@@ -1,276 +1,521 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import React from 'react';
 import { clsx } from 'clsx';
-import { Download, Calendar, Building2, AlertCircle, Loader2, ChevronRight, ChevronDown, GitCompare } from 'lucide-react';
+import {
+  Download, Calendar, Building2, AlertCircle, Loader2, ChevronRight,
+  FileText, Users, Briefcase, BarChart3, Shield, DollarSign,
+  GitCompare, Layers, List, LayoutGrid, Search, Sparkles,
+  ChevronDown, ArrowUpDown
+} from 'lucide-react';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import type { Location } from '@meritbooks/shared';
 import { CashFlowReport } from './cash-flow-report';
 import { GlDrillDown } from './gl-drill-down';
 
-// ===== Shared Types =====
+// ═══════════════════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════════════════
+
 interface DrillDownTarget { accountId?: string; accountNumber: string; accountName: string }
-interface AgingRow { vendorName?: string; customerName?: string; billNumber?: string; invoiceNumber?: string; dueDate: string; totalCents: number; balanceCents: number; agingBucket: string; locationName: string }
-interface AgingResponse { data: AgingRow[]; buckets: Record<string, { count: number; totalCents: number }>; totalOutstanding: number }
 
-// ===== Report Tabs (16 total) =====
-const REPORT_TABS = [
-  { key: 'pnl', label: 'P&L' },
-  { key: 'bs', label: 'Balance Sheet' },
-  { key: 'cf', label: 'Cash Flow' },
-  { key: 'tb', label: 'Trial Balance' },
-  { key: 'gl', label: 'GL Detail' },
-  { key: 'ar_aging', label: 'AR Aging' },
-  { key: 'ap_aging', label: 'AP Aging' },
-  { key: 'job_prof', label: 'Job Profit' },
-  { key: 'bva', label: 'Budget v Actual' },
-  { key: 'consol', label: 'Consolidated' },
-  { key: 'equity', label: 'Equity Changes' },
-  { key: 'vend_bal', label: 'Vendor Bal' },
-  { key: 'cust_bal', label: 'Customer Bal' },
-  { key: 'open', label: 'Open Items' },
-  { key: 'exp_vend', label: 'Expense/Vendor' },
-  { key: 'inc_cust', label: 'Income/Customer' },
-  { key: 'sales_cust', label: 'Sales/Customer' },
-  { key: 'txn_list', label: 'Transactions' },
-] as const;
+// ═══════════════════════════════════════════════════════════════
+// REPORT CATALOG — grouped by category
+// ═══════════════════════════════════════════════════════════════
 
-type RT = (typeof REPORT_TABS)[number]['key'];
-
-function getDefaults() {
-  const n = new Date();
-  return { start: `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-01`, end: new Date(n.getFullYear(), n.getMonth()+1, 0).toISOString().slice(0,10) };
+interface ReportDef {
+  key: string;
+  label: string;
+  description: string;
+  needsDates: boolean;
+  hasBasis: boolean;
+  hasDetail: boolean;
+  hasCompare: boolean;
 }
 
-// ===== Main =====
+interface ReportCategory {
+  key: string;
+  label: string;
+  icon: React.ElementType;
+  reports: ReportDef[];
+}
+
+const REPORT_CATALOG: ReportCategory[] = [
+  {
+    key: 'financial', label: 'Financial Statements', icon: FileText,
+    reports: [
+      { key: 'pnl', label: 'Profit & Loss', description: 'Revenue minus expenses for a period', needsDates: true, hasBasis: true, hasDetail: true, hasCompare: true },
+      { key: 'pnl_dept', label: 'P&L by Department', description: 'Departmental breakdown of income and expenses', needsDates: true, hasBasis: true, hasDetail: true, hasCompare: false },
+      { key: 'pnl_class', label: 'P&L by Class', description: 'P&L filtered by class dimension', needsDates: true, hasBasis: true, hasDetail: true, hasCompare: false },
+      { key: 'bs', label: 'Balance Sheet', description: 'Assets, liabilities, and equity at a point in time', needsDates: false, hasBasis: false, hasDetail: true, hasCompare: true },
+      { key: 'cf', label: 'Cash Flow Statement', description: 'Operating, investing, and financing activities (indirect method)', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: false },
+      { key: 'equity', label: 'Changes in Equity', description: 'Beginning balance + activity = ending balance per equity account', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: false },
+      { key: 'tb', label: 'Trial Balance', description: 'All accounts with debit and credit balances', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
+      { key: 'consol', label: 'Consolidated Statements', description: 'Combined P&L across entities with intercompany eliminations', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: false },
+      { key: 'bva', label: 'Budget vs Actual', description: 'Budget amounts vs GL actuals with $ and % variance', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: false },
+    ],
+  },
+  {
+    key: 'ar', label: 'Accounts Receivable', icon: DollarSign,
+    reports: [
+      { key: 'ar_aging', label: 'AR Aging', description: 'Open invoices by aging bucket (Current, 30, 60, 90, 120+)', needsDates: false, hasBasis: false, hasDetail: true, hasCompare: false },
+      { key: 'inc_cust', label: 'Income by Customer', description: 'Revenue, collections, and outstanding by customer', needsDates: true, hasBasis: false, hasDetail: true, hasCompare: false },
+      { key: 'sales_cust', label: 'Sales by Customer', description: 'Product/service line breakdown per customer from invoice lines', needsDates: true, hasBasis: false, hasDetail: true, hasCompare: false },
+      { key: 'cust_bal', label: 'Customer Balances', description: 'Total invoiced, paid, and open balance per customer', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
+      { key: 'open_ar', label: 'Open Invoices', description: 'All unpaid invoices with days overdue', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
+    ],
+  },
+  {
+    key: 'ap', label: 'Accounts Payable', icon: Users,
+    reports: [
+      { key: 'ap_aging', label: 'AP Aging', description: 'Open bills by aging bucket', needsDates: false, hasBasis: false, hasDetail: true, hasCompare: false },
+      { key: 'exp_vend', label: 'Expense by Vendor', description: 'All expenses grouped by vendor with account breakdown', needsDates: true, hasBasis: false, hasDetail: true, hasCompare: false },
+      { key: 'vend_bal', label: 'Vendor Balances', description: 'Total billed, paid, and open per vendor with 1099 flags', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
+      { key: 'open_ap', label: 'Open Bills', description: 'All unpaid bills with days overdue', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
+      { key: 'vendor_1099', label: '1099 Summary', description: '1099-eligible vendors with YTD payments for tax reporting', needsDates: true, hasBasis: false, hasDetail: true, hasCompare: false },
+    ],
+  },
+  {
+    key: 'jobs', label: 'Jobs & Projects', icon: Briefcase,
+    reports: [
+      { key: 'job_prof', label: 'Job Profitability', description: 'Contract, cost, billed, margin per job', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
+      { key: 'wip', label: 'WIP Schedule', description: 'Work in progress: contract, costs to date, % complete, over/under billed', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
+      { key: 'job_cost', label: 'Job Cost Detail', description: 'Cost entries by job, phase, and cost code', needsDates: true, hasBasis: false, hasDetail: true, hasCompare: false },
+    ],
+  },
+  {
+    key: 'mgmt', label: 'Management', icon: BarChart3,
+    reports: [
+      { key: 'gl', label: 'General Ledger', description: 'Every GL transaction line by date range', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: false },
+      { key: 'gl_compare', label: 'GL Account Comparison', description: 'Compare any account across two periods', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: true },
+      { key: 'txn_list', label: 'Transaction List', description: 'All transactions by date, grouped by day or line-by-line', needsDates: true, hasBasis: false, hasDetail: true, hasCompare: false },
+      { key: 'open', label: 'Open Items (AR + AP)', description: 'Combined view of all unpaid invoices and bills', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
+    ],
+  },
+  {
+    key: 'tax', label: 'Tax & Compliance', icon: Shield,
+    reports: [
+      { key: 'sales_tax', label: 'Sales Tax Summary', description: 'Tax collected by jurisdiction and period', needsDates: true, hasBasis: false, hasDetail: true, hasCompare: false },
+      { key: 'vendor_1099', label: '1099 Vendor Report', description: '1099-eligible vendors with payment totals', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: false },
+    ],
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// PERIOD PRESETS
+// ═══════════════════════════════════════════════════════════════
+
+interface PeriodPreset { key: string; label: string; getDates: () => { start: string; end: string } }
+
+function pad(n: number) { return String(n).padStart(2, '0'); }
+function fmt(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+
+const PERIOD_PRESETS: PeriodPreset[] = [
+  { key: 'this_month', label: 'This Month', getDates: () => { const n = new Date(); return { start: `${n.getFullYear()}-${pad(n.getMonth()+1)}-01`, end: fmt(new Date(n.getFullYear(), n.getMonth()+1, 0)) }; } },
+  { key: 'last_month', label: 'Last Month', getDates: () => { const n = new Date(); const lm = new Date(n.getFullYear(), n.getMonth()-1, 1); return { start: fmt(lm), end: fmt(new Date(lm.getFullYear(), lm.getMonth()+1, 0)) }; } },
+  { key: 'this_quarter', label: 'This Quarter', getDates: () => { const n = new Date(); const q = Math.floor(n.getMonth()/3)*3; return { start: `${n.getFullYear()}-${pad(q+1)}-01`, end: fmt(new Date(n.getFullYear(), q+3, 0)) }; } },
+  { key: 'last_quarter', label: 'Last Quarter', getDates: () => { const n = new Date(); const q = Math.floor(n.getMonth()/3)*3 - 3; const y = q < 0 ? n.getFullYear()-1 : n.getFullYear(); const qm = ((q % 12) + 12) % 12; return { start: `${y}-${pad(qm+1)}-01`, end: fmt(new Date(y, qm+3, 0)) }; } },
+  { key: 'ytd', label: 'Year to Date', getDates: () => { const n = new Date(); return { start: `${n.getFullYear()}-01-01`, end: fmt(n) }; } },
+  { key: 'last_year', label: 'Last Year', getDates: () => { const y = new Date().getFullYear()-1; return { start: `${y}-01-01`, end: `${y}-12-31` }; } },
+  { key: 'last_12', label: 'Last 12 Months', getDates: () => { const n = new Date(); const s = new Date(n.getFullYear()-1, n.getMonth(), n.getDate()+1); return { start: fmt(s), end: fmt(n) }; } },
+  { key: 'custom', label: 'Custom Range', getDates: () => { const n = new Date(); return { start: `${n.getFullYear()}-${pad(n.getMonth()+1)}-01`, end: fmt(n) }; } },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN REPORT CENTER
+// ═══════════════════════════════════════════════════════════════
+
 export function ReportViewer() {
-  const [tab, setTab] = useState<RT>('pnl');
-  const d = useMemo(getDefaults, []);
-  const [sd, setSd] = useState(d.start);
-  const [ed, setEd] = useState(d.end);
+  const [selectedCategory, setSelectedCategory] = useState('financial');
+  const [selectedReport, setSelectedReport] = useState<string | null>(null);
+  const [periodPreset, setPeriodPreset] = useState('this_month');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
   const [locId, setLocId] = useState('all');
-  const [drill, setDrill] = useState<DrillDownTarget | null>(null);
+  const [basis, setBasis] = useState<'accrual' | 'cash'>('accrual');
+  const [viewMode, setViewMode] = useState<'summary' | 'detail'>('summary');
   const [compare, setCompare] = useState(false);
+  const [drill, setDrill] = useState<DrillDownTarget | null>(null);
+  const [nlQuery, setNlQuery] = useState('');
 
   const { data: locs } = useQuery<Location[]>('/api/locations');
 
+  // Compute dates from preset
+  const { start: sd, end: ed } = useMemo(() => {
+    if (periodPreset === 'custom') return { start: customStart, end: customEnd };
+    const preset = PERIOD_PRESETS.find((p) => p.key === periodPreset);
+    return preset?.getDates() ?? { start: '', end: '' };
+  }, [periodPreset, customStart, customEnd]);
+
+  // Find selected report definition
+  const reportDef = useMemo(() => {
+    for (const cat of REPORT_CATALOG) {
+      const r = cat.reports.find((r) => r.key === selectedReport);
+      if (r) return r;
+    }
+    return null;
+  }, [selectedReport]);
+
+  const currentCategory = REPORT_CATALOG.find((c) => c.key === selectedCategory);
+
   return (
-    <div>
-      <div className="flex items-center gap-0.5 p-1 rounded-lg bg-surface-900 border border-slate-800 w-fit mb-4 overflow-x-auto">
-        {REPORT_TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={clsx('px-2.5 py-1.5 rounded-md text-xs transition-colors whitespace-nowrap',
-              tab === t.key ? 'bg-slate-800 text-white font-medium' : 'text-slate-400 hover:text-slate-300')}>
-            {t.label}
-          </button>
-        ))}
+    <div className="flex gap-6 h-[calc(100vh-140px)]">
+      {/* ─── Left Sidebar: Report Menu ─── */}
+      <div className="w-64 shrink-0 overflow-y-auto">
+        {/* NL Query */}
+        <div className="relative mb-4">
+          <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-400" />
+          <input
+            type="text"
+            placeholder="Ask for any report..."
+            value={nlQuery}
+            onChange={(e) => setNlQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 bg-indigo-500/[0.06] border border-indigo-500/20 rounded-xl text-sm text-white placeholder:text-indigo-300/40 focus:outline-none focus:border-indigo-500/40 transition-colors"
+          />
+        </div>
+
+        {/* Category list */}
+        <nav className="space-y-1">
+          {REPORT_CATALOG.map((cat) => {
+            const Icon = cat.icon;
+            const isActive = selectedCategory === cat.key;
+            return (
+              <div key={cat.key}>
+                <button
+                  onClick={() => { setSelectedCategory(cat.key); setSelectedReport(null); }}
+                  className={clsx(
+                    'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left',
+                    isActive ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  )}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  {cat.label}
+                  <ChevronDown className={clsx('w-3 h-3 ml-auto transition-transform', isActive ? 'rotate-0' : '-rotate-90')} />
+                </button>
+
+                {/* Report list within category */}
+                {isActive && (
+                  <div className="ml-6 mt-1 space-y-0.5 border-l border-slate-800 pl-3">
+                    {cat.reports.map((report) => (
+                      <button
+                        key={report.key}
+                        onClick={() => setSelectedReport(report.key)}
+                        className={clsx(
+                          'w-full text-left px-2.5 py-1.5 rounded-md text-xs transition-colors',
+                          selectedReport === report.key
+                            ? 'bg-slate-800 text-white font-medium'
+                            : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/30'
+                        )}
+                      >
+                        {report.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </nav>
       </div>
 
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Calendar size={14} className="text-slate-500" />
-          <input type="date" value={sd} onChange={(e) => setSd(e.target.value)} className="input w-36 text-sm font-mono" />
-          <span className="text-slate-600 text-sm">to</span>
-          <input type="date" value={ed} onChange={(e) => setEd(e.target.value)} className="input w-36 text-sm font-mono" />
-        </div>
-        <div className="flex items-center gap-2">
-          <Building2 size={14} className="text-slate-500" />
-          <select value={locId} onChange={(e) => setLocId(e.target.value)} className="input w-52">
-            <option value="all">All Companies</option>
-            {(locs ?? []).map((l) => <option key={l.id} value={l.id}>{l.short_code} · {l.name}</option>)}
-          </select>
-        </div>
-        {(tab === 'pnl' || tab === 'bs') && (
-          <button onClick={() => setCompare(!compare)} className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors', compare ? 'bg-indigo-600/20 text-indigo-400 border-indigo-500/30' : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white')}>
-            <GitCompare size={12} /> {compare ? 'Comparing' : 'Compare'}
-          </button>
+      {/* ─── Right: Report Content ─── */}
+      <div className="flex-1 overflow-y-auto">
+        {!selectedReport ? (
+          /* ─── No report selected: show category overview ─── */
+          <div>
+            <h1 className="text-2xl font-semibold text-white mb-2">
+              {currentCategory?.label ?? 'Reports'}
+            </h1>
+            <p className="text-sm text-slate-400 mb-6">Select a report from the menu to generate it.</p>
+
+            <div className="grid grid-cols-2 gap-3">
+              {(currentCategory?.reports ?? []).map((report) => (
+                <button
+                  key={report.key}
+                  onClick={() => setSelectedReport(report.key)}
+                  className="text-left p-4 rounded-xl border border-slate-800 bg-slate-800/20 hover:bg-slate-800/50 hover:border-slate-700 transition-colors group"
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-white group-hover:text-emerald-400 transition-colors">{report.label}</span>
+                    <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-emerald-400 transition-colors" />
+                  </div>
+                  <p className="text-xs text-slate-500">{report.description}</p>
+                  <div className="flex gap-2 mt-2">
+                    {report.hasBasis && <span className="px-1.5 py-0.5 text-[10px] rounded bg-cyan-500/10 text-cyan-400">Cash/Accrual</span>}
+                    {report.hasDetail && <span className="px-1.5 py-0.5 text-[10px] rounded bg-purple-500/10 text-purple-400">Summary/Detail</span>}
+                    {report.hasCompare && <span className="px-1.5 py-0.5 text-[10px] rounded bg-amber-500/10 text-amber-400">Comparative</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          /* ─── Report selected: show controls + content ─── */
+          <div>
+            {/* Report header + controls */}
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h1 className="text-xl font-semibold text-white">{reportDef?.label}</h1>
+                <p className="text-xs text-slate-500 mt-0.5">{reportDef?.description}</p>
+              </div>
+              <button className="btn-secondary btn-sm flex items-center gap-1.5"><Download size={14} />Export</button>
+            </div>
+
+            {/* Controls bar */}
+            <div className="flex items-center gap-3 mb-5 flex-wrap p-3 rounded-xl bg-slate-800/20 border border-slate-800">
+              {/* Period preset */}
+              {reportDef?.needsDates !== false && (
+                <div className="flex items-center gap-2">
+                  <Calendar size={14} className="text-slate-500" />
+                  <select
+                    value={periodPreset}
+                    onChange={(e) => setPeriodPreset(e.target.value)}
+                    className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"
+                  >
+                    {PERIOD_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                  </select>
+                  {periodPreset === 'custom' && (
+                    <>
+                      <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono w-32" />
+                      <span className="text-slate-600 text-xs">to</span>
+                      <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono w-32" />
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Company filter */}
+              <div className="flex items-center gap-1.5">
+                <Building2 size={13} className="text-slate-500" />
+                <select value={locId} onChange={(e) => setLocId(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
+                  <option value="all">All Companies</option>
+                  {(locs ?? []).map((l) => <option key={l.id} value={l.id}>{l.short_code} · {l.name}</option>)}
+                </select>
+              </div>
+
+              {/* Cash vs Accrual */}
+              {reportDef?.hasBasis && (
+                <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-700">
+                  <button onClick={() => setBasis('accrual')} className={clsx('px-2.5 py-1 rounded-md text-xs font-medium transition-colors', basis === 'accrual' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300')}>Accrual</button>
+                  <button onClick={() => setBasis('cash')} className={clsx('px-2.5 py-1 rounded-md text-xs font-medium transition-colors', basis === 'cash' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300')}>Cash</button>
+                </div>
+              )}
+
+              {/* Summary / Detail */}
+              {reportDef?.hasDetail && (
+                <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-700">
+                  <button onClick={() => setViewMode('summary')} className={clsx('px-2 py-1 rounded-md text-xs flex items-center gap-1 transition-colors', viewMode === 'summary' ? 'bg-slate-700 text-white' : 'text-slate-500')}><LayoutGrid size={11} />Summary</button>
+                  <button onClick={() => setViewMode('detail')} className={clsx('px-2 py-1 rounded-md text-xs flex items-center gap-1 transition-colors', viewMode === 'detail' ? 'bg-slate-700 text-white' : 'text-slate-500')}><List size={11} />Detail</button>
+                </div>
+              )}
+
+              {/* Compare */}
+              {reportDef?.hasCompare && (
+                <button onClick={() => setCompare(!compare)} className={clsx('flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors', compare ? 'bg-indigo-600/20 text-indigo-400 border-indigo-500/30' : 'bg-slate-800 text-slate-400 border-slate-700')}>
+                  <GitCompare size={11} />{compare ? 'Comparing' : 'Compare'}
+                </button>
+              )}
+            </div>
+
+            {/* Report content — lazy loaded */}
+            <ReportContent
+              reportKey={selectedReport}
+              sd={sd} ed={ed} locId={locId}
+              basis={basis} viewMode={viewMode} compare={compare}
+              onDrill={setDrill}
+            />
+          </div>
         )}
-        <button className="btn-secondary btn-sm ml-auto flex items-center gap-1.5"><Download size={14} />Export</button>
       </div>
 
-      {tab === 'pnl' && <PnlReport sd={sd} ed={ed} locId={locId} onDrill={setDrill} compare={compare} />}
-      {tab === 'bs' && <BsReport ed={ed} locId={locId} onDrill={setDrill} />}
-      {tab === 'cf' && <CashFlowReport startDate={sd} endDate={ed} locationId={locId} />}
-      {tab === 'tb' && <TbReport locId={locId} onDrill={setDrill} />}
-      {tab === 'gl' && <GlReport sd={sd} ed={ed} locId={locId} />}
-      {tab === 'ar_aging' && <AgingReport type="ar" locId={locId} />}
-      {tab === 'ap_aging' && <AgingReport type="ap" locId={locId} />}
-      {tab === 'job_prof' && <JobProfReport locId={locId} />}
-      {tab === 'bva' && <BvaReport sd={sd} ed={ed} locId={locId} />}
-      {tab === 'consol' && <ConsolReport sd={sd} ed={ed} />}
-      {tab === 'equity' && <EquityReport sd={sd} ed={ed} locId={locId} />}
-      {tab === 'vend_bal' && <VendBalReport locId={locId} />}
-      {tab === 'cust_bal' && <CustBalReport locId={locId} />}
-      {tab === 'open' && <OpenItemsReport locId={locId} />}
-      {tab === 'exp_vend' && <ExpenseByVendorReport sd={sd} ed={ed} locId={locId} />}
-      {tab === 'inc_cust' && <IncomeByCustomerReport sd={sd} ed={ed} locId={locId} />}
-      {tab === 'sales_cust' && <SalesByCustomerReport sd={sd} ed={ed} locId={locId} />}
-      {tab === 'txn_list' && <TransactionListReport sd={sd} ed={ed} locId={locId} />}
-
+      {/* Drill-down modal */}
       {drill && <GlDrillDown accountId={drill.accountId} accountNumber={drill.accountNumber} accountName={drill.accountName} startDate={sd} endDate={ed} locationId={locId} onClose={() => setDrill(null)} />}
     </div>
   );
 }
 
-// ===== Helpers =====
-function Ld() { return <div className="card p-12 flex items-center justify-center"><Loader2 size={24} className="animate-spin text-slate-500" /></div>; }
-function Er({ m }: { m: string }) { return <div className="card p-8 text-center"><AlertCircle size={24} className="mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{m}</p></div>; }
-function Em({ m }: { m?: string }) { return <div className="card p-8 text-center text-sm text-slate-500">{m ?? 'No data.'}</div>; }
-function Cr({ children, onClick, cls }: { children: React.ReactNode; onClick?: () => void; cls?: string }) {
-  return <tr onClick={onClick} className={clsx('transition-colors', onClick ? 'cursor-pointer hover:bg-slate-800/40' : 'hover:bg-slate-800/20', cls)}>{children}</tr>;
+// ═══════════════════════════════════════════════════════════════
+// REPORT CONTENT ROUTER — loads the right report
+// ═══════════════════════════════════════════════════════════════
+
+function ReportContent({ reportKey, sd, ed, locId, basis, viewMode, compare, onDrill }: {
+  reportKey: string; sd: string; ed: string; locId: string;
+  basis: 'accrual' | 'cash'; viewMode: 'summary' | 'detail'; compare: boolean;
+  onDrill: (t: DrillDownTarget) => void;
+}) {
+  // Build common params
+  const p: Record<string, string> = {};
+  if (sd) p.start_date = sd;
+  if (ed) p.end_date = ed;
+  if (locId !== 'all') p.location_id = locId;
+
+  switch (reportKey) {
+    case 'pnl': return <PnlReport p={p} onDrill={onDrill} compare={compare} />;
+    case 'bs': return <BsReport ed={ed} locId={locId} onDrill={onDrill} />;
+    case 'cf': return <CashFlowReport startDate={sd} endDate={ed} locationId={locId} />;
+    case 'tb': return <TbReport locId={locId} onDrill={onDrill} />;
+    case 'gl': return <SimpleApiReport url="/api/reports/gl-detail" params={p} title="General Ledger" />;
+    case 'ar_aging': return <SimpleApiReport url="/api/reports/ar-aging" params={{ location_id: locId !== 'all' ? locId : '' }} title="AR Aging" />;
+    case 'ap_aging': return <SimpleApiReport url="/api/reports/ap-aging" params={{ location_id: locId !== 'all' ? locId : '' }} title="AP Aging" />;
+    case 'job_prof': return <SimpleApiReport url="/api/reports/job-profitability" params={{ location_id: locId !== 'all' ? locId : '' }} title="Job Profitability" />;
+    case 'bva': return <SimpleApiReport url="/api/budgets/vs-actual" params={{ ...p, fiscal_year: sd?.slice(0,4) ?? '' }} title="Budget vs Actual" />;
+    case 'consol': return <SimpleApiReport url="/api/reports/consolidated" params={p} title="Consolidated" />;
+    case 'equity': return <SimpleApiReport url="/api/reports/equity-changes" params={p} title="Changes in Equity" />;
+    case 'inc_cust': return <SimpleApiReport url="/api/reports/income-by-customer" params={{ ...p, mode: viewMode }} title="Income by Customer" />;
+    case 'sales_cust': return <SimpleApiReport url="/api/reports/sales-by-customer" params={{ ...p, mode: viewMode }} title="Sales by Customer" />;
+    case 'exp_vend': return <SimpleApiReport url="/api/reports/expense-by-vendor" params={{ ...p, mode: viewMode }} title="Expense by Vendor" />;
+    case 'vend_bal': return <SimpleApiReport url="/api/reports/vendor-balances" params={{ location_id: locId !== 'all' ? locId : '' }} title="Vendor Balances" />;
+    case 'cust_bal': return <SimpleApiReport url="/api/reports/customer-balances" params={{ location_id: locId !== 'all' ? locId : '' }} title="Customer Balances" />;
+    case 'open': case 'open_ar': case 'open_ap': return <SimpleApiReport url="/api/reports/open-items" params={{ location_id: locId !== 'all' ? locId : '', type: reportKey === 'open_ar' ? 'ar' : reportKey === 'open_ap' ? 'ap' : '' }} title="Open Items" />;
+    case 'txn_list': return <SimpleApiReport url="/api/reports/transaction-list" params={{ ...p, mode: viewMode }} title="Transaction List" />;
+    default: return <div className="card p-8 text-center text-slate-500">Report "{reportKey}" is not yet implemented. Select a different report.</div>;
+  }
 }
 
-// ===== P&L with % Rev + Comparative =====
+// ═══════════════════════════════════════════════════════════════
+// SHARED COMPONENTS
+// ═══════════════════════════════════════════════════════════════
+
+function Ld() { return <div className="card p-12 flex items-center justify-center"><Loader2 size={24} className="animate-spin text-slate-500" /></div>; }
+function Er({ m }: { m: string }) { return <div className="card p-8 text-center"><AlertCircle size={24} className="mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{m}</p></div>; }
+function Em({ m }: { m?: string }) { return <div className="card p-8 text-center text-sm text-slate-500">{m ?? 'No data for this period. This report will populate as transactions are posted.'}</div>; }
+
+// Generic API report — fetches data and dumps JSON for now
+// Each report type should have its own renderer, but this serves as a fallback
+function SimpleApiReport({ url, params, title }: { url: string; params: Record<string, string>; title: string }) {
+  const cleanParams = Object.fromEntries(Object.entries(params).filter(([,v]) => v));
+  const qs = new URLSearchParams(cleanParams).toString();
+  const { data, isLoading, error } = useQuery<any>(`${url}${qs ? '?' + qs : ''}`);
+  if (isLoading) return <Ld />;
+  if (error) return <Er m={String(error)} />;
+  if (!data) return <Em />;
+
+  // Try to render a table from data.data array
+  const rows = data.data ?? data.accounts ?? data.reconciliations ?? [];
+  if (!Array.isArray(rows) || rows.length === 0) return <Em m={`No ${title.toLowerCase()} data found for this period.`} />;
+
+  const keys = Object.keys(rows[0]).filter((k) => !k.includes('Id') && !k.includes('id') && k !== 'transactions' && k !== 'invoices' && k !== 'details' && k !== 'aging' && k !== 'accounts' && k !== 'byAccount' && k !== 'byLocation');
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="px-6 py-4 border-b border-slate-800">
+        <h2 className="text-base font-semibold text-white">{title}</h2>
+        <p className="text-2xs text-slate-500 mt-0.5">{rows.length} rows</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-800/50">
+              {keys.map((k) => (
+                <th key={k} className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 whitespace-nowrap">{k.replace(/([A-Z])/g, ' $1').replace(/Cents$/, '').trim()}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/30">
+            {rows.slice(0, 200).map((row: any, i: number) => (
+              <tr key={i} className="hover:bg-slate-800/20">
+                {keys.map((k) => {
+                  const v = row[k];
+                  const isMoney = typeof k === 'string' && (k.endsWith('Cents') || k.includes('cents') || k.includes('Cents'));
+                  const isBool = typeof v === 'boolean';
+                  const isPct = typeof k === 'string' && (k.includes('Pct') || k.includes('pct'));
+                  return (
+                    <td key={k} className={clsx('px-4 py-1.5 whitespace-nowrap', isMoney || isPct ? 'text-right font-mono' : '', isMoney ? 'text-slate-200' : 'text-slate-400')}>
+                      {isMoney ? formatMoney(Number(v ?? 0)) : isBool ? (v ? '✓' : '—') : isPct ? `${v}%` : String(v ?? '—')}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// P&L with % revenue, drill-down, comparative
+// ═══════════════════════════════════════════════════════════════
+
 interface ISAcct { accountId: string; accountNumber: string; accountName: string; amountCents: number }
 interface ISGroup { name: string; accounts: ISAcct[]; totalCents: number }
 interface ISSection { type: string; label: string; groups: ISGroup[]; totalCents: number }
 interface ISR { sections: ISSection[]; summary: { revenueCents: number; cogsCents: number; grossProfitCents: number; opexCents: number; ebitdaCents: number; otherCents: number; netIncomeCents: number; grossMarginPct: number; netMarginPct: number } }
 
-function PnlReport({ sd, ed, locId, onDrill, compare }: { sd: string; ed: string; locId: string; onDrill: (t: DrillDownTarget) => void; compare: boolean }) {
-  const p: Record<string, string> = { start_date: sd, end_date: ed };
-  if (locId !== 'all') p.location_id = locId;
+function PnlReport({ p, onDrill, compare }: { p: Record<string, string>; onDrill: (t: DrillDownTarget) => void; compare: boolean }) {
   const { data, isLoading, error } = useQuery<ISR>('/api/reports/income-statement', p);
-
-  // Prior period (month before)
-  const priorEnd = new Date(sd);
+  // Prior period
+  const priorEnd = p.start_date ? new Date(p.start_date) : new Date();
   priorEnd.setDate(priorEnd.getDate() - 1);
-  const priorStart = `${priorEnd.getFullYear()}-${String(priorEnd.getMonth()+1).padStart(2,'0')}-01`;
-  const pp: Record<string, string> = { start_date: priorStart, end_date: priorEnd.toISOString().slice(0,10) };
-  if (locId !== 'all') pp.location_id = locId;
-  const { data: priorData } = useQuery<ISR>(compare ? '/api/reports/income-statement' : null, compare ? pp : undefined);
+  const priorStart = `${priorEnd.getFullYear()}-${pad(priorEnd.getMonth()+1)}-01`;
+  const pp = { ...p, start_date: priorStart, end_date: fmt(priorEnd) };
+  const { data: pd } = useQuery<ISR>(compare ? '/api/reports/income-statement' : null, compare ? pp : undefined);
 
   if (isLoading) return <Ld />;
   if (error) return <Er m={String(error)} />;
   if (!data) return <Em />;
-
   const { sections, summary: s } = data;
-  const ps = priorData?.summary;
   const rb = Math.abs(s.revenueCents) || 1;
-
-  // Build prior account lookup
-  const priorAcctMap = new Map<string, number>();
-  if (priorData) {
-    for (const sec of priorData.sections) {
-      for (const g of sec.groups) {
-        for (const a of g.accounts) priorAcctMap.set(a.accountNumber, a.amountCents);
-      }
-    }
-  }
+  const pm = new Map<string, number>();
+  if (pd) pd.sections.forEach((sec) => sec.groups.forEach((g) => g.accounts.forEach((a) => pm.set(a.accountNumber, a.amountCents))));
 
   return (
     <div className="card overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-800">
-        <h2 className="text-base font-semibold text-white">Income Statement</h2>
-        <p className="text-2xs text-slate-500 mt-0.5 font-mono">{sd} through {ed}{compare ? ` vs ${priorStart} through ${priorEnd.toISOString().slice(0,10)}` : ''}</p>
-      </div>
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-slate-800/50">
-            <th className="px-6 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24">Account</th>
-            <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Description</th>
-            <th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Current</th>
-            <th className="px-3 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-14">% Rev</th>
-            {compare && <th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Prior</th>}
-            {compare && <th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Variance</th>}
-          </tr>
-        </thead>
+      <table className="w-full"><thead><tr className="border-b border-slate-800/50"><th className="px-6 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24">Acct</th><th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Description</th><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Amount</th><th className="px-3 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-14">%</th>{compare&&<><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Prior</th><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Var</th></>}</tr></thead>
         <tbody>
-          {sections.map((sec) => (
-            <PnlSec key={sec.type} sec={sec} rb={rb} onDrill={onDrill} compare={compare} priorMap={priorAcctMap} />
-          ))}
-          <SmryLine l="Gross Profit" a={s.grossProfitCents} pct={s.grossMarginPct} rb={rb} bold compare={compare} prior={ps?.grossProfitCents} />
-          <SmryLine l="EBITDA" a={s.ebitdaCents} rb={rb} compare={compare} prior={ps?.ebitdaCents} />
-          <SmryLine l="Net Income" a={s.netIncomeCents} pct={s.netMarginPct} rb={rb} bold hl compare={compare} prior={ps?.netIncomeCents} />
+          {sections.map((sec) => (<React.Fragment key={sec.type}>
+            <tr className="bg-slate-800/30"><td colSpan={compare?6:4} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase">{sec.label} <span className="font-mono text-slate-500 ml-1">{formatMoney(sec.totalCents)}</span></td></tr>
+            {sec.groups.flatMap((g) => g.accounts.map((a) => { const pv = pm.get(a.accountNumber)??0; const v = a.amountCents-pv; return (
+              <tr key={a.accountNumber} onClick={() => onDrill({accountId:a.accountId,accountNumber:a.accountNumber,accountName:a.accountName})} className="cursor-pointer hover:bg-slate-800/40 transition-colors"><td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td><td className="px-4 py-1.5 text-sm text-slate-300 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600"/></td><td className="px-4 py-1.5 text-right text-sm font-mono tabular-nums text-slate-200">{formatMoney(a.amountCents)}</td><td className="px-3 py-1.5 text-right text-2xs font-mono text-slate-600">{Math.round(Math.abs(a.amountCents)/rb*100)}%</td>{compare&&<><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-400">{formatMoney(pv)}</td><td className={clsx('px-4 py-1.5 text-right text-sm font-mono',v>0?'text-emerald-400':v<0?'text-red-400':'text-slate-500')}>{v>0?'+':''}{formatMoney(v)}</td></>}</tr>
+            ); }))}
+          </React.Fragment>))}
+          <tr className="bg-slate-800/20"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Gross Profit</td><td className="px-4 py-2.5 text-right text-base font-mono font-semibold text-white">{formatMoney(s.grossProfitCents)} <span className="text-2xs text-slate-500">{s.grossMarginPct}%</span></td><td/>{compare&&<td colSpan={2}/>}</tr>
+          <tr className="bg-brand-500/[0.04]"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Net Income</td><td className={clsx('px-4 py-2.5 text-right text-base font-mono font-semibold',s.netIncomeCents>=0?'text-emerald-400':'text-red-400')}>{formatMoney(s.netIncomeCents)} <span className="text-2xs text-slate-500">{s.netMarginPct}%</span></td><td/>{compare&&<td colSpan={2}/>}</tr>
         </tbody>
       </table>
     </div>
   );
 }
 
-function PnlSec({ sec, rb, onDrill, compare, priorMap }: { sec: ISSection; rb: number; onDrill: (t: DrillDownTarget) => void; compare: boolean; priorMap: Map<string, number> }) {
-  return (
-    <>
-      <tr className="bg-slate-800/30">
-        <td colSpan={compare ? 6 : 4} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase tracking-wider">{sec.label}
-          <span className="ml-2 font-mono text-slate-500">{formatMoney(sec.totalCents)}</span>
-        </td>
-      </tr>
-      {sec.groups.flatMap((g) => g.accounts.map((a) => {
-        const prior = priorMap.get(a.accountNumber) ?? 0;
-        const variance = a.amountCents - prior;
-        return (
-          <Cr key={a.accountNumber} onClick={() => onDrill({ accountId: a.accountId, accountNumber: a.accountNumber, accountName: a.accountName })}>
-            <td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td>
-            <td className="px-4 py-1.5 text-sm text-slate-300 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600" /></td>
-            <td className="px-4 py-1.5 text-right text-sm font-mono tabular-nums text-slate-200">{formatMoney(a.amountCents)}</td>
-            <td className="px-3 py-1.5 text-right text-2xs font-mono text-slate-600">{Math.round(Math.abs(a.amountCents)/rb*100)}%</td>
-            {compare && <td className="px-4 py-1.5 text-right text-sm font-mono text-slate-400">{formatMoney(prior)}</td>}
-            {compare && <td className={clsx('px-4 py-1.5 text-right text-sm font-mono', variance > 0 ? 'text-emerald-400' : variance < 0 ? 'text-red-400' : 'text-slate-500')}>{variance > 0 ? '+' : ''}{formatMoney(variance)}</td>}
-          </Cr>
-        );
-      }))}
-    </>
-  );
-}
+// ═══════════════════════════════════════════════════════════════
+// BALANCE SHEET
+// ═══════════════════════════════════════════════════════════════
 
-function SmryLine({ l, a, pct, rb, bold, hl, compare, prior }: { l: string; a: number; pct?: number; rb: number; bold?: boolean; hl?: boolean; compare?: boolean; prior?: number }) {
-  const v = prior !== undefined ? a - prior : 0;
-  return (
-    <tr className={clsx(hl ? 'bg-brand-500/[0.04]' : 'bg-slate-800/20')}>
-      <td></td>
-      <td className={clsx('px-4 py-2.5', bold ? 'text-sm font-semibold text-white' : 'text-sm text-slate-300')}>{l}</td>
-      <td className="px-4 py-2.5 text-right">
-        <span className={clsx('font-mono tabular-nums', bold ? 'text-base font-semibold' : 'text-sm', hl ? (a >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-white')}>{formatMoney(a)}</span>
-        {pct !== undefined && <span className="ml-2 text-2xs text-slate-500 font-mono">{pct}%</span>}
-      </td>
-      <td className="px-3 py-2.5 text-right text-2xs font-mono text-slate-600">{Math.round(Math.abs(a)/rb*100)}%</td>
-      {compare && <td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{prior !== undefined ? formatMoney(prior) : ''}</td>}
-      {compare && <td className={clsx('px-4 py-2.5 text-right font-mono text-sm', v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-slate-500')}>{prior !== undefined ? `${v > 0 ? '+' : ''}${formatMoney(v)}` : ''}</td>}
-    </tr>
-  );
-}
-
-// ===== Balance Sheet =====
 function BsReport({ ed, locId, onDrill }: { ed: string; locId: string; onDrill: (t: DrillDownTarget) => void }) {
   const p: Record<string, string> = { as_of_date: ed };
   if (locId !== 'all') p.location_id = locId;
-  const { data, isLoading, error } = useQuery<{ sections: { type: string; label: string; subTypes: { name: string; groups: { name: string; accounts: { accountId: string; accountNumber: string; accountName: string; balanceCents: number }[]; totalCents: number }[]; totalCents: number }[]; totalCents: number }[]; summary: { totalAssetsCents: number; totalLiabilitiesCents: number; totalEquityCents: number; isBalanced: boolean; varianceCents: number } }>('/api/reports/balance-sheet', p);
+  const { data, isLoading, error } = useQuery<{ sections: { type: string; label: string; subTypes: { groups: { accounts: { accountId: string; accountNumber: string; accountName: string; balanceCents: number }[] }[] }[]; totalCents: number }[]; summary: { totalAssetsCents: number; totalLiabilitiesCents: number; totalEquityCents: number; isBalanced: boolean; varianceCents: number } }>('/api/reports/balance-sheet', p);
   if (isLoading) return <Ld />;
   if (error) return <Er m={String(error)} />;
   if (!data) return <Em />;
   const { sections, summary: s } = data;
   return (
     <div className="card overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-        <div><h2 className="text-base font-semibold text-white">Balance Sheet</h2><p className="text-2xs text-slate-500 mt-0.5 font-mono">As of {ed}</p></div>
-        {s.isBalanced ? <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-400">Balanced ✓</span> : <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-red-500/10 text-red-400 flex items-center gap-1"><AlertCircle size={12}/>Off by {formatMoney(Math.abs(s.varianceCents))}</span>}
+      <div className="px-6 py-3 border-b border-slate-800 flex items-center justify-between">
+        <p className="text-2xs text-slate-500 font-mono">As of {ed}</p>
+        {s.isBalanced?<span className="px-2 py-0.5 rounded text-xs bg-emerald-500/10 text-emerald-400">Balanced ✓</span>:<span className="px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-400">Off by {formatMoney(Math.abs(s.varianceCents))}</span>}
       </div>
-      <table className="w-full">
-        <thead><tr className="border-b border-slate-800/50"><th className="px-6 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24">Account</th><th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Description</th><th className="px-6 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Balance</th></tr></thead>
+      <table className="w-full"><thead><tr className="border-b border-slate-800/50"><th className="px-6 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24">Acct</th><th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Description</th><th className="px-6 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Balance</th></tr></thead>
         <tbody>
-          {sections.map((sec) => (
-            <>{/* section header */}
-              <tr key={sec.type} className="bg-slate-800/30"><td colSpan={2} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase">{sec.label}</td><td className="px-6 py-2 text-right text-xs font-mono font-semibold text-slate-300">{formatMoney(sec.totalCents)}</td></tr>
-              {sec.subTypes.flatMap((st) => st.groups.flatMap((g) => g.accounts.map((a) => (
-                <Cr key={a.accountNumber} onClick={() => onDrill({ accountId: a.accountId, accountNumber: a.accountNumber, accountName: a.accountName })}>
-                  <td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td>
-                  <td className="px-4 py-1.5 text-sm text-slate-400 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600"/></td>
-                  <td className="px-6 py-1.5 text-right text-sm font-mono tabular-nums text-slate-300">{formatMoney(a.balanceCents)}</td>
-                </Cr>
-              ))))}
-            </>
-          ))}
+          {sections.map((sec) => (<React.Fragment key={sec.type}>
+            <tr className="bg-slate-800/30"><td colSpan={2} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase">{sec.label}</td><td className="px-6 py-2 text-right text-xs font-mono font-semibold text-slate-300">{formatMoney(sec.totalCents)}</td></tr>
+            {sec.subTypes.flatMap((st) => st.groups.flatMap((g) => g.accounts.map((a) => (<tr key={a.accountNumber} onClick={() => onDrill({accountId:a.accountId,accountNumber:a.accountNumber,accountName:a.accountName})} className="cursor-pointer hover:bg-slate-800/40 transition-colors"><td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td><td className="px-4 py-1.5 text-sm text-slate-400 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600"/></td><td className="px-6 py-1.5 text-right text-sm font-mono tabular-nums text-slate-300">{formatMoney(a.balanceCents)}</td></tr>))))}
+          </React.Fragment>))}
           <tr className="bg-slate-800/30"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Total Assets</td><td className="px-6 py-2.5 text-right text-base font-mono font-semibold text-white">{formatMoney(s.totalAssetsCents)}</td></tr>
-          <tr className="bg-brand-500/[0.04]"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Total L + E</td><td className="px-6 py-2.5 text-right text-base font-mono font-semibold text-white">{formatMoney(s.totalLiabilitiesCents + s.totalEquityCents)}</td></tr>
+          <tr className="bg-brand-500/[0.04]"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Total L + E</td><td className="px-6 py-2.5 text-right text-base font-mono font-semibold text-white">{formatMoney(s.totalLiabilitiesCents+s.totalEquityCents)}</td></tr>
         </tbody>
       </table>
     </div>
   );
 }
 
-// ===== Trial Balance =====
+// ═══════════════════════════════════════════════════════════════
+// TRIAL BALANCE
+// ═══════════════════════════════════════════════════════════════
+
 function TbReport({ locId, onDrill }: { locId: string; onDrill: (t: DrillDownTarget) => void }) {
   const p: Record<string, string> = {};
   if (locId !== 'all') p.location_id = locId;
@@ -279,336 +524,15 @@ function TbReport({ locId, onDrill }: { locId: string; onDrill: (t: DrillDownTar
   if (error) return <Er m={String(error)} />;
   const rows = data?.data ?? [];
   if (!rows.length) return <Em m="No posted entries." />;
-  const td = rows.reduce((s, r) => s + Number(r.total_debits), 0);
-  const tc = rows.reduce((s, r) => s + Number(r.total_credits), 0);
+  const td = rows.reduce((s,r) => s+Number(r.total_debits),0);
+  const tc = rows.reduce((s,r) => s+Number(r.total_credits),0);
   return (
     <div className="card overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between"><div><h2 className="text-base font-semibold text-white">Trial Balance</h2><p className="text-2xs text-slate-500">{rows.length} accounts</p></div>{td===tc ? <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-400">Balanced ✓</span> : <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-red-500/10 text-red-400">Unbalanced</span>}</div>
-      <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-6 py-2.5 text-left w-24">Account</th><th className="px-4 py-2.5 text-left">Name</th><th className="px-4 py-2.5 text-left">Type</th><th className="px-6 py-2.5 text-right">Debits</th><th className="px-6 py-2.5 text-right">Credits</th><th className="px-6 py-2.5 text-right">Net</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">{rows.map((r) => (<Cr key={r.account_number} onClick={() => onDrill({ accountNumber: r.account_number, accountName: r.account_name })}><td className="px-6 py-1.5 text-xs font-mono text-slate-500">{r.account_number}</td><td className="px-4 py-1.5 text-slate-300 flex items-center gap-1">{r.account_name}<ChevronRight size={10} className="text-slate-600"/></td><td className="px-4 py-1.5 text-2xs text-slate-500">{r.account_type}</td><td className="px-6 py-1.5 text-right font-mono text-slate-300">{Number(r.total_debits) > 0 ? formatMoney(r.total_debits) : ''}</td><td className="px-6 py-1.5 text-right font-mono text-slate-300">{Number(r.total_credits) > 0 ? formatMoney(r.total_credits) : ''}</td><td className="px-6 py-1.5 text-right font-mono font-medium text-slate-200">{formatMoney(r.net_balance)}</td></Cr>))}</tbody>
+      <div className="px-6 py-3 border-b border-slate-800 flex items-center justify-between"><p className="text-2xs text-slate-500">{rows.length} accounts</p>{td===tc?<span className="px-2 py-0.5 rounded text-xs bg-emerald-500/10 text-emerald-400">Balanced ✓</span>:<span className="px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-400">Unbalanced</span>}</div>
+      <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-6 py-2.5 text-left w-20">Acct</th><th className="px-4 py-2.5 text-left">Name</th><th className="px-4 py-2.5 text-left w-16">Type</th><th className="px-6 py-2.5 text-right">Debits</th><th className="px-6 py-2.5 text-right">Credits</th><th className="px-6 py-2.5 text-right">Net</th></tr></thead>
+        <tbody className="divide-y divide-slate-800/30">{rows.map((r) => (<tr key={r.account_number} onClick={() => onDrill({accountNumber:r.account_number,accountName:r.account_name})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500">{r.account_number}</td><td className="px-4 py-1.5 text-slate-300">{r.account_name}</td><td className="px-4 py-1.5 text-2xs text-slate-500">{r.account_type}</td><td className="px-6 py-1.5 text-right font-mono text-slate-300">{Number(r.total_debits)>0?formatMoney(r.total_debits):''}</td><td className="px-6 py-1.5 text-right font-mono text-slate-300">{Number(r.total_credits)>0?formatMoney(r.total_credits):''}</td><td className="px-6 py-1.5 text-right font-mono font-medium text-slate-200">{formatMoney(r.net_balance)}</td></tr>))}</tbody>
         <tfoot><tr className="border-t-2 border-slate-700 bg-slate-800/30"><td colSpan={3} className="px-6 py-2.5 font-semibold text-white">Totals</td><td className="px-6 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(td)}</td><td className="px-6 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(tc)}</td><td className="px-6 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(td-tc)}</td></tr></tfoot>
       </table>
-    </div>
-  );
-}
-
-// ===== GL Detail =====
-function GlReport({ sd, ed, locId }: { sd: string; ed: string; locId: string }) {
-  const p: Record<string, string> = { start_date: sd, end_date: ed };
-  if (locId !== 'all') p.location_id = locId;
-  const { data, isLoading, error } = useQuery<{ data: { id: string; entryNumber: string; entryDate: string; sourceModule: string; entryMemo: string|null; accountNumber: string; accountName: string; debitCents: number; creditCents: number }[]; summary: { totalDebitCents: number; totalCreditCents: number } }>('/api/reports/gl-detail', p);
-  if (isLoading) return <Ld />;
-  if (error) return <Er m={String(error)} />;
-  const rows = data?.data ?? [];
-  if (!rows.length) return <Em m="No GL entries." />;
-  return (
-    <div className="card overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-800"><h2 className="text-base font-semibold text-white">GL Detail</h2><p className="text-2xs text-slate-500 font-mono">{sd} – {ed} · {rows.length} entries</p></div>
-      <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left">Date</th><th className="px-4 py-2.5 text-left">Entry</th><th className="px-4 py-2.5 text-left">Account</th><th className="px-4 py-2.5 text-left">Memo</th><th className="px-4 py-2.5 text-left">Source</th><th className="px-4 py-2.5 text-right">Debit</th><th className="px-4 py-2.5 text-right">Credit</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">{rows.slice(0,200).map((r) => (<tr key={r.id} className="hover:bg-slate-800/20"><td className="px-4 py-1.5 font-mono text-xs text-slate-400">{r.entryDate}</td><td className="px-4 py-1.5 font-mono text-xs text-slate-300">{r.entryNumber}</td><td className="px-4 py-1.5 text-slate-300"><span className="font-mono text-xs text-slate-500 mr-1">{r.accountNumber}</span>{r.accountName}</td><td className="px-4 py-1.5 text-slate-400 max-w-[160px] truncate">{r.entryMemo??'—'}</td><td className="px-4 py-1.5 text-2xs text-slate-500">{r.sourceModule}</td><td className="px-4 py-1.5 text-right font-mono text-slate-300">{r.debitCents>0?formatMoney(r.debitCents):''}</td><td className="px-4 py-1.5 text-right font-mono text-slate-300">{r.creditCents>0?formatMoney(r.creditCents):''}</td></tr>))}</tbody>
-        <tfoot><tr className="border-t-2 border-slate-700 bg-slate-800/30"><td colSpan={5} className="px-4 py-2.5 font-semibold text-white">Totals</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(data?.summary.totalDebitCents??0)}</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(data?.summary.totalCreditCents??0)}</td></tr></tfoot>
-      </table>
-    </div>
-  );
-}
-
-// ===== Aging (shared for AP/AR) =====
-function AgingBuckets({ b, t }: { b: Record<string, { count: number; totalCents: number }>; t: number }) {
-  return (
-    <div className="grid grid-cols-6 gap-3 mb-4">
-      {['CURRENT','1-30','31-60','61-90','90+'].map((k) => { const d = b[k]??{count:0,totalCents:0}; return <div key={k} className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-3"><p className="text-xs text-gray-400">{k==='CURRENT'?'Current':`${k} days`}</p><p className="text-lg font-mono font-semibold text-white mt-1">{formatMoney(d.totalCents)}</p><p className="text-2xs text-gray-500">{d.count} items</p></div>; })}
-      <div className="bg-gray-800/50 border border-emerald-700/30 rounded-lg p-3"><p className="text-xs text-emerald-400">Total</p><p className="text-lg font-mono font-semibold text-emerald-400 mt-1">{formatMoney(t)}</p></div>
-    </div>
-  );
-}
-
-function AgingReport({ type, locId }: { type: 'ar' | 'ap'; locId: string }) {
-  const p: Record<string, string> = {};
-  if (locId !== 'all') p.location_id = locId;
-  const qs = new URLSearchParams(p).toString();
-  const { data, isLoading, error } = useQuery<AgingResponse>(`/api/reports/${type}-aging${qs?'?'+qs:''}`);
-  if (isLoading) return <Ld />;
-  if (error) return <Er m={String(error)} />;
-  if (!data) return <Em />;
-  const isAR = type === 'ar';
-  return (
-    <div><h2 className="text-base font-semibold text-white mb-3">{isAR?'AR':'AP'} Aging</h2><AgingBuckets b={data.buckets} t={data.totalOutstanding} />
-      <div className="card overflow-hidden"><table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left">{isAR?'Customer':'Vendor'}</th><th className="px-4 py-2.5 text-left">{isAR?'Invoice':'Bill'} #</th><th className="px-4 py-2.5 text-left">Due</th><th className="px-4 py-2.5 text-left">Bucket</th><th className="px-4 py-2.5 text-left">Company</th><th className="px-4 py-2.5 text-right">Balance</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">{data.data.map((r,i) => (<tr key={i} className="hover:bg-slate-800/20"><td className="px-4 py-1.5 text-slate-300">{isAR?r.customerName:r.vendorName}</td><td className="px-4 py-1.5 font-mono text-xs text-slate-400">{isAR?r.invoiceNumber:r.billNumber}</td><td className="px-4 py-1.5 font-mono text-xs text-slate-400">{r.dueDate}</td><td className="px-4 py-1.5"><span className={clsx('px-1.5 py-0.5 rounded text-2xs',r.agingBucket==='CURRENT'?'bg-emerald-500/20 text-emerald-300':r.agingBucket==='90+'?'bg-red-500/20 text-red-300':'bg-amber-500/20 text-amber-300')}>{r.agingBucket}</span></td><td className="px-4 py-1.5 text-xs text-slate-500">{r.locationName}</td><td className="px-4 py-1.5 text-right font-mono text-slate-200">{formatMoney(r.balanceCents)}</td></tr>))}</tbody>
-      </table></div>
-    </div>
-  );
-}
-
-// ===== Job Profitability =====
-function JobProfReport({ locId }: { locId: string }) {
-  const p: Record<string, string> = {};
-  if (locId !== 'all') p.location_id = locId;
-  const qs = new URLSearchParams(p).toString();
-  const { data, isLoading, error } = useQuery<{ data: { jobNumber: string; jobName: string; customerName: string; status: string; contractCents: number; actualCostCents: number; billedCents: number; pctComplete: number; marginPct: number|null; isOverBudget: boolean }[] }>(`/api/reports/job-profitability${qs?'?'+qs:''}`);
-  if (isLoading) return <Ld />;
-  if (error) return <Er m={String(error)} />;
-  const rows = data?.data ?? [];
-  if (!rows.length) return <Em m="No jobs." />;
-  return (
-    <div className="card overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-800"><h2 className="text-base font-semibold text-white">Job Profitability</h2><p className="text-2xs text-slate-500">{rows.length} jobs</p></div>
-      <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left">Job</th><th className="px-4 py-2.5 text-left">Customer</th><th className="px-4 py-2.5 text-left">Status</th><th className="px-4 py-2.5 text-right">Contract</th><th className="px-4 py-2.5 text-right">Cost</th><th className="px-4 py-2.5 text-right">Billed</th><th className="px-4 py-2.5 text-right">% Done</th><th className="px-4 py-2.5 text-right">Margin</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">{rows.map((r) => (<tr key={r.jobNumber} className={clsx('hover:bg-slate-800/20',r.isOverBudget&&'bg-red-500/[0.03]')}><td className="px-4 py-1.5"><span className="font-mono text-xs text-slate-500 mr-1">{r.jobNumber}</span><span className="text-slate-300">{r.jobName}</span></td><td className="px-4 py-1.5 text-slate-400">{r.customerName??'—'}</td><td className="px-4 py-1.5"><span className={clsx('px-1.5 py-0.5 rounded text-2xs',r.status==='ACTIVE'?'bg-emerald-500/20 text-emerald-300':'bg-gray-500/20 text-gray-300')}>{r.status}</span></td><td className="px-4 py-1.5 text-right font-mono text-slate-300">{r.contractCents>0?formatMoney(r.contractCents):'—'}</td><td className="px-4 py-1.5 text-right font-mono text-slate-300">{formatMoney(r.actualCostCents)}</td><td className="px-4 py-1.5 text-right font-mono text-slate-300">{formatMoney(r.billedCents)}</td><td className="px-4 py-1.5 text-right font-mono text-slate-400">{Math.round(r.pctComplete*100)}%</td><td className={clsx('px-4 py-1.5 text-right font-mono font-medium',r.marginPct!==null?(r.marginPct>=20?'text-emerald-400':r.marginPct>=0?'text-amber-400':'text-red-400'):'text-slate-500')}>{r.marginPct!==null?`${r.marginPct}%`:'—'}</td></tr>))}</tbody>
-      </table>
-    </div>
-  );
-}
-
-// ===== Budget vs Actual =====
-function BvaReport({ sd, ed, locId }: { sd: string; ed: string; locId: string }) {
-  const p: Record<string, string> = { start_date: sd, end_date: ed, fiscal_year: sd.slice(0,4) };
-  if (locId !== 'all') p.location_id = locId;
-  const qs = new URLSearchParams(p).toString();
-  const { data, isLoading, error } = useQuery<{ data: { accountNumber: string; accountName: string; accountType: string; budgetCents: number; actualCents: number; varianceCents: number; variancePct: number; isFavorable: boolean }[]; totals: Record<string, { budget: number; actual: number; variance: number }> }>(`/api/budgets/vs-actual?${qs}`);
-  if (isLoading) return <Ld />;
-  if (error) return <Er m={String(error)} />;
-  const rows = data?.data ?? [];
-  if (!rows.length) return <Em m="No budget data. Create budgets first to see variance analysis." />;
-  return (
-    <div className="card overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-800"><h2 className="text-base font-semibold text-white">Budget vs Actual</h2><p className="text-2xs text-slate-500 font-mono">{sd} – {ed}</p></div>
-      <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left w-24">Account</th><th className="px-4 py-2.5 text-left">Name</th><th className="px-4 py-2.5 text-left">Type</th><th className="px-4 py-2.5 text-right">Budget</th><th className="px-4 py-2.5 text-right">Actual</th><th className="px-4 py-2.5 text-right">$ Var</th><th className="px-4 py-2.5 text-right">% Var</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">{rows.map((r) => (<tr key={r.accountNumber} className="hover:bg-slate-800/20"><td className="px-4 py-1.5 font-mono text-xs text-slate-500">{r.accountNumber}</td><td className="px-4 py-1.5 text-slate-300">{r.accountName}</td><td className="px-4 py-1.5 text-2xs text-slate-500">{r.accountType}</td><td className="px-4 py-1.5 text-right font-mono text-slate-400">{formatMoney(r.budgetCents)}</td><td className="px-4 py-1.5 text-right font-mono text-slate-300">{formatMoney(r.actualCents)}</td><td className={clsx('px-4 py-1.5 text-right font-mono',r.isFavorable?'text-emerald-400':'text-red-400')}>{formatMoney(r.varianceCents)}</td><td className={clsx('px-4 py-1.5 text-right font-mono text-xs',r.isFavorable?'text-emerald-400':'text-red-400')}>{r.variancePct}%</td></tr>))}</tbody>
-      </table>
-    </div>
-  );
-}
-
-// ===== Consolidated =====
-function ConsolReport({ sd, ed }: { sd: string; ed: string }) {
-  const { data, isLoading, error } = useQuery<{ accounts: { accountNumber: string; accountName: string; accountType: string; consolidatedCents: number; byLocation: Record<string, number> }[]; locations: { id: string; name: string; shortCode: string }[]; eliminatedCents: number }>(`/api/reports/consolidated?start_date=${sd}&end_date=${ed}`);
-  if (isLoading) return <Ld />;
-  if (error) return <Er m={String(error)} />;
-  const accts = data?.accounts ?? [];
-  const locs = data?.locations ?? [];
-  if (!accts.length) return <Em m="No consolidated data." />;
-  return (
-    <div className="card overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-800"><h2 className="text-base font-semibold text-white">Consolidated P&L</h2><p className="text-2xs text-slate-500 font-mono">{sd} – {ed} · IC eliminations applied · {formatMoney(data?.eliminatedCents??0)} eliminated</p></div>
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left sticky left-0 bg-surface-900">Account</th>{locs.slice(0,8).map((l) => <th key={l.id} className="px-3 py-2.5 text-right min-w-[80px]">{l.shortCode}</th>)}<th className="px-4 py-2.5 text-right font-semibold">Consol</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">{accts.map((a) => (<tr key={a.accountNumber} className="hover:bg-slate-800/20"><td className="px-4 py-1.5 text-slate-300 sticky left-0 bg-surface-900"><span className="font-mono text-xs text-slate-500 mr-1">{a.accountNumber}</span>{a.accountName}</td>{locs.slice(0,8).map((l) => <td key={l.id} className="px-3 py-1.5 text-right font-mono text-xs text-slate-400">{a.byLocation[l.id]?formatMoney(a.byLocation[l.id]):''}</td>)}<td className="px-4 py-1.5 text-right font-mono font-medium text-white">{formatMoney(a.consolidatedCents)}</td></tr>))}</tbody>
-      </table></div>
-    </div>
-  );
-}
-
-// ===== Equity Changes =====
-function EquityReport({ sd, ed, locId }: { sd: string; ed: string; locId: string }) {
-  const p: Record<string, string> = { start_date: sd, end_date: ed };
-  if (locId !== 'all') p.location_id = locId;
-  const qs = new URLSearchParams(p).toString();
-  const { data, isLoading, error } = useQuery<{ accounts: { accountNumber: string; accountName: string; beginningBalanceCents: number; activityCents: number; endingBalanceCents: number }[]; netIncomeCents: number; summary: { totalBeginning: number; totalActivity: number; totalEnding: number } }>(`/api/reports/equity-changes?${qs}`);
-  if (isLoading) return <Ld />;
-  if (error) return <Er m={String(error)} />;
-  const accts = data?.accounts ?? [];
-  return (
-    <div className="card overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-800"><h2 className="text-base font-semibold text-white">Statement of Changes in Equity</h2><p className="text-2xs text-slate-500 font-mono">{sd} – {ed}</p></div>
-      <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left">Account</th><th className="px-4 py-2.5 text-right">Beginning</th><th className="px-4 py-2.5 text-right">Activity</th><th className="px-4 py-2.5 text-right">Ending</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">
-          {accts.map((a) => (<tr key={a.accountNumber} className="hover:bg-slate-800/20"><td className="px-4 py-1.5 text-slate-300"><span className="font-mono text-xs text-slate-500 mr-1">{a.accountNumber}</span>{a.accountName}</td><td className="px-4 py-1.5 text-right font-mono text-slate-400">{formatMoney(a.beginningBalanceCents)}</td><td className={clsx('px-4 py-1.5 text-right font-mono',a.activityCents>=0?'text-emerald-400':'text-red-400')}>{formatMoney(a.activityCents)}</td><td className="px-4 py-1.5 text-right font-mono font-medium text-white">{formatMoney(a.endingBalanceCents)}</td></tr>))}
-          <tr className="bg-slate-800/20"><td className="px-4 py-2 text-sm text-slate-300">Net Income (retained)</td><td/><td className="px-4 py-2 text-right font-mono text-emerald-400">{formatMoney(data?.netIncomeCents??0)}</td><td/></tr>
-        </tbody>
-        <tfoot><tr className="border-t-2 border-slate-700 bg-slate-800/30"><td className="px-4 py-2.5 font-semibold text-white">Total Equity</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(data?.summary.totalBeginning??0)}</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(data?.summary.totalActivity??0)}</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-emerald-400">{formatMoney(data?.summary.totalEnding??0)}</td></tr></tfoot>
-      </table>
-    </div>
-  );
-}
-
-// ===== Vendor Balances =====
-function VendBalReport({ locId }: { locId: string }) {
-  const p: Record<string, string> = {};
-  if (locId !== 'all') p.location_id = locId;
-  const qs = new URLSearchParams(p).toString();
-  const { data, isLoading, error } = useQuery<{ data: { vendorName: string; is1099: boolean; totalBilledCents: number; totalPaidCents: number; openBalanceCents: number; billCount: number; openBillCount: number; aging: Record<string, number> }[]; summary: { totalVendors: number; totalOpenCents: number; vendorsWithBalance: number } }>(`/api/reports/vendor-balances${qs?'?'+qs:''}`);
-  if (isLoading) return <Ld />;
-  if (error) return <Er m={String(error)} />;
-  const rows = data?.data ?? [];
-  if (!rows.length) return <Em m="No vendor data." />;
-  return (
-    <div className="card overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-800"><h2 className="text-base font-semibold text-white">Vendor Balance Summary</h2><p className="text-2xs text-slate-500">{data?.summary.vendorsWithBalance} vendors with open balance · {formatMoney(data?.summary.totalOpenCents??0)} outstanding</p></div>
-      <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left">Vendor</th><th className="px-4 py-2.5 text-right">Billed</th><th className="px-4 py-2.5 text-right">Paid</th><th className="px-4 py-2.5 text-right">Open</th><th className="px-4 py-2.5 text-right">Bills</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">{rows.map((r) => (<tr key={r.vendorName} className="hover:bg-slate-800/20"><td className="px-4 py-1.5 text-slate-300">{r.vendorName}{r.is1099 && <span className="ml-1 px-1 py-0.5 text-2xs bg-amber-500/20 text-amber-300 rounded">1099</span>}</td><td className="px-4 py-1.5 text-right font-mono text-slate-400">{formatMoney(r.totalBilledCents)}</td><td className="px-4 py-1.5 text-right font-mono text-slate-400">{formatMoney(r.totalPaidCents)}</td><td className="px-4 py-1.5 text-right font-mono text-white font-medium">{formatMoney(r.openBalanceCents)}</td><td className="px-4 py-1.5 text-right text-slate-500">{r.openBillCount}/{r.billCount}</td></tr>))}</tbody>
-      </table>
-    </div>
-  );
-}
-
-// ===== Customer Balances =====
-function CustBalReport({ locId }: { locId: string }) {
-  const p: Record<string, string> = {};
-  if (locId !== 'all') p.location_id = locId;
-  const qs = new URLSearchParams(p).toString();
-  const { data, isLoading, error } = useQuery<{ data: { customerName: string; email: string|null; termsDays: number; totalInvoicedCents: number; totalPaidCents: number; openBalanceCents: number; invoiceCount: number; openInvoiceCount: number }[]; summary: { totalCustomers: number; totalOpenCents: number } }>(`/api/reports/customer-balances${qs?'?'+qs:''}`);
-  if (isLoading) return <Ld />;
-  if (error) return <Er m={String(error)} />;
-  const rows = data?.data ?? [];
-  if (!rows.length) return <Em m="No customer data." />;
-  return (
-    <div className="card overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-800"><h2 className="text-base font-semibold text-white">Customer Balance Summary</h2><p className="text-2xs text-slate-500">{formatMoney(data?.summary.totalOpenCents??0)} outstanding</p></div>
-      <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left">Customer</th><th className="px-4 py-2.5 text-right">Terms</th><th className="px-4 py-2.5 text-right">Invoiced</th><th className="px-4 py-2.5 text-right">Paid</th><th className="px-4 py-2.5 text-right">Open</th><th className="px-4 py-2.5 text-right">Invoices</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">{rows.map((r) => (<tr key={r.customerName} className="hover:bg-slate-800/20"><td className="px-4 py-1.5 text-slate-300">{r.customerName}</td><td className="px-4 py-1.5 text-right text-xs text-slate-500">Net {r.termsDays}</td><td className="px-4 py-1.5 text-right font-mono text-slate-400">{formatMoney(r.totalInvoicedCents)}</td><td className="px-4 py-1.5 text-right font-mono text-slate-400">{formatMoney(r.totalPaidCents)}</td><td className="px-4 py-1.5 text-right font-mono text-white font-medium">{formatMoney(r.openBalanceCents)}</td><td className="px-4 py-1.5 text-right text-slate-500">{r.openInvoiceCount}/{r.invoiceCount}</td></tr>))}</tbody>
-      </table>
-    </div>
-  );
-}
-
-// ===== Open Items =====
-function OpenItemsReport({ locId }: { locId: string }) {
-  const p: Record<string, string> = {};
-  if (locId !== 'all') p.location_id = locId;
-  const qs = new URLSearchParams(p).toString();
-  const { data, isLoading, error } = useQuery<{ data: { type: string; number: string; counterpartyName: string; dueDate: string; balanceCents: number; daysOverdue: number; locationName: string }[]; summary: { openInvoices: number; openBills: number; totalARCents: number; totalAPCents: number; netCents: number } }>(`/api/reports/open-items${qs?'?'+qs:''}`);
-  if (isLoading) return <Ld />;
-  if (error) return <Er m={String(error)} />;
-  const rows = data?.data ?? [];
-  const s = data?.summary;
-  if (!rows.length) return <Em m="No open items." />;
-  return (
-    <div>
-      <div className="grid grid-cols-3 gap-4 mb-4">
-        <div className="bg-gray-800/50 border border-blue-700/30 rounded-lg p-3"><p className="text-xs text-blue-400">Open AR</p><p className="text-lg font-mono font-semibold text-white mt-1">{formatMoney(s?.totalARCents??0)}</p><p className="text-2xs text-gray-500">{s?.openInvoices} invoices</p></div>
-        <div className="bg-gray-800/50 border border-amber-700/30 rounded-lg p-3"><p className="text-xs text-amber-400">Open AP</p><p className="text-lg font-mono font-semibold text-white mt-1">{formatMoney(s?.totalAPCents??0)}</p><p className="text-2xs text-gray-500">{s?.openBills} bills</p></div>
-        <div className="bg-gray-800/50 border border-emerald-700/30 rounded-lg p-3"><p className="text-xs text-emerald-400">Net (AR − AP)</p><p className={clsx('text-lg font-mono font-semibold mt-1',(s?.netCents??0)>=0?'text-emerald-400':'text-red-400')}>{formatMoney(s?.netCents??0)}</p></div>
-      </div>
-      <div className="card overflow-hidden"><table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left">Type</th><th className="px-4 py-2.5 text-left">#</th><th className="px-4 py-2.5 text-left">Name</th><th className="px-4 py-2.5 text-left">Due</th><th className="px-4 py-2.5 text-left">Company</th><th className="px-4 py-2.5 text-right">Balance</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">{rows.map((r,i) => (<tr key={i} className="hover:bg-slate-800/20"><td className="px-4 py-1.5"><span className={clsx('px-1.5 py-0.5 rounded text-2xs',r.type==='invoice'?'bg-blue-500/20 text-blue-300':'bg-amber-500/20 text-amber-300')}>{r.type==='invoice'?'AR':'AP'}</span></td><td className="px-4 py-1.5 font-mono text-xs text-slate-400">{r.number}</td><td className="px-4 py-1.5 text-slate-300">{r.counterpartyName}</td><td className="px-4 py-1.5 font-mono text-xs text-slate-400">{r.dueDate}{r.daysOverdue>0&&<span className="ml-1 text-red-400">{r.daysOverdue}d</span>}</td><td className="px-4 py-1.5 text-xs text-slate-500">{r.locationName}</td><td className="px-4 py-1.5 text-right font-mono text-white">{formatMoney(r.balanceCents)}</td></tr>))}</tbody>
-      </table></div>
-    </div>
-  );
-}
-
-// ===== Expense by Vendor =====
-function ExpenseByVendorReport({ sd, ed, locId }: { sd: string; ed: string; locId: string }) {
-  const [mode, setMode] = useState<'summary'|'detail'>('summary');
-  const p: Record<string, string> = { start_date: sd, end_date: ed, mode };
-  if (locId !== 'all') p.location_id = locId;
-  const qs = new URLSearchParams(p).toString();
-  const { data, isLoading, error } = useQuery<{ data: { vendorName: string; is1099: boolean; totalCents: number; transactionCount: number; accounts: { accountName: string }[]; transactions: { date: string; description: string; amountCents: number; locationCode: string }[] }[]; summary: { totalExpenseCents: number; vendorCount: number } }>(`/api/reports/expense-by-vendor?${qs}`);
-  if (isLoading) return <Ld />;
-  if (error) return <Er m={String(error)} />;
-  const rows = data?.data ?? [];
-  if (!rows.length) return <Em m="No expense data for this period." />;
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div><h2 className="text-base font-semibold text-white">Expense by Vendor</h2><p className="text-2xs text-slate-500 font-mono">{sd} – {ed} · {formatMoney(data?.summary.totalExpenseCents??0)} total</p></div>
-        <div className="flex gap-1 p-0.5 rounded-lg bg-slate-800 border border-slate-700">
-          <button onClick={() => setMode('summary')} className={clsx('px-3 py-1 rounded text-xs', mode==='summary'?'bg-slate-700 text-white':'text-slate-400')}>Summary</button>
-          <button onClick={() => setMode('detail')} className={clsx('px-3 py-1 rounded text-xs', mode==='detail'?'bg-slate-700 text-white':'text-slate-400')}>Detail</button>
-        </div>
-      </div>
-      <div className="card overflow-hidden"><table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left">Vendor</th><th className="px-4 py-2.5 text-left">{mode==='summary'?'Top Account':'Date'}</th><th className="px-4 py-2.5 text-right">Txns</th><th className="px-4 py-2.5 text-right">Total</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">{rows.map((r,ri) => (<React.Fragment key={ri}>
-          <tr className="hover:bg-slate-800/20"><td className="px-4 py-1.5 text-slate-300">{r.vendorName}{r.is1099&&<span className="ml-1 px-1 py-0.5 text-2xs bg-amber-500/20 text-amber-300 rounded">1099</span>}</td><td className="px-4 py-1.5 text-xs text-slate-500">{mode==='summary'?(r.accounts[0]?.accountName??'—'):''}</td><td className="px-4 py-1.5 text-right text-slate-400">{r.transactionCount}</td><td className="px-4 py-1.5 text-right font-mono text-white font-medium">{formatMoney(r.totalCents)}</td></tr>
-          {mode==='detail'&&r.transactions.map((t,i) => (<tr key={i} className="bg-slate-800/10"><td className="px-4 py-1 pl-8 text-xs text-slate-500 font-mono">{t.date}</td><td className="px-4 py-1 text-xs text-slate-400">{t.description}</td><td className="px-4 py-1 text-right text-xs text-slate-500">{t.locationCode}</td><td className="px-4 py-1 text-right font-mono text-xs text-slate-300">{formatMoney(t.amountCents)}</td></tr>))}
-        </React.Fragment>))}</tbody>
-      </table></div>
-    </div>
-  );
-}
-
-// ===== Income by Customer =====
-function IncomeByCustomerReport({ sd, ed, locId }: { sd: string; ed: string; locId: string }) {
-  const [mode, setMode] = useState<'summary'|'detail'>('summary');
-  const p: Record<string, string> = { start_date: sd, end_date: ed, mode };
-  if (locId !== 'all') p.location_id = locId;
-  const qs = new URLSearchParams(p).toString();
-  const { data, isLoading, error } = useQuery<{ data: { customerName: string; totalRevenueCents: number; totalPaidCents: number; totalBalanceCents: number; invoiceCount: number; invoices: { invoiceNumber: string; date: string; totalCents: number; paidCents: number; balanceCents: number; status: string; jobNumber: string|null }[] }[]; summary: { totalRevenueCents: number; totalCollectedCents: number; customerCount: number } }>(`/api/reports/income-by-customer?${qs}`);
-  if (isLoading) return <Ld />;
-  if (error) return <Er m={String(error)} />;
-  const rows = data?.data ?? [];
-  if (!rows.length) return <Em m="No income data for this period." />;
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div><h2 className="text-base font-semibold text-white">Income by Customer</h2><p className="text-2xs text-slate-500">{data?.summary.customerCount} customers · {formatMoney(data?.summary.totalRevenueCents??0)} revenue</p></div>
-        <div className="flex gap-1 p-0.5 rounded-lg bg-slate-800 border border-slate-700">
-          <button onClick={() => setMode('summary')} className={clsx('px-3 py-1 rounded text-xs', mode==='summary'?'bg-slate-700 text-white':'text-slate-400')}>Summary</button>
-          <button onClick={() => setMode('detail')} className={clsx('px-3 py-1 rounded text-xs', mode==='detail'?'bg-slate-700 text-white':'text-slate-400')}>Detail</button>
-        </div>
-      </div>
-      <div className="card overflow-hidden"><table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left">Customer</th><th className="px-4 py-2.5 text-right">Revenue</th><th className="px-4 py-2.5 text-right">Collected</th><th className="px-4 py-2.5 text-right">Outstanding</th><th className="px-4 py-2.5 text-right">Invoices</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">{rows.map((r,ri) => (<React.Fragment key={ri}>
-          <tr className="hover:bg-slate-800/20"><td className="px-4 py-1.5 text-slate-300">{r.customerName}</td><td className="px-4 py-1.5 text-right font-mono text-white">{formatMoney(r.totalRevenueCents)}</td><td className="px-4 py-1.5 text-right font-mono text-emerald-400">{formatMoney(r.totalPaidCents)}</td><td className="px-4 py-1.5 text-right font-mono text-amber-400">{formatMoney(r.totalBalanceCents)}</td><td className="px-4 py-1.5 text-right text-slate-400">{r.invoiceCount}</td></tr>
-          {mode==='detail'&&r.invoices.map((inv,i) => (<tr key={i} className="bg-slate-800/10"><td className="px-4 py-1 pl-8 text-xs text-slate-400"><span className="font-mono text-slate-500 mr-1">{inv.invoiceNumber}</span>{inv.date}{inv.jobNumber&&<span className="ml-1 text-indigo-400">Job {inv.jobNumber}</span>}</td><td className="px-4 py-1 text-right font-mono text-xs text-slate-300">{formatMoney(inv.totalCents)}</td><td className="px-4 py-1 text-right font-mono text-xs text-slate-400">{formatMoney(inv.paidCents)}</td><td className="px-4 py-1 text-right font-mono text-xs text-slate-400">{formatMoney(inv.balanceCents)}</td><td className="px-4 py-1 text-right"><span className={clsx('px-1 py-0.5 rounded text-2xs',inv.status==='PAID'?'bg-emerald-500/20 text-emerald-300':'bg-amber-500/20 text-amber-300')}>{inv.status}</span></td></tr>))}
-        </React.Fragment>))}</tbody>
-      </table></div>
-    </div>
-  );
-}
-
-// ===== Sales by Customer =====
-function SalesByCustomerReport({ sd, ed, locId }: { sd: string; ed: string; locId: string }) {
-  const [mode, setMode] = useState<'summary'|'detail'>('summary');
-  const p: Record<string, string> = { start_date: sd, end_date: ed, mode };
-  if (locId !== 'all') p.location_id = locId;
-  const qs = new URLSearchParams(p).toString();
-  const { data, isLoading, error } = useQuery<{ data: { customerName: string; totalSalesCents: number; lineCount: number; byAccount: { accountName: string; totalCents: number }[]; details: { invoiceNumber: string; description: string; qty: number; unitPriceCents: number; amountCents: number; accountName: string }[] }[]; summary: { totalSalesCents: number; customerCount: number } }>(`/api/reports/sales-by-customer?${qs}`);
-  if (isLoading) return <Ld />;
-  if (error) return <Er m={String(error)} />;
-  const rows = data?.data ?? [];
-  if (!rows.length) return <Em m="No sales data for this period." />;
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div><h2 className="text-base font-semibold text-white">Sales by Customer</h2><p className="text-2xs text-slate-500">{formatMoney(data?.summary.totalSalesCents??0)} total sales</p></div>
-        <div className="flex gap-1 p-0.5 rounded-lg bg-slate-800 border border-slate-700">
-          <button onClick={() => setMode('summary')} className={clsx('px-3 py-1 rounded text-xs', mode==='summary'?'bg-slate-700 text-white':'text-slate-400')}>Summary</button>
-          <button onClick={() => setMode('detail')} className={clsx('px-3 py-1 rounded text-xs', mode==='detail'?'bg-slate-700 text-white':'text-slate-400')}>Detail</button>
-        </div>
-      </div>
-      <div className="card overflow-hidden"><table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left">Customer</th><th className="px-4 py-2.5 text-left">{mode==='summary'?'Revenue Lines':'Item'}</th><th className="px-4 py-2.5 text-right">Items</th><th className="px-4 py-2.5 text-right">Total</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">{rows.map((r,ri) => (<React.Fragment key={ri}>
-          <tr className="hover:bg-slate-800/20"><td className="px-4 py-1.5 text-slate-300">{r.customerName}</td><td className="px-4 py-1.5 text-xs text-slate-400">{mode==='summary'?r.byAccount.map((a) => a.accountName).join(', '):''}</td><td className="px-4 py-1.5 text-right text-slate-400">{r.lineCount}</td><td className="px-4 py-1.5 text-right font-mono text-white font-medium">{formatMoney(r.totalSalesCents)}</td></tr>
-          {mode==='detail'&&r.details.map((d,i) => (<tr key={i} className="bg-slate-800/10"><td className="px-4 py-1 pl-8 text-xs text-slate-500 font-mono">{d.invoiceNumber}</td><td className="px-4 py-1 text-xs text-slate-400">{d.description} <span className="text-slate-600">({d.accountName})</span></td><td className="px-4 py-1 text-right font-mono text-xs text-slate-500">{d.qty} × {formatMoney(d.unitPriceCents)}</td><td className="px-4 py-1 text-right font-mono text-xs text-slate-300">{formatMoney(d.amountCents)}</td></tr>))}
-        </React.Fragment>))}</tbody>
-      </table></div>
-    </div>
-  );
-}
-
-// ===== Transaction List =====
-function TransactionListReport({ sd, ed, locId }: { sd: string; ed: string; locId: string }) {
-  const [mode, setMode] = useState<'detail'|'summary'>('detail');
-  const p: Record<string, string> = { start_date: sd, end_date: ed, mode };
-  if (locId !== 'all') p.location_id = locId;
-  const qs = new URLSearchParams(p).toString();
-  const { data, isLoading, error } = useQuery<{ data: any[]; summary: { totalDebits: number; totalCredits: number; entryCount: number } }>(`/api/reports/transaction-list?${qs}`);
-  if (isLoading) return <Ld />;
-  if (error) return <Er m={String(error)} />;
-  const rows = data?.data ?? [];
-  if (!rows.length) return <Em m="No transactions for this period." />;
-  const s = data?.summary;
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div><h2 className="text-base font-semibold text-white">Transaction List</h2><p className="text-2xs text-slate-500 font-mono">{sd} – {ed} · {s?.entryCount} entries</p></div>
-        <div className="flex gap-1 p-0.5 rounded-lg bg-slate-800 border border-slate-700">
-          <button onClick={() => setMode('summary')} className={clsx('px-3 py-1 rounded text-xs', mode==='summary'?'bg-slate-700 text-white':'text-slate-400')}>By Day</button>
-          <button onClick={() => setMode('detail')} className={clsx('px-3 py-1 rounded text-xs', mode==='detail'?'bg-slate-700 text-white':'text-slate-400')}>All Lines</button>
-        </div>
-      </div>
-      <div className="card overflow-hidden">
-        {mode === 'summary' ? (
-          <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left">Date</th><th className="px-4 py-2.5 text-right">Entries</th><th className="px-4 py-2.5 text-right">Debits</th><th className="px-4 py-2.5 text-right">Credits</th></tr></thead>
-            <tbody className="divide-y divide-slate-800/30">{rows.map((r: any,i: number) => (<tr key={i} className="hover:bg-slate-800/20"><td className="px-4 py-1.5 font-mono text-slate-300">{r.date}</td><td className="px-4 py-1.5 text-right text-slate-400">{r.entryCount}</td><td className="px-4 py-1.5 text-right font-mono text-slate-300">{formatMoney(r.debitCents)}</td><td className="px-4 py-1.5 text-right font-mono text-slate-300">{formatMoney(r.creditCents)}</td></tr>))}</tbody>
-          </table>
-        ) : (
-          <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-4 py-2.5 text-left">Date</th><th className="px-4 py-2.5 text-left">Entry</th><th className="px-4 py-2.5 text-left">Account</th><th className="px-4 py-2.5 text-left">Memo</th><th className="px-4 py-2.5 text-right">Debit</th><th className="px-4 py-2.5 text-right">Credit</th></tr></thead>
-            <tbody className="divide-y divide-slate-800/30">{rows.slice(0,300).map((r: any,i: number) => (<tr key={i} className="hover:bg-slate-800/20"><td className="px-4 py-1.5 font-mono text-xs text-slate-400">{r.date}</td><td className="px-4 py-1.5 font-mono text-xs text-slate-300">{r.entryNumber}</td><td className="px-4 py-1.5 text-slate-300"><span className="font-mono text-xs text-slate-500 mr-1">{r.accountNumber}</span>{r.accountName}</td><td className="px-4 py-1.5 text-xs text-slate-400 max-w-[160px] truncate">{r.entryMemo||r.lineMemo||'—'}</td><td className="px-4 py-1.5 text-right font-mono text-slate-300">{r.debitCents>0?formatMoney(r.debitCents):''}</td><td className="px-4 py-1.5 text-right font-mono text-slate-300">{r.creditCents>0?formatMoney(r.creditCents):''}</td></tr>))}</tbody>
-            <tfoot><tr className="border-t-2 border-slate-700 bg-slate-800/30"><td colSpan={4} className="px-4 py-2.5 font-semibold text-white">Totals</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(s?.totalDebits??0)}</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(s?.totalCredits??0)}</td></tr></tfoot>
-          </table>
-        )}
-      </div>
     </div>
   );
 }
