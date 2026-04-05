@@ -34,34 +34,20 @@ export interface PostResult {
 
 /**
  * Post a journal entry to the GL.
- *
- * This is a transactional operation — either all lines are posted or none are.
- * The database triggers handle:
- *   - Double-entry balance check (check_journal_balance)
- *   - Period lock enforcement (enforce_period_lock)
- *   - Control account enforcement (enforce_control_accounts)
- *   - Approved account enforcement (enforce_approved_accounts)
- *   - Dimension validation (validate_dimensions)
  */
 export async function postJournalEntry(
   supabase: SupabaseClient,
   input: PostJournalEntryInput
 ): Promise<PostResult> {
-  // Validate: debits must equal credits
   const totalDebits = input.lines.reduce((sum, l) => sum + l.debit_cents, 0);
   const totalCredits = input.lines.reduce((sum, l) => sum + l.credit_cents, 0);
 
   if (totalDebits !== totalCredits) {
-    return {
-      success: false,
-      error: `Unbalanced entry: debits=${totalDebits} credits=${totalCredits}`,
-    };
+    return { success: false, error: `Unbalanced entry: debits=${totalDebits} credits=${totalCredits}` };
   }
-
   if (totalDebits === 0) {
     return { success: false, error: 'Entry has no amounts' };
   }
-
   if (input.lines.length < 2) {
     return { success: false, error: 'Entry must have at least 2 lines' };
   }
@@ -79,7 +65,6 @@ export async function postJournalEntry(
   if (periodError || !period) {
     return { success: false, error: `No fiscal period found for date ${input.entry_date}` };
   }
-
   if (period.status === 'HARD_CLOSE') {
     return { success: false, error: 'Cannot post to a hard-closed period' };
   }
@@ -105,10 +90,7 @@ export async function postJournalEntry(
     .single();
 
   if (entryError || !entry) {
-    return {
-      success: false,
-      error: `Failed to create entry: ${entryError?.message ?? 'unknown'}`,
-    };
+    return { success: false, error: `Failed to create entry: ${entryError?.message ?? 'unknown'}` };
   }
 
   // Insert all lines
@@ -133,24 +115,28 @@ export async function postJournalEntry(
     .insert(lineInserts);
 
   if (linesError) {
-    // Rollback: delete the header if lines fail
     await supabase.from('gl_entries').delete().eq('id', entry.id);
-    return {
-      success: false,
-      error: `Failed to post lines: ${linesError.message}`,
-    };
+    return { success: false, error: `Failed to post lines: ${linesError.message}` };
   }
 
-  return {
-    success: true,
-    entry_id: entry.id,
-    entry_number: entry.entry_number,
-  };
+  return { success: true, entry_id: entry.id, entry_number: entry.entry_number };
+}
+
+/** Raw GL line from Supabase query (before mapping to JournalEntryLineInput) */
+interface RawGlLine {
+  account_id: string;
+  debit_cents: number;
+  credit_cents: number;
+  location_id?: string;
+  department_id?: string | null;
+  class_id?: string | null;
+  item_id?: string | null;
+  memo?: string | null;
+  [key: string]: unknown;
 }
 
 /**
  * Void a posted journal entry.
- * Creates a reversing entry and marks the original as voided.
  */
 export async function voidJournalEntry(
   supabase: SupabaseClient,
@@ -159,13 +145,9 @@ export async function voidJournalEntry(
   userId: string,
   reason: string
 ): Promise<PostResult> {
-  // Get the original entry and lines
   const { data: original, error: fetchError } = await supabase
     .from('gl_entries')
-    .select(`
-      *,
-      gl_entry_lines (*)
-    `)
+    .select(`*, gl_entry_lines (*)`)
     .eq('id', entryId)
     .eq('org_id', orgId)
     .single();
@@ -173,21 +155,20 @@ export async function voidJournalEntry(
   if (fetchError || !original) {
     return { success: false, error: 'Entry not found' };
   }
-
   if (original.status !== 'POSTED') {
     return { success: false, error: `Cannot void entry in status ${original.status}` };
   }
 
-  // Create reversing entry (swap debits and credits)
-  const reversingLines = (original.gl_entry_lines as JournalEntryLineInput[]).map((line) => ({
+  const rawLines = original.gl_entry_lines as RawGlLine[];
+  const reversingLines: JournalEntryLineInput[] = rawLines.map((line) => ({
     account_id: line.account_id,
     debit_cents: line.credit_cents,
     credit_cents: line.debit_cents,
-    location_id: (line as Record<string, unknown>).location_id as string,
-    department_id: (line as Record<string, unknown>).department_id as string | undefined,
-    class_id: (line as Record<string, unknown>).class_id as string | undefined,
-    item_id: (line as Record<string, unknown>).item_id as string | undefined,
-    memo: `VOID: ${(line as Record<string, unknown>).memo ?? ''}`,
+    location_id: (line.location_id as string) ?? original.location_id,
+    department_id: (line.department_id as string) ?? undefined,
+    class_id: (line.class_id as string) ?? undefined,
+    item_id: (line.item_id as string) ?? undefined,
+    memo: `VOID: ${(line.memo as string) ?? ''}`,
   }));
 
   const result = await postJournalEntry(supabase, {
@@ -203,7 +184,6 @@ export async function voidJournalEntry(
 
   if (!result.success) return result;
 
-  // Mark original as voided
   await supabase
     .from('gl_entries')
     .update({

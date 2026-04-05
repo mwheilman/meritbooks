@@ -9,6 +9,7 @@ const bsQuerySchema = z.object({
 });
 
 interface BSLineItem {
+  accountId: string;
   accountNumber: string;
   accountName: string;
   groupName: string;
@@ -87,6 +88,7 @@ export const GET = apiQueryHandler(
 
     // Aggregate by account
     const accountMap = new Map<string, {
+      accountId: string;
       accountNumber: string;
       accountName: string;
       accountType: string;
@@ -113,6 +115,7 @@ export const GET = apiQueryHandler(
         existing.totalCredits += Number(line.credit_cents ?? 0);
       } else {
         accountMap.set(key, {
+          accountId: line.account_id,
           accountNumber: acct.account_number,
           accountName: acct.name,
           accountType: acct.account_type,
@@ -155,6 +158,7 @@ export const GET = apiQueryHandler(
         const groupMap = subTypeMap.get(acct.subTypeName)!;
         if (!groupMap.has(acct.groupName)) groupMap.set(acct.groupName, []);
         groupMap.get(acct.groupName)!.push({
+          accountId: acct.accountId,
           accountNumber: acct.accountNumber,
           accountName: acct.accountName,
           groupName: acct.groupName,

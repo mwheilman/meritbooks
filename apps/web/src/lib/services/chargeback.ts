@@ -28,27 +28,20 @@ export interface ChargebackLineItem {
   sourceNotes?: string;
 }
 
-/**
- * Generate chargeback invoices for a given month.
- *
- * Invoice structure (6 sections per receiving company):
- *   1. COGS-Labor: Production hrs on customer projects
- *   2. OpEx-Labor: Always-OpEx dept hrs + internal/facility hrs
- *   3. COGS-Expenses: Receipts tagged to jobs from BY_JOB_MATCH depts
- *   4. OpEx-Expenses: General receipts or ALWAYS_OPEX dept receipts
- *   5. Shared Costs: Per allocation rules
- *   6. Direct Assigned: Burdened cost × allocation %
- */
+/** Supabase FK joins return arrays. Extract first element safely. */
+function fkFirst<T>(val: unknown): T | null {
+  if (Array.isArray(val)) return (val[0] as T) ?? null;
+  return (val as T) ?? null;
+}
+
 export async function generateChargebackInvoices(
   supabase: SupabaseClient,
   orgId: string,
   year: number,
   month: number,
 ): Promise<ChargebackInvoiceData[]> {
-  // Get overhead rate for the period
   const ohRate = await calculateOverheadRate(supabase, orgId, year, month);
 
-  // Get all locations (excluding Merit itself for receiving)
   const { data: locations } = await supabase
     .from('locations')
     .select('id, name, short_code')
@@ -57,11 +50,9 @@ export async function generateChargebackInvoices(
 
   if (!locations) return [];
 
-  // Get Merit location for determining "customer ≠ job" logic
   const meritLocation = locations.find((l) => l.short_code === 'MMG');
   if (!meritLocation) return [];
 
-  // Get time entries for the period
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDate = new Date(year, month, 0).toISOString().split('T')[0];
 
@@ -76,41 +67,38 @@ export async function generateChargebackInvoices(
     .gte('clock_in', startDate)
     .lte('clock_in', endDate + 'T23:59:59Z');
 
-  // Get shared cost allocation rules
   const { data: sharedRules } = await supabase
     .from('shared_cost_rules')
     .select('*')
     .eq('org_id', orgId)
     .eq('is_active', true);
 
-  // Build invoices per receiving company
   const invoices: ChargebackInvoiceData[] = [];
 
   for (const location of locations) {
-    if (location.id === meritLocation.id) continue; // Merit doesn't bill itself
+    if (location.id === meritLocation.id) continue;
 
     const lineItems: ChargebackLineItem[] = [];
     let cogsLaborCents = 0;
     let opexLaborCents = 0;
-    let cogsExpensesCents = 0;
-    let opexExpensesCents = 0;
+    const cogsExpensesCents = 0;
+    const opexExpensesCents = 0;
     let sharedCostsCents = 0;
-    let directAssignedCents = 0;
+    const directAssignedCents = 0;
 
-    // Process time entries for this location
     for (const entry of (timeEntries ?? [])) {
       if (entry.location_id !== location.id) continue;
       if (!entry.total_hours || entry.total_hours <= 0) continue;
 
-      const emp = entry.employees as { first_name: string; last_name: string; hourly_rate_cents: number; labor_type: string } | null;
-      const dept = entry.departments as { name: string; gl_classification: string } | null;
+      const emp = fkFirst<{ first_name: string; last_name: string; hourly_rate_cents: number; labor_type: string }>(entry.employees);
+      const dept = fkFirst<{ name: string; gl_classification: string }>(entry.departments);
 
       if (!emp || emp.labor_type !== 'PRODUCTION') continue;
 
       const glClass = classifyTimeEntry(
         dept?.gl_classification ?? 'ALWAYS_OPEX',
         !!entry.job_id,
-        false, // simplified — would check if job's customer is the same entity
+        false,
       );
 
       const billRate = calculateBillRate(emp.hourly_rate_cents ?? 0, ohRate.ohRateCents);
@@ -128,12 +116,10 @@ export async function generateChargebackInvoices(
       };
 
       lineItems.push(item);
-
       if (glClass === 'COGS') cogsLaborCents += amount;
       else opexLaborCents += amount;
     }
 
-    // Process shared cost allocations
     for (const rule of (sharedRules ?? [])) {
       const applicableLocations = rule.applicable_location_ids as string[];
       if (applicableLocations.length > 0 && !applicableLocations.includes(location.id)) continue;
@@ -143,17 +129,11 @@ export async function generateChargebackInvoices(
 
       switch (rule.allocation_method) {
         case 'EVEN_SPLIT':
-          allocationAmount = Math.round(rule.monthly_amount_cents / targetCount);
-          break;
         case 'BY_REVENUE_PCT':
-          // Simplified — would query actual revenue per location
-          allocationAmount = Math.round(rule.monthly_amount_cents / targetCount);
-          break;
         case 'BY_HEADCOUNT':
-          allocationAmount = Math.round(rule.monthly_amount_cents / targetCount);
-          break;
         default:
           allocationAmount = Math.round(rule.monthly_amount_cents / targetCount);
+          break;
       }
 
       lineItems.push({
@@ -170,19 +150,11 @@ export async function generateChargebackInvoices(
 
     if (totalCents > 0) {
       const monthStr = String(month).padStart(2, '0');
-      const dayStr = '15'; // invoice date mid-month
       invoices.push({
         locationId: location.id,
         locationName: location.name,
-        invoiceNumber: `CB-${year}-${monthStr}${dayStr}-${location.short_code}`,
-        sections: {
-          cogsLaborCents,
-          opexLaborCents,
-          cogsExpensesCents,
-          opexExpensesCents,
-          sharedCostsCents,
-          directAssignedCents,
-        },
+        invoiceNumber: `CB-${year}-${monthStr}15-${location.short_code}`,
+        sections: { cogsLaborCents, opexLaborCents, cogsExpensesCents, opexExpensesCents, sharedCostsCents, directAssignedCents },
         totalCents,
         lineItems,
       });

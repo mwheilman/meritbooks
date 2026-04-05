@@ -1,108 +1,133 @@
 'use client';
 
-import { clsx } from 'clsx';
-import { StatusBadge, MetricCard } from '@/components/ui';
+import { useState } from 'react';
+import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
-import { CheckCircle, AlertTriangle, FileCheck, Landmark } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, Building2, CreditCard, ChevronDown, ArrowRight } from 'lucide-react';
+import { clsx } from 'clsx';
 
-interface ReconAccount {
-  id: string;
-  institution: string;
-  accountName: string;
-  mask: string;
-  locationCode: string;
-  statementBalance: number;
-  glBalance: number;
-  outstandingDeposits: number;
-  outstandingChecks: number;
-  adjustedBank: number;
-  difference: number;
+interface ReconciliationRow {
+  id: string; bankAccountName: string; bankAccountNumber: string;
+  locationName: string; locationCode: string;
+  periodYear: number; periodMonth: number;
+  statementBalanceCents: number; glBalanceCents: number;
+  outstandingDepositsCents: number; outstandingChecksCents: number;
+  adjustedBankBalanceCents: number; differenceCents: number;
   isReconciled: boolean;
-  period: string;
+}
+interface NeedsRecRow {
+  id: string; accountName: string; accountNumber: string;
+  balanceCents: number; accountType: string;
+  locationName: string; locationCode: string;
+}
+interface RecResponse {
+  reconciliations: ReconciliationRow[];
+  needsReconciliation: NeedsRecRow[];
 }
 
-const DEMO_RECONS: ReconAccount[] = [
-  { id: '1', institution: 'Bank of America', accountName: 'Operating', mask: '4418', locationCode: 'MMG', statementBalance: 6420000, glBalance: 6420000, outstandingDeposits: 0, outstandingChecks: 0, adjustedBank: 6420000, difference: 0, isReconciled: true, period: 'Mar 2026' },
-  { id: '2', institution: 'Bank of America', accountName: 'Payroll', mask: '4419', locationCode: 'MMG', statementBalance: 2030000, glBalance: 2030000, outstandingDeposits: 0, outstandingChecks: 0, adjustedBank: 2030000, difference: 0, isReconciled: true, period: 'Mar 2026' },
-  { id: '3', institution: 'Wells Fargo', accountName: 'Operating', mask: '7712', locationCode: 'SCC', statementBalance: 3280000, glBalance: 3480000, outstandingDeposits: 420000, outstandingChecks: 220000, adjustedBank: 3480000, difference: 0, isReconciled: true, period: 'Mar 2026' },
-  { id: '4', institution: 'Wells Fargo', accountName: 'Operating', mask: '3301', locationCode: 'ICC', statementBalance: 2640000, glBalance: 2890000, outstandingDeposits: 350000, outstandingChecks: 100000, adjustedBank: 2890000, difference: 0, isReconciled: false, period: 'Mar 2026' },
-  { id: '5', institution: 'US Bank', accountName: 'Operating', mask: '5504', locationCode: 'HH', statementBalance: 2980000, glBalance: 3120000, outstandingDeposits: 180000, outstandingChecks: 40000, adjustedBank: 3120000, difference: 0, isReconciled: false, period: 'Mar 2026' },
-  { id: '6', institution: 'US Bank', accountName: 'Operating', mask: '8820', locationCode: 'DM', statementBalance: 3400000, glBalance: 3554000, outstandingDeposits: 200000, outstandingChecks: 46000, adjustedBank: 3554000, difference: 0, isReconciled: false, period: 'Mar 2026' },
-  { id: '7', institution: 'Hills Bank', accountName: 'Operating', mask: '2210', locationCode: 'CIR', statementBalance: 1190000, glBalance: 1240000, outstandingDeposits: 80000, outstandingChecks: 30000, adjustedBank: 1240000, difference: 0, isReconciled: false, period: 'Mar 2026' },
-  { id: '8', institution: 'Hills Bank', accountName: 'Operating', mask: '1180', locationCode: 'WI', statementBalance: 1480000, glBalance: 1560000, outstandingDeposits: 120000, outstandingChecks: 40000, adjustedBank: 1560000, difference: 0, isReconciled: false, period: 'Mar 2026' },
-];
-
 export function ReconciliationView() {
-  const reconciled = DEMO_RECONS.filter((r) => r.isReconciled).length;
-  const total = DEMO_RECONS.length;
-  const unreconciled = total - reconciled;
-  const hasDiscrepancies = DEMO_RECONS.some((r) => r.difference !== 0);
+  const [locationId, setLocationId] = useState('');
+  const { data: locData } = useQuery<{ data: { id: string; name: string }[] }>('/api/locations');
+  const locations = locData?.data ?? [];
+
+  const params: Record<string, string> = {};
+  if (locationId) params.location_id = locationId;
+  const qs = new URLSearchParams(params).toString();
+
+  const { data, isLoading, error } = useQuery<RecResponse>(`/api/reconciliation${qs ? '?' + qs : ''}`);
+
+  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>;
+  if (error) return <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{String(error)}</p></div>;
+
+  const recs = data?.reconciliations ?? [];
+  const needs = data?.needsReconciliation ?? [];
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <MetricCard label="Reconciled" value={`${reconciled}/${total}`} icon={CheckCircle} change={{ value: 'March 2026', direction: 'flat' }} />
-        <MetricCard label="Outstanding" value={String(unreconciled)} icon={FileCheck} />
-        <MetricCard label="Total Accounts" value={String(total)} icon={Landmark} />
-        <MetricCard label="Discrepancies" value={hasDiscrepancies ? 'Yes' : 'None'} icon={AlertTriangle} change={hasDiscrepancies ? { value: 'Action needed', direction: 'down' } : { value: 'All clear', direction: 'up' }} />
+      {/* Filter */}
+      <div className="flex items-center gap-3">
+        <Building2 className="w-4 h-4 text-gray-500" />
+        <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
+          className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
+          <option value="">All Companies</option>
+          {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
       </div>
 
-      <div className="card overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-800">
-          <h3 className="text-sm font-semibold text-white">March 2026 Reconciliations</h3>
-        </div>
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-slate-800">
-              <th className="px-5 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Account</th>
-              <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Entity</th>
-              <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Statement</th>
-              <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">+ Deposits</th>
-              <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">− Checks</th>
-              <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Adj. Bank</th>
-              <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">GL Balance</th>
-              <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Diff</th>
-              <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800/30">
-            {DEMO_RECONS.map((r) => (
-              <tr key={r.id} className="table-row-hover cursor-pointer">
-                <td className="px-5 py-3">
-                  <p className="text-sm text-slate-200">{r.institution}</p>
-                  <p className="text-2xs text-slate-500">{r.accountName} ·{r.mask}</p>
-                </td>
-                <td className="px-4 py-3">
-                  <span className="text-sm text-slate-300">{r.locationCode}</span>
-                </td>
-                <td className="px-4 py-3 text-right text-sm font-mono tabular-nums text-slate-400">{formatMoney(r.statementBalance)}</td>
-                <td className="px-4 py-3 text-right text-sm font-mono tabular-nums text-emerald-400/70">
-                  {r.outstandingDeposits > 0 ? `+${formatMoney(r.outstandingDeposits)}` : '—'}
-                </td>
-                <td className="px-4 py-3 text-right text-sm font-mono tabular-nums text-red-400/70">
-                  {r.outstandingChecks > 0 ? `(${formatMoney(r.outstandingChecks)})` : '—'}
-                </td>
-                <td className="px-4 py-3 text-right text-sm font-mono tabular-nums text-slate-300">{formatMoney(r.adjustedBank)}</td>
-                <td className="px-4 py-3 text-right text-sm font-mono tabular-nums text-slate-300">{formatMoney(r.glBalance)}</td>
-                <td className="px-4 py-3 text-right">
-                  <span className={clsx(
-                    'text-sm font-mono tabular-nums font-medium',
-                    r.difference === 0 ? 'text-emerald-400' : 'text-red-400',
-                  )}>
-                    {r.difference === 0 ? '$0.00' : formatMoney(r.difference)}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-center">
-                  {r.isReconciled
-                    ? <StatusBadge status="COMPLETE" variant="success" />
-                    : <StatusBadge status="PENDING" />
-                  }
-                </td>
-              </tr>
+      {/* Accounts needing reconciliation */}
+      {needs.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-amber-400 mb-3 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" /> {needs.length} accounts need reconciliation
+          </h3>
+          <div className="grid grid-cols-3 gap-3">
+            {needs.map((a) => (
+              <div key={a.id} className="bg-gray-800/30 border border-amber-700/30 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <CreditCard className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm text-white font-medium">{a.accountName}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">{a.locationCode} · {a.accountNumber}</span>
+                  <span className="font-mono text-gray-300">{formatMoney(a.balanceCents)}</span>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        </div>
+      )}
+
+      {/* Completed reconciliations */}
+      {recs.length > 0 ? (
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-3">Reconciliation History</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-gray-700/50">
+                  <th className="pb-3 pr-4">Account</th>
+                  <th className="pb-3 pr-4">Company</th>
+                  <th className="pb-3 pr-4">Period</th>
+                  <th className="pb-3 pr-4 text-right">Statement</th>
+                  <th className="pb-3 pr-4 text-right">GL Balance</th>
+                  <th className="pb-3 pr-4 text-right">Outstanding</th>
+                  <th className="pb-3 pr-4 text-right">Difference</th>
+                  <th className="pb-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800/30">
+                {recs.map((r) => (
+                  <tr key={r.id} className="hover:bg-gray-800/20">
+                    <td className="py-2.5 pr-4 text-white">{r.bankAccountName}</td>
+                    <td className="py-2.5 pr-4 text-xs text-gray-400">{r.locationCode}</td>
+                    <td className="py-2.5 pr-4 font-mono text-xs text-gray-400">{r.periodYear}-{String(r.periodMonth).padStart(2, '0')}</td>
+                    <td className="py-2.5 pr-4 text-right font-mono text-gray-300">{formatMoney(r.statementBalanceCents)}</td>
+                    <td className="py-2.5 pr-4 text-right font-mono text-gray-300">{formatMoney(r.glBalanceCents)}</td>
+                    <td className="py-2.5 pr-4 text-right font-mono text-gray-400 text-xs">
+                      +{formatMoney(r.outstandingDepositsCents)} / -{formatMoney(r.outstandingChecksCents)}
+                    </td>
+                    <td className={clsx('py-2.5 pr-4 text-right font-mono font-medium', r.differenceCents === 0 ? 'text-emerald-400' : 'text-red-400')}>
+                      {formatMoney(r.differenceCents)}
+                    </td>
+                    <td className="py-2.5">
+                      {r.isReconciled
+                        ? <span className="flex items-center gap-1 text-emerald-400 text-xs"><CheckCircle2 className="w-3.5 h-3.5" /> Reconciled</span>
+                        : <span className="flex items-center gap-1 text-amber-400 text-xs"><AlertCircle className="w-3.5 h-3.5" /> Pending</span>
+                      }
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : needs.length === 0 ? (
+        <div className="text-center py-12">
+          <CheckCircle2 className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+          <p className="text-gray-400">No reconciliations found</p>
+          <p className="text-sm text-gray-500 mt-1">Bank accounts will appear here when connected via Plaid</p>
+        </div>
+      ) : null}
     </div>
   );
 }

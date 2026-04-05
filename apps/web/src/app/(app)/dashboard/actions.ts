@@ -58,8 +58,8 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     pendingReview: (pendingReceipts ?? 0) + (pendingBills ?? 0) + (pendingBankTxns ?? 0),
     pendingReceipts: pendingReceipts ?? 0,
     pendingBills: pendingBills ?? 0,
-    pendingJEs: 0, // TODO: draft JEs awaiting approval
-    totalTransactionsToday: 0, // TODO: count today's posted
+    pendingJEs: 0,
+    totalTransactionsToday: 0,
     cashPositionCents,
     openAPCents,
     openARCents,
@@ -80,7 +80,6 @@ export interface RecentActivity {
 export async function getRecentActivity(limit = 20): Promise<RecentActivity[]> {
   const supabase = await createServerSupabase();
 
-  // Get recent bank transactions as proxy for activity
   const { data: txns } = await supabase
     .from('bank_transactions')
     .select(`
@@ -94,14 +93,18 @@ export async function getRecentActivity(limit = 20): Promise<RecentActivity[]> {
     .order('created_at', { ascending: false })
     .limit(limit);
 
-  return (txns ?? []).map((t) => ({
-    id: t.id,
-    type: 'bank_txn' as const,
-    description: t.description,
-    amount_cents: t.amount_cents,
-    status: t.status,
-    location_name: (t.locations as { name: string } | null)?.name ?? null,
-    created_at: t.created_at,
-    user_name: null,
-  }));
+  return (txns ?? []).map((t) => {
+    // Supabase FK joins return arrays — extract first element
+    const loc = Array.isArray(t.locations) ? t.locations[0] : t.locations;
+    return {
+      id: t.id,
+      type: 'bank_txn' as const,
+      description: t.description,
+      amount_cents: t.amount_cents,
+      status: t.status,
+      location_name: (loc as { name: string } | null)?.name ?? null,
+      created_at: t.created_at,
+      user_name: null,
+    };
+  });
 }

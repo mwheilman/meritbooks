@@ -1,5 +1,5 @@
 // AI categorization service — uses Anthropic when available, falls back to rule-based
-import { createClient } from '@/lib/supabase/server';
+import { createAdminSupabase } from '@/lib/supabase/server';
 
 interface CategorizationResult {
   accountId: string | null;
@@ -14,7 +14,7 @@ export async function matchVendorPattern(
   description: string,
   orgId: string
 ): Promise<CategorizationResult | null> {
-  const supabase = await createClient();
+  const supabase = createAdminSupabase();
   
   const { data: patterns } = await supabase
     .from('vendor_patterns')
@@ -27,7 +27,7 @@ export async function matchVendorPattern(
 
   const normalized = description.toLowerCase().replace(/[^a-z0-9\s]/g, '');
   
-  let bestMatch: typeof patterns[0] | null = null;
+  let bestMatch: (typeof patterns)[0] | null = null;
   let bestScore = 0;
 
   for (const pattern of patterns) {
@@ -80,7 +80,8 @@ export async function aiCategorize(
 
   // Dynamic import to avoid build failures when package isn't installed
   try {
-    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Anthropic = (await import('@anthropic-ai/sdk' as string)).default;
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     
     const message = await client.messages.create({

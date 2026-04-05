@@ -4,9 +4,10 @@ import { z } from 'zod';
 import { apiQueryHandler } from '@/lib/api-handler';
 import { calculateOverheadRate } from '@/lib/services/overhead-rate';
 
+// Use string params (from query string) and transform manually in handler
 const querySchema = z.object({
-  year: z.string().regex(/^\d{4}$/).transform(Number),
-  month: z.string().regex(/^\d{1,2}$/).transform(Number),
+  year: z.string().regex(/^\d{4}$/),
+  month: z.string().regex(/^\d{1,2}$/),
 });
 
 export const GET = apiQueryHandler(
@@ -15,8 +16,8 @@ export const GET = apiQueryHandler(
     const result = await calculateOverheadRate(
       ctx.supabase,
       ctx.orgId ?? '',
-      params.year,
-      params.month,
+      parseInt(params.year, 10),
+      parseInt(params.month, 10),
     );
 
     return NextResponse.json(result);

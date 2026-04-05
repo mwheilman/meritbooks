@@ -21,12 +21,17 @@ interface FlaggedItem {
   locationName: string | null;
 }
 
+/** Helper: Supabase FK joins return arrays. Extract first element safely. */
+function fkFirst<T>(val: unknown): T | null {
+  if (Array.isArray(val)) return (val[0] as T) ?? null;
+  return (val as T) ?? null;
+}
+
 export const GET = apiQueryHandler(
   flaggedQuerySchema,
   async (params, ctx) => {
     const loc = params.location_id;
 
-    // Query flagged bank transactions
     let bankQ = ctx.supabase
       .from('bank_transactions')
       .select(`
@@ -38,7 +43,6 @@ export const GET = apiQueryHandler(
       .limit(50);
     if (loc) bankQ = bankQ.eq('location_id', loc);
 
-    // Query flagged receipts
     let receiptQ = ctx.supabase
       .from('receipts')
       .select(`
@@ -50,7 +54,6 @@ export const GET = apiQueryHandler(
       .limit(20);
     if (loc) receiptQ = receiptQ.eq('location_id', loc);
 
-    // Query on-hold bills
     let billQ = ctx.supabase
       .from('bills')
       .select(`
@@ -66,9 +69,8 @@ export const GET = apiQueryHandler(
 
     const items: FlaggedItem[] = [];
 
-    // Bank transactions
     for (const t of bankResult.data ?? []) {
-      const location = t.location as { name: string; short_code: string } | null;
+      const location = fkFirst<{ name: string; short_code: string }>(t.location);
       items.push({
         id: t.id,
         type: 'bank_txn',
@@ -82,9 +84,8 @@ export const GET = apiQueryHandler(
       });
     }
 
-    // Receipts
     for (const r of receiptResult.data ?? []) {
-      const location = r.location as { name: string; short_code: string } | null;
+      const location = fkFirst<{ name: string; short_code: string }>(r.location);
       items.push({
         id: r.id,
         type: 'receipt',
@@ -98,9 +99,8 @@ export const GET = apiQueryHandler(
       });
     }
 
-    // Bills on hold
     for (const b of billResult.data ?? []) {
-      const vendor = b.vendor as { name: string } | null;
+      const vendor = fkFirst<{ name: string }>(b.vendor);
       items.push({
         id: b.id,
         type: 'bill',
@@ -114,7 +114,6 @@ export const GET = apiQueryHandler(
       });
     }
 
-    // Sort by created_at desc
     items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return NextResponse.json({
