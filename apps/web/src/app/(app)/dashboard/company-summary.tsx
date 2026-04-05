@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { formatMoney } from '@meritbooks/shared';
 import { clsx } from 'clsx';

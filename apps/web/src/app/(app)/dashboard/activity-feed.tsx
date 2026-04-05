@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { Receipt, FileText, CheckCircle, ArrowRightLeft, Landmark } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';

@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
 import { jobSearchSchema, type JobSearchQuery } from '@/lib/validations/transactions';
