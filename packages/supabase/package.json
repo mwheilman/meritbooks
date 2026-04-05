@@ -1,0 +1,17 @@
+{
+  "name": "@meritbooks/supabase",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "echo 'No build needed - SQL migrations only'",
+    "migrate": "supabase db push",
+    "reset": "supabase db reset",
+    "gen-types": "supabase gen types typescript --local > types/database.ts",
+    "seed": "npx tsx seed/index.ts"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.49.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
