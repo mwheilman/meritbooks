@@ -1,93 +1,127 @@
 'use client';
 
-import { AlertTriangle, Bot, User, ArrowRight } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, Landmark, Receipt, FileText, Inbox, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
-import { StatusBadge } from '@/components/ui';
+import { EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
+import { useQuery } from '@/hooks';
+import { CompanySelector } from '../bank-feed/company-selector';
 
 interface FlaggedItem {
   id: string;
-  type: 'bank_txn' | 'receipt' | 'bill' | 'je';
+  type: 'bank_txn' | 'receipt' | 'bill';
   description: string;
   amountCents: number;
-  locationCode: string;
-  flaggedBy: 'AI' | 'HUMAN';
-  flaggedByName: string;
-  reason: string;
+  reason: string | null;
   date: string;
-  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  locationCode: string | null;
+  locationName: string | null;
 }
 
-const DEMO_FLAGGED: FlaggedItem[] = [
-  { id: '1', type: 'bank_txn', description: 'UNKNOWN VENDOR PMT 8847123', amountCents: 54200, locationCode: 'DM', flaggedBy: 'AI', flaggedByName: 'Claude', reason: 'Unknown vendor — $542 charge with no matching pattern, receipt, or bill. Confidence 32%.', date: '2026-04-02', priority: 'HIGH' },
-  { id: '2', type: 'receipt', description: 'Illegible receipt — Tyler B.', amountCents: 18944, locationCode: 'DM', flaggedBy: 'AI', flaggedByName: 'Claude', reason: 'OCR extraction failed — vendor name and line items unreadable. Manual review required.', date: '2026-03-31', priority: 'MEDIUM' },
-  { id: '3', type: 'bill', description: 'Smith Plumbing Co — Invoice SP-2026-044', amountCents: 124000, locationCode: 'ICC', flaggedBy: 'AI', flaggedByName: 'Claude', reason: 'Vendor has 3 missing compliance documents (W-9, GL COI, WC COI). Payment held automatically.', date: '2026-02-10', priority: 'HIGH' },
-  { id: '4', type: 'bank_txn', description: 'WIRE TRANSFER 00884421', amountCents: 1500000, locationCode: 'MMG', flaggedBy: 'HUMAN', flaggedByName: 'Sarah M.', reason: 'Large wire — needs CFO approval. Appears to be equipment purchase but no PO on file.', date: '2026-04-01', priority: 'HIGH' },
-  { id: '5', type: 'je', description: 'JE-2026-000847 — Prepaid amortization', amountCents: 185000, locationCode: 'MMG', flaggedBy: 'HUMAN', flaggedByName: 'Sarah M.', reason: 'Amortization schedule may be incorrect — policy term changed mid-year. Need to verify remaining balance.', date: '2026-04-01', priority: 'LOW' },
-  { id: '6', type: 'bank_txn', description: 'PAYPAL *MARKETPLACE', amountCents: 29900, locationCode: 'AIN', flaggedBy: 'AI', flaggedByName: 'Claude', reason: 'PayPal transaction — could be personal expense on company card. No receipt submitted. Chase reminder #3 sent.', date: '2026-03-29', priority: 'MEDIUM' },
-];
+interface FlaggedResponse {
+  data: FlaggedItem[];
+  counts: { bank_txn: number; receipt: number; bill: number; total: number };
+}
 
-const TYPE_LABELS: Record<string, string> = {
-  bank_txn: 'Bank Txn',
-  receipt: 'Receipt',
-  bill: 'Bill',
-  je: 'Journal Entry',
-};
-
-const PRIORITY_COLORS: Record<string, string> = {
-  HIGH: 'border-l-red-500',
-  MEDIUM: 'border-l-amber-500',
-  LOW: 'border-l-slate-600',
+const TYPE_CONFIG = {
+  bank_txn: { icon: Landmark, label: 'Bank Txn', className: 'text-blue-400 bg-blue-500/10' },
+  receipt: { icon: Receipt, label: 'Receipt', className: 'text-purple-400 bg-purple-500/10' },
+  bill: { icon: FileText, label: 'Bill', className: 'text-amber-400 bg-amber-500/10' },
 };
 
 export function FlaggedQueue() {
+  const [locationId, setLocationId] = useState<string | null>(null);
+
+  const params: Record<string, string> = {};
+  if (locationId) params.location_id = locationId;
+
+  const { data, isLoading, error } = useQuery<FlaggedResponse>(
+    '/api/flagged',
+    Object.keys(params).length > 0 ? params : undefined,
+  );
+
+  const items = data?.data ?? [];
+  const counts = data?.counts ?? null;
+
   return (
-    <div className="space-y-2">
-      {DEMO_FLAGGED.map((item) => (
-        <div
-          key={item.id}
-          className={clsx(
-            'card border-l-2 p-4 hover:bg-white/[0.01] transition-colors cursor-pointer',
-            PRIORITY_COLORS[item.priority],
-          )}
-        >
-          <div className="flex items-start gap-4">
-            {/* Icon */}
-            <div className={clsx(
-              'h-8 w-8 rounded-lg flex items-center justify-center shrink-0',
-              item.flaggedBy === 'AI' ? 'bg-purple-500/10' : 'bg-blue-500/10',
-            )}>
-              {item.flaggedBy === 'AI'
-                ? <Bot size={16} className="text-purple-400" />
-                : <User size={16} className="text-blue-400" />
-              }
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">{TYPE_LABELS[item.type]}</span>
-                <span className="text-xs text-slate-600">{item.locationCode}</span>
-                <span className="text-xs text-slate-600">·</span>
-                <span className="text-xs text-slate-500">{item.date}</span>
-                <span className="ml-auto text-xs text-slate-500">by {item.flaggedByName}</span>
-              </div>
-              <p className="text-sm font-medium text-slate-200 mb-1">{item.description}</p>
-              <p className="text-sm text-slate-400">{item.reason}</p>
-            </div>
-
-            {/* Amount + actions */}
-            <div className="flex flex-col items-end gap-2 shrink-0">
-              <span className="text-sm font-mono tabular-nums text-white font-medium">
-                {formatMoney(item.amountCents)}
-              </span>
-              <button className="btn-primary btn-sm">
-                Review <ArrowRight size={12} />
-              </button>
-            </div>
+    <div className="space-y-4">
+      <div className="flex items-center gap-4">
+        <CompanySelector selectedId={locationId} onChange={setLocationId} />
+        {counts && counts.total > 0 && (
+          <div className="flex items-center gap-3 text-sm text-slate-400">
+            <span className="font-mono tabular-nums text-brand-400">{counts.total}</span> items
+            {counts.bank_txn > 0 && <span className="text-2xs">({counts.bank_txn} txns</span>}
+            {counts.receipt > 0 && <span className="text-2xs">{counts.receipt} receipts</span>}
+            {counts.bill > 0 && <span className="text-2xs">{counts.bill} bills)</span>}
           </div>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="card p-5 animate-pulse h-24" />
+          ))}
         </div>
-      ))}
+      ) : error ? (
+        <div className="card p-8 text-center">
+          <AlertCircle size={24} className="mx-auto text-red-400 mb-2" />
+          <p className="text-sm text-red-400 font-medium">{error}</p>
+        </div>
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={Inbox}
+          title="No flagged items"
+          description="All transactions are categorized and approved. Nothing needs attention right now."
+        />
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => {
+            const config = TYPE_CONFIG[item.type];
+            const Icon = config.icon;
+
+            return (
+              <div
+                key={`${item.type}-${item.id}`}
+                className="card border-l-2 border-l-amber-500 hover:border-l-amber-400 transition-colors"
+              >
+                <div className="px-5 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className={clsx('h-8 w-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5', config.className)}>
+                        <Icon size={16} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={clsx('inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-medium', config.className)}>
+                            {config.label}
+                          </span>
+                          {item.locationCode && (
+                            <span className="text-2xs font-mono text-slate-500 bg-slate-800 px-1 py-0.5 rounded">
+                              {item.locationCode}
+                            </span>
+                          )}
+                          <span className="text-2xs text-slate-600 font-mono tabular-nums">{item.date}</span>
+                        </div>
+                        <p className="text-sm text-slate-200 mb-1">{item.description}</p>
+                        {item.reason && (
+                          <p className="text-xs text-slate-400 leading-relaxed">{item.reason}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-sm font-mono tabular-nums font-medium text-slate-200">
+                        {formatMoney(item.amountCents)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

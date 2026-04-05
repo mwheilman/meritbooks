@@ -1,220 +1,240 @@
 'use client';
 
-import { useState } from 'react';
-import { Check, Flag, Pencil, Camera, Mail, Upload, Bell, ChevronRight } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Check, Flag, Camera, Mail, Upload, Inbox, AlertCircle, Loader2, Search, Bell } from 'lucide-react';
 import { clsx } from 'clsx';
-import { StatusBadge, ConfidenceBar } from '@/components/ui';
+import { StatusBadge, ConfidenceBar, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
+import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
+import type { ApproveReceiptInput } from '@/lib/validations/transactions';
+import { CompanySelector } from '../bank-feed/company-selector';
 
-interface ReceiptItem {
+interface ReceiptRow {
   id: string;
-  vendorName: string;
-  amountCents: number;
-  date: string;
+  submitted_at: string;
+  receipt_date: string | null;
+  vendor_name: string | null;
+  amount_cents: number | null;
   source: 'MOBILE_CAPTURE' | 'EMAIL' | 'MANUAL_UPLOAD';
   status: string;
-  aiAccount: string;
-  aiConfidence: number;
-  locationName: string;
-  locationCode: string;
-  submittedBy: string;
-  chaseCount: number;
-  imageUrl: string; // placeholder
-  extractedData: {
-    vendor: string;
-    total: string;
-    date: string;
-    items: string[];
-    tax: string;
-    paymentMethod: string;
-  };
+  ai_confidence: number | null;
+  chase_reminder_count: number;
+  location: { id: string; name: string; short_code: string } | null;
+  account: { id: string; account_number: string; name: string } | null;
+  vendor: { id: string; name: string } | null;
+}
+
+interface ReceiptResponse {
+  data: ReceiptRow[];
+  counts: Record<string, { count: number; amount_cents: number }>;
+  pagination: { page: number; per_page: number; total: number; total_pages: number };
+}
+
+interface ApproveResult {
+  success: boolean;
+  entry_number: string;
 }
 
 const SOURCE_ICONS = {
-  MOBILE_CAPTURE: { icon: Camera, label: 'Mobile' },
-  EMAIL: { icon: Mail, label: 'Email' },
-  MANUAL_UPLOAD: { icon: Upload, label: 'Upload' },
+  MOBILE_CAPTURE: { icon: Camera, label: 'Mobile', className: 'text-blue-400 bg-blue-500/10' },
+  EMAIL: { icon: Mail, label: 'Email', className: 'text-purple-400 bg-purple-500/10' },
+  MANUAL_UPLOAD: { icon: Upload, label: 'Upload', className: 'text-slate-400 bg-slate-500/10' },
 };
 
-const DEMO_RECEIPTS: ReceiptItem[] = [
-  {
-    id: '1', vendorName: 'Menards', amountCents: 34218, date: '2026-04-03', source: 'MOBILE_CAPTURE',
-    status: 'CATEGORIZED', aiAccount: '5100 · Materials', aiConfidence: 0.94,
-    locationName: 'Swan Creek Construction', locationCode: 'SCC', submittedBy: 'Jake T.', chaseCount: 0,
-    imageUrl: '', extractedData: { vendor: 'Menards #3344', total: '$342.18', date: '04/03/2026', items: ['2x4 Lumber x24', 'Drywall Screws 5lb', 'Joint Compound'], tax: '$21.42', paymentMethod: 'Visa ·4418' },
-  },
-  {
-    id: '2', vendorName: 'Shell', amountCents: 6842, date: '2026-04-02', source: 'MOBILE_CAPTURE',
-    status: 'CATEGORIZED', aiAccount: '6200 · Fuel', aiConfidence: 0.97,
-    locationName: 'Merit Management', locationCode: 'MMG', submittedBy: 'Carlos R.', chaseCount: 0,
-    imageUrl: '', extractedData: { vendor: 'Shell Oil 0087234', total: '$68.42', date: '04/02/2026', items: ['Regular Unleaded 18.2gal'], tax: '$0.00', paymentMethod: 'Visa ·8820' },
-  },
-  {
-    id: '3', vendorName: 'Home Depot', amountCents: 24599, date: '2026-04-01', source: 'EMAIL',
-    status: 'PENDING', aiAccount: '5120 · Supplies', aiConfidence: 0.82,
-    locationName: 'Heartland HVAC', locationCode: 'HH', submittedBy: 'Email Parser', chaseCount: 0,
-    imageUrl: '', extractedData: { vendor: 'The Home Depot #2891', total: '$245.99', date: '04/01/2026', items: ['Copper Fittings Assorted', 'PVC Pipe 3" x10', 'Teflon Tape 12pk'], tax: '$15.38', paymentMethod: 'Amex ·1002' },
-  },
-  {
-    id: '4', vendorName: 'Unknown', amountCents: 18944, date: '2026-03-31', source: 'MOBILE_CAPTURE',
-    status: 'FLAGGED', aiAccount: '', aiConfidence: 0.31,
-    locationName: 'Dorrian Mechanical', locationCode: 'DM', submittedBy: 'Tyler B.', chaseCount: 0,
-    imageUrl: '', extractedData: { vendor: 'ILLEGIBLE', total: '$189.44', date: '03/31/2026', items: ['Cannot parse line items'], tax: '?', paymentMethod: 'Unknown' },
-  },
-];
-
-// Chase queue — missing receipts
-const CHASE_ITEMS = [
-  { cardHolder: 'Jake T.', vendor: 'Casey\'s General', amount: 4218, card: '·4418', date: '04/02', chaseCount: 2, nextChase: '15min' },
-  { cardHolder: 'Marcus W.', vendor: 'Grainger', amount: 34200, card: '·7712', date: '04/01', chaseCount: 5, nextChase: 'Escalated' },
-  { cardHolder: 'Tyler B.', vendor: 'Fastenal', amount: 8940, card: '·3301', date: '03/30', chaseCount: 8, nextChase: 'Supervisor notified' },
-];
+const TAB_CONFIG = [
+  { key: 'all', label: 'All' },
+  { key: 'PENDING', label: 'Pending' },
+  { key: 'CATEGORIZED', label: 'Categorized' },
+  { key: 'FLAGGED', label: 'Flagged' },
+] as const;
 
 export function ReceiptQueue() {
-  const [selectedId, setSelectedId] = useState<string>(DEMO_RECEIPTS[0].id);
-  const selected = DEMO_RECEIPTS.find((r) => r.id === selectedId) ?? DEMO_RECEIPTS[0];
+  const [activeTab, setActiveTab] = useState('all');
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
+  const [locationId, setLocationId] = useState<string | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
-  return (
-    <div className="space-y-6">
-      {/* Chase alerts */}
-      <div className="card">
-        <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Bell size={14} className="text-amber-400" />
-            <h3 className="text-sm font-semibold text-white">Missing Receipt Chase</h3>
-          </div>
-          <span className="text-2xs text-amber-400">{CHASE_ITEMS.length} outstanding</span>
-        </div>
-        <div className="divide-y divide-slate-800/30">
-          {CHASE_ITEMS.map((item, i) => (
-            <div key={i} className="px-5 py-2.5 flex items-center gap-4 table-row-hover">
-              <span className="text-sm text-slate-300 w-24">{item.cardHolder}</span>
-              <span className="text-sm text-slate-400 flex-1">{item.vendor}</span>
-              <span className="text-sm font-mono tabular-nums text-slate-300">{formatMoney(item.amount)}</span>
-              <span className="text-2xs text-slate-500">{item.card} · {item.date}</span>
-              <span className={clsx(
-                'text-2xs font-medium',
-                item.chaseCount >= 5 ? 'text-red-400' : 'text-amber-400',
-              )}>
-                {item.chaseCount} reminders · {item.nextChase}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+  const params: Record<string, string> = {};
+  if (activeTab !== 'all') params.status = activeTab;
+  if (debouncedSearch) params.search = debouncedSearch;
+  if (locationId) params.location_id = locationId;
 
-      {/* Split view: list + detail */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        {/* Receipt list */}
-        <div className="lg:col-span-2 card overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-800">
-            <h3 className="text-sm font-semibold text-white">Queue ({DEMO_RECEIPTS.length})</h3>
-          </div>
-          <div className="divide-y divide-slate-800/30">
-            {DEMO_RECEIPTS.map((r) => {
-              const SourceIcon = SOURCE_ICONS[r.source].icon;
-              return (
-                <button
-                  key={r.id}
-                  onClick={() => setSelectedId(r.id)}
-                  className={clsx(
-                    'w-full px-5 py-3 flex items-center gap-3 text-left transition-colors',
-                    selectedId === r.id ? 'bg-brand-500/[0.06] border-l-2 border-brand-500' : 'hover:bg-white/[0.02] border-l-2 border-transparent',
-                  )}
-                >
-                  <SourceIcon size={14} className="text-slate-500 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-200 truncate">{r.vendorName}</span>
-                      <span className="text-sm font-mono tabular-nums text-slate-300 ml-2">{formatMoney(r.amountCents)}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-2xs text-slate-500">{r.locationCode} · {r.date}</span>
-                      <StatusBadge status={r.status} />
-                    </div>
-                  </div>
-                  <ChevronRight size={14} className="text-slate-600 shrink-0" />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Receipt detail */}
-        <div className="lg:col-span-3 card overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-white">Receipt Detail</h3>
-            <div className="flex items-center gap-2">
-              <button className="btn-ghost btn-sm"><Pencil size={12} /> Edit</button>
-              <button className="btn-ghost btn-sm text-amber-400"><Flag size={12} /> Flag</button>
-              <button className="btn-primary btn-sm"><Check size={12} /> Approve</button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 divide-x divide-slate-800">
-            {/* Image preview (placeholder) */}
-            <div className="p-6 flex items-center justify-center bg-slate-900/50 min-h-[400px]">
-              <div className="text-center">
-                <Camera size={48} className="text-slate-700 mx-auto mb-3" />
-                <p className="text-sm text-slate-500">Receipt image preview</p>
-                <p className="text-2xs text-slate-600 mt-1">
-                  {SOURCE_ICONS[selected.source].label} · {selected.submittedBy}
-                </p>
-              </div>
-            </div>
-
-            {/* Extracted data */}
-            <div className="p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">AI Confidence</span>
-                <ConfidenceBar value={selected.aiConfidence} size="md" className="w-32" />
-              </div>
-
-              <div className="space-y-3">
-                <Field label="Vendor" value={selected.extractedData.vendor} />
-                <Field label="Total" value={selected.extractedData.total} />
-                <Field label="Date" value={selected.extractedData.date} />
-                <Field label="Payment" value={selected.extractedData.paymentMethod} />
-                <Field label="Tax" value={selected.extractedData.tax} />
-                <div>
-                  <label className="text-2xs text-slate-500 uppercase tracking-wider font-semibold block mb-1">Line Items</label>
-                  <ul className="space-y-1">
-                    {selected.extractedData.items.map((item, i) => (
-                      <li key={i} className="text-sm text-slate-300 pl-3 border-l-2 border-slate-800">{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-800 pt-4 space-y-3">
-                <div>
-                  <label className="text-2xs text-slate-500 uppercase tracking-wider font-semibold block mb-1">GL Account</label>
-                  <select className="input" defaultValue={selected.aiAccount || ''}>
-                    <option value="">Select account...</option>
-                    <option value="5100">5100 · Materials</option>
-                    <option value="5120">5120 · Supplies</option>
-                    <option value="6200">6200 · Fuel</option>
-                    <option value="6600">6600 · Office Supplies</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-2xs text-slate-500 uppercase tracking-wider font-semibold block mb-1">Company</label>
-                  <input className="input" value={selected.locationName} readOnly />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+  const { data, isLoading, error, refetch } = useQuery<ReceiptResponse>(
+    '/api/receipts',
+    Object.keys(params).length > 0 ? params : undefined,
   );
-}
 
-function Field({ label, value }: { label: string; value: string }) {
+  const { mutate: approveReceipt } = useMutation<ApproveReceiptInput, ApproveResult>(
+    '/api/receipts/approve'
+  );
+
+  const handleApprove = useCallback(async (r: ReceiptRow) => {
+    if (!r.account || !r.amount_cents || !r.receipt_date) {
+      addToast('error', 'Receipt missing required fields (account, amount, or date)');
+      return;
+    }
+    setApprovingId(r.id);
+    const result = await approveReceipt({
+      receipt_id: r.id,
+      account_id: r.account.id,
+      vendor_id: r.vendor?.id ?? undefined,
+      amount_cents: r.amount_cents,
+      receipt_date: r.receipt_date,
+    });
+    if (result) {
+      addToast('success', `Receipt approved`);
+      refetch();
+    } else {
+      addToast('error', 'Failed to approve receipt');
+    }
+    setApprovingId(null);
+  }, [approveReceipt, refetch]);
+
+  const receipts = data?.data ?? [];
+  const counts = data?.counts ?? null;
+
   return (
-    <div>
-      <label className="text-2xs text-slate-500 uppercase tracking-wider font-semibold block mb-0.5">{label}</label>
-      <p className="text-sm text-slate-200">{value}</p>
+    <div className="space-y-4">
+      <CompanySelector selectedId={locationId} onChange={setLocationId} />
+
+      {/* Status tabs */}
+      <div className="flex items-center gap-1 p-1 rounded-lg bg-surface-900 border border-slate-800 w-fit">
+        {TAB_CONFIG.map((tab) => {
+          const stats = counts?.[tab.key] ?? null;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors',
+                activeTab === tab.key
+                  ? 'bg-slate-800 text-white font-medium'
+                  : 'text-slate-400 hover:text-slate-300'
+              )}
+            >
+              <span>{tab.label}</span>
+              <span className={clsx(
+                'text-2xs font-mono tabular-nums',
+                activeTab === tab.key ? 'text-brand-400' : 'text-slate-600'
+              )}>
+                {stats ? stats.count : '--'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="relative max-w-md">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by vendor name..."
+          className="input pl-9"
+        />
+      </div>
+
+      {isLoading ? (
+        <TableSkeleton rows={6} cols={8} />
+      ) : error ? (
+        <div className="card p-8 text-center">
+          <AlertCircle size={24} className="mx-auto text-red-400 mb-2" />
+          <p className="text-sm text-red-400 font-medium">{error}</p>
+        </div>
+      ) : receipts.length === 0 ? (
+        <EmptyState icon={Inbox} title="No receipts" description="No receipts match your filters." />
+      ) : (
+        <div className="card overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-800">
+                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
+                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Vendor</th>
+                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Source</th>
+                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Company</th>
+                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">GL Category</th>
+                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 w-20">Conf.</th>
+                <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Amount</th>
+                <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                <th className="w-20 px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/30">
+              {receipts.map((r) => {
+                const sourceConfig = SOURCE_ICONS[r.source];
+                const SourceIcon = sourceConfig.icon;
+                const isPosted = r.status === 'POSTED' || r.status === 'APPROVED';
+                return (
+                  <tr key={r.id} className="table-row-hover">
+                    <td className="px-4 py-3 text-sm text-slate-400 font-mono tabular-nums whitespace-nowrap">
+                      {r.receipt_date ?? r.submitted_at?.split('T')[0] ?? '--'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="text-sm text-slate-200">{r.vendor_name ?? r.vendor?.name ?? 'Unknown'}</p>
+                      {r.chase_reminder_count > 0 && (
+                        <span className="inline-flex items-center gap-1 text-2xs text-amber-400 mt-0.5">
+                          <Bell size={9} />
+                          {r.chase_reminder_count} reminders
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={clsx('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium', sourceConfig.className)}>
+                        <SourceIcon size={10} />
+                        {sourceConfig.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.location ? (
+                        <span className="text-2xs font-mono text-slate-500 bg-slate-800 px-1 py-0.5 rounded">
+                          {r.location.short_code}
+                        </span>
+                      ) : '--'}
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.account ? (
+                        <span className="text-xs font-mono text-slate-400">{r.account.account_number} · {r.account.name}</span>
+                      ) : (
+                        <span className="text-xs text-amber-400 italic">Uncategorized</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.ai_confidence != null && <ConfidenceBar value={r.ai_confidence} />}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-mono tabular-nums text-slate-200">
+                      {r.amount_cents != null ? formatMoney(r.amount_cents) : '--'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <StatusBadge status={r.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleApprove(r)}
+                          disabled={!r.account || !r.amount_cents || isPosted || approvingId === r.id}
+                          className={clsx(
+                            'p-1.5 rounded-md transition-colors',
+                            !r.account || !r.amount_cents || isPosted
+                              ? 'text-slate-700 cursor-not-allowed'
+                              : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'
+                          )}
+                        >
+                          {approvingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                        </button>
+                        <button className="p-1.5 rounded-md text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors">
+                          <Flag size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

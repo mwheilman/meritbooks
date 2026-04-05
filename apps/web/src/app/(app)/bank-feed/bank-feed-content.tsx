@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
 import type { BankFeedResponse, BankFeedRow } from '@meritbooks/shared';
-import type { ApproveBankTransactionInput } from '@/lib/validations/transactions';
+import type { ApproveBankTransactionInput, FlagTransactionInput } from '@/lib/validations/transactions';
 import { BankFeedFilters } from './bank-feed-filters';
 import { BankFeedList } from './bank-feed-list';
 import { BankFeedMetricsStrip } from './bank-feed-metrics';
@@ -14,6 +14,18 @@ interface ApproveResult {
   success: boolean;
   entry_number: string;
   transaction_id: string;
+}
+
+interface FlagResult {
+  success: boolean;
+  transaction_id: string;
+  status: string;
+}
+
+interface InlineUpdateResult {
+  success: boolean;
+  transaction: unknown;
+  changed: string[];
 }
 
 export type SortField = 'date' | 'amount' | 'confidence' | 'vendor' | 'company';
@@ -55,6 +67,7 @@ export function BankFeedContent() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [editingTxn, setEditingTxn] = useState<BankFeedRow | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [flaggingTxn, setFlaggingTxn] = useState<BankFeedRow | null>(null);
 
   // Build query params
   const params: Record<string, string> = {};
@@ -79,7 +92,6 @@ export function BankFeedContent() {
       setSortDir((prev) => prev === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      // Default directions: confidence asc, date desc, amount desc, rest asc
       setSortDir(field === 'date' || field === 'amount' ? 'desc' : 'asc');
     }
   }, [sortField]);
@@ -90,15 +102,23 @@ export function BankFeedContent() {
     ApproveResult
   >('/api/bank-feed/approve');
 
+  // Flag mutation
+  const { mutate: flagTxn, isLoading: isFlagging } = useMutation<
+    FlagTransactionInput,
+    FlagResult
+  >('/api/bank-feed/flag');
+
   const handleApprove = useCallback(async (txn: BankFeedRow) => {
-    if (!txn.ai_account) {
-      addToast('error', 'Cannot approve: no AI-suggested account');
+    const account = txn.final_account ?? txn.ai_account;
+    if (!account) {
+      addToast('error', 'Cannot approve: no GL account assigned');
       return;
     }
     const result = await approveTxn({
       transaction_id: txn.id,
-      account_id: txn.ai_account.id,
+      account_id: account.id,
       vendor_id: txn.ai_vendor?.id ?? undefined,
+      job_id: txn.final_job?.id ?? undefined,
     });
     if (result) {
       addToast('success', `Approved → ${result.entry_number}`);
@@ -108,17 +128,62 @@ export function BankFeedContent() {
     }
   }, [approveTxn, refetch]);
 
+  // Flag handler
+  const handleFlag = useCallback((txn: BankFeedRow) => {
+    setFlaggingTxn(txn);
+  }, []);
+
+  const handleFlagSubmit = useCallback(async (reason: string) => {
+    if (!flaggingTxn) return;
+    const result = await flagTxn({
+      transaction_id: flaggingTxn.id,
+      reason,
+    });
+    if (result?.success) {
+      addToast('success', 'Transaction flagged for review');
+      setFlaggingTxn(null);
+      refetch();
+    } else {
+      addToast('error', 'Failed to flag transaction');
+    }
+  }, [flaggingTxn, flagTxn, refetch]);
+
+  // Inline update handler (for GL account or job changes from the table)
+  const handleInlineUpdate = useCallback(async (
+    txnId: string,
+    updates: { final_account_id?: string; final_job_id?: string | null }
+  ) => {
+    try {
+      const res = await fetch(`/api/bank-feed/${txnId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      const result: InlineUpdateResult = await res.json();
+      if (result.success) {
+        addToast('success', `Updated ${result.changed.join(', ').replace(/final_/g, '')}`);
+        refetch();
+      } else {
+        addToast('error', 'Failed to update');
+      }
+    } catch {
+      addToast('error', 'Network error updating transaction');
+    }
+  }, [refetch]);
+
   // Batch approve
   const handleBatchApprove = useCallback(async (txnIds: string[]) => {
     let approved = 0;
     let failed = 0;
     for (const id of txnIds) {
       const txn = transactions.find((t) => t.id === id);
-      if (txn?.ai_account) {
+      const account = txn?.final_account ?? txn?.ai_account;
+      if (account) {
         const result = await approveTxn({
           transaction_id: id,
-          account_id: txn.ai_account.id,
-          vendor_id: txn.ai_vendor?.id ?? undefined,
+          account_id: account.id,
+          vendor_id: txn?.ai_vendor?.id ?? undefined,
+          job_id: txn?.final_job?.id ?? undefined,
         });
         if (result) approved++;
         else failed++;
@@ -154,15 +219,13 @@ export function BankFeedContent() {
     }
   }, [selected.size, transactions]);
 
-  // Smart batch: select all with confidence >= 90%
   const selectHighConfidence = useCallback(() => {
     const highConf = transactions
-      .filter((t) => (t.ai_confidence ?? 0) >= 0.9 && t.ai_account)
+      .filter((t) => (t.ai_confidence ?? 0) >= 0.9 && (t.final_account ?? t.ai_account))
       .map((t) => t.id);
     setSelected(new Set(highConf));
   }, [transactions]);
 
-  // Vendor batch: select all transactions from a given vendor
   const selectByVendor = useCallback((vendorName: string) => {
     const ids = transactions
       .filter((t) => {
@@ -172,7 +235,6 @@ export function BankFeedContent() {
       .map((t) => t.id);
     setSelected((prev) => {
       const next = new Set(prev);
-      // Toggle: if all already selected, deselect them
       const allSelected = ids.every((id) => next.has(id));
       if (allSelected) {
         ids.forEach((id) => next.delete(id));
@@ -205,10 +267,9 @@ export function BankFeedContent() {
   // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      // Don't capture when typing in inputs or when edit panel is open
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (editingTxn) return;
+      if (editingTxn || flaggingTxn) return;
 
       const len = transactions.length;
       if (len === 0) return;
@@ -241,7 +302,7 @@ export function BankFeedContent() {
         case 'f': {
           if (focusedIndex >= 0 && focusedIndex < len) {
             e.preventDefault();
-            addToast('error', 'Flag endpoint not yet implemented');
+            handleFlag(transactions[focusedIndex]);
           }
           break;
         }
@@ -261,7 +322,7 @@ export function BankFeedContent() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [transactions, focusedIndex, handleApprove, handleEdit, toggleSelect, editingTxn]);
+  }, [transactions, focusedIndex, handleApprove, handleEdit, handleFlag, toggleSelect, editingTxn, flaggingTxn]);
 
   // Reset selection when location changes
   useEffect(() => {
@@ -289,6 +350,8 @@ export function BankFeedContent() {
         onApprove={handleApprove}
         isApproving={isApproving}
         onBatchApprove={handleBatchApprove}
+        onFlag={handleFlag}
+        onInlineUpdate={handleInlineUpdate}
         focusedIndex={focusedIndex}
         selected={selected}
         onToggleSelect={toggleSelect}
@@ -299,6 +362,7 @@ export function BankFeedContent() {
         sortField={sortField}
         sortDir={sortDir}
         onSort={handleSort}
+        selectedLocationId={selectedLocationId}
       />
       {editingTxn && (
         <EditPanel
@@ -308,6 +372,75 @@ export function BankFeedContent() {
           onSave={handleEditSave}
         />
       )}
+      {/* Flag Dialog */}
+      {flaggingTxn && (
+        <FlagDialog
+          transaction={flaggingTxn}
+          isLoading={isFlagging}
+          onSubmit={handleFlagSubmit}
+          onClose={() => setFlaggingTxn(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// --- Flag Dialog Component ---
+
+function FlagDialog({
+  transaction,
+  isLoading,
+  onSubmit,
+  onClose,
+}: {
+  transaction: BankFeedRow;
+  isLoading: boolean;
+  onSubmit: (reason: string) => void;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState('');
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] max-w-[90vw] bg-surface-900 border border-slate-800 rounded-xl shadow-2xl z-50 p-6">
+        <h3 className="text-lg font-semibold text-white mb-1">Flag for Review</h3>
+        <p className="text-sm text-slate-400 mb-4 truncate">{transaction.description}</p>
+        <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
+          Reason <span className="text-red-400">*</span>
+        </label>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Why does this need manager review?"
+          rows={3}
+          autoFocus
+          className="w-full px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-500/40 focus:border-amber-500/40 resize-none"
+        />
+        <div className="flex items-center justify-end gap-3 mt-4">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-md text-sm text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSubmit(reason)}
+            disabled={reason.trim().length === 0 || isLoading}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-amber-600 text-white hover:bg-amber-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed transition-colors"
+          >
+            Flag Transaction
+          </button>
+        </div>
+      </div>
     </>
   );
 }

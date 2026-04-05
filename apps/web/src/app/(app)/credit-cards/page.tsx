@@ -7,9 +7,6 @@ export default function CreditCardsPage() {
       <PageHeader
         title="Credit Cards"
         description="Transaction matching with receipt chase tracking"
-        actions={
-          <button className="btn-primary btn-sm">Batch Approve</button>
-        }
       />
       <CreditCardFeed />
     </>

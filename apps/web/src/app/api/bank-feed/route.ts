@@ -19,6 +19,7 @@ export const GET = apiQueryHandler(
       .select(`
         id,
         transaction_date,
+        created_at,
         description,
         amount_cents,
         status,
@@ -29,9 +30,10 @@ export const GET = apiQueryHandler(
         matched_bill_id,
         matched_receipt_id,
         location:locations!bank_transactions_location_id_fkey(id, name, short_code),
-        ai_account:accounts!bank_transactions_ai_account_id_fkey(id, account_number, name),
+        ai_account:accounts!bank_transactions_ai_account_id_fkey(id, account_number, name, account_type),
         ai_vendor:vendors!bank_transactions_ai_vendor_id_fkey(id, name, display_name),
-        final_account:accounts!bank_transactions_final_account_id_fkey(id, account_number, name),
+        final_account:accounts!bank_transactions_final_account_id_fkey(id, account_number, name, account_type),
+        final_job:jobs!bank_transactions_final_job_id_fkey(id, job_number, name),
         matched_bill:bills!fk_matched_bill(id, bill_number)
       `, { count: 'exact' });
 
