@@ -84,15 +84,45 @@ PLAID_CLIENT_ID                      # Plaid banking (server-side only)
 PLAID_SECRET                         # Plaid banking (server-side only)
 ```
 
-## Current Build State (HONEST ASSESSMENT — READ THIS FIRST)
+## Current Build State (Updated Session 7 — April 5, 2026)
 
-ZERO pages meet production criteria after 5 sessions. Every page renders hardcoded demo arrays. No page fetches from its API route. No button triggers a real mutation. The application is 34 interactive mockups with a production-grade schema behind them.
+Bank Feed is the first page wired to real Supabase data. All other 33 pages still render hardcoded demo arrays.
 
-What is solid: 11 SQL migrations, 63+ tables, 9 views, 6 enforcement triggers, RLS everywhere. 29 API routes that query real tables with verified column names. 7 service modules with real business logic. None of these services are called from page components.
+WHAT WORKS:
+- Bank Feed page queries real bank_transactions table via GET /api/bank-feed
+- 25 seed transactions exist for Swan Creek Construction
+- Status tab filters with dollar amounts
+- Debounced search, pagination, loading/error/empty states
+- Approve button calls POST /api/bank-feed/approve and creates real journal entries
+- Toast notifications on approve/error
+- Keyboard shortcuts (j/k/a/f/Space/Esc)
+- Company selector dropdown (queries /api/locations)
+- Edit panel with GL account search, vendor recents, notes, Save & Approve
+- Job selector in edit panel (queries /api/jobs/search) — COGS accounts require job assignment
+- apps/web/.env.local exists with Supabase + Clerk credentials (do not commit to git)
+- docs/meritbooks-exhaustive-feature-audit.md is in the repo
 
-What is not: All 34 pages render hardcoded demo data. No TanStack Query or data-fetching infrastructure. No TypeScript interfaces for API response shapes. No loading, empty, or error states. No mutations wired. No RBAC, no company switcher, no theme toggle. No Plaid or email integration.
+WHAT IS BROKEN OR INCOMPLETE:
+- Migration 010 (job_id columns on bank_transactions) has NOT been applied to Supabase — must run in SQL Editor
+- The bank-feed API had 500 errors from joining final_job before migration was applied — join was removed as workaround
+- Flag button shows not yet implemented toast
+- Edit button wiring needs verification
+- Processing metrics strip exists as component but may not render
+- Smart batch selection needs verification
+- Vendor batch selection needs verification
+- Sortable column headers need verification
+- 19 pre-existing TypeScript errors across other files (not bank-feed related)
 
-Priority order — DO NOT SKIP AHEAD: 1) Wire pages to real data (install TanStack Query, create hooks, define TS interfaces, wire Bank Feed end-to-end as template, replicate). 2) Financial Reporting Engine. 3) Accounts Receivable. 4) Job Costing. 5) Onboarding Wizard.
+WHAT IS NOT BUILT:
+- All other 33 pages still render demo data
+- No Financial Reporting Engine
+- No Accounts Receivable
+- No Job Costing pages
+- No Onboarding Wizard
+- No Plaid or M365 integration
+- No RBAC enforcement
+
+NEXT SESSION PRIORITY: Verify bank feed features actually render in browser. Fix anything broken. Then wire the next page.
 
 ## Design System (BINDING)
 
@@ -131,3 +161,47 @@ Rule 10 - Never Repeat These Failures: Never claim built when rendering demo dat
 Rule 11 - Schema Ground Truth: ALWAYS cat the relevant migration SQL in packages/supabase/migrations/ before writing any query. If a column name does not match the migration file, your code is wrong.
 
 Rule 12 - Self-Audit Every Response: After writing code, check Rules 3, 4, 5, and 10 against your output. If any rule fails, fix it before presenting. Do not wait to be asked.
+
+## Feature Audit Checklist (MANDATORY)
+
+Before building or modifying any page, do the following:
+1. Open docs/meritbooks-exhaustive-feature-audit.md
+2. Find every audit item number for that page
+3. List them in your plan
+4. After building, verify each one is covered
+5. If an item is intentionally deferred, say so and why
+
+The audit file is the cross-reference checklist for every feature in the product. If you build a page without checking the audit, you are violating Rule 6 (Full Context).
+
+## Bank Feed — Required Features (from Build Spec §09 + Prior Sessions)
+
+These are not suggestions. All must be present in the Bank Feed page:
+
+Core (Spec §09, Audit #160-163):
+- AI-categorized transactions sorted by confidence (lowest first = needs most attention)
+- Confidence bars showing AI certainty percentage
+- Match status badges (matched to bill, matched to receipt, unmatched)
+- 3 actions per transaction: Approve, Flag, Edit
+- Batch approve for high-confidence items
+
+Enhancements (validated in prior sessions, carry forward):
+- Processing metrics strip: Processed today X/Y (Z%), AI auto-approved count, Avg confidence
+- Smart batch selection: "Select all >=90% confidence" button
+- Vendor batch selection: click vendor name to select all transactions from that vendor
+- Sortable column headers (date, amount, confidence, vendor, company)
+- Inline GL account search with vendor recents (top 5 most-used accounts for this vendor) in the edit panel
+- Edit slide-out panel with: vendor name, GL account search, AI reasoning display, notes field, Save & Approve
+
+Already built (keep these):
+- Keyboard shortcuts (j/k/a/f/Space/Esc)
+- Dollar amounts in status tabs
+- Toast notifications on approve/error
+- Loading/error/empty states
+- Debounced search
+- Real Supabase queries
+
+## Dev Server Management
+
+Before starting a dev server with npm run dev, always kill any existing dev servers first:
+lsof -ti:3000,3001,3002 | xargs kill -9 2>/dev/null
+Always use port 3000. Never leave orphaned servers running on other ports.

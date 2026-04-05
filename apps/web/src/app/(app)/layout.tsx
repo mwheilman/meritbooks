@@ -1,5 +1,6 @@
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
+import { ToastContainer } from '@/components/ui';
 
 export default function AppLayout({
   children,
@@ -15,6 +16,7 @@ export default function AppLayout({
           {children}
         </main>
       </div>
+      <ToastContainer />
     </div>
   );
 }

@@ -234,6 +234,60 @@ export interface Receipt {
 }
 
 // =============================================================
+// API RESPONSE TYPES
+// =============================================================
+
+/** Hydrated bank transaction row returned by GET /api/bank-feed */
+export interface BankFeedRow {
+  id: string;
+  transaction_date: string;
+  description: string;
+  amount_cents: number;
+  status: TransactionStatus;
+  ai_confidence: number | null;
+  ai_reasoning: string | null;
+  match_type: 'VENDOR_PATTERN' | 'BILL_PAYMENT' | 'RECEIPT' | 'NONE' | null;
+  match_confidence: number | null;
+  matched_bill_id: string | null;
+  matched_receipt_id: string | null;
+  location: { id: string; name: string; short_code: string } | null;
+  ai_account: { id: string; account_number: string; name: string; account_type?: AccountType } | null;
+  ai_vendor: { id: string; name: string; display_name: string | null } | null;
+  final_account: { id: string; account_number: string; name: string; account_type?: AccountType } | null;
+  final_job: { id: string; job_number: string; name: string } | null;
+  matched_bill: { id: string; bill_number: string | null } | null;
+}
+
+export interface BankFeedStatusCounts {
+  count: number;
+  amount_cents: number;
+}
+
+export interface BankFeedMetrics {
+  total_today: number;
+  reviewed_today: number;
+  auto_approved_today: number;
+  avg_confidence: number;
+}
+
+export interface BankFeedResponse {
+  data: BankFeedRow[];
+  counts: {
+    all: BankFeedStatusCounts;
+    PENDING: BankFeedStatusCounts;
+    CATEGORIZED: BankFeedStatusCounts;
+    FLAGGED: BankFeedStatusCounts;
+  };
+  metrics: BankFeedMetrics;
+  pagination: {
+    page: number;
+    per_page: number;
+    total: number;
+    total_pages: number;
+  };
+}
+
+// =============================================================
 // JOBS & AR
 // =============================================================
 
@@ -252,6 +306,16 @@ export interface Job {
   billed_to_date_cents: number;
   pct_complete: number | null;
   created_at: string;
+}
+
+/** Lightweight job record returned by /api/jobs/search */
+export interface JobSearchResult {
+  id: string;
+  job_number: string;
+  name: string;
+  customer_name: string | null;
+  job_type: string | null;
+  status: string;
 }
 
 export interface Invoice {

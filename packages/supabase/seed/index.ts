@@ -112,7 +112,7 @@ async function main() {
               account_type: type.code,
               account_sub_type: st.code,
               is_control_account: acct.is_control_account ?? false,
-              is_company_specific: acct.is_company_specific ?? false,
+              is_company_specific: false, // top-level COA; per-location instances created during onboarding
               is_bank_account: acct.is_bank_account ?? false,
               is_credit_card: acct.is_credit_card ?? false,
               require_department: acct.require_department ?? false,

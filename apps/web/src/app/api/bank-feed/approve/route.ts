@@ -38,12 +38,12 @@ export const POST = apiHandler(
     // Inflow: DR Cash, CR Revenue/Liability
     const lines = isOutflow
       ? [
-          { account_id: body.account_id, debit_cents: absCents, credit_cents: 0, location_id: locationId, department_id: body.department_id, class_id: body.class_id },
+          { account_id: body.account_id, debit_cents: absCents, credit_cents: 0, location_id: locationId, department_id: body.department_id ?? undefined, class_id: body.class_id ?? undefined },
           { account_id: cashAccountId, debit_cents: 0, credit_cents: absCents, location_id: locationId },
         ]
       : [
           { account_id: cashAccountId, debit_cents: absCents, credit_cents: 0, location_id: locationId },
-          { account_id: body.account_id, debit_cents: 0, credit_cents: absCents, location_id: locationId, department_id: body.department_id, class_id: body.class_id },
+          { account_id: body.account_id, debit_cents: 0, credit_cents: absCents, location_id: locationId, department_id: body.department_id ?? undefined, class_id: body.class_id ?? undefined },
         ];
 
     const jeResult = await postJournalEntry(ctx.supabase, {
@@ -71,11 +71,34 @@ export const POST = apiHandler(
         final_vendor_id: body.vendor_id,
         final_department_id: body.department_id,
         final_class_id: body.class_id,
+        final_job_id: body.job_id ?? null,
         approved_by: ctx.userId,
         approved_at: new Date().toISOString(),
         gl_entry_id: jeResult.entry_id,
       })
       .eq('id', body.transaction_id);
+
+    // Create job cost entry when a job is assigned (COGS tracking)
+    if (body.job_id && jeResult.entry_id) {
+      // Find the expense line (the one hitting the categorized account, not the cash account)
+      const { data: expenseLine } = await ctx.supabase
+        .from('gl_entry_lines')
+        .select('id')
+        .eq('gl_entry_id', jeResult.entry_id)
+        .eq('account_id', body.account_id)
+        .single();
+
+      if (expenseLine) {
+        await ctx.supabase.from('job_cost_entries').insert({
+          org_id: orgId,
+          job_id: body.job_id,
+          gl_entry_line_id: expenseLine.id,
+          amount_cents: absCents,
+          description: `Bank feed: ${txn.description}`,
+          entry_date: txn.transaction_date,
+        });
+      }
+    }
 
     // Update vendor pattern cache (learning)
     if (body.vendor_id) {

@@ -10,6 +10,7 @@ export const approveBankTransactionSchema = z.object({
   vendor_id: z.string().uuid().optional().nullable(),
   department_id: z.string().uuid().optional().nullable(),
   class_id: z.string().uuid().optional().nullable(),
+  job_id: z.string().uuid().optional().nullable(),
 });
 
 export const batchApproveSchema = z.object({
@@ -19,6 +20,14 @@ export const batchApproveSchema = z.object({
 export const flagTransactionSchema = z.object({
   transaction_id: z.string().uuid(),
   reason: z.string().min(1, 'Flag reason is required').max(500),
+});
+
+export const bankFeedQuerySchema = z.object({
+  status: z.enum(['all', 'PENDING', 'CATEGORIZED', 'FLAGGED', 'APPROVED', 'POSTED']).optional(),
+  search: z.string().max(200).optional(),
+  location_id: z.string().uuid().optional(),
+  page: z.string().regex(/^\d+$/).optional(),
+  per_page: z.string().regex(/^\d+$/).optional(),
 });
 
 // =============================================================
@@ -75,12 +84,30 @@ export const approveBillSchema = z.object({
 });
 
 // =============================================================
+// JOBS
+// =============================================================
+
+export const jobSearchSchema = z.object({
+  q: z.string().max(100).optional(),
+  location_id: z.string().uuid('Location is required'),
+});
+
+// =============================================================
+// LOCATIONS
+// =============================================================
+
+export const locationQuerySchema = z.object({});
+
+// =============================================================
 // TYPE EXPORTS
 // =============================================================
 
 export type ApproveBankTransactionInput = z.infer<typeof approveBankTransactionSchema>;
 export type BatchApproveInput = z.infer<typeof batchApproveSchema>;
 export type FlagTransactionInput = z.infer<typeof flagTransactionSchema>;
+export type BankFeedQuery = z.infer<typeof bankFeedQuerySchema>;
 export type SubmitReceiptInput = z.infer<typeof submitReceiptSchema>;
 export type ApproveReceiptInput = z.infer<typeof approveReceiptSchema>;
 export type CreateBillInput = z.infer<typeof createBillSchema>;
+export type JobSearchQuery = z.infer<typeof jobSearchSchema>;
+export type LocationQuery = z.infer<typeof locationQuerySchema>;
