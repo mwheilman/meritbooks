@@ -86,7 +86,7 @@ function InvoiceList({
       <div className="p-8 text-center">
         <AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" />
         <p className="text-red-400">Failed to load invoices</p>
-        <p className="text-sm text-gray-500 mt-1">{error.message}</p>
+        <p className="text-sm text-gray-500 mt-1">{error}</p>
       </div>
     );
   }

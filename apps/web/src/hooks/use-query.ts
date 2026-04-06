@@ -6,6 +6,8 @@ import { api } from '@/lib/api-client';
 interface UseQueryOptions {
   enabled?: boolean;
   refetchInterval?: number;
+  /** Change this value to force a refetch (cache-buster) */
+  key?: string;
 }
 
 interface UseQueryResult<T> {
@@ -23,9 +25,11 @@ interface UseQueryResult<T> {
  *     '/api/gl/trial-balance',
  *     { location_id: selectedCompany }
  *   );
+ *
+ * Pass `null` as url to skip the fetch (conditional fetching).
  */
 export function useQuery<T>(
-  url: string,
+  url: string | null,
   params?: Record<string, string>,
   options?: UseQueryOptions
 ): UseQueryResult<T> {
@@ -34,10 +38,14 @@ export function useQuery<T>(
   const [isLoading, setIsLoading] = useState(true);
   const mountedRef = useRef(true);
 
-  const { enabled = true, refetchInterval } = options ?? {};
+  const { enabled = true, refetchInterval, key } = options ?? {};
+  const shouldFetch = enabled && url !== null;
 
   const fetchData = useCallback(async () => {
-    if (!enabled) return;
+    if (!shouldFetch || !url) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
 
@@ -52,7 +60,8 @@ export function useQuery<T>(
       setData(result.data);
     }
     setIsLoading(false);
-  }, [url, JSON.stringify(params), enabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, JSON.stringify(params), shouldFetch, key]);
 
   useEffect(() => {
     mountedRef.current = true;

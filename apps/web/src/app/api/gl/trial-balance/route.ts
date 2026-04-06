@@ -8,8 +8,12 @@ export const GET = apiQueryHandler(
   async (params: TrialBalanceQuery, ctx) => {
     let query = ctx.supabase.from('v_trial_balance').select('*');
 
-    if (params.location_id && params.location_id !== 'all') {
-      query = query.eq('location_id', params.location_id);
+    const locIds = (params as Record<string, string>).location_ids;
+    const locFilter = locIds ? locIds.split(',').filter(Boolean) : (params.location_id && params.location_id !== 'all' ? [params.location_id] : []);
+    if (locFilter.length === 1) {
+      query = query.eq('location_id', locFilter[0]);
+    } else if (locFilter.length > 1) {
+      query = query.in('location_id', locFilter);
     }
 
     const { data, error } = await query

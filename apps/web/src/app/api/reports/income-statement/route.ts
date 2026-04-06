@@ -5,10 +5,12 @@ import { z } from 'zod';
 
 const isQuerySchema = z.object({
   location_id: z.string().optional(),
+  location_ids: z.string().optional(),
   department_id: z.string().optional(),
   class_id: z.string().optional(),
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  basis: z.enum(['accrual', 'cash']).optional(),
 });
 
 interface ISLineItem {
@@ -33,6 +35,15 @@ export const GET = apiQueryHandler(
     const startDate = params.start_date ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     const endDateDefault = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     const endDate = params.end_date ?? endDateDefault.toISOString().split('T')[0];
+    const basis = params.basis ?? 'accrual';
+
+    // Resolve location filter — accept location_ids (comma-separated) or location_id
+    const locationIds: string[] = [];
+    if (params.location_ids) {
+      locationIds.push(...params.location_ids.split(',').filter(Boolean));
+    } else if (params.location_id && params.location_id !== 'all') {
+      locationIds.push(params.location_id);
+    }
 
     let query = ctx.supabase
       .from('gl_entry_lines')
@@ -40,6 +51,8 @@ export const GET = apiQueryHandler(
         account_id,
         debit_cents,
         credit_cents,
+        location_id,
+        gl_entry_id,
         accounts!inner(
           account_number,
           name,
@@ -60,6 +73,7 @@ export const GET = apiQueryHandler(
           )
         ),
         gl_entries!inner(
+          id,
           entry_date,
           status
         )
@@ -69,9 +83,13 @@ export const GET = apiQueryHandler(
       .lte('gl_entries.entry_date', endDate)
       .in('accounts.account_type', ['REVENUE', 'COGS', 'OPEX', 'OTHER']);
 
-    if (params.location_id && params.location_id !== 'all') {
-      query = query.eq('location_id', params.location_id);
+    // Multi-location filter
+    if (locationIds.length === 1) {
+      query = query.eq('location_id', locationIds[0]);
+    } else if (locationIds.length > 1) {
+      query = query.in('location_id', locationIds);
     }
+
     if (params.department_id) {
       query = query.eq('department_id', params.department_id);
     }
@@ -86,7 +104,35 @@ export const GET = apiQueryHandler(
       return NextResponse.json({ error: error.message, code: 'QUERY_ERROR' }, { status: 500 });
     }
 
-    // Aggregate by account
+    let filteredData = data ?? [];
+
+    // ─── Cash basis filter ─────────────────────────────────────
+    // Cash basis only includes GL entries that have a corresponding
+    // cleared bank transaction. The link is bank_transactions.gl_entry_id.
+    if (basis === 'cash' && filteredData.length > 0) {
+      const entryIds = [...new Set(filteredData.map((line: Record<string, unknown>) => {
+        const entry = line.gl_entries as unknown as Record<string, unknown>;
+        return entry.id as string;
+      }))];
+
+      // Query bank_transactions to find which gl_entries have been matched to cleared transactions
+      const { data: bankTxns } = await ctx.supabase
+        .from('bank_transactions')
+        .select('gl_entry_id')
+        .in('gl_entry_id', entryIds)
+        .in('status', ['APPROVED', 'CATEGORIZED', 'RECONCILED']);
+
+      const cashEntryIds = new Set((bankTxns ?? []).map((t: Record<string, unknown>) => t.gl_entry_id as string));
+
+      // Also include entries from bank-feed sourced modules (these are cash movements by definition)
+      // Keep entries that either: (a) have a matched bank txn, or (b) were sourced from CASH_MGMT/BANK_FEED
+      filteredData = filteredData.filter((line: Record<string, unknown>) => {
+        const entry = line.gl_entries as unknown as Record<string, unknown>;
+        return cashEntryIds.has(entry.id as string);
+      });
+    }
+
+    // ─── Aggregate by account ──────────────────────────────────
     const accountMap = new Map<string, {
       accountId: string;
       accountNumber: string;
@@ -100,12 +146,12 @@ export const GET = apiQueryHandler(
       totalCredits: number;
     }>();
 
-    for (const line of data ?? []) {
-      const acct = line.accounts as any;
-      const group = acct.account_groups;
-      const subType = group.account_sub_types;
-      const acctType = subType.account_types;
-      const key = acct.account_number;
+    for (const line of filteredData) {
+      const acct = line.accounts as unknown as Record<string, unknown>;
+      const group = acct.account_groups as Record<string, unknown>;
+      const subType = group.account_sub_types as Record<string, unknown>;
+      const acctType = subType.account_types as Record<string, unknown>;
+      const key = acct.account_number as string;
 
       const existing = accountMap.get(key);
       if (existing) {
@@ -113,21 +159,21 @@ export const GET = apiQueryHandler(
         existing.totalCredits += Number(line.credit_cents ?? 0);
       } else {
         accountMap.set(key, {
-          accountId: line.account_id,
-          accountNumber: acct.account_number,
-          accountName: acct.name,
-          accountType: acct.account_type,
-          groupName: group.name,
-          groupOrder: group.display_order,
-          typeOrder: acctType.display_order,
-          normalBalance: acctType.normal_balance,
+          accountId: line.account_id as string,
+          accountNumber: acct.account_number as string,
+          accountName: acct.name as string,
+          accountType: acct.account_type as string,
+          groupName: group.name as string,
+          groupOrder: group.display_order as number,
+          typeOrder: acctType.display_order as number,
+          normalBalance: acctType.normal_balance as string,
           totalDebits: Number(line.debit_cents ?? 0),
           totalCredits: Number(line.credit_cents ?? 0),
         });
       }
     }
 
-    // Build sections
+    // ─── Build sections ────────────────────────────────────────
     const sectionConfig = [
       { type: 'REVENUE', label: 'Revenue' },
       { type: 'COGS', label: 'Cost of Goods Sold' },
@@ -187,7 +233,12 @@ export const GET = apiQueryHandler(
         grossMarginPct: revenue > 0 ? Math.round((grossProfit / revenue) * 10000) / 100 : 0,
         netMarginPct: revenue > 0 ? Math.round((netIncome / revenue) * 10000) / 100 : 0,
       },
-      filters: { startDate, endDate, locationId: params.location_id ?? 'all', departmentId: params.department_id, classId: params.class_id },
+      filters: {
+        startDate, endDate, basis,
+        locationIds: locationIds.length > 0 ? locationIds : ['all'],
+        departmentId: params.department_id,
+        classId: params.class_id,
+      },
     });
   }
 );

@@ -50,6 +50,7 @@ export const voidJournalEntrySchema = z.object({
 
 export const trialBalanceQuerySchema = z.object({
   location_id: z.string().optional(),
+  location_ids: z.string().optional(),
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   as_of_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

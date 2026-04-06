@@ -7,7 +7,9 @@ export async function GET(request: Request) {
   await auth().catch(() => null);
   const supabase = createAdminSupabase();
   const { searchParams } = new URL(request.url);
+  const locationIds = searchParams.get('location_ids');
   const locationId = searchParams.get('location_id');
+  const locFilter = locationIds ? locationIds.split(',').filter(Boolean) : (locationId && locationId !== 'all' ? [locationId] : []);
 
   let query = supabase
     .from('bills')
@@ -17,7 +19,8 @@ export async function GET(request: Request) {
     `)
     .not('status', 'eq', 'VOIDED');
 
-  if (locationId) query = query.eq('location_id', locationId);
+  if (locFilter.length === 1) query = query.eq('location_id', locFilter[0]);
+  else if (locFilter.length > 1) query = query.in('location_id', locFilter);
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

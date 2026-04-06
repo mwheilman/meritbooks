@@ -7,7 +7,9 @@ export async function GET(request: Request) {
   await auth().catch(() => null);
   const supabase = createAdminSupabase();
   const { searchParams } = new URL(request.url);
+  const locationIds = searchParams.get('location_ids');
   const locationId = searchParams.get('location_id');
+  const locFilter = locationIds ? locationIds.split(',').filter(Boolean) : (locationId && locationId !== 'all' ? [locationId] : []);
   const startDate = searchParams.get('start_date') ?? new Date().toISOString().slice(0, 8) + '01';
   const endDate = searchParams.get('end_date') ?? new Date().toISOString().slice(0, 10);
   const mode = searchParams.get('mode') ?? 'summary'; // 'summary' or 'detail'

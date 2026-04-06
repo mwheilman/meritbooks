@@ -100,7 +100,7 @@ export function CloseGrid() {
                     const p = loc.phases[phase];
                     const phasePct = p.total > 0 ? (p.complete / p.total) * 100 : 0;
                     return (
-                      <div key={phase} className="flex items-center gap-1.5" title={`${PHASE_LABELS[phase].label}: ${p.complete}/${p.total}`}>
+                      <div key={phase} className="flex items-center gap-1.5">
                         <div className="h-1.5 w-10 rounded-full bg-gray-700 overflow-hidden">
                           <div className={clsx('h-full rounded-full', PHASE_LABELS[phase].color)} style={{ width: `${phasePct}%` }} />
                         </div>
@@ -123,12 +123,12 @@ export function CloseGrid() {
               {isExpanded && loc.items.length > 0 && (
                 <div className="border-t border-gray-700/30 px-4 py-3 space-y-1">
                   {(['INITIAL', 'MID_CLOSE', 'FINAL'] as const).map((phase) => {
-                    const phaseItems = loc.items.filter((i) => i.phase === phase);
+                    const phaseItems = loc.items.filter((i: ChecklistItem) => i.phase === phase);
                     if (phaseItems.length === 0) return null;
                     return (
                       <div key={phase} className="mb-3">
                         <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">{PHASE_LABELS[phase].label}</p>
-                        {phaseItems.map((item) => (
+                        {phaseItems.map((item: ChecklistItem) => (
                           <button
                             key={item.id}
                             onClick={() => toggleItem(item.id, !item.is_complete)}
@@ -140,7 +140,7 @@ export function CloseGrid() {
                             <span className={clsx('text-sm flex-1', item.is_complete ? 'text-gray-500 line-through' : 'text-gray-300')}>
                               {item.task_name}
                             </span>
-                            {item.is_auto_verified && <Zap className="w-3 h-3 text-amber-400" title="Auto-verified by system" />}
+                            {item.is_auto_verified && <Zap className="w-3 h-3 text-amber-400" />}
                             <span className="text-[10px] text-gray-600 font-mono">Day {item.due_day}</span>
                           </button>
                         ))}

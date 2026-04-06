@@ -7,7 +7,8 @@ import { z } from 'zod';
 const querySchema = z.object({
   account_id: z.string().uuid().optional(),
   account_number: z.string().optional(),
-  location_id: z.string().uuid().optional(),
+  location_id: z.string().optional(),
+  location_ids: z.string().optional(),
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   page: z.string().regex(/^\d+$/).optional(),
@@ -20,6 +21,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const params = querySchema.parse(Object.fromEntries(searchParams.entries()));
+  const locFilter = params.location_ids ? params.location_ids.split(",").filter(Boolean) : (params.location_id && params.location_id !== "all" ? [params.location_id] : []);
 
   const page = parseInt(params.page ?? '1', 10);
   const perPage = parseInt(params.per_page ?? '100', 10);
@@ -45,8 +47,10 @@ export async function GET(request: Request) {
   }
 
   // Filter by location
-  if (params.location_id) {
-    query = query.eq('location_id', params.location_id);
+  if (locFilter.length === 1) {
+    query = query.eq('location_id', locFilter[0]);
+  } else if (locFilter.length > 1) {
+    query = query.in('location_id', locFilter);
   }
 
   // Filter by date range (on the parent gl_entry's entry_date)
@@ -61,7 +65,7 @@ export async function GET(request: Request) {
     
     if (params.start_date) entriesQ = entriesQ.gte('entry_date', params.start_date);
     if (params.end_date) entriesQ = entriesQ.lte('entry_date', params.end_date);
-    if (params.location_id) entriesQ = entriesQ.eq('location_id', params.location_id);
+    if (locFilter.length === 1) entriesQ = entriesQ.eq('location_id', locFilter[0]); else if (locFilter.length > 1) entriesQ = entriesQ.in('location_id', locFilter);
 
     const { data: entryIds } = await entriesQ;
     if (entryIds && entryIds.length > 0) {

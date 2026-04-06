@@ -5,7 +5,9 @@ import { z } from 'zod';
 
 const bsQuerySchema = z.object({
   location_id: z.string().optional(),
+  location_ids: z.string().optional(),
   as_of_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  accountId: z.string().optional(),
 });
 
 interface BSLineItem {
@@ -16,31 +18,23 @@ interface BSLineItem {
   balanceCents: number;
 }
 
-interface BSGroup {
-  name: string;
-  accounts: BSLineItem[];
-  totalCents: number;
-}
-
-interface BSSubType {
-  name: string;
-  groups: BSGroup[];
-  totalCents: number;
-}
-
-interface BSSection {
-  type: string;
-  label: string;
-  subTypes: BSSubType[];
-  totalCents: number;
-}
+interface BSGroup { name: string; accounts: BSLineItem[]; totalCents: number }
+interface BSSubType { name: string; groups: BSGroup[]; totalCents: number }
+interface BSSection { type: string; label: string; subTypes: BSSubType[]; totalCents: number }
 
 export const GET = apiQueryHandler(
   bsQuerySchema,
   async (params, ctx) => {
     const asOfDate = params.as_of_date ?? new Date().toISOString().split('T')[0];
 
-    // Query all BS account lines up to the as-of date
+    // Resolve location filter
+    const locationIds: string[] = [];
+    if (params.location_ids) {
+      locationIds.push(...params.location_ids.split(',').filter(Boolean));
+    } else if (params.location_id && params.location_id !== 'all') {
+      locationIds.push(params.location_id);
+    }
+
     let query = ctx.supabase
       .from('gl_entry_lines')
       .select(`
@@ -75,8 +69,10 @@ export const GET = apiQueryHandler(
       .lte('gl_entries.entry_date', asOfDate)
       .in('accounts.account_type', ['ASSET', 'LIABILITY', 'EQUITY']);
 
-    if (params.location_id && params.location_id !== 'all') {
-      query = query.eq('location_id', params.location_id);
+    if (locationIds.length === 1) {
+      query = query.eq('location_id', locationIds[0]);
+    } else if (locationIds.length > 1) {
+      query = query.in('location_id', locationIds);
     }
 
     const { data, error } = await query;
@@ -103,11 +99,11 @@ export const GET = apiQueryHandler(
     }>();
 
     for (const line of data ?? []) {
-      const acct = line.accounts as any;
-      const group = acct.account_groups;
-      const subType = group.account_sub_types;
-      const acctType = subType.account_types;
-      const key = acct.account_number;
+      const acct = line.accounts as unknown as Record<string, unknown>;
+      const group = acct.account_groups as Record<string, unknown>;
+      const subType = group.account_sub_types as Record<string, unknown>;
+      const acctType = subType.account_types as Record<string, unknown>;
+      const key = acct.account_number as string;
 
       const existing = accountMap.get(key);
       if (existing) {
@@ -115,23 +111,22 @@ export const GET = apiQueryHandler(
         existing.totalCredits += Number(line.credit_cents ?? 0);
       } else {
         accountMap.set(key, {
-          accountId: line.account_id,
-          accountNumber: acct.account_number,
-          accountName: acct.name,
-          accountType: acct.account_type,
-          groupName: group.name,
-          subTypeName: subType.name,
-          groupOrder: group.display_order,
-          subTypeOrder: subType.display_order,
-          typeOrder: acctType.display_order,
-          normalBalance: acctType.normal_balance,
+          accountId: line.account_id as string,
+          accountNumber: acct.account_number as string,
+          accountName: acct.name as string,
+          accountType: acct.account_type as string,
+          groupName: group.name as string,
+          subTypeName: subType.name as string,
+          groupOrder: group.display_order as number,
+          subTypeOrder: subType.display_order as number,
+          typeOrder: acctType.display_order as number,
+          normalBalance: acctType.normal_balance as string,
           totalDebits: Number(line.debit_cents ?? 0),
           totalCredits: Number(line.credit_cents ?? 0),
         });
       }
     }
 
-    // Build sections: Asset, Liability, Equity
     const sectionConfig = [
       { type: 'ASSET', label: 'Assets' },
       { type: 'LIABILITY', label: 'Liabilities' },
@@ -151,7 +146,6 @@ export const GET = apiQueryHandler(
         })
         .sort((a, b) => a.subTypeOrder - b.subTypeOrder || a.groupOrder - b.groupOrder || a.accountNumber.localeCompare(b.accountNumber));
 
-      // Group by subtype → group
       const subTypeMap = new Map<string, Map<string, BSLineItem[]>>();
       for (const acct of accounts) {
         if (!subTypeMap.has(acct.subTypeName)) subTypeMap.set(acct.subTypeName, new Map());
@@ -170,23 +164,13 @@ export const GET = apiQueryHandler(
       for (const [stName, groupMap] of subTypeMap) {
         const groups: BSGroup[] = [];
         for (const [gName, accts] of groupMap) {
-          groups.push({
-            name: gName,
-            accounts: accts,
-            totalCents: accts.reduce((s, a) => s + a.balanceCents, 0),
-          });
+          groups.push({ name: gName, accounts: accts, totalCents: accts.reduce((s, a) => s + a.balanceCents, 0) });
         }
-        subTypes.push({
-          name: stName,
-          groups,
-          totalCents: groups.reduce((s, g) => s + g.totalCents, 0),
-        });
+        subTypes.push({ name: stName, groups, totalCents: groups.reduce((s, g) => s + g.totalCents, 0) });
       }
 
       sections.push({
-        type: cfg.type,
-        label: cfg.label,
-        subTypes,
+        type: cfg.type, label: cfg.label, subTypes,
         totalCents: subTypes.reduce((s, st) => s + st.totalCents, 0),
       });
     }
@@ -194,7 +178,6 @@ export const GET = apiQueryHandler(
     const totalAssets = sections.find((s) => s.type === 'ASSET')?.totalCents ?? 0;
     const totalLiabilities = sections.find((s) => s.type === 'LIABILITY')?.totalCents ?? 0;
     const totalEquity = sections.find((s) => s.type === 'EQUITY')?.totalCents ?? 0;
-    const isBalanced = totalAssets === totalLiabilities + totalEquity;
 
     return NextResponse.json({
       sections,
@@ -203,13 +186,10 @@ export const GET = apiQueryHandler(
         totalLiabilitiesCents: totalLiabilities,
         totalEquityCents: totalEquity,
         liabilitiesPlusEquityCents: totalLiabilities + totalEquity,
-        isBalanced,
+        isBalanced: totalAssets === totalLiabilities + totalEquity,
         varianceCents: totalAssets - (totalLiabilities + totalEquity),
       },
-      filters: {
-        asOfDate,
-        locationId: params.location_id ?? 'all',
-      },
+      filters: { asOfDate, locationIds: locationIds.length > 0 ? locationIds : ['all'] },
     });
   }
 );

@@ -5,7 +5,8 @@ import { createAdminSupabase } from '@/lib/supabase/server';
 import { z } from 'zod';
 
 const querySchema = z.object({
-  location_id: z.string().uuid().optional(),
+  location_id: z.string().optional(),
+  location_ids: z.string().optional(),
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
@@ -16,6 +17,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const params = querySchema.parse(Object.fromEntries(searchParams.entries()));
+  const locFilter = params.location_ids ? params.location_ids.split(",").filter(Boolean) : (params.location_id && params.location_id !== "all" ? [params.location_id] : []);
 
   // Get all GL entries in the period with account type info
   let query = supabase
@@ -41,7 +43,7 @@ export async function GET(request: Request) {
     .gte('entry_date', params.start_date)
     .lte('entry_date', params.end_date);
 
-  if (params.location_id) entriesQ = entriesQ.eq('location_id', params.location_id);
+  if (locFilter.length === 1) entriesQ = entriesQ.eq("location_id", locFilter[0]); else if (locFilter.length > 1) entriesQ = entriesQ.in("location_id", locFilter);
 
   const { data: entryIds } = await entriesQ;
   if (!entryIds || entryIds.length === 0) {
@@ -169,7 +171,7 @@ export async function GET(request: Request) {
       .select('id')
       .eq('status', 'POSTED')
       .lt('entry_date', params.start_date);
-    if (params.location_id) priorQ = priorQ.eq('location_id', params.location_id);
+    if (locFilter.length === 1) priorQ = priorQ.eq("location_id", locFilter[0]); else if (locFilter.length > 1) priorQ = priorQ.in("location_id", locFilter);
 
     const { data: priorEntries } = await priorQ;
     if (priorEntries && priorEntries.length > 0) {
