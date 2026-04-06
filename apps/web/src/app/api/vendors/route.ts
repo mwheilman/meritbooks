@@ -1,128 +1,311 @@
-export const dynamic = "force-dynamic";
-import { NextResponse } from 'next/server';
-import { apiQueryHandler } from '@/lib/api-handler';
-import { z } from 'zod';
+import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
+import { createClient } from '@/lib/supabase/server';
 
-const vendorQuerySchema = z.object({
-  search: z.string().max(200).optional(),
-  compliance: z.enum(['all', 'compliant', 'issues']).optional(),
-  page: z.string().regex(/^\d+$/).optional(),
-  per_page: z.string().regex(/^\d+$/).optional(),
-});
+interface VendorInput {
+  name: string;
+  display_name?: string;
+  email?: string;
+  phone?: string;
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  country?: string;
+  payment_terms?: string;
+  default_account_id?: string;
+  default_department_id?: string;
+  is_1099?: boolean;
+  tax_id?: string;
+  notes?: string;
+  website?: string;
+}
 
-export const GET = apiQueryHandler(
-  vendorQuerySchema,
-  async (params, ctx) => {
-    const page = parseInt(params.page ?? '1', 10);
-    const perPage = Math.min(parseInt(params.per_page ?? '50', 10), 100);
-    const offset = (page - 1) * perPage;
-
-    let query = ctx.supabase
-      .from('vendors')
-      .select(`
-        id,
-        name,
-        display_name,
-        default_account_id,
-        ai_confidence,
-        auto_approve,
-        transaction_count,
-        ytd_spend_cents,
-        is_1099_eligible,
-        is_active,
-        created_at
-      `, { count: 'exact' })
-      .eq('is_active', true)
-      .order('name', { ascending: true })
-      .range(offset, offset + perPage - 1);
-
-    if (params.search && params.search.trim().length > 0) {
-      query = query.ilike('name', `%${params.search.trim()}%`);
+export async function GET(req: NextRequest) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: vendors, error, count } = await query;
+    const supabase = await createClient();
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get('search') ?? '';
+    const page = parseInt(searchParams.get('page') ?? '1', 10);
+    const perPage = parseInt(searchParams.get('per_page') ?? '50', 10);
+    const sortBy = searchParams.get('sort_by') ?? 'name';
+    const sortDir = searchParams.get('sort_dir') === 'desc' ? false : true;
+    const is1099 = searchParams.get('is_1099');
+    const hasPaymentHold = searchParams.get('has_payment_hold');
+
+    // Get org
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('id')
+      .limit(1)
+      .single();
+
+    if (!org) {
+      return NextResponse.json({ vendors: [], total: 0 });
+    }
+
+    let query = supabase
+      .from('vendors')
+      .select('*, vendor_compliance_docs(id, doc_type, status, expiration_date), vendor_payment_holds(id, hold_type, reason, override_type, created_at)', { count: 'exact' })
+      .eq('org_id', org.id)
+      .is('deleted_at', null);
+
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,display_name.ilike.%${search}%,email.ilike.%${search}%`);
+    }
+
+    if (is1099 === 'true') {
+      query = query.eq('is_1099', true);
+    }
+
+    const validSortColumns = ['name', 'created_at', 'is_1099', 'payment_terms'];
+    const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'name';
+    query = query.order(sortColumn, { ascending: sortDir });
+
+    const offset = (page - 1) * perPage;
+    query = query.range(offset, offset + perPage - 1);
+
+    const { data: vendors, count, error } = await query;
 
     if (error) {
-      console.error('[vendors] Query error:', error);
-      return NextResponse.json({ error: error.message, code: 'QUERY_ERROR' }, { status: 500 });
+      console.error('Vendor list error:', error);
+      return NextResponse.json({ error: 'Failed to fetch vendors' }, { status: 500 });
     }
 
-    // Get compliance docs and payment holds for all returned vendors
-    const vendorIds = (vendors ?? []).map((v: { id: string }) => v.id);
-    let complianceMap: Record<string, { w9: string; glCoi: string; wcCoi: string }> = {};
-    let holdSet = new Set<string>();
-    let defaultAccountMap: Record<string, { account_number: string; name: string }> = {};
+    // Compute compliance status per vendor
+    const enriched = (vendors ?? []).map((v: Record<string, unknown>) => {
+      const docs = (v.vendor_compliance_docs ?? []) as Array<{
+        doc_type: string;
+        status: string;
+        expiration_date: string | null;
+      }>;
+      const holds = (v.vendor_payment_holds ?? []) as Array<{
+        hold_type: string;
+        override_type: string | null;
+      }>;
 
-    if (vendorIds.length > 0) {
-      const [docsResult, holdsResult, accountsResult] = await Promise.all([
-        ctx.supabase
-          .from('vendor_compliance_docs')
-          .select('vendor_id, doc_type, expiration_date, status')
-          .in('vendor_id', vendorIds),
-        ctx.supabase
-          .from('vendor_payment_holds')
-          .select('vendor_id')
-          .in('vendor_id', vendorIds),
-        ctx.supabase
-          .from('accounts')
-          .select('id, account_number, name')
-          .in('id', (vendors ?? []).map((v: { default_account_id: string | null }) => v.default_account_id).filter(Boolean)),
-      ]);
+      const w9 = docs.find((d) => d.doc_type === 'W9');
+      const glCoi = docs.find((d) => d.doc_type === 'GL_COI');
+      const wcCoi = docs.find((d) => d.doc_type === 'WC_COI');
 
-      holdSet = new Set((holdsResult.data ?? []).map((h: { vendor_id: string }) => h.vendor_id));
-
-      for (const a of accountsResult.data ?? []) {
-        defaultAccountMap[a.id] = { account_number: a.account_number, name: a.name };
-      }
-
-      // Build compliance map
-      for (const vid of vendorIds) {
-        const docs = (docsResult.data ?? []).filter((d: any) => d.vendor_id === vid);
-        const w9 = docs.find((d: any) => d.doc_type === 'W9');
-        const glCoi = docs.find((d: any) => d.doc_type === 'GL_COI');
-        const wcCoi = docs.find((d: any) => d.doc_type === 'WC_COI');
-
-        const now = new Date();
-        complianceMap[vid] = {
-          w9: w9?.status === 'CURRENT' ? 'VERIFIED' : w9 ? 'PENDING' : 'MISSING',
-          glCoi: glCoi ? (glCoi.expiration_date && new Date(glCoi.expiration_date) < now ? 'EXPIRED' : 'VALID') : 'MISSING',
-          wcCoi: wcCoi ? (wcCoi.expiration_date && new Date(wcCoi.expiration_date) < now ? 'EXPIRED' : 'VALID') : 'N/A',
-        };
-      }
-    }
-
-    // Enrich vendor data
-    const enrichedVendors = (vendors ?? []).map((v: any) => {
-      const compliance = complianceMap[v.id] ?? { w9: 'N/A', glCoi: 'N/A', wcCoi: 'N/A' };
-      const defaultAccount = v.default_account_id ? defaultAccountMap[v.default_account_id] : null;
-      const hasIssue = compliance.w9 === 'MISSING' || compliance.glCoi === 'EXPIRED' || compliance.glCoi === 'MISSING' || compliance.wcCoi === 'EXPIRED';
-
-      return {
-        ...v,
-        displayName: v.display_name ?? v.name,
-        defaultAccount: defaultAccount ? `${defaultAccount.account_number} · ${defaultAccount.name}` : null,
-        compliance,
-        hasPaymentHold: holdSet.has(v.id),
-        hasComplianceIssue: hasIssue,
+      const now = new Date();
+      const isExpired = (doc: typeof w9) => {
+        if (!doc) return true;
+        if (doc.status !== 'ACTIVE') return true;
+        if (doc.expiration_date && new Date(doc.expiration_date) < now) return true;
+        return false;
       };
+
+      const complianceStatus = {
+        w9: w9 ? (isExpired(w9) ? 'expired' : 'valid') : 'missing',
+        glCoi: glCoi ? (isExpired(glCoi) ? 'expired' : 'valid') : 'missing',
+        wcCoi: wcCoi ? (isExpired(wcCoi) ? 'expired' : 'valid') : 'missing',
+        hasActiveHold: holds.some((h) => !h.override_type),
+      };
+
+      // Remove nested arrays from response for cleanliness
+      const { vendor_compliance_docs: _docs, vendor_payment_holds: _holds, ...rest } = v;
+      return { ...rest, compliance: complianceStatus };
     });
 
-    // Filter by compliance status if requested
-    let filtered = enrichedVendors;
-    if (params.compliance === 'issues') {
-      filtered = enrichedVendors.filter((v: any) => v.hasComplianceIssue || v.hasPaymentHold);
-    } else if (params.compliance === 'compliant') {
-      filtered = enrichedVendors.filter((v: any) => !v.hasComplianceIssue && !v.hasPaymentHold);
+    // Filter by payment hold after enrichment
+    let result = enriched;
+    if (hasPaymentHold === 'true') {
+      result = result.filter((v: { compliance: { hasActiveHold: boolean } }) => v.compliance.hasActiveHold);
     }
 
     return NextResponse.json({
-      data: filtered,
-      pagination: { page, per_page: perPage, total: count ?? 0, total_pages: Math.ceil((count ?? 0) / perPage) },
-      summary: {
-        total: enrichedVendors.length,
-        withIssues: enrichedVendors.filter((v: any) => v.hasComplianceIssue || v.hasPaymentHold).length,
-        with1099: enrichedVendors.filter((v: any) => v.is_1099_eligible).length,
-      },
+      vendors: result,
+      total: count ?? 0,
+      page,
+      perPage,
+      totalPages: Math.ceil((count ?? 0) / perPage),
     });
+  } catch (error) {
+    console.error('GET /api/vendors error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-);
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = (await req.json()) as VendorInput;
+    const supabase = await createClient();
+
+    // Get org
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('id')
+      .limit(1)
+      .single();
+
+    if (!org) {
+      return NextResponse.json({ error: 'No organization found' }, { status: 400 });
+    }
+
+    // Validate required fields
+    if (!body.name || body.name.trim().length === 0) {
+      return NextResponse.json({ error: 'Vendor name is required' }, { status: 400 });
+    }
+
+    const trimmedName = body.name.trim();
+
+    // Duplicate detection — fuzzy match on name
+    const { data: existing } = await supabase
+      .from('vendors')
+      .select('id, name')
+      .eq('org_id', org.id)
+      .is('deleted_at', null)
+      .ilike('name', `%${trimmedName}%`)
+      .limit(5);
+
+    const duplicates = (existing ?? []).filter((v: { name: string }) => {
+      const similarity = computeSimilarity(v.name.toLowerCase(), trimmedName.toLowerCase());
+      return similarity > 0.8;
+    });
+
+    if (duplicates.length > 0) {
+      return NextResponse.json({
+        error: 'Potential duplicate vendor detected',
+        duplicates: duplicates.map((d: { id: string; name: string }) => ({ id: d.id, name: d.name })),
+        message: `Similar vendor(s) already exist: ${duplicates.map((d: { name: string }) => d.name).join(', ')}. Set force=true to create anyway.`,
+      }, { status: 409 });
+    }
+
+    // Create vendor
+    const insertData = {
+      org_id: org.id,
+      name: trimmedName,
+      display_name: body.display_name?.trim() || trimmedName,
+      email: body.email?.trim().toLowerCase() || null,
+      phone: body.phone?.trim() || null,
+      address_line1: body.address_line1?.trim() || null,
+      address_line2: body.address_line2?.trim() || null,
+      city: body.city?.trim() || null,
+      state: body.state?.trim()?.toUpperCase() || null,
+      zip: body.zip?.trim() || null,
+      country: body.country?.trim() || 'US',
+      payment_terms: body.payment_terms || 'NET_30',
+      default_account_id: body.default_account_id || null,
+      default_department_id: body.default_department_id || null,
+      is_1099: body.is_1099 ?? false,
+      tax_id: body.tax_id?.trim() || null,
+      notes: body.notes?.trim() || null,
+      website: body.website?.trim() || null,
+      ai_confidence: 0,
+      auto_approve: false,
+      created_by: userId,
+    };
+
+    const { data: vendor, error } = await supabase
+      .from('vendors')
+      .insert(insertData)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('Vendor create error:', error);
+      return NextResponse.json({ error: 'Failed to create vendor', detail: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ vendor }, { status: 201 });
+  } catch (error) {
+    console.error('POST /api/vendors error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { id, ...updates } = body as { id: string } & Partial<VendorInput>;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Vendor ID required' }, { status: 400 });
+    }
+
+    const supabase = await createClient();
+
+    const updateData: Record<string, unknown> = {};
+    if (updates.name !== undefined) updateData.name = updates.name.trim();
+    if (updates.display_name !== undefined) updateData.display_name = updates.display_name.trim();
+    if (updates.email !== undefined) updateData.email = updates.email.trim().toLowerCase();
+    if (updates.phone !== undefined) updateData.phone = updates.phone.trim();
+    if (updates.address_line1 !== undefined) updateData.address_line1 = updates.address_line1.trim();
+    if (updates.address_line2 !== undefined) updateData.address_line2 = updates.address_line2.trim();
+    if (updates.city !== undefined) updateData.city = updates.city.trim();
+    if (updates.state !== undefined) updateData.state = updates.state.trim().toUpperCase();
+    if (updates.zip !== undefined) updateData.zip = updates.zip.trim();
+    if (updates.country !== undefined) updateData.country = updates.country.trim();
+    if (updates.payment_terms !== undefined) updateData.payment_terms = updates.payment_terms;
+    if (updates.default_account_id !== undefined) updateData.default_account_id = updates.default_account_id;
+    if (updates.default_department_id !== undefined) updateData.default_department_id = updates.default_department_id;
+    if (updates.is_1099 !== undefined) updateData.is_1099 = updates.is_1099;
+    if (updates.tax_id !== undefined) updateData.tax_id = updates.tax_id?.trim();
+    if (updates.notes !== undefined) updateData.notes = updates.notes?.trim();
+    if (updates.website !== undefined) updateData.website = updates.website?.trim();
+
+    updateData.updated_at = new Date().toISOString();
+
+    const { data: vendor, error } = await supabase
+      .from('vendors')
+      .update(updateData)
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('Vendor update error:', error);
+      return NextResponse.json({ error: 'Failed to update vendor' }, { status: 500 });
+    }
+
+    return NextResponse.json({ vendor });
+  } catch (error) {
+    console.error('PATCH /api/vendors error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+// Simple string similarity using Levenshtein-based approach
+function computeSimilarity(a: string, b: string): number {
+  if (a === b) return 1;
+  const longer = a.length > b.length ? a : b;
+  const shorter = a.length > b.length ? b : a;
+  if (longer.length === 0) return 1;
+
+  const costs: number[] = [];
+  for (let i = 0; i <= longer.length; i++) {
+    let lastValue = i;
+    for (let j = 0; j <= shorter.length; j++) {
+      if (i === 0) {
+        costs[j] = j;
+      } else if (j > 0) {
+        let newValue = costs[j - 1];
+        if (longer.charAt(i - 1) !== shorter.charAt(j - 1)) {
+          newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+        }
+        costs[j - 1] = lastValue;
+        lastValue = newValue;
+      }
+    }
+    if (i > 0) costs[shorter.length] = lastValue;
+  }
+
+  return (longer.length - costs[shorter.length]) / longer.length;
+}
