@@ -6,7 +6,7 @@ export default function ChargebacksPage() {
     <>
       <PageHeader
         title="Chargeback Billing"
-        description="Overhead allocation and intercompany billing across 17 entities"
+        description="Overhead allocation and intercompany billing"
         actions={
           <div className="flex items-center gap-2">
             <button className="btn-secondary btn-sm">OH Rate History</button>

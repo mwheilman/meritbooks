@@ -52,7 +52,7 @@ const TABS: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'organization', label: 'Organization', icon: Globe },
   { key: 'chase', label: 'Receipt Chase', icon: Bell },
   { key: 'ai', label: 'AI Thresholds', icon: Brain },
-  { key: 'companies', label: 'Portfolio Companies', icon: Building2 },
+  { key: 'companies', label: 'Companies', icon: Building2 },
 ];
 
 export default function SettingsPage() {
@@ -232,7 +232,7 @@ export default function SettingsPage() {
 
           {activeTab === 'companies' && (
             <div className="card p-6 space-y-5">
-              <h2 className="text-lg font-semibold text-white">Portfolio Companies</h2>
+              <h2 className="text-lg font-semibold text-white">Companies</h2>
               <p className="text-xs text-slate-500">{locations.length} entities across {new Set(locations.map((l) => l.industry).filter(Boolean)).size} industries</p>
               <div className="space-y-2">
                 {locations.map((loc) => (
