@@ -1,15 +1,15 @@
 /**
  * MeritBooks RBAC Permissions System
  * 
- * 9 roles confirmed by Mike (Session 11):
+ * 9 roles (Session 11):
  * 
- * Tier 1 — Full Visibility (All companies + Merit Mgmt):
+ * Tier 1 — Full Visibility (all companies, including any parent/top-level entity):
  *   company_admin:       Full owner, manages users/permissions, ungrouped payroll
  *   cfo:                 Financial oversight, can edit accounting settings, ungrouped payroll
- *   merit_controller:    Holding company accounting, chargebacks, intercompany, ungrouped payroll
+ *   merit_controller:    All-company controller — intercompany, consolidations, ungrouped payroll
  * 
- * Tier 2 — Portcos + 3rd Party (No Merit Mgmt):
- *   assistant_cfo:       All portcos + 3rd party, ungrouped payroll at visible cos
+ * Tier 2 — Subset of companies (no parent/top-level entity):
+ *   assistant_cfo:       Assigned subset + third party, ungrouped payroll at visible cos
  *   accounting_manager:  Same as asst CFO + assigns specialist company access, ungrouped payroll
  * 
  * Tier 3 — Assigned Companies Only:
@@ -107,7 +107,6 @@ export const FEATURE_CATALOG: FeatureDefinition[] = [
   { id: 'chart_of_accounts', name: 'Chart of accounts', category: 'Finance & reporting', actions: ['view', 'request', 'approve'], internalOnly: true },
   { id: 'reconciliation', name: 'Bank reconciliation', category: 'Finance & reporting', actions: ['view', 'reconcile'], internalOnly: true },
   { id: 'close_mgmt', name: 'Close management', category: 'Finance & reporting', actions: ['view', 'manage'], internalOnly: true },
-  { id: 'chargebacks', name: 'Chargebacks', category: 'Finance & reporting', actions: ['view', 'generate'], internalOnly: true },
   { id: 'payroll', name: 'Payroll journal entries', category: 'Finance & reporting', actions: ['view', 'create', 'approve'], internalOnly: true },
   { id: 'intercompany', name: 'Intercompany', category: 'Finance & reporting', actions: ['view', 'create'], internalOnly: true },
   { id: 'cash_position', name: 'Cash position', category: 'Cash intelligence', actions: ['view'], internalOnly: true },
@@ -166,7 +165,7 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
   company_admin: {
     key: 'company_admin',
     label: 'Company Admin',
-    description: 'Full platform owner. Sees all companies including Merit Management. Creates and manages all user permissions.',
+    description: 'Full platform owner. Sees all companies, including any parent/top-level entity. Creates and manages all user permissions.',
     companyScope: 'all',
     payrollVisibility: 'ungrouped',
     mfaRequired: true,
@@ -206,7 +205,6 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
       chart_of_accounts: 'all',
       reconciliation: 'view',
       close_mgmt: 'all',
-      chargebacks: 'view',
       payroll: 'view',
       intercompany: 'view',
       cash_position: 'view',
@@ -227,7 +225,7 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
   merit_controller: {
     key: 'merit_controller',
     label: 'Merit Controller',
-    description: 'Runs holding company accounting — chargebacks, intercompany, consolidations, Merit Management books. Sees all portfolio company books.',
+    description: 'All-company controller — intercompany, consolidations, and the parent/top-level entity books. Sees all company books.',
     companyScope: 'all',
     payrollVisibility: 'ungrouped',
     mfaRequired: false,
@@ -251,7 +249,6 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
       chart_of_accounts: { view: true, request: true, approve: false },
       reconciliation: 'all',
       close_mgmt: 'all',
-      chargebacks: 'all',
       payroll: 'all',
       intercompany: 'all',
       cash_position: 'view',
@@ -269,7 +266,7 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
   assistant_cfo: {
     key: 'assistant_cfo',
     label: 'Assistant CFO',
-    description: 'All portfolio companies + third-party customers. Cannot see Merit Management books. Can see chargeback invoices on the portco side.',
+    description: 'An assigned subset of companies + third-party customers. Cannot see the parent/top-level entity books.',
     companyScope: 'portcos_and_3rdparty',
     payrollVisibility: 'ungrouped',
     mfaRequired: false,
@@ -293,7 +290,6 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
       chart_of_accounts: { view: true, request: true, approve: false },
       reconciliation: 'all',
       close_mgmt: 'view',
-      chargebacks: 'view',
       payroll: { view: true, create: true, approve: false },
       cash_position: 'view',
       forecast: 'all',
@@ -334,7 +330,6 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
       chart_of_accounts: 'all',
       reconciliation: 'all',
       close_mgmt: 'all',
-      chargebacks: 'view',
       payroll: 'all',
       cash_position: 'view',
       forecast: 'all',
@@ -504,7 +499,6 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   { featureId: 'chart_of_accounts', label: 'Chart of Accounts', href: '/chart-of-accounts', icon: 'ListTree', category: 'Finance' },
   { featureId: 'reconciliation', label: 'Reconciliation', href: '/reconciliation', icon: 'GitCompare', category: 'Finance' },
   { featureId: 'close_mgmt', label: 'Close Management', href: '/close', icon: 'CalendarCheck', category: 'Finance' },
-  { featureId: 'chargebacks', label: 'Chargebacks', href: '/chargebacks', icon: 'ArrowLeftRight', category: 'Finance' },
   { featureId: 'payroll', label: 'Payroll', href: '/payroll', icon: 'DollarSign', category: 'Finance' },
   { featureId: 'intercompany', label: 'Intercompany', href: '/intercompany', icon: 'Building', category: 'Finance' },
   { featureId: 'checks', label: 'Checks', href: '/checks', icon: 'FileOutput', category: 'Finance' },

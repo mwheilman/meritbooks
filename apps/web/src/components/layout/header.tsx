@@ -4,20 +4,28 @@ import { UserButton } from '@clerk/nextjs';
 import { Search, Bell, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { clsx } from 'clsx';
+import { useMe } from '@/lib/hooks/use-me';
 
-// Demo companies — will be fetched from Supabase in production
-const COMPANIES = [
-  { id: 'all', name: 'All Companies', shortCode: 'ALL' },
-  { id: '1', name: 'Merit Management Group', shortCode: 'MMG' },
-  { id: '2', name: 'Swan Creek Construction', shortCode: 'SCC' },
-  { id: '3', name: 'Iowa Custom Cabinetry', shortCode: 'ICC' },
-  { id: '4', name: 'Heartland HVAC', shortCode: 'HH' },
-  { id: '5', name: 'Dorrian Mechanical', shortCode: 'DM' },
-];
+interface CompanyOption {
+  id: string;
+  name: string;
+  shortCode: string;
+}
 
 export function Header() {
-  const [selectedCompany, setSelectedCompany] = useState(COMPANIES[0]);
+  const { locations } = useMe();
+  const companies: CompanyOption[] = [
+    { id: 'all', name: 'All Companies', shortCode: 'ALL' },
+    ...locations.map((l) => ({
+      id: l.id,
+      name: l.name,
+      shortCode: (l.code || l.name).slice(0, 3).toUpperCase(),
+    })),
+  ];
+
+  const [selectedId, setSelectedId] = useState('all');
   const [companyOpen, setCompanyOpen] = useState(false);
+  const selectedCompany = companies.find((c) => c.id === selectedId) ?? companies[0];
 
   return (
     <header className="flex h-[var(--header-height)] items-center justify-between border-b border-slate-800 bg-surface-950 px-6">
@@ -41,11 +49,16 @@ export function Header() {
               onClick={() => setCompanyOpen(false)}
             />
             <div className="absolute top-full left-0 mt-1 z-20 w-72 rounded-xl border border-slate-800 bg-surface-900 shadow-xl py-1 animate-slide-up">
-              {COMPANIES.map((company) => (
+              {companies.length === 1 && (
+                <div className="px-3 py-2 text-xs text-slate-500">
+                  No companies yet — add them in setup.
+                </div>
+              )}
+              {companies.map((company) => (
                 <button
                   key={company.id}
                   onClick={() => {
-                    setSelectedCompany(company);
+                    setSelectedId(company.id);
                     setCompanyOpen(false);
                   }}
                   className={clsx(

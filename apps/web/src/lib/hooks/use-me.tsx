@@ -12,7 +12,6 @@ export interface MeUser {
   role: UserRole | null;
   roleLabel: string;
   roleDescription: string;
-  laborType: string | null;
   isActive: boolean;
   hasEmployeeRecord: boolean;
   mfaRequired: boolean;

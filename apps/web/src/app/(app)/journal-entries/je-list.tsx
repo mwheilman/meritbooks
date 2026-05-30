@@ -44,7 +44,6 @@ const SOURCE_LABELS: Record<string, { label: string; className: string }> = {
   MANUAL: { label: 'Manual', className: 'text-slate-400 bg-slate-500/10' },
   REV_REC: { label: 'Rev Rec', className: 'text-indigo-400 bg-indigo-500/10' },
   DEPRECIATION: { label: 'Depreciation', className: 'text-slate-400 bg-slate-500/10' },
-  CHARGEBACK: { label: 'Chargeback', className: 'text-orange-400 bg-orange-500/10' },
   INTERCOMPANY: { label: 'Interco', className: 'text-cyan-400 bg-cyan-500/10' },
   CASH_MGMT: { label: 'Cash Mgmt', className: 'text-blue-400 bg-blue-500/10' },
   SYSTEM: { label: 'System', className: 'text-slate-400 bg-slate-500/10' },

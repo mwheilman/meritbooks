@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminSupabase } from '@/lib/supabase/server';
 import { ROLE_DEFINITIONS, getVisibleFeatures, getSidebarGrouped, type UserRole } from '@/lib/rbac/permissions';
 
 export async function GET(_req: NextRequest) {
@@ -10,7 +10,7 @@ export async function GET(_req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminSupabase();
 
     // 1. Find the org
     const { data: org } = await supabase
@@ -188,7 +188,7 @@ export async function PATCH(req: NextRequest) {
       email?: string;
     };
 
-    const supabase = await createClient();
+    const supabase = createAdminSupabase();
 
     const updates: Record<string, string> = {};
     if (firstName) updates.first_name = firstName.trim();

@@ -27,19 +27,18 @@ export type EntryType = 'STANDARD' | 'ADJUSTING' | 'CLOSING' | 'REVERSING' | 'RE
 
 export type PeriodStatus = 'OPEN' | 'SOFT_CLOSE' | 'HARD_CLOSE';
 
-export type LaborType = 'PRODUCTION' | 'DIRECT_ASSIGNED' | 'OVERHEAD' | 'OWNER_GROUP' | 'DEAL_TEAM';
-
-export type DeptGlClassification = 'ALWAYS_OPEX' | 'BY_JOB_MATCH';
-
 export type RevRecMethod = 'PCT_COSTS_INCURRED' | 'PCT_COMPLETE' | 'COMPLETED_CONTRACT' | 'POINT_OF_SALE';
 
 export type DepreciationMethod =
   | 'STRAIGHT_LINE' | 'DOUBLE_DECLINING'
   | 'MACRS_3' | 'MACRS_5' | 'MACRS_7' | 'MACRS_10' | 'MACRS_15' | 'MACRS_20';
 
-export type AllocationMethod = 'EVEN_SPLIT' | 'BY_REVENUE_PCT' | 'BY_HEADCOUNT' | 'CUSTOM_PCT';
-
 export type ClosePhase = 'INITIAL' | 'MID_CLOSE' | 'FINAL';
+
+// Session 12 — inter-department model
+export type InternalChargeMethod = 'inherit' | 'revenue' | 'cost_transfer';
+export type CompanyChargeMethod = 'revenue' | 'cost_transfer';
+export type InternalInvoiceStatus = 'draft' | 'sent' | 'approved' | 'booked' | 'rejected' | 'void';
 
 // =============================================================
 // CORE ENTITIES
@@ -71,8 +70,8 @@ export interface Location {
   short_code: string;
   industry: string | null;
   fiscal_year_start_month: number;
-  gl_classification_default: DeptGlClassification;
   rev_rec_method: RevRecMethod;
+  default_internal_charge_method: CompanyChargeMethod;
   minimum_cash_cents: number;
   is_active: boolean;
   created_at: string;
@@ -106,15 +105,12 @@ export interface Account {
 export interface Department {
   id: string;
   org_id: string;
+  location_id: string | null;
   name: string;
-  code: string;
-  gl_classification: DeptGlClassification;
-  is_active: boolean;
+  code: string | null;
   parent_department_id: string | null;
-  clock_mode: 'TIMER' | 'MANUAL';
-  require_gps: boolean;
-  require_phase: boolean;
-  billable_by_default: boolean;
+  internal_charge_method: InternalChargeMethod;
+  is_active: boolean;
   created_at: string;
 }
 
@@ -354,27 +350,9 @@ export interface Employee {
   org_id: string;
   first_name: string;
   last_name: string;
-  labor_type: LaborType;
   department_id: string | null;
   hourly_rate_cents: number | null;
   annual_salary_cents: number | null;
   is_active: boolean;
-  assigned_location_ids: string[];
-  created_at: string;
-}
-
-export interface TimeEntry {
-  id: string;
-  org_id: string;
-  employee_id: string;
-  location_id: string;
-  clock_in: string;
-  clock_out: string | null;
-  total_hours: number | null;
-  department_id: string | null;
-  job_id: string | null;
-  notes: string | null;
-  is_billable: boolean;
-  gl_classification: 'COGS' | 'OPEX' | 'CAPITALIZE' | null;
   created_at: string;
 }

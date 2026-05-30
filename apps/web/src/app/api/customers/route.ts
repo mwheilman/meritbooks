@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminSupabase } from '@/lib/supabase/server';
 
 interface CustomerInput {
   name: string;
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminSupabase();
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search') ?? '';
     const page = parseInt(searchParams.get('page') ?? '1', 10);
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json()) as CustomerInput;
-    const supabase = await createClient();
+    const supabase = createAdminSupabase();
 
     const { data: org } = await supabase
       .from('organizations')
@@ -224,7 +224,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Customer ID required' }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminSupabase();
 
     const updateData: Record<string, unknown> = {};
     if (updates.name !== undefined) updateData.name = updates.name.trim();
