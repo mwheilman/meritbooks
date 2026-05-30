@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   BookOpen,
   Calculator,
-  Clock,
   DollarSign,
   TrendingUp,
   BarChart3,
@@ -72,7 +71,6 @@ export const navigation: NavGroup[] = [
     label: 'Operations',
     items: [
       { label: 'Jobs & Projects', href: '/jobs', icon: Briefcase },
-      { label: 'Chargebacks', href: '/chargebacks', icon: Clock },
       { label: 'Vendors', href: '/vendors', icon: Building2 },
       { label: 'Close Management', href: '/close', icon: ClipboardCheck },
     ],
