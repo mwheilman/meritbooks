@@ -31,7 +31,7 @@ export async function GET(_req: NextRequest) {
     // 2. Find employee record for this Clerk user
     const { data: employees } = await supabase
       .from('employees')
-      .select('id, org_id, clerk_user_id, first_name, last_name, email, role, labor_type, department_id, is_active, created_at')
+      .select('id, org_id, clerk_user_id, first_name, last_name, email, role, department_id, is_active, created_at')
       .eq('clerk_user_id', userId)
       .eq('org_id', org.id)
       .limit(1);
@@ -56,10 +56,9 @@ export async function GET(_req: NextRequest) {
             last_name: 'User',
             email: '',
             role: 'company_admin',
-            labor_type: 'OWNER_GROUP',
             is_active: true,
           })
-          .select('id, org_id, clerk_user_id, first_name, last_name, email, role, labor_type, department_id, is_active, created_at')
+          .select('id, org_id, clerk_user_id, first_name, last_name, email, role, department_id, is_active, created_at')
           .single();
 
         if (createErr) {
@@ -112,14 +111,12 @@ export async function GET(_req: NextRequest) {
         .order('name');
       locations = allLocs ?? [];
 
-      // If portcos_and_3rdparty, filter out Merit Management
       if (roleDef.companyScope === 'portcos_and_3rdparty') {
         locations = locations.filter(
           (l) => !l.name.toLowerCase().includes('merit management') && !l.code.toLowerCase().includes('merit-mgmt')
         );
       }
     } else {
-      // assigned or own_company — get from employee_locations
       const { data: assignedLocs } = await supabase
         .from('employee_locations')
         .select('location_id')
@@ -155,7 +152,6 @@ export async function GET(_req: NextRequest) {
         role,
         roleLabel: roleDef?.label ?? role,
         roleDescription: roleDef?.description ?? '',
-        laborType: employee.labor_type,
         isActive: employee.is_active,
         hasEmployeeRecord: true,
         mfaRequired: roleDef?.mfaRequired ?? false,
