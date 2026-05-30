@@ -4,18 +4,23 @@ import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Building2, Users, BookOpen, ChevronRight, ChevronLeft,
-  Loader2, Check, AlertCircle, Plus, Trash2, Sparkles
+  Loader2, Check, AlertCircle, Plus, Trash2, Sparkles, Network
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface CompanyEntry { key: string; name: string; shortCode: string; industry: string; fiscalYearStartMonth: number }
 interface TeamMember { key: string; firstName: string; lastName: string; email: string; role: string; assignedCompanyKeys: string[] }
+type ChargeMethod = 'inherit' | 'revenue' | 'cost_transfer';
+type CompanyMethod = 'revenue' | 'cost_transfer';
+interface CreatedCompany { name: string; code: string; locationId: string }
+interface DeptDraft { key: string; name: string; method: ChargeMethod }
 
-type Step = 'organization' | 'companies' | 'team' | 'accounts' | 'review';
+type Step = 'organization' | 'companies' | 'departments' | 'team' | 'accounts' | 'review';
 
 const STEPS: { key: Step; label: string; icon: typeof Building2 }[] = [
   { key: 'organization', label: 'Organization', icon: Building2 },
   { key: 'companies', label: 'Companies', icon: Building2 },
+  { key: 'departments', label: 'Departments', icon: Network },
   { key: 'team', label: 'Team & Roles', icon: Users },
   { key: 'accounts', label: 'Chart of Accounts', icon: BookOpen },
   { key: 'review', label: 'Review & Launch', icon: Check },
@@ -54,6 +59,9 @@ export default function SetupPage() {
   const [coaCount, setCoaCount] = useState(0);
   const [coaSeeding, setCoaSeeding] = useState(false);
   const [companiesCreated, setCompaniesCreated] = useState<string[]>([]);
+  const [createdCompanies, setCreatedCompanies] = useState<CreatedCompany[]>([]);
+  const [companyMethod, setCompanyMethod] = useState<Record<string, CompanyMethod>>({});
+  const [deptDrafts, setDeptDrafts] = useState<Record<string, DeptDraft[]>>({});
 
   const stepIdx = STEPS.findIndex((s) => s.key === step);
   const inputCls = "w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20";
@@ -86,14 +94,34 @@ export default function SetupPage() {
         if (valid.length === 0) { setError('Add at least one company'); setSubmitting(false); return; }
         const codes = valid.map((c) => c.shortCode.toUpperCase());
         if (new Set(codes).size !== codes.length) { setError('Each company needs a unique short code'); setSubmitting(false); return; }
+        // If already created (e.g. navigated back then forward), don't re-create
+        if (createdCompanies.length > 0) { setStep('departments'); setSubmitting(false); return; }
         const created: string[] = [];
+        const createdFull: CreatedCompany[] = [];
         for (const co of valid) {
           const res = await fetch('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ step: 'company', name: co.name.trim(), short_code: co.shortCode.toUpperCase().trim(), industry: co.industry || undefined, fiscal_year_start_month: co.fiscalYearStartMonth }) });
           const d = await res.json();
           if (!res.ok) { setError(`"${co.name}": ${d.error}`); setSubmitting(false); return; }
           created.push(co.name);
+          if (d.locationId) createdFull.push({ name: co.name.trim(), code: co.shortCode.toUpperCase().trim(), locationId: d.locationId });
         }
         setCompaniesCreated(created);
+        setCreatedCompanies(createdFull);
+        setCompanyMethod(Object.fromEntries(createdFull.map((c) => [c.locationId, 'revenue' as CompanyMethod])));
+        setDeptDrafts(Object.fromEntries(createdFull.map((c) => [c.locationId, [] as DeptDraft[]])));
+        setStep('departments');
+      } else if (step === 'departments') {
+        // Set each company's default charge method, then create its departments
+        for (const co of createdCompanies) {
+          const method = companyMethod[co.locationId] ?? 'revenue';
+          const mRes = await fetch('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ step: 'company_charge_method', location_id: co.locationId, default_internal_charge_method: method }) });
+          if (!mRes.ok) { const d = await mRes.json(); setError(`${co.name}: ${d.error ?? 'Failed to set charge method'}`); setSubmitting(false); return; }
+          for (const dept of (deptDrafts[co.locationId] ?? [])) {
+            if (!dept.name.trim()) continue;
+            const dRes = await fetch('/api/departments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: dept.name.trim(), location_id: co.locationId, internal_charge_method: dept.method }) });
+            if (!dRes.ok) { const d = await dRes.json(); setError(`${co.name} / ${dept.name}: ${d.error ?? 'Failed to create department'}`); setSubmitting(false); return; }
+          }
+        }
         setStep('team');
       } else if (step === 'team') {
         setStep('accounts');
@@ -115,7 +143,7 @@ export default function SetupPage() {
       }
     } catch { setError('Network error'); }
     setSubmitting(false);
-  }, [step, orgName, orgSlug, contactName, contactEmail, timezone, companies, coaSeeded, router]);
+  }, [step, orgName, orgSlug, contactName, contactEmail, timezone, companies, coaSeeded, createdCompanies, companyMethod, deptDrafts, router]);
 
   if (loading) return <div className="flex items-center justify-center py-24"><Loader2 className="w-8 h-8 text-emerald-400 animate-spin" /></div>;
 
@@ -179,6 +207,67 @@ export default function SetupPage() {
               ))}
             </div>
             <button onClick={() => setCompanies((p) => [...p, { key: genKey(), name: '', shortCode: '', industry: '', fiscalYearStartMonth: 1 }])} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-slate-700 text-sm text-slate-400 hover:text-emerald-400 hover:border-emerald-500/30 w-full justify-center"><Plus size={16} /> Add another company</button>
+          </div>
+        )}
+
+        {/* Step 3: Departments */}
+        {step === 'departments' && (
+          <div className="p-8">
+            <h2 className="text-2xl font-semibold text-white mb-1">Set up departments</h2>
+            <p className="text-sm text-slate-400 mb-8">Each department gets its own P&amp;L, budget, and FP&amp;A. When one department serves another, it issues an internal invoice. You can skip this and add departments later.</p>
+            <div className="space-y-5">
+              {createdCompanies.map((co) => (
+                <div key={co.locationId} className="bg-slate-800/30 border border-slate-800 rounded-xl p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-sm font-medium text-white">{co.name} <span className="text-slate-600 font-mono text-xs">{co.code}</span></span>
+                  </div>
+                  <div className="mb-4">
+                    <label className={labelCls}>Default internal charge method</label>
+                    <select
+                      value={companyMethod[co.locationId] ?? 'revenue'}
+                      onChange={(e) => setCompanyMethod((p) => ({ ...p, [co.locationId]: e.target.value as CompanyMethod }))}
+                      className={clsx(inputCls, 'w-72')}
+                    >
+                      <option value="revenue">Revenue (provider books internal revenue)</option>
+                      <option value="cost_transfer">Cost transfer (move cost, no revenue)</option>
+                    </select>
+                    <p className="text-[11px] text-slate-600 mt-1">
+                      {(companyMethod[co.locationId] ?? 'revenue') === 'revenue'
+                        ? 'Inter-department charges book internal revenue for the provider and internal cost for the receiver, netting to zero at the company roll-up.'
+                        : 'Inter-department charges move cost from the provider to the receiver — no internal revenue is recognized.'}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {(deptDrafts[co.locationId] ?? []).map((d) => (
+                      <div key={d.key} className="flex gap-2 items-center">
+                        <input
+                          value={d.name}
+                          onChange={(e) => setDeptDrafts((p) => ({ ...p, [co.locationId]: p[co.locationId].map((x) => x.key === d.key ? { ...x, name: e.target.value } : x) }))}
+                          placeholder="e.g. New Construction, Marketing, HR"
+                          className={clsx(inputCls, 'flex-1')}
+                        />
+                        <select
+                          value={d.method}
+                          onChange={(e) => setDeptDrafts((p) => ({ ...p, [co.locationId]: p[co.locationId].map((x) => x.key === d.key ? { ...x, method: e.target.value as ChargeMethod } : x) }))}
+                          className={clsx(inputCls, 'w-44')}
+                        >
+                          <option value="inherit">Company default</option>
+                          <option value="revenue">Revenue</option>
+                          <option value="cost_transfer">Cost transfer</option>
+                        </select>
+                        <button onClick={() => setDeptDrafts((p) => ({ ...p, [co.locationId]: p[co.locationId].filter((x) => x.key !== d.key) }))} className="text-slate-500 hover:text-red-400 p-1 shrink-0"><Trash2 size={14} /></button>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setDeptDrafts((p) => ({ ...p, [co.locationId]: [...(p[co.locationId] ?? []), { key: genKey(), name: '', method: 'inherit' as ChargeMethod }] }))}
+                    className="mt-3 flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed border-slate-700 text-xs text-slate-400 hover:text-emerald-400 hover:border-emerald-500/30"
+                  >
+                    <Plus size={14} /> Add department
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -258,6 +347,7 @@ export default function SetupPage() {
         <div className="flex items-center justify-between px-8 py-5 border-t border-slate-800 bg-slate-800/10">
           <button onClick={() => { setError(''); if (stepIdx > 0) setStep(STEPS[stepIdx - 1].key); }} disabled={stepIdx === 0} className={clsx('flex items-center gap-2 px-4 py-2 rounded-xl text-sm', stepIdx === 0 ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-800')}><ChevronLeft size={16} /> Back</button>
           {step === 'team' && <button onClick={() => setStep('accounts')} className="text-xs text-slate-500 hover:text-slate-400">Skip for now →</button>}
+          {step === 'departments' && <button onClick={() => setStep('team')} className="text-xs text-slate-500 hover:text-slate-400">Skip for now →</button>}
           <button onClick={handleNext} disabled={submitting} className={clsx('flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-medium', submitting ? 'bg-slate-700 text-slate-500' : step === 'review' ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-white text-slate-900 hover:bg-slate-100')}>
             {submitting && <Loader2 size={16} className="animate-spin" />}
             {step === 'review' ? <>Launch MeritBooks <Sparkles size={14} /></> : step === 'accounts' && !coaSeeded ? 'Load Chart of Accounts' : <>Next <ChevronRight size={16} /></>}

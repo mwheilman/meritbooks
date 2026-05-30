@@ -71,7 +71,15 @@ const finalizeSchema = z.object({
   step: z.literal('finalize'),
 });
 
-const stepSchema = z.discriminatedUnion('step', [orgSchema, companySchema, coaSchema, finalizeSchema]);
+// ─── Step: Set company default internal charge method ───────
+
+const chargeMethodSchema = z.object({
+  step: z.literal('company_charge_method'),
+  location_id: z.string().uuid(),
+  default_internal_charge_method: z.enum(['revenue', 'cost_transfer']),
+});
+
+const stepSchema = z.discriminatedUnion('step', [orgSchema, companySchema, chargeMethodSchema, coaSchema, finalizeSchema]);
 
 export async function POST(request: Request) {
   const authResult = await auth().catch(() => ({ userId: null as string | null }));
@@ -211,6 +219,18 @@ export async function POST(request: Request) {
   // ═══════════════════════════════════════════════════════════
   // STEP 3: Seed Chart of Accounts from CFO Spec
   // ═══════════════════════════════════════════════════════════
+
+  if (body.step === 'company_charge_method') {
+    const { data: org } = await supabase.from('organizations').select('id').limit(1).single();
+    if (!org) return NextResponse.json({ error: 'Create organization first' }, { status: 400 });
+    const { error } = await supabase
+      .from('locations')
+      .update({ default_internal_charge_method: body.default_internal_charge_method })
+      .eq('id', body.location_id)
+      .eq('org_id', org.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true });
+  }
 
   if (body.step === 'chart_of_accounts') {
     const { data: org } = await supabase.from('organizations').select('id').limit(1).single();
