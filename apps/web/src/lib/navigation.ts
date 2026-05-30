@@ -13,6 +13,7 @@ import {
   Users,
   Building2,
   Network,
+  ArrowLeftRight,
   Briefcase,
   ClipboardCheck,
   FileCheck,
@@ -72,6 +73,7 @@ export const navigation: NavGroup[] = [
     label: 'Operations',
     items: [
       { label: 'Departments', href: '/departments', icon: Network },
+      { label: 'Internal Invoices', href: '/internal-invoices', icon: ArrowLeftRight },
       { label: 'Jobs & Projects', href: '/jobs', icon: Briefcase },
       { label: 'Vendors', href: '/vendors', icon: Building2 },
       { label: 'Close Management', href: '/close', icon: ClipboardCheck },
