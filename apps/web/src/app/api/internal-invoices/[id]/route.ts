@@ -75,7 +75,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
     const { error } = await supabase
       .from('internal_invoices')
-      .update({ status: 'sent', sent_at: now, sent_by: userId, charge_method: method })
+      .update({ status: 'sent', sent_at: now, sent_by: null, charge_method: method })
       .eq('id', inv.id);
     if (error) return NextResponse.json({ error: error.message, code: 'UPDATE_ERROR' }, { status: 500 });
     return NextResponse.json({ success: true, status: 'sent', chargeMethod: method });
@@ -97,7 +97,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         receiverDepartmentId: inv.receiver_department_id as string,
         chargeMethod: (inv.charge_method as ChargeMethod) === 'cost_transfer' ? 'cost_transfer' : 'revenue',
         memo: (inv.memo as string) ?? null,
-        postedBy: userId,
+        postedBy: null,
       });
       glEntryId = result.glEntryId;
     } catch (e) {
@@ -105,7 +105,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
     const { error } = await supabase
       .from('internal_invoices')
-      .update({ status: 'booked', approved_at: now, approved_by: userId, booked_at: now, booked_gl_entry_id: glEntryId })
+      .update({ status: 'booked', approved_at: now, approved_by: null, booked_at: now, booked_gl_entry_id: glEntryId })
       .eq('id', inv.id);
     if (error) return NextResponse.json({ error: error.message, code: 'UPDATE_ERROR' }, { status: 500 });
     return NextResponse.json({ success: true, status: 'booked', glEntryId });
@@ -118,7 +118,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
     const { error } = await supabase
       .from('internal_invoices')
-      .update({ status: 'rejected', rejected_at: now, rejected_by: userId, rejection_reason: body.reason ?? null })
+      .update({ status: 'rejected', rejected_at: now, rejected_by: null, rejection_reason: body.reason ?? null })
       .eq('id', inv.id);
     if (error) return NextResponse.json({ error: error.message, code: 'UPDATE_ERROR' }, { status: 500 });
     return NextResponse.json({ success: true, status: 'rejected' });
@@ -134,7 +134,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
     const { error } = await supabase
       .from('internal_invoices')
-      .update({ status: 'void', voided_at: now, voided_by: userId })
+      .update({ status: 'void', voided_at: now, voided_by: null })
       .eq('id', inv.id);
     if (error) return NextResponse.json({ error: error.message, code: 'UPDATE_ERROR' }, { status: 500 });
     return NextResponse.json({ success: true, status: 'void' });

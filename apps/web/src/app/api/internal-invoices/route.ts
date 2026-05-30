@@ -160,7 +160,7 @@ export async function POST(request: Request) {
       job_id: body.job_id ?? null,
       status: 'draft',
       total_cents: totalCents,
-      created_by: userId,
+      created_by: null, // attribution columns are uuid; Clerk IDs are text — see follow-up
     })
     .select('id, invoice_number')
     .single();

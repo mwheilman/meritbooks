@@ -132,7 +132,7 @@ export default function InternalInvoicesPage() {
       setForm(null);
       await refetch();
     } catch {
-      addToast('error', 'Network error \u2014 please try again.');
+      addToast('error', 'Network error — please try again.');
     } finally {
       setSaving(false);
     }
@@ -158,7 +158,7 @@ export default function InternalInvoicesPage() {
       setRejecting(null); setRejectReason('');
       await refetch();
     } catch {
-      addToast('error', 'Network error \u2014 please try again.');
+      addToast('error', 'Network error — please try again.');
     } finally {
       setBusyId(null);
     }
@@ -199,7 +199,7 @@ export default function InternalInvoicesPage() {
 
       {isLoading && (
         <div className="flex items-center justify-center py-20 text-slate-400">
-          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading invoices\u2026
+          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading invoices…
         </div>
       )}
 
@@ -228,7 +228,7 @@ export default function InternalInvoicesPage() {
               <tr>
                 <th className="text-left font-medium px-4 py-3">Invoice</th>
                 <th className="text-left font-medium px-4 py-3">Company</th>
-                <th className="text-left font-medium px-4 py-3">Provider \u2192 Receiver</th>
+                <th className="text-left font-medium px-4 py-3">Provider → Receiver</th>
                 <th className="text-right font-medium px-4 py-3">Amount</th>
                 <th className="text-left font-medium px-4 py-3">Status</th>
                 <th className="text-right font-medium px-4 py-3">Actions</th>
@@ -244,10 +244,10 @@ export default function InternalInvoicesPage() {
                       <div className="font-medium text-slate-200">{inv.invoiceNumber}</div>
                       <div className="text-xs text-slate-500">{inv.invoiceDate}</div>
                     </td>
-                    <td className="px-4 py-3 text-slate-300">{inv.location?.name ?? '\u2014'}</td>
+                    <td className="px-4 py-3 text-slate-300">{inv.location?.name ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-300">
                       <span className="text-slate-200">{inv.provider?.name ?? '?'}</span>
-                      <span className="text-slate-500"> \u2192 </span>
+                      <span className="text-slate-500"> → </span>
                       <span className="text-slate-200">{inv.receiver?.name ?? '?'}</span>
                       {inv.status !== 'draft' && (
                         <span className="ml-2 text-xs text-slate-500">
@@ -315,7 +315,7 @@ export default function InternalInvoicesPage() {
                   onChange={(e) => setForm({ ...form, locationId: e.target.value, providerId: '', receiverId: '' })}
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-200"
                 >
-                  <option value="">Select a company\u2026</option>
+                  <option value="">Select a company…</option>
                   {locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
               </div>
@@ -329,7 +329,7 @@ export default function InternalInvoicesPage() {
                     disabled={!form.locationId}
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-200 disabled:opacity-50"
                   >
-                    <option value="">Select\u2026</option>
+                    <option value="">Select…</option>
                     {companyDepts(form.locationId).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
@@ -341,7 +341,7 @@ export default function InternalInvoicesPage() {
                     disabled={!form.locationId}
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-200 disabled:opacity-50"
                   >
-                    <option value="">Select\u2026</option>
+                    <option value="">Select…</option>
                     {companyDepts(form.locationId).filter((d) => d.id !== form.providerId).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
