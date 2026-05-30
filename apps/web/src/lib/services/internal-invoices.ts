@@ -104,13 +104,15 @@ async function ensureAccount(db: DB, orgId: string, spec: AccountSpec): Promise<
     throw new Error(`Account sub-type ${spec.subTypeCode} not found — COA not seeded for this org`);
   }
 
-  // Resolve (or create) a dedicated eliminations group under that sub-type
+  // Resolve (or create) a dedicated eliminations group under that sub-type.
+  // Look up by the SAME name we insert with (was a mismatch before).
+  const groupName = `${spec.groupName} (${spec.accountType})`;
   let groupId: string | null = null;
   const { data: group } = await db
     .from('account_groups')
     .select('id')
     .eq('org_id', orgId)
-    .eq('name', spec.groupName)
+    .eq('name', groupName)
     .maybeSingle();
   if (group?.id) {
     groupId = group.id;
@@ -127,13 +129,24 @@ async function ensureAccount(db: DB, orgId: string, spec: AccountSpec): Promise<
       .insert({
         org_id: orgId,
         account_sub_type_id: subType.id,
-        name: `${spec.groupName} (${spec.accountType})`,
+        name: groupName,
         display_order: ((maxOrder?.display_order as number) ?? 900) + 1,
       })
       .select('id')
       .single();
-    if (groupErr || !created) throw new Error(`Failed to create eliminations group: ${groupErr?.message}`);
-    groupId = created.id;
+    if (created?.id) {
+      groupId = created.id;
+    } else {
+      // Lost a race (unique violation) — the group now exists; re-select it.
+      const { data: existing } = await db
+        .from('account_groups')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('name', groupName)
+        .maybeSingle();
+      if (!existing?.id) throw new Error(`Failed to create eliminations group: ${groupErr?.message}`);
+      groupId = existing.id;
+    }
   }
 
   const number = await freeAccountNumber(db, orgId, spec.number);
@@ -162,11 +175,11 @@ async function ensureAccount(db: DB, orgId: string, spec: AccountSpec): Promise<
 
 /** Ensure all eliminating accounts exist for the org; returns their ids. */
 export async function ensureEliminatingAccounts(db: DB, orgId: string): Promise<EliminatingAccounts> {
-  const [revenueAccountId, costAccountId, transferAccountId] = await Promise.all([
-    ensureAccount(db, orgId, ELIM_REVENUE),
-    ensureAccount(db, orgId, ELIM_COST),
-    ensureAccount(db, orgId, ELIM_TRANSFER),
-  ]);
+  // Sequential (not parallel): COST and TRANSFER share the COGS eliminations group,
+  // so creating them in parallel races on the group's unique name.
+  const revenueAccountId = await ensureAccount(db, orgId, ELIM_REVENUE);
+  const costAccountId = await ensureAccount(db, orgId, ELIM_COST);
+  const transferAccountId = await ensureAccount(db, orgId, ELIM_TRANSFER);
   return { revenueAccountId, costAccountId, transferAccountId };
 }
 
