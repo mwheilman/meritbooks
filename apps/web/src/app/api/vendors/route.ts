@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
     // Get org
     const { data: org } = await supabase
-      .from('organizations')
+      .schema('core').from('organizations')
       .select('id')
       .limit(1)
       .single();
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     }
 
     let query = supabase
-      .from('vendors')
+      .schema('core').from('vendors')
       .select('*, vendor_compliance_docs(id, doc_type, status, expiration_date), vendor_payment_holds(id, hold_type, reason, override_type, created_at)', { count: 'exact' })
       .eq('org_id', org.id)
       .is('deleted_at', null);
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
 
     // Get org
     const { data: org } = await supabase
-      .from('organizations')
+      .schema('core').from('organizations')
       .select('id')
       .limit(1)
       .single();
@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
 
     // Duplicate detection — fuzzy match on name
     const { data: existing } = await supabase
-      .from('vendors')
+      .schema('core').from('vendors')
       .select('id, name')
       .eq('org_id', org.id)
       .is('deleted_at', null)
@@ -209,7 +209,7 @@ export async function POST(req: NextRequest) {
     };
 
     const { data: vendor, error } = await supabase
-      .from('vendors')
+      .schema('core').from('vendors')
       .insert(insertData)
       .select('*')
       .single();
@@ -264,7 +264,7 @@ export async function PATCH(req: NextRequest) {
     updateData.updated_at = new Date().toISOString();
 
     const { data: vendor, error } = await supabase
-      .from('vendors')
+      .schema('core').from('vendors')
       .update(updateData)
       .eq('id', id)
       .select('*')

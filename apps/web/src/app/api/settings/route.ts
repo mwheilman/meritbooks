@@ -9,7 +9,7 @@ export async function GET() {
   const supabase = createAdminSupabase();
 
   const { data, error } = await supabase
-    .from('organizations')
+    .schema('core').from('organizations')
     .select('*')
     .limit(1)
     .single();
@@ -20,7 +20,7 @@ export async function GET() {
 
   // Also get locations for portfolio companies
   const { data: locations } = await supabase
-    .from('locations')
+    .schema('core').from('locations')
     .select('id, name, short_code, industry, is_active, created_at')
     .order('name');
 
@@ -80,10 +80,10 @@ export async function PATCH(request: Request) {
   }
 
   // Get org id
-  const { data: org } = await supabase.from('organizations').select('id').limit(1).single();
+  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
   if (!org) return NextResponse.json({ error: 'No organization found' }, { status: 404 });
 
-  const { error } = await supabase.from('organizations').update(result.data).eq('id', org.id);
+  const { error } = await supabase.schema('core').from('organizations').update(result.data).eq('id', org.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ success: true });

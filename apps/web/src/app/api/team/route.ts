@@ -8,7 +8,7 @@ export async function GET() {
   const supabase = createAdminSupabase();
 
   const { data, error } = await supabase
-    .from('employees')
+    .schema('core').from('employees')
     .select(`
       id,
       first_name,

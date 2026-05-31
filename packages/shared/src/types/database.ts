@@ -348,11 +348,38 @@ export interface Customer {
 export interface Employee {
   id: string;
   org_id: string;
+  clerk_user_id: string | null;
   first_name: string;
   last_name: string;
+  email: string | null;
+  phone: string | null;
+  title: string | null;
   department_id: string | null;
   hourly_rate_cents: number | null;
   annual_salary_cents: number | null;
+  // Suite Core (Session 14): payroll account mapping into Books COA.
+  payroll_account_id: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+// =============================================================
+// ITEMS (Suite Core — thin canonical; deep fields reserved for Inventory)
+// =============================================================
+
+export type ItemType = 'INVENTORY' | 'NON_INVENTORY' | 'SERVICE' | 'LABOR' | 'OTHER';
+
+export interface Item {
+  id: string;
+  org_id: string;
+  sku: string;
+  name: string;
+  item_type: ItemType;
+  unit_of_measure: string | null;
+  default_unit_cost_cents: number | null;
+  // Books-owned columns co-located on the core table:
+  income_account_id: string | null;
+  cogs_account_id: string | null;
   is_active: boolean;
   created_at: string;
 }

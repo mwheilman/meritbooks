@@ -17,7 +17,7 @@ async function getCompanySummary(): Promise<CompanyData[]> {
 
   // Get all active locations
   const { data: locations } = await supabase
-    .from('locations')
+    .schema('core').from('locations')
     .select('id, name, short_code, minimum_cash_cents, is_active')
     .eq('is_active', true)
     .order('name');

@@ -88,7 +88,7 @@ export const GET = apiQueryHandler(
     const offset = (page - 1) * perPage;
 
     let query = ctx.supabase
-      .from('jobs')
+      .schema('core').from('jobs')
       .select(`
         id, job_number, name, description, customer_name, job_type, status,
         pricing_model, markup_pct,
@@ -161,7 +161,7 @@ export const GET = apiQueryHandler(
     const countStatuses = ['ACTIVE', 'BID', 'COMPLETE', 'ON_HOLD'] as const;
     const statusCounts: Record<string, number> = {};
     for (const s of countStatuses) {
-      let q = ctx.supabase.from('jobs').select('id', { count: 'exact', head: true }).eq('status', s);
+      let q = ctx.supabase.schema('core').from('jobs').select('id', { count: 'exact', head: true }).eq('status', s);
       if (params.location_id) q = q.eq('location_id', params.location_id);
       const { count: c } = await q;
       statusCounts[s] = c ?? 0;
@@ -244,7 +244,7 @@ export const POST = apiHandler(
     const orgId = ctx.orgId ?? '';
 
     const { data: location } = await ctx.supabase
-      .from('locations')
+      .schema('core').from('locations')
       .select('rev_rec_method')
       .eq('id', body.location_id)
       .single();
@@ -282,7 +282,7 @@ export const POST = apiHandler(
     const estimatedRevenue = body.estimated_revenue_cents ?? calcEstimatedRevenue(jobData);
 
     const { data: job, error: jobError } = await ctx.supabase
-      .from('jobs')
+      .schema('core').from('jobs')
       .insert({
         org_id: orgId,
         location_id: body.location_id,

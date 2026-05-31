@@ -12,7 +12,7 @@ export const GET = apiQueryHandler(
   jobSearchSchema,
   async (params: JobSearchQuery, ctx) => {
     let query = ctx.supabase
-      .from('jobs')
+      .schema('core').from('jobs')
       .select('id, job_number, name, customer_name, job_type, status')
       .eq('location_id', params.location_id)
       .in('status', ['ACTIVE', 'BID'])

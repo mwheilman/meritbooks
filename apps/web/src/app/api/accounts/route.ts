@@ -156,7 +156,7 @@ export async function POST(request: Request) {
 
   // Get org_id from any location (accounts are org-level)
   const { data: orgRow } = await supabase
-    .from('locations')
+    .schema('core').from('locations')
     .select('org_id')
     .limit(1)
     .single();

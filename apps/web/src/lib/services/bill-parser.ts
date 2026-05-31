@@ -194,12 +194,12 @@ export async function parseInvoiceWithAI(
  */
 export async function matchVendor(
   vendorName: string,
-  supabase: { from: (table: string) => { select: (cols: string) => { ilike: (col: string, val: string) => { limit: (n: number) => Promise<{ data: unknown[] | null }> } } } }
+  supabase: { schema: (s: string) => { from: (table: string) => { select: (cols: string) => { ilike: (col: string, val: string) => { limit: (n: number) => Promise<{ data: unknown[] | null }> } } } } }
 ): Promise<{ id: string; name: string; confidence: number } | null> {
   if (!vendorName) return null;
 
   // Try exact match first
-  const { data: exact } = await (supabase.from('vendors').select('id, name, display_name') as unknown as { ilike: (col: string, val: string) => { limit: (n: number) => Promise<{ data: Array<{ id: string; name: string; display_name: string | null }> | null }> } }).ilike('name', vendorName).limit(1);
+  const { data: exact } = await (supabase.schema('core').from('vendors').select('id, name, display_name') as unknown as { ilike: (col: string, val: string) => { limit: (n: number) => Promise<{ data: Array<{ id: string; name: string; display_name: string | null }> | null }> } }).ilike('name', vendorName).limit(1);
 
   if (exact && exact.length > 0) {
     return { id: exact[0].id, name: exact[0].display_name ?? exact[0].name, confidence: 1.0 };
@@ -209,7 +209,7 @@ export async function matchVendor(
   const words = vendorName.split(/\s+/).slice(0, 3);
   for (const word of words) {
     if (word.length < 3) continue;
-    const { data: fuzzy } = await (supabase.from('vendors').select('id, name, display_name') as unknown as { ilike: (col: string, val: string) => { limit: (n: number) => Promise<{ data: Array<{ id: string; name: string; display_name: string | null }> | null }> } }).ilike('name', `%${word}%`).limit(5);
+    const { data: fuzzy } = await (supabase.schema('core').from('vendors').select('id, name, display_name') as unknown as { ilike: (col: string, val: string) => { limit: (n: number) => Promise<{ data: Array<{ id: string; name: string; display_name: string | null }> | null }> } }).ilike('name', `%${word}%`).limit(5);
 
     if (fuzzy && fuzzy.length > 0) {
       // Return the first fuzzy match with reduced confidence

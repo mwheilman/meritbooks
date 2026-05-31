@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
-interface CompanyEntry { key: string; name: string; shortCode: string; industry: string; fiscalYearStartMonth: number }
+interface CompanyEntry { key: string; name: string; shortCode: string; industry: string; fiscalYearStartMonth: number; revRecMethod: string }
 interface TeamMember { key: string; firstName: string; lastName: string; email: string; role: string; assignedCompanyKeys: string[] }
 type ChargeMethod = 'inherit' | 'revenue' | 'cost_transfer';
 type CompanyMethod = 'revenue' | 'cost_transfer';
@@ -53,7 +53,7 @@ export default function SetupPage() {
   const [contactEmail, setContactEmail] = useState('');
   const [timezone, setTimezone] = useState('America/Chicago');
 
-  const [companies, setCompanies] = useState<CompanyEntry[]>([{ key: genKey(), name: '', shortCode: '', industry: '', fiscalYearStartMonth: 1 }]);
+  const [companies, setCompanies] = useState<CompanyEntry[]>([{ key: genKey(), name: '', shortCode: '', industry: '', fiscalYearStartMonth: 1, revRecMethod: 'POINT_OF_SALE' }]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [coaSeeded, setCoaSeeded] = useState(false);
   const [coaCount, setCoaCount] = useState(0);
@@ -99,7 +99,7 @@ export default function SetupPage() {
         const created: string[] = [];
         const createdFull: CreatedCompany[] = [];
         for (const co of valid) {
-          const res = await fetch('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ step: 'company', name: co.name.trim(), short_code: co.shortCode.toUpperCase().trim(), industry: co.industry || undefined, fiscal_year_start_month: co.fiscalYearStartMonth }) });
+          const res = await fetch('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ step: 'company', name: co.name.trim(), short_code: co.shortCode.toUpperCase().trim(), industry: co.industry || undefined, fiscal_year_start_month: co.fiscalYearStartMonth, rev_rec_method: co.revRecMethod }) });
           const d = await res.json();
           if (!res.ok) { setError(`"${co.name}": ${d.error}`); setSubmitting(false); return; }
           created.push(co.name);
@@ -203,10 +203,11 @@ export default function SetupPage() {
                     <div><label className={labelCls}>Industry</label><select value={co.industry} onChange={(e) => setCompanies((p) => p.map((c) => c.key === co.key ? { ...c, industry: e.target.value } : c))} className={inputCls}><option value="">Select...</option>{INDUSTRIES.map((i) => <option key={i} value={i}>{i}</option>)}</select></div>
                   </div>
                   <div className="mt-3"><label className={labelCls}>Fiscal Year Starts</label><select value={co.fiscalYearStartMonth} onChange={(e) => setCompanies((p) => p.map((c) => c.key === co.key ? { ...c, fiscalYearStartMonth: Number(e.target.value) } : c))} className={clsx(inputCls, 'w-48')}>{Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{new Date(2000, m - 1).toLocaleString('en', { month: 'long' })}</option>)}</select></div>
+                  <div className="mt-3"><label className={labelCls}>Revenue Recognition</label><select value={co.revRecMethod} onChange={(e) => setCompanies((p) => p.map((c) => c.key === co.key ? { ...c, revRecMethod: e.target.value } : c))} className={clsx(inputCls, 'w-72')}><option value="POINT_OF_SALE">Point of sale (recognize on billing)</option><option value="PCT_COMPLETE">Percent complete</option><option value="PCT_COSTS_INCURRED">Percent of costs incurred</option><option value="COMPLETED_CONTRACT">Completed contract</option></select></div>
                 </div>
               ))}
             </div>
-            <button onClick={() => setCompanies((p) => [...p, { key: genKey(), name: '', shortCode: '', industry: '', fiscalYearStartMonth: 1 }])} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-slate-700 text-sm text-slate-400 hover:text-emerald-400 hover:border-emerald-500/30 w-full justify-center"><Plus size={16} /> Add another company</button>
+            <button onClick={() => setCompanies((p) => [...p, { key: genKey(), name: '', shortCode: '', industry: '', fiscalYearStartMonth: 1, revRecMethod: 'POINT_OF_SALE' }])} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-slate-700 text-sm text-slate-400 hover:text-emerald-400 hover:border-emerald-500/30 w-full justify-center"><Plus size={16} /> Add another company</button>
           </div>
         )}
 

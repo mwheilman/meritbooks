@@ -66,11 +66,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
     // Resolve provider department method; inherit -> company default
     const { data: providerDept } = await supabase
-      .from('departments').select('internal_charge_method').eq('id', inv.provider_department_id).single();
+      .schema('core').from('departments').select('internal_charge_method').eq('id', inv.provider_department_id).single();
     let method = (providerDept?.internal_charge_method as string) ?? 'inherit';
     if (method === 'inherit') {
       const { data: loc } = await supabase
-        .from('locations').select('default_internal_charge_method').eq('id', inv.location_id).single();
+        .schema('core').from('locations').select('default_internal_charge_method').eq('id', inv.location_id).single();
       method = (loc?.default_internal_charge_method as string) ?? 'revenue';
     }
     const { error } = await supabase

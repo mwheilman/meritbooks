@@ -14,7 +14,7 @@ export async function GET(_req: NextRequest) {
 
     // 1. Find the org
     const { data: org } = await supabase
-      .from('organizations')
+      .schema('core').from('organizations')
       .select('id, name, setup_complete')
       .limit(1)
       .single();
@@ -30,7 +30,7 @@ export async function GET(_req: NextRequest) {
 
     // 2. Find employee record for this Clerk user
     const { data: employees } = await supabase
-      .from('employees')
+      .schema('core').from('employees')
       .select('id, org_id, clerk_user_id, first_name, last_name, email, role, department_id, is_active, created_at')
       .eq('clerk_user_id', userId)
       .eq('org_id', org.id)
@@ -41,14 +41,14 @@ export async function GET(_req: NextRequest) {
     // 3. Auto-assign admin if setup is complete but no employee record exists
     if (!employee && org.setup_complete) {
       const { count } = await supabase
-        .from('employees')
+        .schema('core').from('employees')
         .select('id', { count: 'exact', head: true })
         .eq('org_id', org.id);
 
       if (count === 0 || count === null) {
         // First user after setup — auto-create as company_admin
         const { data: newEmployee, error: createErr } = await supabase
-          .from('employees')
+          .schema('core').from('employees')
           .insert({
             org_id: org.id,
             clerk_user_id: userId,
@@ -68,7 +68,7 @@ export async function GET(_req: NextRequest) {
 
           // Assign to ALL locations
           const { data: locations } = await supabase
-            .from('locations')
+            .schema('core').from('locations')
             .select('id')
             .eq('org_id', org.id);
 
@@ -105,7 +105,7 @@ export async function GET(_req: NextRequest) {
     let locations: Array<{ id: string; name: string; code: string }> = [];
     if (roleDef?.companyScope === 'all' || roleDef?.companyScope === 'portcos_and_3rdparty') {
       const { data: allLocs } = await supabase
-        .from('locations')
+        .schema('core').from('locations')
         .select('id, name, code')
         .eq('org_id', org.id)
         .order('name');
@@ -125,7 +125,7 @@ export async function GET(_req: NextRequest) {
       if (assignedLocs && assignedLocs.length > 0) {
         const locIds = assignedLocs.map((al: { location_id: string }) => al.location_id);
         const { data: locs } = await supabase
-          .from('locations')
+          .schema('core').from('locations')
           .select('id, name, code')
           .in('id', locIds)
           .order('name');
@@ -200,7 +200,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const { data: employee, error } = await supabase
-      .from('employees')
+      .schema('core').from('employees')
       .update(updates)
       .eq('clerk_user_id', userId)
       .select('id, first_name, last_name, email, role')

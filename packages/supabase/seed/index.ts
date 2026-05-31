@@ -31,7 +31,7 @@ async function main() {
   // 1. Organization
   console.log('  [1/6] Organization...');
   const { data: org, error: orgErr } = await supabase
-    .from('organizations')
+    .schema('core').from('organizations')
     .upsert({
       name: 'Merit Management Group',
       slug: 'merit-mgmt',
@@ -157,7 +157,7 @@ async function main() {
 
   for (const co of companies) {
     const { error } = await supabase
-      .from('locations')
+      .schema('core').from('locations')
       .upsert({
         org_id: orgId,
         name: co.name,
@@ -191,7 +191,7 @@ async function main() {
 
   for (const dept of departments) {
     const { error } = await supabase
-      .from('departments')
+      .schema('core').from('departments')
       .upsert({
         org_id: orgId,
         name: dept.name,
@@ -210,7 +210,7 @@ async function main() {
   // 6. Fiscal periods (2026)
   console.log('  [5/6] Fiscal periods...');
   const { data: locations } = await supabase
-    .from('locations')
+    .schema('core').from('locations')
     .select('id')
     .eq('org_id', orgId);
 

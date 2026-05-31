@@ -14,7 +14,7 @@ export async function GET() {
   const supabase = createAdminSupabase();
 
   const { data: org } = await supabase
-    .from('organizations')
+    .schema('core').from('organizations')
     .select('id, name, setup_complete')
     .limit(1)
     .single();
@@ -25,7 +25,7 @@ export async function GET() {
 
   if (!org.setup_complete) {
     // Check how far they got
-    const { count: locCount } = await supabase.from('locations').select('id', { count: 'exact', head: true });
+    const { count: locCount } = await supabase.schema('core').from('locations').select('id', { count: 'exact', head: true });
     const { count: acctCount } = await supabase.from('accounts').select('id', { count: 'exact', head: true });
 
     let step = 'organization';
@@ -57,6 +57,9 @@ const companySchema = z.object({
   short_code: z.string().min(1).max(10).regex(/^[A-Z0-9]+$/, 'Must be uppercase'),
   industry: z.string().max(100).optional(),
   fiscal_year_start_month: z.number().int().min(1).max(12).default(1),
+  // Rev-rec is a per-company wizard setting (FROZEN contract §1); Books drives
+  // recognition from it. Defaults to point-of-sale.
+  rev_rec_method: z.enum(['PCT_COSTS_INCURRED', 'PCT_COMPLETE', 'COMPLETED_CONTRACT', 'POINT_OF_SALE']).default('POINT_OF_SALE'),
 });
 
 // ─── Step 3: Seed COA ───────────────────────────────────────
@@ -107,13 +110,13 @@ export async function POST(request: Request) {
 
   if (body.step === 'organization') {
     // Check if org already exists
-    const { data: existing } = await supabase.from('organizations').select('id').limit(1).single();
+    const { data: existing } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
     if (existing) {
       return NextResponse.json({ success: true, orgId: existing.id, message: 'Organization already exists' });
     }
 
     const { data: org, error } = await supabase
-      .from('organizations')
+      .schema('core').from('organizations')
       .insert({
         name: body.name,
         slug: body.slug,
@@ -137,12 +140,12 @@ export async function POST(request: Request) {
   // ═══════════════════════════════════════════════════════════
 
   if (body.step === 'company') {
-    const { data: org } = await supabase.from('organizations').select('id').limit(1).single();
+    const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
     if (!org) return NextResponse.json({ error: 'Create organization first' }, { status: 400 });
 
     // Check for duplicate short_code
     const { data: existingLoc } = await supabase
-      .from('locations')
+      .schema('core').from('locations')
       .select('id')
       .eq('short_code', body.short_code)
       .limit(1)
@@ -153,13 +156,14 @@ export async function POST(request: Request) {
     }
 
     const { data: location, error: locErr } = await supabase
-      .from('locations')
+      .schema('core').from('locations')
       .insert({
         org_id: org.id,
         name: body.name,
         short_code: body.short_code,
         industry: body.industry ?? null,
         fiscal_year_start_month: body.fiscal_year_start_month,
+        rev_rec_method: body.rev_rec_method,
       })
       .select('id')
       .single();
@@ -221,10 +225,10 @@ export async function POST(request: Request) {
   // ═══════════════════════════════════════════════════════════
 
   if (body.step === 'company_charge_method') {
-    const { data: org } = await supabase.from('organizations').select('id').limit(1).single();
+    const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
     if (!org) return NextResponse.json({ error: 'Create organization first' }, { status: 400 });
     const { error } = await supabase
-      .from('locations')
+      .schema('core').from('locations')
       .update({ default_internal_charge_method: body.default_internal_charge_method })
       .eq('id', body.location_id)
       .eq('org_id', org.id);
@@ -233,7 +237,7 @@ export async function POST(request: Request) {
   }
 
   if (body.step === 'chart_of_accounts') {
-    const { data: org } = await supabase.from('organizations').select('id').limit(1).single();
+    const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
     if (!org) return NextResponse.json({ error: 'Create organization first' }, { status: 400 });
 
     // Check if COA already seeded
@@ -314,9 +318,16 @@ export async function POST(request: Request) {
                 account_number: acctData.number,
                 name: acctData.name,
                 account_type: typeData.code,
+                account_sub_type: stData.code,
                 display_order: acctData.display_order,
                 is_control_account: acctData.is_control_account ?? false,
-                is_company_specific: acctData.is_company_specific ?? false,
+                // Seed accounts are an org-level template; "company-specific" is
+                // promoted later when an account is assigned to a company. At
+                // template time we cannot satisfy chk_company_specific (which
+                // requires company_location_id when the flag is true), so seed
+                // every account non-company-specific with a null location.
+                is_company_specific: false,
+                company_location_id: null,
                 is_bank_account: acctData.is_bank_account ?? false,
                 is_credit_card: acctData.is_credit_card ?? false,
                 require_department: acctData.require_department ?? false,
@@ -343,11 +354,11 @@ export async function POST(request: Request) {
   // ═══════════════════════════════════════════════════════════
 
   if (body.step === 'finalize') {
-    const { data: org } = await supabase.from('organizations').select('id').limit(1).single();
+    const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
     if (!org) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
     const { error } = await supabase
-      .from('organizations')
+      .schema('core').from('organizations')
       .update({ setup_complete: true })
       .eq('id', org.id);
 

@@ -33,7 +33,7 @@ export async function GET(request: Request) {
 
   // Get locations
   const { data: locations } = await supabase
-    .from('locations')
+    .schema('core').from('locations')
     .select('id, name, short_code')
     .eq('is_active', true)
     .order('name');

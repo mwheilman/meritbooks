@@ -11,7 +11,7 @@ export const GET = apiQueryHandler(
   locationQuerySchema,
   async (_params, ctx) => {
     const { data, error } = await ctx.supabase
-      .from('locations')
+      .schema('core').from('locations')
       .select('id, name, short_code, industry')
       .eq('is_active', true)
       .order('name');

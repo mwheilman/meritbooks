@@ -20,6 +20,8 @@ import {
   Settings,
   Shield,
   Wallet,
+  Upload,
+  BadgeCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -49,6 +51,7 @@ export const navigation: NavGroup[] = [
       { label: 'Credit Cards', href: '/credit-cards', icon: CreditCard },
       { label: 'Receipts', href: '/receipts', icon: Receipt },
       { label: 'Bills', href: '/bills', icon: FileText },
+      { label: 'Cost Approvals', href: '/cost-approvals', icon: BadgeCheck },
       { label: 'Flagged Items', href: '/flagged', icon: AlertTriangle },
     ],
   },
@@ -82,6 +85,7 @@ export const navigation: NavGroup[] = [
   {
     label: 'Admin',
     items: [
+      { label: 'Import Data', href: '/import', icon: Upload },
       { label: 'Team', href: '/team', icon: Users },
       { label: 'Compliance', href: '/compliance', icon: Shield },
       { label: 'Settings', href: '/settings', icon: Settings },

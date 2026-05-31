@@ -169,7 +169,7 @@ export async function POST(request: Request) {
 
   // Get org_id from location
   const { data: loc } = await supabase
-    .from('locations')
+    .schema('core').from('locations')
     .select('org_id')
     .eq('id', body.location_id)
     .single();
@@ -219,8 +219,12 @@ export async function POST(request: Request) {
       source_module: 'MANUAL',
       status,
       posted_at: status === 'POSTED' ? new Date().toISOString() : null,
-      posted_by: status === 'POSTED' ? userId : null,
-      created_by: userId,
+      // created_by / posted_by are uuid columns; Clerk user ids are text, so we
+      // write null (matching migration 018 + the internal-invoice flow). The
+      // posted_at timestamp still records when. Real attribution waits on the
+      // *_by uuid->text migration (blocked by five financial views).
+      posted_by: null,
+      created_by: null,
     })
     .select('id, entry_number')
     .single();

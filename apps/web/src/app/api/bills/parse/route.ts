@@ -73,7 +73,7 @@ export async function POST(request: Request) {
   if (parsed.vendorName) {
     // Try exact match
     const { data: exactVendors } = await supabase
-      .from('vendors')
+      .schema('core').from('vendors')
       .select('id, name, display_name, payment_terms_days, default_account_id')
       .ilike('name', parsed.vendorName)
       .limit(1);
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
       const words = parsed.vendorName.split(/\s+/).filter((w: string) => w.length >= 3);
       for (const word of words) {
         const { data: fuzzyVendors } = await supabase
-          .from('vendors')
+          .schema('core').from('vendors')
           .select('id, name, display_name, payment_terms_days, default_account_id')
           .ilike('name', `%${word}%`)
           .limit(3);
@@ -162,7 +162,7 @@ export async function POST(request: Request) {
   }
 
   // ─── Log to AI audit ──────────────────────────────────────
-  const { data: org } = await supabase.from('organizations').select('id').limit(1).single();
+  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
 
   if (org) {
     await supabase.from('ai_audit_log').insert({

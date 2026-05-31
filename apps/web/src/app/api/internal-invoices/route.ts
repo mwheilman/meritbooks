@@ -20,7 +20,7 @@ const createSchema = z.object({
 });
 
 async function resolveOrgId(supabase: ReturnType<typeof createAdminSupabase>): Promise<string | null> {
-  const { data } = await supabase.from('organizations').select('id').limit(1).single();
+  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
   return (data?.id as string) ?? null;
 }
 
@@ -131,12 +131,12 @@ export async function POST(request: Request) {
   }
 
   // Resolve org from location and verify both departments belong to this company
-  const { data: loc } = await supabase.from('locations').select('id, org_id').eq('id', body.location_id).single();
+  const { data: loc } = await supabase.schema('core').from('locations').select('id, org_id').eq('id', body.location_id).single();
   if (!loc) return NextResponse.json({ error: 'Company not found', code: 'NOT_FOUND' }, { status: 404 });
   const orgId = loc.org_id as string;
 
   const { data: depts } = await supabase
-    .from('departments')
+    .schema('core').from('departments')
     .select('id, location_id, is_active')
     .in('id', [body.provider_department_id, body.receiver_department_id]);
   const deptList = depts ?? [];

@@ -9,7 +9,7 @@ const CHARGE_METHODS: ChargeMethod[] = ['inherit', 'revenue', 'cost_transfer'];
 
 /** Resolve the active organization (single-tenant resolution, matches other routes). */
 async function getOrgId(supabase: ReturnType<typeof createAdminSupabase>): Promise<string | null> {
-  const { data: org } = await supabase.from('organizations').select('id').limit(1).single();
+  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
   return org?.id ?? null;
 }
 
@@ -28,7 +28,7 @@ async function makeUniqueCode(
   if (!base) base = 'DEPT';
 
   const { data: existing } = await supabase
-    .from('departments')
+    .schema('core').from('departments')
     .select('id, code')
     .eq('org_id', orgId);
 
@@ -55,7 +55,7 @@ export async function GET(_req: NextRequest) {
     if (!orgId) return NextResponse.json({ departments: [], total: 0 });
 
     const { data, error } = await supabase
-      .from('departments')
+      .schema('core').from('departments')
       .select('id, name, code, location_id, parent_department_id, internal_charge_method, hierarchy_depth, is_active, created_at')
       .eq('org_id', orgId)
       .order('name');
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
 
     // Validate company belongs to org
     const { data: loc } = await supabase
-      .from('locations')
+      .schema('core').from('locations')
       .select('id')
       .eq('org_id', orgId)
       .eq('id', locationId)
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
     let hierarchyDepth = 1;
     if (parentId) {
       const { data: parent } = await supabase
-        .from('departments')
+        .schema('core').from('departments')
         .select('id, location_id, hierarchy_depth')
         .eq('org_id', orgId)
         .eq('id', parentId)
@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
     const code = await makeUniqueCode(supabase, orgId, requestedCode || name);
 
     const { data: created, error } = await supabase
-      .from('departments')
+      .schema('core').from('departments')
       .insert({
         org_id: orgId,
         location_id: locationId,
@@ -189,7 +189,7 @@ export async function PATCH(req: NextRequest) {
     if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
     const { data: existing } = await supabase
-      .from('departments')
+      .schema('core').from('departments')
       .select('id, location_id')
       .eq('org_id', orgId)
       .eq('id', id)
@@ -212,7 +212,7 @@ export async function PATCH(req: NextRequest) {
       }
       if (parentId) {
         const { data: parent } = await supabase
-          .from('departments')
+          .schema('core').from('departments')
           .select('id, location_id, hierarchy_depth')
           .eq('org_id', orgId)
           .eq('id', parentId)
@@ -233,7 +233,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const { data: updated, error } = await supabase
-      .from('departments')
+      .schema('core').from('departments')
       .update(update)
       .eq('org_id', orgId)
       .eq('id', id)
@@ -268,7 +268,7 @@ export async function DELETE(req: NextRequest) {
 
     // Block deactivation if it has active child departments
     const { count: childCount } = await supabase
-      .from('departments')
+      .schema('core').from('departments')
       .select('id', { count: 'exact', head: true })
       .eq('org_id', orgId)
       .eq('parent_department_id', id)
@@ -282,7 +282,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     const { error } = await supabase
-      .from('departments')
+      .schema('core').from('departments')
       .update({ is_active: false })
       .eq('org_id', orgId)
       .eq('id', id);

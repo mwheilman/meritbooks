@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     const sortDir = searchParams.get('sort_dir') === 'desc' ? false : true;
 
     const { data: org } = await supabase
-      .from('organizations')
+      .schema('core').from('organizations')
       .select('id')
       .limit(1)
       .single();
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     }
 
     let query = supabase
-      .from('customers')
+      .schema('core').from('customers')
       .select('*', { count: 'exact' })
       .eq('org_id', org.id)
       .is('deleted_at', null);
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
     const supabase = createAdminSupabase();
 
     const { data: org } = await supabase
-      .from('organizations')
+      .schema('core').from('organizations')
       .select('id')
       .limit(1)
       .single();
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
 
     // Duplicate detection
     const { data: existing } = await supabase
-      .from('customers')
+      .schema('core').from('customers')
       .select('id, name')
       .eq('org_id', org.id)
       .is('deleted_at', null)
@@ -193,7 +193,7 @@ export async function POST(req: NextRequest) {
     };
 
     const { data: customer, error } = await supabase
-      .from('customers')
+      .schema('core').from('customers')
       .insert(insertData)
       .select('*')
       .single();
@@ -249,7 +249,7 @@ export async function PATCH(req: NextRequest) {
     updateData.updated_at = new Date().toISOString();
 
     const { data: customer, error } = await supabase
-      .from('customers')
+      .schema('core').from('customers')
       .update(updateData)
       .eq('id', id)
       .select('*')

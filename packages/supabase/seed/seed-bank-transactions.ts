@@ -37,7 +37,7 @@ async function main() {
 
   // Look up org
   const { data: org } = await supabase
-    .from('organizations')
+    .schema('core').from('organizations')
     .select('id')
     .eq('slug', 'merit-mgmt')
     .single();
@@ -47,7 +47,7 @@ async function main() {
 
   // Look up Swan Creek Construction location
   const { data: scc } = await supabase
-    .from('locations')
+    .schema('core').from('locations')
     .select('id')
     .eq('org_id', orgId)
     .eq('short_code', 'SCC')
@@ -151,7 +151,7 @@ async function main() {
   for (const v of vendorDefs) {
     // Check if vendor already exists
     const { data: existing } = await supabase
-      .from('vendors')
+      .schema('core').from('vendors')
       .select('id')
       .eq('org_id', orgId)
       .eq('name', v.name)
@@ -163,7 +163,7 @@ async function main() {
     }
 
     const { data: vendor, error } = await supabase
-      .from('vendors')
+      .schema('core').from('vendors')
       .insert({
         org_id: orgId,
         name: v.name,
