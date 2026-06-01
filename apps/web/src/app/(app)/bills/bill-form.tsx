@@ -3,12 +3,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Upload, Plus, Trash2, AlertCircle, Loader2, Check, Send,
-  Search, X, ChevronDown, ShieldAlert, AlertTriangle, FileText,
-  Camera, Sparkles, Eye
+  Search, X, ChevronDown, AlertTriangle, FileText,
+  Camera, Sparkles, Eye, Briefcase,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useQuery, useMutation } from '@/hooks';
+import { useQuery } from '@/hooks';
 import { formatMoney, dollarsToCents } from '@meritbooks/shared';
+import type { JobSearchResult } from '@meritbooks/shared';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -29,6 +30,8 @@ interface AccountOption {
   is_control_account: boolean;
 }
 
+type CostType = 'MATERIALS' | 'SUBCONTRACTOR' | 'EQUIPMENT' | 'OTHER';
+
 interface BillLineState {
   key: string;
   description: string;
@@ -38,6 +41,9 @@ interface BillLineState {
   unitCost: string;
   amount: string;
   confidence: number | null;
+  job_id: string;
+  jobLabel: string;
+  cost_type: CostType;
 }
 
 interface ParsedResponse {
@@ -54,13 +60,7 @@ interface ParsedResponse {
     taxCents: number;
     totalCents: number;
     totalConfidence: number;
-    lines: Array<{
-      description: string;
-      quantity: number;
-      unitCostCents: number;
-      amountCents: number;
-      confidence: number;
-    }>;
+    lines: Array<{ description: string; quantity: number; unitCostCents: number; amountCents: number; confidence: number }>;
     notes: string;
     parseTimeMs: number;
   };
@@ -71,7 +71,7 @@ interface ParsedResponse {
 
 function genKey() { return Math.random().toString(36).slice(2, 8); }
 function emptyLine(): BillLineState {
-  return { key: genKey(), description: '', account_id: '', accountLabel: '', quantity: '1', unitCost: '', amount: '', confidence: null };
+  return { key: genKey(), description: '', account_id: '', accountLabel: '', quantity: '1', unitCost: '', amount: '', confidence: null, job_id: '', jobLabel: '', cost_type: 'MATERIALS' };
 }
 
 function confidenceColor(c: number): string {
@@ -79,14 +79,11 @@ function confidenceColor(c: number): string {
   if (c >= 0.6) return 'text-amber-400';
   return 'text-red-400';
 }
-
 function confidenceBg(c: number): string {
   if (c >= 0.85) return 'bg-emerald-500/10 border-emerald-500/20';
   if (c >= 0.6) return 'bg-amber-500/10 border-amber-500/20';
   return 'bg-red-500/10 border-red-500/20';
 }
-
-// ─── Confidence Badge ───────────────────────────────────────
 
 function ConfBadge({ score }: { score: number | null }) {
   if (score === null) return null;
@@ -158,16 +155,78 @@ function AccountPicker({ value, label, onChange, locationId }: {
   );
 }
 
+// ─── Job Picker ─────────────────────────────────────────────
+
+function JobPicker({ value, label, onChange, locationId }: {
+  value: string; label: string;
+  onChange: (id: string, label: string) => void;
+  locationId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [debounced, setDebounced] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { const t = setTimeout(() => setDebounced(search), 200); return () => clearTimeout(t); }, [search]);
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  const params: Record<string, string> = {};
+  if (locationId) params.location_id = locationId;
+  if (debounced.length >= 1) params.q = debounced;
+
+  const { data } = useQuery<JobSearchResult[]>(open && locationId ? '/api/jobs/search' : null, Object.keys(params).length > 0 ? params : undefined);
+  const jobs = data ?? [];
+
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => locationId && setOpen(!open)} disabled={!locationId}
+        className={clsx('w-full text-left px-2 py-1.5 rounded-lg border text-xs truncate disabled:opacity-50',
+          value ? 'bg-brand-500/10 border-brand-500/30 text-brand-300' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}>
+        <Briefcase size={9} className="inline mr-1 -mt-0.5" />
+        {label || (locationId ? 'No job' : 'Pick company')}
+        {value && (
+          <span onClick={(e) => { e.stopPropagation(); onChange('', ''); }} className="float-right text-slate-500 hover:text-red-400"><X size={11} /></span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full mt-1 left-0 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
+          <div className="p-2 border-b border-slate-800">
+            <div className="relative">
+              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search jobs..." autoFocus
+                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50" />
+            </div>
+          </div>
+          <div className="max-h-40 overflow-y-auto">
+            <button type="button" onClick={() => { onChange('', ''); setOpen(false); setSearch(''); }}
+              className="w-full text-left px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800">No job (overhead)</button>
+            {jobs.length === 0 ? (
+              <p className="px-3 py-3 text-xs text-slate-500 text-center">{debounced ? 'No matches' : 'Type to search'}</p>
+            ) : jobs.map((j) => (
+              <button key={j.id} type="button" onClick={() => { onChange(j.id, `${j.job_number} · ${j.name}`); setOpen(false); setSearch(''); }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-800 flex items-center gap-2">
+                <span className="font-mono text-slate-500 shrink-0">{j.job_number}</span>
+                <span className="text-slate-300 truncate">{j.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Form ──────────────────────────────────────────────
 
 export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  // Upload state
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [documentPreview, setDocumentPreview] = useState<string | null>(null);
   const [isAiParsed, setIsAiParsed] = useState(false);
 
-  // Form state
   const [locationId, setLocationId] = useState('');
   const [vendorId, setVendorId] = useState('');
   const [vendorName, setVendorName] = useState('');
@@ -187,20 +246,17 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
 
   const { data: locData } = useQuery<LocationOption[]>('/api/locations');
   const locations = locData ?? [];
-
   const { data: vendorData } = useQuery<{ data: VendorOption[] }>('/api/vendors?per_page=200');
   const vendors = vendorData?.data ?? [];
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Compute totals
   const subtotalCents = useMemo(() =>
     lines.reduce((s, l) => s + dollarsToCents(parseFloat(l.amount) || 0), 0),
     [lines]
   );
   const totalCents = subtotalCents + taxCents;
 
-  // Auto due date from vendor terms
   useEffect(() => {
     if (vendorId && billDate && !isAiParsed) {
       const vendor = vendors.find((v) => v.id === vendorId);
@@ -212,7 +268,6 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
     }
   }, [vendorId, billDate, vendors, isAiParsed]);
 
-  // Auto-calculate line amount from qty × unit cost
   const updateLine = useCallback((key: string, field: keyof BillLineState, value: string) => {
     setLines((prev) => prev.map((l) => {
       if (l.key !== key) return l;
@@ -226,20 +281,17 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
     }));
   }, []);
 
-  // ─── AI Upload Handler ──────────────────────────────────
-
   const handleFileUpload = useCallback(async (file: File) => {
     setUploading(true);
     setUploadError('');
     setDuplicateWarning('');
 
-    // Show preview for images
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = (e) => setDocumentPreview(e.target?.result as string);
       reader.readAsDataURL(file);
     } else {
-      setDocumentPreview(null); // PDFs can't preview in img tag
+      setDocumentPreview(null);
     }
 
     const formData = new FormData();
@@ -248,16 +300,12 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
     try {
       const res = await fetch('/api/bills/parse', { method: 'POST', body: formData });
       const data: ParsedResponse | { error: string } = await res.json();
-
       if (!res.ok || 'error' in data) {
         setUploadError('error' in data ? data.error : 'Failed to parse document');
         setUploading(false);
         return;
       }
-
       const { parsed, vendor, suggestedAccount, duplicateWarning: dw } = data as ParsedResponse;
-
-      // Populate form with AI-extracted data
       setIsAiParsed(true);
       setVendorName(parsed.vendorName);
       setVendorConfidence(parsed.vendorNameConfidence);
@@ -266,13 +314,7 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
       if (parsed.billDate) { setBillDate(parsed.billDate); setBillDateConf(parsed.billDateConfidence); }
       if (parsed.dueDate) { setDueDate(parsed.dueDate); setDueDateConf(parsed.dueDateConfidence); }
       setTaxCents(parsed.taxCents);
-
-      if (vendor) {
-        setVendorId(vendor.id);
-        setVendorName(vendor.name);
-        setVendorConfidence(vendor.confidence);
-      }
-
+      if (vendor) { setVendorId(vendor.id); setVendorName(vendor.name); setVendorConfidence(vendor.confidence); }
       if (parsed.lines.length > 0) {
         setLines(parsed.lines.map((pl) => ({
           key: genKey(),
@@ -283,9 +325,11 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
           unitCost: (pl.unitCostCents / 100).toFixed(2),
           amount: (pl.amountCents / 100).toFixed(2),
           confidence: pl.confidence,
+          job_id: '',
+          jobLabel: '',
+          cost_type: 'MATERIALS',
         })));
       }
-
       if (dw) setDuplicateWarning(dw);
     } catch {
       setUploadError('Failed to upload file');
@@ -293,12 +337,9 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
     setUploading(false);
   }, []);
 
-  // ─── Submit ─────────────────────────────────────────────
-
   const handleSubmit = useCallback(async () => {
     setFormError('');
     setSuccessMsg('');
-
     if (!locationId) { setFormError('Select a company'); return; }
     if (!vendorId) { setFormError('Select or match a vendor'); return; }
     if (!billDate) { setFormError('Enter a bill date'); return; }
@@ -308,7 +349,6 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
     if (validLines.length === 0) { setFormError('Add at least one line with an amount'); return; }
 
     setSubmitting(true);
-
     const payload = {
       location_id: locationId,
       vendor_id: vendorId,
@@ -322,6 +362,8 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
         quantity: parseFloat(l.quantity) || 1,
         unit_cost_cents: dollarsToCents(parseFloat(l.unitCost) || 0),
         amount_cents: dollarsToCents(parseFloat(l.amount) || 0),
+        job_id: l.job_id || undefined,
+        cost_type: l.job_id ? l.cost_type : undefined,
       })),
     };
 
@@ -331,20 +373,15 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       const result = await res.json();
-
       if (!res.ok) {
         setFormError(result.error ?? 'Failed to create bill');
         setSubmitting(false);
         return;
       }
-
-      const statusMsg = result.compliance_warning
-        ? `Bill created (ON HOLD — ${result.compliance_warning})`
-        : 'Bill created successfully';
-      setSuccessMsg(statusMsg);
-      setTimeout(() => onSuccess(), 1500);
+      const jobNote = result.committed_cost_lines > 0 ? ` · ${result.committed_cost_lines} job cost(s) committed` : '';
+      setSuccessMsg(result.compliance_warning ? `Bill created (ON HOLD)${jobNote}` : `Bill created${jobNote}`);
+      setTimeout(() => onSuccess(), 1400);
     } catch {
       setFormError('Network error');
     }
@@ -353,7 +390,6 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-      {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold text-white">New Bill</h2>
@@ -367,7 +403,6 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
       </div>
 
       <div className="flex">
-        {/* Document preview (left side) */}
         {documentPreview && (
           <div className="w-80 border-r border-slate-800 p-4 shrink-0">
             <p className="text-xs text-slate-500 mb-2 flex items-center gap-1"><Eye size={11} /> Original Document</p>
@@ -375,9 +410,7 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
           </div>
         )}
 
-        {/* Form (right side) */}
         <div className="flex-1 p-6 space-y-5">
-          {/* Upload area */}
           {!isAiParsed && (
             <div
               onClick={() => fileInputRef.current?.click()}
@@ -411,7 +444,6 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
               <p className="text-xs text-red-400">{uploadError}</p>
             </div>
           )}
-
           {duplicateWarning && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
               <AlertTriangle size={13} className="text-amber-400" />
@@ -419,7 +451,6 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
             </div>
           )}
 
-          {/* Divider for manual entry */}
           {!isAiParsed && !uploading && (
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-slate-800" />
@@ -428,7 +459,6 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
             </div>
           )}
 
-          {/* Form fields */}
           <div className="grid grid-cols-4 gap-4">
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium">Company</label>
@@ -439,9 +469,7 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">
-                Vendor <ConfBadge score={vendorConfidence} />
-              </label>
+              <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Vendor <ConfBadge score={vendorConfidence} /></label>
               <select value={vendorId} onChange={(e) => { setVendorId(e.target.value); setVendorConfidence(null); }}
                 className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white">
                 <option value="">{vendorName && !vendorId ? `"${vendorName}" (no match)` : 'Select vendor...'}</option>
@@ -449,9 +477,7 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">
-                Bill # <ConfBadge score={billNumberConf} />
-              </label>
+              <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Bill # <ConfBadge score={billNumberConf} /></label>
               <input type="text" value={billNumber} onChange={(e) => { setBillNumber(e.target.value); setBillNumberConf(null); }}
                 placeholder="INV-001" className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono placeholder:text-slate-600" />
             </div>
@@ -467,16 +493,12 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">
-                Bill Date <ConfBadge score={billDateConf} />
-              </label>
+              <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Bill Date <ConfBadge score={billDateConf} /></label>
               <input type="date" value={billDate} onChange={(e) => { setBillDate(e.target.value); setBillDateConf(null); }}
                 className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono" />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">
-                Due Date <ConfBadge score={dueDateConf} />
-              </label>
+              <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Due Date <ConfBadge score={dueDateConf} /></label>
               <input type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); setDueDateConf(null); }}
                 className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono" />
             </div>
@@ -489,16 +511,15 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
                 <tr className="border-b border-slate-800 bg-slate-800/30">
                   <th className="px-3 py-2 text-left text-2xs font-semibold uppercase text-slate-500 w-8">#</th>
                   <th className="px-3 py-2 text-left text-2xs font-semibold uppercase text-slate-500">Description</th>
-                  <th className="px-3 py-2 text-left text-2xs font-semibold uppercase text-slate-500 min-w-[180px]">Account</th>
-                  <th className="px-3 py-2 text-right text-2xs font-semibold uppercase text-slate-500 w-16">Qty</th>
-                  <th className="px-3 py-2 text-right text-2xs font-semibold uppercase text-slate-500 w-24">Unit Cost</th>
+                  <th className="px-3 py-2 text-left text-2xs font-semibold uppercase text-slate-500 min-w-[170px]">Account</th>
+                  <th className="px-3 py-2 text-left text-2xs font-semibold uppercase text-slate-500 min-w-[150px]">Job</th>
                   <th className="px-3 py-2 text-right text-2xs font-semibold uppercase text-slate-500 w-24">Amount</th>
                   <th className="w-8" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/30">
                 {lines.map((line, idx) => (
-                  <tr key={line.key} className="hover:bg-slate-800/20">
+                  <tr key={line.key} className="hover:bg-slate-800/20 align-top">
                     <td className="px-3 py-2 text-xs text-slate-600 font-mono">
                       {idx + 1}
                       {line.confidence !== null && <ConfBadge score={line.confidence} />}
@@ -506,6 +527,16 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
                     <td className="px-3 py-2">
                       <input type="text" value={line.description} onChange={(e) => updateLine(line.key, 'description', e.target.value)}
                         placeholder="Line description" className="w-full px-2 py-1 bg-slate-800/50 border border-slate-700/50 rounded text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50" />
+                      <div className="flex items-center gap-1 mt-1">
+                        <input type="number" value={line.quantity} onChange={(e) => updateLine(line.key, 'quantity', e.target.value)}
+                          min="0" step="1" title="Qty" className="w-12 px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs text-white font-mono text-right focus:outline-none" />
+                        <span className="text-2xs text-slate-600">×</span>
+                        <div className="relative flex-1">
+                          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">$</span>
+                          <input type="text" value={line.unitCost} onChange={(e) => updateLine(line.key, 'unitCost', e.target.value.replace(/[^0-9.]/g, ''))}
+                            placeholder="0.00" title="Unit cost" className="w-full pl-4 pr-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs text-white font-mono text-right focus:outline-none" />
+                        </div>
+                      </div>
                     </td>
                     <td className="px-3 py-2">
                       <AccountPicker value={line.account_id} label={line.accountLabel}
@@ -513,15 +544,18 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
                         locationId={locationId} />
                     </td>
                     <td className="px-3 py-2">
-                      <input type="number" value={line.quantity} onChange={(e) => updateLine(line.key, 'quantity', e.target.value)}
-                        min="0" step="1" className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-white font-mono text-right focus:outline-none focus:border-emerald-500/50" />
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="relative">
-                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">$</span>
-                        <input type="text" value={line.unitCost} onChange={(e) => updateLine(line.key, 'unitCost', e.target.value.replace(/[^0-9.]/g, ''))}
-                          placeholder="0.00" className="w-full pl-4 pr-1 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-white font-mono text-right focus:outline-none focus:border-emerald-500/50" />
-                      </div>
+                      <JobPicker value={line.job_id} label={line.jobLabel}
+                        onChange={(id, lbl) => setLines((prev) => prev.map((l) => l.key === line.key ? { ...l, job_id: id, jobLabel: lbl } : l))}
+                        locationId={locationId} />
+                      {line.job_id && (
+                        <select value={line.cost_type} onChange={(e) => updateLine(line.key, 'cost_type', e.target.value)}
+                          className="w-full mt-1 px-1.5 py-1 bg-slate-800 border border-slate-700 rounded text-2xs text-slate-300 focus:outline-none">
+                          <option value="MATERIALS">Materials</option>
+                          <option value="SUBCONTRACTOR">Subcontractor</option>
+                          <option value="EQUIPMENT">Equipment</option>
+                          <option value="OTHER">Other</option>
+                        </select>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       <div className="relative">
@@ -542,7 +576,7 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
               </tbody>
               <tfoot>
                 <tr className="border-t border-slate-700">
-                  <td colSpan={4} className="px-3 py-2">
+                  <td colSpan={3} className="px-3 py-2">
                     <button type="button" onClick={() => setLines((p) => [...p, emptyLine()])}
                       className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300">
                       <Plus size={12} /> Add line
@@ -554,13 +588,13 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
                 </tr>
                 {taxCents > 0 && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-1 text-right text-xs text-slate-500">Tax</td>
+                    <td colSpan={4} className="px-3 py-1 text-right text-xs text-slate-500">Tax</td>
                     <td className="px-3 py-1 text-right text-xs font-mono text-slate-400">{formatMoney(taxCents)}</td>
                     <td />
                   </tr>
                 )}
                 <tr className="bg-slate-800/20">
-                  <td colSpan={5} className="px-3 py-2.5 text-right text-sm font-medium text-white">Total</td>
+                  <td colSpan={4} className="px-3 py-2.5 text-right text-sm font-medium text-white">Total</td>
                   <td className="px-3 py-2.5 text-right text-base font-mono font-bold text-white">{formatMoney(totalCents)}</td>
                   <td />
                 </tr>
@@ -568,7 +602,6 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
             </table>
           </div>
 
-          {/* Error / Success */}
           {formError && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
               <AlertCircle size={13} className="text-red-400" /><p className="text-xs text-red-400">{formError}</p>
@@ -580,7 +613,6 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
             </div>
           )}
 
-          {/* Actions */}
           <div className="flex items-center justify-end gap-3 pt-2">
             <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800">Cancel</button>
             <button onClick={handleSubmit} disabled={submitting || !locationId || !vendorId || subtotalCents === 0}

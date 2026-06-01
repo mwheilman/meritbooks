@@ -8,7 +8,7 @@
  * approver destination; the bill stays Books-owned throughout.
  *
  * Gates (contract §5):
- *   PAYABLE_APPROVAL        -> starts PENDING, clears on approval
+ *   PAYABLE_APPROVAL        -> starts PENDING, clears on bill approval
  *   BANKFEED_CATEGORIZATION -> clears immediately (cash already spent)
  *   TIMESHEET_PAYROLL       -> starts PENDING, clears on timesheet/payroll approval
  */
@@ -84,6 +84,8 @@ export interface CreateAttributionInput {
   memo?: string | null;
   routing?: RoutingContext;
   glEntryId?: string | null;
+  /** Link the attribution back to its originating bill (AP lifecycle). */
+  billId?: string | null;
 }
 
 /**
@@ -113,6 +115,7 @@ export async function createAttribution(db: DB, input: CreateAttributionInput) {
       lifecycle,
       source_type: input.sourceType,
       source_ref: input.sourceRef ?? null,
+      bill_id: input.billId ?? null,
       gl_entry_id: input.glEntryId ?? null,
       approver_type: approver.approver_type,
       approver_ref: approver.approver_ref,

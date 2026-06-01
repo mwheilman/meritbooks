@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Inbox, AlertCircle, Search, AlertTriangle, TrendingUp, TrendingDown, ExternalLink, Layers, FileText, Clock, Repeat } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatusBadge, EmptyState, TableSkeleton } from '@/components/ui';
@@ -74,6 +75,7 @@ function Bar({ pct, warn }: { pct: number; warn: boolean }) {
 }
 
 export function JobList() {
+  const router = useRouter();
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
   const ds = useDebounce(search, 300);
@@ -146,7 +148,7 @@ export function JobList() {
             {jobs.map((j) => {
               const pr = PRICING[j.pricing_model] ?? PRICING.FIXED_PRICE;
               return (
-                <tr key={j.id} className="table-row-hover">
+                <tr key={j.id} onClick={() => router.push(`/jobs/${j.id}`)} className="table-row-hover cursor-pointer">
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-sm font-mono text-slate-300">{j.job_number}</span>

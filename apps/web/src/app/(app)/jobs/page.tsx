@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import Link from 'next/link';
 import { PageHeader } from '@/components/ui';
 import { JobList } from './job-list';
 import { JobCreateForm } from './job-create-form';
@@ -21,7 +22,7 @@ export default function JobsPage() {
         description="Budget tracking, cost analysis, and profitability across all entities"
         actions={
           <div className="flex items-center gap-2">
-            <button className="btn-secondary btn-sm">WIP Report</button>
+            <Link href="/reports?report=wip" className="btn-secondary btn-sm">WIP Report</Link>
             <button className="btn-primary btn-sm" onClick={() => setShowCreate(true)}>New Job</button>
           </div>
         }

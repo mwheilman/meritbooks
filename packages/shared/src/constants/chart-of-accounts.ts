@@ -72,6 +72,7 @@ export const ACCOUNT_TYPE_HIERARCHY: AccountTypeSeed[] = [
               { number: '1110', name: 'Retainage Receivable', display_order: 2 },
               { number: '1150', name: 'Allowance for Doubtful Accounts', display_order: 3 },
               { number: '1160', name: 'Intercompany Receivable', display_order: 4 },
+              { number: '1180', name: 'Unbilled Receivable (Contract Asset)', display_order: 5 },
             ],
           },
           {

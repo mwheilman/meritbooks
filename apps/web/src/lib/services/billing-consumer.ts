@@ -1,10 +1,10 @@
 /**
- * JOB_BILLING consumer (Projects -> Books) — Event & Cost/Billing Contract (FROZEN v2) §4.
+ * JOB_BILLING consumer (Projects -> Books) — Event & Cost/Billing Contract (FROZEN v3) §4.
  *
  * Drains pending JOB_BILLING events from core.events. For each: create invoices +
  * invoice_lines, mint the invoice number, post AR + revenue/deferred per the
- * company's rev-rec config, write invoice_id/invoice_number + gl_entry_id back
- * onto the event. Reject (do not post) on a HARD_CLOSE period. Books owns the
+ * company's rev-rec config, write invoice_id + invoice_number + gl_entry_id back
+ * onto the event (so Projects can show the number without reading invoices). Reject (do not post) on a HARD_CLOSE period. Books owns the
  * issued invoice; corrections are credit memo / adjustment / void-and-reissue
  * (not handled here — issuance only).
  */
@@ -146,7 +146,7 @@ export async function processBillingEvents(db: DB, orgId: string): Promise<Billi
       }
 
       await db.from('invoices').update({ gl_entry_id: entryId }).eq('id', invoiceId);
-      await db.schema('core').from('events').update({ status: 'processed', invoice_id: invoiceId, gl_entry_id: entryId, processed_at: new Date().toISOString() }).eq('id', ev.id);
+      await db.schema('core').from('events').update({ status: 'processed', invoice_id: invoiceId, invoice_number: invoiceNumber, gl_entry_id: entryId, processed_at: new Date().toISOString() }).eq('id', ev.id);
 
       out.processed++;
       out.results.push({ event_id: ev.event_id, status: 'processed', invoice_number: invoiceNumber });

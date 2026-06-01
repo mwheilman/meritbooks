@@ -173,7 +173,9 @@ const PERIODS = [
 
 export function ReportViewer() {
   const [catKey, setCatKey] = useState('financial');
-  const [reportKey, setReportKey] = useState<string | null>(null);
+  const [reportKey, setReportKey] = useState<string | null>(
+    () => (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('report') : null)
+  );
   const [periodKey, setPeriodKey] = useState('this_month');
   const [customS, setCustomS] = useState('');
   const [customE, setCustomE] = useState('');
@@ -400,6 +402,8 @@ function ReportContent({ reportKey, sd, ed, locIds, basis, viewMode, compare, on
         open_ar: '/api/reports/open-items',
         open_ap: '/api/reports/open-items',
         txn_list: '/api/reports/transaction-list',
+        wip: '/api/reports/wip',
+        job_cost: '/api/reports/job-cost',
       };
       const url = urlMap[reportKey];
       if (!url) return <div className="card p-8 text-center text-slate-500">Report not yet implemented.</div>;

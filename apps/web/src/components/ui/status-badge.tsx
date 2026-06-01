@@ -24,8 +24,12 @@ const variantMap: Record<string, BadgeVariant> = {
   // Bills
   PAID: 'success',
   PARTIALLY_PAID: 'info',
+  SCHEDULED: 'info',
   ON_HOLD: 'danger',
   OVERDUE: 'danger',
+
+  // Cost attribution lifecycle
+  CLEARED: 'success',
 
   // Jobs
   ACTIVE: 'success',
@@ -86,12 +90,12 @@ export function StatusBadge({ status, variant, size = 'sm', dot = true, classNam
       {dot && (
         <span
           className={clsx(
-            'h-1.5 w-1.5 rounded-full',
+            'w-1.5 h-1.5 rounded-full',
             v === 'success' && 'bg-emerald-400',
             v === 'warning' && 'bg-amber-400',
             v === 'danger' && 'bg-red-400',
             v === 'info' && 'bg-blue-400',
-            v === 'neutral' && 'bg-slate-500',
+            v === 'neutral' && 'bg-slate-400'
           )}
         />
       )}

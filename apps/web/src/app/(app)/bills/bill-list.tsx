@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, Shield, Inbox, AlertCircle, Search, ShieldAlert, Clock } from 'lucide-react';
+import { Inbox, AlertCircle, Search, ShieldAlert, Clock, Briefcase, UserCheck, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatusBadge, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useDebounce } from '@/hooks';
 import { CompanySelector } from '../bank-feed/company-selector';
+import { BillDetail } from './bill-detail';
 
 interface BillRow {
   id: string;
@@ -20,7 +21,11 @@ interface BillRow {
   ai_extracted: boolean;
   ai_confidence: number | null;
   payment_hold_reason: string | null;
+  approver_type: string | null;
+  approver_ref: string | null;
+  scheduled_payment_date: string | null;
   daysUntilDue: number | null;
+  jobLines: number;
   location: { id: string; name: string; short_code: string } | null;
   vendor: { id: string; name: string; display_name: string | null; is_1099_eligible: boolean } | null;
   compliance: { missing: string[]; hasHold: boolean } | null;
@@ -36,21 +41,30 @@ const TAB_CONFIG = [
   { key: 'all', label: 'All Open' },
   { key: 'PENDING', label: 'Pending' },
   { key: 'APPROVED', label: 'Approved' },
+  { key: 'SCHEDULED', label: 'Scheduled' },
   { key: 'ON_HOLD', label: 'On Hold' },
+  { key: 'PAID', label: 'Paid' },
 ] as const;
+
+const APPROVER_LABEL: Record<string, string> = {
+  ACCOUNTING: 'Accounting',
+  RESPONSIBLE_PARTY: 'Responsible party',
+  PM_LEADER: 'PM / Leader',
+};
 
 export function BillList() {
   const [activeTab, setActiveTab] = useState('all');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [locationId, setLocationId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const params: Record<string, string> = {};
   if (activeTab !== 'all') params.status = activeTab;
   if (debouncedSearch) params.search = debouncedSearch;
   if (locationId) params.location_id = locationId;
 
-  const { data, isLoading, error } = useQuery<BillResponse>(
+  const { data, isLoading, error, refetch } = useQuery<BillResponse>(
     '/api/bills',
     Object.keys(params).length > 0 ? params : undefined,
   );
@@ -100,7 +114,7 @@ export function BillList() {
       </div>
 
       {isLoading ? (
-        <TableSkeleton rows={6} cols={8} />
+        <TableSkeleton rows={6} cols={9} />
       ) : error ? (
         <div className="card p-8 text-center">
           <AlertCircle size={24} className="mx-auto text-red-400 mb-2" />
@@ -116,11 +130,12 @@ export function BillList() {
                 <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Bill #</th>
                 <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Vendor</th>
                 <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Company</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Bill Date</th>
+                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Approver</th>
                 <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Due</th>
                 <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Amount</th>
                 <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Balance</th>
                 <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                <th className="w-8" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/30">
@@ -131,13 +146,22 @@ export function BillList() {
                 const isDueSoon = bill.daysUntilDue !== null && bill.daysUntilDue >= 0 && bill.daysUntilDue <= 7;
 
                 return (
-                  <tr key={bill.id} className="table-row-hover">
+                  <tr
+                    key={bill.id}
+                    onClick={() => setSelectedId(bill.id)}
+                    className="table-row-hover cursor-pointer"
+                  >
                     <td className="px-4 py-3">
                       <span className="text-sm font-mono text-slate-300">{bill.bill_number ?? '--'}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-slate-200">{vendorName}</span>
+                        {bill.jobLines > 0 && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium bg-brand-500/10 text-brand-400" title={`${bill.jobLines} job-tagged line(s)`}>
+                            <Briefcase size={10} /> {bill.jobLines}
+                          </span>
+                        )}
                         {hasComplianceIssue && (
                           <span
                             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium bg-red-500/10 text-red-400"
@@ -159,8 +183,15 @@ export function BillList() {
                         </span>
                       ) : '--'}
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-400 font-mono tabular-nums">
-                      {bill.bill_date}
+                    <td className="px-4 py-3">
+                      {bill.approver_type ? (
+                        <span className="inline-flex items-center gap-1 text-2xs text-slate-400">
+                          <UserCheck size={11} className="text-slate-500" />
+                          {APPROVER_LABEL[bill.approver_type] ?? bill.approver_type}
+                        </span>
+                      ) : (
+                        <span className="text-2xs text-slate-600">--</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
@@ -194,12 +225,23 @@ export function BillList() {
                     <td className="px-4 py-3 text-center">
                       <StatusBadge status={bill.status} />
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <ChevronRight size={14} className="text-slate-600" />
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {selectedId && (
+        <BillDetail
+          billId={selectedId}
+          onClose={() => setSelectedId(null)}
+          onChanged={() => refetch()}
+        />
       )}
     </div>
   );

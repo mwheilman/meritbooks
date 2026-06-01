@@ -3,10 +3,15 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { createBillSchema } from '@/lib/validations/transactions';
+import { createAttribution, resolveApprover } from '@/lib/services/cost-approval';
+
+async function getOrgId(supabase: ReturnType<typeof createAdminSupabase>): Promise<string | null> {
+  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
+  return (data as { id: string } | null)?.id ?? null;
+}
 
 export async function POST(request: Request) {
-  const authResult = await auth().catch(() => ({ userId: null as string | null, orgId: null as string | null }));
-  const orgId = authResult.orgId ?? '';
+  await auth().catch(() => null);
 
   try {
     const raw = await request.json();
@@ -24,8 +29,10 @@ export async function POST(request: Request) {
 
     const body = result.data;
     const supabase = createAdminSupabase();
+    const orgId = await getOrgId(supabase);
+    if (!orgId) return NextResponse.json({ error: 'No organization configured' }, { status: 400 });
 
-    // Check vendor compliance
+    // Vendor compliance
     const { data: complianceDocs } = await supabase
       .from('vendor_compliance_docs')
       .select('doc_type, status, expiration_date')
@@ -38,6 +45,9 @@ export async function POST(request: Request) {
 
     const subtotalCents = body.lines.reduce((s, l) => s + l.amount_cents, 0);
     const totalCents = subtotalCents + body.tax_cents;
+
+    // Route the bill to an approver (by vendor, falling back to ACCOUNTING).
+    const approver = await resolveApprover(supabase, orgId, { vendorId: body.vendor_id, sourceType: 'BILL' });
 
     const { data: bill, error: billErr } = await supabase
       .from('bills')
@@ -53,6 +63,8 @@ export async function POST(request: Request) {
         total_cents: totalCents,
         status: hasIssue ? 'ON_HOLD' : 'PENDING',
         payment_hold_reason: hasIssue ? 'Vendor compliance documents missing or expired' : null,
+        approver_type: approver.approver_type,
+        approver_ref: approver.approver_ref,
         ai_extracted: false,
       })
       .select('id')
@@ -77,18 +89,63 @@ export async function POST(request: Request) {
       job_id: line.job_id ?? null,
     }));
 
-    const { error: linesErr } = await supabase
+    const { data: insertedLines, error: linesErr } = await supabase
       .from('bill_lines')
-      .insert(lineInserts);
+      .insert(lineInserts)
+      .select('id, line_number, account_id, amount_cents, department_id, job_id');
 
     if (linesErr) {
       await supabase.from('bills').delete().eq('id', bill.id);
       return NextResponse.json({ error: linesErr.message }, { status: 500 });
     }
 
+    // Account numbers for GL_CODE routing of job-tagged lines.
+    const jobLines = (insertedLines ?? []).filter((l) => (l as { job_id: string | null }).job_id);
+    const acctIds = [...new Set(jobLines.map((l) => (l as { account_id: string }).account_id))];
+    const acctNumberById = new Map<string, string>();
+    if (acctIds.length > 0) {
+      const { data: accts } = await supabase.from('accounts').select('id, account_number').in('id', acctIds);
+      for (const a of accts ?? []) acctNumberById.set((a as { id: string }).id, (a as { account_number: string }).account_number);
+    }
+
+    // Each job-tagged line becomes a PENDING committed-cost attribution
+    // (gate PAYABLE_APPROVAL). It clears when the bill is approved.
+    let committedCosts = 0;
+    const costTypeByLineNo = new Map<number, string>();
+    body.lines.forEach((l, i) => costTypeByLineNo.set(i + 1, l.cost_type ?? 'MATERIALS'));
+
+    for (const l of jobLines) {
+      const lineNo = (l as { line_number: number }).line_number;
+      try {
+        await createAttribution(supabase, {
+          orgId,
+          locationId: body.location_id,
+          jobId: (l as { job_id: string }).job_id,
+          departmentId: (l as { department_id: string | null }).department_id ?? null,
+          costType: (costTypeByLineNo.get(lineNo) ?? 'MATERIALS') as 'MATERIALS' | 'SUBCONTRACTOR' | 'EQUIPMENT' | 'OTHER',
+          amountCents: (l as { amount_cents: number }).amount_cents,
+          occurredOn: body.bill_date,
+          gate: 'PAYABLE_APPROVAL',
+          sourceType: 'BILL',
+          sourceRef: (l as { id: string }).id,
+          billId: bill.id,
+          routing: {
+            vendorId: body.vendor_id,
+            accountNumber: acctNumberById.get((l as { account_id: string }).account_id) ?? null,
+            sourceType: 'BILL',
+          },
+        });
+        committedCosts++;
+      } catch (e) {
+        console.error('[bills/create] attribution failed', e);
+        // Non-fatal: the bill + lines are saved; the committed-cost event can be retried.
+      }
+    }
+
     return NextResponse.json({
       bill_id: bill.id,
       status: hasIssue ? 'ON_HOLD' : 'PENDING',
+      committed_cost_lines: committedCosts,
       compliance_warning: hasIssue ? 'Bill placed on hold due to vendor compliance issues' : null,
     }, { status: 201 });
   } catch (error) {

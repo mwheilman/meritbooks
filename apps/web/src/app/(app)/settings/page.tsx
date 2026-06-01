@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Settings, Building2, Bell, Brain, Globe, Save, Loader2, AlertCircle, Check
+  Settings, Building2, Bell, Brain, Globe, Save, Loader2, AlertCircle, Check, Route, Percent
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { PageHeader } from '@/components/ui';
+import { CostRouting } from './cost-routing';
+import { RevRecConfig } from './rev-rec-config';
 
 interface OrgSettings {
   id: string;
@@ -46,12 +48,14 @@ interface SettingsResponse {
   locations: LocationRow[];
 }
 
-type TabKey = 'organization' | 'chase' | 'ai' | 'companies';
+type TabKey = 'organization' | 'chase' | 'ai' | 'routing' | 'revrec' | 'companies';
 
 const TABS: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'organization', label: 'Organization', icon: Globe },
   { key: 'chase', label: 'Receipt Chase', icon: Bell },
   { key: 'ai', label: 'AI Thresholds', icon: Brain },
+  { key: 'routing', label: 'Cost Routing', icon: Route },
+  { key: 'revrec', label: 'Revenue Recognition', icon: Percent },
   { key: 'companies', label: 'Companies', icon: Building2 },
 ];
 
@@ -65,7 +69,6 @@ export default function SettingsPage() {
   const org = data?.org;
   const locations = data?.locations ?? [];
 
-  // Form state
   const [orgName, setOrgName] = useState('');
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -145,12 +148,14 @@ export default function SettingsPage() {
   const inputCls = "w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50";
   const labelCls = "block text-xs text-slate-500 mb-1.5 font-medium";
 
+  // The Cost Routing tab manages its own persistence; the org Save bar doesn't apply there.
+  const showSaveBar = activeTab !== 'routing' && activeTab !== 'companies';
+
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" description={`${org?.name ?? 'Organization'} configuration`} />
 
       <div className="flex gap-6">
-        {/* Tabs */}
         <nav className="w-48 shrink-0 space-y-0.5">
           {TABS.map((tab) => {
             const Icon = tab.icon;
@@ -164,7 +169,6 @@ export default function SettingsPage() {
           })}
         </nav>
 
-        {/* Content */}
         <div className="flex-1 max-w-2xl">
           {activeTab === 'organization' && (
             <div className="card p-6 space-y-5">
@@ -230,6 +234,9 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {activeTab === 'routing' && <CostRouting />}
+          {activeTab === 'revrec' && <RevRecConfig />}
+
           {activeTab === 'companies' && (
             <div className="card p-6 space-y-5">
               <h2 className="text-lg font-semibold text-white">Companies</h2>
@@ -251,18 +258,19 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Save bar */}
-          <div className="flex items-center justify-between mt-6">
-            {saveError && <p className="text-xs text-red-400">{saveError}</p>}
-            {saved && <p className="flex items-center gap-1 text-xs text-emerald-400"><Check size={12} /> Settings saved</p>}
-            {!saveError && !saved && <div />}
-            <button onClick={handleSave} disabled={saving}
-              className={clsx('flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors',
-                saving ? 'bg-slate-700 text-slate-500' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              Save Settings
-            </button>
-          </div>
+          {showSaveBar && (
+            <div className="flex items-center justify-between mt-6">
+              {saveError && <p className="text-xs text-red-400">{saveError}</p>}
+              {saved && <p className="flex items-center gap-1 text-xs text-emerald-400"><Check size={12} /> Settings saved</p>}
+              {!saveError && !saved && <div />}
+              <button onClick={handleSave} disabled={saving}
+                className={clsx('flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors',
+                  saving ? 'bg-slate-700 text-slate-500' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Save Settings
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

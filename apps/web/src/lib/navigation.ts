@@ -21,7 +21,8 @@ import {
   Shield,
   Wallet,
   Upload,
-  BadgeCheck,
+  CalendarDays,
+  Percent,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -51,7 +52,6 @@ export const navigation: NavGroup[] = [
       { label: 'Credit Cards', href: '/credit-cards', icon: CreditCard },
       { label: 'Receipts', href: '/receipts', icon: Receipt },
       { label: 'Bills', href: '/bills', icon: FileText },
-      { label: 'Cost Approvals', href: '/cost-approvals', icon: BadgeCheck },
       { label: 'Flagged Items', href: '/flagged', icon: AlertTriangle },
     ],
   },
@@ -61,6 +61,8 @@ export const navigation: NavGroup[] = [
       { label: 'Journal Entries', href: '/journal-entries', icon: BookOpen },
       { label: 'Chart of Accounts', href: '/chart-of-accounts', icon: Calculator },
       { label: 'Reconciliation', href: '/reconciliation', icon: FileCheck },
+      { label: 'Fiscal Periods', href: '/periods', icon: CalendarDays },
+      { label: 'Revenue Recognition', href: '/rev-rec', icon: Percent },
       { label: 'Invoices', href: '/invoices', icon: DollarSign },
     ],
   },

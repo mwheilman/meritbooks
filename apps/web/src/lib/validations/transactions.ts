@@ -59,6 +59,9 @@ export const approveReceiptSchema = z.object({
 // BILLS
 // =============================================================
 
+/** Cost type carried by a job-tagged line; drives the JOB_COST attribution. */
+export const costTypeSchema = z.enum(['MATERIALS', 'SUBCONTRACTOR', 'EQUIPMENT', 'OTHER']);
+
 export const createBillSchema = z.object({
   location_id: z.string().uuid(),
   vendor_id: z.string().uuid('Vendor is required'),
@@ -75,6 +78,7 @@ export const createBillSchema = z.object({
     unit_cost_cents: z.number().int().min(0),
     amount_cents: z.number().int(),
     job_id: z.string().uuid().optional().nullable(),
+    cost_type: costTypeSchema.optional(),
   })).min(1, 'Bill must have at least one line'),
   tax_cents: z.number().int().min(0).default(0),
 });
@@ -82,6 +86,35 @@ export const createBillSchema = z.object({
 export const approveBillSchema = z.object({
   bill_id: z.string().uuid(),
 });
+
+/** Lifecycle transition actions invoked from the Bill detail panel. */
+export const billTransitionSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('approve') }),
+  z.object({
+    action: z.literal('schedule'),
+    scheduled_payment_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'A scheduled date is required'),
+    payment_method: z.string().max(50).optional(),
+  }),
+  z.object({
+    action: z.literal('pay'),
+    amount_cents: z.number().int().min(1, 'Payment amount is required'),
+    payment_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    payment_method: z.string().max(50).optional(),
+  }),
+  z.object({
+    action: z.literal('void'),
+    reason: z.string().min(1, 'A void reason is required').max(500),
+  }),
+  z.object({
+    action: z.literal('override_approver'),
+    approver_type: z.enum(['ACCOUNTING', 'RESPONSIBLE_PARTY', 'PM_LEADER']),
+    approver_ref: z.string().max(100).optional().nullable(),
+  }),
+  z.object({
+    action: z.literal('release_hold'),
+    reason: z.string().min(1, 'A reason is required to release a hold').max(500),
+  }),
+]);
 
 // =============================================================
 // JOBS
@@ -109,5 +142,7 @@ export type BankFeedQuery = z.infer<typeof bankFeedQuerySchema>;
 export type SubmitReceiptInput = z.infer<typeof submitReceiptSchema>;
 export type ApproveReceiptInput = z.infer<typeof approveReceiptSchema>;
 export type CreateBillInput = z.infer<typeof createBillSchema>;
+export type BillTransitionInput = z.infer<typeof billTransitionSchema>;
+export type CostType = z.infer<typeof costTypeSchema>;
 export type JobSearchQuery = z.infer<typeof jobSearchSchema>;
 export type LocationQuery = z.infer<typeof locationQuerySchema>;
