@@ -239,114 +239,145 @@ export async function POST(request: Request) {
   if (body.step === 'chart_of_accounts') {
     const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
     if (!org) return NextResponse.json({ error: 'Create organization first' }, { status: 400 });
+    const orgId = org.id;
 
-    // Check if COA already seeded
-    const { count: existingAccounts } = await supabase
+    // ─────────────────────────────────────────────────────────
+    // Seed this tenant's own editable copy of the standard chart.
+    //
+    // Each tenant owns its own account rows (scoped by org_id) — this is
+    // NOT a shared global table. We copy the full standard template into
+    // the tenant's accounts at setup; the tenant then reviews/amends it.
+    //
+    // Done as a handful of bulk UPSERTs (not ~340 sequential inserts) so
+    // the request can never time out partway, and so it is idempotent and
+    // self-healing: a partially-seeded tenant (e.g. types/sub-types/groups
+    // present but accounts missing) is repaired on the next run. Existing
+    // accounts are left untouched (ignoreDuplicates) so tenant edits and
+    // any company-specific accounts survive a re-run.
+    // ─────────────────────────────────────────────────────────
+
+    // 1. Account types — upsert by (org_id, code), then read ids back
+    const typeRows = ACCOUNT_TYPE_HIERARCHY.map((t) => ({
+      org_id: orgId,
+      code: t.code,
+      name: t.name,
+      normal_balance: t.normal_balance,
+      closes_to_retained_earnings: t.closes_to_retained_earnings,
+      display_order: t.display_order,
+    }));
+    const { error: typeErr } = await supabase
+      .from('account_types')
+      .upsert(typeRows, { onConflict: 'org_id,code' });
+    if (typeErr) {
+      console.error('[setup] account_types upsert failed:', typeErr);
+      return NextResponse.json({ error: `Failed seeding account types: ${typeErr.message}` }, { status: 500 });
+    }
+    const { data: typeRowsBack } = await supabase
+      .from('account_types')
+      .select('id, code')
+      .eq('org_id', orgId);
+    const typeIdByCode = new Map((typeRowsBack ?? []).map((r) => [r.code as string, r.id as string]));
+
+    // 2. Sub-types — upsert by (org_id, code)
+    const subRows: Array<Record<string, unknown>> = [];
+    for (const t of ACCOUNT_TYPE_HIERARCHY) {
+      for (const st of t.sub_types) {
+        subRows.push({
+          org_id: orgId,
+          account_type_id: typeIdByCode.get(t.code),
+          code: st.code,
+          name: st.name,
+          display_order: st.display_order,
+        });
+      }
+    }
+    const { error: subErr } = await supabase
+      .from('account_sub_types')
+      .upsert(subRows, { onConflict: 'org_id,code' });
+    if (subErr) {
+      console.error('[setup] account_sub_types upsert failed:', subErr);
+      return NextResponse.json({ error: `Failed seeding sub-types: ${subErr.message}` }, { status: 500 });
+    }
+    const { data: subRowsBack } = await supabase
+      .from('account_sub_types')
+      .select('id, code')
+      .eq('org_id', orgId);
+    const subIdByCode = new Map((subRowsBack ?? []).map((r) => [r.code as string, r.id as string]));
+
+    // 3. Account groups — upsert by (org_id, name)
+    const groupRows: Array<Record<string, unknown>> = [];
+    for (const t of ACCOUNT_TYPE_HIERARCHY) {
+      for (const st of t.sub_types) {
+        for (const g of st.groups) {
+          groupRows.push({
+            org_id: orgId,
+            account_sub_type_id: subIdByCode.get(st.code),
+            name: g.name,
+            display_order: g.display_order,
+          });
+        }
+      }
+    }
+    const { error: groupErr } = await supabase
+      .from('account_groups')
+      .upsert(groupRows, { onConflict: 'org_id,name' });
+    if (groupErr) {
+      console.error('[setup] account_groups upsert failed:', groupErr);
+      return NextResponse.json({ error: `Failed seeding account groups: ${groupErr.message}` }, { status: 500 });
+    }
+    const { data: groupRowsBack } = await supabase
+      .from('account_groups')
+      .select('id, name')
+      .eq('org_id', orgId);
+    const groupIdByName = new Map((groupRowsBack ?? []).map((r) => [r.name as string, r.id as string]));
+
+    // 4. Accounts — one bulk upsert; ignoreDuplicates keeps existing rows intact
+    const accountRows: Array<Record<string, unknown>> = [];
+    for (const t of ACCOUNT_TYPE_HIERARCHY) {
+      for (const st of t.sub_types) {
+        for (const g of st.groups) {
+          for (const acctData of g.accounts) {
+            accountRows.push({
+              org_id: orgId,
+              account_group_id: groupIdByName.get(g.name),
+              account_number: acctData.number,
+              name: acctData.name,
+              account_type: t.code,
+              account_sub_type: st.code,
+              display_order: acctData.display_order,
+              is_control_account: acctData.is_control_account ?? false,
+              // Template accounts are org-level and non-company-specific;
+              // company_location_id stays null to satisfy chk_company_specific.
+              is_company_specific: false,
+              company_location_id: null,
+              is_bank_account: acctData.is_bank_account ?? false,
+              is_credit_card: acctData.is_credit_card ?? false,
+              require_department: acctData.require_department ?? false,
+              require_class: acctData.require_class ?? false,
+              approval_status: 'APPROVED',
+              is_active: true,
+            });
+          }
+        }
+      }
+    }
+    const { error: acctErr } = await supabase
       .from('accounts')
-      .select('id', { count: 'exact', head: true });
-
-    if (existingAccounts && existingAccounts > 0) {
-      return NextResponse.json({ success: true, message: 'Chart of accounts already exists', accountCount: existingAccounts });
+      .upsert(accountRows, { onConflict: 'org_id,account_number', ignoreDuplicates: true });
+    if (acctErr) {
+      console.error('[setup] accounts upsert failed:', acctErr);
+      return NextResponse.json({ error: `Failed seeding accounts: ${acctErr.message}` }, { status: 500 });
     }
 
-    let totalAccounts = 0;
+    const { count: totalAccounts } = await supabase
+      .from('accounts')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId);
 
-    for (const typeData of ACCOUNT_TYPE_HIERARCHY) {
-      // Insert account type
-      const { data: acctType, error: typeErr } = await supabase
-        .from('account_types')
-        .insert({
-          org_id: org.id,
-          code: typeData.code,
-          name: typeData.name,
-          normal_balance: typeData.normal_balance,
-          closes_to_retained_earnings: typeData.closes_to_retained_earnings,
-          display_order: typeData.display_order,
-        })
-        .select('id')
-        .single();
-
-      if (typeErr || !acctType) {
-        console.error(`[setup] Failed to insert account type ${typeData.code}:`, typeErr);
-        continue;
-      }
-
-      for (const stData of typeData.sub_types) {
-        // Insert sub-type
-        const { data: subType, error: stErr } = await supabase
-          .from('account_sub_types')
-          .insert({
-            org_id: org.id,
-            account_type_id: acctType.id,
-            code: stData.code,
-            name: stData.name,
-            display_order: stData.display_order,
-          })
-          .select('id')
-          .single();
-
-        if (stErr || !subType) {
-          console.error(`[setup] Failed to insert sub-type ${stData.code}:`, stErr);
-          continue;
-        }
-
-        for (const groupData of stData.groups) {
-          // Insert group
-          const { data: group, error: gErr } = await supabase
-            .from('account_groups')
-            .insert({
-              org_id: org.id,
-              account_sub_type_id: subType.id,
-              name: groupData.name,
-              display_order: groupData.display_order,
-            })
-            .select('id')
-            .single();
-
-          if (gErr || !group) {
-            console.error(`[setup] Failed to insert group ${groupData.name}:`, gErr);
-            continue;
-          }
-
-          // Insert accounts
-          for (const acctData of groupData.accounts) {
-            const { error: acctErr } = await supabase
-              .from('accounts')
-              .insert({
-                org_id: org.id,
-                account_group_id: group.id,
-                account_number: acctData.number,
-                name: acctData.name,
-                account_type: typeData.code,
-                account_sub_type: stData.code,
-                display_order: acctData.display_order,
-                is_control_account: acctData.is_control_account ?? false,
-                // Seed accounts are an org-level template; "company-specific" is
-                // promoted later when an account is assigned to a company. At
-                // template time we cannot satisfy chk_company_specific (which
-                // requires company_location_id when the flag is true), so seed
-                // every account non-company-specific with a null location.
-                is_company_specific: false,
-                company_location_id: null,
-                is_bank_account: acctData.is_bank_account ?? false,
-                is_credit_card: acctData.is_credit_card ?? false,
-                require_department: acctData.require_department ?? false,
-                require_class: acctData.require_class ?? false,
-                approval_status: 'APPROVED',
-                is_active: true,
-              });
-
-            if (acctErr) {
-              console.error(`[setup] Failed to insert account ${acctData.number}:`, acctErr);
-            } else {
-              totalAccounts++;
-            }
-          }
-        }
-      }
-    }
-
-    return NextResponse.json({ success: true, accountCount: totalAccounts }, { status: 201 });
+    return NextResponse.json(
+      { success: true, accountCount: totalAccounts ?? 0, templateAccounts: accountRows.length },
+      { status: 201 },
+    );
   }
 
   // ═══════════════════════════════════════════════════════════
