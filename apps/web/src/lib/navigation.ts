@@ -23,6 +23,7 @@ import {
   Upload,
   CalendarDays,
   Percent,
+  FlaskConical,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -90,6 +91,7 @@ export const navigation: NavGroup[] = [
       { label: 'Import Data', href: '/import', icon: Upload },
       { label: 'Team', href: '/team', icon: Users },
       { label: 'Compliance', href: '/compliance', icon: Shield },
+      { label: 'Sandbox', href: '/sandbox', icon: FlaskConical },
       { label: 'Settings', href: '/settings', icon: Settings },
     ],
   },
