@@ -38,6 +38,28 @@ export interface JobCostEventInput {
  * Returns the emitted event_id.
  */
 export async function emitJobCostEvent(db: DB, input: JobCostEventInput): Promise<string> {
+  // Emit-side idempotency guard (migration 025): if a PENDING JOB_COST event
+  // with the same (org_id, source_ref, lifecycle) already sits on the queue, do
+  // not emit a duplicate — return the existing event_id. This is defense-in-depth
+  // on top of the consumer's event_id dedupe + source_ref cost identity, and
+  // matters once automatic cost emission (AP / bank-feed / payroll) is wired.
+  const findPending = async () => {
+    const { data } = await db
+      .schema('core').from('events')
+      .select('event_id')
+      .eq('org_id', input.orgId)
+      .eq('event_type', 'JOB_COST')
+      .eq('status', 'pending')
+      .eq('payload->>source_ref', input.sourceRef)
+      .eq('payload->>lifecycle', input.lifecycle)
+      .limit(1)
+      .maybeSingle();
+    return (data as { event_id: string } | null)?.event_id ?? null;
+  };
+
+  const already = await findPending();
+  if (already) return already;
+
   const eventId = randomUUID();
   const payload = {
     event_id: eventId,
@@ -66,7 +88,15 @@ export async function emitJobCostEvent(db: DB, input: JobCostEventInput): Promis
     occurred_on: input.occurredOn,
     status: 'pending', // awaiting consumption by Projects
   });
-  if (error) throw new Error(`emitJobCostEvent: ${error.message}`);
+  if (error) {
+    // A concurrent emit may have lost the race to the partial unique index;
+    // treat that as a no-op and return the winning row's event_id.
+    if (/duplicate key|unique constraint|uq_core_events_pending_jobcost_identity/i.test(error.message)) {
+      const winner = await findPending();
+      if (winner) return winner;
+    }
+    throw new Error(`emitJobCostEvent: ${error.message}`);
+  }
   return eventId;
 }
 
