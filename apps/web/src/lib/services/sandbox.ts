@@ -468,7 +468,7 @@ export async function runSandboxRoundTrip(db: DB, orgId: string): Promise<RoundT
       entry_type: 'STANDARD',
       memo: `${SANDBOX_TAG} Job cost — materials`,
       source_module: 'AP',
-      created_by: 'system:sandbox',
+      created_by: null,
       lines: [
         { account_id: cogsId, debit_cents: costCents, credit_cents: 0, location_id: jobA.location_id, department_id: jobA.department_id ?? undefined, memo: 'Job materials' },
         { account_id: apClearing, debit_cents: 0, credit_cents: costCents, location_id: jobA.location_id, department_id: jobA.department_id ?? undefined, memo: 'Accrued job cost' },
@@ -521,7 +521,7 @@ export async function runSandboxRoundTrip(db: DB, orgId: string): Promise<RoundT
       pct_complete: null, // POC uses cost-to-cost; pct ignored
     });
     const before = await jobRecognized(db, orgId, jobA.id);
-    const res = await processProgressEvents(db, orgId, 'system:sandbox');
+    const res = await processProgressEvents(db, orgId, null);
     const after = await jobRecognized(db, orgId, jobA.id);
     const processed = res.processed > 0;
     // PCT_COSTS_INCURRED: 120k actual / 800k estimate = 15% → 15% of 1.2M contract = 180k earned.
@@ -563,7 +563,7 @@ export async function runSandboxRoundTrip(db: DB, orgId: string): Promise<RoundT
       cost_estimate_cents: jobA.estimated_cost_cents ?? 800_000_00,
       pct_complete: null,
     });
-    const res = await processProgressEvents(db, orgId, 'system:sandbox');
+    const res = await processProgressEvents(db, orgId, null);
     const rejected = res.rejected > 0 && !!res.results.find((r) => r.status === 'rejected' && /closed|locked|period/i.test(r.error ?? ''));
     const reason = res.results.find((r) => r.status === 'rejected')?.error;
     paths.push({

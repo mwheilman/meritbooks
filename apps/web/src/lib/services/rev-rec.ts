@@ -206,7 +206,7 @@ export async function recognizeJob(
     memo: `Revenue recognition (${method})`,
     source_module: 'REV_REC',
     source_id: job.id,
-    created_by: runBy ?? 'system:revrec',
+    created_by: runBy,
     lines,
   });
   if (!je.success || !je.entry_id) {

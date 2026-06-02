@@ -21,7 +21,7 @@ export interface PostJournalEntryInput {
   memo?: string;
   source_module?: string;
   source_id?: string;
-  created_by: string;
+  created_by: string | null;
   lines: JournalEntryLineInput[];
 }
 
