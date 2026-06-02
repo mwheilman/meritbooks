@@ -298,7 +298,10 @@ export async function seedSandbox(db: DB, opts: { reset?: boolean } = {}): Promi
   steps.push({ step: 'master_data', detail: '2 customers, 1 vendor' });
 
   const incomeAcct = await acctByType(db, org.id, 'REVENUE', /service|sales|contract|operating|revenue/i);
-  const cogsAcct = await acctByType(db, org.id, 'EXPENSE', /cost of|cogs|materials|direct/i);
+  const cogsAcct =
+    (await acctByType(db, org.id, 'COGS', /material|cost of|subcontract|direct/i)) ??
+    (await acctByType(db, org.id, 'COGS')) ??
+    (await acctByType(db, org.id, 'OPEX'));
   await ensureItem(db, org.id, { sku: 'SBX-FLOOR', name: `${SANDBOX_TAG} Hardwood flooring (sq ft)`, item_type: 'INVENTORY', income_account_id: incomeAcct, cogs_account_id: cogsAcct });
   await ensureItem(db, org.id, { sku: 'SBX-LABOR', name: `${SANDBOX_TAG} Installation labor (hr)`, item_type: 'LABOR', income_account_id: incomeAcct, cogs_account_id: cogsAcct });
   await ensureEmployee(db, org.id, { first: 'Sandbox', last: 'Installer', departmentId: deptField });
@@ -451,9 +454,12 @@ export async function runSandboxRoundTrip(db: DB, orgId: string): Promise<RoundT
 
   // ── Path 1: Cost — post a job-dimensioned GL cost, then emit JOB_COST. ──
   try {
-    const cogsId = await acctByType(db, orgId, 'EXPENSE', /cost of|cogs|materials|direct|subcontract/i);
+    const cogsId =
+      (await acctByType(db, orgId, 'COGS', /material|cost of|subcontract|direct/i)) ??
+      (await acctByType(db, orgId, 'COGS')) ??
+      (await acctByType(db, orgId, 'OPEX'));
     const apClearing = (await acctId(db, orgId, '2400')) ?? (await acctByType(db, orgId, 'LIABILITY', /accrued|clearing|payable/i, { excludeControl: true }));
-    if (!cogsId || !apClearing) throw new Error('Missing COGS/expense or accrual/clearing account in COA');
+    if (!cogsId || !apClearing) throw new Error('Missing COGS/OPEX or accrual/clearing account in COA');
     const costCents = 120_000_00; // drives PCT_COSTS_INCURRED to 15% of the 800k estimate
     const je = await postJournalEntry(db, {
       org_id: orgId,
