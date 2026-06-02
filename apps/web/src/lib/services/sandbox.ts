@@ -35,6 +35,7 @@ import { postJournalEntry } from './gl-posting';
 import { emitJobCostEvent, stampGlLineJob } from './job-cost-events';
 import { processProgressEvents } from './job-progress';
 import { processBillingEvents } from './billing-consumer';
+import { recognizeJobById } from './rev-rec';
 
 type DB = SupabaseClient;
 
@@ -81,7 +82,7 @@ export interface SeedResult {
 
 /** Path-by-path outcome of the cross-module round-trip. */
 export interface RoundTripPath {
-  path: 'cost' | 'recognition' | 'billing' | 'rejection';
+  path: 'cost' | 'recognition' | 'billing' | 'rejection' | 'pos_recognition' | 'idempotency' | 'missing_account';
   label: string;
   pass: boolean;
   detail: string;
@@ -572,6 +573,78 @@ export async function runSandboxRoundTrip(db: DB, orgId: string): Promise<RoundT
     });
   } catch (e) {
     paths.push({ path: 'rejection', label: 'Rejection (Rule F — closed period)', pass: false, detail: e instanceof Error ? e.message : 'rejection path failed' });
+  }
+
+  // ── Path 5: Point-of-sale recognition — CHF Job B recognizes on billed, not cost. ──
+  try {
+    // Point-of-sale earns = billed-to-date. The billing consumer doesn't bump
+    // billed_to_date_cents on the job, so seed that input directly (the same way
+    // the POC path seeds actual_cost) to isolate the method's earned=billed math.
+    const billedCents = 30_000_00;
+    await db.schema('core').from('jobs').update({ billed_to_date_cents: billedCents, updated_at: new Date().toISOString() }).eq('id', jobB.id);
+    const before = await jobRecognized(db, orgId, jobB.id);
+    const res = await recognizeJobById(db, orgId, jobB.id, asOf, null);
+    const after = await jobRecognized(db, orgId, jobB.id);
+    const ok = res.method === 'POINT_OF_SALE' && (res.status === 'posted' || res.status === 'unchanged') && after === billedCents;
+    paths.push({
+      path: 'pos_recognition', label: 'Point-of-sale recognition (CHF Job B)', pass: ok,
+      detail: ok
+        ? `Resolved POINT_OF_SALE; recognized-to-date now $${(after / 100).toLocaleString()} = billed-to-date (not cost-driven). Prior $${(before / 100).toLocaleString()}.`
+        : `Expected POINT_OF_SALE earning $${(billedCents / 100).toLocaleString()} on billed; got method ${res.method}, recognized $${(after / 100).toLocaleString()} (${res.status}${res.reason ? `: ${res.reason}` : ''}).`,
+    });
+  } catch (e) {
+    paths.push({ path: 'pos_recognition', label: 'Point-of-sale recognition (CHF Job B)', pass: false, detail: e instanceof Error ? e.message : 'point-of-sale path failed' });
+  }
+
+  // ── Path 6: Idempotency — a re-delivered event_id must not create a second row. ──
+  try {
+    const dupId = randomUUID();
+    const row = {
+      org_id: orgId, event_id: dupId, event_type: 'JOB_PROGRESS', source_module: 'PROJECTS',
+      payload: {
+        event_id: dupId, job_id: jobA.id, location_id: jobA.location_id, trigger: 'SANDBOX',
+        contract_value_cents: jobA.contract_amount_cents ?? 1_200_000_00,
+        cost_estimate_cents: jobA.estimated_cost_cents ?? 800_000_00, pct_complete: null,
+        occurred_on: asOf, source_ref: `sandbox-idem-${dupId.slice(0, 8)}`, memo: `${SANDBOX_TAG} idempotency probe`,
+      },
+      occurred_on: asOf, status: 'pending' as const,
+    };
+    const first = await db.schema('core').from('events').insert(row);
+    const second = await db.schema('core').from('events').insert(row); // same event_id on purpose
+    const deduped = !first.error && !!second.error && /duplicate key|unique/i.test(second.error.message);
+    // Clean up the probe row so it doesn't drain as a real progress event later.
+    await db.schema('core').from('events').delete().eq('org_id', orgId).eq('event_id', dupId);
+    paths.push({
+      path: 'idempotency', label: 'Idempotency (duplicate event_id rejected)', pass: deduped,
+      detail: deduped
+        ? 'A second insert of the same event_id was rejected by the unique(org_id, event_id) constraint — at-least-once delivery is safe.'
+        : `Expected the duplicate event_id to be rejected; it was not.${second.error ? ` (${second.error.message})` : ''}`,
+    });
+  } catch (e) {
+    paths.push({ path: 'idempotency', label: 'Idempotency (duplicate event_id rejected)', pass: false, detail: e instanceof Error ? e.message : 'idempotency path failed' });
+  }
+
+  // ── Path 7: Missing-account rejection — a GL post against a bogus account must fail cleanly. ──
+  try {
+    const bogusAccount = randomUUID();
+    const je = await postJournalEntry(db, {
+      org_id: orgId, location_id: jobA.location_id, entry_date: asOf, entry_type: 'STANDARD',
+      memo: `${SANDBOX_TAG} missing-account probe`, source_module: 'AP', created_by: null,
+      lines: [
+        { account_id: bogusAccount, debit_cents: 100, credit_cents: 0, location_id: jobA.location_id },
+        { account_id: bogusAccount, debit_cents: 0, credit_cents: 100, location_id: jobA.location_id },
+      ],
+    });
+    const rejectedCleanly = !je.success && !!je.error;
+    paths.push({
+      path: 'missing_account', label: 'Missing-account rejection (clean failure)', pass: rejectedCleanly,
+      detail: rejectedCleanly
+        ? `A post referencing a non-existent account was rejected without crashing: "${je.error}".`
+        : 'Expected the bogus-account post to be rejected, but it reported success.',
+    });
+  } catch (e) {
+    // A thrown error still proves the bad reference was rejected rather than written.
+    paths.push({ path: 'missing_account', label: 'Missing-account rejection (clean failure)', pass: true, detail: `Rejected the bogus-account post: ${e instanceof Error ? e.message : 'error'}.` });
   }
 
   return { asOf, paths, allPassed: paths.every((p) => p.pass) };

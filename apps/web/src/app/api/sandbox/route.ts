@@ -35,9 +35,11 @@ export async function POST(request: Request) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   let action: string | undefined;
+  let resetFirst = false;
   try {
     const body = await request.json();
     action = body?.action;
+    resetFirst = body?.resetFirst === true;
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
@@ -56,13 +58,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, action, ...result });
     }
     // verify
-    const status = await getSandboxStatus(supabase);
+    let status = await getSandboxStatus(supabase);
     if (!status.orgId) {
       return NextResponse.json({ error: 'No organization to verify — seed the sandbox first.' }, { status: 400 });
     }
-    const roundTrip = await runSandboxRoundTrip(supabase, status.orgId);
+    if (resetFirst) {
+      await resetSandbox(supabase);
+      status = await getSandboxStatus(supabase);
+    }
+    const roundTrip = await runSandboxRoundTrip(supabase, status.orgId!);
     const fresh = await getSandboxStatus(supabase);
-    return NextResponse.json({ ok: true, action, roundTrip, status: fresh });
+    return NextResponse.json({ ok: true, action, resetFirst, roundTrip, status: fresh });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : `${action} failed` }, { status: 500 });
   }

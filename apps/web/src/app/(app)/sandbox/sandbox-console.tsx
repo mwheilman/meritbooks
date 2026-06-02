@@ -33,7 +33,7 @@ interface SandboxStatus {
 }
 interface SeedStep { step: string; detail: string }
 interface RoundTripPath {
-  path: 'cost' | 'recognition' | 'billing' | 'rejection';
+  path: 'cost' | 'recognition' | 'billing' | 'rejection' | 'pos_recognition' | 'idempotency' | 'missing_account';
   label: string;
   pass: boolean;
   detail: string;
@@ -49,6 +49,7 @@ export function SandboxConsole() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<Action>(null);
+  const [resetBeforeRun, setResetBeforeRun] = useState(true);
   const [steps, setSteps] = useState<SeedStep[] | null>(null);
   const [roundTrip, setRoundTrip] = useState<RoundTripResult | null>(null);
 
@@ -77,7 +78,7 @@ export function SandboxConsole() {
       const res = await fetch('/api/sandbox', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, resetFirst: action === 'verify' ? resetBeforeRun : false }),
       });
       const body = await res.json();
       if (!res.ok) { addToast('error', body.error ?? `${action} failed`); return; }
@@ -97,7 +98,7 @@ export function SandboxConsole() {
     } finally {
       setBusy(null);
     }
-  }, [busy, loadStatus]);
+  }, [busy, loadStatus, resetBeforeRun]);
 
   if (loading) {
     return (
@@ -142,6 +143,16 @@ export function SandboxConsole() {
           variant="emerald"
           label="Run round-trip"
         />
+        <label className="inline-flex items-center gap-2 text-xs text-slate-400 select-none cursor-pointer">
+          <input
+            type="checkbox"
+            checked={resetBeforeRun}
+            onChange={(e) => setResetBeforeRun(e.target.checked)}
+            disabled={!!busy}
+            className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500/40"
+          />
+          Reset before run
+        </label>
         <ActionButton
           onClick={() => {
             if (confirm('Reset will clear all transactional and master data for this tenant, then re-seed. The chart of accounts, entities, and fiscal periods are preserved. Continue?')) run('reset');
