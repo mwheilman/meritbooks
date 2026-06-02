@@ -206,7 +206,10 @@ export async function recognizeJob(
     memo: `Revenue recognition (${method})`,
     source_module: 'REV_REC',
     source_id: job.id,
-    created_by: runBy,
+    // created_by is a uuid column; Clerk actor IDs are text and don't cast (see
+    // migration 018). Record the human actor in revenue_recognition_runs.run_by
+    // (text) below; the GL author follows the app-wide null-attribution pattern.
+    created_by: null,
     lines,
   });
   if (!je.success || !je.entry_id) {
