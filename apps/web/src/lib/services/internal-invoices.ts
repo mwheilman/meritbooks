@@ -183,6 +183,51 @@ export async function ensureEliminatingAccounts(db: DB, orgId: string): Promise<
   return { revenueAccountId, costAccountId, transferAccountId };
 }
 
+/**
+ * Resolve the effective charge method for an internal invoice from Books' own
+ * config: the provider department governs; 'inherit' falls back to the company
+ * (location) default; final fallback is 'revenue'. Shared by the direct-create
+ * path and the DEPT_INVOICE_ISSUE consumer (the seam never carries charge_method
+ * on the payload — Books is the source of truth).
+ */
+export async function resolveChargeMethod(
+  db: DB,
+  locationId: string,
+  providerDepartmentId: string,
+): Promise<ChargeMethod> {
+  const { data: providerDept } = await db
+    .schema('core').from('departments')
+    .select('internal_charge_method')
+    .eq('id', providerDepartmentId)
+    .maybeSingle();
+  let method = (providerDept?.internal_charge_method as string) ?? 'inherit';
+  if (method === 'inherit') {
+    const { data: loc } = await db
+      .schema('core').from('locations')
+      .select('default_internal_charge_method')
+      .eq('id', locationId)
+      .maybeSingle();
+    method = (loc?.default_internal_charge_method as string) ?? 'revenue';
+  }
+  return method === 'cost_transfer' ? 'cost_transfer' : 'revenue';
+}
+
+/** Next per-org internal-invoice number: II-000001, II-000002, … */
+export async function nextInternalInvoiceNumber(db: DB, orgId: string): Promise<string> {
+  const { data } = await db
+    .from('internal_invoices')
+    .select('invoice_number')
+    .eq('org_id', orgId)
+    .order('created_at', { ascending: false })
+    .limit(200);
+  let max = 0;
+  for (const row of data ?? []) {
+    const m = /^II-(\d+)$/.exec((row as { invoice_number: string }).invoice_number ?? '');
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `II-${String(max + 1).padStart(6, '0')}`;
+}
+
 export interface BookInput {
   orgId: string;
   locationId: string;

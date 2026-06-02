@@ -33,7 +33,7 @@ interface SandboxStatus {
 }
 interface SeedStep { step: string; detail: string }
 interface RoundTripPath {
-  path: 'cost' | 'recognition' | 'billing' | 'rejection' | 'pos_recognition' | 'idempotency' | 'missing_account';
+  path: 'cost' | 'recognition' | 'billing' | 'rejection' | 'pos_recognition' | 'idempotency' | 'missing_account' | 'dept_invoice' | 'dept_invoice_rejection';
   label: string;
   pass: boolean;
   detail: string;
@@ -86,7 +86,7 @@ export function SandboxConsole() {
       if (action === 'verify') {
         const rt = body.roundTrip as RoundTripResult;
         setRoundTrip(rt);
-        addToast(rt.allPassed ? 'success' : 'error', rt.allPassed ? 'All four paths passed' : 'Some paths did not pass — see results');
+        addToast(rt.allPassed ? 'success' : 'error', rt.allPassed ? `All ${rt.paths.length} checks passed` : 'Some checks did not pass — see results');
       } else {
         setSteps((body.steps as SeedStep[]) ?? null);
         addToast('success', action === 'reset' ? 'Sandbox reset and re-seeded' : 'Sandbox seeded');

@@ -36,6 +36,8 @@ import { emitJobCostEvent, stampGlLineJob } from './job-cost-events';
 import { processProgressEvents } from './job-progress';
 import { processBillingEvents } from './billing-consumer';
 import { recognizeJobById } from './rev-rec';
+import { emitDeptInvoiceIssue } from './dept-invoice-events';
+import { processDeptInvoiceEvents } from './dept-invoice-consumer';
 
 type DB = SupabaseClient;
 
@@ -82,7 +84,7 @@ export interface SeedResult {
 
 /** Path-by-path outcome of the cross-module round-trip. */
 export interface RoundTripPath {
-  path: 'cost' | 'recognition' | 'billing' | 'rejection' | 'pos_recognition' | 'idempotency' | 'missing_account';
+  path: 'cost' | 'recognition' | 'billing' | 'rejection' | 'pos_recognition' | 'idempotency' | 'missing_account' | 'dept_invoice' | 'dept_invoice_rejection';
   label: string;
   pass: boolean;
   detail: string;
@@ -241,7 +243,7 @@ function closedDate(): string {
 async function upsertDepartment(
   db: DB,
   orgId: string,
-  spec: { name: string; code: string },
+  spec: { name: string; code: string; locationId: string },
 ): Promise<string> {
   const { data: existing } = await db
     .schema('core').from('departments')
@@ -249,10 +251,14 @@ async function upsertDepartment(
     .eq('org_id', orgId)
     .eq('code', spec.code)
     .maybeSingle();
-  if (existing) return (existing as { id: string }).id;
+  if (existing) {
+    // keep location_id in sync (idempotent repair)
+    await db.schema('core').from('departments').update({ location_id: spec.locationId }).eq('id', (existing as { id: string }).id);
+    return (existing as { id: string }).id;
+  }
   const { data, error } = await db
     .schema('core').from('departments')
-    .insert({ org_id: orgId, name: spec.name, code: spec.code })
+    .insert({ org_id: orgId, name: spec.name, code: spec.code, location_id: spec.locationId })
     .select('id')
     .single();
   if (error || !data) throw new Error(`Department ${spec.code}: ${error?.message}`);
@@ -271,7 +277,7 @@ export async function seedSandbox(db: DB, opts: { reset?: boolean } = {}): Promi
   steps.push({ step: 'organization', detail: `${org.name} (${org.id.slice(0, 8)}…)` });
 
   // Ensure Projects entitlement so Books runs in auto-fed mode (seam exercised).
-  await db.schema('core').from('organizations').update({ entitlements: { projects: true } }).eq('id', org.id);
+  await db.schema('core').from('organizations').update({ entitlements: { books: true, projects: true } }).eq('id', org.id);
 
   if (opts.reset) {
     await clearTenantData(db, org.id);
@@ -287,10 +293,13 @@ export async function seedSandbox(db: DB, opts: { reset?: boolean } = {}): Promi
   const entB = await ensureEntity(db, org.id, { ...ENTITY_B, rev_rec_method: 'POINT_OF_SALE' });
   steps.push({ step: 'entities', detail: `${entA.short_code} (FY ${entA.fiscal_year_start_month}), ${entB.short_code} (FY ${entB.fiscal_year_start_month})` });
 
-  // 3) Departments per entity.
-  const deptField = await upsertDepartment(db, org.id, { name: `${SANDBOX_TAG} Field Operations`, code: 'NWC-FIELD' });
-  const deptRetail = await upsertDepartment(db, org.id, { name: `${SANDBOX_TAG} Retail`, code: 'CHF-RETAIL' });
-  steps.push({ step: 'departments', detail: '2 departments (Field Operations, Retail)' });
+  // 3) Departments per entity. NWC gets two (provider + receiver) so the
+  //    internal-invoice seam can run within one company.
+  const deptField = await upsertDepartment(db, org.id, { name: `${SANDBOX_TAG} Field Operations`, code: 'NWC-FIELD', locationId: entA.id });
+  const deptAdmin = await upsertDepartment(db, org.id, { name: `${SANDBOX_TAG} Administration`, code: 'NWC-ADMIN', locationId: entA.id });
+  const deptRetail = await upsertDepartment(db, org.id, { name: `${SANDBOX_TAG} Retail`, code: 'CHF-RETAIL', locationId: entB.id });
+  void deptAdmin;
+  steps.push({ step: 'departments', detail: '3 departments (NWC: Field Operations, Administration; CHF: Retail)' });
 
   // 4) Master data — customers, vendors, items, employees.
   const custA = await ensureCustomer(db, org.id, `${SANDBOX_TAG} Fabrikam Inc.`);
@@ -647,6 +656,73 @@ export async function runSandboxRoundTrip(db: DB, orgId: string): Promise<RoundT
     paths.push({ path: 'missing_account', label: 'Missing-account rejection (clean failure)', pass: true, detail: `Rejected the bogus-account post: ${e instanceof Error ? e.message : 'error'}.` });
   }
 
+  // ── Path 8: Internal department invoice — Projects → Books seam (DEPT_INVOICE_ISSUE). ──
+  const deptByCode = async (code: string): Promise<string | null> => {
+    const { data } = await db.schema('core').from('departments').select('id').eq('org_id', orgId).eq('code', code).maybeSingle();
+    return (data as { id: string } | null)?.id ?? null;
+  };
+  try {
+    const providerDept = await deptByCode('NWC-FIELD');
+    const receiverDept = await deptByCode('NWC-ADMIN');
+    if (!providerDept || !receiverDept) throw new Error('NWC provider/receiver departments not found');
+    const sourceRef = `sandbox-deptinv-${randomUUID().slice(0, 8)}`;
+    const amount = 5_000_00;
+    const eventId = await emitDeptInvoiceIssue(db, {
+      orgId, locationId: jobA.location_id, providerDepartmentId: providerDept, receiverDepartmentId: receiverDept,
+      occurredOn: asOf, sourceRef, lines: [{ description: `${SANDBOX_TAG} Internal services`, amount_cents: amount }],
+      memo: `${SANDBOX_TAG} internal dept invoice`, projectsDocumentId: `proj-doc-${sourceRef}`,
+    });
+    const res = await processDeptInvoiceEvents(db, orgId);
+    const r = res.results.find((x) => x.event_id === eventId);
+    const processed = !!r && r.status === 'processed' && !!r.invoice_number;
+
+    // Eliminating-netting check: both legs must sit on is_eliminating accounts and net to zero at company roll-up.
+    let nets = false;
+    if (processed) {
+      const { data: inv } = await db.from('internal_invoices').select('booked_gl_entry_id').eq('org_id', orgId).eq('source_ref', sourceRef).maybeSingle();
+      const glId = (inv as { booked_gl_entry_id: string | null } | null)?.booked_gl_entry_id ?? null;
+      if (glId) {
+        const { data: lines } = await db.from('gl_entry_lines').select('debit_cents, credit_cents, account_id').eq('gl_entry_id', glId);
+        const rows = (lines ?? []) as { debit_cents: number; credit_cents: number; account_id: string }[];
+        const { data: accts } = await db.from('accounts').select('id, is_eliminating').in('id', rows.map((l) => l.account_id));
+        const elim = new Map((accts ?? []).map((a) => [(a as { id: string }).id, (a as { is_eliminating: boolean }).is_eliminating]));
+        const allElim = rows.length > 0 && rows.every((l) => elim.get(l.account_id) === true);
+        const net = rows.reduce((s, l) => s + Number(l.debit_cents) - Number(l.credit_cents), 0);
+        nets = allElim && net === 0;
+      }
+    }
+    paths.push({
+      path: 'dept_invoice', label: 'Internal dept invoice (Projects → Books seam)', pass: processed && nets,
+      detail: processed && nets
+        ? `Issued internal invoice ${r?.invoice_number} ($5,000.00, NWC Field → Administration); both legs on eliminating accounts, net zero at company roll-up; number written back to the event.`
+        : processed ? `Issued ${r?.invoice_number} but the eliminating-netting check failed.` : `Internal invoice not processed: ${r?.error ?? res.results[0]?.error ?? 'unknown'}.`,
+    });
+  } catch (e) {
+    paths.push({ path: 'dept_invoice', label: 'Internal dept invoice (Projects → Books seam)', pass: false, detail: e instanceof Error ? e.message : 'dept invoice path failed' });
+  }
+
+  // ── Path 9: Internal dept invoice on a HARD_CLOSE period must be rejected (Rule F). ──
+  try {
+    const providerDept = await deptByCode('NWC-FIELD');
+    const receiverDept = await deptByCode('NWC-ADMIN');
+    if (!providerDept || !receiverDept) throw new Error('NWC provider/receiver departments not found');
+    const sourceRef = `sandbox-deptinv-closed-${randomUUID().slice(0, 8)}`;
+    const eventId = await emitDeptInvoiceIssue(db, {
+      orgId, locationId: jobA.location_id, providerDepartmentId: providerDept, receiverDepartmentId: receiverDept,
+      occurredOn: closedDate(), sourceRef, lines: [{ description: `${SANDBOX_TAG} Internal services (closed)`, amount_cents: 1_000_00 }],
+      memo: `${SANDBOX_TAG} closed-period probe`, projectsDocumentId: `proj-doc-${sourceRef}`,
+    });
+    const res = await processDeptInvoiceEvents(db, orgId);
+    const r = res.results.find((x) => x.event_id === eventId);
+    const rejected = !!r && r.status === 'rejected' && /closed|locked|period/i.test(r.error ?? '');
+    paths.push({
+      path: 'dept_invoice_rejection', label: 'Internal dept invoice — closed period (Rule F)', pass: rejected,
+      detail: rejected ? `Internal invoice on a HARD_CLOSE period correctly rejected: "${r?.error}".` : 'Expected a closed-period rejection but none occurred.',
+    });
+  } catch (e) {
+    paths.push({ path: 'dept_invoice_rejection', label: 'Internal dept invoice — closed period (Rule F)', pass: false, detail: e instanceof Error ? e.message : 'dept invoice rejection path failed' });
+  }
+
   return { asOf, paths, allPassed: paths.every((p) => p.pass) };
 }
 
@@ -709,6 +785,11 @@ async function enqueueBillingEvent(
  * rev-rec runs/maps → cost bridges/attributions → jobs → master data → depts.
  */
 async function clearTenantData(db: DB, orgId: string): Promise<void> {
+  // Internal invoices first: they FK gl_entries (booked_gl_entry_id) and
+  // departments, both of which are cleared below — delete these ahead of them.
+  await db.from('internal_invoice_lines').delete().eq('org_id', orgId);
+  await db.from('internal_invoices').delete().eq('org_id', orgId);
+
   // Books-schema (public) ledger + sub-ledger rows.
   await db.from('gl_entry_lines').delete().eq('org_id', orgId);
   await db.from('gl_entries').delete().eq('org_id', orgId);
