@@ -16,7 +16,8 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"],
-      "@meritbooks/shared": ["../../packages/shared/src"]
+      "@meritbooks/shared": ["../../packages/shared/src"],
+      "@meritbooks/core-ai": ["../../packages/core-ai/src"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

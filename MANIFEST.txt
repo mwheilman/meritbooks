@@ -1,0 +1,71 @@
+MeritBooks / Suite Core — AI Gateway & Cost Governance (Architecture §3A + §3A.9)
+Build session deliverable. Extract at ~/Projects/meritbooks/ (paths are repo-relative).
+
+CONTRACT MODEL (§3A.9): in-process import is the CANONICAL inter-module path — a module
+imports `runAiGateway` from @meritbooks/core-ai and calls it directly (no network hop, no
+identity to verify; the app already authed via Clerk). The HTTP route is a THROWAWAY interim
+bridge used only while Books and Projects are separate deployments; it is retired at the
+single-app merge. Both run the same engine and return the same §3A.6 shape.
+
+NEW — database (Core-owned tables; run in Supabase SQL editor):
+  packages/supabase/migrations/027_ai_gateway.sql
+
+NEW — Core gateway engine (shared package; Books-agnostic; callable by any module):
+  packages/core-ai/package.json
+  packages/core-ai/tsconfig.json
+  packages/core-ai/src/index.ts
+  packages/core-ai/src/types.ts        (the §3A.6 request/response contract)
+  packages/core-ai/src/provider.ts     (the single Anthropic call)
+  packages/core-ai/src/store.ts        (core-schema reads/writes)
+  packages/core-ai/src/gateway.ts      (§3A.6 order of operations — identity-agnostic; trusts inputs)
+  packages/core-ai/src/httpClient.ts   (interim: config-driven client so NO module hardcodes the URL)
+
+NEW — HTTP surface + spend visibility (co-hosted in Books for now; moves to Core at merge):
+  apps/web/src/app/api/ai/gateway/route.ts   (POST — INTERIM bridge: service token + membership verify)
+  apps/web/src/app/api/ai/usage/route.ts      (GET  — tenant spend, counters, recent log; in-app read)
+
+MODIFIED (replace in place):
+  apps/web/tsconfig.json   (adds the @meritbooks/core-ai path alias)
+
+INTERIM BRIDGE AUTH (§3A.9 b/c) — only matters until merge:
+  - Per-module shared service token. Set env AI_GATEWAY_SERVICE_TOKENS="PROJECTS:<secret>,BOOKS:<secret>"
+    (format MODULE:token, comma-separated). No env set => the HTTP bridge is DISABLED (fail closed).
+    The caller sends header  x-merit-service-token: <secret>  matching its module.
+  - Caller asserts tenant_id + user_id in the body. If user_id is set, the bridge verifies an ACTIVE
+    core.memberships row for that user in that tenant and DENIES if absent (fail closed). core.users /
+    core.memberships are NOT built yet (Identity/Access §4 is future Core work), so user-attributed HTTP
+    calls will deny until Core ships them — by design. user_id = null = tenant-scoped service principal,
+    authorized by the token alone (used for agent/system calls and for verification today).
+  - Do NOT build Clerk M2M / signed requests / mTLS for this path; it is being retired.
+
+DEPLOY
+  1) cd ~/Projects/meritbooks && tar xzf ~/Downloads/meritbooks-ai-gateway.tar.gz
+  2) Run packages/supabase/migrations/027_ai_gateway.sql in the Supabase SQL editor.
+  3) git add -A && git commit -m "Suite Core: AI gateway & cost governance (arch 3A/3A.9)" && git push
+  4) Vercel env: confirm ANTHROPIC_API_KEY (server-side). To exercise the interim bridge, also set
+     AI_GATEWAY_SERVICE_TOKENS. (In-process callers need neither the token nor a URL.)
+
+VERIFY (no spend — dry_run, service-principal path, works today without memberships)
+  Set AI_GATEWAY_SERVICE_TOKENS="BOOKS:testtoken123" in env, then:
+  POST /api/ai/gateway
+    headers: x-merit-service-token: testtoken123
+    body: { "module":"BOOKS","feature":"selftest","model":"claude-haiku-4-5-20251001",
+            "tenant_id":"<your core.organizations.id>","user_id":null,
+            "dry_run":true, "sim_tokens":{"input":1000,"output":500} }
+  Expect: status "ok", a correlation_id, cost_cents from the seeded price row, a new
+  core.ai_usage_log row + incremented core.ai_usage_counters (TENANT). Then GET /api/ai/usage.
+  Set a small monthly_cap_cents on the 'default' ai_tier_config row and repeat to watch
+  state go under -> soft -> hard (blocks). (At single-app merge, callers use runAiGateway
+  in-process and this token/URL/membership scaffolding is dropped.)
+
+LEFT AS CONFIG (§3A.7 — fill once tier pricing is set; mechanism is built):
+  core.ai_tier_config: monthly_cap_cents, per_user_cap_cents, soft_warn_pct, overage_policy,
+                        degrade_model  (operational guards already have working defaults)
+  core.ai_model_prices: PLACEHOLDER prices seeded — edit to current Anthropic list pricing
+  core.ai_feature_caps: empty — add rows only where you want a per-feature cap
+
+FLAG TO SUITE CORE: the bridge's membership check assumes Identity/Access §4 shape
+  (core.users.id/clerk_user_id, core.memberships.user_id/organization_id/status='active').
+  Confirm those exact names when the memberships migration ships; one line in
+  verifyActiveMembership() may need adjustment. Until then the engine + in-process path are
+  fully live; only user-attributed HTTP-bridge calls are gated.
