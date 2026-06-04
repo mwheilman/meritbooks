@@ -17,6 +17,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from './gl-posting';
+import { recordBillPayment, reverseGlEntry } from '../posting/lifecycle';
 import { approveAttribution, resolveApprover, type ResolvedApprover, type RoutingContext } from './cost-approval';
 import type { CostType } from './job-cost-events';
 
@@ -164,7 +165,7 @@ export async function approveBill(db: DB, orgId: string, billId: string, approve
     memo: `Bill ${bill.bill_number ?? ''} approved`.trim(),
     source_module: 'BILL',
     source_id: bill.id,
-    created_by: approvedBy,
+    created_by: null, // uuid column; Clerk actor is text → captured on approved_by_user
     lines: jeLines,
   });
 
@@ -233,36 +234,41 @@ export async function scheduleBill(db: DB, orgId: string, billId: string, schedu
   return { id: billId, status: 'SCHEDULED' as const };
 }
 
-/** Record a payment against an approved/scheduled bill. */
-export async function payBill(db: DB, orgId: string, billId: string, amountCents: number, paymentDate: string, method: string | null) {
-  const { bill } = await loadBillWithLines(db, orgId, billId);
-  if (!['APPROVED', 'SCHEDULED', 'PARTIALLY_PAID'].includes(bill.status)) {
-    throw new Error(`Bill must be approved before recording a payment (current status: ${bill.status})`);
-  }
-  const newPaid = bill.amount_paid_cents + amountCents;
-  if (newPaid > bill.total_cents) {
-    throw new Error('Payment exceeds the outstanding balance');
-  }
-  const fullyPaid = newPaid >= bill.total_cents;
-  const { error } = await db
-    .from('bills')
-    .update({
-      amount_paid_cents: newPaid,
-      status: fullyPaid ? 'PAID' : 'PARTIALLY_PAID',
-      payment_method: method ?? null,
-      paid_at: fullyPaid ? new Date(`${paymentDate}T00:00:00Z`).toISOString() : null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', billId);
-  if (error) throw new Error(error.message);
-  return { id: billId, status: fullyPaid ? ('PAID' as const) : ('PARTIALLY_PAID' as const), amount_paid_cents: newPaid };
+/** Record a payment against an approved/scheduled bill. Posts DR AP / CR cash
+ * through the settlement lifecycle so the payable actually clears (audit gap 1).
+ * Validation of status and outstanding balance happens inside recordBillPayment. */
+export async function payBill(
+  db: DB,
+  orgId: string,
+  billId: string,
+  amountCents: number,
+  paymentDate: string,
+  method: string | null,
+  createdBy: string | null = null
+) {
+  const res = await recordBillPayment(db, { orgId, billId, amountCents, paymentDate, method, createdBy });
+  return {
+    id: billId,
+    status: res.status,
+    amount_paid_cents: res.amount_paid_cents,
+    payment_id: res.payment_id,
+    gl_entry_id: res.gl_entry_id,
+  };
 }
 
-/** Void a bill and void any of its job-cost attributions. */
+/** Void a bill: reverse its approval GL entry and void any job-cost attributions. */
 export async function voidBill(db: DB, orgId: string, billId: string, reason: string) {
   const { bill } = await loadBillWithLines(db, orgId, billId);
+  if (bill.status === 'VOIDED') return { id: billId, status: 'VOIDED' as const };
   if (bill.amount_paid_cents > 0) {
-    throw new Error('Cannot void a bill that has payments recorded against it');
+    throw new Error('Cannot void a bill that has payments recorded against it — void the payments first');
+  }
+
+  // Reverse the GL entry posted at approval (audit gap 2). The reversal is a
+  // balanced REVERSING entry via the void primitive; nothing is mutated in place.
+  if (bill.gl_entry_id) {
+    const rev = await reverseGlEntry(db, orgId, bill.gl_entry_id, `Bill voided: ${reason}`);
+    if (!rev.success) throw new Error(rev.error ?? 'Failed to reverse the bill GL entry');
   }
 
   const { error } = await db

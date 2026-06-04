@@ -34,6 +34,7 @@ export interface JobRevRecRow {
   status: string | null;
   rev_rec_method: RevRecMethod | null;
   rev_rec_method_override: RevRecMethod | null;
+  revenue_account_id: string | null;
   contract_amount_cents: number | null;
   estimated_cost_cents: number | null;
   actual_cost_cents: number | null;
@@ -44,16 +45,32 @@ export interface JobRevRecRow {
   service_end_date: string | null;
 }
 
-/** Resolve the recognition method for one job (override → map → company default). */
+/**
+ * Resolve the recognition method for one job:
+ *   1. per-job override
+ *   2. per-revenue-type method (the job's revenue_account_id)  ← primary selection
+ *   3. legacy job_type → method map
+ *   4. company default
+ */
 export function resolveRevRecMethod(
-  job: Pick<JobRevRecRow, 'job_type' | 'archetype' | 'rev_rec_method_override'>,
+  job: Pick<JobRevRecRow, 'job_type' | 'archetype' | 'rev_rec_method_override' | 'revenue_account_id'>,
   jobTypeMap: Map<string, RevRecMethod>,
   companyDefault: RevRecMethod,
+  revenueTypeMap?: Map<string, RevRecMethod>,
 ): RevRecMethod {
   if (job.rev_rec_method_override) return job.rev_rec_method_override;
+  if (revenueTypeMap && job.revenue_account_id && revenueTypeMap.has(job.revenue_account_id)) {
+    return revenueTypeMap.get(job.revenue_account_id) as RevRecMethod;
+  }
   const key = job.job_type ?? job.archetype ?? null;
   if (key && jobTypeMap.has(key)) return jobTypeMap.get(key) as RevRecMethod;
   return companyDefault;
+}
+
+/** Load the per-revenue-type method map for a company. */
+async function loadRevenueTypeMap(db: DB, orgId: string, locationId: string): Promise<Map<string, RevRecMethod>> {
+  const { data } = await db.from('revenue_type_methods').select('revenue_account_id, method').eq('org_id', orgId).eq('location_id', locationId);
+  return new Map((data ?? []).map((r) => [(r as { revenue_account_id: string }).revenue_account_id, (r as { method: RevRecMethod }).method]));
 }
 
 /**
@@ -237,7 +254,7 @@ export async function recognizeJob(
 }
 
 const JOB_SELECT =
-  'id, location_id, job_type, archetype, status, rev_rec_method, rev_rec_method_override, ' +
+  'id, location_id, job_type, archetype, status, rev_rec_method, rev_rec_method_override, revenue_account_id, ' +
   'contract_amount_cents, estimated_cost_cents, actual_cost_cents, billed_to_date_cents, ' +
   'pct_complete, revenue_recognized_cents, service_start_date, service_end_date';
 
@@ -255,7 +272,8 @@ export async function recognizeJobById(
   const { data: loc } = await db.schema('core').from('locations').select('rev_rec_method').eq('id', j.location_id).maybeSingle();
   const companyDefault = ((loc as { rev_rec_method: RevRecMethod } | null)?.rev_rec_method ?? 'PCT_COSTS_INCURRED');
   const map = await loadMethodMap(db, orgId, j.location_id);
-  const method = resolveRevRecMethod(j, map, companyDefault);
+  const revenueTypeMap = await loadRevenueTypeMap(db, orgId, j.location_id);
+  const method = resolveRevRecMethod(j, map, companyDefault, revenueTypeMap);
   return recognizeJob(db, orgId, j, method, asOf, runBy);
 }
 
@@ -290,16 +308,18 @@ export async function recognizeRun(
   const locIds = [...new Set((jobs ?? []).map((j) => (j as unknown as JobRevRecRow).location_id))];
   const defaultByLoc = new Map<string, RevRecMethod>();
   const mapByLoc = new Map<string, Map<string, RevRecMethod>>();
+  const revTypeByLoc = new Map<string, Map<string, RevRecMethod>>();
   for (const lid of locIds) {
     const { data: loc } = await db.schema('core').from('locations').select('rev_rec_method').eq('id', lid).maybeSingle();
     defaultByLoc.set(lid, ((loc as { rev_rec_method: RevRecMethod } | null)?.rev_rec_method ?? 'PCT_COSTS_INCURRED'));
     mapByLoc.set(lid, await loadMethodMap(db, orgId, lid));
+    revTypeByLoc.set(lid, await loadRevenueTypeMap(db, orgId, lid));
   }
 
   const out: RecognizeRunResult = { asOf: args.asOf, posted: 0, unchanged: 0, skipped: 0, totalRecognizedDeltaCents: 0, jobs: [] };
 
   for (const raw of (jobs ?? []) as unknown as (JobRevRecRow & { id: string })[]) {
-    const method = resolveRevRecMethod(raw, mapByLoc.get(raw.location_id) ?? new Map(), defaultByLoc.get(raw.location_id) ?? 'PCT_COSTS_INCURRED');
+    const method = resolveRevRecMethod(raw, mapByLoc.get(raw.location_id) ?? new Map(), defaultByLoc.get(raw.location_id) ?? 'PCT_COSTS_INCURRED', revTypeByLoc.get(raw.location_id));
     const r = await recognizeJob(db, orgId, raw, method, args.asOf, args.runBy, { preview: args.preview });
     if (r.status === 'posted') { out.posted++; out.totalRecognizedDeltaCents += r.deltaCents; }
     else if (r.status === 'unchanged') out.unchanged++;

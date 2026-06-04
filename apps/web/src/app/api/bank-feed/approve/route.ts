@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { apiHandler } from '@/lib/api-handler';
 import { approveBankTransactionSchema, type ApproveBankTransactionInput } from '@/lib/validations/transactions';
 import { postJournalEntry } from '@/lib/services/gl-posting';
+import { recordBillPayment } from '@/lib/posting/lifecycle';
 import { createAttribution } from '@/lib/services/cost-approval';
 
 /**
@@ -38,6 +39,43 @@ export const POST = apiHandler(
     const cashAccountId = bankAccount.account_id;
     const isOutflow = txn.amount_cents < 0;
     const absCents = Math.abs(txn.amount_cents);
+
+    // If this outflow settles an existing bill, clear Accounts Payable rather
+    // than booking a fresh expense — the bill was already expensed at approval,
+    // so re-expensing the bank line would double-count (audit gap 3).
+    if (isOutflow && txn.match_type === 'BILL_PAYMENT' && txn.matched_bill_id) {
+      try {
+        const res = await recordBillPayment(ctx.supabase, {
+          orgId,
+          billId: txn.matched_bill_id as string,
+          amountCents: absCents,
+          paymentDate: txn.transaction_date,
+          method: 'OTHER',
+          cashAccountId, // post the cash side to the actual bank account
+          bankTransactionId: txn.id,
+          createdBy: null,
+        });
+        await ctx.supabase
+          .from('bank_transactions')
+          .update({
+            status: 'POSTED',
+            match_type: 'BILL_PAYMENT',
+            matched_bill_id: txn.matched_bill_id,
+            approved_at: new Date().toISOString(),
+            gl_entry_id: res.gl_entry_id,
+          })
+          .eq('id', body.transaction_id);
+        return NextResponse.json(
+          { success: true, settled_bill: true, bill_payment_id: res.payment_id, transaction_id: body.transaction_id },
+          { status: 200 }
+        );
+      } catch (e) {
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : 'Bill settlement failed' },
+          { status: 400 }
+        );
+      }
+    }
 
     // Periods are a product of setup, not auto-created here (suite contract Rule F):
     // postJournalEntry rejects a missing/closed period with a clear error.

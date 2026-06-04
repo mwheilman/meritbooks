@@ -8,6 +8,7 @@ export interface JournalEntryLineInput {
   department_id?: string;
   class_id?: string;
   item_id?: string;
+  job_id?: string;
   memo?: string;
   quantity?: number;
   unit_cost_cents?: number;
@@ -105,6 +106,7 @@ export async function postJournalEntry(
     department_id: line.department_id ?? null,
     class_id: line.class_id ?? null,
     item_id: line.item_id ?? null,
+    job_id: line.job_id ?? null,
     memo: line.memo ?? null,
     quantity: line.quantity ?? null,
     unit_cost_cents: line.unit_cost_cents ?? null,
@@ -122,32 +124,28 @@ export async function postJournalEntry(
   return { success: true, entry_id: entry.id, entry_number: entry.entry_number };
 }
 
-/** Raw GL line from Supabase query (before mapping to JournalEntryLineInput) */
-interface RawGlLine {
-  account_id: string;
-  debit_cents: number;
-  credit_cents: number;
-  location_id?: string;
-  department_id?: string | null;
-  class_id?: string | null;
-  item_id?: string | null;
-  memo?: string | null;
-  [key: string]: unknown;
-}
-
 /**
  * Void a posted journal entry.
+ *
+ * The canonical reporting views (v_trial_balance / v_income_statement /
+ * v_balance_sheet) count status='POSTED' only. So a void simply flips the entry
+ * to VOIDED — its lines then drop out of every balance, netting the entry's
+ * effect to zero. (The previous implementation ALSO posted a reversing entry,
+ * which under POSTED-only views double-removed the amount, leaving −X instead
+ * of 0.) Closed-period immutability is preserved: an entry in a hard-closed
+ * period cannot be voided in place — reverse it with a new entry in an open
+ * period instead.
  */
 export async function voidJournalEntry(
   supabase: SupabaseClient,
   orgId: string,
   entryId: string,
-  userId: string,
+  userId: string | null,
   reason: string
 ): Promise<PostResult> {
   const { data: original, error: fetchError } = await supabase
     .from('gl_entries')
-    .select(`*, gl_entry_lines (*)`)
+    .select('id, status, entry_number, fiscal_period_id')
     .eq('id', entryId)
     .eq('org_id', orgId)
     .single();
@@ -159,41 +157,34 @@ export async function voidJournalEntry(
     return { success: false, error: `Cannot void entry in status ${original.status}` };
   }
 
-  const rawLines = original.gl_entry_lines as RawGlLine[];
-  const reversingLines: JournalEntryLineInput[] = rawLines.map((line) => ({
-    account_id: line.account_id,
-    debit_cents: line.credit_cents,
-    credit_cents: line.debit_cents,
-    location_id: (line.location_id as string) ?? original.location_id,
-    department_id: (line.department_id as string) ?? undefined,
-    class_id: (line.class_id as string) ?? undefined,
-    item_id: (line.item_id as string) ?? undefined,
-    memo: `VOID: ${(line.memo as string) ?? ''}`,
-  }));
+  // Closed-period immutability: do not mutate a hard-closed period.
+  const { data: period } = await supabase
+    .from('fiscal_periods')
+    .select('status')
+    .eq('id', original.fiscal_period_id)
+    .maybeSingle();
+  if (period?.status === 'HARD_CLOSE') {
+    return {
+      success: false,
+      error: 'Cannot void an entry in a hard-closed period; post a reversing entry in an open period instead.',
+    };
+  }
 
-  const result = await postJournalEntry(supabase, {
-    org_id: orgId,
-    location_id: original.location_id,
-    entry_date: new Date().toISOString().split('T')[0],
-    entry_type: 'REVERSING',
-    memo: `VOID of ${original.entry_number}: ${reason}`,
-    source_module: original.source_module,
-    created_by: userId,
-    lines: reversingLines,
-  });
-
-  if (!result.success) return result;
-
-  await supabase
+  const { error: updateError } = await supabase
     .from('gl_entries')
     .update({
       status: 'VOIDED',
       voided_at: new Date().toISOString(),
       voided_by: userId,
       void_reason: reason,
-      reversed_by_id: result.entry_id,
+      updated_at: new Date().toISOString(),
     })
-    .eq('id', entryId);
+    .eq('id', entryId)
+    .eq('org_id', orgId);
 
-  return result;
+  if (updateError) {
+    return { success: false, error: `Failed to void entry: ${updateError.message}` };
+  }
+
+  return { success: true, entry_id: entryId, entry_number: original.entry_number as string };
 }

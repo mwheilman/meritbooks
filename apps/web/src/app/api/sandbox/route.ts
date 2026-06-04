@@ -9,6 +9,7 @@ import {
   resetSandbox,
   runSandboxRoundTrip,
 } from '@/lib/services/sandbox';
+import { runPostingEngineChecks } from '@/lib/services/posting-verify';
 
 /** GET /api/sandbox — current sandbox status (entities, master-data counts, periods). */
 export async function GET() {
@@ -43,8 +44,8 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
-  if (!action || !['seed', 'reset', 'verify'].includes(action)) {
-    return NextResponse.json({ error: "action must be one of: 'seed', 'reset', 'verify'" }, { status: 422 });
+  if (!action || !['seed', 'reset', 'verify', 'verify-posting'].includes(action)) {
+    return NextResponse.json({ error: "action must be one of: 'seed', 'reset', 'verify', 'verify-posting'" }, { status: 422 });
   }
 
   const supabase = createAdminSupabase();
@@ -56,6 +57,13 @@ export async function POST(request: Request) {
     if (action === 'reset') {
       const result = await resetSandbox(supabase);
       return NextResponse.json({ ok: true, action, ...result });
+    }
+    if (action === 'verify-posting') {
+      // Ensure COA + entities + periods exist, then exercise the deterministic
+      // posting engine + settlement lifecycle and assert the GATE 2 criteria.
+      await seedSandbox(supabase);
+      const result = await runPostingEngineChecks(supabase);
+      return NextResponse.json({ ok: true, action, ...result }, { status: result.allPassed ? 200 : 207 });
     }
     // verify
     let status = await getSandboxStatus(supabase);
