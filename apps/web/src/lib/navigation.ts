@@ -86,6 +86,7 @@ export const navigation: NavGroup[] = [
       { label: 'Jobs & Projects', href: '/jobs', icon: Briefcase },
       { label: 'Vendors', href: '/vendors', icon: Building2 },
       { label: 'Retainage', href: '/retainage', icon: PiggyBank },
+      { label: 'Vendor Compliance', href: '/vendor-compliance', icon: Shield },
       { label: 'Close Management', href: '/close', icon: ClipboardCheck },
     ],
   },

@@ -22,6 +22,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry, voidJournalEntry } from '../services/gl-posting';
 import { debitCreditFor, type Effect } from './account-direction';
 import { resolveRole, resolveCashSide, getAccountRef, PostingError, type AccountRef } from './account-roles';
+import { enforcePaymentAllowed } from '../services/vendor-compliance';
 import type { PaymentRail } from './transaction-types';
 
 type DB = SupabaseClient;
@@ -59,6 +60,7 @@ function cashSideEffect(cash: AccountRef, direction: 'pay' | 'receive'): Effect 
 interface BillRow {
   id: string;
   location_id: string;
+  vendor_id: string;
   total_cents: number;
   amount_paid_cents: number;
   status: string;
@@ -91,7 +93,7 @@ export interface BillPaymentResult {
 export async function recordBillPayment(db: DB, input: RecordBillPaymentInput): Promise<BillPaymentResult> {
   const { data: billData, error } = await db
     .from('bills')
-    .select('id, location_id, total_cents, amount_paid_cents, status')
+    .select('id, location_id, vendor_id, total_cents, amount_paid_cents, status')
     .eq('org_id', input.orgId)
     .eq('id', input.billId)
     .single<BillRow>();
@@ -100,6 +102,13 @@ export async function recordBillPayment(db: DB, input: RecordBillPaymentInput): 
   if (!['APPROVED', 'SCHEDULED', 'PARTIALLY_PAID'].includes(billData.status)) {
     throw new PostingError(`Bill must be approved before payment (status: ${billData.status})`);
   }
+
+  // Vendor-compliance gate: refuse payment to a vendor on hold (missing/expired
+  // W-9 or COI) unless an active override applies. A ONE_TIME override is
+  // consumed here. Re-checked at PAY time, not just at bill creation, because
+  // documents can lapse after a bill is approved.
+  await enforcePaymentAllowed(db, input.orgId, billData.vendor_id, input.billId, input.createdBy ?? null);
+
   const balance = billData.total_cents - billData.amount_paid_cents;
   if (input.amountCents > balance) {
     throw new PostingError(`Payment ${input.amountCents} exceeds outstanding balance ${balance}`);
