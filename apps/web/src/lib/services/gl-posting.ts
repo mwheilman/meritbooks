@@ -12,6 +12,10 @@ export interface JournalEntryLineInput {
   memo?: string;
   quantity?: number;
   unit_cost_cents?: number;
+  /** Counterparty entity (location) for intercompany due-to/due-from pairing. */
+  counterparty_location_id?: string;
+  /** Counterparty department for inter-department elimination pairing. */
+  counterparty_department_id?: string;
 }
 
 export interface PostJournalEntryInput {
@@ -94,23 +98,31 @@ export async function postJournalEntry(
     return { success: false, error: `Failed to create entry: ${entryError?.message ?? 'unknown'}` };
   }
 
-  // Insert all lines
-  const lineInserts = input.lines.map((line, index) => ({
-    org_id: input.org_id,
-    gl_entry_id: entry.id,
-    line_number: index + 1,
-    account_id: line.account_id,
-    debit_cents: line.debit_cents,
-    credit_cents: line.credit_cents,
-    location_id: line.location_id,
-    department_id: line.department_id ?? null,
-    class_id: line.class_id ?? null,
-    item_id: line.item_id ?? null,
-    job_id: line.job_id ?? null,
-    memo: line.memo ?? null,
-    quantity: line.quantity ?? null,
-    unit_cost_cents: line.unit_cost_cents ?? null,
-  }));
+  // Insert all lines. Counterparty dimensions are included ONLY when provided,
+  // so callers that don't use them never reference those columns — keeping
+  // existing posting paths working regardless of whether migration 035
+  // (counterparty_location_id) has been applied yet.
+  const lineInserts = input.lines.map((line, index) => {
+    const row: Record<string, unknown> = {
+      org_id: input.org_id,
+      gl_entry_id: entry.id,
+      line_number: index + 1,
+      account_id: line.account_id,
+      debit_cents: line.debit_cents,
+      credit_cents: line.credit_cents,
+      location_id: line.location_id,
+      department_id: line.department_id ?? null,
+      class_id: line.class_id ?? null,
+      item_id: line.item_id ?? null,
+      job_id: line.job_id ?? null,
+      memo: line.memo ?? null,
+      quantity: line.quantity ?? null,
+      unit_cost_cents: line.unit_cost_cents ?? null,
+    };
+    if (line.counterparty_location_id !== undefined) row.counterparty_location_id = line.counterparty_location_id;
+    if (line.counterparty_department_id !== undefined) row.counterparty_department_id = line.counterparty_department_id;
+    return row;
+  });
 
   const { error: linesError } = await supabase
     .from('gl_entry_lines')
