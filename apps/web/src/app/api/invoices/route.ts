@@ -28,16 +28,18 @@ export async function GET(request: Request) {
   const from = (page - 1) * perPage;
   const to = from + perPage - 1;
 
-  // Base query
+  // Base query.
+  // NOTE: no PostgREST embeds on customers/locations/jobs here — those tables
+  // now live in the `core` schema while invoices is in `public`, and PostgREST
+  // cannot embed across schemas (it 500s with a schema-cache error). We fetch
+  // each relation separately from `core` (below) and stitch them in JS.
   let query = supabase
     .from('invoices')
     .select(`
       id, invoice_number, invoice_date, due_date, subtotal_cents, tax_cents,
       retainage_cents, total_cents, amount_paid_cents, balance_cents,
       status, is_progress_bill, application_number, memo, sent_at, created_at,
-      customer:customers!invoices_customer_id_fkey(id, name, email, payment_terms_days),
-      location:locations!invoices_location_id_fkey(id, name, short_code),
-      job:jobs!invoices_job_id_fkey(id, job_number, name)
+      customer_id, location_id, job_id
     `, { count: 'exact' })
     .order('invoice_date', { ascending: false })
     .range(from, to);
@@ -83,11 +85,34 @@ export async function GET(request: Request) {
     }
   }
 
+  // Fetch the related core records for the invoices on this page and build
+  // lookup maps (replaces the cross-schema PostgREST embeds removed above).
+  const rows = data ?? [];
+  const customerIds = [...new Set(rows.map((r) => r.customer_id).filter(Boolean))] as string[];
+  const locationIds = [...new Set(rows.map((r) => r.location_id).filter(Boolean))] as string[];
+  const jobIds = [...new Set(rows.map((r) => r.job_id).filter(Boolean))] as string[];
+
+  const [custRes, locRes, jobRes] = await Promise.all([
+    customerIds.length
+      ? supabase.schema('core').from('customers').select('id, name, email, payment_terms_days').in('id', customerIds)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    locationIds.length
+      ? supabase.schema('core').from('locations').select('id, name, short_code').in('id', locationIds)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    jobIds.length
+      ? supabase.schema('core').from('jobs').select('id, job_number, name').in('id', jobIds)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+  ]);
+
+  const customerById = new Map((custRes.data ?? []).map((c: Record<string, unknown>) => [c.id as string, c]));
+  const locationById = new Map((locRes.data ?? []).map((l: Record<string, unknown>) => [l.id as string, l]));
+  const jobById = new Map((jobRes.data ?? []).map((j: Record<string, unknown>) => [j.id as string, j]));
+
   // Map data with aging calculation
-  const invoices = (data ?? []).map((inv) => {
-    const customer = Array.isArray(inv.customer) ? inv.customer[0] : inv.customer;
-    const location = Array.isArray(inv.location) ? inv.location[0] : inv.location;
-    const job = Array.isArray(inv.job) ? inv.job[0] : inv.job;
+  const invoices = rows.map((inv) => {
+    const customer = inv.customer_id ? customerById.get(inv.customer_id as string) ?? null : null;
+    const location = inv.location_id ? locationById.get(inv.location_id as string) ?? null : null;
+    const job = inv.job_id ? jobById.get(inv.job_id as string) ?? null : null;
     const dueDate = new Date(inv.due_date);
     const daysOverdue = Math.max(0, Math.floor((now.getTime() - dueDate.getTime()) / 86400000));
 

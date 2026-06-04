@@ -50,9 +50,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ vendors: [], total: 0 });
     }
 
+    // NOTE: no PostgREST embed on vendor_compliance_docs / vendor_payment_holds
+    // here — vendors now lives in `core` while those child tables are in
+    // `public`, and PostgREST cannot embed across schemas (it 500s). We fetch
+    // the child rows separately (below) and stitch them in JS.
     let query = supabase
       .schema('core').from('vendors')
-      .select('*, vendor_compliance_docs(id, doc_type, status, expiration_date), vendor_payment_holds(id, hold_type, reason, override_type, created_at)', { count: 'exact' })
+      .select('*', { count: 'exact' })
       .eq('org_id', org.id)
       .is('deleted_at', null);
 
@@ -78,17 +82,43 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch vendors' }, { status: 500 });
     }
 
+    // Fetch compliance docs + payment holds for the vendors on this page
+    // (public schema) and group them by vendor_id. Empty page → skip the calls.
+    const vendorIds = (vendors ?? []).map((v: Record<string, unknown>) => v.id as string);
+
+    const docsByVendor = new Map<string, Array<{ doc_type: string; status: string; expiration_date: string | null }>>();
+    const holdsByVendor = new Map<string, Array<{ hold_type: string; start_date: string | null; end_date: string | null }>>();
+
+    if (vendorIds.length > 0) {
+      const [{ data: docs }, { data: holds }] = await Promise.all([
+        supabase
+          .from('vendor_compliance_docs')
+          .select('vendor_id, doc_type, status, expiration_date')
+          .eq('org_id', org.id)
+          .in('vendor_id', vendorIds),
+        supabase
+          .from('vendor_payment_holds')
+          .select('vendor_id, hold_type, reason, start_date, end_date, created_at')
+          .eq('org_id', org.id)
+          .in('vendor_id', vendorIds),
+      ]);
+
+      for (const d of docs ?? []) {
+        const arr = docsByVendor.get(d.vendor_id as string) ?? [];
+        arr.push(d as { doc_type: string; status: string; expiration_date: string | null });
+        docsByVendor.set(d.vendor_id as string, arr);
+      }
+      for (const h of holds ?? []) {
+        const arr = holdsByVendor.get(h.vendor_id as string) ?? [];
+        arr.push(h as { hold_type: string; start_date: string | null; end_date: string | null });
+        holdsByVendor.set(h.vendor_id as string, arr);
+      }
+    }
+
     // Compute compliance status per vendor
     const enriched = (vendors ?? []).map((v: Record<string, unknown>) => {
-      const docs = (v.vendor_compliance_docs ?? []) as Array<{
-        doc_type: string;
-        status: string;
-        expiration_date: string | null;
-      }>;
-      const holds = (v.vendor_payment_holds ?? []) as Array<{
-        hold_type: string;
-        override_type: string | null;
-      }>;
+      const docs = docsByVendor.get(v.id as string) ?? [];
+      const holds = holdsByVendor.get(v.id as string) ?? [];
 
       const w9 = docs.find((d) => d.doc_type === 'W9');
       const glCoi = docs.find((d) => d.doc_type === 'GL_COI');
@@ -97,21 +127,28 @@ export async function GET(req: NextRequest) {
       const now = new Date();
       const isExpired = (doc: typeof w9) => {
         if (!doc) return true;
-        if (doc.status !== 'ACTIVE') return true;
+        // vendor_compliance_docs.status enum is MISSING | PENDING | VALID | EXPIRED.
+        if (doc.status !== 'VALID') return true;
         if (doc.expiration_date && new Date(doc.expiration_date) < now) return true;
         return false;
+      };
+
+      // A hold is currently in effect if its window covers today: started on/before
+      // now (or no start) and not yet ended (end_date null = permanent, else future).
+      const holdInEffect = (h: { start_date: string | null; end_date: string | null }) => {
+        if (h.start_date && new Date(h.start_date) > now) return false;
+        if (h.end_date && new Date(h.end_date) < now) return false;
+        return true;
       };
 
       const complianceStatus = {
         w9: w9 ? (isExpired(w9) ? 'expired' : 'valid') : 'missing',
         glCoi: glCoi ? (isExpired(glCoi) ? 'expired' : 'valid') : 'missing',
         wcCoi: wcCoi ? (isExpired(wcCoi) ? 'expired' : 'valid') : 'missing',
-        hasActiveHold: holds.some((h) => !h.override_type),
+        hasActiveHold: holds.some(holdInEffect),
       };
 
-      // Remove nested arrays from response for cleanliness
-      const { vendor_compliance_docs: _docs, vendor_payment_holds: _holds, ...rest } = v;
-      return { ...rest, compliance: complianceStatus };
+      return { ...v, compliance: complianceStatus };
     });
 
     // Filter by payment hold after enrichment

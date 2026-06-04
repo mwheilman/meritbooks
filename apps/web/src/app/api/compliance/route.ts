@@ -17,26 +17,33 @@ export async function GET(request: Request) {
 
   if (oblError) return NextResponse.json({ error: oblError.message }, { status: 500 });
 
-  // Get filings for this year
+  // Get filings for this year.
+  // NOTE: no PostgREST embed on `locations` here — locations now live in the
+  // `core` schema while compliance_filings is in `public`, and PostgREST cannot
+  // resolve an embed across schemas (it 500s with a schema-cache error). We
+  // fetch locations separately (below) and stitch the relation in JS.
   const { data: filings, error: filError } = await supabase
     .from('compliance_filings')
     .select(`
       id, obligation_id, location_id, period_year, period_month, period_quarter,
       due_date, status, filed_amount_cents, expected_amount_cents,
-      filed_by, filed_at, notes,
-      location:locations!compliance_filings_location_id_fkey(id, name, short_code)
+      filed_by, filed_at, notes
     `)
     .eq('period_year', year)
     .order('due_date');
 
   if (filError) return NextResponse.json({ error: filError.message }, { status: 500 });
 
-  // Get locations
+  // Get locations (core schema) — also used to stitch each filing's location.
   const { data: locations } = await supabase
     .schema('core').from('locations')
     .select('id, name, short_code')
     .eq('is_active', true)
     .order('name');
+
+  const locationById = new Map(
+    (locations ?? []).map((l: Record<string, unknown>) => [l.id as string, l]),
+  );
 
   const now = new Date();
   const filedCount = (filings ?? []).filter((f: Record<string, unknown>) => f.status === 'FILED' || f.status === 'AUTO_VERIFIED').length;
@@ -66,7 +73,7 @@ export async function GET(request: Request) {
       expectedAmountCents: f.expected_amount_cents,
       filedAt: f.filed_at,
       notes: f.notes,
-      location: f.location,
+      location: locationById.get(f.location_id as string) ?? null,
     })),
     locations: locations ?? [],
     summary: { filedCount, overdueCount, upcomingCount, totalFilings: (filings ?? []).length },
