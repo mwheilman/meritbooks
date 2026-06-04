@@ -238,6 +238,7 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
   const [dueDate, setDueDate] = useState('');
   const [dueDateConf, setDueDateConf] = useState<number | null>(null);
   const [taxCents, setTaxCents] = useState(0);
+  const [retainagePct, setRetainagePct] = useState(0);
   const [lines, setLines] = useState<BillLineState[]>([emptyLine()]);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
@@ -255,7 +256,11 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
     lines.reduce((s, l) => s + dollarsToCents(parseFloat(l.amount) || 0), 0),
     [lines]
   );
-  const totalCents = subtotalCents + taxCents;
+  const retainageCents = useMemo(
+    () => (retainagePct > 0 ? Math.round((subtotalCents * retainagePct) / 100) : 0),
+    [subtotalCents, retainagePct],
+  );
+  const totalCents = subtotalCents + taxCents - retainageCents;
 
   useEffect(() => {
     if (vendorId && billDate && !isAiParsed) {
@@ -356,6 +361,7 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
       bill_date: billDate,
       due_date: dueDate,
       tax_cents: taxCents,
+      retainage_pct: retainagePct,
       lines: validLines.map((l) => ({
         description: l.description || undefined,
         account_id: l.account_id,
@@ -386,7 +392,7 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
       setFormError('Network error');
     }
     setSubmitting(false);
-  }, [locationId, vendorId, billNumber, billDate, dueDate, taxCents, lines, onSuccess]);
+  }, [locationId, vendorId, billNumber, billDate, dueDate, taxCents, retainagePct, lines, onSuccess]);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
@@ -491,7 +497,7 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Bill Date <ConfBadge score={billDateConf} /></label>
               <input type="date" value={billDate} onChange={(e) => { setBillDate(e.target.value); setBillDateConf(null); }}
@@ -501,6 +507,15 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
               <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Due Date <ConfBadge score={dueDateConf} /></label>
               <input type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); setDueDateConf(null); }}
                 className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono" />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1 font-medium">Retainage %</label>
+              <div className="relative">
+                <input type="number" value={retainagePct || ''} onChange={(e) => setRetainagePct(Math.min(100, Math.max(0, parseFloat(e.target.value || '0'))))}
+                  step="0.5" min="0" max="100" placeholder="0"
+                  className="w-full pr-7 pl-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono placeholder:text-slate-600" />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500">%</span>
+              </div>
             </div>
           </div>
 
@@ -593,8 +608,15 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
                     <td />
                   </tr>
                 )}
+                {retainageCents > 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-1 text-right text-xs text-amber-500/80">Retainage withheld ({retainagePct}%)</td>
+                    <td className="px-3 py-1 text-right text-xs font-mono text-amber-400">−{formatMoney(retainageCents)}</td>
+                    <td />
+                  </tr>
+                )}
                 <tr className="bg-slate-800/20">
-                  <td colSpan={4} className="px-3 py-2.5 text-right text-sm font-medium text-white">Total</td>
+                  <td colSpan={4} className="px-3 py-2.5 text-right text-sm font-medium text-white">{retainageCents > 0 ? 'Due now' : 'Total'}</td>
                   <td className="px-3 py-2.5 text-right text-base font-mono font-bold text-white">{formatMoney(totalCents)}</td>
                   <td />
                 </tr>

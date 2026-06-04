@@ -24,6 +24,7 @@ import {
   Upload,
   CalendarDays,
   Percent,
+  PiggyBank,
   FlaskConical,
   type LucideIcon,
 } from 'lucide-react';
@@ -84,6 +85,7 @@ export const navigation: NavGroup[] = [
       { label: 'Intercompany', href: '/intercompany', icon: Combine },
       { label: 'Jobs & Projects', href: '/jobs', icon: Briefcase },
       { label: 'Vendors', href: '/vendors', icon: Building2 },
+      { label: 'Retainage', href: '/retainage', icon: PiggyBank },
       { label: 'Close Management', href: '/close', icon: ClipboardCheck },
     ],
   },

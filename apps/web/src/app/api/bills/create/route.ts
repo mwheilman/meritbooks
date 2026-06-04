@@ -44,7 +44,11 @@ export async function POST(request: Request) {
     );
 
     const subtotalCents = body.lines.reduce((s, l) => s + l.amount_cents, 0);
-    const totalCents = subtotalCents + body.tax_cents;
+    // Retainage is withheld on the subtotal (not tax), mirroring the AR side.
+    // total_cents is the currently-due payable, NET of retainage; the withheld
+    // portion is parked in Retainage Payable at approval.
+    const retainageCents = body.retainage_pct > 0 ? Math.round(subtotalCents * body.retainage_pct / 100) : 0;
+    const totalCents = subtotalCents + body.tax_cents - retainageCents;
 
     // Route the bill to an approver (by vendor, falling back to ACCOUNTING).
     const approver = await resolveApprover(supabase, orgId, { vendorId: body.vendor_id, sourceType: 'BILL' });
@@ -61,6 +65,8 @@ export async function POST(request: Request) {
         subtotal_cents: subtotalCents,
         tax_cents: body.tax_cents,
         total_cents: totalCents,
+        retainage_pct: body.retainage_pct,
+        retainage_cents: retainageCents,
         status: hasIssue ? 'ON_HOLD' : 'PENDING',
         payment_hold_reason: hasIssue ? 'Vendor compliance documents missing or expired' : null,
         approver_type: approver.approver_type,

@@ -17,6 +17,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from './gl-posting';
+import { resolveRole } from '../posting/account-roles';
 import { recordBillPayment, reverseGlEntry } from '../posting/lifecycle';
 import { approveAttribution, resolveApprover, type ResolvedApprover, type RoutingContext } from './cost-approval';
 import type { CostType } from './job-cost-events';
@@ -44,6 +45,7 @@ export interface BillRow {
   subtotal_cents: number;
   tax_cents: number;
   total_cents: number;
+  retainage_cents: number;
   amount_paid_cents: number;
   status: string;
   gl_entry_id: string | null;
@@ -79,7 +81,7 @@ export async function resolveApAccount(db: DB, orgId: string): Promise<string> {
 export async function loadBillWithLines(db: DB, orgId: string, billId: string): Promise<{ bill: BillRow; lines: BillLineRow[] }> {
   const { data: bill, error } = await db
     .from('bills')
-    .select('id, org_id, location_id, vendor_id, bill_number, bill_date, due_date, subtotal_cents, tax_cents, total_cents, amount_paid_cents, status, gl_entry_id')
+    .select('id, org_id, location_id, vendor_id, bill_number, bill_date, due_date, subtotal_cents, tax_cents, total_cents, retainage_cents, amount_paid_cents, status, gl_entry_id')
     .eq('org_id', orgId)
     .eq('id', billId)
     .single();
@@ -156,6 +158,24 @@ export async function approveBill(db: DB, orgId: string, billId: string, approve
     class_id: undefined,
     memo: `AP: ${bill.bill_number ?? bill.id}`,
   });
+
+  // Retainage withholding: the full cost is recognized in the expense lines
+  // above, but only (subtotal + tax − retainage) is credited to AP (bill
+  // total_cents is already net). The withheld portion is parked in Retainage
+  // Payable until released. Debits (subtotal + tax) = AP credit + retainage
+  // credit, so this keeps the entry balanced.
+  if (bill.retainage_cents > 0) {
+    const retainagePayable = await resolveRole(db, orgId, 'RETAINAGE_PAYABLE');
+    jeLines.push({
+      account_id: retainagePayable.id,
+      debit_cents: 0,
+      credit_cents: bill.retainage_cents,
+      location_id: bill.location_id,
+      department_id: undefined,
+      class_id: undefined,
+      memo: `Retainage withheld: ${bill.bill_number ?? bill.id}`,
+    });
+  }
 
   const je = await postJournalEntry(db, {
     org_id: orgId,
@@ -262,6 +282,19 @@ export async function voidBill(db: DB, orgId: string, billId: string, reason: st
   if (bill.status === 'VOIDED') return { id: billId, status: 'VOIDED' as const };
   if (bill.amount_paid_cents > 0) {
     throw new Error('Cannot void a bill that has payments recorded against it — void the payments first');
+  }
+
+  // Retainage that has already been released (and paid) cannot be unwound here.
+  if (bill.retainage_cents > 0) {
+    const { data: rels } = await db
+      .from('retainage_releases')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('bill_id', billId)
+      .limit(1);
+    if ((rels ?? []).length > 0) {
+      throw new Error('Cannot void a bill whose retainage has been released — reverse the retainage release first');
+    }
   }
 
   // Reverse the GL entry posted at approval (audit gap 2). The reversal is a
