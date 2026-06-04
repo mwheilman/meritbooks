@@ -25,6 +25,7 @@ import {
   CalendarDays,
   Percent,
   PiggyBank,
+  Lock,
   FlaskConical,
   type LucideIcon,
 } from 'lucide-react';
@@ -88,6 +89,7 @@ export const navigation: NavGroup[] = [
       { label: 'Retainage', href: '/retainage', icon: PiggyBank },
       { label: 'Vendor Compliance', href: '/vendor-compliance', icon: Shield },
       { label: 'Close Management', href: '/close', icon: ClipboardCheck },
+      { label: 'Year-End Close', href: '/year-end-close', icon: Lock },
     ],
   },
   {
