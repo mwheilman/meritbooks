@@ -54,6 +54,7 @@ export function ReceiptQueue() {
   const debouncedSearch = useDebounce(search, 300);
   const [locationId, setLocationId] = useState<string | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [isCategorizing, setIsCategorizing] = useState(false);
 
   const params: Record<string, string> = {};
   if (activeTab !== 'all') params.status = activeTab;
@@ -91,12 +92,52 @@ export function ReceiptQueue() {
     setApprovingId(null);
   }, [approveReceipt, refetch]);
 
+  const handleCategorizeAll = useCallback(async () => {
+    setIsCategorizing(true);
+    try {
+      const res = await fetch('/api/receipts/categorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all_pending: true, location_id: locationId ?? undefined }),
+      });
+      const result = await res.json();
+      if (res.ok && result.ok) {
+        if (result.coded > 0) {
+          addToast('success', `AI coded ${result.coded} receipt${result.coded > 1 ? 's' : ''}${result.failed ? `, ${result.failed} need attention` : ''}`);
+        } else if (result.processed === 0) {
+          addToast('success', 'Nothing to categorize — no uncoded pending receipts');
+        } else {
+          addToast('error', `Could not code any of ${result.processed} receipt${result.processed > 1 ? 's' : ''}`);
+        }
+        refetch();
+      } else if (res.status === 402) {
+        addToast('error', 'AI budget reached — categorization paused');
+      } else {
+        addToast('error', result.error ?? 'Categorization failed');
+      }
+    } catch {
+      addToast('error', 'Network error during categorization');
+    } finally {
+      setIsCategorizing(false);
+    }
+  }, [locationId, refetch]);
+
   const receipts = data?.data ?? [];
   const counts = data?.counts ?? null;
 
   return (
     <div className="space-y-4">
-      <CompanySelector selectedId={locationId} onChange={setLocationId} />
+      <div className="flex items-center justify-between gap-3">
+        <CompanySelector selectedId={locationId} onChange={setLocationId} />
+        <button
+          onClick={handleCategorizeAll}
+          disabled={isCategorizing}
+          className="btn-secondary btn-sm whitespace-nowrap"
+          title="Run AI categorization on uncoded pending receipts"
+        >
+          {isCategorizing ? 'Categorizing…' : 'AI Categorize'}
+        </button>
+      </div>
 
       {/* Status tabs */}
       <div className="flex items-center gap-1 p-1 rounded-lg bg-surface-900 border border-slate-800 w-fit">

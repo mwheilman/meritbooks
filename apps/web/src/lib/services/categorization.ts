@@ -10,9 +10,9 @@
  * Tier 1 (free, deterministic): vendor-pattern match on prior coding.
  * Tier 2 (gateway AI): when no confident pattern exists.
  *
- * Note: the vendor-pattern *learning loop* (writing confirmed codings back to
- * vendor_patterns) is intentionally not wired here — that table predates the
- * core-schema carve and needs a migration to the core model first.
+ * The vendor-pattern learning loop (learnVendorPattern, below) writes confirmed
+ * codings back to vendor_patterns so tier 1 catches repeats for free. Migration
+ * 040 added the (org_id, normalized_description) upsert key it relies on.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -235,9 +235,9 @@ Respond with ONLY this JSON, no markdown:
  */
 export async function learnVendorPattern(
   supabase: SupabaseClient,
-  args: { orgId: string; description: string; accountId: string; vendorId?: string | null; departmentId?: string | null; locationId?: string | null },
+  args: { orgId: string; description: string; accountId: string; vendorId?: string | null; departmentId?: string | null; classId?: string | null; locationId?: string | null },
 ): Promise<{ learned: boolean }> {
-  const { orgId, description, accountId, vendorId, departmentId, locationId } = args;
+  const { orgId, description, accountId, vendorId, departmentId, classId, locationId } = args;
   const normalized = normalizeDescription(description);
   if (!normalized || !accountId) return { learned: false };
 
@@ -257,6 +257,7 @@ export async function learnVendorPattern(
           account_id: accountId,
           vendor_id: vendorId ?? null,
           department_id: departmentId ?? null,
+          class_id: classId ?? null,
           location_id: locationId ?? null,
           match_count: Number(existing.match_count ?? 1) + 1,
           last_matched_at: new Date().toISOString(),
@@ -268,6 +269,7 @@ export async function learnVendorPattern(
         vendor_id: vendorId ?? null,
         account_id: accountId,
         department_id: departmentId ?? null,
+        class_id: classId ?? null,
         location_id: locationId ?? null,
         raw_description: description.slice(0, 1000),
         normalized_description: normalized,

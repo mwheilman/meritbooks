@@ -68,6 +68,7 @@ export function BankFeedContent() {
   const [editingTxn, setEditingTxn] = useState<BankFeedRow | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [flaggingTxn, setFlaggingTxn] = useState<BankFeedRow | null>(null);
+  const [isCategorizing, setIsCategorizing] = useState(false);
 
   // Build query params
   const params: Record<string, string> = {};
@@ -127,6 +128,38 @@ export function BankFeedContent() {
       addToast('error', 'Failed to approve transaction');
     }
   }, [approveTxn, refetch]);
+
+  // AI-categorize uncoded PENDING transactions in place (populates the ai_* columns
+  // the list already renders; reviewer then approves with final ?? ai).
+  const handleCategorizeAll = useCallback(async () => {
+    setIsCategorizing(true);
+    try {
+      const res = await fetch('/api/bank-feed/categorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all_pending: true, location_id: selectedLocationId ?? undefined }),
+      });
+      const result = await res.json();
+      if (res.ok && result.ok) {
+        if (result.coded > 0) {
+          addToast('success', `AI coded ${result.coded} transaction${result.coded > 1 ? 's' : ''}${result.failed ? `, ${result.failed} need attention` : ''}`);
+        } else if (result.processed === 0) {
+          addToast('success', 'Nothing to categorize — no uncoded pending transactions');
+        } else {
+          addToast('error', `Could not code any of ${result.processed} transaction${result.processed > 1 ? 's' : ''}`);
+        }
+        refetch();
+      } else if (res.status === 402) {
+        addToast('error', 'AI budget reached — categorization paused');
+      } else {
+        addToast('error', result.error ?? 'Categorization failed');
+      }
+    } catch {
+      addToast('error', 'Network error during categorization');
+    } finally {
+      setIsCategorizing(false);
+    }
+  }, [selectedLocationId, refetch]);
 
   // Flag handler
   const handleFlag = useCallback((txn: BankFeedRow) => {
@@ -332,8 +365,16 @@ export function BankFeedContent() {
 
   return (
     <>
-      <div className="mb-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <CompanySelector selectedId={selectedLocationId} onChange={setSelectedLocationId} />
+        <button
+          onClick={handleCategorizeAll}
+          disabled={isCategorizing}
+          className="btn-secondary btn-sm whitespace-nowrap"
+          title="Run AI categorization on uncoded pending transactions"
+        >
+          {isCategorizing ? 'Categorizing…' : 'AI Categorize'}
+        </button>
       </div>
       <BankFeedFilters
         activeTab={activeTab}

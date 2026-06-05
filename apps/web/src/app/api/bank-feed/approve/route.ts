@@ -5,6 +5,7 @@ import { approveBankTransactionSchema, type ApproveBankTransactionInput } from '
 import { postJournalEntry } from '@/lib/services/gl-posting';
 import { recordBillPayment } from '@/lib/posting/lifecycle';
 import { createAttribution } from '@/lib/services/cost-approval';
+import { learnVendorPattern } from '@/lib/services/categorization';
 
 /**
  * POST /api/bank-feed/approve
@@ -163,21 +164,20 @@ export const POST = apiHandler(
       }
     }
 
-    // Vendor pattern learning
+    // Vendor pattern learning. Routed through learnVendorPattern so it upserts on
+    // the (org_id, normalized_description) key migration 040 introduced — a raw
+    // upsert on the old (org_id, vendor_id, normalized_description) target would
+    // now collide with that index when two vendors share a description.
     if (body.vendor_id) {
-      const normalized = txn.description.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-      await ctx.supabase.from('vendor_patterns').upsert({
-        org_id: orgId,
-        vendor_id: body.vendor_id,
-        raw_description: txn.description,
-        normalized_description: normalized,
-        account_id: body.account_id,
-        department_id: body.department_id ?? null,
-        class_id: body.class_id ?? null,
-        location_id: locationId,
-        match_count: 1,
-        last_matched_at: new Date().toISOString(),
-      }, { onConflict: 'org_id,vendor_id,normalized_description' });
+      await learnVendorPattern(ctx.supabase, {
+        orgId,
+        description: txn.description,
+        accountId: body.account_id,
+        vendorId: body.vendor_id,
+        departmentId: body.department_id ?? null,
+        classId: body.class_id ?? null,
+        locationId,
+      });
 
       await ctx.supabase.rpc('increment_vendor_stats', {
         p_vendor_id: body.vendor_id,
