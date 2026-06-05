@@ -7,9 +7,13 @@
  * (capex / prepaid / deferred revenue) and asks one clarifying question when the
  * economic substance is genuinely ambiguous rather than guessing silently.
  *
- * Mirrors the existing bill-parser Claude integration (same endpoint, version,
- * model, JSON-out contract).
+ * GATE 3: this now runs through the Core AI gateway (metered, budget-capped,
+ * model-config-driven) instead of calling Anthropic directly. The route writes
+ * an ai_decisions record for every proposal.
  */
+
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { runAiGateway } from '@meritbooks/core-ai';
 
 export interface ComposerAccount {
   account_number: string;
@@ -39,6 +43,16 @@ export interface ComposerProposal {
   notes: string | null;
 }
 
+export interface GatewayMeta {
+  status: string;
+  modelRequested: string;
+  modelUsed: string | null;
+  costCents: number;
+  correlationId: string;
+  budgetState: string;
+  message: string | null;
+}
+
 export interface ComposerResult {
   success: boolean;
   error?: string;
@@ -46,12 +60,15 @@ export interface ComposerResult {
   tokensInput?: number;
   tokensOutput?: number;
   latencyMs?: number;
+  gateway?: GatewayMeta;
 }
 
-const MODEL = 'claude-sonnet-4-20250514';
+/** Default model requested; the gateway may substitute (degrade) under budget policy. */
+export const COMPOSER_MODEL = 'claude-sonnet-4-20250514';
+export const COMPOSER_FEATURE = 'JE_COMPOSER';
 
-function buildPrompt(description: string, accounts: ComposerAccount[], today: string, companyName?: string): string {
-  // Keep the account list compact but complete — number, name, type/sub-type.
+/** Pure: build the composer prompt from a description + the real COA. */
+export function buildComposerPrompt(description: string, accounts: ComposerAccount[], today: string, companyName?: string): string {
   const coa = accounts
     .map((a) => `${a.account_number}\t${a.name}\t(${a.account_type}/${a.account_sub_type})`)
     .join('\n');
@@ -92,92 +109,116 @@ Respond with ONLY a JSON object, no markdown, no prose:
 }`;
 }
 
-export async function composeJournalEntry(
-  description: string,
-  accounts: ComposerAccount[],
-  apiKey: string,
-  companyName?: string
+/** Pure: parse the model's JSON text into a normalized proposal. */
+export function parseComposerProposal(text: string): { proposal?: ComposerProposal; error?: string } {
+  const jsonStr = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    return { error: 'Could not parse the AI response' };
+  }
+
+  const rawLines = (parsed.lines as Array<Record<string, unknown>>) ?? [];
+  const lines: ComposedLine[] = rawLines.map((l) => ({
+    account_number: String(l.account_number ?? ''),
+    debit_cents: Math.max(0, Math.round(Number(l.debit_cents ?? 0))),
+    credit_cents: Math.max(0, Math.round(Number(l.credit_cents ?? 0))),
+    memo: l.memo ? String(l.memo) : null,
+  }));
+
+  const totalDebitCents = lines.reduce((s, l) => s + l.debit_cents, 0);
+  const totalCreditCents = lines.reduce((s, l) => s + l.credit_cents, 0);
+
+  const predRaw = (parsed.prediction as Record<string, unknown>) ?? {};
+  const predType = String(predRaw.type ?? 'NONE').toUpperCase();
+  const prediction: { type: PredictionType; rationale: string | null } = {
+    type: (['NONE', 'CAPEX', 'PREPAID', 'DEFERRED_REVENUE'].includes(predType) ? predType : 'NONE') as PredictionType,
+    rationale: predRaw.rationale ? String(predRaw.rationale) : null,
+  };
+
+  const proposal: ComposerProposal = {
+    memo: String(parsed.memo ?? ''),
+    lines,
+    balanced: totalDebitCents === totalCreditCents && totalDebitCents > 0,
+    totalDebitCents,
+    totalCreditCents,
+    prediction,
+    confidence: Math.min(1, Math.max(0, Number(parsed.confidence ?? 0))),
+    clarifyingQuestion: parsed.clarifyingQuestion ? String(parsed.clarifyingQuestion) : null,
+    notes: parsed.notes ? String(parsed.notes) : null,
+  };
+  return { proposal };
+}
+
+/** Extract the text content from a gateway result (Anthropic content array). */
+function extractText(result: unknown): string | null {
+  if (!Array.isArray(result)) return null;
+  const block = (result as Array<{ type?: string; text?: string }>).find((c) => c?.type === 'text');
+  return block?.text ?? null;
+}
+
+/**
+ * Compose a journal entry THROUGH the Core AI gateway (metered + budget-capped).
+ * Advisory: returns a proposal for human review; never posts.
+ */
+export async function composeViaGateway(
+  supabase: SupabaseClient,
+  anthropicApiKey: string,
+  args: { orgId: string; userId: string | null; description: string; accounts: ComposerAccount[]; companyName?: string },
 ): Promise<ComposerResult> {
+  const { orgId, userId, description, accounts, companyName } = args;
   if (!description.trim()) return { success: false, error: 'Description is empty' };
   if (accounts.length === 0) return { success: false, error: 'No chart of accounts available — seed the COA first' };
 
   const today = new Date().toISOString().split('T')[0];
-  const prompt = buildPrompt(description, accounts, today, companyName);
+  const prompt = buildComposerPrompt(description, accounts, today, companyName);
   const start = Date.now();
 
+  let gw;
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 1500,
+    gw = await runAiGateway(
+      { supabase, anthropicApiKey },
+      {
+        tenant_id: orgId,
+        user_id: userId,
+        module: 'BOOKS',
+        feature: COMPOSER_FEATURE,
+        model: COMPOSER_MODEL,
         messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
-      }),
-    });
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error('[je-composer] Claude API error:', response.status, errBody);
-      return { success: false, error: `Claude API returned ${response.status}` };
-    }
-
-    const result = await response.json();
-    const textContent = result.content?.find((c: { type: string }) => c.type === 'text');
-    if (!textContent?.text) return { success: false, error: 'Claude returned an empty response' };
-
-    const jsonStr = textContent.text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(jsonStr);
-    } catch {
-      console.error('[je-composer] Failed to parse JSON:', jsonStr.slice(0, 500));
-      return { success: false, error: 'Could not parse the AI response' };
-    }
-
-    const rawLines = (parsed.lines as Array<Record<string, unknown>>) ?? [];
-    const lines: ComposedLine[] = rawLines.map((l) => ({
-      account_number: String(l.account_number ?? ''),
-      debit_cents: Math.max(0, Math.round(Number(l.debit_cents ?? 0))),
-      credit_cents: Math.max(0, Math.round(Number(l.credit_cents ?? 0))),
-      memo: l.memo ? String(l.memo) : null,
-    }));
-
-    const totalDebitCents = lines.reduce((s, l) => s + l.debit_cents, 0);
-    const totalCreditCents = lines.reduce((s, l) => s + l.credit_cents, 0);
-
-    const predRaw = (parsed.prediction as Record<string, unknown>) ?? {};
-    const predType = String(predRaw.type ?? 'NONE').toUpperCase();
-    const prediction: { type: PredictionType; rationale: string | null } = {
-      type: (['NONE', 'CAPEX', 'PREPAID', 'DEFERRED_REVENUE'].includes(predType) ? predType : 'NONE') as PredictionType,
-      rationale: predRaw.rationale ? String(predRaw.rationale) : null,
-    };
-
-    const proposal: ComposerProposal = {
-      memo: String(parsed.memo ?? ''),
-      lines,
-      balanced: totalDebitCents === totalCreditCents && totalDebitCents > 0,
-      totalDebitCents,
-      totalCreditCents,
-      prediction,
-      confidence: Math.min(1, Math.max(0, Number(parsed.confidence ?? 0))),
-      clarifyingQuestion: parsed.clarifyingQuestion ? String(parsed.clarifyingQuestion) : null,
-      notes: parsed.notes ? String(parsed.notes) : null,
-    };
-
-    return {
-      success: true,
-      proposal,
-      tokensInput: result.usage?.input_tokens,
-      tokensOutput: result.usage?.output_tokens,
-      latencyMs: Date.now() - start,
-    };
+        max_tokens: 1500,
+      },
+    );
   } catch (e) {
-    console.error('[je-composer] unexpected error:', e);
-    return { success: false, error: e instanceof Error ? e.message : 'Compose failed' };
+    return { success: false, error: e instanceof Error ? e.message : 'Gateway error' };
   }
+
+  const meta: GatewayMeta = {
+    status: gw.status,
+    modelRequested: COMPOSER_MODEL,
+    modelUsed: gw.model_used,
+    costCents: gw.cost_cents,
+    correlationId: gw.correlation_id,
+    budgetState: gw.budget.state,
+    message: gw.message,
+  };
+
+  if (gw.status === 'blocked' || gw.result == null) {
+    return { success: false, error: gw.message ?? 'AI request was blocked', gateway: meta };
+  }
+
+  const text = extractText(gw.result);
+  if (!text) return { success: false, error: 'The model returned an empty response', gateway: meta };
+
+  const { proposal, error } = parseComposerProposal(text);
+  if (!proposal) return { success: false, error: error ?? 'Parse failed', gateway: meta };
+
+  return {
+    success: true,
+    proposal,
+    tokensInput: gw.tokens.input,
+    tokensOutput: gw.tokens.output,
+    latencyMs: Date.now() - start,
+    gateway: meta,
+  };
 }

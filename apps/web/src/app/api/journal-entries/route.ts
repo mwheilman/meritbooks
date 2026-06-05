@@ -22,6 +22,8 @@ const jeCreateSchema = z.object({
   memo: z.string().max(1000).optional(),
   post_immediately: z.boolean().default(true),
   lines: z.array(jeLineSchema).min(2),
+  /** When the entry came from an AI proposal, link it so the decision is dispositioned. */
+  decision_id: z.string().uuid().optional(),
 });
 
 // GET — query journal entries (already exists, re-export for combined route)
@@ -264,6 +266,26 @@ export async function POST(request: Request) {
       error: `Failed to post lines: ${linesError.message}`,
       code: 'LINES_ERROR',
     }, { status: 500 });
+  }
+
+  // If this entry came from an AI proposal, mark the decision APPROVED and link
+  // it to the posted GL entry (the human-disposition half of the decision log).
+  if (body.decision_id) {
+    try {
+      await supabase
+        .from('ai_decisions')
+        .update({
+          status: 'APPROVED',
+          disposition_by_user: userId,
+          disposition_at: new Date().toISOString(),
+          posted_gl_entry_id: entry.id,
+        })
+        .eq('org_id', orgId)
+        .eq('id', body.decision_id)
+        .eq('status', 'PROPOSED');
+    } catch (e) {
+      console.error('[journal-entries POST] decision disposition failed (non-fatal):', e);
+    }
   }
 
   return NextResponse.json({

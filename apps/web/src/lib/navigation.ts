@@ -26,6 +26,7 @@ import {
   Percent,
   PiggyBank,
   Lock,
+  Sparkles,
   FlaskConical,
   type LucideIcon,
 } from 'lucide-react';
@@ -76,6 +77,7 @@ export const navigation: NavGroup[] = [
       { label: 'Cash Position', href: '/cash', icon: Wallet },
       { label: '13-Week Forecast', href: '/forecast', icon: TrendingUp },
       { label: 'Reports', href: '/reports', icon: BarChart3 },
+      { label: 'AI Decision Log', href: '/ai-decisions', icon: Sparkles },
     ],
   },
   {

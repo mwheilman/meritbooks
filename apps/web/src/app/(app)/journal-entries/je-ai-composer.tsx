@@ -40,6 +40,8 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
   const [error, setError] = useState('');
 
   const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [decisionId, setDecisionId] = useState<string | null>(null);
+  const [gateway, setGateway] = useState<{ costCents: number; budgetState: string; message: string | null } | null>(null);
   const [memo, setMemo] = useState('');
   const [lines, setLines] = useState<EditLine[]>([]);
   const [posting, setPosting] = useState(false);
@@ -57,7 +59,7 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
   }, []);
 
   const compose = useCallback(async () => {
-    setError(''); setProposal(null); setPostError('');
+    setError(''); setProposal(null); setPostError(''); setDecisionId(null); setGateway(null);
     if (!locationId) { setError('Select a company first.'); return; }
     if (description.trim().length < 3) { setError('Describe the transaction first.'); return; }
     setComposing(true);
@@ -71,6 +73,8 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
       if (!res.ok) { setError(data.error ?? 'Compose failed'); return; }
       const p = data.proposal as Proposal;
       setProposal(p);
+      setDecisionId(data.decisionId ?? null);
+      setGateway(data.gateway ? { costCents: data.gateway.costCents, budgetState: data.gateway.budgetState, message: data.gateway.message } : null);
       setMemo(p.memo);
       setLines(p.lines.map((l) => ({
         account_id: l.account_id,
@@ -110,6 +114,7 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
         entry_type: 'STANDARD' as const,
         memo,
         post_immediately: true,
+        decision_id: decisionId ?? undefined,
         lines: lines
           .filter((l) => l.account_id && (toCents(l.debit) > 0 || toCents(l.credit) > 0))
           .map((l) => ({
@@ -133,7 +138,7 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
     } finally {
       setPosting(false);
     }
-  }, [totals.balanced, allResolved, locationId, entryDate, memo, lines, onSuccess]);
+  }, [totals.balanced, allResolved, locationId, entryDate, memo, lines, decisionId, onSuccess]);
 
   return (
     <div className="rounded-xl border border-emerald-500/30 bg-slate-900/60 p-5">
@@ -234,6 +239,13 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
               {posting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Post entry
             </button>
             <span className="text-2xs text-slate-500">Confidence {(proposal.confidence * 100).toFixed(0)}%</span>
+            {gateway && (
+              <span className="text-2xs text-slate-500" title={`Budget: ${gateway.budgetState}`}>
+                · metered ${(gateway.costCents / 100).toFixed(4)}
+              </span>
+            )}
+            {decisionId && <span className="text-2xs text-slate-500">· logged for audit</span>}
+            {gateway?.message && <span className="text-2xs text-amber-400">· {gateway.message}</span>}
             {postError && <span className="text-xs text-rose-400">{postError}</span>}
           </div>
         </div>

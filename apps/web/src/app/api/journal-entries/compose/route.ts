@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { composeJournalEntry, type ComposerAccount } from '@/lib/services/je-composer';
+import { composeViaGateway, type ComposerAccount } from '@/lib/services/je-composer';
 import { z } from 'zod';
 
 const schema = z.object({
@@ -70,10 +70,18 @@ export async function POST(request: Request) {
     account_sub_type: String((a as { account_sub_type: string }).account_sub_type),
   }));
 
-  const result = await composeJournalEntry(body.description, composerAccounts, apiKey, (loc as { name: string }).name);
+  const result = await composeViaGateway(supabase, apiKey, {
+    orgId,
+    userId,
+    description: body.description,
+    accounts: composerAccounts,
+    companyName: (loc as { name: string }).name,
+  });
 
   if (!result.success || !result.proposal) {
-    return NextResponse.json({ error: result.error ?? 'Compose failed' }, { status: 502 });
+    // Surface a budget block distinctly so the UI can explain it.
+    const status = result.gateway?.status === 'blocked' ? 402 : 502;
+    return NextResponse.json({ error: result.error ?? 'Compose failed', gateway: result.gateway ?? null }, { status });
   }
 
   // Map account numbers -> ids; flag any the model invented (shouldn't happen).
@@ -93,28 +101,54 @@ export async function POST(request: Request) {
     };
   });
 
-  // Best-effort audit log (never block the response on logging).
+  const balanced = result.proposal.balanced && unresolved.length === 0;
+
+  // Decision log: every proposal is recorded immutably before it can be acted on.
+  let decisionId: string | null = null;
   try {
-    await supabase.from('ai_audit_log').insert({
-      org_id: orgId,
-      feature: 'JE_COMPOSER',
-      model_version: 'claude-sonnet-4-20250514',
-      input_summary: body.description.slice(0, 500),
-      output_summary: result.proposal.memo.slice(0, 500),
-      confidence: result.proposal.confidence,
-      tokens_input: result.tokensInput ?? null,
-      tokens_output: result.tokensOutput ?? null,
-      latency_ms: result.latencyMs ?? null,
-    });
+    const { data: decision } = await supabase
+      .from('ai_decisions')
+      .insert({
+        org_id: orgId,
+        location_id: body.location_id,
+        feature: 'JE_COMPOSER',
+        model_requested: result.gateway?.modelRequested ?? null,
+        model_used: result.gateway?.modelUsed ?? null,
+        correlation_id: result.gateway?.correlationId ?? null,
+        input_summary: body.description.slice(0, 2000),
+        proposed_output: {
+          memo: result.proposal.memo,
+          lines,
+          prediction: result.proposal.prediction,
+          totalDebitCents: result.proposal.totalDebitCents,
+          totalCreditCents: result.proposal.totalCreditCents,
+          unresolvedAccounts: unresolved,
+        },
+        confidence: result.proposal.confidence,
+        reasoning: result.proposal.notes,
+        clarifying_question: result.proposal.clarifyingQuestion,
+        status: 'PROPOSED',
+        tokens_input: result.tokensInput ?? null,
+        tokens_output: result.tokensOutput ?? null,
+        cost_cents: result.gateway?.costCents ?? null,
+        created_by_user: userId,
+      })
+      .select('id')
+      .single();
+    decisionId = (decision as { id: string } | null)?.id ?? null;
   } catch (e) {
-    console.error('[je-compose] audit log failed (non-fatal):', e);
+    console.error('[je-compose] decision log failed (non-fatal):', e);
   }
 
   return NextResponse.json({
+    decisionId,
+    gateway: result.gateway
+      ? { status: result.gateway.status, modelUsed: result.gateway.modelUsed, costCents: result.gateway.costCents, budgetState: result.gateway.budgetState, message: result.gateway.message }
+      : null,
     proposal: {
       memo: result.proposal.memo,
       lines,
-      balanced: result.proposal.balanced && unresolved.length === 0,
+      balanced,
       totalDebitCents: result.proposal.totalDebitCents,
       totalCreditCents: result.proposal.totalCreditCents,
       prediction: result.proposal.prediction,
