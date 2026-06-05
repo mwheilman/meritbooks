@@ -21,6 +21,11 @@ import { runAiGateway } from '@meritbooks/core-ai';
 export const CATEGORIZE_MODEL = 'claude-sonnet-4-20250514';
 export const CATEGORIZE_FEATURE = 'CATEGORIZATION';
 
+/** Shared normalization — must match between matching and learning. */
+export function normalizeDescription(description: string): string {
+  return description.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+}
+
 export interface CategorySuggestion {
   accountId: string | null;
   accountNumber: string | null;
@@ -52,7 +57,7 @@ export async function matchVendorPattern(
       .limit(100);
     if (error || !patterns?.length) return null;
 
-    const normalized = description.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    const normalized = normalizeDescription(description);
     let best: (typeof patterns)[number] | null = null;
     let bestScore = 0;
     for (const p of patterns) {
@@ -221,4 +226,58 @@ Respond with ONLY this JSON, no markdown:
       confidence, reasoning, source: 'ai', decisionId,
     },
   };
+}
+
+/**
+ * Learning loop: record a confirmed coding so tier 1 (free) catches it next time.
+ * Upserts on (org_id, normalized_description), incrementing match_count on repeats.
+ * Server-side only (admin client) — never throws into the caller.
+ */
+export async function learnVendorPattern(
+  supabase: SupabaseClient,
+  args: { orgId: string; description: string; accountId: string; vendorId?: string | null; departmentId?: string | null; locationId?: string | null },
+): Promise<{ learned: boolean }> {
+  const { orgId, description, accountId, vendorId, departmentId, locationId } = args;
+  const normalized = normalizeDescription(description);
+  if (!normalized || !accountId) return { learned: false };
+
+  try {
+    // Increment if we already know this description; else insert a fresh pattern.
+    const { data: existing } = await supabase
+      .from('vendor_patterns')
+      .select('id, match_count')
+      .eq('org_id', orgId)
+      .eq('normalized_description', normalized)
+      .maybeSingle();
+
+    if (existing?.id) {
+      await supabase
+        .from('vendor_patterns')
+        .update({
+          account_id: accountId,
+          vendor_id: vendorId ?? null,
+          department_id: departmentId ?? null,
+          location_id: locationId ?? null,
+          match_count: Number(existing.match_count ?? 1) + 1,
+          last_matched_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+    } else {
+      await supabase.from('vendor_patterns').insert({
+        org_id: orgId,
+        vendor_id: vendorId ?? null,
+        account_id: accountId,
+        department_id: departmentId ?? null,
+        location_id: locationId ?? null,
+        raw_description: description.slice(0, 1000),
+        normalized_description: normalized,
+        match_count: 1,
+        last_matched_at: new Date().toISOString(),
+      });
+    }
+    return { learned: true };
+  } catch (e) {
+    console.error('[categorize] learnVendorPattern failed (non-fatal):', e);
+    return { learned: false };
+  }
 }

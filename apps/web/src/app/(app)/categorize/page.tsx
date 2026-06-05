@@ -77,6 +77,14 @@ export default function CategorizePage() {
     setPosting(false);
     if (res.error) { addToast('error', res.error.error); return; }
     addToast('success', `Posted ${res.data?.entry?.entryNumber ?? 'entry'} — coded & logged`);
+    // Learning loop: teach this confirmed coding so tier 1 catches it next time.
+    void api.post('/api/categorize/learn', {
+      description,
+      account_id: expenseId,
+      vendor_id: suggestion?.vendorId ?? undefined,
+      department_id: suggestion?.departmentId ?? undefined,
+      location_id: locationId,
+    });
     setSuggestion(null); setDescription(''); setAmount(''); setExpenseId(''); setFundingId('');
   };
 
