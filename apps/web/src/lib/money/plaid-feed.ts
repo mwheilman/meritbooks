@@ -37,64 +37,35 @@ interface BankAccountRow {
   plaid_item_pk: string | null;
 }
 
-/** A location is required on bank_accounts; use the tenant's first/primary location. */
-async function resolvePrimaryLocationId(adminDb: SupabaseClient, orgId: string): Promise<string> {
-  const { data, error } = await adminDb
-    .schema('core')
-    .from('locations')
-    .select('id')
-    .eq('org_id', orgId)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle<{ id: string }>();
-  if (error) throw new Error(`Could not resolve a location: ${error.message}`);
-  if (!data?.id) throw new Error('No location found for tenant; create a location before connecting a bank.');
-  return data.id;
-}
-
-/** The GL cash account to attach to a new bank account (operating_bank role, else first ASSET cash). */
-async function resolveCashGlAccount(adminDb: SupabaseClient, orgId: string): Promise<string> {
-  // Prefer an account tagged with the operating_bank / cash role.
-  const { data: roleRow } = await adminDb
-    .from('account_roles')
-    .select('account_id, role_key')
-    .eq('org_id', orgId)
-    .in('role_key', ['operating_bank', 'cash'])
-    .limit(1)
-    .maybeSingle<{ account_id: string }>();
-  if (roleRow?.account_id) return roleRow.account_id;
-
-  // Fallback: first asset account that looks like cash/bank by number (1xxx).
-  const { data: acct, error } = await adminDb
-    .from('accounts')
-    .select('id, account_number, account_type')
-    .eq('org_id', orgId)
-    .eq('account_type', 'ASSET')
-    .order('account_number', { ascending: true })
-    .limit(1)
-    .maybeSingle<{ id: string }>();
-  if (error) throw new Error(`Could not resolve a cash GL account: ${error.message}`);
-  if (!acct?.id) throw new Error('No asset account found to map the bank account to.');
-  return acct.id;
-}
-
 export interface ConnectResult {
   connectionId: string;
   itemPk: string;
   plaidItemId: string;
   institutionName: string | null;
-  accountsLinked: number;
+  accountsStaged: number;
 }
 
 /**
- * Complete a Link flow: exchange the public token, register the connection,
- * record the Item, upsert its accounts. Returns a summary for the UI.
+ * Complete a Link flow for a KNOWN entity: exchange the public token, register
+ * the connection, record the Item, and stage the returned accounts under the
+ * given location. The entity is resolved before Plaid opens (presumed when
+ * scoped to a company; picked once from the consolidated view) — never guessed.
  */
 export async function completePlaidLink(
   adminDb: SupabaseClient,
   orgId: string,
-  input: { publicToken: string; connectedBy: string },
+  input: { publicToken: string; connectedBy: string; locationId: string },
 ): Promise<ConnectResult> {
+  // Validate the entity belongs to this org.
+  const { data: locRow } = await adminDb
+    .schema('core')
+    .from('locations')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('id', input.locationId)
+    .maybeSingle<{ id: string }>();
+  if (!locRow) throw new Error('Selected entity not found for this tenant.');
+
   const { accessToken, itemId } = await exchangePublicToken(adminDb, ENV, input.publicToken);
   const { accounts, institution } = await fetchItemAccounts(adminDb, ENV, accessToken);
 
@@ -128,60 +99,30 @@ export async function completePlaidLink(
     .single<{ id: string }>();
   if (itemErr) throw new Error(`Failed to record Plaid item: ${itemErr.message}`);
 
-  // 3) Upsert bank_accounts for each Plaid account. Errors are collected and
-  //    surfaced (NOT swallowed) so a constraint failure can't masquerade as a
-  //    successful link. Only depository accounts (checking/savings) become bank
-  //    accounts; loans/investments/credit are skipped for the cash feed.
-  const locationId = await resolvePrimaryLocationId(adminDb, orgId);
-  const glAccountId = await resolveCashGlAccount(adminDb, orgId);
-
-  let linked = 0;
-  const skipped: string[] = [];
-  const errors: string[] = [];
-
+  // 3) Stage every returned account under the resolved entity. The user then
+  //    assigns each a GL account + label (entity is already known) before it
+  //    becomes a real bank account. We do NOT auto-create bank_accounts here.
+  const staged: Array<{ plaidAccountId: string; name: string; type: string }> = [];
   for (const a of accounts) {
-    if (a.type !== 'CHECKING' && a.type !== 'SAVINGS' && a.type !== 'CREDIT_CARD' && a.type !== 'LINE_OF_CREDIT') {
-      skipped.push(`${a.name} (${a.type})`);
-      continue;
-    }
-    const fields = {
-      org_id: orgId,
-      location_id: locationId,
-      account_id: glAccountId,
-      plaid_account_id: a.plaidAccountId,
-      plaid_item_pk: itemRow.id,
-      institution_name: institution.institutionName ?? 'Bank',
-      account_name: a.name,
-      account_mask: a.mask,
-      account_type: a.type,
-      current_balance_cents: a.currentBalanceCents,
-      available_balance_cents: a.availableBalanceCents,
-      balance_updated_at: new Date().toISOString(),
-      is_active: true,
-    };
-    // The (org_id, plaid_account_id) unique index is PARTIAL (WHERE plaid_account_id
-    // IS NOT NULL), which Postgres won't use for ON CONFLICT — so check-then-write.
-    const { data: existing } = await adminDb
-      .from('bank_accounts')
-      .select('id')
-      .eq('org_id', orgId)
-      .eq('plaid_account_id', a.plaidAccountId)
-      .maybeSingle<{ id: string }>();
-
-    const { error: baErr } = existing
-      ? await adminDb.from('bank_accounts').update(fields).eq('id', existing.id)
-      : await adminDb.from('bank_accounts').insert(fields);
-
-    if (baErr) errors.push(`${a.name}: ${baErr.message}`);
-    else linked += 1;
-  }
-
-  if (linked === 0) {
-    throw new Error(
-      `No bank accounts were linked. ${errors.length ? 'Errors: ' + errors.join('; ') : ''}` +
-      `${skipped.length ? ' Skipped non-depository: ' + skipped.join(', ') : ''}` +
-      ` (location=${locationId}, glAccount=${glAccountId})`,
-    );
+    const { error: stErr } = await adminDb
+      .from('plaid_pending_accounts')
+      .upsert(
+        {
+          org_id: orgId,
+          plaid_item_pk: itemRow.id,
+          connection_id: connection.id,
+          location_id: input.locationId,
+          plaid_account_id: a.plaidAccountId,
+          account_name: a.name,
+          account_mask: a.mask,
+          account_type: a.type,
+          current_balance_cents: a.currentBalanceCents,
+          available_balance_cents: a.availableBalanceCents,
+          status: 'PENDING',
+        },
+        { onConflict: 'org_id,plaid_account_id' },
+      );
+    if (!stErr) staged.push({ plaidAccountId: a.plaidAccountId, name: a.name, type: a.type });
   }
 
   return {
@@ -189,8 +130,132 @@ export async function completePlaidLink(
     itemPk: itemRow.id,
     plaidItemId: itemId,
     institutionName: institution.institutionName,
-    accountsLinked: linked,
+    accountsStaged: staged.length,
   };
+}
+
+export interface PendingAccount {
+  id: string;
+  plaidAccountId: string;
+  accountName: string;
+  accountMask: string | null;
+  accountType: string;
+  currentBalanceCents: number | null;
+  locationId: string;
+  status: string;
+}
+
+/** List the accounts awaiting mapping for a tenant (newest connect first). */
+export async function listPendingAccounts(adminDb: SupabaseClient, orgId: string): Promise<PendingAccount[]> {
+  const { data, error } = await adminDb
+    .from('plaid_pending_accounts')
+    .select('id, plaid_account_id, account_name, account_mask, account_type, current_balance_cents, location_id, status')
+    .eq('org_id', orgId)
+    .eq('status', 'PENDING')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    plaidAccountId: r.plaid_account_id as string,
+    accountName: r.account_name as string,
+    accountMask: (r.account_mask as string | null) ?? null,
+    accountType: r.account_type as string,
+    currentBalanceCents: (r.current_balance_cents as number | null) ?? null,
+    locationId: r.location_id as string,
+    status: r.status as string,
+  }));
+}
+
+/**
+ * Promote a staged account into a real bank account. The entity is taken from
+ * the staged row (resolved before Plaid opened); the user supplies only the GL
+ * cash account and a label. Idempotent on (org, plaid_account_id).
+ */
+export async function mapPendingAccount(
+  adminDb: SupabaseClient,
+  orgId: string,
+  input: { pendingId: string; glAccountId: string; label: string },
+): Promise<{ bankAccountId: string }> {
+  // Load the staged row (includes the entity it was connected under).
+  const { data: pend, error: pErr } = await adminDb
+    .from('plaid_pending_accounts')
+    .select('id, plaid_account_id, plaid_item_pk, location_id, account_mask, account_type, current_balance_cents, available_balance_cents')
+    .eq('org_id', orgId)
+    .eq('id', input.pendingId)
+    .maybeSingle<{
+      id: string; plaid_account_id: string; plaid_item_pk: string; location_id: string; account_mask: string | null;
+      account_type: string; current_balance_cents: number | null; available_balance_cents: number | null;
+    }>();
+  if (pErr) throw new Error(pErr.message);
+  if (!pend) throw new Error('Pending account not found.');
+
+  // Validate the chosen GL account belongs to this org.
+  const { data: gl } = await adminDb
+    .from('accounts')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('id', input.glAccountId)
+    .maybeSingle<{ id: string }>();
+  if (!gl) throw new Error('Chosen GL account not found for this tenant.');
+
+  // Resolve institution name from the item.
+  const { data: item } = await adminDb
+    .from('plaid_items')
+    .select('institution_name')
+    .eq('id', pend.plaid_item_pk)
+    .maybeSingle<{ institution_name: string | null }>();
+
+  const fields = {
+    org_id: orgId,
+    location_id: pend.location_id,
+    account_id: input.glAccountId,
+    plaid_account_id: pend.plaid_account_id,
+    plaid_item_pk: pend.plaid_item_pk,
+    institution_name: item?.institution_name ?? 'Bank',
+    account_name: input.label.trim() || 'Bank Account',
+    account_mask: pend.account_mask,
+    account_type: pend.account_type === 'OTHER' ? 'CHECKING' : pend.account_type,
+    current_balance_cents: pend.current_balance_cents,
+    available_balance_cents: pend.available_balance_cents,
+    balance_updated_at: new Date().toISOString(),
+    is_active: true,
+  };
+
+  const { data: existing } = await adminDb
+    .from('bank_accounts')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('plaid_account_id', pend.plaid_account_id)
+    .maybeSingle<{ id: string }>();
+
+  let bankAccountId: string;
+  if (existing) {
+    const { error } = await adminDb.from('bank_accounts').update(fields).eq('id', existing.id);
+    if (error) throw new Error(error.message);
+    bankAccountId = existing.id;
+  } else {
+    const { data: ins, error } = await adminDb.from('bank_accounts').insert(fields).select('id').single<{ id: string }>();
+    if (error) throw new Error(error.message);
+    bankAccountId = ins.id;
+  }
+
+  // Mark the staged row mapped.
+  await adminDb
+    .from('plaid_pending_accounts')
+    .update({ status: 'MAPPED', mapped_bank_account_id: bankAccountId })
+    .eq('id', pend.id);
+
+  return { bankAccountId };
+}
+
+/** Mark a staged account as ignored (e.g. a personal/loan account the tenant won't track). */
+export async function ignorePendingAccount(adminDb: SupabaseClient, orgId: string, pendingId: string): Promise<void> {
+  const { error } = await adminDb
+    .from('plaid_pending_accounts')
+    .update({ status: 'IGNORED' })
+    .eq('org_id', orgId)
+    .eq('id', pendingId);
+  if (error) throw new Error(error.message);
 }
 
 export interface SyncSummary {
@@ -381,4 +446,40 @@ async function readTokenForConnection(adminDb: SupabaseClient, orgId: string, co
   const token = await readProviderSecret(adminDb, ref);
   if (!token) throw new Error('Stored credential is unreadable.');
   return token;
+}
+
+/**
+ * Rename a bank account and/or reselect its GL cash account (in-feed edit).
+ * Only the label and GL mapping are editable; the entity stays fixed (changing
+ * which entity a bank account belongs to is a separate, deliberate action).
+ */
+export async function updateBankAccount(
+  adminDb: SupabaseClient,
+  orgId: string,
+  input: { bankAccountId: string; label?: string; glAccountId?: string },
+): Promise<void> {
+  const patch: Record<string, unknown> = {};
+  if (input.label !== undefined) {
+    const trimmed = input.label.trim();
+    if (!trimmed) throw new Error('Label cannot be empty.');
+    patch.account_name = trimmed;
+  }
+  if (input.glAccountId !== undefined) {
+    const { data: gl } = await adminDb
+      .from('accounts')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('id', input.glAccountId)
+      .maybeSingle<{ id: string }>();
+    if (!gl) throw new Error('Chosen GL account not found for this tenant.');
+    patch.account_id = input.glAccountId;
+  }
+  if (Object.keys(patch).length === 0) return;
+
+  const { error } = await adminDb
+    .from('bank_accounts')
+    .update(patch)
+    .eq('org_id', orgId)
+    .eq('id', input.bankAccountId);
+  if (error) throw new Error(error.message);
 }

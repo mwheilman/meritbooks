@@ -5,20 +5,22 @@ import { auth } from '@clerk/nextjs/server';
 import { z } from 'zod';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { resolveOrgId } from '@/lib/posting/lifecycle';
-import { completePlaidLink } from '@/lib/money/plaid-feed';
+import { updateBankAccount } from '@/lib/money/plaid-feed';
 
 /**
- * POST /api/integrations/plaid/exchange
- *   { public_token }
- *   -> exchanges for an access token, registers the connection (Vault), records
- *      the Item, upserts bank accounts, and runs a first transaction sync.
+ * PATCH /api/bank-accounts/:id
+ *   { label?, gl_account_id? }
+ *   Rename a bank account and/or reselect its GL cash account (in-feed edit).
+ *   Entity is intentionally not editable here.
  */
 const schema = z.object({
-  public_token: z.string().min(10).max(2048),
-  location_id: z.string().uuid(),
+  label: z.string().min(1).max(120).optional(),
+  gl_account_id: z.string().uuid().optional(),
+}).refine((v) => v.label !== undefined || v.gl_account_id !== undefined, {
+  message: 'Provide a label or a GL account to update.',
 });
 
-export async function POST(request: Request) {
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const a = await auth().catch(() => null);
   const userId = (a as { userId?: string | null } | null)?.userId ?? null;
   if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -32,18 +34,15 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: 'Validation failed' }, { status: 422 });
 
-  const supabase = createAdminSupabase();
+  const db = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(supabase);
-    const linked = await completePlaidLink(supabase, orgId, {
-      publicToken: parsed.data.public_token,
-      connectedBy: userId,
-      locationId: parsed.data.location_id,
+    const orgId = await resolveOrgId(db);
+    await updateBankAccount(db, orgId, {
+      bankAccountId: params.id,
+      label: parsed.data.label,
+      glAccountId: parsed.data.gl_account_id,
     });
-    // Do NOT sync yet — accounts are staged and have no GL/entity mapping, so
-    // there is nowhere to attach transactions. The first sync runs after the
-    // user maps accounts (see the map route).
-    return NextResponse.json({ ok: true, linked });
+    return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 });
   }

@@ -50,6 +50,8 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: typeof A
 export function CashDashboard() {
   const [expandedLoc, setExpandedLoc] = useState<string | null>(null);
   const { data, isLoading, error, refetch } = useQuery<CashResponse>('/api/cash');
+  const { data: entitiesData } = useQuery<Array<{ id: string; name: string }>>('/api/locations');
+  const entities = entitiesData ?? [];
 
   if (isLoading) {
     return (
@@ -114,7 +116,7 @@ export function CashDashboard() {
 
       {/* Refresh + bank connection */}
       <div className="flex items-center justify-between gap-3">
-        <PlaidLinkButton variant="full" onChanged={() => refetch()} />
+        <PlaidLinkButton variant="full" entities={entities} onChanged={() => refetch()} />
         <button onClick={() => refetch()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0">
           <RefreshCw size={12} /> Refresh
         </button>
@@ -127,7 +129,7 @@ export function CashDashboard() {
           <p className="text-sm text-slate-500">No bank accounts connected.</p>
           <p className="text-xs text-slate-600 mt-1 mb-4">Connect a bank to see live cash positions across your entities.</p>
           <div className="flex justify-center">
-            <PlaidLinkButton onChanged={() => refetch()} />
+            <PlaidLinkButton entities={entities} onChanged={() => refetch()} />
           </div>
         </div>
       ) : (

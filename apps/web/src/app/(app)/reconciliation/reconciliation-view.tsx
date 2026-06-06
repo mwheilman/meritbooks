@@ -128,7 +128,7 @@ export function ReconciliationView() {
           <p className="text-gray-400">No bank accounts connected yet</p>
           <p className="text-sm text-gray-500 mt-1 mb-4">Connect a bank to import transactions and reconcile against the GL.</p>
           <div className="flex justify-center">
-            <PlaidLinkButton variant="full" onChanged={() => refetch()} />
+            <PlaidLinkButton variant="full" entities={locations} onChanged={() => refetch()} />
           </div>
         </div>
       ) : null}
