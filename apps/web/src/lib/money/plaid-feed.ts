@@ -245,6 +245,16 @@ export async function mapPendingAccount(
     .update({ status: 'MAPPED', mapped_bank_account_id: bankAccountId })
     .eq('id', pend.id);
 
+  // Reset this Item's sync cursor so the NEXT sync re-pulls the full transaction
+  // history and attaches it to all now-mapped accounts. Without this, an earlier
+  // sync may have advanced the cursor before this account existed, so its
+  // transactions would never be fetched. The transaction upsert is deduped by
+  // plaid_transaction_id, so re-pulling is safe.
+  await adminDb
+    .from('plaid_items')
+    .update({ sync_cursor: null })
+    .eq('id', pend.plaid_item_pk);
+
   return { bankAccountId };
 }
 

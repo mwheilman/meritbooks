@@ -127,10 +127,7 @@ export function CashDashboard() {
         <div className="card p-12 text-center">
           <Landmark className="w-10 h-10 mx-auto text-slate-700 mb-3" />
           <p className="text-sm text-slate-500">No bank accounts connected.</p>
-          <p className="text-xs text-slate-600 mt-1 mb-4">Connect a bank to see live cash positions across your entities.</p>
-          <div className="flex justify-center">
-            <PlaidLinkButton entities={entities} onChanged={() => refetch()} />
-          </div>
+          <p className="text-xs text-slate-600 mt-1">Use “Connect a bank” above to link an account and see live cash positions.</p>
         </div>
       ) : (
         <div className="space-y-2">
