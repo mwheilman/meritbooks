@@ -9,7 +9,7 @@
  */
 
 let pass = 0, fail = 0;
-const A = { wages: 'acct-6000', empTax: 'acct-6010', clearing: 'acct-1096', fed: 'acct-2200', state: 'acct-2210', fica: 'acct-2220', garn: 'acct-2270', health: 'acct-2230', retire: 'acct-2240' };
+const A = { wages: 'acct-6000', empTax: 'acct-6010', clearing: 'acct-1096', fed: 'acct-2200', state: 'acct-2210', fica: 'acct-2220', garn: 'acct-2270', health: 'acct-2230', retire: 'acct-2240', wc: 'acct-2250' };
 
 function classifyTax(agency) {
   const a = agency.toLowerCase();
@@ -24,12 +24,21 @@ function classifyDeduction(kind) {
   if (/(401|retire|pension|roth)/.test(k)) return A.retire;
   throw new Error(`unmapped deduction ${kind}`);
 }
+const EXP = { health: 'acct-6020', retire: 'acct-6030', wc: 'acct-6040' };
+function classifyBenefit(kind) {
+  const k = kind.toLowerCase();
+  if (/(health|medical|dental|vision|hsa|fsa)/.test(k)) return { expense: EXP.health, payable: A.health };
+  if (/(401|retire|pension|roth|match)/.test(k)) return { expense: EXP.retire, payable: A.retire };
+  if (/(workers? comp|workman|wc)/.test(k)) return { expense: EXP.wc, payable: A.wc };
+  throw new Error(`unmapped benefit ${kind}`);
+}
 
 function mapReceipt(receipt) {
   const liab = new Map();
   const add = (id, c) => liab.set(id, (liab.get(id) || 0) + c);
   const wageByDept = new Map();
   let empTaxTotal = 0, net = 0;
+  const empExpense = [];
   for (const ln of receipt.lines) {
     const et = ln.employeeTaxes.reduce((s, t) => s + t.cents, 0);
     const dd = ln.postTaxDeductions.reduce((s, d) => s + d.cents, 0);
@@ -39,10 +48,12 @@ function mapReceipt(receipt) {
     for (const t of ln.employeeTaxes) add(classifyTax(t.agency), t.cents);
     for (const d of ln.postTaxDeductions) add(classifyDeduction(d.kind), d.cents);
     for (const t of ln.employerTaxes) { add(classifyTax(t.agency), t.cents); empTaxTotal += t.cents; }
+    for (const b of (ln.benefits || [])) { const { expense, payable } = classifyBenefit(b.kind); empExpense.push(b.cents); add(payable, b.cents); }
   }
   const lines = [];
   for (const [departmentId, gross] of wageByDept) lines.push({ debit_cents: gross, credit_cents: 0, departmentId });
   if (empTaxTotal > 0) lines.push({ debit_cents: empTaxTotal, credit_cents: 0 });
+  for (const c of empExpense) lines.push({ debit_cents: c, credit_cents: 0 });
   for (const [, cents] of liab) lines.push({ debit_cents: 0, credit_cents: cents });
   if (net > 0) lines.push({ debit_cents: 0, credit_cents: net });
   return lines;
@@ -80,6 +91,18 @@ check('two employees + garnishment, two depts', mapReceipt({
       employerTaxes: [{ agency: 'SS', cents: 18600 }],
       postTaxDeductions: [{ kind: '401k loan', agency: null, cents: 11400 }], benefits: [], departmentId: 'dept-B', jobId: null },
   ],
+}));
+
+// Employer benefit contributions (health + 401k match): expense + payable, stays balanced
+check('employer benefits (health + 401k match)', mapReceipt({
+  lines: [{
+    employeeHandle: 'e1', grossCents: 600000, netCents: 432000,
+    employeeTaxes: [{ agency: 'Federal', cents: 96000 }, { agency: 'FICA', cents: 45000 }, { agency: 'State', cents: 27000 }],
+    employerTaxes: [{ agency: 'FICA', cents: 45000 }],
+    postTaxDeductions: [],
+    benefits: [{ kind: 'Employer Health', cents: 40000 }, { kind: '401k Match', cents: 18000 }],
+    departmentId: 'dept-A', jobId: null,
+  }],
 }));
 
 // Reconciliation guard catches a bad line

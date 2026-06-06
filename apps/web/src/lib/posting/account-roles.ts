@@ -57,7 +57,11 @@ export type AccountRoleKey =
   | 'HEALTH_INSURANCE_PAYABLE'
   | 'RETIREMENT_PAYABLE'
   | 'WORKERS_COMP_PAYABLE'
-  | 'GARNISHMENT_PAYABLE';
+  | 'GARNISHMENT_PAYABLE'
+  // Employer benefit expenses (GATE 12.3 refinement)
+  | 'HEALTH_INSURANCE_EXPENSE'
+  | 'RETIREMENT_MATCH_EXPENSE'
+  | 'WORKERS_COMP_EXPENSE';
 
 /** Standard COA numbers per role — fallback when account_roles isn't seeded. */
 const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
@@ -96,6 +100,10 @@ const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
   RETIREMENT_PAYABLE: '2240',
   WORKERS_COMP_PAYABLE: '2250',
   GARNISHMENT_PAYABLE: '2270',
+  // Employer benefit expenses (GATE 12.3 refinement)
+  HEALTH_INSURANCE_EXPENSE: '6020',
+  RETIREMENT_MATCH_EXPENSE: '6030',
+  WORKERS_COMP_EXPENSE: '6040',
 };
 
 /** A resolved account, carrying the type/sub-type the direction helper needs. */

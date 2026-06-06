@@ -18,12 +18,10 @@
  * cash requirement, which clears Payments in Transit -> Cash via the AP
  * settlement path (ap-posting.postApSettlement).
  *
- * SCOPE: covers the universal core — wages, employee withholdings, employer
- * payroll taxes, net pay. Employer benefit *contributions* (employer health /
- * 401(k) match / WC expense) are intentionally NOT auto-mapped here (their
- * expense-account mapping is tenant-config); the generic builder can post them
- * when a later unit supplies resolved expense+payable lines, and the balance
- * assertion will surface any receipt that carries them unmapped.
+ * SCOPE: wages, employee withholdings, employer payroll taxes, net pay, and
+ * employer benefit *contributions* (employer health / 401(k) match / WC) — each
+ * posting its expense (6020/6030/6040) and matching payable (2230/2240/2250).
+ * Unknown deduction or benefit kinds throw rather than post to a guessed account.
  *
  * Pure build/classify/map functions are DB-free (balance-verifiable). The post
  * wrapper resolves roles and posts through the engine.
@@ -62,6 +60,22 @@ export function classifyDeduction(kind: string): AccountRoleKey {
   if (/(health|medical|dental|vision|hsa|fsa)/.test(k)) return 'HEALTH_INSURANCE_PAYABLE';
   if (/(401|retire|pension|roth)/.test(k)) return 'RETIREMENT_PAYABLE';
   throw new UnmappedDeductionError(kind);
+}
+
+export class UnmappedBenefitError extends Error {
+  constructor(kind: string) {
+    super(`Unmapped employer benefit kind "${kind}" — add a classification before posting (refusing to guess the expense/liability accounts).`);
+    this.name = 'UnmappedBenefitError';
+  }
+}
+
+/** Map an employer benefit contribution kind to its (expense role, payable role). Throws on unknown kinds. */
+export function classifyBenefit(kind: string): { expense: AccountRoleKey; payable: AccountRoleKey } {
+  const k = kind.toLowerCase();
+  if (/(health|medical|dental|vision|hsa|fsa)/.test(k)) return { expense: 'HEALTH_INSURANCE_EXPENSE', payable: 'HEALTH_INSURANCE_PAYABLE' };
+  if (/(401|retire|pension|roth|match)/.test(k)) return { expense: 'RETIREMENT_MATCH_EXPENSE', payable: 'RETIREMENT_PAYABLE' };
+  if (/(workers? comp|workman|wc)/.test(k)) return { expense: 'WORKERS_COMP_EXPENSE', payable: 'WORKERS_COMP_PAYABLE' };
+  throw new UnmappedBenefitError(kind);
 }
 
 // ---------------------------------------------------------------------------
@@ -119,8 +133,10 @@ export interface ResolvedPayrollAccounts {
   wagesExpenseId: string;
   payrollTaxExpenseId: string;
   clearingId: string;
-  /** liability role -> account id (FEDERAL_TAX_PAYABLE, STATE_TAX_PAYABLE, FICA_PAYABLE, GARNISHMENT_PAYABLE, HEALTH_INSURANCE_PAYABLE, RETIREMENT_PAYABLE). */
+  /** liability role -> account id (FEDERAL_TAX_PAYABLE, STATE_TAX_PAYABLE, FICA_PAYABLE, GARNISHMENT_PAYABLE, HEALTH_INSURANCE_PAYABLE, RETIREMENT_PAYABLE, WORKERS_COMP_PAYABLE). */
   liabilityByRole: Partial<Record<AccountRoleKey, string>>;
+  /** employer benefit expense role -> account id (HEALTH_INSURANCE_EXPENSE, RETIREMENT_MATCH_EXPENSE, WORKERS_COMP_EXPENSE). */
+  expenseByRole?: Partial<Record<AccountRoleKey, string>>;
 }
 
 /** Per-line reconciliation guard: net + employee withholdings must equal gross. */
@@ -143,6 +159,13 @@ export function mapPayrollReceipt(receipt: PayrollReceipt, locationId: string, a
   const wageByDept = new Map<string | null, number>();
   let employerTaxTotal = 0;
   let netTotal = 0;
+  const employerExpenseLines: PayrollExpenseLine[] = [];
+
+  const addExpense = (role: AccountRoleKey, cents: number, memo: string) => {
+    const id = acc.expenseByRole?.[role];
+    if (!id) throw new Error(`No account resolved for employer benefit expense role ${role}`);
+    employerExpenseLines.push({ accountId: id, cents, memo });
+  };
 
   for (const ln of receipt.lines) {
     assertLineReconciles(ln);
@@ -151,7 +174,12 @@ export function mapPayrollReceipt(receipt: PayrollReceipt, locationId: string, a
     for (const t of ln.employeeTaxes) addLiability(classifyTaxAgency(t.agency), t.cents);
     for (const d of ln.postTaxDeductions) addLiability(classifyDeduction(d.kind), d.cents);
     for (const t of ln.employerTaxes) { addLiability(classifyTaxAgency(t.agency), t.cents); employerTaxTotal += t.cents; }
-    // NOTE: ln.benefits (employer contributions) intentionally not mapped here — see SCOPE.
+    // Employer benefit contributions: DR benefit expense, CR benefit payable.
+    for (const b of ln.benefits) {
+      const { expense, payable } = classifyBenefit(b.kind);
+      addExpense(expense, b.cents, `Employer ${b.kind}`);
+      addLiability(payable, b.cents);
+    }
   }
 
   const wageLines: PayrollWageLine[] = [...wageByDept.entries()].map(([departmentId, grossCents]) => ({
@@ -162,10 +190,14 @@ export function mapPayrollReceipt(receipt: PayrollReceipt, locationId: string, a
 
   const liabilityCredits: PayrollLiabilityCredit[] = [...liabilityTotals.entries()].map(([accountId, cents]) => ({ accountId, cents }));
 
+  if (employerTaxTotal > 0) {
+    employerExpenseLines.unshift({ accountId: acc.payrollTaxExpenseId, cents: employerTaxTotal, memo: 'Employer payroll taxes' });
+  }
+
   return {
     locationId,
     wageLines,
-    employerExpenseLines: employerTaxTotal > 0 ? [{ accountId: acc.payrollTaxExpenseId, cents: employerTaxTotal, memo: 'Employer payroll taxes' }] : [],
+    employerExpenseLines,
     liabilityCredits,
     netPayCents: netTotal,
     clearingAccountId: acc.clearingId,
@@ -180,7 +212,7 @@ export async function postPayrollRun(
   supabase: SupabaseClient,
   args: { orgId: string; locationId: string; entryDate: string; receipt: PayrollReceipt; createdBy: string | null; sourceId?: string },
 ): Promise<PostResult> {
-  const [wages, payrollTaxExpense, clearing, federal, state, fica, garnishment, health, retirement] = await Promise.all([
+  const [wages, payrollTaxExpense, clearing, federal, state, fica, garnishment, health, retirement, workersComp, healthExp, retireExp, wcExp] = await Promise.all([
     resolveRole(supabase, args.orgId, 'WAGES_EXPENSE'),
     resolveRole(supabase, args.orgId, 'PAYROLL_TAX_EXPENSE'),
     resolveRole(supabase, args.orgId, 'PAYMENTS_IN_TRANSIT', args.locationId),
@@ -190,6 +222,10 @@ export async function postPayrollRun(
     resolveRole(supabase, args.orgId, 'GARNISHMENT_PAYABLE'),
     resolveRole(supabase, args.orgId, 'HEALTH_INSURANCE_PAYABLE'),
     resolveRole(supabase, args.orgId, 'RETIREMENT_PAYABLE'),
+    resolveRole(supabase, args.orgId, 'WORKERS_COMP_PAYABLE'),
+    resolveRole(supabase, args.orgId, 'HEALTH_INSURANCE_EXPENSE'),
+    resolveRole(supabase, args.orgId, 'RETIREMENT_MATCH_EXPENSE'),
+    resolveRole(supabase, args.orgId, 'WORKERS_COMP_EXPENSE'),
   ]);
 
   const posting = mapPayrollReceipt(args.receipt, args.locationId, {
@@ -203,6 +239,12 @@ export async function postPayrollRun(
       GARNISHMENT_PAYABLE: garnishment.id,
       HEALTH_INSURANCE_PAYABLE: health.id,
       RETIREMENT_PAYABLE: retirement.id,
+      WORKERS_COMP_PAYABLE: workersComp.id,
+    },
+    expenseByRole: {
+      HEALTH_INSURANCE_EXPENSE: healthExp.id,
+      RETIREMENT_MATCH_EXPENSE: retireExp.id,
+      WORKERS_COMP_EXPENSE: wcExp.id,
     },
   });
 
