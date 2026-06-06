@@ -8,6 +8,7 @@ import {
   ChevronDown, ChevronRight, Wallet, RefreshCw, Landmark
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { PlaidLinkButton } from '@/components/integrations/plaid-link-button';
 
 interface CashAccount {
   id: string;
@@ -111,9 +112,10 @@ export function CashDashboard() {
         </div>
       </div>
 
-      {/* Refresh */}
-      <div className="flex justify-end">
-        <button onClick={() => refetch()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+      {/* Refresh + bank connection */}
+      <div className="flex items-center justify-between gap-3">
+        <PlaidLinkButton variant="full" onChanged={() => refetch()} />
+        <button onClick={() => refetch()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0">
           <RefreshCw size={12} /> Refresh
         </button>
       </div>
@@ -123,7 +125,10 @@ export function CashDashboard() {
         <div className="card p-12 text-center">
           <Landmark className="w-10 h-10 mx-auto text-slate-700 mb-3" />
           <p className="text-sm text-slate-500">No bank accounts connected.</p>
-          <p className="text-xs text-slate-600 mt-1">Connect bank accounts via Plaid to see cash positions.</p>
+          <p className="text-xs text-slate-600 mt-1 mb-4">Connect a bank to see live cash positions across your entities.</p>
+          <div className="flex justify-center">
+            <PlaidLinkButton onChanged={() => refetch()} />
+          </div>
         </div>
       ) : (
         <div className="space-y-2">

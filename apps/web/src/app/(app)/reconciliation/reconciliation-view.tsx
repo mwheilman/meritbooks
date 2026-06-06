@@ -5,6 +5,7 @@ import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { CheckCircle2, AlertCircle, Loader2, Building2, CreditCard, ChevronDown, ArrowRight } from 'lucide-react';
 import { clsx } from 'clsx';
+import { PlaidLinkButton } from '@/components/integrations/plaid-link-button';
 
 interface ReconciliationRow {
   id: string; bankAccountName: string; bankAccountNumber: string;
@@ -34,7 +35,7 @@ export function ReconciliationView() {
   if (locationId) params.location_id = locationId;
   const qs = new URLSearchParams(params).toString();
 
-  const { data, isLoading, error } = useQuery<RecResponse>(`/api/reconciliation${qs ? '?' + qs : ''}`);
+  const { data, isLoading, error, refetch } = useQuery<RecResponse>(`/api/reconciliation${qs ? '?' + qs : ''}`);
 
   if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>;
   if (error) return <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{String(error)}</p></div>;
@@ -124,8 +125,11 @@ export function ReconciliationView() {
       ) : needs.length === 0 ? (
         <div className="text-center py-12">
           <CheckCircle2 className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400">No reconciliations found</p>
-          <p className="text-sm text-gray-500 mt-1">Bank accounts will appear here when connected via Plaid</p>
+          <p className="text-gray-400">No bank accounts connected yet</p>
+          <p className="text-sm text-gray-500 mt-1 mb-4">Connect a bank to import transactions and reconcile against the GL.</p>
+          <div className="flex justify-center">
+            <PlaidLinkButton variant="full" onChanged={() => refetch()} />
+          </div>
         </div>
       ) : null}
     </div>
