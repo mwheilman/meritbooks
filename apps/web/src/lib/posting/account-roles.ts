@@ -47,7 +47,17 @@ export type AccountRoleKey =
   // Money movement (GATE 12)
   | 'SETTLEMENT_CLEARING'
   | 'PAYMENTS_IN_TRANSIT'
-  | 'MERCHANT_FEE_EXPENSE';
+  | 'MERCHANT_FEE_EXPENSE'
+  // Payroll posting (GATE 12.3)
+  | 'WAGES_EXPENSE'
+  | 'PAYROLL_TAX_EXPENSE'
+  | 'FEDERAL_TAX_PAYABLE'
+  | 'STATE_TAX_PAYABLE'
+  | 'FICA_PAYABLE'
+  | 'HEALTH_INSURANCE_PAYABLE'
+  | 'RETIREMENT_PAYABLE'
+  | 'WORKERS_COMP_PAYABLE'
+  | 'GARNISHMENT_PAYABLE';
 
 /** Standard COA numbers per role — fallback when account_roles isn't seeded. */
 const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
@@ -76,6 +86,16 @@ const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
   SETTLEMENT_CLEARING: '1095',
   PAYMENTS_IN_TRANSIT: '1096',
   MERCHANT_FEE_EXPENSE: '6630',
+  // Payroll posting (GATE 12.3)
+  WAGES_EXPENSE: '6000',
+  PAYROLL_TAX_EXPENSE: '6010',
+  FEDERAL_TAX_PAYABLE: '2200',
+  STATE_TAX_PAYABLE: '2210',
+  FICA_PAYABLE: '2220',
+  HEALTH_INSURANCE_PAYABLE: '2230',
+  RETIREMENT_PAYABLE: '2240',
+  WORKERS_COMP_PAYABLE: '2250',
+  GARNISHMENT_PAYABLE: '2270',
 };
 
 /** A resolved account, carrying the type/sub-type the direction helper needs. */

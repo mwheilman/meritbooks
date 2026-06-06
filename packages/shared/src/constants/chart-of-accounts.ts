@@ -198,6 +198,7 @@ export const ACCOUNT_TYPE_HIERARCHY: AccountTypeSeed[] = [
               { number: '2240', name: '401(k) Payable', display_order: 5 },
               { number: '2250', name: 'Workers Comp Payable', display_order: 6 },
               { number: '2260', name: 'Accrued Wages', display_order: 7 },
+              { number: '2270', name: 'Garnishments Payable', display_order: 8 },
             ],
           },
           {
