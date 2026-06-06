@@ -128,7 +128,13 @@ export async function connectProvider(
 
   let secretRef: string | null = null;
   if (input.secret) {
-    secretRef = await storeProviderSecret(adminDb, input.secret, `${orgId}:${input.capability}:${input.provider}:${input.environment}`);
+    // Vault enforces unique secret NAMES. Include the account handle (when present)
+    // and a short random suffix so re-connecting after a reset can't collide with
+    // an orphaned secret left in Vault under the same logical name.
+    const handlePart = input.accountHandle ? `:${input.accountHandle}` : '';
+    const uniqueSuffix = Math.random().toString(36).slice(2, 8);
+    const secretName = `${orgId}:${input.capability}:${input.provider}:${input.environment}${handlePart}:${uniqueSuffix}`;
+    secretRef = await storeProviderSecret(adminDb, input.secret, secretName);
   }
 
   const { data, error } = await adminDb
