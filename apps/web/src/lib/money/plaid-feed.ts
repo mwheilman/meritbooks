@@ -128,12 +128,23 @@ export async function completePlaidLink(
     .single<{ id: string }>();
   if (itemErr) throw new Error(`Failed to record Plaid item: ${itemErr.message}`);
 
-  // 3) Upsert bank_accounts for each Plaid account.
+  // 3) Upsert bank_accounts for each Plaid account. Errors are collected and
+  //    surfaced (NOT swallowed) so a constraint failure can't masquerade as a
+  //    successful link. Only depository accounts (checking/savings) become bank
+  //    accounts; loans/investments/credit are skipped for the cash feed.
   const locationId = await resolvePrimaryLocationId(adminDb, orgId);
   const glAccountId = await resolveCashGlAccount(adminDb, orgId);
 
+  let linked = 0;
+  const skipped: string[] = [];
+  const errors: string[] = [];
+
   for (const a of accounts) {
-    await adminDb
+    if (a.type !== 'CHECKING' && a.type !== 'SAVINGS' && a.type !== 'CREDIT_CARD' && a.type !== 'LINE_OF_CREDIT') {
+      skipped.push(`${a.name} (${a.type})`);
+      continue;
+    }
+    const { error: baErr } = await adminDb
       .from('bank_accounts')
       .upsert(
         {
@@ -153,6 +164,16 @@ export async function completePlaidLink(
         },
         { onConflict: 'org_id,plaid_account_id' },
       );
+    if (baErr) errors.push(`${a.name}: ${baErr.message}`);
+    else linked += 1;
+  }
+
+  if (linked === 0) {
+    throw new Error(
+      `No bank accounts were linked. ${errors.length ? 'Errors: ' + errors.join('; ') : ''}` +
+      `${skipped.length ? ' Skipped non-depository: ' + skipped.join(', ') : ''}` +
+      ` (location=${locationId}, glAccount=${glAccountId})`,
+    );
   }
 
   return {
@@ -160,7 +181,7 @@ export async function completePlaidLink(
     itemPk: itemRow.id,
     plaidItemId: itemId,
     institutionName: institution.institutionName,
-    accountsLinked: accounts.length,
+    accountsLinked: linked,
   };
 }
 

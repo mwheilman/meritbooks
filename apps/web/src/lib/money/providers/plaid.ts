@@ -123,16 +123,19 @@ function toCents(n: number | null | undefined): number | null {
   return Math.round(n * 100);
 }
 
-/** Normalize a Plaid account subtype to our bank_accounts.account_type enum. */
+/** Normalize a Plaid account subtype to our bank_accounts.account_type enum, or
+ *  'OTHER' for non-cash accounts (loans, investments) the cash feed should skip. */
 function normalizeAccountType(acct: AccountBase): string {
   const sub = (acct.subtype ?? '').toString().toLowerCase();
   const type = (acct.type ?? '').toString().toLowerCase();
   if (sub === 'checking') return 'CHECKING';
-  if (sub === 'savings') return 'SAVINGS';
+  if (sub === 'savings' || sub === 'money market' || sub === 'cd') return 'SAVINGS';
   if (type === 'credit' || sub === 'credit card') return 'CREDIT_CARD';
-  if (sub === 'line of credit' || sub === 'business') return 'LINE_OF_CREDIT';
-  // Sensible default for depository accounts.
-  return type === 'depository' ? 'CHECKING' : 'CHECKING';
+  if (sub === 'line of credit') return 'LINE_OF_CREDIT';
+  // A depository account with an unknown subtype is still cash → treat as checking.
+  if (type === 'depository') return 'CHECKING';
+  // Loans, investments, brokerage, 401k, etc. — not part of the cash feed.
+  return 'OTHER';
 }
 
 /** Fetch the accounts + institution for a connected Item (using its access token). */
