@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePlaidLink } from 'react-plaid-link';
 import { Landmark, Loader2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -68,10 +68,11 @@ export function PlaidLinkButton({
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  // Ref mirror of the chosen entity so onSuccess never reads a stale/null state.
+  const chosenEntityRef = useRef<string | null>(locationId ?? null);
   const [showMapper, setShowMapper] = useState(false);
   // The entity the new connection is for. Presumed from the prop; else picked.
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [chosenEntity, setChosenEntity] = useState<string | null>(locationId ?? null);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -119,17 +120,17 @@ export function PlaidLinkButton({
   const startConnect = useCallback(() => {
     setMessage(null);
     if (locationId) {
-      setChosenEntity(locationId);
+      chosenEntityRef.current = locationId;
       void fetchLinkToken();
     } else if (entities && entities.length > 0) {
       setPickerOpen(true);
     } else {
-      setMessage({ kind: 'err', text: 'No entity available to connect a bank for.' });
+      setMessage({ kind: 'err', text: 'No entity available. Add a company first, or open a specific company.' });
     }
   }, [locationId, entities, fetchLinkToken]);
 
   const chooseEntityAndConnect = useCallback((id: string) => {
-    setChosenEntity(id);
+    chosenEntityRef.current = id;
     setPickerOpen(false);
     void fetchLinkToken();
   }, [fetchLinkToken]);
@@ -138,7 +139,8 @@ export function PlaidLinkButton({
     async (publicToken: string) => {
       setBusy(true);
       setMessage(null);
-      if (!chosenEntity) {
+      const entityId = chosenEntityRef.current;
+      if (!entityId) {
         setMessage({ kind: 'err', text: 'No entity selected for this connection.' });
         setLinkToken(null);
         setBusy(false);
@@ -148,7 +150,7 @@ export function PlaidLinkButton({
         const res = await fetch('/api/integrations/plaid/exchange', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ public_token: publicToken, location_id: chosenEntity }),
+          body: JSON.stringify({ public_token: publicToken, location_id: entityId }),
         });
         const body = (await res.json()) as ExchangeResult;
         if (!res.ok || body.error) {
@@ -171,7 +173,7 @@ export function PlaidLinkButton({
         setBusy(false);
       }
     },
-    [loadStatus, onChanged, chosenEntity],
+    [loadStatus, onChanged],
   );
 
   const { open, ready } = usePlaidLink({
