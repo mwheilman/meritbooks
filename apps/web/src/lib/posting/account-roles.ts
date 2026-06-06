@@ -43,7 +43,11 @@ export type AccountRoleKey =
   | 'OWNERS_DRAW'
   | 'JOB_WIP'
   | 'INTERCOMPANY_AR'
-  | 'INTERCOMPANY_AP';
+  | 'INTERCOMPANY_AP'
+  // Money movement (GATE 12)
+  | 'SETTLEMENT_CLEARING'
+  | 'PAYMENTS_IN_TRANSIT'
+  | 'MERCHANT_FEE_EXPENSE';
 
 /** Standard COA numbers per role — fallback when account_roles isn't seeded. */
 const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
@@ -68,6 +72,10 @@ const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
   JOB_WIP: '1210',
   INTERCOMPANY_AR: '1160',
   INTERCOMPANY_AP: '2020',
+  // Money movement (GATE 12)
+  SETTLEMENT_CLEARING: '1095',
+  PAYMENTS_IN_TRANSIT: '1096',
+  MERCHANT_FEE_EXPENSE: '6630',
 };
 
 /** A resolved account, carrying the type/sub-type the direction helper needs. */

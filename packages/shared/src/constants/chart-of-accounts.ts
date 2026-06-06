@@ -62,6 +62,8 @@ export const ACCOUNT_TYPE_HIERARCHY: AccountTypeSeed[] = [
               { number: '1020', name: 'Savings Account', display_order: 3, is_bank_account: true, is_company_specific: true },
               { number: '1050', name: 'Petty Cash', display_order: 4 },
               { number: '1090', name: 'Undeposited Funds', display_order: 5 },
+              { number: '1095', name: 'Payment Processor Clearing', display_order: 6 },
+              { number: '1096', name: 'Payments in Transit', display_order: 7 },
             ],
           },
           {
