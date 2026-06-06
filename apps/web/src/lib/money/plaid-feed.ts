@@ -144,26 +144,34 @@ export async function completePlaidLink(
       skipped.push(`${a.name} (${a.type})`);
       continue;
     }
-    const { error: baErr } = await adminDb
+    const fields = {
+      org_id: orgId,
+      location_id: locationId,
+      account_id: glAccountId,
+      plaid_account_id: a.plaidAccountId,
+      plaid_item_pk: itemRow.id,
+      institution_name: institution.institutionName ?? 'Bank',
+      account_name: a.name,
+      account_mask: a.mask,
+      account_type: a.type,
+      current_balance_cents: a.currentBalanceCents,
+      available_balance_cents: a.availableBalanceCents,
+      balance_updated_at: new Date().toISOString(),
+      is_active: true,
+    };
+    // The (org_id, plaid_account_id) unique index is PARTIAL (WHERE plaid_account_id
+    // IS NOT NULL), which Postgres won't use for ON CONFLICT — so check-then-write.
+    const { data: existing } = await adminDb
       .from('bank_accounts')
-      .upsert(
-        {
-          org_id: orgId,
-          location_id: locationId,
-          account_id: glAccountId,
-          plaid_account_id: a.plaidAccountId,
-          plaid_item_pk: itemRow.id,
-          institution_name: institution.institutionName ?? 'Bank',
-          account_name: a.name,
-          account_mask: a.mask,
-          account_type: a.type,
-          current_balance_cents: a.currentBalanceCents,
-          available_balance_cents: a.availableBalanceCents,
-          balance_updated_at: new Date().toISOString(),
-          is_active: true,
-        },
-        { onConflict: 'org_id,plaid_account_id' },
-      );
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('plaid_account_id', a.plaidAccountId)
+      .maybeSingle<{ id: string }>();
+
+    const { error: baErr } = existing
+      ? await adminDb.from('bank_accounts').update(fields).eq('id', existing.id)
+      : await adminDb.from('bank_accounts').insert(fields);
+
     if (baErr) errors.push(`${a.name}: ${baErr.message}`);
     else linked += 1;
   }
@@ -269,10 +277,37 @@ export async function syncAllPlaidItems(adminDb: SupabaseClient, orgId: string):
         .filter((r): r is NonNullable<typeof r> => r !== null);
 
       if (rows.length > 0) {
-        const { error: upErr } = await adminDb
+        // The (org_id, plaid_transaction_id) unique index is PARTIAL, so ON
+        // CONFLICT can't use it. Find which Plaid ids already exist, update those,
+        // insert the rest.
+        const ids = rows.map((r) => r.plaid_transaction_id);
+        const { data: existingTxns } = await adminDb
           .from('bank_transactions')
-          .upsert(rows, { onConflict: 'org_id,plaid_transaction_id' });
-        if (upErr) throw new Error(upErr.message);
+          .select('id, plaid_transaction_id')
+          .eq('org_id', orgId)
+          .in('plaid_transaction_id', ids);
+        const idToPk = new Map<string, string>();
+        for (const e of (existingTxns ?? []) as Array<{ id: string; plaid_transaction_id: string }>) {
+          idToPk.set(e.plaid_transaction_id, e.id);
+        }
+
+        const toInsert = rows.filter((r) => !idToPk.has(r.plaid_transaction_id));
+        const toUpdate = rows.filter((r) => idToPk.has(r.plaid_transaction_id));
+
+        if (toInsert.length > 0) {
+          const { error: insErr } = await adminDb.from('bank_transactions').insert(toInsert);
+          if (insErr) throw new Error(insErr.message);
+        }
+        for (const r of toUpdate) {
+          const pk = idToPk.get(r.plaid_transaction_id)!;
+          // Only update fields that can legitimately change; never clobber a row
+          // already posted to the GL beyond its descriptive fields.
+          await adminDb
+            .from('bank_transactions')
+            .update({ description: r.description, amount_cents: r.amount_cents, category: r.category, posted_date: r.posted_date })
+            .eq('id', pk)
+            .is('gl_entry_id', null);
+        }
       }
 
       // Removed transactions: delete by Plaid id (only those not yet posted to GL).
