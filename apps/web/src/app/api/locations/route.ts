@@ -12,7 +12,7 @@ export const GET = apiQueryHandler(
   async (_params, ctx) => {
     const { data, error } = await ctx.supabase
       .schema('core').from('locations')
-      .select('id, name, short_code, industry')
+      .select('id, name, short_code, industry, require_department, require_class, require_item')
       .eq('is_active', true)
       .order('name');
 

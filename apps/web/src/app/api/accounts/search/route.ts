@@ -12,7 +12,20 @@ const searchSchema = z.object({
  * GET /api/accounts/search
  * Search GL accounts. If vendor_id is provided, returns that vendor's
  * top 5 most-used accounts first (from vendor_patterns), then remaining matches.
+ *
+ * FIX (Session 25): the old query ordered by account_number ASC and capped at 30
+ * rows. With ~140 approved accounts and no search term, that returned only the
+ * lowest-numbered accounts (1xxx assets, 2xxx liabilities) and silently dropped
+ * COGS (5xxx) and OPEX (6xxx) — so the bank-feed categorization picker could not
+ * reach an expense/COGS account at all. A categorization target may be ANY
+ * postable account, not just a low-numbered one. We now return the FULL active +
+ * approved chart (a per-tenant COA is bounded — hundreds of rows, not millions)
+ * and let the client group it by type. The 30-cap only applies when the user is
+ * actively typing a query (where a short, relevant list is the right UX).
  */
+const FULL_LIST_CAP = 1000; // safety ceiling; a tenant COA is well under this
+const TYPED_QUERY_CAP = 50;
+
 export const GET = apiQueryHandler(
   searchSchema,
   async (params, ctx) => {
@@ -32,14 +45,16 @@ export const GET = apiQueryHandler(
       recentAccountIds = (patterns ?? []).map((p: { account_id: string }) => p.account_id);
     }
 
-    // Search accounts
+    // Search accounts. No query => return the FULL active COA so every postable
+    // account class (COGS/OPEX/liability/etc.) is reachable; a typed query gets a
+    // bounded, relevance-ordered slice.
     let query = ctx.supabase
       .from('accounts')
       .select('id, account_number, name, account_type, account_sub_type')
       .eq('is_active', true)
       .eq('approval_status', 'APPROVED')
       .order('account_number', { ascending: true })
-      .limit(30);
+      .limit(q.length > 0 ? TYPED_QUERY_CAP : FULL_LIST_CAP);
 
     if (q.length > 0) {
       // Search by number prefix or name

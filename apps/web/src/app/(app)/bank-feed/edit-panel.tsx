@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Search, Check, Loader2, Bot, ChevronRight, Briefcase, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { X, Search, Check, Loader2, Bot, ChevronRight, Briefcase, AlertCircle, Layers, Building2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
@@ -29,10 +29,68 @@ interface AccountSearchResponse {
   accounts: AccountOption[];
 }
 
+interface DeptOption {
+  id: string;
+  name: string;
+  code: string;
+  locationId: string | null;
+}
+
+interface DeptResponse {
+  departments: DeptOption[];
+}
+
+interface ClassOption {
+  id: string;
+  name: string;
+  code: string;
+}
+
+interface EntityFlags {
+  id: string;
+  name: string;
+  require_department?: boolean;
+  require_class?: boolean;
+  require_item?: boolean;
+}
+
 interface ApproveResult {
   success: boolean;
   entry_number: string;
   transaction_id: string;
+}
+
+// Display order for grouping the GL list by account type.
+const TYPE_ORDER = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'COGS', 'OPEX', 'OTHER'] as const;
+const TYPE_LABEL: Record<string, string> = {
+  ASSET: 'Assets',
+  LIABILITY: 'Liabilities',
+  EQUITY: 'Equity',
+  REVENUE: 'Revenue',
+  COGS: 'Cost of Goods Sold',
+  OPEX: 'Operating Expenses',
+  OTHER: 'Other',
+};
+
+function groupByType(accounts: AccountOption[]): Array<{ type: string; rows: AccountOption[] }> {
+  const buckets = new Map<string, AccountOption[]>();
+  for (const a of accounts) {
+    const t = a.account_type ?? 'OTHER';
+    if (!buckets.has(t)) buckets.set(t, []);
+    buckets.get(t)!.push(a);
+  }
+  const ordered: Array<{ type: string; rows: AccountOption[] }> = [];
+  for (const t of TYPE_ORDER) {
+    const rows = buckets.get(t);
+    if (rows?.length) ordered.push({ type: t, rows });
+  }
+  // Any unexpected type goes last.
+  for (const [t, rows] of buckets) {
+    if (!TYPE_ORDER.includes(t as (typeof TYPE_ORDER)[number]) && rows.length) {
+      ordered.push({ type: t, rows });
+    }
+  }
+  return ordered;
 }
 
 export function EditPanel({ transaction, locationId, onClose, onSave }: EditPanelProps) {
@@ -60,13 +118,34 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
   const debouncedJobSearch = useDebounce(jobSearch, 200);
   const jobSearchRef = useRef<HTMLInputElement>(null);
 
-  // Derive whether job is required: COGS account type
-  const isCogs = selectedAccount?.account_type === 'COGS';
-  const jobRequired = isCogs;
-  const jobMissing = jobRequired && !selectedJob;
+  // Department + class state
+  const [selectedDept, setSelectedDept] = useState<DeptOption | null>(null);
+  const [showDeptDropdown, setShowDeptDropdown] = useState(false);
+  const [selectedClass, setSelectedClass] = useState<ClassOption | null>(null);
+  const [showClassDropdown, setShowClassDropdown] = useState(false);
 
-  // Resolve the location for job search: prefer explicit, fall back to transaction's location
+  // Resolve the location for job/dimension scoping.
   const effectiveLocationId = locationId ?? transaction.location?.id ?? null;
+
+  // Entity require_* flags (drive required-dimension validation).
+  const { data: entities } = useQuery<EntityFlags[]>('/api/locations');
+  const entity = useMemo(
+    () => (entities ?? []).find((e) => e.id === effectiveLocationId) ?? null,
+    [entities, effectiveLocationId]
+  );
+  const requireDept = entity?.require_department ?? false;
+  const requireClass = entity?.require_class ?? false;
+
+  // Departments (scoped to the entity, plus org-shared departments with no location).
+  const { data: deptData } = useQuery<DeptResponse>('/api/departments');
+  const departments = useMemo(() => {
+    const all = deptData?.departments ?? [];
+    return all.filter((d) => !d.locationId || d.locationId === effectiveLocationId);
+  }, [deptData, effectiveLocationId]);
+
+  // Classes (org-wide).
+  const { data: classData } = useQuery<ClassOption[]>('/api/classes');
+  const classes = classData ?? [];
 
   // Account search query
   const searchParams: Record<string, string> = {};
@@ -89,6 +168,14 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
     jobSearchParams,
     { enabled: showJobDropdown && !!effectiveLocationId }
   );
+
+  // Required-dimension validation
+  const isCogs = selectedAccount?.account_type === 'COGS';
+  const jobRequired = isCogs;
+  const jobMissing = jobRequired && !selectedJob;
+  const deptMissing = requireDept && !selectedDept;
+  const classMissing = requireClass && !selectedClass;
+  const blockingMissing = jobMissing || deptMissing || classMissing;
 
   // Approve mutation
   const { mutate: approveTxn, isLoading: isSaving } = useMutation<
@@ -116,15 +203,18 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
     return () => document.removeEventListener('mousedown', handleClick);
   }, [onClose]);
 
-  // Close account dropdown on click outside search area
+  // Close inline dropdowns on click outside their containers
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (searchInputRef.current && !searchInputRef.current.closest('.account-search-container')?.contains(e.target as Node)) {
+      const t = e.target as Node;
+      if (searchInputRef.current && !searchInputRef.current.closest('.account-search-container')?.contains(t)) {
         setShowAccountDropdown(false);
       }
-      if (jobSearchRef.current && !jobSearchRef.current.closest('.job-search-container')?.contains(e.target as Node)) {
+      if (jobSearchRef.current && !jobSearchRef.current.closest('.job-search-container')?.contains(t)) {
         setShowJobDropdown(false);
       }
+      if (!(t as HTMLElement).closest?.('.dept-search-container')) setShowDeptDropdown(false);
+      if (!(t as HTMLElement).closest?.('.class-search-container')) setShowClassDropdown(false);
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -135,9 +225,16 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
       addToast('error', 'Select a GL account before approving');
       return;
     }
-
     if (jobMissing) {
       addToast('error', 'COGS accounts require a job assignment');
+      return;
+    }
+    if (deptMissing) {
+      addToast('error', `${entity?.name ?? 'This company'} requires a department on every entry`);
+      return;
+    }
+    if (classMissing) {
+      addToast('error', `${entity?.name ?? 'This company'} requires a class on every entry`);
       return;
     }
 
@@ -146,17 +243,25 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
       account_id: selectedAccount.id,
       vendor_id: transaction.ai_vendor?.id ?? undefined,
       job_id: selectedJob?.id ?? undefined,
+      department_id: selectedDept?.id ?? undefined,
+      class_id: selectedClass?.id ?? undefined,
     });
 
     if (result) {
       addToast('success', `Approved → ${result.entry_number}`);
       onSave();
     } else {
-      addToast('error', 'Failed to approve transaction');
+      // The DB validate_dimensions trigger may still reject for an
+      // account-level required dimension; the mutation surfaces that message.
+      addToast('error', 'Failed to approve — check required department/class/job');
     }
-  }, [selectedAccount, transaction, approveTxn, onSave, selectedJob, jobMissing]);
+  }, [selectedAccount, transaction, approveTxn, onSave, selectedJob, selectedDept, selectedClass, jobMissing, deptMissing, classMissing, entity]);
 
   const isAlreadyPosted = transaction.status === 'POSTED' || transaction.status === 'APPROVED';
+  const groupedAccounts = useMemo(
+    () => groupByType(accountResults?.accounts ?? []),
+    [accountResults]
+  );
 
   return (
     <>
@@ -174,6 +279,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
           <button
             onClick={onClose}
             className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] transition-colors"
+            aria-label="Close"
           >
             <X size={18} />
           </button>
@@ -202,6 +308,12 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
                 </div>
               )}
             </div>
+            {entity && (
+              <div className="flex items-center gap-1.5 pt-1 text-2xs text-slate-500">
+                <Building2 size={11} />
+                <span>{entity.name}</span>
+              </div>
+            )}
           </div>
 
           {/* AI Reasoning */}
@@ -231,13 +343,12 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
             />
           </div>
 
-          {/* GL Account */}
+          {/* GL Account (grouped by type) */}
           <div className="account-search-container">
             <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
               GL Account
             </label>
 
-            {/* Selected account display */}
             {selectedAccount && !showAccountDropdown && (
               <button
                 onClick={() => {
@@ -256,7 +367,6 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
               </button>
             )}
 
-            {/* Search input */}
             {(!selectedAccount || showAccountDropdown) && (
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
@@ -273,13 +383,11 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
               </div>
             )}
 
-            {/* Account dropdown */}
             {showAccountDropdown && accountResults && (
-              <div className="mt-1 max-h-64 overflow-y-auto rounded-md bg-slate-800 border border-slate-700 shadow-xl">
-                {/* Vendor-specific recent accounts */}
+              <div className="mt-1 max-h-72 overflow-y-auto rounded-md bg-slate-800 border border-slate-700 shadow-xl">
                 {accountResults.recent.length > 0 && (
                   <>
-                    <div className="px-3 py-1.5 text-2xs text-indigo-400 uppercase tracking-wider font-semibold bg-slate-800/80 sticky top-0">
+                    <div className="px-3 py-1.5 text-2xs text-indigo-400 uppercase tracking-wider font-semibold bg-slate-800/90 sticky top-0">
                       Recent for this vendor
                     </div>
                     {accountResults.recent.map((acct) => (
@@ -287,43 +395,68 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
                         key={acct.id}
                         account={acct}
                         isSelected={selectedAccount?.id === acct.id}
-                        onSelect={() => {
-                          setSelectedAccount(acct);
-                          setShowAccountDropdown(false);
-                          setAccountSearch('');
-                        }}
+                        onSelect={() => { setSelectedAccount(acct); setShowAccountDropdown(false); setAccountSearch(''); }}
                       />
                     ))}
                   </>
                 )}
 
-                {/* All matching accounts */}
-                {accountResults.accounts.length > 0 && (
-                  <>
-                    <div className="px-3 py-1.5 text-2xs text-slate-500 uppercase tracking-wider font-semibold bg-slate-800/80 sticky top-0">
-                      All accounts
+                {groupedAccounts.map((group) => (
+                  <div key={group.type}>
+                    <div className="px-3 py-1.5 text-2xs text-slate-500 uppercase tracking-wider font-semibold bg-slate-800/90 sticky top-0">
+                      {TYPE_LABEL[group.type] ?? group.type}
                     </div>
-                    {accountResults.accounts.map((acct) => (
+                    {group.rows.map((acct) => (
                       <AccountRow
                         key={acct.id}
                         account={acct}
                         isSelected={selectedAccount?.id === acct.id}
-                        onSelect={() => {
-                          setSelectedAccount(acct);
-                          setShowAccountDropdown(false);
-                          setAccountSearch('');
-                        }}
+                        onSelect={() => { setSelectedAccount(acct); setShowAccountDropdown(false); setAccountSearch(''); }}
                       />
                     ))}
-                  </>
-                )}
+                  </div>
+                ))}
 
-                {accountResults.recent.length === 0 && accountResults.accounts.length === 0 && (
+                {accountResults.recent.length === 0 && groupedAccounts.length === 0 && (
                   <div className="px-3 py-4 text-sm text-slate-600 text-center">No accounts found</div>
                 )}
               </div>
             )}
           </div>
+
+          {/* Department */}
+          <DimensionPicker
+            containerClass="dept-search-container"
+            icon={<Building2 size={12} className="inline mr-1 -mt-0.5" />}
+            label="Department"
+            required={requireDept}
+            open={showDeptDropdown}
+            setOpen={setShowDeptDropdown}
+            selectedLabel={selectedDept ? `${selectedDept.code} · ${selectedDept.name}` : null}
+            onClear={() => setSelectedDept(null)}
+            emptyHint={departments.length === 0 ? 'No departments for this company' : 'Select a department'}
+            options={departments.map((d) => ({ id: d.id, label: `${d.code} · ${d.name}`, selected: selectedDept?.id === d.id }))}
+            onSelect={(id) => { setSelectedDept(departments.find((d) => d.id === id) ?? null); setShowDeptDropdown(false); }}
+            missing={deptMissing}
+            missingMsg="This company requires a department on every entry"
+          />
+
+          {/* Class */}
+          <DimensionPicker
+            containerClass="class-search-container"
+            icon={<Layers size={12} className="inline mr-1 -mt-0.5" />}
+            label="Class"
+            required={requireClass}
+            open={showClassDropdown}
+            setOpen={setShowClassDropdown}
+            selectedLabel={selectedClass ? `${selectedClass.code} · ${selectedClass.name}` : null}
+            onClear={() => setSelectedClass(null)}
+            emptyHint={classes.length === 0 ? 'No classes defined' : 'Select a class'}
+            options={classes.map((c) => ({ id: c.id, label: `${c.code} · ${c.name}`, selected: selectedClass?.id === c.id }))}
+            onSelect={(id) => { setSelectedClass(classes.find((c) => c.id === id) ?? null); setShowClassDropdown(false); }}
+            missing={classMissing}
+            missingMsg="This company requires a class on every entry"
+          />
 
           {/* Job / Project */}
           <div className="job-search-container">
@@ -334,7 +467,6 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
               {!jobRequired && <span className="text-slate-600 ml-1">(optional)</span>}
             </label>
 
-            {/* Selected job display */}
             {selectedJob && !showJobDropdown && (
               <button
                 onClick={() => {
@@ -356,6 +488,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
                   <button
                     onClick={(e) => { e.stopPropagation(); setSelectedJob(null); }}
                     className="p-0.5 rounded hover:bg-white/[0.08] text-slate-600 hover:text-slate-300"
+                    aria-label="Clear job"
                   >
                     <X size={12} />
                   </button>
@@ -364,7 +497,6 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
               </button>
             )}
 
-            {/* Search input */}
             {(!selectedJob || showJobDropdown) && (
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
@@ -381,23 +513,16 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
               </div>
             )}
 
-            {/* Job dropdown */}
             {showJobDropdown && effectiveLocationId && jobResults && (
               <div className="mt-1 max-h-48 overflow-y-auto rounded-md bg-slate-800 border border-slate-700 shadow-xl">
                 {jobResults.length > 0 ? (
                   jobResults.map((job) => (
                     <button
                       key={job.id}
-                      onClick={() => {
-                        setSelectedJob(job);
-                        setShowJobDropdown(false);
-                        setJobSearch('');
-                      }}
+                      onClick={() => { setSelectedJob(job); setShowJobDropdown(false); setJobSearch(''); }}
                       className={clsx(
                         'w-full flex items-center justify-between px-3 py-2 text-left transition-colors',
-                        selectedJob?.id === job.id
-                          ? 'bg-brand-500/10 text-brand-400'
-                          : 'text-slate-300 hover:bg-white/[0.04]'
+                        selectedJob?.id === job.id ? 'bg-brand-500/10 text-brand-400' : 'text-slate-300 hover:bg-white/[0.04]'
                       )}
                     >
                       <div className="min-w-0">
@@ -416,7 +541,6 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
               </div>
             )}
 
-            {/* Validation message */}
             {jobMissing && (
               <div className="mt-1.5 flex items-center gap-1.5 text-red-400 text-xs">
                 <AlertCircle size={12} />
@@ -450,19 +574,15 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
           </button>
           <button
             onClick={handleSaveApprove}
-            disabled={!selectedAccount || isSaving || isAlreadyPosted || jobMissing}
+            disabled={!selectedAccount || isSaving || isAlreadyPosted || blockingMissing}
             className={clsx(
               'inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors',
-              !selectedAccount || isAlreadyPosted || jobMissing
+              !selectedAccount || isAlreadyPosted || blockingMissing
                 ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
                 : 'bg-emerald-600 text-white hover:bg-emerald-500'
             )}
           >
-            {isSaving ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Check size={14} />
-            )}
+            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
             {isAlreadyPosted ? 'Already Posted' : 'Save & Approve'}
           </button>
         </div>
@@ -481,9 +601,7 @@ function AccountRow({ account, isSelected, onSelect }: {
       onClick={onSelect}
       className={clsx(
         'w-full flex items-center justify-between px-3 py-2 text-left transition-colors',
-        isSelected
-          ? 'bg-brand-500/10 text-brand-400'
-          : 'text-slate-300 hover:bg-white/[0.04]'
+        isSelected ? 'bg-brand-500/10 text-brand-400' : 'text-slate-300 hover:bg-white/[0.04]'
       )}
     >
       <div>
@@ -492,5 +610,83 @@ function AccountRow({ account, isSelected, onSelect }: {
       </div>
       {isSelected && <Check size={14} className="text-brand-400" />}
     </button>
+  );
+}
+
+/** Compact single-select dropdown used for the Department and Class dimensions. */
+function DimensionPicker(props: {
+  containerClass: string;
+  icon: React.ReactNode;
+  label: string;
+  required: boolean;
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  selectedLabel: string | null;
+  onClear: () => void;
+  emptyHint: string;
+  options: Array<{ id: string; label: string; selected: boolean }>;
+  onSelect: (id: string) => void;
+  missing: boolean;
+  missingMsg: string;
+}) {
+  const { containerClass, icon, label, required, open, setOpen, selectedLabel, onClear, emptyHint, options, onSelect, missing, missingMsg } = props;
+  return (
+    <div className={containerClass}>
+      <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
+        {icon}
+        {label}
+        {required ? <span className="text-red-400 ml-1">*</span> : <span className="text-slate-600 ml-1">(optional)</span>}
+      </label>
+
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-left hover:border-slate-600 transition-colors group"
+      >
+        <span className={clsx('text-sm', selectedLabel ? 'text-slate-200' : 'text-slate-600')}>
+          {selectedLabel ?? emptyHint}
+        </span>
+        <div className="flex items-center gap-1">
+          {selectedLabel && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onClear(); }}
+              className="p-0.5 rounded hover:bg-white/[0.08] text-slate-600 hover:text-slate-300"
+              aria-label={`Clear ${label.toLowerCase()}`}
+            >
+              <X size={12} />
+            </button>
+          )}
+          <ChevronRight size={14} className={clsx('text-slate-600 transition-transform', open && 'rotate-90')} />
+        </div>
+      </button>
+
+      {open && (
+        <div className="mt-1 max-h-48 overflow-y-auto rounded-md bg-slate-800 border border-slate-700 shadow-xl">
+          {options.length > 0 ? (
+            options.map((o) => (
+              <button
+                key={o.id}
+                onClick={() => onSelect(o.id)}
+                className={clsx(
+                  'w-full flex items-center justify-between px-3 py-2 text-left text-sm transition-colors',
+                  o.selected ? 'bg-brand-500/10 text-brand-400' : 'text-slate-300 hover:bg-white/[0.04]'
+                )}
+              >
+                <span>{o.label}</span>
+                {o.selected && <Check size={14} className="text-brand-400" />}
+              </button>
+            ))
+          ) : (
+            <div className="px-3 py-4 text-sm text-slate-600 text-center">{emptyHint}</div>
+          )}
+        </div>
+      )}
+
+      {missing && (
+        <div className="mt-1.5 flex items-center gap-1.5 text-red-400 text-xs">
+          <AlertCircle size={12} />
+          <span>{missingMsg}</span>
+        </div>
+      )}
+    </div>
   );
 }

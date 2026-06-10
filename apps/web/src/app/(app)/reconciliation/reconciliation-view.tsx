@@ -28,8 +28,8 @@ interface RecResponse {
 
 export function ReconciliationView() {
   const [locationId, setLocationId] = useState('');
-  const { data: locData } = useQuery<{ data: { id: string; name: string }[] }>('/api/locations');
-  const locations = locData?.data ?? [];
+  const { data: locData } = useQuery<{ id: string; name: string }[]>('/api/locations');
+  const locations = locData ?? [];
 
   const params: Record<string, string> = {};
   if (locationId) params.location_id = locationId;

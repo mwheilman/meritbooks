@@ -99,6 +99,18 @@ export async function completePlaidLink(
     .single<{ id: string }>();
   if (itemErr) throw new Error(`Failed to record Plaid item: ${itemErr.message}`);
 
+  // 2b) Repeat-connect hardening (Session 25): clear any prior PENDING staged
+  //     rows for THIS Item before re-staging. Reconnecting the same institution
+  //     used to leave stale PENDING rows behind, so the mapper appeared to list
+  //     accounts "twice". Only PENDING rows are removed — accounts already mapped
+  //     (promoted to bank_accounts, status no longer PENDING) are untouched.
+  await adminDb
+    .from('plaid_pending_accounts')
+    .delete()
+    .eq('org_id', orgId)
+    .eq('plaid_item_pk', itemRow.id)
+    .eq('status', 'PENDING');
+
   // 3) Stage every returned account under the resolved entity. The user then
   //    assigns each a GL account + label (entity is already known) before it
   //    becomes a real bank account. We do NOT auto-create bank_accounts here.
