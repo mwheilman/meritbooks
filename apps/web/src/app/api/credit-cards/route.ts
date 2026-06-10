@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
 import { z } from 'zod';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 const ccQuerySchema = z.object({
   status: z.enum(['all', 'PENDING', 'CATEGORIZED', 'FLAGGED', 'APPROVED']).optional(),
@@ -65,9 +66,8 @@ export const GET = apiQueryHandler(
         ai_reasoning,
         match_type,
         matched_receipt_id,
-        location:locations!bank_transactions_location_id_fkey(id, name, short_code),
+        location_id, ai_vendor_id,
         ai_account:accounts!bank_transactions_ai_account_id_fkey(id, account_number, name, account_type),
-        ai_vendor:vendors!bank_transactions_ai_vendor_id_fkey(id, name, display_name),
         final_account:accounts!bank_transactions_final_account_id_fkey(id, account_number, name, account_type),
         bank_account:bank_accounts!bank_transactions_bank_account_id_fkey(id, account_name, account_mask)
       `, { count: 'exact' })
@@ -118,7 +118,13 @@ export const GET = apiQueryHandler(
       }
     }
 
-    // Transform data — add receipt status
+    // Stitch core entities (locations / vendors) — cross-schema embeds don't work.
+    const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+      ctx.supabase, 'locations', 'id, name, short_code', (data ?? []).map((t: any) => t.location_id));
+    const venMap = await fetchCoreMap<{ id: string; name: string; display_name: string | null }>(
+      ctx.supabase, 'vendors', 'id, name, display_name', (data ?? []).map((t: any) => t.ai_vendor_id));
+
+    // Transform data — add receipt status + stitched entities
     const rows = (data ?? []).map((t: any) => {
       const receipt = receiptMap[t.id];
       let receiptStatus: 'MATCHED' | 'MISSING' | 'PENDING' = 'MISSING';
@@ -130,6 +136,8 @@ export const GET = apiQueryHandler(
 
       return {
         ...t,
+        location: t.location_id ? locMap.get(t.location_id) ?? null : null,
+        ai_vendor: t.ai_vendor_id ? venMap.get(t.ai_vendor_id) ?? null : null,
         receiptStatus,
         chaseCount: receipt?.chase_reminder_count ?? 0,
       };

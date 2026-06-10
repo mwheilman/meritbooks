@@ -98,10 +98,9 @@ export function BankFeedContent() {
   }, [sortField]);
 
   // Approve mutation
-  const { mutate: approveTxn, isLoading: isApproving } = useMutation<
-    ApproveBankTransactionInput,
-    ApproveResult
-  >('/api/bank-feed/approve');
+  // Inline approve uses a direct fetch (see handleApprove) so the server's real
+  // error surfaces; this local flag drives the row button's loading state.
+  const [isApproving, setIsApproving] = useState(false);
 
   // Flag mutation
   const { mutate: flagTxn, isLoading: isFlagging } = useMutation<
@@ -115,19 +114,31 @@ export function BankFeedContent() {
       addToast('error', 'Cannot approve: no GL account assigned');
       return;
     }
-    const result = await approveTxn({
-      transaction_id: txn.id,
-      account_id: account.id,
-      vendor_id: txn.ai_vendor?.id ?? undefined,
-      job_id: txn.final_job?.id ?? undefined,
-    });
-    if (result) {
-      addToast('success', `Approved → ${result.entry_number}`);
-      refetch();
-    } else {
-      addToast('error', 'Failed to approve transaction');
+    setIsApproving(true);
+    try {
+      const res = await fetch('/api/bank-feed/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transaction_id: txn.id,
+          account_id: account.id,
+          vendor_id: txn.ai_vendor?.id ?? undefined,
+          job_id: txn.final_job?.id ?? undefined,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (res.ok && result?.success) {
+        addToast('success', `Approved → ${result.entry_number}`);
+        refetch();
+      } else {
+        addToast('error', result?.error ?? 'Failed to approve transaction');
+      }
+    } catch {
+      addToast('error', 'Network error while approving');
+    } finally {
+      setIsApproving(false);
     }
-  }, [approveTxn, refetch]);
+  }, [refetch]);
 
   // AI-categorize uncoded PENDING transactions in place (populates the ai_* columns
   // the list already renders; reviewer then approves with final ?? ai).
@@ -212,13 +223,18 @@ export function BankFeedContent() {
       const txn = transactions.find((t) => t.id === id);
       const account = txn?.final_account ?? txn?.ai_account;
       if (account) {
-        const result = await approveTxn({
-          transaction_id: id,
-          account_id: account.id,
-          vendor_id: txn?.ai_vendor?.id ?? undefined,
-          job_id: txn?.final_job?.id ?? undefined,
+        const res = await fetch('/api/bank-feed/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transaction_id: id,
+            account_id: account.id,
+            vendor_id: txn?.ai_vendor?.id ?? undefined,
+            job_id: txn?.final_job?.id ?? undefined,
+          }),
         });
-        if (result) approved++;
+        const result = await res.json().catch(() => ({}));
+        if (res.ok && result?.success) approved++;
         else failed++;
       } else {
         failed++;
@@ -232,7 +248,7 @@ export function BankFeedContent() {
     }
     setSelected(new Set());
     refetch();
-  }, [transactions, approveTxn, refetch]);
+  }, [transactions, refetch]);
 
   // Selection handlers
   const toggleSelect = useCallback((id: string) => {

@@ -177,11 +177,10 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
   const classMissing = requireClass && !selectedClass;
   const blockingMissing = jobMissing || deptMissing || classMissing;
 
-  // Approve mutation
-  const { mutate: approveTxn, isLoading: isSaving } = useMutation<
-    ApproveBankTransactionInput,
-    ApproveResult
-  >('/api/bank-feed/approve');
+  // Approve via direct fetch so we can surface the server's actual error
+  // message (e.g. "No fiscal period found for date …") instead of a generic
+  // toast. The useMutation hook swallows the message behind a null return.
+  const [isSaving, setIsSaving] = useState(false);
 
   // Close on Escape
   useEffect(() => {
@@ -238,24 +237,34 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
       return;
     }
 
-    const result = await approveTxn({
-      transaction_id: transaction.id,
-      account_id: selectedAccount.id,
-      vendor_id: transaction.ai_vendor?.id ?? undefined,
-      job_id: selectedJob?.id ?? undefined,
-      department_id: selectedDept?.id ?? undefined,
-      class_id: selectedClass?.id ?? undefined,
-    });
-
-    if (result) {
-      addToast('success', `Approved → ${result.entry_number}`);
-      onSave();
-    } else {
-      // The DB validate_dimensions trigger may still reject for an
-      // account-level required dimension; the mutation surfaces that message.
-      addToast('error', 'Failed to approve — check required department/class/job');
+    setIsSaving(true);
+    try {
+      const res = await fetch('/api/bank-feed/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transaction_id: transaction.id,
+          account_id: selectedAccount.id,
+          vendor_id: transaction.ai_vendor?.id ?? undefined,
+          job_id: selectedJob?.id ?? undefined,
+          department_id: selectedDept?.id ?? undefined,
+          class_id: selectedClass?.id ?? undefined,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (res.ok && result?.success) {
+        addToast('success', `Approved → ${result.entry_number}`);
+        onSave();
+      } else {
+        // Surface the real reason (period, dimension, balance, etc.).
+        addToast('error', result?.error ?? 'Failed to approve transaction');
+      }
+    } catch {
+      addToast('error', 'Network error while approving');
+    } finally {
+      setIsSaving(false);
     }
-  }, [selectedAccount, transaction, approveTxn, onSave, selectedJob, selectedDept, selectedClass, jobMissing, deptMissing, classMissing, entity]);
+  }, [selectedAccount, transaction, onSave, selectedJob, selectedDept, selectedClass, jobMissing, deptMissing, classMissing, entity]);
 
   const isAlreadyPosted = transaction.status === 'POSTED' || transaction.status === 'APPROVED';
   const groupedAccounts = useMemo(

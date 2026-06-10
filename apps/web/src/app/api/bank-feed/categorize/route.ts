@@ -1,10 +1,14 @@
 export const dynamic = 'force-dynamic';
+// Allow the batch to run long enough on Vercel (Pro/Enterprise). A 48-txn batch
+// at concurrency 12 is well under this; without it the platform default could
+// kill a long categorization mid-run.
+export const maxDuration = 300;
 
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { z } from 'zod';
-import { suggestCategory, CATEGORIZE_MODEL } from '@/lib/services/categorization';
+import { suggestCategory, CATEGORIZE_MODEL, type CoaRow } from '@/lib/services/categorization';
 
 /**
  * POST /api/bank-feed/categorize
@@ -48,9 +52,9 @@ interface TxnRow {
   ai_account_id: string | null;
 }
 
-/** Max gateway calls in flight at once. Tuned for the ~10s/call latency: 8 keeps
- *  the Anthropic side comfortable while cutting wall-clock ~8x. */
-const CONCURRENCY = 8;
+/** Max gateway calls in flight at once. Tuned for the ~10s/call latency: 12
+ *  keeps the Anthropic side comfortable while cutting wall-clock ~12x. */
+const CONCURRENCY = 12;
 
 type CodeOutcome =
   | { kind: 'coded' }
@@ -86,6 +90,21 @@ export async function POST(request: Request) {
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return NextResponse.json({ error: 'AI is not configured (ANTHROPIC_API_KEY missing).' }, { status: 503 });
+
+  // Preload the COA + vendors + departments ONCE for the whole batch. Previously
+  // suggestCategory re-fetched all three on every transaction (48x redundant
+  // heavy queries); loading once and passing them in removes that overhead.
+  const [accRes, venRes, deptRes] = await Promise.all([
+    supabase.from('accounts').select('id, account_number, name, account_type, account_sub_type')
+      .eq('org_id', orgId).eq('is_active', true).eq('approval_status', 'APPROVED').order('account_number'),
+    supabase.schema('core').from('vendors').select('id, name').eq('org_id', orgId).limit(500),
+    supabase.schema('core').from('departments').select('id, name').eq('org_id', orgId).limit(500),
+  ]);
+  const preloaded = {
+    accounts: (accRes.data ?? []) as CoaRow[],
+    vendors: (venRes.data ?? []) as Array<{ id: string; name: string }>,
+    departments: (deptRes.data ?? []) as Array<{ id: string; name: string }>,
+  };
 
   // Resolve the working set.
   let query = supabase
@@ -128,6 +147,7 @@ export async function POST(request: Request) {
       description: txn.description,
       amountCents: Math.abs(txn.amount_cents),
       locationId: txn.location_id,
+      preloaded,
     });
 
     if (!res.ok) {

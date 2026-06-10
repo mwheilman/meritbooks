@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
 import { z } from 'zod';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 const receiptQuerySchema = z.object({
   status: z.enum(['all', 'PENDING', 'CATEGORIZED', 'FLAGGED', 'APPROVED']).optional(),
@@ -30,9 +31,8 @@ export const GET = apiQueryHandler(
         status,
         ai_confidence,
         chase_reminder_count,
-        location:locations!receipts_location_id_fkey(id, name, short_code),
-        account:accounts!receipts_account_id_fkey(id, account_number, name),
-        vendor:vendors!receipts_vendor_id_fkey(id, name)
+        location_id, vendor_id,
+        account:accounts!receipts_account_id_fkey(id, account_number, name)
       `, { count: 'exact' });
 
     if (params.location_id) query = query.eq('location_id', params.location_id);
@@ -59,6 +59,18 @@ export const GET = apiQueryHandler(
       return NextResponse.json({ error: error.message, code: 'QUERY_ERROR' }, { status: 500 });
     }
 
+    // Stitch core entities (locations / vendors) — cross-schema embeds don't work.
+    const receiptsRaw = (data ?? []) as Array<Record<string, any>>;
+    const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+      ctx.supabase, 'locations', 'id, name, short_code', receiptsRaw.map((r) => r.location_id));
+    const venMap = await fetchCoreMap<{ id: string; name: string }>(
+      ctx.supabase, 'vendors', 'id, name', receiptsRaw.map((r) => r.vendor_id));
+    const stitched = receiptsRaw.map((r) => ({
+      ...r,
+      location: r.location_id ? locMap.get(r.location_id) ?? null : null,
+      vendor: r.vendor_id ? venMap.get(r.vendor_id) ?? null : null,
+    }));
+
     // Status counts
     const statuses = ['PENDING', 'CATEGORIZED', 'FLAGGED'] as const;
     const statusCounts: Record<string, { count: number; amount_cents: number }> = {};
@@ -79,7 +91,7 @@ export const GET = apiQueryHandler(
     statusCounts['all'] = { count: totalCount, amount_cents: totalAmount };
 
     return NextResponse.json({
-      data: data ?? [],
+      data: stitched,
       counts: statusCounts,
       pagination: { page, per_page: perPage, total: count ?? 0, total_pages: Math.ceil((count ?? 0) / perPage) },
     });

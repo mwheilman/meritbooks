@@ -40,7 +40,7 @@ export interface CategorySuggestion {
   decisionId: string | null;
 }
 
-interface CoaRow { id: string; account_number: string; name: string; account_type: string; account_sub_type: string }
+export interface CoaRow { id: string; account_number: string; name: string; account_type: string; account_sub_type: string }
 
 /** Tier 1: match against prior vendor-coding patterns. Defensive — never throws. */
 export async function matchVendorPattern(
@@ -96,18 +96,47 @@ function extractText(result: unknown): string | null {
 export async function suggestCategory(
   supabase: SupabaseClient,
   anthropicApiKey: string,
-  args: { orgId: string; description: string; amountCents: number; locationId: string | null },
+  args: {
+    orgId: string;
+    description: string;
+    amountCents: number;
+    locationId: string | null;
+    /**
+     * Optional pre-fetched tenant data. When categorizing many transactions in
+     * one request (the bank-feed "categorize all" batch), the caller fetches the
+     * COA + vendors + departments ONCE and passes them here, so we don't re-run
+     * three heavy queries per transaction. Omit it for single-shot callers.
+     */
+    preloaded?: {
+      accounts: CoaRow[];
+      vendors: Array<{ id: string; name: string }>;
+      departments: Array<{ id: string; name: string }>;
+    };
+  },
 ): Promise<{ ok: true; suggestion: CategorySuggestion } | { ok: false; error: string; budgetBlocked?: boolean }> {
-  const { orgId, description, amountCents, locationId } = args;
+  const { orgId, description, amountCents, locationId, preloaded } = args;
   if (!description.trim()) return { ok: false, error: 'Description is empty' };
 
-  // Pull tenant data once (used for mapping + the AI prompt).
-  const [{ data: coa }, { data: vendors }, { data: depts }] = await Promise.all([
-    supabase.from('accounts').select('id, account_number, name, account_type, account_sub_type')
-      .eq('org_id', orgId).eq('is_active', true).eq('approval_status', 'APPROVED').order('account_number'),
-    supabase.schema('core').from('vendors').select('id, name').eq('org_id', orgId).limit(500),
-    supabase.schema('core').from('departments').select('id, name').eq('org_id', orgId).limit(500),
-  ]);
+  // Pull tenant data once (used for mapping + the AI prompt) unless the caller
+  // already loaded it for a batch.
+  let coa: CoaRow[] | null;
+  let vendors: Array<{ id: string; name: string }> | null;
+  let depts: Array<{ id: string; name: string }> | null;
+  if (preloaded) {
+    coa = preloaded.accounts;
+    vendors = preloaded.vendors;
+    depts = preloaded.departments;
+  } else {
+    const [accRes, venRes, deptRes] = await Promise.all([
+      supabase.from('accounts').select('id, account_number, name, account_type, account_sub_type')
+        .eq('org_id', orgId).eq('is_active', true).eq('approval_status', 'APPROVED').order('account_number'),
+      supabase.schema('core').from('vendors').select('id, name').eq('org_id', orgId).limit(500),
+      supabase.schema('core').from('departments').select('id, name').eq('org_id', orgId).limit(500),
+    ]);
+    coa = accRes.data as CoaRow[] | null;
+    vendors = venRes.data as Array<{ id: string; name: string }> | null;
+    depts = deptRes.data as Array<{ id: string; name: string }> | null;
+  }
 
   const accounts = (coa ?? []) as CoaRow[];
   if (accounts.length === 0) return { ok: false, error: 'No approved chart of accounts — seed the COA first' };

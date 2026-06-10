@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
 import { z } from 'zod';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 const flaggedQuerySchema = z.object({
   location_id: z.string().uuid().optional(),
@@ -35,8 +36,7 @@ export const GET = apiQueryHandler(
     let bankQ = ctx.supabase
       .from('bank_transactions')
       .select(`
-        id, description, amount_cents, ai_reasoning, transaction_date, created_at,
-        location:locations!bank_transactions_location_id_fkey(name, short_code)
+        id, description, amount_cents, ai_reasoning, transaction_date, created_at, location_id
       `)
       .eq('status', 'FLAGGED')
       .order('created_at', { ascending: false })
@@ -46,8 +46,7 @@ export const GET = apiQueryHandler(
     let receiptQ = ctx.supabase
       .from('receipts')
       .select(`
-        id, vendor_name, amount_cents, submitted_at,
-        location:locations!receipts_location_id_fkey(name, short_code)
+        id, vendor_name, amount_cents, submitted_at, location_id
       `)
       .eq('status', 'FLAGGED')
       .order('submitted_at', { ascending: false })
@@ -57,8 +56,7 @@ export const GET = apiQueryHandler(
     let billQ = ctx.supabase
       .from('bills')
       .select(`
-        id, bill_number, total_cents, payment_hold_reason, bill_date, created_at,
-        vendor:vendors!bills_vendor_id_fkey(name)
+        id, bill_number, total_cents, payment_hold_reason, bill_date, created_at, vendor_id
       `)
       .eq('status', 'ON_HOLD')
       .order('created_at', { ascending: false })
@@ -67,10 +65,20 @@ export const GET = apiQueryHandler(
 
     const [bankResult, receiptResult, billResult] = await Promise.all([bankQ, receiptQ, billQ]);
 
+    // Stitch core entities — cross-schema embeds don't work.
+    const locIds = [
+      ...(bankResult.data ?? []).map((t: any) => t.location_id),
+      ...(receiptResult.data ?? []).map((r: any) => r.location_id),
+    ];
+    const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+      ctx.supabase, 'locations', 'id, name, short_code', locIds);
+    const venMap = await fetchCoreMap<{ id: string; name: string }>(
+      ctx.supabase, 'vendors', 'id, name', (billResult.data ?? []).map((b: any) => b.vendor_id));
+
     const items: FlaggedItem[] = [];
 
     for (const t of bankResult.data ?? []) {
-      const location = fkFirst<{ name: string; short_code: string }>(t.location);
+      const location = t.location_id ? locMap.get(t.location_id) ?? null : null;
       items.push({
         id: t.id,
         type: 'bank_txn',
@@ -85,7 +93,7 @@ export const GET = apiQueryHandler(
     }
 
     for (const r of receiptResult.data ?? []) {
-      const location = fkFirst<{ name: string; short_code: string }>(r.location);
+      const location = r.location_id ? locMap.get(r.location_id) ?? null : null;
       items.push({
         id: r.id,
         type: 'receipt',
@@ -100,7 +108,7 @@ export const GET = apiQueryHandler(
     }
 
     for (const b of billResult.data ?? []) {
-      const vendor = fkFirst<{ name: string }>(b.vendor);
+      const vendor = b.vendor_id ? venMap.get(b.vendor_id) ?? null : null;
       items.push({
         id: b.id,
         type: 'bill',

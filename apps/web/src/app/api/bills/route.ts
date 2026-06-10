@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { z } from 'zod';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 const billQuerySchema = z.object({
   status: z.enum(['all', 'PENDING', 'APPROVED', 'SCHEDULED', 'PARTIALLY_PAID', 'PAID', 'ON_HOLD']).optional(),
@@ -45,8 +46,7 @@ export async function GET(request: Request) {
       total_cents, amount_paid_cents, balance_cents,
       status, ai_extracted, ai_confidence, payment_hold_reason,
       approver_type, approver_ref, scheduled_payment_date,
-      location:locations!bills_location_id_fkey(id, name, short_code),
-      vendor:vendors!bills_vendor_id_fkey(id, name, display_name, is_1099_eligible)
+      location_id, vendor_id
     `, { count: 'exact' })
     .eq('org_id', orgId);
 
@@ -70,8 +70,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message, code: 'QUERY_ERROR' }, { status: 500 });
   }
 
-  const bills = data ?? [];
-  const billIds = bills.map((b: { id: string }) => b.id);
+  const billsRaw = (data ?? []) as Array<Record<string, any>>;
+
+  // Stitch core entities (locations / vendors) — cross-schema embeds don't work.
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code', billsRaw.map((b) => b.location_id));
+  const venMap = await fetchCoreMap<{ id: string; name: string; display_name: string | null; is_1099_eligible: boolean }>(
+    supabase, 'vendors', 'id, name, display_name, is_1099_eligible', billsRaw.map((b) => b.vendor_id));
+
+  const bills: Array<Record<string, any>> = billsRaw.map((b) => ({
+    ...b,
+    location: b.location_id ? locMap.get(b.location_id) ?? null : null,
+    vendor: b.vendor_id ? venMap.get(b.vendor_id) ?? null : null,
+  }));
+  const billIds = bills.map((b) => b.id as string);
 
   // Which bills have job-tagged lines? (single query, no N+1)
   const jobLineCount: Record<string, number> = {};
