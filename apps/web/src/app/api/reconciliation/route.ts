@@ -4,6 +4,16 @@ import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { z } from 'zod';
 
+/**
+ * GET /api/reconciliation
+ *
+ * NOTE (Session 25 fix): bank_accounts lives in `public` and locations lives in
+ * `core`. PostgREST cannot embed across the core↔public boundary — attempting
+ * `location:locations!bank_accounts_location_id_fkey(...)` throws
+ * "Could not find a relationship between 'bank_accounts' and 'locations' in the
+ * schema cache". Per the standing architecture rule, we select `location_id`
+ * and stitch the entity (name / short_code) from `core.locations` in JS.
+ */
 export async function GET(request: Request) {
   await auth().catch(() => null);
   const supabase = createAdminSupabase();
@@ -17,9 +27,7 @@ export async function GET(request: Request) {
       outstanding_deposits_cents, outstanding_checks_cents,
       adjusted_bank_balance_cents, difference_cents,
       is_reconciled, reconciled_by, created_at,
-      bank_account:bank_accounts!bank_reconciliations_bank_account_id_fkey(id, account_name, account_number, current_balance_cents, account_type,
-        location:locations!bank_accounts_location_id_fkey(id, name, short_code)
-      ),
+      bank_account:bank_accounts!bank_reconciliations_bank_account_id_fkey(id, account_name, account_number, current_balance_cents, account_type, location_id),
       fiscal_period:fiscal_periods!bank_reconciliations_fiscal_period_id_fkey(period_year, period_month, status)
     `)
     .order('created_at', { ascending: false });
@@ -32,25 +40,52 @@ export async function GET(request: Request) {
       .eq('location_id', locationId);
     if (accounts && accounts.length > 0) {
       query = query.in('bank_account_id', accounts.map((a) => a.id));
+    } else {
+      // No accounts for this entity → no reconciliations to show.
+      query = query.in('bank_account_id', ['00000000-0000-0000-0000-000000000000']);
     }
   }
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Also get bank accounts that need reconciliation (no rec for current period)
-  const { data: allAccounts } = await supabase
+  // Bank accounts that need reconciliation (no rec for current period).
+  const { data: allAccounts, error: acctErr } = await supabase
     .from('bank_accounts')
-    .select(`
-      id, account_name, account_number, current_balance_cents, account_type,
-      location:locations!bank_accounts_location_id_fkey(id, name, short_code)
-    `)
+    .select('id, account_name, account_number, current_balance_cents, account_type, location_id')
     .eq('is_active', true);
+  if (acctErr) return NextResponse.json({ error: acctErr.message }, { status: 500 });
 
-  const reconciledAccountIds = new Set((data ?? []).map((r) => {
+  // ── Stitch entity (core.locations) in JS — cross-schema embeds don't work. ──
+  const locationIds = new Set<string>();
+  for (const r of data ?? []) {
     const ba = Array.isArray(r.bank_account) ? r.bank_account[0] : r.bank_account;
-    return ba?.id;
-  }).filter(Boolean));
+    const lid = (ba as { location_id?: string | null } | null)?.location_id;
+    if (lid) locationIds.add(lid);
+  }
+  for (const a of allAccounts ?? []) {
+    if (a.location_id) locationIds.add(a.location_id as string);
+  }
+
+  const locMap = new Map<string, { name: string; short_code: string }>();
+  if (locationIds.size > 0) {
+    const { data: locs } = await supabase
+      .schema('core').from('locations')
+      .select('id, name, short_code')
+      .in('id', Array.from(locationIds));
+    for (const l of locs ?? []) {
+      locMap.set(l.id as string, { name: l.name as string, short_code: l.short_code as string });
+    }
+  }
+
+  const reconciledAccountIds = new Set(
+    (data ?? [])
+      .map((r) => {
+        const ba = Array.isArray(r.bank_account) ? r.bank_account[0] : r.bank_account;
+        return (ba as { id?: string } | null)?.id;
+      })
+      .filter(Boolean)
+  );
 
   const needsReconciliation = (allAccounts ?? []).filter((a) => !reconciledAccountIds.has(a.id));
 
@@ -58,14 +93,14 @@ export async function GET(request: Request) {
     reconciliations: (data ?? []).map((r) => {
       const ba = Array.isArray(r.bank_account) ? r.bank_account[0] : r.bank_account;
       const fp = Array.isArray(r.fiscal_period) ? r.fiscal_period[0] : r.fiscal_period;
-      const loc = ba && typeof ba === 'object' && 'location' in ba
-        ? (Array.isArray(ba.location) ? ba.location[0] : ba.location) : null;
+      const lid = (ba as { location_id?: string | null } | null)?.location_id ?? null;
+      const loc = lid ? locMap.get(lid) ?? null : null;
       return {
         id: r.id,
-        bankAccountName: ba?.account_name ?? '',
-        bankAccountNumber: ba?.account_number ?? '',
-        locationName: (loc as { name: string } | null)?.name ?? '',
-        locationCode: (loc as { short_code: string } | null)?.short_code ?? '',
+        bankAccountName: (ba as { account_name?: string } | null)?.account_name ?? '',
+        bankAccountNumber: (ba as { account_number?: string } | null)?.account_number ?? '',
+        locationName: loc?.name ?? '',
+        locationCode: loc?.short_code ?? '',
         periodYear: fp?.period_year,
         periodMonth: fp?.period_month,
         statementBalanceCents: Number(r.statement_ending_balance_cents),
@@ -78,15 +113,15 @@ export async function GET(request: Request) {
       };
     }),
     needsReconciliation: needsReconciliation.map((a) => {
-      const loc = Array.isArray(a.location) ? a.location[0] : a.location;
+      const loc = a.location_id ? locMap.get(a.location_id as string) ?? null : null;
       return {
         id: a.id,
         accountName: a.account_name,
         accountNumber: a.account_number,
         balanceCents: Number(a.current_balance_cents),
         accountType: a.account_type,
-        locationName: (loc as { name: string } | null)?.name ?? '',
-        locationCode: (loc as { short_code: string } | null)?.short_code ?? '',
+        locationName: loc?.name ?? '',
+        locationCode: loc?.short_code ?? '',
       };
     }),
   });
