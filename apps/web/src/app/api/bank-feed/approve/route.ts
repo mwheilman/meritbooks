@@ -98,7 +98,7 @@ export const POST = apiHandler(
       memo: `Bank feed: ${txn.description}`,
       source_module: 'BANK_FEED',
       source_id: txn.id,
-      created_by: ctx.userId,
+      created_by: null, // Clerk user id is text; gl_entries.created_by is uuid (nullable per migration 018). No core.users mapping yet.
       lines,
     });
 
@@ -115,7 +115,7 @@ export const POST = apiHandler(
         final_department_id: body.department_id,
         final_class_id: body.class_id,
         final_job_id: body.job_id ?? null,
-        approved_by: ctx.userId,
+        approved_by: null, // uuid column; Clerk text id has no uuid mapping yet
         approved_at: new Date().toISOString(),
         gl_entry_id: jeResult.entry_id,
       })

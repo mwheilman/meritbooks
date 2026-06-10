@@ -27,7 +27,7 @@ export async function GET(request: Request) {
       outstanding_deposits_cents, outstanding_checks_cents,
       adjusted_bank_balance_cents, difference_cents,
       is_reconciled, reconciled_by, created_at,
-      bank_account:bank_accounts!bank_reconciliations_bank_account_id_fkey(id, account_name, account_number, current_balance_cents, account_type, location_id),
+      bank_account:bank_accounts!bank_reconciliations_bank_account_id_fkey(id, account_name, account_mask, current_balance_cents, account_type, location_id),
       fiscal_period:fiscal_periods!bank_reconciliations_fiscal_period_id_fkey(period_year, period_month, status)
     `)
     .order('created_at', { ascending: false });
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
   // Bank accounts that need reconciliation (no rec for current period).
   const { data: allAccounts, error: acctErr } = await supabase
     .from('bank_accounts')
-    .select('id, account_name, account_number, current_balance_cents, account_type, location_id')
+    .select('id, account_name, account_mask, current_balance_cents, account_type, location_id')
     .eq('is_active', true);
   if (acctErr) return NextResponse.json({ error: acctErr.message }, { status: 500 });
 
@@ -98,7 +98,7 @@ export async function GET(request: Request) {
       return {
         id: r.id,
         bankAccountName: (ba as { account_name?: string } | null)?.account_name ?? '',
-        bankAccountNumber: (ba as { account_number?: string } | null)?.account_number ?? '',
+        bankAccountNumber: (ba as { account_mask?: string } | null)?.account_mask ?? '',
         locationName: loc?.name ?? '',
         locationCode: loc?.short_code ?? '',
         periodYear: fp?.period_year,
@@ -117,7 +117,7 @@ export async function GET(request: Request) {
       return {
         id: a.id,
         accountName: a.account_name,
-        accountNumber: a.account_number,
+        accountNumber: (a as { account_mask?: string }).account_mask ?? '',
         balanceCents: Number(a.current_balance_cents),
         accountType: a.account_type,
         locationName: loc?.name ?? '',
