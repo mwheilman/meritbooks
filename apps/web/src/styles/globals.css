@@ -46,7 +46,17 @@
 
   /* Data table rows */
   .table-row-hover {
-    @apply transition-colors hover:bg-white/[0.02];
+    @apply transition-colors hover:bg-white/[0.05];
+  }
+  /* Rows that open a detail panel: obvious affordance + chevron reveal. */
+  .row-clickable {
+    @apply cursor-pointer transition-colors hover:bg-emerald-500/[0.06] hover:shadow-[inset_2px_0_0_0_rgb(16,185,129)];
+  }
+  .row-chevron {
+    @apply text-slate-600 opacity-0 transition-opacity;
+  }
+  .row-clickable:hover .row-chevron {
+    @apply opacity-100 text-emerald-400;
   }
 
   /* Status badges */

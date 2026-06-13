@@ -6,8 +6,7 @@ import { formatMoney } from '@meritbooks/shared';
 import { InvoiceDrawer } from './invoice-drawer';
 import {
   FileText, Plus, DollarSign, Clock, AlertCircle, Search, ChevronDown,
-  Check, Send, CreditCard, X, Loader2, Building2
-} from 'lucide-react';
+  Check, Send, CreditCard, X, Loader2, Building2, ChevronRight } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -208,7 +207,7 @@ function InvoiceList({
             </thead>
             <tbody>
               {invoices.map((inv) => (
-                <tr key={inv.id} onClick={() => onRowClick(inv.id)} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors cursor-pointer">
+                <tr key={inv.id} onClick={() => onRowClick(inv.id)} className="border-b border-gray-800/50 row-clickable">
                   <td className="py-3 pr-4">
                     <span className="font-mono text-white">{inv.invoiceNumber}</span>
                     {inv.isProgressBill && (
@@ -251,6 +250,7 @@ function InvoiceList({
                         <DollarSign className="w-4 h-4" />
                       </button>
                     )}
+                    <ChevronRight size={15} className="row-chevron inline ml-1 align-middle" />
                   </td>
                 </tr>
               ))}

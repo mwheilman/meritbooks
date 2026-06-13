@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Inbox, AlertCircle, Search } from 'lucide-react';
+import { Inbox, AlertCircle, Search, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatusBadge, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
@@ -140,13 +140,14 @@ export function JournalEntryList() {
                 <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Debits</th>
                 <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">Lines</th>
                 <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                <th className="px-2 w-8"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/30">
               {entries.map((je) => {
                 const source = SOURCE_LABELS[je.sourceModule ?? ''] ?? SOURCE_LABELS.SYSTEM;
                 return (
-                  <tr key={je.id} onClick={() => setSelectedId(je.id)} className="table-row-hover cursor-pointer">
+                  <tr key={je.id} onClick={() => setSelectedId(je.id)} className="row-clickable">
                     <td className="px-4 py-3 text-sm font-mono text-slate-300 whitespace-nowrap">
                       {je.entryNumber}
                     </td>
@@ -180,6 +181,7 @@ export function JournalEntryList() {
                     <td className="px-4 py-3 text-center">
                       <StatusBadge status={je.status} />
                     </td>
+                    <td className="px-2 text-right"><ChevronRight size={15} className="row-chevron inline" /></td>
                   </tr>
                 );
               })}
