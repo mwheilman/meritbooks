@@ -639,6 +639,19 @@ export function InvoiceManager() {
   const [showCreate, setShowCreate] = useState(false);
   const [paymentInvoice, setPaymentInvoice] = useState<InvoiceRow | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+
+  // Deep-link: open the panel from ?invoice=<id> on load, and keep the URL in
+  // sync so a refresh re-opens it and the link is shareable.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('invoice');
+    if (id) setDetailId(id);
+  }, []);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (detailId) url.searchParams.set('invoice', detailId);
+    else url.searchParams.delete('invoice');
+    window.history.replaceState(null, '', url.toString());
+  }, [detailId]);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const refresh = useCallback(() => {

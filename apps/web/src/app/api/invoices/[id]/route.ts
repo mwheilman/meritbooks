@@ -86,3 +86,150 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     lines,
   });
 }
+
+// ─── PATCH /api/invoices/[id] — state-aware edit with privileged override ───
+//
+// DRAFT invoices edit freely (no GL yet). A non-DRAFT invoice is part of the
+// book of record — its issuance is posted (DR 1100 AR / CR revenue). Editing it
+// requires a privileged override with a typed reason, which is written to
+// audit_log. If the override changes the invoice's financial total, the existing
+// GL entry is REVERSED and a fresh balanced entry is RE-POSTED, so the trial
+// balance never drifts. Non-financial edits (memo, dates) under override just log.
+//
+// NOTE: role enforcement (true "admin only") attaches when the Core identity /
+// RBAC tables land; today the override is gated by a required reason + full audit
+// trail, and the actor is the Clerk user id recorded on each audit row.
+import { z } from 'zod';
+import { postJournalEntry, voidJournalEntry } from '@/lib/services/gl-posting';
+
+const lineInput = z.object({
+  description: z.string().min(1).max(500),
+  account_id: z.string().uuid(),
+  quantity: z.number().min(0).default(1),
+  unit_price_cents: z.number().int(),
+});
+
+const patchSchema = z.object({
+  memo: z.string().max(2000).nullable().optional(),
+  invoice_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  lines: z.array(lineInput).min(1).optional(),
+  override: z.object({ reason: z.string().min(3).max(500) }).optional(),
+});
+
+const AR_CONTROL_ACCOUNT_NUMBER = '1100';
+
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
+  const supabase = createAdminSupabase();
+
+  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
+  const orgId = (org as { id: string } | null)?.id;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  let body: z.infer<typeof patchSchema>;
+  try {
+    const parsed = patchSchema.safeParse(await request.json());
+    if (!parsed.success) return NextResponse.json({ error: 'Validation failed', details: parsed.error.issues }, { status: 422 });
+    body = parsed.data;
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const { data: inv, error: invErr } = await supabase
+    .from('invoices')
+    .select('id, status, location_id, invoice_date, due_date, memo, subtotal_cents, tax_cents, total_cents, gl_entry_id, invoice_number')
+    .eq('org_id', orgId).eq('id', params.id).single();
+  if (invErr || !inv) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+
+  const isDraft = inv.status === 'DRAFT';
+  const financialChange = Array.isArray(body.lines);
+
+  // Posted invoices require an override reason to edit anything.
+  if (!isDraft && !body.override) {
+    return NextResponse.json(
+      { error: 'This invoice is posted. An override reason is required to edit it.', code: 'OVERRIDE_REQUIRED' },
+      { status: 403 },
+    );
+  }
+
+  // Build header changes + collect audited field diffs.
+  const updates: Record<string, unknown> = {};
+  const diffs: Array<{ field: string; oldVal: unknown; newVal: unknown }> = [];
+  const consider = (field: string, newVal: unknown, oldVal: unknown) => {
+    if (newVal !== undefined && newVal !== oldVal) { updates[field] = newVal; diffs.push({ field, oldVal, newVal }); }
+  };
+  consider('memo', body.memo, inv.memo);
+  consider('invoice_date', body.invoice_date, inv.invoice_date);
+  consider('due_date', body.due_date, inv.due_date);
+
+  // Replace lines + recompute totals when lines are provided.
+  let newSubtotal = inv.subtotal_cents as number;
+  if (financialChange) {
+    const lines = body.lines!.map((l, i) => ({
+      org_id: orgId, invoice_id: inv.id, line_number: i + 1,
+      description: l.description, account_id: l.account_id,
+      quantity: l.quantity, unit_price_cents: l.unit_price_cents,
+      amount_cents: Math.round(l.quantity * l.unit_price_cents),
+    }));
+    newSubtotal = lines.reduce((s, l) => s + l.amount_cents, 0);
+    const newTotal = newSubtotal + Number(inv.tax_cents ?? 0);
+
+    await supabase.from('invoice_lines').delete().eq('invoice_id', inv.id);
+    const { error: lineErr } = await supabase.from('invoice_lines').insert(lines);
+    if (lineErr) return NextResponse.json({ error: `Lines: ${lineErr.message}` }, { status: 500 });
+
+    diffs.push({ field: 'subtotal_cents', oldVal: inv.subtotal_cents, newVal: newSubtotal });
+    diffs.push({ field: 'total_cents', oldVal: inv.total_cents, newVal: newTotal });
+    updates.subtotal_cents = newSubtotal;
+    updates.total_cents = newTotal;
+
+    // Keep the GL consistent: reverse the old issuance entry and re-post.
+    if (inv.gl_entry_id) {
+      const rev = await voidJournalEntry(supabase, orgId, inv.gl_entry_id as string, userId,
+        `Invoice ${inv.invoice_number} edited via override: ${body.override?.reason ?? ''}`);
+      if (!rev.success) return NextResponse.json({ error: `Reverse failed: ${rev.error}` }, { status: 500 });
+
+      const { data: arAcct } = await supabase
+        .from('accounts').select('id')
+        .eq('org_id', orgId).eq('account_number', AR_CONTROL_ACCOUNT_NUMBER).maybeSingle();
+      if (!arAcct) return NextResponse.json({ error: `AR control account ${AR_CONTROL_ACCOUNT_NUMBER} missing from COA` }, { status: 400 });
+
+      const glLines = [
+        { account_id: (arAcct as { id: string }).id, debit_cents: newTotal, credit_cents: 0, location_id: inv.location_id as string, memo: 'Accounts receivable' },
+        ...lines.map((l) => ({ account_id: l.account_id, debit_cents: 0, credit_cents: l.amount_cents, location_id: inv.location_id as string, memo: 'Revenue' })),
+      ];
+      const reposted = await postJournalEntry(supabase, {
+        org_id: orgId, location_id: inv.location_id as string,
+        entry_date: (body.invoice_date ?? inv.invoice_date) as string,
+        entry_type: 'STANDARD', source_module: 'AR', source_id: inv.id,
+        memo: `AR invoice ${inv.invoice_number} (override re-post)`,
+        created_by: null, lines: glLines,
+      });
+      if (!reposted.success) return NextResponse.json({ error: `Re-post failed: ${reposted.error}` }, { status: 500 });
+      updates.gl_entry_id = reposted.entry_id;
+      diffs.push({ field: 'gl_entry_id', oldVal: inv.gl_entry_id, newVal: reposted.entry_id });
+    }
+  }
+
+  if (Object.keys(updates).length > 0) {
+    const { error: upErr } = await supabase.from('invoices').update(updates).eq('id', inv.id).eq('org_id', orgId);
+    if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
+  }
+
+  // Audit trail: one row per changed field, plus the override reason.
+  const auditRows = diffs.map((d) => ({
+    org_id: orgId, table_name: 'invoices', record_id: inv.id, action: 'UPDATE' as const,
+    field_name: d.field, old_value: d.oldVal != null ? String(d.oldVal) : null,
+    new_value: d.newVal != null ? String(d.newVal) : null, user_id: userId,
+  }));
+  if (body.override) {
+    auditRows.push({
+      org_id: orgId, table_name: 'invoices', record_id: inv.id, action: 'UPDATE' as const,
+      field_name: '_override_reason', old_value: inv.status as string, new_value: body.override.reason, user_id: userId,
+    });
+  }
+  if (auditRows.length > 0) await supabase.from('audit_log').insert(auditRows);
+
+  return NextResponse.json({ ok: true, id: inv.id, changedFields: diffs.map((d) => d.field), overridden: !!body.override });
+}
