@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 import { billTransitionSchema } from '@/lib/validations/transactions';
 import { approveBill, scheduleBill, payBill, voidBill } from '@/lib/services/bill-ap';
 
@@ -26,15 +27,24 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       subtotal_cents, tax_cents, total_cents, amount_paid_cents, balance_cents,
       status, payment_hold_reason, scheduled_payment_date, payment_method, paid_at,
       approver_type, approver_ref, approved_by_user, approved_at, void_reason,
-      gl_entry_id,
-      location:locations!bills_location_id_fkey(id, name, short_code),
-      vendor:vendors!bills_vendor_id_fkey(id, name, display_name, is_1099_eligible)
+      gl_entry_id, location_id, vendor_id
     `)
     .eq('org_id', orgId)
     .eq('id', params.id)
     .single();
 
   if (error || !bill) return NextResponse.json({ error: 'Bill not found' }, { status: 404 });
+
+  // Stitch core entities (location/vendor) onto the bill — cross-schema embeds don't work.
+  {
+    const b = bill as Record<string, any>;
+    const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+      supabase, 'locations', 'id, name, short_code', [b.location_id]);
+    const venMap = await fetchCoreMap<{ id: string; name: string; display_name: string | null; is_1099_eligible: boolean }>(
+      supabase, 'vendors', 'id, name, display_name, is_1099_eligible', [b.vendor_id]);
+    b.location = b.location_id ? locMap.get(b.location_id) ?? null : null;
+    b.vendor = b.vendor_id ? venMap.get(b.vendor_id) ?? null : null;
+  }
 
   const { data: lines } = await supabase
     .from('bill_lines')

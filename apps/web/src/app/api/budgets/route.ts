@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
 
 // ─── GET: Budget entries ──────────────────────────────────────────────
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
       id, location_id, account_id, department_id, fiscal_year,
       period_number, amount_cents, notes,
       account:accounts!budgets_account_id_fkey(account_number, name, account_type),
-      location:locations!budgets_location_id_fkey(name, short_code)
+      location_id
     `)
     .eq('fiscal_year', fiscalYear)
     .order('period_number')

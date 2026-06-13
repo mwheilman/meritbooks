@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
 
 const querySchema = z.object({
@@ -34,8 +35,7 @@ export async function GET(request: Request) {
       id, line_number, debit_cents, credit_cents, memo, created_at,
       account:accounts!gl_entry_lines_account_id_fkey(id, account_number, name),
       gl_entry:gl_entries!gl_entry_lines_gl_entry_id_fkey(
-        id, entry_number, entry_date, entry_type, memo, source_module, status,
-        location:locations!gl_entries_location_id_fkey(id, name, short_code)
+        id, entry_number, entry_date, entry_type, memo, source_module, status, location_id
       )
     `, { count: 'exact' })
     .order('created_at', { ascending: false })
@@ -86,15 +86,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Stitch entry locations (core) — cross-schema embeds don't work.
+  const rows = (data ?? []) as Array<Record<string, any>>;
+  const entryLocIds = rows.map((line) => {
+    const e = Array.isArray(line.gl_entry) ? line.gl_entry[0] : line.gl_entry;
+    return (e as { location_id?: string } | null)?.location_id;
+  });
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code', entryLocIds);
+
   // Calculate summary
   let totalDebitCents = 0;
   let totalCreditCents = 0;
 
-  const transactions = (data ?? []).map((line) => {
+  const transactions = rows.map((line) => {
     const account = Array.isArray(line.account) ? line.account[0] : line.account;
     const entry = Array.isArray(line.gl_entry) ? line.gl_entry[0] : line.gl_entry;
-    const location = entry && typeof entry === 'object' && 'location' in entry
-      ? (Array.isArray(entry.location) ? entry.location[0] : entry.location)
+    const location = (entry as { location_id?: string } | null)?.location_id
+      ? locMap.get((entry as { location_id: string }).location_id) ?? null
       : null;
 
     const debit = Number(line.debit_cents ?? 0);

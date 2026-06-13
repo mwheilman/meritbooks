@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
 
 const lineSchema = z.object({
@@ -58,9 +59,7 @@ export async function GET(request: Request) {
       id, invoice_number, invoice_date, memo, status, charge_method, total_cents,
       job_id, booked_gl_entry_id, rejection_reason, created_at,
       sent_at, approved_at, rejected_at, booked_at,
-      location:locations!internal_invoices_location_id_fkey(id, name, short_code),
-      provider:departments!internal_invoices_provider_department_id_fkey(id, name, code),
-      receiver:departments!internal_invoices_receiver_department_id_fkey(id, name, code)
+      location_id, provider_department_id, receiver_department_id
     `)
     .eq('org_id', orgId);
 
@@ -72,7 +71,20 @@ export async function GET(request: Request) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message, code: 'QUERY_ERROR' }, { status: 500 });
 
-  const rows = (data ?? []).map((r: Record<string, unknown>) => ({
+  // Stitch core entities (location + provider/receiver departments).
+  const raw = (data ?? []) as Array<Record<string, any>>;
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code', raw.map((r) => r.location_id));
+  const deptMap = await fetchCoreMap<{ id: string; name: string; code: string }>(
+    supabase, 'departments', 'id, name, code',
+    [...raw.map((r) => r.provider_department_id), ...raw.map((r) => r.receiver_department_id)]);
+  for (const r of raw) {
+    r.location = r.location_id ? locMap.get(r.location_id) ?? null : null;
+    r.provider = r.provider_department_id ? deptMap.get(r.provider_department_id) ?? null : null;
+    r.receiver = r.receiver_department_id ? deptMap.get(r.receiver_department_id) ?? null : null;
+  }
+
+  const rows = raw.map((r: Record<string, unknown>) => ({
     id: r.id,
     invoiceNumber: r.invoice_number,
     invoiceDate: r.invoice_date,

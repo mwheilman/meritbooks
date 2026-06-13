@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 export async function GET() {
   await auth().catch(() => null);
@@ -13,7 +14,7 @@ export async function GET() {
       id, name, description, frequency, start_date, end_date,
       next_run_date, is_reversing, is_active, template_lines,
       last_generated_at, created_at,
-      location:locations!recurring_templates_location_id_fkey(id, name, short_code)
+      location_id
     `)
     .order('next_run_date', { ascending: true, nullsFirst: false });
 
@@ -22,7 +23,12 @@ export async function GET() {
     return NextResponse.json({ error: error.message, code: 'QUERY_ERROR' }, { status: 500 });
   }
 
-  const templates = (data ?? []).map((t: Record<string, unknown>) => ({
+  const rows = (data ?? []) as Array<Record<string, any>>;
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code', rows.map((r) => r.location_id));
+  for (const r of rows) r.location = r.location_id ? locMap.get(r.location_id) ?? null : null;
+
+  const templates = rows.map((t: Record<string, unknown>) => ({
     id: t.id,
     name: t.name,
     description: t.description,

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
 
 const jeLineSchema = z.object({
@@ -54,7 +55,7 @@ export async function GET(request: Request) {
       posted_at,
       created_by,
       created_at,
-      location:locations!gl_entries_location_id_fkey(id, name, short_code),
+      location_id,
       gl_entry_lines(debit_cents, credit_cents)
     `, { count: 'exact' });
 
@@ -77,7 +78,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message, code: 'QUERY_ERROR' }, { status: 500 });
   }
 
-  const rows = (data ?? []).map((je: Record<string, unknown>) => {
+  const raw = (data ?? []) as Array<Record<string, any>>;
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code', raw.map((r) => r.location_id));
+  for (const r of raw) r.location = r.location_id ? locMap.get(r.location_id) ?? null : null;
+
+  const rows = raw.map((je: Record<string, unknown>) => {
     const lines = (je.gl_entry_lines as Array<{ debit_cents: number; credit_cents: number }>) ?? [];
     const totalDebitCents = lines.reduce((sum: number, l) => sum + Number(l.debit_cents ?? 0), 0);
     return {

@@ -6,6 +6,7 @@ import { formatMoney } from '@meritbooks/shared';
 import { CheckCircle2, AlertCircle, Loader2, Building2, CreditCard, ChevronDown, ArrowRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlaidLinkButton } from '@/components/integrations/plaid-link-button';
+import { ReconciliationModal } from './reconciliation-modal';
 
 interface ReconciliationRow {
   id: string; bankAccountName: string; bankAccountNumber: string;
@@ -19,7 +20,7 @@ interface ReconciliationRow {
 interface NeedsRecRow {
   id: string; accountName: string; accountNumber: string;
   balanceCents: number; accountType: string;
-  locationName: string; locationCode: string;
+  locationId: string | null; locationName: string; locationCode: string;
 }
 interface RecResponse {
   reconciliations: ReconciliationRow[];
@@ -28,6 +29,7 @@ interface RecResponse {
 
 export function ReconciliationView() {
   const [locationId, setLocationId] = useState('');
+  const [modalAccount, setModalAccount] = useState<NeedsRecRow | null>(null);
   const { data: locData } = useQuery<{ id: string; name: string }[]>('/api/locations');
   const locations = locData ?? [];
 
@@ -63,16 +65,24 @@ export function ReconciliationView() {
           </h3>
           <div className="grid grid-cols-3 gap-3">
             {needs.map((a) => (
-              <div key={a.id} className="bg-gray-800/30 border border-amber-700/30 rounded-lg p-3">
+              <button
+                key={a.id}
+                onClick={() => setModalAccount(a)}
+                className="text-left bg-gray-800/30 border border-amber-700/30 rounded-lg p-3 hover:border-emerald-500/50 hover:bg-gray-800/50 transition-colors cursor-pointer group"
+              >
                 <div className="flex items-center gap-2 mb-1">
                   <CreditCard className="w-4 h-4 text-gray-500" />
                   <span className="text-sm text-white font-medium">{a.accountName}</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-gray-600 ml-auto group-hover:text-emerald-400 transition-colors" />
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">{a.locationCode} · {a.accountNumber}</span>
                   <span className="font-mono text-gray-300">{formatMoney(a.balanceCents)}</span>
                 </div>
-              </div>
+                <div className="mt-2 text-2xs text-emerald-400/80 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Click to reconcile →
+                </div>
+              </button>
             ))}
           </div>
         </div>
@@ -132,6 +142,20 @@ export function ReconciliationView() {
           </div>
         </div>
       ) : null}
+
+      {modalAccount && (
+        <ReconciliationModal
+          account={{
+            id: modalAccount.id,
+            accountName: modalAccount.accountName,
+            locationId: modalAccount.locationId,
+            locationCode: modalAccount.locationCode,
+            balanceCents: modalAccount.balanceCents,
+          }}
+          onClose={() => setModalAccount(null)}
+          onCreated={() => refetch()}
+        />
+      )}
     </div>
   );
 }

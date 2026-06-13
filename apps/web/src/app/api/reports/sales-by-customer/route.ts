@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 export async function GET(request: Request) {
   await auth().catch(() => null);
@@ -19,14 +20,22 @@ export async function GET(request: Request) {
     .from('invoices')
     .select(`
       id, invoice_number, invoice_date, customer_id, status,
-      customer:customers!invoices_customer_id_fkey(id, name),
-      location:locations!invoices_location_id_fkey(name, short_code)
+      customer_id, location_id
     `)
     .gte('invoice_date', startDate)
     .lte('invoice_date', endDate)
     .not('status', 'in', '("VOIDED","DRAFT")');
   if (locationId) invQ = invQ.eq('location_id', locationId);
-  const { data: invoices } = await invQ;
+  const { data: invoicesRaw } = await invQ;
+  const invoices = (invoicesRaw ?? []) as Array<Record<string, any>>;
+  const custMap = await fetchCoreMap<{ id: string; name: string }>(
+    supabase, 'customers', 'id, name', invoices.map((i) => i.customer_id));
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code', invoices.map((i) => i.location_id));
+  for (const i of invoices) {
+    i.customer = i.customer_id ? custMap.get(i.customer_id) ?? null : null;
+    i.location = i.location_id ? locMap.get(i.location_id) ?? null : null;
+  }
 
   if (!invoices || invoices.length === 0) {
     return NextResponse.json({ period: { startDate, endDate }, mode, data: [], summary: { totalSalesCents: 0, customerCount: 0, lineItemCount: 0 } });

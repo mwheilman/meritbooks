@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 export async function GET(request: Request) {
   await auth().catch(() => null);
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
       last_depreciation_date, status,
       disposal_date, disposal_proceeds_cents,
       physical_location, condition, barcode, last_inspection_date,
-      location:locations!fixed_assets_location_id_fkey(id, name, short_code),
+      location_id,
       assigned_to_employee:employees!fixed_assets_assigned_to_fkey(id, first_name, last_name),
       asset_account:accounts!fixed_assets_asset_account_id_fkey(account_number, name),
       depreciation_account:accounts!fixed_assets_depreciation_expense_account_id_fkey(account_number, name),
@@ -40,7 +41,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message, code: 'QUERY_ERROR' }, { status: 500 });
   }
 
-  const assets = (data ?? []).map((a: Record<string, unknown>) => ({
+  const rows = (data ?? []) as Array<Record<string, any>>;
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code', rows.map((r) => r.location_id));
+  for (const r of rows) r.location = r.location_id ? locMap.get(r.location_id) ?? null : null;
+
+  const assets = rows.map((a: Record<string, unknown>) => ({
     id: a.id,
     assetTag: a.asset_tag,
     name: a.name,

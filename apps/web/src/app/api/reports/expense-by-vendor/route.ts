@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 export async function GET(request: Request) {
   await auth().catch(() => null);
@@ -18,9 +19,7 @@ export async function GET(request: Request) {
   let billQ = supabase
     .from('bills')
     .select(`
-      id, bill_number, bill_date, total_cents, status,
-      vendor:vendors!bills_vendor_id_fkey(id, name, is_1099_eligible),
-      location:locations!bills_location_id_fkey(name, short_code)
+      id, bill_number, bill_date, total_cents, status, vendor_id, location_id
     `)
     .gte('bill_date', startDate)
     .lte('bill_date', endDate)
@@ -32,9 +31,7 @@ export async function GET(request: Request) {
   let txnQ = supabase
     .from('bank_transactions')
     .select(`
-      id, description, transaction_date, amount_cents, status,
-      vendor:vendors!bank_transactions_final_vendor_id_fkey(id, name, is_1099_eligible),
-      location:locations!bank_transactions_location_id_fkey(name, short_code),
+      id, description, transaction_date, amount_cents, status, final_vendor_id, location_id,
       account:accounts!bank_transactions_final_account_id_fkey(account_number, name, account_type)
     `)
     .gte('transaction_date', startDate)
@@ -42,6 +39,16 @@ export async function GET(request: Request) {
     .lt('amount_cents', 0); // expenses are negative
   if (locationId) txnQ = txnQ.eq('location_id', locationId);
   const { data: txns } = await txnQ;
+  const billRows = (bills ?? []) as Array<Record<string, any>>;
+  const txnRows = (txns ?? []) as Array<Record<string, any>>;
+  const venMap = await fetchCoreMap<{ id: string; name: string; is_1099_eligible: boolean }>(
+    supabase, 'vendors', 'id, name, is_1099_eligible',
+    [...billRows.map((b) => b.vendor_id), ...txnRows.map((t) => t.final_vendor_id)]);
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code',
+    [...billRows.map((b) => b.location_id), ...txnRows.map((t) => t.location_id)]);
+  for (const b of billRows) { b.vendor = b.vendor_id ? venMap.get(b.vendor_id) ?? null : null; b.location = b.location_id ? locMap.get(b.location_id) ?? null : null; }
+  for (const t of txnRows) { t.vendor = t.final_vendor_id ? venMap.get(t.final_vendor_id) ?? null : null; t.location = t.location_id ? locMap.get(t.location_id) ?? null : null; }
 
   // Aggregate by vendor
   const vendorMap = new Map<string, {
@@ -74,17 +81,17 @@ export async function GET(request: Request) {
   };
 
   // Process bills
-  for (const bill of bills ?? []) {
-    const v = Array.isArray(bill.vendor) ? bill.vendor[0] : bill.vendor;
-    const loc = Array.isArray(bill.location) ? bill.location[0] : bill.location;
+  for (const bill of billRows) {
+    const v = bill.vendor;
+    const loc = bill.location;
     if (!v) continue;
     addToVendor(v.id, v.name, v.is_1099_eligible, Number(bill.total_cents), '', 'AP - Bills', bill.bill_date, `Bill ${bill.bill_number ?? ''}`, 'bill', (loc as { short_code: string } | null)?.short_code ?? '');
   }
 
   // Process bank transactions
-  for (const txn of txns ?? []) {
-    const v = Array.isArray(txn.vendor) ? txn.vendor[0] : txn.vendor;
-    const loc = Array.isArray(txn.location) ? txn.location[0] : txn.location;
+  for (const txn of txnRows) {
+    const v = txn.vendor;
+    const loc = txn.location;
     const acct = Array.isArray(txn.account) ? txn.account[0] : txn.account;
     if (!v) continue;
     addToVendor(v.id, v.name, v.is_1099_eligible, Math.abs(Number(txn.amount_cents)),

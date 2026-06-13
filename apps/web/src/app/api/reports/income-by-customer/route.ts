@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 export async function GET(request: Request) {
   await auth().catch(() => null);
@@ -19,15 +20,25 @@ export async function GET(request: Request) {
     .from('invoices')
     .select(`
       id, invoice_number, invoice_date, total_cents, amount_paid_cents, balance_cents, status,
-      customer:customers!invoices_customer_id_fkey(id, name, email, payment_terms_days),
-      location:locations!invoices_location_id_fkey(name, short_code),
-      job:jobs!invoices_job_id_fkey(job_number, name)
+      customer_id, location_id, job_id
     `)
     .gte('invoice_date', startDate)
     .lte('invoice_date', endDate)
     .not('status', 'in', '("VOIDED","DRAFT")');
   if (locationId) invQ = invQ.eq('location_id', locationId);
   const { data: invoices } = await invQ;
+  const invRows = (invoices ?? []) as Array<Record<string, any>>;
+  const custMap = await fetchCoreMap<{ id: string; name: string; email: string | null; payment_terms_days: number }>(
+    supabase, 'customers', 'id, name, email, payment_terms_days', invRows.map((i) => i.customer_id));
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code', invRows.map((i) => i.location_id));
+  const jobMap = await fetchCoreMap<{ id: string; job_number: string; name: string }>(
+    supabase, 'jobs', 'id, job_number, name', invRows.map((i) => i.job_id));
+  for (const i of invRows) {
+    i.customer = i.customer_id ? custMap.get(i.customer_id) ?? null : null;
+    i.location = i.location_id ? locMap.get(i.location_id) ?? null : null;
+    i.job = i.job_id ? jobMap.get(i.job_id) ?? null : null;
+  }
 
   // Aggregate by customer
   const customerMap = new Map<string, {
@@ -41,10 +52,10 @@ export async function GET(request: Request) {
     invoices: { invoiceNumber: string; date: string; totalCents: number; paidCents: number; balanceCents: number; status: string; jobNumber: string | null; locationCode: string }[];
   }>();
 
-  for (const inv of invoices ?? []) {
-    const c = Array.isArray(inv.customer) ? inv.customer[0] : inv.customer;
-    const loc = Array.isArray(inv.location) ? inv.location[0] : inv.location;
-    const job = Array.isArray(inv.job) ? inv.job[0] : inv.job;
+  for (const inv of invRows) {
+    const c = inv.customer;
+    const loc = inv.location;
+    const job = inv.job;
     if (!c) continue;
 
     const existing = customerMap.get(c.id);

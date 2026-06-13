@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 export async function GET(request: Request) {
   await auth().catch(() => null);
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
     .from('bills')
     .select(`
       id, vendor_id, total_cents, amount_paid_cents, balance_cents, status, due_date,
-      vendor:vendors!bills_vendor_id_fkey(id, name, is_1099_eligible)
+      vendor_id
     `)
     .not('status', 'eq', 'VOIDED');
 
@@ -23,6 +24,11 @@ export async function GET(request: Request) {
   else if (locFilter.length > 1) query = query.in('location_id', locFilter);
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const bills = (data ?? []) as Array<Record<string, any>>;
+  const venMap = await fetchCoreMap<{ id: string; name: string; is_1099_eligible: boolean }>(
+    supabase, 'vendors', 'id, name, is_1099_eligible', bills.map((b) => b.vendor_id));
+  for (const b of bills) b.vendor = b.vendor_id ? venMap.get(b.vendor_id) ?? null : null;
 
   const vendorMap = new Map<string, {
     vendorId: string; vendorName: string; is1099: boolean;
@@ -32,8 +38,8 @@ export async function GET(request: Request) {
   }>();
 
   const now = new Date();
-  for (const bill of data ?? []) {
-    const v = Array.isArray(bill.vendor) ? bill.vendor[0] : bill.vendor;
+  for (const bill of bills) {
+    const v = bill.vendor;
     if (!v) continue;
     const key = v.id;
     const balance = Number(bill.balance_cents ?? 0);

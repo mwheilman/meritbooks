@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 export async function GET(request: Request) {
   await auth().catch(() => null);
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
     .select(`
       id, name, lender, instrument_type, original_amount_cents, current_balance_cents,
       interest_rate, maturity_date, monthly_payment_cents, payment_type,
-      location:locations!debt_instruments_location_id_fkey(id, name, short_code)
+      location_id
     `)
     .order('current_balance_cents', { ascending: false });
 
@@ -25,8 +26,11 @@ export async function GET(request: Request) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const instruments = (data ?? []).map((d) => {
-    const loc = Array.isArray(d.location) ? d.location[0] : d.location;
+  const rows = (data ?? []) as Array<Record<string, any>>;
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code', rows.map((r) => r.location_id));
+  const instruments = rows.map((d) => {
+    const loc = d.location_id ? locMap.get(d.location_id) ?? null : null;
     const now = new Date();
     const maturity = d.maturity_date ? new Date(d.maturity_date) : null;
     const monthsRemaining = maturity ? Math.max(0, Math.round((maturity.getTime() - now.getTime()) / (30 * 86400000))) : null;

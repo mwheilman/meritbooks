@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
 
 const updateTransactionSchema = z.object({
@@ -99,7 +100,7 @@ export async function PATCH(
       .select(`
         id, status,
         final_account:accounts!bank_transactions_final_account_id_fkey(id, account_number, name, account_type),
-        final_job:jobs!bank_transactions_final_job_id_fkey(id, job_number, name)
+        final_job_id
       `)
       .single();
 
@@ -108,6 +109,14 @@ export async function PATCH(
         { error: updateError.message, code: 'UPDATE_ERROR' },
         { status: 500 }
       );
+    }
+
+    // Stitch final_job (core) onto the response — cross-schema embeds don't work.
+    if (updated) {
+      const u = updated as Record<string, any>;
+      const jobMap = await fetchCoreMap<{ id: string; job_number: string; name: string }>(
+        supabase, 'jobs', 'id, job_number, name', [u.final_job_id]);
+      u.final_job = u.final_job_id ? jobMap.get(u.final_job_id) ?? null : null;
     }
 
     // Audit log all changed fields

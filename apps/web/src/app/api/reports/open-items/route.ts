@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 export async function GET(request: Request) {
   await auth().catch(() => null);
@@ -26,16 +27,18 @@ export async function GET(request: Request) {
       .from('invoices')
       .select(`
         id, invoice_number, invoice_date, due_date, total_cents, amount_paid_cents, balance_cents, status,
-        customer:customers!invoices_customer_id_fkey(name),
-        location:locations!invoices_location_id_fkey(name)
+        customer_id, location_id
       `)
       .not('status', 'in', '("PAID","VOIDED","DRAFT")');
     if (locationId) invQ = invQ.eq('location_id', locationId);
-    const { data: invoices } = await invQ;
+    const { data: invoicesRaw } = await invQ;
+    const invoices = (invoicesRaw ?? []) as Array<Record<string, any>>;
+    const cMap = await fetchCoreMap<{ id: string; name: string }>(supabase, 'customers', 'id, name', invoices.map((i) => i.customer_id));
+    const lMap = await fetchCoreMap<{ id: string; name: string }>(supabase, 'locations', 'id, name', invoices.map((i) => i.location_id));
 
-    for (const inv of invoices ?? []) {
-      const cust = Array.isArray(inv.customer) ? inv.customer[0] : inv.customer;
-      const loc = Array.isArray(inv.location) ? inv.location[0] : inv.location;
+    for (const inv of invoices) {
+      const cust = inv.customer_id ? cMap.get(inv.customer_id) ?? null : null;
+      const loc = inv.location_id ? lMap.get(inv.location_id) ?? null : null;
       const daysOver = Math.max(0, Math.floor((now.getTime() - new Date(inv.due_date).getTime()) / 86400000));
       items.push({
         id: inv.id, type: 'invoice', number: inv.invoice_number,
@@ -54,16 +57,18 @@ export async function GET(request: Request) {
       .from('bills')
       .select(`
         id, bill_number, bill_date, due_date, total_cents, amount_paid_cents, balance_cents, status,
-        vendor:vendors!bills_vendor_id_fkey(name),
-        location:locations!bills_location_id_fkey(name)
+        vendor_id, location_id
       `)
       .not('status', 'in', '("PAID","VOIDED")');
     if (locationId) billQ = billQ.eq('location_id', locationId);
-    const { data: bills } = await billQ;
+    const { data: billsRaw } = await billQ;
+    const bills = (billsRaw ?? []) as Array<Record<string, any>>;
+    const vMap = await fetchCoreMap<{ id: string; name: string }>(supabase, 'vendors', 'id, name', bills.map((b) => b.vendor_id));
+    const blMap = await fetchCoreMap<{ id: string; name: string }>(supabase, 'locations', 'id, name', bills.map((b) => b.location_id));
 
-    for (const bill of bills ?? []) {
-      const vend = Array.isArray(bill.vendor) ? bill.vendor[0] : bill.vendor;
-      const loc = Array.isArray(bill.location) ? bill.location[0] : bill.location;
+    for (const bill of bills) {
+      const vend = bill.vendor_id ? vMap.get(bill.vendor_id) ?? null : null;
+      const loc = bill.location_id ? blMap.get(bill.location_id) ?? null : null;
       const daysOver = Math.max(0, Math.floor((now.getTime() - new Date(bill.due_date).getTime()) / 86400000));
       items.push({
         id: bill.id, type: 'bill', number: bill.bill_number ?? 'No #',

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 export async function GET(request: Request) {
   await auth().catch(() => null);
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
     .from('invoices')
     .select(`
       id, customer_id, total_cents, amount_paid_cents, balance_cents, status, due_date,
-      customer:customers!invoices_customer_id_fkey(id, name, email, payment_terms_days)
+      customer_id
     `)
     .not('status', 'in', '("VOIDED","DRAFT")');
 
@@ -23,6 +24,11 @@ export async function GET(request: Request) {
   else if (locFilter.length > 1) query = query.in('location_id', locFilter);
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const invoices = (data ?? []) as Array<Record<string, any>>;
+  const custMap = await fetchCoreMap<{ id: string; name: string; email: string | null; payment_terms_days: number }>(
+    supabase, 'customers', 'id, name, email, payment_terms_days', invoices.map((i) => i.customer_id));
+  for (const i of invoices) i.customer = i.customer_id ? custMap.get(i.customer_id) ?? null : null;
 
   const customerMap = new Map<string, {
     customerId: string; customerName: string; email: string | null; termsDays: number;
@@ -32,8 +38,8 @@ export async function GET(request: Request) {
   }>();
 
   const now = new Date();
-  for (const inv of data ?? []) {
-    const c = Array.isArray(inv.customer) ? inv.customer[0] : inv.customer;
+  for (const inv of invoices) {
+    const c = inv.customer;
     if (!c) continue;
     const key = c.id;
     const balance = Number(inv.balance_cents ?? 0);

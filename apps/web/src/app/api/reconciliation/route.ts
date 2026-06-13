@@ -120,6 +120,7 @@ export async function GET(request: Request) {
         accountNumber: (a as { account_mask?: string }).account_mask ?? '',
         balanceCents: Number(a.current_balance_cents),
         accountType: a.account_type,
+        locationId: a.location_id ?? null,
         locationName: loc?.name ?? '',
         locationCode: loc?.short_code ?? '',
       };
@@ -128,26 +129,79 @@ export async function GET(request: Request) {
 }
 
 // ─── POST: Start reconciliation ───────────────────────────────────────
+// gl_balance_cents is COMPUTED server-side (running balance of the bank
+// account's GL cash account through the period end), not trusted from the
+// client. adjusted_bank_balance and difference are generated columns.
 const startRecSchema = z.object({
   bank_account_id: z.string().uuid(),
   fiscal_period_id: z.string().uuid(),
   statement_ending_balance_cents: z.number().int(),
-  gl_balance_cents: z.number().int(),
-  outstanding_deposits_cents: z.number().int().default(0),
-  outstanding_checks_cents: z.number().int().default(0),
+  outstanding_deposits_cents: z.number().int().min(0).default(0),
+  outstanding_checks_cents: z.number().int().min(0).default(0),
 });
 
 export async function POST(request: Request) {
-  const authResult = await auth().catch(() => ({ userId: null as string | null, orgId: null as string | null }));
-  const orgId = authResult.orgId ?? '';
+  await auth().catch(() => null);
   const supabase = createAdminSupabase();
+
+  const { data: org } = await supabase
+    .schema('core').from('organizations').select('id').limit(1).single();
+  const orgId = (org as { id: string } | null)?.id;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   try {
     const raw = await request.json();
     const result = startRecSchema.safeParse(raw);
-    if (!result.success) return NextResponse.json({ error: 'Validation failed', details: result.error.issues }, { status: 422 });
-
+    if (!result.success) {
+      return NextResponse.json({ error: 'Validation failed', details: result.error.issues }, { status: 422 });
+    }
     const body = result.data;
+
+    // Resolve the bank account → its GL cash account + location.
+    const { data: ba, error: baErr } = await supabase
+      .from('bank_accounts')
+      .select('id, account_id, location_id')
+      .eq('id', body.bank_account_id)
+      .eq('org_id', orgId)
+      .single();
+    if (baErr || !ba) return NextResponse.json({ error: 'Bank account not found' }, { status: 404 });
+
+    // Resolve the fiscal period → its end date (the "as of" reconciliation date).
+    const { data: period, error: pErr } = await supabase
+      .from('fiscal_periods')
+      .select('id, end_date, location_id')
+      .eq('id', body.fiscal_period_id)
+      .eq('org_id', orgId)
+      .single();
+    if (pErr || !period) return NextResponse.json({ error: 'Fiscal period not found' }, { status: 404 });
+
+    // Compute the GL cash balance as of the period end: sum(debits) - sum(credits)
+    // over POSTED entries dated on/before end_date, for this account + location.
+    const { data: postedEntries } = await supabase
+      .from('gl_entries')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('location_id', ba.location_id)
+      .eq('status', 'POSTED')
+      .lte('entry_date', period.end_date);
+    const entryIds = (postedEntries ?? []).map((e: { id: string }) => e.id);
+
+    let glBalanceCents = 0;
+    if (entryIds.length > 0) {
+      const { data: lines } = await supabase
+        .from('gl_entry_lines')
+        .select('debit_cents, credit_cents')
+        .eq('account_id', ba.account_id)
+        .in('gl_entry_id', entryIds);
+      for (const l of lines ?? []) {
+        glBalanceCents += Number(l.debit_cents ?? 0) - Number(l.credit_cents ?? 0);
+      }
+    }
+
+    const adjusted =
+      body.statement_ending_balance_cents + body.outstanding_deposits_cents - body.outstanding_checks_cents;
+    const difference = glBalanceCents - adjusted;
+
     const { data, error } = await supabase
       .from('bank_reconciliations')
       .insert({
@@ -155,11 +209,12 @@ export async function POST(request: Request) {
         bank_account_id: body.bank_account_id,
         fiscal_period_id: body.fiscal_period_id,
         statement_ending_balance_cents: body.statement_ending_balance_cents,
-        gl_balance_cents: body.gl_balance_cents,
+        gl_balance_cents: glBalanceCents,
         outstanding_deposits_cents: body.outstanding_deposits_cents,
         outstanding_checks_cents: body.outstanding_checks_cents,
+        is_reconciled: difference === 0,
       })
-      .select('id, difference_cents, is_reconciled')
+      .select('id, gl_balance_cents, difference_cents, is_reconciled')
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 
 export async function GET(request: Request) {
   await auth().catch(() => null);
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
     .from('equity_holders')
     .select(`
       id, holder_name, share_class, ownership_pct, invested_cents, distributions_ytd_cents,
-      location:locations!equity_holders_location_id_fkey(id, name, short_code)
+      location_id
     `)
     .order('ownership_pct', { ascending: false });
 
@@ -24,8 +25,11 @@ export async function GET(request: Request) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const holders = (data ?? []).map((h) => {
-    const loc = Array.isArray(h.location) ? h.location[0] : h.location;
+  const rows = (data ?? []) as Array<Record<string, any>>;
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code', rows.map((r) => r.location_id));
+  const holders = rows.map((h) => {
+    const loc = h.location_id ? locMap.get(h.location_id) ?? null : null;
     return {
       id: h.id,
       holderName: h.holder_name,

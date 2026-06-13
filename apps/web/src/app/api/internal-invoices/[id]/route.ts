@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { fetchCoreMap } from '@/lib/stitch-core';
 import { bookInternalInvoice, type ChargeMethod } from '@/lib/services/internal-invoices';
 import { z } from 'zod';
 
@@ -19,15 +20,22 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       job_id, booked_gl_entry_id, rejection_reason, location_id,
       provider_department_id, receiver_department_id,
       sent_at, approved_at, rejected_at, booked_at, created_at,
-      location:locations!internal_invoices_location_id_fkey(id, name, short_code),
-      provider:departments!internal_invoices_provider_department_id_fkey(id, name, code),
-      receiver:departments!internal_invoices_receiver_department_id_fkey(id, name, code),
       lines:internal_invoice_lines(id, line_number, description, amount_cents)
     `)
     .eq('id', params.id)
     .single();
   if (error || !data) return NextResponse.json({ error: 'Invoice not found', code: 'NOT_FOUND' }, { status: 404 });
-  return NextResponse.json({ data });
+
+  // Stitch core entities (location + provider/receiver departments).
+  const d = data as Record<string, any>;
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code', [d.location_id]);
+  const deptMap = await fetchCoreMap<{ id: string; name: string; code: string }>(
+    supabase, 'departments', 'id, name, code', [d.provider_department_id, d.receiver_department_id]);
+  d.location = d.location_id ? locMap.get(d.location_id) ?? null : null;
+  d.provider = d.provider_department_id ? deptMap.get(d.provider_department_id) ?? null : null;
+  d.receiver = d.receiver_department_id ? deptMap.get(d.receiver_department_id) ?? null : null;
+  return NextResponse.json({ data: d });
 }
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
