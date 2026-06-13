@@ -44,13 +44,27 @@
     @apply card transition-colors hover:border-slate-700;
   }
 
-  /* Data table rows */
+  /* Data table rows. Safari does not reliably paint background/box-shadow on
+     <tr> (display:table-row), so hover styles target the child <td> cells. */
   .table-row-hover {
-    @apply transition-colors hover:bg-white/[0.05];
+    @apply transition-colors;
   }
-  /* Rows that open a detail panel: obvious affordance + chevron reveal. */
+  .table-row-hover:hover > td {
+    background-color: rgb(255 255 255 / 0.05);
+  }
+  /* Rows that open a detail panel: obvious emerald highlight + left accent +
+     a chevron that appears on hover. Backgrounds on <td> for Safari. */
   .row-clickable {
-    @apply cursor-pointer transition-colors hover:bg-emerald-500/[0.06] hover:shadow-[inset_2px_0_0_0_rgb(16,185,129)];
+    @apply cursor-pointer;
+  }
+  .row-clickable > td {
+    @apply transition-colors;
+  }
+  .row-clickable:hover > td {
+    background-color: rgb(16 185 129 / 0.09);
+  }
+  .row-clickable:hover > td:first-child {
+    box-shadow: inset 2px 0 0 0 rgb(16 185 129);
   }
   .row-chevron {
     @apply text-slate-600 opacity-0 transition-opacity;
