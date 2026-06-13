@@ -7,6 +7,7 @@ import { StatusBadge, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useDebounce } from '@/hooks';
 import { CompanySelector } from '../bank-feed/company-selector';
+import { JournalEntryDrawer } from './je-drawer';
 
 interface JERow {
   id: string;
@@ -63,6 +64,7 @@ export function JournalEntryList() {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [locationId, setLocationId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const params: Record<string, string> = {};
   if (activeTab !== 'all') params.status = activeTab;
@@ -144,7 +146,7 @@ export function JournalEntryList() {
               {entries.map((je) => {
                 const source = SOURCE_LABELS[je.sourceModule ?? ''] ?? SOURCE_LABELS.SYSTEM;
                 return (
-                  <tr key={je.id} className="table-row-hover">
+                  <tr key={je.id} onClick={() => setSelectedId(je.id)} className="table-row-hover cursor-pointer">
                     <td className="px-4 py-3 text-sm font-mono text-slate-300 whitespace-nowrap">
                       {je.entryNumber}
                     </td>
@@ -185,6 +187,8 @@ export function JournalEntryList() {
           </table>
         </div>
       )}
+
+      <JournalEntryDrawer entryId={selectedId} onClose={() => setSelectedId(null)} />
     </div>
   );
 }

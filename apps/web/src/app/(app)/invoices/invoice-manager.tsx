@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@/hooks/use-query';
 import { formatMoney } from '@meritbooks/shared';
+import { InvoiceDrawer } from './invoice-drawer';
 import {
   FileText, Plus, DollarSign, Clock, AlertCircle, Search, ChevronDown,
   Check, Send, CreditCard, X, Loader2, Building2
@@ -49,9 +50,11 @@ interface LocationOption {
 function InvoiceList({
   onCreateClick,
   onPaymentClick,
+  onRowClick,
 }: {
   onCreateClick: () => void;
   onPaymentClick: (inv: InvoiceRow) => void;
+  onRowClick: (id: string) => void;
 }) {
   const [status, setStatus] = useState('ALL');
   const [search, setSearch] = useState('');
@@ -205,7 +208,7 @@ function InvoiceList({
             </thead>
             <tbody>
               {invoices.map((inv) => (
-                <tr key={inv.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+                <tr key={inv.id} onClick={() => onRowClick(inv.id)} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors cursor-pointer">
                   <td className="py-3 pr-4">
                     <span className="font-mono text-white">{inv.invoiceNumber}</span>
                     {inv.isProgressBill && (
@@ -241,7 +244,7 @@ function InvoiceList({
                   <td className="py-3">
                     {inv.status !== 'PAID' && inv.status !== 'VOIDED' && inv.status !== 'DRAFT' && (
                       <button
-                        onClick={() => onPaymentClick(inv)}
+                        onClick={(e) => { e.stopPropagation(); onPaymentClick(inv); }}
                         className="p-1.5 text-gray-400 hover:text-emerald-400 hover:bg-gray-700/50 rounded transition-colors"
                         title="Receive payment"
                       >
@@ -635,6 +638,7 @@ function PaymentDialog({
 export function InvoiceManager() {
   const [showCreate, setShowCreate] = useState(false);
   const [paymentInvoice, setPaymentInvoice] = useState<InvoiceRow | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const refresh = useCallback(() => {
@@ -648,7 +652,9 @@ export function InvoiceManager() {
       <InvoiceList
         onCreateClick={() => setShowCreate(true)}
         onPaymentClick={(inv) => setPaymentInvoice(inv)}
+        onRowClick={(id) => setDetailId(id)}
       />
+      <InvoiceDrawer invoiceId={detailId} onClose={() => setDetailId(null)} />
       {showCreate && <CreateInvoiceForm onClose={() => setShowCreate(false)} onCreated={refresh} />}
       {paymentInvoice && <PaymentDialog invoice={paymentInvoice} onClose={() => setPaymentInvoice(null)} onPaid={refresh} />}
     </div>
