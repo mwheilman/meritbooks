@@ -1,7 +1,9 @@
 'use client';
+import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
+import { DepartmentDrawer, type DeptLike } from './dept-drawer';
 
 import { useState, useMemo } from 'react';
-import { Loader2, AlertCircle, Plus, Network, Pencil, Power, X } from 'lucide-react';
+import { Loader2, AlertCircle, Plus, Network, Pencil, Power, X, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { addToast } from '@/hooks';
@@ -67,6 +69,8 @@ const EMPTY_FORM: FormState = {
 
 export default function DepartmentsPage() {
   const { data, isLoading, error, refetch } = useQuery<DepartmentsResponse>('/api/departments');
+  const [selected, setSelected] = useState<{ dept: DeptLike; companyName: string } | null>(null);
+  const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<{ dept: DeptLike; companyName: string }>();
   const { data: locations } = useQuery<LocationRow[]>('/api/locations');
 
   const [form, setForm] = useState<FormState | null>(null);
@@ -260,7 +264,7 @@ export default function DepartmentsPage() {
                     const indent = Math.max(0, (d.hierarchyDepth ?? 1) - 1);
                     const cm = CHARGE_METHOD_LABELS[d.internalChargeMethod];
                     return (
-                      <tr key={d.id} className={clsx('hover:bg-slate-800/20', !d.isActive && 'opacity-50')}>
+                      <tr key={d.id} {...rowHandlers({ dept: d as unknown as DeptLike, companyName: group.companyName })} onClick={() => setSelected({ dept: d as unknown as DeptLike, companyName: group.companyName })} className={clsx('row-clickable', !d.isActive && 'opacity-50')}>
                         <td className="px-4 py-3">
                           <div className="flex items-center" style={{ paddingLeft: `${indent * 18}px` }}>
                             {indent > 0 && <span className="text-slate-600 mr-1.5">{'\u2514'}</span>}
@@ -290,7 +294,7 @@ export default function DepartmentsPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
                             <button
-                              onClick={() => openEdit(d)}
+                              onClick={(e) => { e.stopPropagation(); openEdit(d); }}
                               className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-white/[0.04] transition-colors"
                               title="Edit"
                             >
@@ -298,13 +302,14 @@ export default function DepartmentsPage() {
                             </button>
                             {d.isActive && (
                               <button
-                                onClick={() => deactivate(d)}
+                                onClick={(e) => { e.stopPropagation(); deactivate(d); }}
                                 className="p-1.5 rounded-md text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                                 title="Deactivate"
                               >
                                 <Power size={14} />
                               </button>
                             )}
+                            <ChevronRight size={14} className="row-chevron" />
                           </div>
                         </td>
                       </tr>
@@ -316,6 +321,27 @@ export default function DepartmentsPage() {
           ))}
         </div>
       )}
+
+      <HoverPeekCard
+        rect={peek?.rect ?? null} visible={!!peek} cardHandlers={cardHandlers}
+        onOpen={peek ? () => { const sel = peek.item; close(); setSelected(sel); } : undefined}
+      >
+        {peek && (
+          <div className="p-3">
+            <div className="text-sm font-semibold text-white mb-1">{peek.item.dept.name}</div>
+            <div className="text-2xs text-slate-500 mb-2">{peek.item.dept.code} · {peek.item.companyName}</div>
+            {peek.item.dept.parentName && <div className="text-2xs text-slate-500">under {peek.item.dept.parentName}</div>}
+            <div className="mt-2 text-2xs"><span className={peek.item.dept.isActive ? 'text-emerald-400' : 'text-slate-500'}>{peek.item.dept.isActive ? 'Active' : 'Inactive'}</span></div>
+          </div>
+        )}
+      </HoverPeekCard>
+
+      <DepartmentDrawer
+        dept={selected?.dept ?? null}
+        companyName={selected?.companyName}
+        onClose={() => setSelected(null)}
+        onEdit={selected ? () => { const d = selected.dept; setSelected(null); openEdit(d as unknown as DepartmentRow); } : undefined}
+      />
 
       {/* Create / Edit modal */}
       {form && (

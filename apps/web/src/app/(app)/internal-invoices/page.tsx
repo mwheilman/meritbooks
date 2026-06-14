@@ -1,7 +1,9 @@
 'use client';
+import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
+import { InternalInvoiceDrawer } from './internal-invoice-drawer';
 
 import { useState, useMemo } from 'react';
-import { Loader2, AlertCircle, Plus, ArrowLeftRight, Trash2, X, Check, Ban, Send } from 'lucide-react';
+import { Loader2, AlertCircle, Plus, ArrowLeftRight, Trash2, X, Check, Ban, Send, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { PageHeader, EmptyState } from '@/components/ui';
@@ -78,6 +80,8 @@ export default function InternalInvoicesPage() {
   const { data, isLoading, error, refetch } = useQuery<ListResponse>(
     `/api/internal-invoices${filter !== 'all' ? `?status=${filter}` : ''}`,
   );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<InvoiceRow>();
   const { data: deptData } = useQuery<DepartmentsResponse>('/api/departments');
   const { data: locations } = useQuery<LocationRow[]>('/api/locations');
 
@@ -239,7 +243,7 @@ export default function InternalInvoicesPage() {
                 const st = STATUS_STYLE[inv.status];
                 const busy = busyId === inv.id;
                 return (
-                  <tr key={inv.id} className="border-t border-white/5 hover:bg-white/[0.02]">
+                  <tr key={inv.id} {...rowHandlers(inv)} onClick={() => setSelectedId(inv.id)} className="border-t border-white/5 row-clickable">
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-200">{inv.invoiceNumber}</div>
                       <div className="text-xs text-slate-500">{inv.invoiceDate}</div>
@@ -267,28 +271,29 @@ export default function InternalInvoicesPage() {
                         {busy && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
                         {!busy && inv.status === 'draft' && (
                           <>
-                            <button onClick={() => act(inv, 'send')} className="btn-primary btn-sm inline-flex items-center gap-1">
+                            <button onClick={(e) => { e.stopPropagation(); act(inv, 'send'); }} className="btn-primary btn-sm inline-flex items-center gap-1">
                               <Send className="w-3.5 h-3.5" /> Send
                             </button>
-                            <button onClick={() => act(inv, 'void')} className="btn-ghost btn-sm">Void</button>
+                            <button onClick={(e) => { e.stopPropagation(); act(inv, 'void'); }} className="btn-ghost btn-sm">Void</button>
                           </>
                         )}
                         {!busy && inv.status === 'sent' && (
                           <>
-                            <button onClick={() => act(inv, 'approve')} className="btn-primary btn-sm inline-flex items-center gap-1">
+                            <button onClick={(e) => { e.stopPropagation(); act(inv, 'approve'); }} className="btn-primary btn-sm inline-flex items-center gap-1">
                               <Check className="w-3.5 h-3.5" /> Approve
                             </button>
-                            <button onClick={() => { setRejecting(inv); setRejectReason(''); }} className="btn-ghost btn-sm inline-flex items-center gap-1">
+                            <button onClick={(e) => { e.stopPropagation(); setRejecting(inv); setRejectReason(''); }} className="btn-ghost btn-sm inline-flex items-center gap-1">
                               <Ban className="w-3.5 h-3.5" /> Reject
                             </button>
                           </>
                         )}
                         {!busy && inv.status === 'booked' && inv.bookedGlEntryId && (
-                          <a href={`/journal-entries?highlight=${inv.bookedGlEntryId}`} className="btn-ghost btn-sm">View GL</a>
+                          <a href={`/journal-entries?highlight=${inv.bookedGlEntryId}`} onClick={(e) => e.stopPropagation()} className="btn-ghost btn-sm">View GL</a>
                         )}
                         {!busy && inv.status === 'rejected' && (
-                          <button onClick={() => act(inv, 'void')} className="btn-ghost btn-sm">Void</button>
+                          <button onClick={(e) => { e.stopPropagation(); act(inv, 'void'); }} className="btn-ghost btn-sm">Void</button>
                         )}
+                        <ChevronRight size={14} className="row-chevron" />
                       </div>
                     </td>
                   </tr>
@@ -298,6 +303,27 @@ export default function InternalInvoicesPage() {
           </table>
         </div>
       )}
+
+      <HoverPeekCard
+        rect={peek?.rect ?? null} visible={!!peek} cardHandlers={cardHandlers}
+        onOpen={peek ? () => { const id = peek.item.id; close(); setSelectedId(id); } : undefined}
+      >
+        {peek && (
+          <div className="p-3">
+            <div className="text-sm font-semibold text-white mb-1">{peek.item.invoiceNumber}</div>
+            <div className="text-2xs text-slate-400 mb-2">
+              <span className="text-slate-200">{peek.item.provider?.name ?? '?'}</span> → <span className="text-slate-200">{peek.item.receiver?.name ?? '?'}</span>
+            </div>
+            <div className="rounded-md bg-slate-800/40 px-3 py-2 flex items-center justify-between">
+              <span className="text-2xs text-slate-500">{peek.item.chargeMethod === 'cost_transfer' ? 'Cost transfer' : 'Revenue'}</span>
+              <span className="text-sm font-mono text-white">{fmt(peek.item.totalCents)}</span>
+            </div>
+            <div className="mt-2 text-2xs text-slate-500">{peek.item.location?.name ?? '--'} · {peek.item.invoiceDate}</div>
+          </div>
+        )}
+      </HoverPeekCard>
+
+      <InternalInvoiceDrawer invoiceId={selectedId} onClose={() => setSelectedId(null)} />
 
       {/* Create modal */}
       {form && (

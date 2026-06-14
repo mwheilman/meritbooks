@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Check, Flag, Pencil, Receipt, Bell, Clock, Inbox, AlertCircle, Loader2, Search } from 'lucide-react';
+import { Check, Flag, Pencil, Receipt, Bell, Clock, Inbox, AlertCircle, Loader2, Search, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatusBadge, ConfidenceBar, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
+import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
+import { CreditCardDrawer, type CCLike } from './cc-drawer';
 import type { ApproveBankTransactionInput } from '@/lib/validations/transactions';
 import { CompanySelector } from '../bank-feed/company-selector';
 
@@ -89,6 +91,8 @@ export function CreditCardFeed() {
     '/api/credit-cards',
     Object.keys(params).length > 0 ? params : undefined,
   );
+  const [selectedTxn, setSelectedTxn] = useState<CCLike | null>(null);
+  const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<CCLike>();
 
   const { mutate: approveTxn } = useMutation<ApproveBankTransactionInput, ApproveResult>(
     '/api/bank-feed/approve'
@@ -200,7 +204,7 @@ export function CreditCardFeed() {
                 const vendor = txn.ai_vendor?.display_name ?? txn.ai_vendor?.name ?? null;
                 const isPosted = txn.status === 'POSTED' || txn.status === 'APPROVED';
                 return (
-                  <tr key={txn.id} className="table-row-hover">
+                  <tr key={txn.id} {...rowHandlers(txn as unknown as CCLike)} onClick={() => setSelectedTxn(txn as unknown as CCLike)} className="row-clickable">
                     <td className="px-4 py-3 text-sm text-slate-400 font-mono tabular-nums whitespace-nowrap">
                       {txn.transaction_date}
                     </td>
@@ -248,7 +252,7 @@ export function CreditCardFeed() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <button
-                          onClick={() => handleApprove(txn)}
+                          onClick={(e) => { e.stopPropagation(); handleApprove(txn); }}
                           disabled={!account || approvingId === txn.id || isPosted}
                           className={clsx(
                             'p-1.5 rounded-md transition-colors',
@@ -260,9 +264,10 @@ export function CreditCardFeed() {
                         >
                           {approvingId === txn.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                         </button>
-                        <button className="p-1.5 rounded-md text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors" title="Flag">
+                        <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-md text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors" title="Flag">
                           <Flag size={14} />
                         </button>
+                        <ChevronRight size={14} className="row-chevron" />
                       </div>
                     </td>
                   </tr>
@@ -272,6 +277,26 @@ export function CreditCardFeed() {
           </table>
         </div>
       )}
+
+      <HoverPeekCard
+        rect={peek?.rect ?? null} visible={!!peek} cardHandlers={cardHandlers}
+        onOpen={peek ? () => { const t = peek.item; close(); setSelectedTxn(t); } : undefined}
+      >
+        {peek && (
+          <div className="p-3">
+            <div className="text-sm font-semibold text-white truncate mb-1">{peek.item.description}</div>
+            <div className="rounded-md bg-slate-800/40 px-3 py-2 flex items-center justify-between">
+              <span className="text-2xs text-slate-500">{peek.item.transaction_date}</span>
+              <span className="text-sm font-mono text-white">{formatMoney(Math.abs(peek.item.amount_cents))}</span>
+            </div>
+            <div className="mt-2 text-2xs text-slate-500">
+              {(peek.item.final_account ?? peek.item.ai_account) ? `${(peek.item.final_account ?? peek.item.ai_account)!.account_number} · ${(peek.item.final_account ?? peek.item.ai_account)!.name}` : 'Uncategorized'}
+            </div>
+          </div>
+        )}
+      </HoverPeekCard>
+
+      <CreditCardDrawer txn={selectedTxn} onClose={() => setSelectedTxn(null)} />
     </div>
   );
 }

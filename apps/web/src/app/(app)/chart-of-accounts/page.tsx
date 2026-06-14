@@ -1,4 +1,7 @@
 'use client';
+import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
+import { AccountPeek } from './account-peek';
+import { AccountDrawer } from './account-drawer';
 
 import { useState, useCallback } from 'react';
 import {
@@ -56,6 +59,8 @@ export default function ChartOfAccountsPage() {
     '/api/accounts', Object.keys(params).length > 0 ? params : undefined,
     { key: String(refreshKey) }
   );
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<{ id: string }>();
 
   const accounts = data?.data ?? [];
   const counts = data?.counts;
@@ -169,7 +174,7 @@ export default function ChartOfAccountsPage() {
             </thead>
             <tbody className="divide-y divide-slate-800/30">
               {filtered.map((acct) => (
-                <tr key={acct.id} className="hover:bg-slate-800/20">
+                <tr key={acct.id} {...rowHandlers({ id: acct.id })} onClick={() => setSelectedAccountId(acct.id)} className="row-clickable">
                   <td className="px-4 py-2 text-xs font-mono text-emerald-400">{acct.accountNumber}</td>
                   <td className="px-4 py-2 text-slate-300">{acct.name}</td>
                   <td className="px-4 py-2 text-xs text-slate-500">{acct.accountType}</td>
@@ -195,11 +200,11 @@ export default function ChartOfAccountsPage() {
                     <td className="px-4 py-2 text-center">
                       <div className="flex items-center justify-center gap-1">
                         <button
-                          onClick={() => handleApproval(acct.id, 'approve')}
+                          onClick={(e) => { e.stopPropagation(); handleApproval(acct.id, 'approve'); }}
                           className="p-1 rounded bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
                         ><Check size={13} /></button>
                         <button
-                          onClick={() => handleApproval(acct.id, 'reject')}
+                          onClick={(e) => { e.stopPropagation(); handleApproval(acct.id, 'reject'); }}
                           className="p-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
                         ><X size={13} /></button>
                       </div>
@@ -211,6 +216,17 @@ export default function ChartOfAccountsPage() {
           </table>
         </div>
       )}
+
+      <HoverPeekCard
+        rect={peek?.rect ?? null}
+        visible={!!peek}
+        cardHandlers={cardHandlers}
+        onOpen={peek ? () => { const id = peek.item.id; close(); setSelectedAccountId(id); } : undefined}
+      >
+        {peek && <AccountPeek accountId={peek.item.id} />}
+      </HoverPeekCard>
+
+      <AccountDrawer accountId={selectedAccountId} onClose={() => setSelectedAccountId(null)} />
     </div>
   );
 }

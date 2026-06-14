@@ -1,7 +1,9 @@
 'use client';
+import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
+import { AssetDrawer, type AssetLike } from './asset-drawer';
 
 import { useState } from 'react';
-import { Package, Loader2, AlertCircle, Search, DollarSign, TrendingDown, Archive } from 'lucide-react';
+import { Package, Loader2, AlertCircle, Search, DollarSign, TrendingDown, Archive, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
@@ -53,6 +55,8 @@ export default function FixedAssetsPage() {
   if (locationFilter) params.location_id = locationFilter;
 
   const { data, isLoading, error } = useQuery<AssetsResponse>('/api/fixed-assets', Object.keys(params).length > 0 ? params : undefined);
+  const [selectedAsset, setSelectedAsset] = useState<AssetLike | null>(null);
+  const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<AssetLike>();
   const assets = data?.data ?? [];
   const summary = data?.summary;
 
@@ -131,7 +135,7 @@ export default function FixedAssetsPage() {
                     ? Math.round((asset.accumulatedDepreciationCents / asset.acquisitionCostCents) * 100)
                     : 0;
                   return (
-                    <tr key={asset.id} className="hover:bg-slate-800/20">
+                    <tr key={asset.id} {...rowHandlers(asset as unknown as AssetLike)} onClick={() => setSelectedAsset(asset as unknown as AssetLike)} className="row-clickable">
                       <td className="px-4 py-3">
                         <p className="text-sm text-white font-medium">{asset.name}</p>
                         <p className="text-[10px] text-slate-600 font-mono">{asset.assetTag ?? '—'}{asset.serialNumber ? ` · SN: ${asset.serialNumber}` : ''}</p>
@@ -154,6 +158,7 @@ export default function FixedAssetsPage() {
                         <span className={clsx('px-1.5 py-0.5 rounded text-[10px] font-medium', STATUS_CLS[asset.status] ?? 'bg-slate-500/10 text-slate-500')}>
                           {asset.status.replace('_', ' ')}
                         </span>
+                        <ChevronRight size={13} className="row-chevron inline ml-1 align-middle" />
                       </td>
                     </tr>
                   );
@@ -163,6 +168,28 @@ export default function FixedAssetsPage() {
           </div>
         </div>
       )}
+
+      <HoverPeekCard
+        rect={peek?.rect ?? null} visible={!!peek} cardHandlers={cardHandlers}
+        onOpen={peek ? () => { const a = peek.item; close(); setSelectedAsset(a); } : undefined}
+      >
+        {peek && (
+          <div className="p-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-semibold text-white truncate">{peek.item.name}</span>
+            </div>
+            <div className="text-2xs text-slate-500 mb-2">{[peek.item.assetTag, peek.item.category].filter(Boolean).join(' · ') || '--'}</div>
+            <div className="rounded-md bg-slate-800/40 px-3 py-2 space-y-0.5">
+              <div className="flex justify-between text-2xs"><span className="text-slate-500">Cost</span><span className="font-mono text-slate-300">{formatMoney(peek.item.acquisitionCostCents)}</span></div>
+              <div className="flex justify-between text-2xs"><span className="text-slate-500">Accumulated</span><span className="font-mono text-amber-400">{formatMoney(peek.item.accumulatedDepreciationCents)}</span></div>
+              <div className="flex justify-between text-2xs"><span className="text-slate-500">Net book value</span><span className="font-mono text-white">{formatMoney(peek.item.netBookValueCents)}</span></div>
+            </div>
+            <div className="mt-2 text-2xs text-slate-500">{peek.item.depreciationMethod.replace(/_/g, ' ')} · {peek.item.usefulLifeMonths}mo</div>
+          </div>
+        )}
+      </HoverPeekCard>
+
+      <AssetDrawer asset={selectedAsset} onClose={() => setSelectedAsset(null)} />
     </div>
   );
 }

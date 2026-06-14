@@ -3,7 +3,9 @@
 import { useState, useCallback } from 'react';
 import { Loader2, AlertCircle, Play, Eye, CheckCircle2, MinusCircle, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useRouter } from 'next/navigation';
 import { useQuery, addToast } from '@/hooks';
+import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { formatMoney } from '@meritbooks/shared';
 
 interface JobResult {
@@ -34,6 +36,8 @@ export function RevRecRun() {
 
   // Preview via GET (no posting); re-fetch keyed on asOf.
   const { data, isLoading, error, refetch } = useQuery<RunResponse>('/api/rev-rec/run', { as_of: asOf }, { key: `revrec-${asOf}` });
+  const router = useRouter();
+  const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<JobResult>();
 
   const post = useCallback(async () => {
     if (!window.confirm(`Post revenue recognition as of ${asOf}? This writes journal entries.`)) return;
@@ -99,7 +103,7 @@ export function RevRecRun() {
             </thead>
             <tbody className="divide-y divide-slate-800/30">
               {jobs.map((j) => (
-                <tr key={j.jobId} className="table-row-hover">
+                <tr key={j.jobId} {...rowHandlers(j)} onClick={() => router.push(`/jobs/${j.jobId}`)} className="row-clickable">
                   <td className="px-4 py-2">
                     <span className="text-2xs font-mono text-slate-500">{j.jobNumber ?? '--'}</span>
                     <p className="text-sm text-slate-200 truncate max-w-[220px]">{j.jobName ?? j.jobId}</p>
@@ -125,6 +129,25 @@ export function RevRecRun() {
           </table>
         </div>
       )}
+
+      <HoverPeekCard
+        rect={peek?.rect ?? null} visible={!!peek} cardHandlers={cardHandlers}
+        onOpen={peek ? () => { const id = peek.item.jobId; close(); router.push(`/jobs/${id}`); } : undefined}
+      >
+        {peek && (
+          <div className="p-3">
+            <div className="mb-1"><span className="text-2xs font-mono text-slate-500">{peek.item.jobNumber ?? '--'}</span>
+              <p className="text-sm font-semibold text-white truncate">{peek.item.jobName ?? peek.item.jobId}</p></div>
+            <div className="text-2xs text-slate-500 mb-2">{METHOD_SHORT[peek.item.method] ?? peek.item.method}</div>
+            <div className="rounded-md bg-slate-800/40 px-3 py-2 space-y-0.5">
+              <div className="flex justify-between text-2xs"><span className="text-slate-500">Earned to date</span><span className="font-mono text-slate-300">{formatMoney(peek.item.earnedToDateCents)}</span></div>
+              <div className="flex justify-between text-2xs"><span className="text-slate-500">Prior recognized</span><span className="font-mono text-slate-400">{formatMoney(peek.item.priorRecognizedCents)}</span></div>
+              <div className="flex justify-between text-2xs"><span className="text-slate-500">To recognize now</span><span className={'font-mono ' + (peek.item.deltaCents > 0 ? 'text-emerald-400' : peek.item.deltaCents < 0 ? 'text-red-400' : 'text-slate-500')}>{formatMoney(peek.item.deltaCents)}</span></div>
+            </div>
+            {peek.item.reason && <div className="mt-2 text-2xs text-amber-400">{peek.item.reason}</div>}
+          </div>
+        )}
+      </HoverPeekCard>
     </div>
   );
 }
