@@ -1,11 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, Shield, AlertTriangle, CheckCircle, FileWarning, Inbox, AlertCircle, ShieldAlert } from 'lucide-react';
+import { Search, Shield, AlertTriangle, CheckCircle, FileWarning, Inbox, AlertCircle, ShieldAlert, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ConfidenceBar, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useDebounce } from '@/hooks';
+import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
+import { VendorPeek } from './vendor-peek';
+import { VendorDrawer } from './vendor-drawer';
 
 interface VendorRow {
   id: string;
@@ -50,6 +53,8 @@ export function VendorList() {
   const params: Record<string, string> = {};
   if (debouncedSearch) params.search = debouncedSearch;
   if (filter !== 'all') params.compliance = filter;
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<VendorRow>();
 
   const { data, isLoading, error } = useQuery<VendorResponse>(
     '/api/vendors',
@@ -134,11 +139,12 @@ export function VendorList() {
                 <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">W-9</th>
                 <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">GL COI</th>
                 <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">WC COI</th>
+                <th className="w-8" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/30">
               {vendors.map((v) => (
-                <tr key={v.id} className="table-row-hover">
+                <tr key={v.id} {...rowHandlers(v)} onClick={() => setSelectedId(v.id)} className="row-clickable">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-slate-200 font-medium">{v.displayName}</span>
@@ -183,12 +189,24 @@ export function VendorList() {
                   <td className="px-4 py-3 text-center">
                     <ComplianceIcon status={v.compliance.wcCoi} />
                   </td>
+                  <td className="px-4 py-3 text-right"><ChevronRight size={14} className="row-chevron inline" /></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      <HoverPeekCard
+        rect={peek?.rect ?? null}
+        visible={!!peek}
+        cardHandlers={cardHandlers}
+        onOpen={peek ? () => { const id = peek.item.id; close(); setSelectedId(id); } : undefined}
+      >
+        {peek && <VendorPeek vendorId={peek.item.id} />}
+      </HoverPeekCard>
+
+      <VendorDrawer vendorId={selectedId} onClose={() => setSelectedId(null)} />
     </div>
   );
 }

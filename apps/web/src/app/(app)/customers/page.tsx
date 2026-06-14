@@ -1,9 +1,11 @@
 'use client';
+import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
+import { CustomerPeek } from './customer-peek';
+import { CustomerDrawer } from './customer-drawer';
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Search, Plus, X, Users, ChevronDown, ChevronUp, Loader2, DollarSign, AlertTriangle,
-} from 'lucide-react';
+  Search, Plus, X, Users, ChevronDown, ChevronUp, Loader2, DollarSign, AlertTriangle, ChevronRight } from 'lucide-react';
 
 interface Customer {
   id: string;
@@ -188,6 +190,8 @@ export default function CustomersPage() {
       setSaving(false);
     }
   };
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<Customer>();
 
   const startEdit = (c: Customer) => {
     setEditingId(c.id);
@@ -374,7 +378,7 @@ export default function CustomersPage() {
             </thead>
             <tbody>
               {customers.map((c) => (
-                <tr key={c.id} className="border-b border-zinc-800 hover:bg-zinc-800/50 transition-colors">
+                <tr key={c.id} {...rowHandlers(c)} onClick={() => setSelectedCustomerId(c.id)} className="border-b border-zinc-800 row-clickable">
                   <td className="px-4 py-3">
                     <div className="text-sm font-medium text-white">{c.display_name || c.name}</div>
                     {c.city && c.state && <div className="text-xs text-zinc-500">{c.city}, {c.state}</div>}
@@ -414,7 +418,8 @@ export default function CustomersPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button onClick={() => startEdit(c)} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">Edit</button>
+                    <button onClick={(e) => { e.stopPropagation(); startEdit(c); }} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">Edit</button>
+                    <ChevronRight size={14} className="row-chevron inline ml-2 align-middle" />
                   </td>
                 </tr>
               ))}
@@ -422,6 +427,21 @@ export default function CustomersPage() {
           </table>
         </div>
       )}
+
+      <HoverPeekCard
+        rect={peek?.rect ?? null}
+        visible={!!peek}
+        cardHandlers={cardHandlers}
+        onOpen={peek ? () => { const id = peek.item.id; close(); setSelectedCustomerId(id); } : undefined}
+      >
+        {peek && <CustomerPeek customerId={peek.item.id} />}
+      </HoverPeekCard>
+
+      <CustomerDrawer
+        customerId={selectedCustomerId}
+        onClose={() => setSelectedCustomerId(null)}
+        onEdit={selectedCustomerId ? () => { const c = customers.find((x) => x.id === selectedCustomerId); setSelectedCustomerId(null); if (c) startEdit(c); } : undefined}
+      />
     </div>
   );
 }
