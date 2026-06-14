@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@/hooks/use-query';
 import { formatMoney } from '@meritbooks/shared';
 import { InvoiceDrawer } from './invoice-drawer';
-import { useHoverPeek, HoverPeekCard, PeekRow } from '@/components/hover-peek';
+import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
+import { InvoicePeek } from './invoice-peek';
 import {
   FileText, Plus, DollarSign, Clock, AlertCircle, Search, ChevronDown,
   Check, Send, CreditCard, X, Loader2, Building2, ChevronRight } from 'lucide-react';
@@ -60,7 +61,7 @@ function InvoiceList({
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [locationId, setLocationId] = useState('');
-  const { peek, handlers } = useHoverPeek<InvoiceRow>();
+  const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<InvoiceRow>();
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -209,7 +210,7 @@ function InvoiceList({
             </thead>
             <tbody>
               {invoices.map((inv) => (
-                <tr key={inv.id} {...handlers(inv)} onClick={() => onRowClick(inv.id)} className="border-b border-gray-800/50 row-clickable">
+                <tr key={inv.id} {...rowHandlers(inv)} onClick={() => onRowClick(inv.id)} className="border-b border-gray-800/50 row-clickable">
                   <td className="py-3 pr-4">
                     <span className="font-mono text-white">{inv.invoiceNumber}</span>
                     {inv.isProgressBill && (
@@ -262,19 +263,12 @@ function InvoiceList({
       )}
 
       <HoverPeekCard
-        x={peek?.x ?? 0} y={peek?.y ?? 0} visible={!!peek}
-        title={peek ? `Invoice ${peek.item.invoiceNumber}` : ''}
-        status={peek ? <StatusBadge status={peek.item.status} /> : null}
+        rect={peek?.rect ?? null}
+        visible={!!peek}
+        cardHandlers={cardHandlers}
+        onOpen={peek ? () => { const id = peek.item.id; close(); onRowClick(id); } : undefined}
       >
-        {peek && (
-          <>
-            <PeekRow label="Customer" value={peek.item.customer?.name ?? '--'} />
-            <PeekRow label="Company" value={peek.item.location?.shortCode ?? '--'} />
-            <PeekRow label="Due" value={peek.item.dueDate + (peek.item.daysOverdue > 0 && peek.item.status !== 'PAID' ? ` (${peek.item.daysOverdue}d late)` : '')} />
-            <PeekRow label="Total" value={formatMoney(peek.item.totalCents)} strong />
-            <PeekRow label="Balance" value={formatMoney(peek.item.balanceCents)} strong />
-          </>
-        )}
+        {peek && <InvoicePeek invoiceId={peek.item.id} />}
       </HoverPeekCard>
     </div>
   );

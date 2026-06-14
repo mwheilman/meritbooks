@@ -1,73 +1,92 @@
 'use client';
 
-import { useRef, useState, useCallback, type ReactNode } from 'react';
-import { clsx } from 'clsx';
+import { useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
 
 /**
- * Passive hover-peek: hover a row and, after a short delay, a small summary card
- * appears near the cursor. It is purely passive (pointer-events: none) — it
- * never steals the hover, and vanishes the instant you leave the row. Clicking
- * the row still opens the full DetailDrawer; this is just the at-a-glance peek.
- *
- * Each list renders one <HoverPeekCard> and supplies summary content for the
- * currently-peeked item, drawn from data the row already has (so it's instant).
+ * Interactive hover-peek: hover a row and, after a short delay, a card anchored
+ * to the row shows a real preview of the document (a mini invoice, a JE
+ * T-account, a receipt image…). The card is interactive — a hover bridge keeps
+ * it open while you move onto it, where an "Open full" button opens the full
+ * DetailDrawer. Detail is fetched on hover and cached, so re-hovering is instant.
  */
-export function useHoverPeek<T>(delay = 350) {
-  const [peek, setPeek] = useState<{ item: T; x: number; y: number } | null>(null);
-  const timer = useRef<number | null>(null);
-  const pos = useRef({ x: 0, y: 0 });
+export function useHoverPeek<T>(opts?: { openDelay?: number; closeDelay?: number }) {
+  const openDelay = opts?.openDelay ?? 350;
+  const closeDelay = opts?.closeDelay ?? 200;
+  const [peek, setPeek] = useState<{ item: T; rect: DOMRect } | null>(null);
+  const openTimer = useRef<number | null>(null);
+  const closeTimer = useRef<number | null>(null);
 
-  const clear = () => { if (timer.current) { window.clearTimeout(timer.current); timer.current = null; } };
+  const cancelOpen = () => { if (openTimer.current) { window.clearTimeout(openTimer.current); openTimer.current = null; } };
+  const cancelClose = () => { if (closeTimer.current) { window.clearTimeout(closeTimer.current); closeTimer.current = null; } };
 
-  const handlers = useCallback((item: T) => ({
+  const rowHandlers = useCallback((item: T) => ({
     onMouseEnter: (e: React.MouseEvent) => {
-      pos.current = { x: e.clientX, y: e.clientY };
-      clear();
-      timer.current = window.setTimeout(() => setPeek({ item, x: pos.current.x, y: pos.current.y }), delay);
+      cancelClose();
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      cancelOpen();
+      openTimer.current = window.setTimeout(() => setPeek({ item, rect }), openDelay);
     },
-    onMouseMove: (e: React.MouseEvent) => { pos.current = { x: e.clientX, y: e.clientY }; },
-    onMouseLeave: () => { clear(); setPeek(null); },
-  }), [delay]);
+    onMouseLeave: () => {
+      cancelOpen();
+      closeTimer.current = window.setTimeout(() => setPeek(null), closeDelay);
+    },
+  }), [openDelay, closeDelay]);
 
-  return { peek, handlers };
+  const cardHandlers = {
+    onMouseEnter: () => cancelClose(),
+    onMouseLeave: () => { closeTimer.current = window.setTimeout(() => setPeek(null), closeDelay); },
+  };
+
+  const close = useCallback(() => { cancelOpen(); cancelClose(); setPeek(null); }, []);
+  return { peek, rowHandlers, cardHandlers, close };
 }
 
-const CARD_W = 300;
+// ── Detail fetch with a simple module cache (instant on re-hover) ──────────
+const peekCache = new Map<string, unknown>();
+export function usePeekDetail<D>(url: string | null) {
+  const [data, setData] = useState<D | null>(url && peekCache.has(url) ? (peekCache.get(url) as D) : null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (!url) { setData(null); return; }
+    if (peekCache.has(url)) { setData(peekCache.get(url) as D); return; }
+    let alive = true;
+    setLoading(true);
+    fetch(url)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d) { peekCache.set(url, d); setData(d as D); } })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [url]);
+  return { data, loading };
+}
 
-export function HoverPeekCard({ x, y, visible, title, status, children }: {
-  x: number; y: number; visible: boolean;
-  title: string; status?: ReactNode; children: ReactNode;
+const CARD_W = 340;
+
+export function HoverPeekCard({ rect, visible, cardHandlers, onOpen, children }: {
+  rect: DOMRect | null;
+  visible: boolean;
+  cardHandlers: { onMouseEnter: () => void; onMouseLeave: () => void };
+  onOpen?: () => void;
+  children: ReactNode;
 }) {
-  if (!visible) return null;
+  if (!visible || !rect) return null;
   const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
-  // Place to the right of the cursor; flip left near the right edge. Clamp vertically.
-  const left = x + 20 + CARD_W > vw ? Math.max(12, x - CARD_W - 20) : x + 20;
-  const top = Math.min(Math.max(12, y + 16), vh - 240);
+  // Anchor to the right of the row; flip to the left if there's no room.
+  const left = rect.right + 12 + CARD_W > vw ? Math.max(12, rect.left - CARD_W - 12) : rect.right + 12;
+  const top = Math.min(Math.max(12, rect.top - 8), vh - 360);
 
   return (
-    <div
-      className="fixed z-[60] pointer-events-none animate-in fade-in duration-100"
-      style={{ left, top, width: CARD_W }}
-    >
-      <div className="rounded-lg border border-slate-700 bg-surface-900/98 shadow-2xl backdrop-blur-sm overflow-hidden">
-        <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-800">
-          <span className="text-sm font-semibold text-white truncate">{title}</span>
-          {status}
-        </div>
-        <div className="px-3 py-2 space-y-1.5">{children}</div>
+    <div className="fixed z-[60] animate-in fade-in zoom-in-95 duration-100" style={{ left, top, width: CARD_W }} {...cardHandlers}>
+      <div className="rounded-xl border border-slate-700 bg-surface-900 shadow-2xl overflow-hidden">
+        {children}
+        {onOpen && (
+          <button onClick={onOpen} className="w-full px-3 py-2 border-t border-slate-800 text-xs font-medium text-emerald-400 hover:bg-emerald-500/[0.06] transition-colors text-center">
+            Open full →
+          </button>
+        )}
       </div>
-    </div>
-  );
-}
-
-export function PeekRow({ label, value, strong }: { label: string; value: ReactNode; strong?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-2xs text-slate-500">{label}</span>
-      <span className={clsx('text-xs text-right truncate', strong ? 'text-slate-100 font-medium font-mono tabular-nums' : 'text-slate-300')}>
-        {value ?? '--'}
-      </span>
     </div>
   );
 }

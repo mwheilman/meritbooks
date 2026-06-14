@@ -8,7 +8,8 @@ import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useDebounce } from '@/hooks';
 import { CompanySelector } from '../bank-feed/company-selector';
 import { JournalEntryDrawer } from './je-drawer';
-import { useHoverPeek, HoverPeekCard, PeekRow } from '@/components/hover-peek';
+import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
+import { JournalEntryPeek } from './je-peek';
 
 interface JERow {
   id: string;
@@ -66,7 +67,7 @@ export function JournalEntryList() {
   const debouncedSearch = useDebounce(search, 300);
   const [locationId, setLocationId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { peek, handlers } = useHoverPeek<JERow>();
+  const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<JERow>();
 
   const params: Record<string, string> = {};
   if (activeTab !== 'all') params.status = activeTab;
@@ -149,7 +150,7 @@ export function JournalEntryList() {
               {entries.map((je) => {
                 const source = SOURCE_LABELS[je.sourceModule ?? ''] ?? SOURCE_LABELS.SYSTEM;
                 return (
-                  <tr key={je.id} {...handlers(je)} onClick={() => setSelectedId(je.id)} className="row-clickable">
+                  <tr key={je.id} {...rowHandlers(je)} onClick={() => setSelectedId(je.id)} className="row-clickable">
                     <td className="px-4 py-3 text-sm font-mono text-slate-300 whitespace-nowrap">
                       {je.entryNumber}
                     </td>
@@ -193,20 +194,12 @@ export function JournalEntryList() {
       )}
 
       <HoverPeekCard
-        x={peek?.x ?? 0} y={peek?.y ?? 0} visible={!!peek}
-        title={peek?.item.entryNumber ?? ''}
-        status={peek ? <StatusBadge status={peek.item.status} /> : null}
+        rect={peek?.rect ?? null}
+        visible={!!peek}
+        cardHandlers={cardHandlers}
+        onOpen={peek ? () => { const id = peek.item.id; close(); setSelectedId(id); } : undefined}
       >
-        {peek && (
-          <>
-            <PeekRow label="Date" value={peek.item.entryDate} />
-            <PeekRow label="Source" value={SOURCE_LABELS[peek.item.sourceModule ?? '']?.label ?? 'System'} />
-            <PeekRow label="Company" value={peek.item.location?.short_code ?? '--'} />
-            <PeekRow label="Memo" value={peek.item.memo ?? '--'} />
-            <PeekRow label="Debits" value={formatMoney(peek.item.totalDebitCents)} strong />
-            <PeekRow label="Lines" value={peek.item.lineCount} />
-          </>
-        )}
+        {peek && <JournalEntryPeek entryId={peek.item.id} />}
       </HoverPeekCard>
 
       <JournalEntryDrawer entryId={selectedId} onClose={() => setSelectedId(null)} />
