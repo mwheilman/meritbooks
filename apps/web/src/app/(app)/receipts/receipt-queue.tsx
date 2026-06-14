@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Check, Flag, Camera, Mail, Upload, Inbox, AlertCircle, Loader2, Search, Bell } from 'lucide-react';
+import { Check, Flag, Camera, Mail, Upload, Inbox, AlertCircle, Loader2, Search, Bell, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatusBadge, ConfidenceBar, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
+import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
+import { ReceiptPeek } from './receipt-peek';
+import { ReceiptDrawer } from './receipt-drawer';
 import type { ApproveReceiptInput } from '@/lib/validations/transactions';
 import { CompanySelector } from '../bank-feed/company-selector';
 
@@ -50,6 +53,8 @@ const TAB_CONFIG = [
 
 export function ReceiptQueue() {
   const [activeTab, setActiveTab] = useState('all');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<ReceiptRow>();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [locationId, setLocationId] = useState<string | null>(null);
@@ -208,7 +213,7 @@ export function ReceiptQueue() {
                 const SourceIcon = sourceConfig.icon;
                 const isPosted = r.status === 'POSTED' || r.status === 'APPROVED';
                 return (
-                  <tr key={r.id} className="table-row-hover">
+                  <tr key={r.id} {...rowHandlers(r)} onClick={() => setSelectedId(r.id)} className="row-clickable">
                     <td className="px-4 py-3 text-sm text-slate-400 font-mono tabular-nums whitespace-nowrap">
                       {r.receipt_date ?? r.submitted_at?.split('T')[0] ?? '--'}
                     </td>
@@ -253,7 +258,7 @@ export function ReceiptQueue() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <button
-                          onClick={() => handleApprove(r)}
+                          onClick={(e) => { e.stopPropagation(); handleApprove(r); }}
                           disabled={!r.account || !r.amount_cents || isPosted || approvingId === r.id}
                           className={clsx(
                             'p-1.5 rounded-md transition-colors',
@@ -264,9 +269,10 @@ export function ReceiptQueue() {
                         >
                           {approvingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                         </button>
-                        <button className="p-1.5 rounded-md text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors">
+                        <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-md text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors">
                           <Flag size={14} />
                         </button>
+                        <ChevronRight size={14} className="row-chevron" />
                       </div>
                     </td>
                   </tr>
@@ -276,6 +282,17 @@ export function ReceiptQueue() {
           </table>
         </div>
       )}
+
+      <HoverPeekCard
+        rect={peek?.rect ?? null}
+        visible={!!peek}
+        cardHandlers={cardHandlers}
+        onOpen={peek ? () => { const id = peek.item.id; close(); setSelectedId(id); } : undefined}
+      >
+        {peek && <ReceiptPeek receiptId={peek.item.id} />}
+      </HoverPeekCard>
+
+      <ReceiptDrawer receiptId={selectedId} onClose={() => setSelectedId(null)} />
     </div>
   );
 }

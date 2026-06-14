@@ -6,6 +6,8 @@ import { clsx } from 'clsx';
 import { StatusBadge, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useDebounce } from '@/hooks';
+import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
+import { BillPeek } from './bill-peek';
 import { CompanySelector } from '../bank-feed/company-selector';
 import { BillDetail } from './bill-detail';
 
@@ -58,6 +60,7 @@ export function BillList() {
   const debouncedSearch = useDebounce(search, 300);
   const [locationId, setLocationId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<BillRow>();
 
   const params: Record<string, string> = {};
   if (activeTab !== 'all') params.status = activeTab;
@@ -148,8 +151,9 @@ export function BillList() {
                 return (
                   <tr
                     key={bill.id}
+                    {...rowHandlers(bill)}
                     onClick={() => setSelectedId(bill.id)}
-                    className="table-row-hover cursor-pointer"
+                    className="row-clickable"
                   >
                     <td className="px-4 py-3">
                       <span className="text-sm font-mono text-slate-300">{bill.bill_number ?? '--'}</span>
@@ -226,7 +230,7 @@ export function BillList() {
                       <StatusBadge status={bill.status} />
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <ChevronRight size={14} className="text-slate-600" />
+                      <ChevronRight size={14} className="row-chevron inline" />
                     </td>
                   </tr>
                 );
@@ -235,6 +239,15 @@ export function BillList() {
           </table>
         </div>
       )}
+
+      <HoverPeekCard
+        rect={peek?.rect ?? null}
+        visible={!!peek}
+        cardHandlers={cardHandlers}
+        onOpen={peek ? () => { const id = peek.item.id; close(); setSelectedId(id); } : undefined}
+      >
+        {peek && <BillPeek billId={peek.item.id} />}
+      </HoverPeekCard>
 
       {selectedId && (
         <BillDetail
