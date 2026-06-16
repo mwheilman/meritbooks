@@ -11,17 +11,18 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.9.0",
-    "@supabase/supabase-js": "^2.49.0",
+    "@react-pdf/renderer": "^4.3.0",
     "@supabase/ssr": "^0.6.0",
-    "next": "^14.2.25",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "lucide-react": "^0.468.0",
+    "@supabase/supabase-js": "^2.49.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
-    "zod": "^3.24.0",
+    "lucide-react": "^0.468.0",
+    "next": "^14.2.25",
     "plaid": "^42.2.0",
-    "react-plaid-link": "^4.1.1"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-plaid-link": "^4.1.1",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

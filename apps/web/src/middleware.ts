@@ -4,6 +4,7 @@ const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/api/webhooks(.*)',
+  '/pay(.*)',          // hosted customer invoice view — tokenized, no login
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Settings, Building2, Bell, Brain, Globe, Save, Loader2, AlertCircle, Check, Route, Percent
-} from 'lucide-react';
+  Settings, Building2, Bell, Brain, Globe, Save, Loader2, AlertCircle, Check, Route, Percent, Receipt } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { PageHeader } from '@/components/ui';
 import { CostRouting } from './cost-routing';
 import { RevRecConfig } from './rev-rec-config';
+import { InvoiceBranding } from './invoice-branding';
 
 interface OrgSettings {
   id: string;
@@ -48,7 +48,7 @@ interface SettingsResponse {
   locations: LocationRow[];
 }
 
-type TabKey = 'organization' | 'chase' | 'ai' | 'routing' | 'revrec' | 'companies';
+type TabKey = 'organization' | 'chase' | 'ai' | 'routing' | 'revrec' | 'branding' | 'companies';
 
 const TABS: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'organization', label: 'Organization', icon: Globe },
@@ -56,6 +56,7 @@ const TABS: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'ai', label: 'AI Thresholds', icon: Brain },
   { key: 'routing', label: 'Cost Routing', icon: Route },
   { key: 'revrec', label: 'Revenue Recognition', icon: Percent },
+  { key: 'branding', label: 'Invoice Display', icon: Receipt },
   { key: 'companies', label: 'Companies', icon: Building2 },
 ];
 
@@ -149,7 +150,7 @@ export default function SettingsPage() {
   const labelCls = "block text-xs text-slate-500 mb-1.5 font-medium";
 
   // The Cost Routing tab manages its own persistence; the org Save bar doesn't apply there.
-  const showSaveBar = activeTab !== 'routing' && activeTab !== 'companies';
+  const showSaveBar = activeTab !== 'routing' && activeTab !== 'companies' && activeTab !== 'branding';
 
   return (
     <div className="space-y-6">
@@ -237,6 +238,7 @@ export default function SettingsPage() {
           {activeTab === 'routing' && <CostRouting />}
           {activeTab === 'revrec' && <RevRecConfig />}
 
+          {activeTab === 'branding' && <InvoiceBranding />}
           {activeTab === 'companies' && (
             <div className="card p-6 space-y-5">
               <h2 className="text-lg font-semibold text-white">Companies</h2>

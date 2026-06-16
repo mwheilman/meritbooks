@@ -23,7 +23,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .select(`
       id, invoice_number, invoice_date, due_date, status, memo,
       subtotal_cents, tax_cents, total_cents, amount_paid_cents, balance_cents,
-      is_progress_bill, customer_id, location_id, job_id, gl_entry_id, created_at
+      is_progress_bill, customer_id, location_id, job_id, gl_entry_id, created_at, public_token
     `)
     .eq('org_id', orgId)
     .eq('id', params.id)
@@ -73,6 +73,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     status: inv.status,
     memo: inv.memo,
     isProgressBill: inv.is_progress_bill,
+    publicToken: inv.public_token,
     subtotalCents: Number(inv.subtotal_cents ?? 0),
     taxCents: Number(inv.tax_cents ?? 0),
     totalCents: Number(inv.total_cents ?? 0),

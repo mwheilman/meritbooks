@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
-import { Pencil, Plus, Trash2, Loader2, ShieldAlert } from 'lucide-react';
+import { Pencil, Plus, Trash2, Loader2, ShieldAlert, Download, Link2 } from 'lucide-react';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { StatusBadge } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
+import { InvoiceTextOverrides } from '@/components/invoice-text-overrides';
 
 interface InvLine {
   id?: string; lineNumber?: number; description: string;
@@ -15,7 +16,7 @@ interface InvLine {
 }
 interface InvDetail {
   id: string; invoiceNumber: string; invoiceDate: string; dueDate: string;
-  status: string; memo: string | null; isProgressBill: boolean;
+  status: string; memo: string | null; isProgressBill: boolean; publicToken: string;
   subtotalCents: number; taxCents: number; totalCents: number;
   amountPaidCents: number; balanceCents: number;
   customerName: string; customerEmail: string | null;
@@ -126,6 +127,18 @@ export function InvoiceDrawer({ invoiceId, onClose }: { invoiceId: string | null
           <div className="flex items-center gap-2">
             <StatusBadge status={data.status} />
             {!editing && (
+              <>
+                <a href={`/api/invoices/${data.id}/pdf`} target="_blank" rel="noreferrer"
+                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
+                  <Download size={12} /> PDF
+                </a>
+                <button onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/pay/${data.publicToken}`); addToast('success', 'Customer link copied'); }}
+                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
+                  <Link2 size={12} /> Link
+                </button>
+              </>
+            )}
+            {!editing && (
               <button onClick={beginEdit} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
                 <Pencil size={12} /> Edit
               </button>
@@ -172,6 +185,11 @@ export function InvoiceDrawer({ invoiceId, onClose }: { invoiceId: string | null
             <DetailField label="Paid" value={formatMoney(data.amountPaidCents)} mono />
             <DetailField label="Balance" value={formatMoney(data.balanceCents)} mono />
           </DetailSection>
+
+          <div className="mt-5 pt-4 border-t border-slate-800">
+            <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Customer-facing text — this invoice</h3>
+            <InvoiceTextOverrides scope="INVOICE" refId={data.id} />
+          </div>
         </>
       )}
 

@@ -4,6 +4,7 @@ import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { postJournalEntry } from '@/lib/services/gl-posting';
+import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
 
 // ─── GET: List invoices ───────────────────────────────────────────────
 const querySchema = z.object({
@@ -206,7 +207,25 @@ export async function POST(request: Request) {
       amount_cents: Math.round(l.quantity * l.unit_price_cents),
     }));
     const subtotalCents = lines.reduce((s, l) => s + l.amount_cents, 0);
-    const retainageCents = body.retainage_pct > 0 ? Math.round(subtotalCents * body.retainage_pct / 100) : 0;
+
+    // Retainage is conditional: only customers/jobs that opted in at creation
+    // withhold it. Resolve job -> customer -> entity; if none enabled, no
+    // retainage line regardless of any pct passed in.
+    const [{ data: custR }, { data: jobR }] = await Promise.all([
+      supabase.schema('core').from('customers').select('retainage_enabled, default_retainage_pct').eq('id', body.customer_id).maybeSingle(),
+      body.job_id
+        ? supabase.schema('core').from('jobs').select('retainage_enabled, default_retainage_pct').eq('id', body.job_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const j = jobR as { retainage_enabled: boolean | null; default_retainage_pct: number | null } | null;
+    const c = custR as { retainage_enabled: boolean | null; default_retainage_pct: number | null } | null;
+    const retainageEnabled = j?.retainage_enabled ?? c?.retainage_enabled ?? false;
+    const resolvedPct = body.retainage_pct > 0
+      ? body.retainage_pct
+      : Number(j?.default_retainage_pct ?? c?.default_retainage_pct ?? 0);
+    const retainageCents = retainageEnabled && resolvedPct > 0
+      ? Math.round(subtotalCents * resolvedPct / 100)
+      : 0;
     const totalCents = subtotalCents + body.tax_cents - retainageCents;
 
     // Insert invoice header
@@ -258,6 +277,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: linesErr.message }, { status: 500 });
     }
 
+    await recordInvoiceEvent(supabase, {
+      orgId, invoiceId: invoice.id, type: 'CREATED', actor: userId,
+      meta: { invoice_number: invoiceNumber, total_cents: totalCents },
+    });
+
     // Optionally post to GL (Debit AR, Credit Revenue per line)
     if (body.post_to_gl && totalCents > 0) {
       // Find the AR control account (12xxx range)
@@ -305,6 +329,10 @@ export async function POST(request: Request) {
           await supabase.from('invoices')
             .update({ gl_entry_id: jeResult.entry_id, status: 'SENT' })
             .eq('id', invoice.id);
+          await recordInvoiceEvent(supabase, {
+            orgId, invoiceId: invoice.id, type: 'POSTED', actor: userId,
+            meta: { gl_entry_id: jeResult.entry_id, total_cents: totalCents },
+          });
         }
       }
     }
