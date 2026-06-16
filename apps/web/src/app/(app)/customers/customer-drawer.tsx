@@ -3,6 +3,8 @@ import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { StatusBadge } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
+import { EntityInvoiceSettings } from '@/components/entity-invoice-settings';
+import { InvoiceTextOverrides } from '@/components/invoice-text-overrides';
 
 interface CustDetail {
   id: string; name: string; legalName: string; email: string | null; phone: string | null;
@@ -44,6 +46,14 @@ export function CustomerDrawer({ customerId, onClose, onEdit }: { customerId: st
             <DetailField label="Open balance" value={formatMoney(data.ar.totalOutstanding)} mono />
             <DetailField label="Open invoices" value={data.ar.openInvoiceCount} />
             <DetailField label="Overdue" value={data.ar.overdueCount} />
+          </DetailSection>
+
+          <DetailSection title="Invoice settings">
+            <EntityInvoiceSettings scope="CUSTOMER" id={data.id} />
+          </DetailSection>
+
+          <DetailSection title="Customer-facing invoice text">
+            <InvoiceTextOverrides scope="CUSTOMER" refId={data.id} />
           </DetailSection>
           {data.recentInvoices.length > 0 && (
             <>

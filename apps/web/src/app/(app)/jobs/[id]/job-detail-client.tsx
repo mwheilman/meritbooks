@@ -9,6 +9,8 @@ import { clsx } from 'clsx';
 import { StatusBadge } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
+import { EntityInvoiceSettings } from '@/components/entity-invoice-settings';
+import { InvoiceTextOverrides } from '@/components/invoice-text-overrides';
 
 const REV_REC_METHOD_OPTS: { value: string; label: string }[] = [
   { value: 'PCT_COMPLETE', label: 'POC — physical % complete' },
@@ -148,6 +150,14 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
 
       {/* Recognition inputs (standalone direct entry / pinned snapshot) */}
       <RevRecInputs job={job} onSaved={refetch} />
+
+      <div className="card p-4 space-y-4">
+        <h2 className="text-sm font-semibold text-white">Invoice settings &amp; text — this job</h2>
+        <EntityInvoiceSettings scope="JOB" id={job.id} />
+        <div className="pt-3 border-t border-slate-800">
+          <InvoiceTextOverrides scope="JOB" refId={job.id} />
+        </div>
+      </div>
 
       {/* Budget vs actual by category */}
       <div className="card overflow-hidden">

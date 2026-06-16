@@ -25,7 +25,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   const buffer = await renderToBuffer(<InvoicePdf doc={doc} />);
 
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',

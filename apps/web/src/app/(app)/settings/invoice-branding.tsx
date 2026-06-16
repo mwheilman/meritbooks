@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Loader2, Upload, Check, ExternalLink } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
+import { EntityInvoiceSettings } from '@/components/entity-invoice-settings';
+import { InvoiceTextOverrides } from '@/components/invoice-text-overrides';
 
 type Style = 'MODERN' | 'CLASSIC' | 'MINIMAL' | 'BOLD' | 'COMPACT';
 interface Entity {
@@ -25,6 +27,7 @@ export function InvoiceBranding() {
   const { data, isLoading, error } = useQuery<{ entities: Entity[] }>('/api/settings/invoice-branding');
   const [entities, setEntities] = useState<Entity[]>([]);
   const [activeId, setActiveId] = useState<string>('');
+  const [typeLabel, setTypeLabel] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -189,6 +192,21 @@ export function InvoiceBranding() {
             <iframe key={previewUrl} src={previewUrl} title="Invoice preview" className="w-full h-full" />
           </div>
           <p className="text-2xs text-slate-500 mt-1">Sample data. Reflects style, color, and logo as you change them.</p>
+        </div>
+      </div>
+
+      <div className="mt-10 pt-6 border-t border-slate-800 grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-1">Payment &amp; retainage defaults</h3>
+          <p className="text-2xs text-slate-500 mb-3">Entity-level defaults. Customers and jobs can override these; invoices override everything.</p>
+          <EntityInvoiceSettings scope="LOCATION" id={active.locationId} />
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-1">Invoice-type text</h3>
+          <p className="text-2xs text-slate-500 mb-3">Set default text for a kind of invoice (e.g. “Progress Bill”, “Deposit”). The label must match the invoice’s type.</p>
+          <input value={typeLabel} onChange={(e) => setTypeLabel(e.target.value)} placeholder="Invoice type label, e.g. Progress Bill"
+            className="w-full px-3 py-2 rounded-md bg-slate-800 border border-slate-700 text-sm text-white mb-3" />
+          {typeLabel.trim() ? <InvoiceTextOverrides scope="INVOICE_TYPE" refId={typeLabel.trim()} /> : <p className="text-2xs text-slate-500">Enter a type label to edit its text.</p>}
         </div>
       </div>
     </div>
