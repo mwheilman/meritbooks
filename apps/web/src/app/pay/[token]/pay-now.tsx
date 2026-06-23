@@ -1,17 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { loadStripe, type Stripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import type { PaymentMethod } from '@/lib/invoices/resolve-payment-methods';
 
 /**
- * Pay Now surface on the hosted invoice page (FPB §11a). Lets the customer pick
- * an authorized method. ACH is presented free; card is presented only with the
- * processing fee disclosed, and the card option requires an explicit fee
- * acceptance before any charge is created. The actual charge call goes through
- * /api/pay/[token]/intent, which is provider-backed (Stripe Connect) and returns
- * a not-enabled state until the tenant's payment account is connected — so the
- * function is fully visible now and only the final charge is gated on credentials.
+ * Pay Now on the hosted invoice page. Pick a method (ACH free; card with the fee
+ * disclosed and explicitly accepted), then a Stripe PaymentIntent is created as a
+ * destination charge to the tenant's connected account and confirmed via the
+ * Stripe Payment Element. The webhook is the source of truth for marking paid.
  */
+let _stripePromise: ReturnType<typeof loadStripe> | null = null;
+function stripePromiseFor(pk: string) {
+  if (!_stripePromise) _stripePromise = loadStripe(pk);
+  return _stripePromise;
+}
+
 export function PayNow({
   token, accent, balanceLabel, methods, surcharge, surchargePct,
 }: {
@@ -24,24 +29,41 @@ export function PayNow({
   const [feeAccepted, setFeeAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [pk, setPk] = useState<string>('');
 
   const cardChosenNeedsFee = method === 'CARD' && surcharge && !feeAccepted;
   const canPay = method === 'ACH' || !cardChosenNeedsFee;
 
-  async function pay() {
+  async function start() {
     setBusy(true); setNotice(null);
     try {
       const res = await fetch(`/api/pay/${token}/intent`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ method, accept_fee: feeAccepted }),
       });
-      const body = await res.json().catch(() => ({}));
-      if (body.enabled && body.redirect_url) { window.location.href = body.redirect_url; return; }
-      if (body.enabled && body.client_secret) { setNotice('Opening secure payment…'); /* Stripe Elements mounts here once wired */ return; }
-      setNotice(body.message || 'Online payment isn’t available yet. Please use the remit-to details on this invoice.');
+      const b = await res.json().catch(() => ({}));
+      if (b.enabled && b.client_secret && b.publishable_key) {
+        setPk(b.publishable_key); setClientSecret(b.client_secret); return;
+      }
+      setNotice(b.message || 'Online payment isn’t available yet. Please use the remit-to details on this invoice.');
     } catch {
-      setNotice('Something went wrong starting the payment. Please try again or use the remit-to details.');
+      setNotice('Something went wrong starting the payment. Please try again.');
     } finally { setBusy(false); }
+  }
+
+  const stripe = useMemo(() => (pk ? stripePromiseFor(pk) : null), [pk]);
+
+  if (clientSecret && stripe) {
+    return (
+      <div style={W.box}>
+        <div style={W.title}>Pay {balanceLabel}</div>
+        <Elements stripe={stripe} options={{ clientSecret, appearance: { theme: 'flat', variables: { colorPrimary: accent } } }}>
+          <CheckoutForm token={token} accent={accent} balanceLabel={balanceLabel} />
+        </Elements>
+        <div style={W.secure}>🔒 Card details are entered securely on Stripe and never touch this site.</div>
+      </div>
+    );
   }
 
   return (
@@ -50,38 +72,54 @@ export function PayNow({
       <div style={W.methods}>
         {hasACH && (
           <button onClick={() => setMethod('ACH')} style={{ ...W.method, ...(method === 'ACH' ? { borderColor: accent, background: '#f0fdf9' } : {}) }}>
-            <div style={W.mTop}>
-              <span style={W.mName}>Bank transfer (ACH)</span>
-              <span style={{ ...W.badge, color: '#16a34a', background: '#dcfce7' }}>No fee</span>
-            </div>
+            <div style={W.mTop}><span style={W.mName}>Bank transfer (ACH)</span><span style={{ ...W.badge, color: '#16a34a', background: '#dcfce7' }}>No fee</span></div>
             <div style={W.mSub}>Pay directly from your bank account.</div>
           </button>
         )}
         {hasCard && (
           <button onClick={() => setMethod('CARD')} style={{ ...W.method, ...(method === 'CARD' ? { borderColor: accent, background: '#f0fdf9' } : {}) }}>
-            <div style={W.mTop}>
-              <span style={W.mName}>Credit or debit card</span>
-              {surcharge ? <span style={{ ...W.badge, color: '#b45309', background: '#fef3c7' }}>+{surchargePct}% fee</span> : <span style={{ ...W.badge, color: '#16a34a', background: '#dcfce7' }}>No fee</span>}
-            </div>
+            <div style={W.mTop}><span style={W.mName}>Credit or debit card</span>{surcharge ? <span style={{ ...W.badge, color: '#b45309', background: '#fef3c7' }}>+{surchargePct}% fee</span> : <span style={{ ...W.badge, color: '#16a34a', background: '#dcfce7' }}>No fee</span>}</div>
             <div style={W.mSub}>{surcharge ? 'A card processing fee applies and is shown before you confirm.' : 'Pay by card.'}</div>
           </button>
         )}
       </div>
-
       {method === 'CARD' && surcharge && (
         <label style={W.feeRow}>
           <input type="checkbox" checked={feeAccepted} onChange={(e) => setFeeAccepted(e.target.checked)} />
           <span>I agree to the {surchargePct}% card processing fee added to my total.</span>
         </label>
       )}
-
-      <button onClick={pay} disabled={!canPay || busy}
-        style={{ ...W.payBtn, background: accent, opacity: (!canPay || busy) ? 0.5 : 1, cursor: (!canPay || busy) ? 'not-allowed' : 'pointer' }}>
-        {busy ? 'Starting…' : cardChosenNeedsFee ? 'Accept the fee to continue' : `Pay ${balanceLabel}`}
+      <button onClick={start} disabled={!canPay || busy} style={{ ...W.payBtn, background: accent, opacity: (!canPay || busy) ? 0.5 : 1, cursor: (!canPay || busy) ? 'not-allowed' : 'pointer' }}>
+        {busy ? 'Starting…' : cardChosenNeedsFee ? 'Accept the fee to continue' : `Continue to pay ${balanceLabel}`}
       </button>
-
       {notice && <div style={W.notice}>{notice}</div>}
-      <div style={W.secure}>🔒 Payments are processed securely. Your card details never touch this site.</div>
+    </div>
+  );
+}
+
+function CheckoutForm({ token, accent, balanceLabel }: { token: string; accent: string; balanceLabel: string }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit() {
+    if (!stripe || !elements) return;
+    setBusy(true); setErr(null);
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: `${window.location.origin}/pay/${token}` },
+    });
+    if (error) { setErr(error.message ?? 'Payment failed.'); setBusy(false); }
+  }
+
+  return (
+    <div>
+      <PaymentElement />
+      <button onClick={submit} disabled={!stripe || busy} style={{ ...W.payBtn, background: accent, marginTop: 16, opacity: busy ? 0.5 : 1, cursor: busy ? 'not-allowed' : 'pointer' }}>
+        {busy ? 'Processing…' : `Pay ${balanceLabel}`}
+      </button>
+      {err && <div style={W.notice}>{err}</div>}
     </div>
   );
 }
