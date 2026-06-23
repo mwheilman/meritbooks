@@ -48,7 +48,7 @@ const nullableBool = z.union([z.boolean(), z.null()]);
 const putSchema = z.object({
   scope: z.enum(['CUSTOMER', 'JOB', 'LOCATION']),
   id: z.string().uuid(),
-  payment_methods_allowed: z.union([z.array(z.enum(['ACH', 'CARD'])), z.null()]),
+  payment_methods_allowed: z.union([z.array(z.enum(['CHECK', 'ACH', 'CARD'])), z.null()]),
   card_surcharge_enabled: nullableBool,
   retainage_enabled: nullableBool,
   default_retainage_pct: z.union([z.number().min(0).max(100), z.null()]),

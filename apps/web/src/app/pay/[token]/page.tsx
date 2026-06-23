@@ -7,6 +7,7 @@ import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
 import {
   resolvePaymentMethods,
   resolveSurchargeEnabled,
+  onlineMethods,
   type PaymentProviderId,
 } from '@/lib/invoices/resolve-payment-methods';
 import { PayNow } from './pay-now';
@@ -85,15 +86,22 @@ export default async function HostedInvoicePage({ params }: { params: { token: s
           </div>
         </section>
 
-        {!paid && methods.length > 0 && (
+        {!paid && onlineMethods(methods).length > 0 && (
           <PayNow
             token={doc.public_token}
             accent={accent}
             balanceLabel={money(doc.balance_cents)}
-            methods={methods}
+            methods={onlineMethods(methods)}
             surcharge={surcharge}
             surchargePct={3}
           />
+        )}
+        {!paid && methods.includes('CHECK') && doc.template?.remit_to && (
+          <div style={S.checkBlock}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Prefer to pay by check?</div>
+            <div style={S.muted}>Mail to:</div>
+            <div style={{ whiteSpace: 'pre-line', marginTop: 2 }}>{doc.template.remit_to}</div>
+          </div>
         )}
         {paid && (
           <div style={{ ...S.paidBanner, color: '#16a34a' }}>Paid in full — thank you.</div>
@@ -159,6 +167,7 @@ const S: Record<string, React.CSSProperties> = {
   payBtn: { padding: '10px 20px', borderRadius: 8, border: 'none', color: '#fff', fontSize: 14, fontWeight: 600 },
   payNote: { fontSize: 12.5, color: '#777', marginTop: -8, marginBottom: 20 },
   paidBanner: { padding: 14, borderRadius: 10, background: '#f0fdf4', textAlign: 'center', fontWeight: 600, marginBottom: 24 },
+  checkBlock: { border: '1px solid #e5e7eb', borderRadius: 10, padding: 14, marginBottom: 24, fontSize: 13, color: '#444' },
   table: { width: '100%', borderCollapse: 'collapse', marginBottom: 8 },
   th: { color: '#fff', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, padding: '8px 10px', textAlign: 'center' },
   tr: { borderBottom: '1px solid #eee' },

@@ -6,37 +6,42 @@ import { clsx } from 'clsx';
 import { addToast } from '@/hooks';
 
 /**
- * Self-saving panel for the invoice cascade settings at one scope
- * (CUSTOMER / JOB / LOCATION): authorized payment methods, card-surcharge
- * posture, and retainage opt-in. "Inherit" leaves the field null so it falls
- * through the cascade (invoice → job → customer → entity → default). Drops into
- * the customer drawer, job detail, and the entity branding screen.
+ * Invoice payment & retainage settings for one scope (CUSTOMER / JOB / LOCATION).
+ * Plain and explicit: pick which methods are allowed (Check, Bank transfer (ACH),
+ * Credit card). If card is on, choose whether the ~3% processing fee is absorbed
+ * by the business or passed to the customer at payment. Self-saving.
+ *
+ * The selection is stored on this record and overrides less-specific levels
+ * (invoice overrides job overrides customer overrides entity). When nothing has
+ * been saved yet, the company defaults (Check + ACH) are shown pre-checked.
  */
-type Tri = 'INHERIT' | 'ON' | 'OFF';
-const triToBool = (t: Tri): boolean | null => (t === 'ON' ? true : t === 'OFF' ? false : null);
-const boolToTri = (b: boolean | null | undefined): Tri => (b === true ? 'ON' : b === false ? 'OFF' : 'INHERIT');
+const SURCHARGE_PCT = 3;
 
 export function EntityInvoiceSettings({ scope, id }: { scope: 'CUSTOMER' | 'JOB' | 'LOCATION'; id: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [methodsMode, setMethodsMode] = useState<'INHERIT' | 'CUSTOM'>('INHERIT');
+  const [check, setCheck] = useState(true);
   const [ach, setAch] = useState(true);
   const [card, setCard] = useState(false);
-  const [surcharge, setSurcharge] = useState<Tri>('INHERIT');
-  const [retainage, setRetainage] = useState<Tri>('INHERIT');
-  const [retPct, setRetPct] = useState<string>('');
+  const [feePassed, setFeePassed] = useState(true); // true = pass to customer, false = absorb
+  const [usingDefaults, setUsingDefaults] = useState(true);
+  const [retainage, setRetainage] = useState(false);
+  const [retPct, setRetPct] = useState('');
 
   useEffect(() => {
     let alive = true; setLoading(true);
     fetch(`/api/entity-invoice-settings?scope=${scope}&id=${id}`).then((r) => r.json()).then((b) => {
       if (!alive) return;
       if (Array.isArray(b.paymentMethods)) {
-        setMethodsMode('CUSTOM');
+        setUsingDefaults(false);
+        setCheck(b.paymentMethods.includes('CHECK'));
         setAch(b.paymentMethods.includes('ACH'));
         setCard(b.paymentMethods.includes('CARD'));
-      } else { setMethodsMode('INHERIT'); }
-      setSurcharge(boolToTri(b.cardSurcharge));
-      setRetainage(boolToTri(b.retainageEnabled));
+      } else {
+        setUsingDefaults(true); setCheck(true); setAch(true); setCard(false);
+      }
+      if (typeof b.cardSurcharge === 'boolean') setFeePassed(b.cardSurcharge);
+      setRetainage(b.retainageEnabled === true);
       setRetPct(b.retainagePct != null ? String(b.retainagePct) : '');
     }).catch(() => {}).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -45,70 +50,71 @@ export function EntityInvoiceSettings({ scope, id }: { scope: 'CUSTOMER' | 'JOB'
   const save = useCallback(async () => {
     setSaving(true);
     try {
-      const methods = methodsMode === 'INHERIT' ? null : [...(ach ? ['ACH'] : []), ...(card ? ['CARD'] : [])];
+      const methods = [...(check ? ['CHECK'] : []), ...(ach ? ['ACH'] : []), ...(card ? ['CARD'] : [])];
       const res = await fetch('/api/entity-invoice-settings', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scope, id,
           payment_methods_allowed: methods,
-          card_surcharge_enabled: triToBool(surcharge),
-          retainage_enabled: triToBool(retainage),
-          default_retainage_pct: retPct.trim() === '' ? null : Number(retPct),
+          card_surcharge_enabled: card ? feePassed : null,
+          retainage_enabled: retainage,
+          default_retainage_pct: retainage && retPct.trim() !== '' ? Number(retPct) : null,
         }),
       });
       const b = await res.json();
       if (!res.ok) { addToast('error', b.error ?? 'Save failed'); return; }
+      setUsingDefaults(false);
       addToast('success', 'Invoice settings saved');
     } finally { setSaving(false); }
-  }, [scope, id, methodsMode, ach, card, surcharge, retainage, retPct]);
+  }, [scope, id, check, ach, card, feePassed, retainage, retPct]);
 
   if (loading) return <div className="flex items-center gap-2 text-slate-400 text-sm py-2"><Loader2 size={14} className="animate-spin" /> Loading…</div>;
 
-  const seg = (val: Tri, set: (t: Tri) => void) => (
-    <div className="inline-flex rounded-md overflow-hidden border border-slate-700">
-      {(['INHERIT', 'ON', 'OFF'] as Tri[]).map((t) => (
-        <button key={t} onClick={() => set(t)}
-          className={clsx('px-2.5 py-1 text-xs', val === t ? 'bg-emerald-500/15 text-emerald-300' : 'text-slate-400 hover:text-white')}>
-          {t === 'INHERIT' ? 'Inherit' : t === 'ON' ? 'On' : 'Off'}
-        </button>
-      ))}
-    </div>
+  const Box = ({ on, set, label }: { on: boolean; set: (v: boolean) => void; label: string }) => (
+    <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+      <input type="checkbox" checked={on} onChange={(e) => { set(e.target.checked); setUsingDefaults(false); }} /> {label}
+    </label>
   );
 
   return (
-    <div className="space-y-3 text-sm">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-slate-400">Payment methods</span>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5 text-xs text-slate-300">
-            <input type="radio" checked={methodsMode === 'INHERIT'} onChange={() => setMethodsMode('INHERIT')} /> Inherit
-          </label>
-          <label className="flex items-center gap-1.5 text-xs text-slate-300">
-            <input type="radio" checked={methodsMode === 'CUSTOM'} onChange={() => setMethodsMode('CUSTOM')} /> Custom
-          </label>
+    <div className="space-y-4 text-sm">
+      <div>
+        <div className="text-slate-400 mb-2">Allowed payment methods{usingDefaults && <span className="text-2xs text-slate-500"> · showing company defaults</span>}</div>
+        <div className="flex flex-col gap-2 pl-0.5">
+          <Box on={check} set={setCheck} label="Check (mail to remit-to address)" />
+          <Box on={ach} set={setAch} label="Bank transfer (ACH)" />
+          <Box on={card} set={setCard} label="Credit / debit card" />
         </div>
       </div>
-      {methodsMode === 'CUSTOM' && (
-        <div className="flex items-center gap-4 pl-1">
-          <label className="flex items-center gap-1.5 text-xs text-slate-300"><input type="checkbox" checked={ach} onChange={(e) => setAch(e.target.checked)} /> Bank transfer (ACH)</label>
-          <label className="flex items-center gap-1.5 text-xs text-slate-300"><input type="checkbox" checked={card} onChange={(e) => setCard(e.target.checked)} /> Card</label>
+
+      {card && (
+        <div className="pl-1 border-l-2 border-slate-700 ml-1 py-1">
+          <div className="text-slate-400 mb-1.5 text-xs">Card processing fee (~{SURCHARGE_PCT}%)</div>
+          <div className="flex flex-col gap-1.5 pl-2">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="radio" checked={feePassed} onChange={() => setFeePassed(true)} />
+              Pass {SURCHARGE_PCT}% to the customer <span className="text-2xs text-slate-500">(added at card payment, not to the invoice)</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="radio" checked={!feePassed} onChange={() => setFeePassed(false)} />
+              We absorb it <span className="text-2xs text-slate-500">(customer pays the invoice amount)</span>
+            </label>
+          </div>
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-slate-400">Card surcharge</span>{seg(surcharge, setSurcharge)}
+      <div className="pt-1">
+        <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+          <input type="checkbox" checked={retainage} onChange={(e) => setRetainage(e.target.checked)} /> Withhold retainage on this {scope === 'LOCATION' ? 'entity’s' : scope.toLowerCase() + '’s'} invoices
+        </label>
+        {retainage && (
+          <div className="flex items-center gap-2 mt-2 pl-6">
+            <span className="text-xs text-slate-400">Default %</span>
+            <input value={retPct} onChange={(e) => setRetPct(e.target.value)} inputMode="decimal" placeholder="10"
+              className="w-20 px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm text-white font-mono" />
+          </div>
+        )}
       </div>
-
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-slate-400">Retainage</span>{seg(retainage, setRetainage)}
-      </div>
-      {retainage === 'ON' && (
-        <div className="flex items-center justify-between gap-3 pl-1">
-          <span className="text-xs text-slate-400">Default retainage %</span>
-          <input value={retPct} onChange={(e) => setRetPct(e.target.value)} inputMode="decimal" placeholder="e.g. 10"
-            className="w-24 px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm text-white font-mono" />
-        </div>
-      )}
 
       <button onClick={save} disabled={saving}
         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50">

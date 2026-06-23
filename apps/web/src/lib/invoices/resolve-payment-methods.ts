@@ -1,40 +1,34 @@
 /**
  * Payment-method authorization resolver (FPB §11a).
  *
- * Which methods appear on a customer's Pay Now is resolved most-specific-wins,
- * exactly like the rev-rec method resolver:
+ * Methods: CHECK (mail a paper check — offline), ACH (bank transfer), CARD.
+ * Resolved most-specific-wins: invoice → job → customer → entity default.
+ * The online methods (ACH, CARD) are intersected with what the active payment
+ * provider supports (Stripe = ACH+CARD, Dwolla = ACH). CHECK is always allowed
+ * when chosen — it's just an instruction to mail a check, no processor involved.
  *
- *     invoice override -> job -> customer -> entity/tenant default
- *
- * Each level is nullable; an unset (null/empty) level falls through to the next.
- * The resolved set is then intersected with what the ACTIVE payment provider
- * actually supports (Stripe = ACH+CARD, Dwolla = ACH only), so a provider swap
- * can never offer a method that can't be charged.
- *
- * Pure + dependency-free so it runs the same on the server (Pay Now page,
- * invoice issue) and is trivially unit-testable.
+ * Pure + dependency-free so it runs identically on the server and is unit-testable.
  */
 
-export type PaymentMethod = 'ACH' | 'CARD';
+export type PaymentMethod = 'CHECK' | 'ACH' | 'CARD';
 export type PaymentProviderId = 'STRIPE' | 'DWOLLA';
 
-/** What each provider can actually charge. */
-export const PROVIDER_METHODS: Record<PaymentProviderId, PaymentMethod[]> = {
+/** Online methods each provider can actually charge (CHECK is offline, excluded). */
+export const PROVIDER_ONLINE_METHODS: Record<PaymentProviderId, PaymentMethod[]> = {
   STRIPE: ['ACH', 'CARD'],
-  DWOLLA: ['ACH'], // ACH-only — no cards
+  DWOLLA: ['ACH'],
 };
 
-/** Default posture when no level sets anything: ACH offered, card not automatic. */
-export const DEFAULT_METHODS: PaymentMethod[] = ['ACH'];
+/** Default posture when nothing is set: accept check + bank transfer; card off. */
+export const DEFAULT_METHODS: PaymentMethod[] = ['CHECK', 'ACH'];
+
+const ONLINE: PaymentMethod[] = ['ACH', 'CARD'];
+const ORDER: PaymentMethod[] = ['CHECK', 'ACH', 'CARD'];
 
 export interface MethodCascadeLevels {
-  /** invoice.payment_methods_allowed (most specific) */
   invoice?: string[] | null;
-  /** core.jobs.payment_methods_allowed */
   job?: string[] | null;
-  /** core.customers.payment_methods_allowed */
   customer?: string[] | null;
-  /** core.locations.payment_methods_allowed (entity default, least specific) */
   entity?: string[] | null;
 }
 
@@ -46,41 +40,44 @@ export interface SurchargeCascadeLevels {
 }
 
 function isMethod(v: string): v is PaymentMethod {
-  return v === 'ACH' || v === 'CARD';
+  return v === 'CHECK' || v === 'ACH' || v === 'CARD';
 }
 
-/** First non-empty level in the cascade, normalized to valid PaymentMethod[]. */
 function firstSet(levels: MethodCascadeLevels): PaymentMethod[] | null {
   for (const raw of [levels.invoice, levels.job, levels.customer, levels.entity]) {
     if (raw && raw.length > 0) {
-      const cleaned = [...new Set(raw.map((m) => m.toUpperCase()).filter(isMethod))];
-      if (cleaned.length > 0) return cleaned as PaymentMethod[];
+      const cleaned = [...new Set(raw.map((m) => m.toUpperCase()).filter(isMethod))] as PaymentMethod[];
+      if (cleaned.length > 0) return cleaned;
     }
   }
   return null;
 }
 
 /**
- * Resolve the payment methods to show on Pay Now for one invoice.
- * @returns methods in stable order (ACH first, then CARD), provider-supported only.
+ * Resolve the payment methods for one invoice. Online methods are filtered to
+ * what the provider supports; CHECK passes through untouched.
+ * @returns methods in stable order: CHECK, ACH, CARD.
  */
 export function resolvePaymentMethods(
   levels: MethodCascadeLevels,
   provider: PaymentProviderId
 ): PaymentMethod[] {
   const chosen = firstSet(levels) ?? DEFAULT_METHODS;
-  const supported = PROVIDER_METHODS[provider] ?? DEFAULT_METHODS;
-  const intersected = chosen.filter((m) => supported.includes(m));
-  // Never return an empty set — fall back to whatever the provider can do.
-  const result = intersected.length > 0 ? intersected : supported;
-  // Stable order: ACH before CARD.
-  return (['ACH', 'CARD'] as PaymentMethod[]).filter((m) => result.includes(m));
+  const onlineSupported = PROVIDER_ONLINE_METHODS[provider] ?? ['ACH'];
+  const kept = chosen.filter((m) => (ONLINE.includes(m) ? onlineSupported.includes(m) : true));
+  const result = kept.length > 0 ? kept : DEFAULT_METHODS;
+  return ORDER.filter((m) => result.includes(m));
+}
+
+/** Online methods only (the ones that get a Pay button on the hosted page). */
+export function onlineMethods(methods: PaymentMethod[]): PaymentMethod[] {
+  return methods.filter((m) => ONLINE.includes(m));
 }
 
 /**
- * Resolve whether a card surcharge applies, most-specific-wins.
- * Default true (card is offered only with the fee opt-in). An explicit false at
- * any level absorbs the card cost instead.
+ * Card surcharge posture, most-specific-wins. true = the card processing fee is
+ * passed to the customer at payment; false = the business absorbs it. Default
+ * true (passed on) unless a level says otherwise.
  */
 export function resolveSurchargeEnabled(levels: SurchargeCascadeLevels): boolean {
   for (const v of [levels.invoice, levels.job, levels.customer, levels.entity]) {
