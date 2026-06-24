@@ -102,6 +102,11 @@ export async function POST(req: Request) {
     );
     return NextResponse.json({ url });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Stripe error' }, { status: 500 });
+    const err = e as { type?: string; code?: string; statusCode?: number; message?: string };
+    console.error('[payments/connect] stripe error', { type: err.type, code: err.code, statusCode: err.statusCode, message: err.message });
+    const detail = [err.type, err.code, err.statusCode ? `HTTP ${err.statusCode}` : null].filter(Boolean).join(' · ');
+    return NextResponse.json({
+      error: (err.message || 'Stripe error') + (detail ? ` (${detail})` : ''),
+    }, { status: 500 });
   }
 }
