@@ -19,7 +19,15 @@ export function getPlatformStripe(): Stripe {
   if (!key) {
     throw new Error('STRIPE_SECRET_KEY is not set in the environment.');
   }
-  if (!_stripe) _stripe = new Stripe(key); // uses the account default API version
+  if (!_stripe) {
+    // The fetch HTTP client avoids stale keep-alive sockets that cause
+    // StripeConnectionError on Vercel serverless functions; retries cover blips.
+    _stripe = new Stripe(key, {
+      httpClient: Stripe.createFetchHttpClient(),
+      maxNetworkRetries: 2,
+      timeout: 20000,
+    });
+  }
   return _stripe;
 }
 
