@@ -130,3 +130,13 @@ export async function getChargeProcessingFeeCents(paymentIntentId: string): Prom
   if (!bt || typeof bt === 'string') return null;
   return typeof bt.fee === 'number' ? bt.fee : null;
 }
+
+/** Lightweight status read for a PaymentIntent (hosted-page return banner). */
+export async function getPaymentIntentStatus(paymentIntentId: string): Promise<string | null> {
+  try {
+    const pi = await getPlatformStripe().paymentIntents.retrieve(paymentIntentId);
+    return pi.status ?? null;
+  } catch {
+    return null;
+  }
+}

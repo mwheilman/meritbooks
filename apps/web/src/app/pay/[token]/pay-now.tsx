@@ -18,10 +18,11 @@ function stripePromiseFor(pk: string) {
 }
 
 export function PayNow({
-  token, accent, balanceLabel, methods, surcharge, surchargePct,
+  token, accent, balanceLabel, methods, surcharge, surchargePct, payerName, payerEmail,
 }: {
   token: string; accent: string; balanceLabel: string;
   methods: PaymentMethod[]; surcharge: boolean; surchargePct: number;
+  payerName?: string; payerEmail?: string;
 }) {
   const hasACH = methods.includes('ACH');
   const hasCard = methods.includes('CARD');
@@ -59,7 +60,7 @@ export function PayNow({
       <div style={W.box}>
         <div style={W.title}>Pay {balanceLabel}</div>
         <Elements stripe={stripe} options={{ clientSecret, appearance: { theme: 'flat', variables: { colorPrimary: accent } } }}>
-          <CheckoutForm token={token} accent={accent} balanceLabel={balanceLabel} />
+          <CheckoutForm token={token} accent={accent} balanceLabel={balanceLabel} payerName={payerName} payerEmail={payerEmail} />
         </Elements>
         <div style={W.secure}>🔒 Card details are entered securely on Stripe and never touch this site.</div>
       </div>
@@ -73,13 +74,13 @@ export function PayNow({
         {hasACH && (
           <button onClick={() => setMethod('ACH')} style={{ ...W.method, ...(method === 'ACH' ? { borderColor: accent, background: '#f0fdf9' } : {}) }}>
             <div style={W.mTop}><span style={W.mName}>Bank transfer (ACH)</span><span style={{ ...W.badge, color: '#16a34a', background: '#dcfce7' }}>No fee</span></div>
-            <div style={W.mSub}>Pay directly from your bank account.</div>
+            <div style={W.mSub}>Pay directly from your bank account. Clears in 1–2 business days.</div>
           </button>
         )}
         {hasCard && (
           <button onClick={() => setMethod('CARD')} style={{ ...W.method, ...(method === 'CARD' ? { borderColor: accent, background: '#f0fdf9' } : {}) }}>
             <div style={W.mTop}><span style={W.mName}>Credit or debit card</span>{surcharge ? <span style={{ ...W.badge, color: '#b45309', background: '#fef3c7' }}>+{surchargePct}% fee</span> : <span style={{ ...W.badge, color: '#16a34a', background: '#dcfce7' }}>No fee</span>}</div>
-            <div style={W.mSub}>{surcharge ? 'A card processing fee applies and is shown before you confirm.' : 'Pay by card.'}</div>
+            <div style={W.mSub}>{surcharge ? 'Confirms instantly. A card processing fee applies and is shown before you confirm.' : 'Confirms instantly.'}</div>
           </button>
         )}
       </div>
@@ -97,7 +98,7 @@ export function PayNow({
   );
 }
 
-function CheckoutForm({ token, accent, balanceLabel }: { token: string; accent: string; balanceLabel: string }) {
+function CheckoutForm({ token, accent, balanceLabel, payerName, payerEmail }: { token: string; accent: string; balanceLabel: string; payerName?: string; payerEmail?: string }) {
   const stripe = useStripe();
   const elements = useElements();
   const [busy, setBusy] = useState(false);
@@ -113,9 +114,13 @@ function CheckoutForm({ token, accent, balanceLabel }: { token: string; accent: 
     if (error) { setErr(error.message ?? 'Payment failed.'); setBusy(false); }
   }
 
+  const defaultValues = (payerName || payerEmail)
+    ? { billingDetails: { name: payerName || undefined, email: payerEmail || undefined } }
+    : undefined;
+
   return (
     <div>
-      <PaymentElement />
+      <PaymentElement options={defaultValues ? { defaultValues } : undefined} />
       <button onClick={submit} disabled={!stripe || busy} style={{ ...W.payBtn, background: accent, marginTop: 16, opacity: busy ? 0.5 : 1, cursor: busy ? 'not-allowed' : 'pointer' }}>
         {busy ? 'Processing…' : `Pay ${balanceLabel}`}
       </button>

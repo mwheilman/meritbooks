@@ -11,6 +11,7 @@ import {
   type PaymentProviderId,
 } from '@/lib/invoices/resolve-payment-methods';
 import { PayNow } from './pay-now';
+import { getPaymentIntentStatus } from '@/lib/money/providers/stripe';
 
 /**
  * Hosted customer invoice view — public, tokenized, no login. A branded,
@@ -45,7 +46,9 @@ function billToLines(bill: Record<string, unknown> | null, fallbackName?: string
   return out;
 }
 
-export default async function HostedInvoicePage({ params }: { params: { token: string } }) {
+export default async function HostedInvoicePage(
+  { params, searchParams }: { params: { token: string }; searchParams: { payment_intent?: string; redirect_status?: string } },
+) {
   const supabase = createAdminSupabase();
   const loaded = await loadInvoiceDocByToken(supabase, params.token);
 
@@ -63,6 +66,17 @@ export default async function HostedInvoicePage({ params }: { params: { token: s
 
   const { doc, orgId } = loaded;
   await recordInvoiceEvent(supabase, { orgId, invoiceId: doc.id, type: 'VIEWED', actor: 'customer' });
+
+  // If the customer was redirected back from Stripe, resolve the real outcome so
+  // we can show a clear confirmation instead of looking like nothing happened.
+  let returnBanner: { tone: 'ok' | 'pending' | 'fail'; text: string } | null = null;
+  if (searchParams?.payment_intent) {
+    const st = await getPaymentIntentStatus(searchParams.payment_intent);
+    if (st === 'succeeded') returnBanner = { tone: 'ok', text: 'Payment received — thank you. A receipt is on its way.' };
+    else if (st === 'processing') returnBanner = { tone: 'pending', text: 'Payment submitted. Bank transfers take 1–2 business days to clear; this invoice updates automatically once it settles.' };
+    else if (st === 'requires_payment_method' || st === 'canceled') returnBanner = { tone: 'fail', text: 'That payment didn’t go through. You can try again below.' };
+    else if (searchParams.redirect_status === 'processing') returnBanner = { tone: 'pending', text: 'Payment submitted and processing. This invoice will update automatically once it clears.' };
+  }
 
   const provider: PaymentProviderId = 'STRIPE';
   const methods = resolvePaymentMethods({ invoice: doc.payment_methods_allowed ?? null }, provider);
@@ -101,6 +115,16 @@ export default async function HostedInvoicePage({ params }: { params: { token: s
         </header>
 
         <div style={S.body}>
+          {returnBanner && (
+            <div style={{
+              ...S.returnBanner,
+              background: returnBanner.tone === 'ok' ? '#ecfdf5' : returnBanner.tone === 'pending' ? '#eff6ff' : '#fef2f2',
+              color: returnBanner.tone === 'ok' ? '#15803d' : returnBanner.tone === 'pending' ? '#1d4ed8' : '#b91c1c',
+              borderColor: returnBanner.tone === 'ok' ? '#a7f3d0' : returnBanner.tone === 'pending' ? '#bfdbfe' : '#fecaca',
+            }}>
+              {returnBanner.tone === 'ok' ? '✓ ' : returnBanner.tone === 'pending' ? '⏳ ' : '⚠️ '}{returnBanner.text}
+            </div>
+          )}
           {/* Hero: balance + primary pay action */}
           <section style={S.hero}>
             <div>
@@ -112,7 +136,7 @@ export default async function HostedInvoicePage({ params }: { params: { token: s
             <a href={`/api/invoices/${doc.id}/pdf`} style={S.pdfLink} target="_blank" rel="noreferrer">↓ PDF</a>
           </section>
 
-          {!paid && online.length > 0 && (
+          {!paid && online.length > 0 && returnBanner?.tone !== 'ok' && (
             <PayNow
               token={doc.public_token}
               accent={accent}
@@ -120,6 +144,8 @@ export default async function HostedInvoicePage({ params }: { params: { token: s
               methods={online}
               surcharge={surcharge}
               surchargePct={3}
+              payerName={doc.customer?.name ?? ''}
+              payerEmail={doc.customer?.email ?? ''}
             />
           )}
           {!paid && methods.includes('CHECK') && doc.template?.remit_to && (
@@ -226,6 +252,7 @@ const S: Record<string, React.CSSProperties> = {
   bandLabel: { fontSize: 11, fontWeight: 600, letterSpacing: 1.5 },
   bandAmount: { fontSize: 24, fontWeight: 800, fontFamily: MONO, marginTop: 2 },
   body: { padding: 36 },
+  returnBanner: { padding: '14px 16px', borderRadius: 12, border: '1px solid', fontSize: 14, fontWeight: 600, lineHeight: 1.5, marginBottom: 22 },
   hero: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: 22, marginBottom: 22, borderBottom: '1px solid #eef2f7' },
   heroStatus: { fontSize: 13, fontWeight: 600, textTransform: 'capitalize' },
   heroBalance: { fontSize: 38, fontWeight: 800, fontFamily: MONO, letterSpacing: -1, marginTop: 4 },
