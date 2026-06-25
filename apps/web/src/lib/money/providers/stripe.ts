@@ -115,3 +115,18 @@ export function constructWebhookEvent(rawBody: string, signature: string): Strip
   if (!secret) throw new Error('STRIPE_WEBHOOK_SECRET is not set in the environment.');
   return getPlatformStripe().webhooks.constructEvent(rawBody, signature, secret);
 }
+
+/**
+ * The Stripe processing fee actually charged on a PaymentIntent's charge, in
+ * cents. On a destination charge this cost is borne by the platform, so it's
+ * the platform's processing-cost expense. Returns null if not yet available.
+ */
+export async function getChargeProcessingFeeCents(paymentIntentId: string): Promise<number | null> {
+  const stripe = getPlatformStripe();
+  const pi = await stripe.paymentIntents.retrieve(paymentIntentId, { expand: ['latest_charge.balance_transaction'] });
+  const charge = pi.latest_charge;
+  if (!charge || typeof charge === 'string') return null;
+  const bt = charge.balance_transaction;
+  if (!bt || typeof bt === 'string') return null;
+  return typeof bt.fee === 'number' ? bt.fee : null;
+}

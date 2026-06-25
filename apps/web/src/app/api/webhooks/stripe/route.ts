@@ -4,9 +4,10 @@ export const runtime = 'nodejs';
 import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { constructWebhookEvent } from '@/lib/money/providers/stripe';
+import { constructWebhookEvent, getChargeProcessingFeeCents } from '@/lib/money/providers/stripe';
 import { applyStripePaymentToInvoice } from '@/lib/money/apply-invoice-payment';
 import { postArPayout } from '@/lib/money/posting/ar-posting';
+import { postPlatformFee } from '@/lib/money/posting/platform-fee';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
 
 /**
@@ -46,6 +47,33 @@ export async function POST(req: Request) {
           method: m.method === 'CARD' ? 'CARD' : 'ACH',
           piId: pi.id,
         });
+
+        // Book the application fee as income on the platform operator's own
+        // ledger (Merit-as-platform). Gated on PLATFORM_ORG_ID; no-op otherwise.
+        const platformOrgId = process.env.PLATFORM_ORG_ID;
+        const grossFeeCents = Number(m.app_fee_cents ?? 0);
+        if (platformOrgId && grossFeeCents > 0 && platformOrgId !== m.org_id) {
+          try {
+            const { data: loc } = await db.schema('core').from('locations')
+              .select('id').eq('org_id', platformOrgId).limit(1).maybeSingle();
+            const platformLocationId = (loc as { id: string } | null)?.id;
+            if (platformLocationId) {
+              let stripeCostCents = 0;
+              try {
+                const fee = await getChargeProcessingFeeCents(pi.id);
+                if (fee != null) stripeCostCents = Math.min(fee, grossFeeCents);
+              } catch { /* fall back to gross-only if the fee isn't retrievable */ }
+              await postPlatformFee(db, {
+                platformOrgId, locationId: platformLocationId,
+                entryDate: new Date().toISOString().slice(0, 10),
+                grossFeeCents, stripeCostCents,
+                createdBy: null, sourceId: pi.id, sourceTenantOrgId: m.org_id,
+              });
+            }
+          } catch (e) {
+            console.error('[stripe webhook] platform fee posting failed', pi.id, e);
+          }
+        }
       }
     } else if (event.type === 'payment_intent.payment_failed') {
       const pi = event.data.object as Stripe.PaymentIntent;

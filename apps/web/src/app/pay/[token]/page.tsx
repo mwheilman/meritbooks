@@ -13,21 +13,37 @@ import {
 import { PayNow } from './pay-now';
 
 /**
- * Hosted customer invoice view (FPB §3/§8). Public, tokenized, no login.
- * Renders the branded document, offers a PDF download, and (once the payments
- * package lands) the Pay Now surface. Opening the page records a VIEWED event
- * so the issuer sees "opened N times, last on…".
- *
- * Pay Now is intentionally a disabled placeholder here — the PaymentProvider
- * adapter + Stripe credentials arrive in the next package; the resolved,
- * provider-supported methods are already computed so the UI is correct the day
- * the adapter turns on.
+ * Hosted customer invoice view — public, tokenized, no login. A branded,
+ * invoice-styled document (tenant logo + accent + clean typography) with Pay Now
+ * embedded as the primary action, so the customer lands on something that looks
+ * like their actual invoice rather than a generic form. Opening records a VIEWED
+ * event for the issuer's open tracking.
  */
 
 const money = (cents: number) =>
   (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const fmtDate = (d: string) =>
   d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+
+function readable(hex: string): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return '#ffffff';
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6 ? '#0f172a' : '#ffffff';
+}
+
+function billToLines(bill: Record<string, unknown> | null, fallbackName?: string): string[] {
+  const out: string[] = [];
+  if (fallbackName) out.push(fallbackName);
+  if (bill) {
+    for (const k of ['attn', 'line1', 'line2', 'street', 'address', 'city_state_zip', 'city', 'state', 'zip', 'email']) {
+      const v = bill[k];
+      if (typeof v === 'string' && v.trim() && !out.includes(v.trim())) out.push(v.trim());
+    }
+  }
+  return out;
+}
 
 export default async function HostedInvoicePage({ params }: { params: { token: string } }) {
   const supabase = createAdminSupabase();
@@ -36,6 +52,7 @@ export default async function HostedInvoicePage({ params }: { params: { token: s
   if (!loaded) {
     return (
       <main style={S.notFoundWrap}>
+        <FontHead />
         <div style={S.notFoundCard}>
           <h1 style={S.notFoundTitle}>Invoice not found</h1>
           <p style={S.muted}>This link may have expired or is incorrect. Contact the sender for an updated link.</p>
@@ -45,137 +62,195 @@ export default async function HostedInvoicePage({ params }: { params: { token: s
   }
 
   const { doc, orgId } = loaded;
-
-  // Record the view (best-effort; never blocks the render).
   await recordInvoiceEvent(supabase, { orgId, invoiceId: doc.id, type: 'VIEWED', actor: 'customer' });
 
-  // Resolve which methods Pay Now WILL offer. The full cascade (invoice → job →
-  // customer → entity) is wired in the payments package where Pay Now turns on;
-  // here we show the resolved default so the note is accurate today.
   const provider: PaymentProviderId = 'STRIPE';
   const methods = resolvePaymentMethods({ invoice: doc.payment_methods_allowed ?? null }, provider);
   const surcharge = resolveSurchargeEnabled({ invoice: doc.card_surcharge_enabled ?? null });
+  const online = onlineMethods(methods);
 
   const accent = doc.template?.accent_color || '#10b981';
+  const onAccent = readable(accent);
   const paid = doc.status === 'PAID' || doc.balance_cents <= 0;
   const overdue = !paid && new Date(doc.due_date + 'T00:00:00') < new Date();
+  const statusLabel = paid ? 'Paid' : overdue ? 'Overdue' : doc.status === 'SENT' ? 'Amount due' : doc.status;
+  const billTo = billToLines(doc.bill_to, doc.customer?.name);
 
   return (
     <main style={S.wrap}>
+      <FontHead />
       <div style={S.sheet}>
-        <header style={S.head}>
-          <div>
-            <div style={S.entity}>{doc.entity?.name || 'Invoice'}</div>
-            <div style={S.muted}>Invoice {doc.invoice_number}</div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ ...S.statusPill, background: paid ? '#16a34a' : overdue ? '#dc2626' : accent }}>
-              {paid ? 'Paid' : overdue ? 'Overdue' : doc.status === 'SENT' ? 'Due' : doc.status}
+        {/* Branded header band */}
+        <header style={{ ...S.band, background: accent, color: onAccent }}>
+          <div style={S.bandLeft}>
+            {doc.template?.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={doc.template.logo_url} alt="" style={S.logo} />
+            ) : (
+              <div style={{ ...S.logoFallback, color: accent }}>{(doc.entity?.name || 'M').slice(0, 1)}</div>
+            )}
+            <div>
+              <div style={S.bandEntity}>{doc.entity?.name || 'Invoice'}</div>
+              <div style={{ ...S.bandSub, color: onAccent, opacity: 0.85 }}>Invoice {doc.invoice_number}</div>
             </div>
-            <div style={{ ...S.muted, marginTop: 6 }}>Due {fmtDate(doc.due_date)}</div>
+          </div>
+          <div style={S.bandRight}>
+            <div style={{ ...S.bandLabel, color: onAccent, opacity: 0.85 }}>INVOICE</div>
+            <div style={S.bandAmount}>{money(doc.total_cents)}</div>
           </div>
         </header>
 
-        <section style={S.balanceRow}>
-          <div>
-            <div style={S.muted}>Balance due</div>
-            <div style={{ ...S.balance, color: accent }}>{money(doc.balance_cents)}</div>
-          </div>
-          <div style={S.actions}>
-            <a href={`/api/invoices/${doc.id}/pdf`} style={S.secondaryBtn} target="_blank" rel="noreferrer">Download PDF</a>
-          </div>
-        </section>
+        <div style={S.body}>
+          {/* Hero: balance + primary pay action */}
+          <section style={S.hero}>
+            <div>
+              <div style={{ ...S.heroStatus, color: paid ? '#16a34a' : overdue ? '#dc2626' : '#475569' }}>
+                {statusLabel}{!paid && doc.due_date ? ` · due ${fmtDate(doc.due_date)}` : ''}
+              </div>
+              <div style={S.heroBalance}>{money(doc.balance_cents)}</div>
+            </div>
+            <a href={`/api/invoices/${doc.id}/pdf`} style={S.pdfLink} target="_blank" rel="noreferrer">↓ PDF</a>
+          </section>
 
-        {!paid && onlineMethods(methods).length > 0 && (
-          <PayNow
-            token={doc.public_token}
-            accent={accent}
-            balanceLabel={money(doc.balance_cents)}
-            methods={onlineMethods(methods)}
-            surcharge={surcharge}
-            surchargePct={3}
-          />
-        )}
-        {!paid && methods.includes('CHECK') && doc.template?.remit_to && (
-          <div style={S.checkBlock}>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>Prefer to pay by check?</div>
-            <div style={S.muted}>Mail to:</div>
-            <div style={{ whiteSpace: 'pre-line', marginTop: 2 }}>{doc.template.remit_to}</div>
-          </div>
-        )}
-        {paid && (
-          <div style={{ ...S.paidBanner, color: '#16a34a' }}>Paid in full — thank you.</div>
-        )}
+          {!paid && online.length > 0 && (
+            <PayNow
+              token={doc.public_token}
+              accent={accent}
+              balanceLabel={money(doc.balance_cents)}
+              methods={online}
+              surcharge={surcharge}
+              surchargePct={3}
+            />
+          )}
+          {!paid && methods.includes('CHECK') && doc.template?.remit_to && (
+            <div style={S.remitCard}>
+              <div style={S.remitTitle}>Prefer to mail a check?</div>
+              <div style={{ whiteSpace: 'pre-line', color: '#475569', fontSize: 13.5, marginTop: 4 }}>{doc.template.remit_to}</div>
+            </div>
+          )}
+          {paid && <div style={S.paidBanner}>✓ Paid in full — thank you.</div>}
 
-        <table style={S.table}>
-          <thead>
-            <tr style={{ background: accent }}>
-              <th style={{ ...S.th, textAlign: 'left' }}>Description</th>
-              <th style={S.th}>Qty</th>
-              <th style={{ ...S.th, textAlign: 'right' }}>Rate</th>
-              <th style={{ ...S.th, textAlign: 'right' }}>Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {doc.lines.map((l, i) => (
-              <tr key={i} style={S.tr}>
-                <td style={S.td}>{l.description}</td>
-                <td style={{ ...S.td, textAlign: 'center' }}>{l.quantity}</td>
-                <td style={{ ...S.td, textAlign: 'right' }}>{money(l.unit_price_cents)}</td>
-                <td style={{ ...S.td, textAlign: 'right' }}>{money(l.amount_cents)}</td>
+          {/* From / Bill to */}
+          <section style={S.parties}>
+            <div style={S.party}>
+              <div style={S.partyLabel}>From</div>
+              <div style={S.partyName}>{doc.entity?.name}</div>
+            </div>
+            <div style={S.party}>
+              <div style={S.partyLabel}>Bill to</div>
+              {billTo.map((l, i) => (
+                <div key={i} style={i === 0 ? S.partyName : S.partyLine}>{l}</div>
+              ))}
+            </div>
+            <div style={S.party}>
+              <div style={S.partyLabel}>Details</div>
+              <div style={S.metaRow}><span style={S.metaK}>Issued</span><span>{fmtDate(doc.invoice_date)}</span></div>
+              <div style={S.metaRow}><span style={S.metaK}>Due</span><span>{fmtDate(doc.due_date)}</span></div>
+              {doc.terms && <div style={S.metaRow}><span style={S.metaK}>Terms</span><span>{doc.terms}</span></div>}
+            </div>
+          </section>
+
+          {/* Line items */}
+          <table style={S.table}>
+            <thead>
+              <tr>
+                <th style={{ ...S.th, textAlign: 'left' }}>Description</th>
+                <th style={S.th}>Qty</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>Rate</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>Amount</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {doc.lines.map((l, i) => (
+                <tr key={i} style={S.tr}>
+                  <td style={S.tdDesc}>{l.description}</td>
+                  <td style={{ ...S.td, textAlign: 'center' }}>{l.quantity}</td>
+                  <td style={{ ...S.td, textAlign: 'right', fontFamily: MONO }}>{money(l.unit_price_cents)}</td>
+                  <td style={{ ...S.td, textAlign: 'right', fontFamily: MONO }}>{money(l.amount_cents)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
-        <div style={S.totals}>
-          <Row label="Subtotal" value={money(doc.subtotal_cents)} />
-          {doc.discount_cents > 0 && <Row label="Discount" value={`-${money(doc.discount_cents)}`} />}
-          {doc.tax_cents > 0 && <Row label="Tax" value={money(doc.tax_cents)} />}
-          {doc.retainage_cents > 0 && <Row label="Retainage withheld" value={`-${money(doc.retainage_cents)}`} />}
-          <Row label="Total" value={money(doc.total_cents)} bold />
-          {doc.amount_paid_cents > 0 && <Row label="Paid" value={`-${money(doc.amount_paid_cents)}`} />}
+          <div style={S.totals}>
+            <Row label="Subtotal" value={money(doc.subtotal_cents)} />
+            {doc.discount_cents > 0 && <Row label="Discount" value={`-${money(doc.discount_cents)}`} />}
+            {doc.tax_cents > 0 && <Row label="Tax" value={money(doc.tax_cents)} />}
+            {doc.retainage_cents > 0 && <Row label="Retainage withheld" value={`-${money(doc.retainage_cents)}`} />}
+            <Row label="Total" value={money(doc.total_cents)} bold accent={accent} />
+            {doc.amount_paid_cents > 0 && <Row label="Paid" value={`-${money(doc.amount_paid_cents)}`} />}
+            {doc.amount_paid_cents > 0 && <Row label="Balance due" value={money(doc.balance_cents)} bold accent={accent} />}
+          </div>
+
+          {doc.customer_message && <p style={S.message}>{doc.customer_message}</p>}
+          <footer style={S.footer}>{doc.template?.footer_text || `${doc.entity?.name ?? ''} · ${doc.invoice_number}`}</footer>
         </div>
-
-        {doc.customer_message && <p style={S.message}>{doc.customer_message}</p>}
-        <footer style={S.footer}>{doc.template?.footer_text || `${doc.entity?.name ?? ''} · ${doc.invoice_number}`}</footer>
       </div>
+      <div style={S.poweredBy}>Secure payments powered by Stripe</div>
     </main>
   );
 }
 
-function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+function Row({ label, value, bold, accent }: { label: string; value: string; bold?: boolean; accent?: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontWeight: bold ? 700 : 400, borderTop: bold ? '1.5px solid #111' : 'none', marginTop: bold ? 6 : 0, paddingTop: bold ? 8 : 4 }}>
-      <span style={{ color: bold ? '#111' : '#555' }}>{label}</span>
-      <span>{value}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: bold ? '8px 0' : '4px 0', fontWeight: bold ? 700 : 400, borderTop: bold ? `2px solid ${accent || '#0f172a'}` : 'none', marginTop: bold ? 4 : 0 }}>
+      <span style={{ color: bold ? '#0f172a' : '#64748b', fontSize: bold ? 15 : 13.5 }}>{label}</span>
+      <span style={{ fontFamily: MONO, color: bold ? (accent || '#0f172a') : '#334155', fontSize: bold ? 16 : 13.5 }}>{value}</span>
     </div>
   );
 }
 
+function FontHead() {
+  return (
+    <style dangerouslySetInnerHTML={{ __html: `
+      @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+    ` }} />
+  );
+}
+
+const SANS = "'Plus Jakarta Sans', system-ui, -apple-system, Segoe UI, sans-serif";
+const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
+
 const S: Record<string, React.CSSProperties> = {
-  wrap: { minHeight: '100vh', background: '#f3f4f6', padding: '40px 16px', fontFamily: 'system-ui, -apple-system, Segoe UI, sans-serif', color: '#1a1a1a' },
-  sheet: { maxWidth: 720, margin: '0 auto', background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', padding: 40 },
-  head: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 },
-  entity: { fontSize: 20, fontWeight: 700 },
-  muted: { color: '#888', fontSize: 13 },
-  statusPill: { display: 'inline-block', color: '#fff', fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: 0.4 },
-  balanceRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 0', borderTop: '1px solid #eee', borderBottom: '1px solid #eee', marginBottom: 20 },
-  balance: { fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums' },
-  actions: { display: 'flex', gap: 10, alignItems: 'center' },
-  secondaryBtn: { padding: '10px 16px', borderRadius: 8, border: '1px solid #d1d5db', color: '#374151', textDecoration: 'none', fontSize: 14, fontWeight: 500 },
-  payBtn: { padding: '10px 20px', borderRadius: 8, border: 'none', color: '#fff', fontSize: 14, fontWeight: 600 },
-  payNote: { fontSize: 12.5, color: '#777', marginTop: -8, marginBottom: 20 },
-  paidBanner: { padding: 14, borderRadius: 10, background: '#f0fdf4', textAlign: 'center', fontWeight: 600, marginBottom: 24 },
-  checkBlock: { border: '1px solid #e5e7eb', borderRadius: 10, padding: 14, marginBottom: 24, fontSize: 13, color: '#444' },
-  table: { width: '100%', borderCollapse: 'collapse', marginBottom: 8 },
-  th: { color: '#fff', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, padding: '8px 10px', textAlign: 'center' },
-  tr: { borderBottom: '1px solid #eee' },
-  td: { padding: '10px', fontSize: 14 },
-  totals: { maxWidth: 280, marginLeft: 'auto', marginTop: 8 },
-  message: { marginTop: 24, paddingTop: 16, borderTop: '1px solid #eee', color: '#555', fontSize: 14, lineHeight: 1.5 },
-  footer: { marginTop: 28, paddingTop: 14, borderTop: '1px solid #eee', textAlign: 'center', color: '#aaa', fontSize: 12 },
-  notFoundWrap: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f3f4f6', fontFamily: 'system-ui, sans-serif' },
-  notFoundCard: { background: '#fff', padding: 40, borderRadius: 12, textAlign: 'center', maxWidth: 420 },
+  wrap: { minHeight: '100vh', background: '#f1f5f9', padding: '40px 16px', fontFamily: SANS, color: '#0f172a' },
+  sheet: { maxWidth: 760, margin: '0 auto', background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 10px 40px rgba(15,23,42,0.10)' },
+  band: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '28px 36px' },
+  bandLeft: { display: 'flex', alignItems: 'center', gap: 16 },
+  logo: { height: 48, maxWidth: 170, objectFit: 'contain', background: '#fff', borderRadius: 8, padding: 6 },
+  logoFallback: { height: 48, width: 48, borderRadius: 10, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 22 },
+  bandEntity: { fontSize: 19, fontWeight: 700, letterSpacing: -0.2 },
+  bandSub: { fontSize: 13, fontFamily: MONO, marginTop: 2 },
+  bandRight: { textAlign: 'right' },
+  bandLabel: { fontSize: 11, fontWeight: 600, letterSpacing: 1.5 },
+  bandAmount: { fontSize: 24, fontWeight: 800, fontFamily: MONO, marginTop: 2 },
+  body: { padding: 36 },
+  hero: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: 22, marginBottom: 22, borderBottom: '1px solid #eef2f7' },
+  heroStatus: { fontSize: 13, fontWeight: 600, textTransform: 'capitalize' },
+  heroBalance: { fontSize: 38, fontWeight: 800, fontFamily: MONO, letterSpacing: -1, marginTop: 4 },
+  pdfLink: { fontSize: 13, fontWeight: 600, color: '#475569', textDecoration: 'none', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 14px' },
+  remitCard: { border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginBottom: 24 },
+  remitTitle: { fontWeight: 600, fontSize: 14 },
+  paidBanner: { padding: 16, borderRadius: 12, background: '#ecfdf5', color: '#16a34a', textAlign: 'center', fontWeight: 700, marginBottom: 24 },
+  parties: { display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 28 },
+  party: { flex: '1 1 180px', minWidth: 160 },
+  partyLabel: { fontSize: 11, fontWeight: 700, letterSpacing: 1, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 6 },
+  partyName: { fontSize: 14.5, fontWeight: 600, color: '#0f172a' },
+  partyLine: { fontSize: 13.5, color: '#475569', marginTop: 2 },
+  metaRow: { display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: '#475569', padding: '2px 0' },
+  metaK: { color: '#94a3b8' },
+  table: { width: '100%', borderCollapse: 'collapse', marginBottom: 12 },
+  th: { fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, padding: '0 8px 10px', textAlign: 'center', color: '#94a3b8', borderBottom: '2px solid #eef2f7', fontWeight: 700 },
+  tr: { borderBottom: '1px solid #f1f5f9' },
+  tdDesc: { padding: '12px 8px', fontSize: 14, fontWeight: 500, color: '#0f172a' },
+  td: { padding: '12px 8px', fontSize: 14, color: '#334155' },
+  totals: { maxWidth: 300, marginLeft: 'auto', marginTop: 12 },
+  message: { marginTop: 28, paddingTop: 18, borderTop: '1px solid #eef2f7', color: '#475569', fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-line' },
+  footer: { marginTop: 24, paddingTop: 16, borderTop: '1px solid #eef2f7', textAlign: 'center', color: '#94a3b8', fontSize: 12.5 },
+  poweredBy: { textAlign: 'center', color: '#94a3b8', fontSize: 12, marginTop: 20 },
+  notFoundWrap: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', fontFamily: SANS },
+  notFoundCard: { background: '#fff', padding: 44, borderRadius: 16, textAlign: 'center', maxWidth: 440, boxShadow: '0 10px 40px rgba(15,23,42,0.10)' },
   notFoundTitle: { fontSize: 20, marginBottom: 8 },
+  muted: { color: '#94a3b8', fontSize: 13.5, lineHeight: 1.5 },
 };

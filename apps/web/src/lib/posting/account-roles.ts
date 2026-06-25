@@ -48,6 +48,8 @@ export type AccountRoleKey =
   | 'SETTLEMENT_CLEARING'
   | 'PAYMENTS_IN_TRANSIT'
   | 'MERCHANT_FEE_EXPENSE'
+  // Platform operator fee income (Merit-as-platform)
+  | 'PLATFORM_FEE_INCOME'
   // Payroll posting (GATE 12.3)
   | 'WAGES_EXPENSE'
   | 'PAYROLL_TAX_EXPENSE'
@@ -90,6 +92,8 @@ const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
   SETTLEMENT_CLEARING: '1095',
   PAYMENTS_IN_TRANSIT: '1096',
   MERCHANT_FEE_EXPENSE: '6630',
+  // Platform operator fee income (Merit-as-platform)
+  PLATFORM_FEE_INCOME: '4910',
   // Payroll posting (GATE 12.3)
   WAGES_EXPENSE: '6000',
   PAYROLL_TAX_EXPENSE: '6010',
