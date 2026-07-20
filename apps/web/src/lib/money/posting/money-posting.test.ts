@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildArCollectionEntry, buildArPayoutEntry } from './ar-posting';
 import { buildPlatformFeeEntry } from './platform-fee';
+import { deriveTenantFeeCents } from '../apply-invoice-payment';
 import { assertBalanced, line, type MoneyMovementEntry } from './types';
 
 // ---------------------------------------------------------------------------
@@ -48,6 +49,53 @@ const amountOn = (e: MoneyMovementEntry, accountId: string, side: 'debit' | 'cre
  *   GL fee on tenant's books = base - (amount_charged - application_fee)
  */
 const tenantFeeCents = (base: number, charged: number, appFee: number) => base - (charged - appFee);
+
+// ---------------------------------------------------------------------------
+// The production fee derivation (the function the webhook actually calls)
+// ---------------------------------------------------------------------------
+
+describe('deriveTenantFeeCents — the shipped derivation, not a re-implementation', () => {
+  it('ACH 1%: tenant bears the full application fee', () => {
+    expect(deriveTenantFeeCents(BASE, BASE, 150_000)).toBe(150_000);
+  });
+
+  it('card pass-through 3%: surcharge covers it, tenant bears nothing', () => {
+    expect(deriveTenantFeeCents(BASE, BASE + 450_000, 450_000)).toBe(0);
+  });
+
+  it('card absorbed 3%: tenant bears the full 3%', () => {
+    expect(deriveTenantFeeCents(BASE, BASE, 450_000)).toBe(450_000);
+  });
+
+  it('never returns a negative fee, even if the customer overpays', () => {
+    expect(deriveTenantFeeCents(BASE, BASE + 1_000_000, 0)).toBe(0);
+  });
+
+  it('agrees with the local formula across the scenario matrix', () => {
+    const cases: Array<[number, number, number]> = [
+      [BASE, BASE, 150_000],
+      [BASE, BASE + 450_000, 450_000],
+      [BASE, BASE, 450_000],
+      [1, 1, 0],
+      [100_000, 100_000, 1_000],
+    ];
+    for (const [base, charged, af] of cases) {
+      expect(deriveTenantFeeCents(base, charged, af)).toBe(tenantFeeCents(base, charged, af));
+    }
+  });
+
+  it('produces a fee that never exceeds the gross (would throw in the builder)', () => {
+    for (const [base, charged, af] of [
+      [BASE, BASE, 150_000],
+      [BASE, BASE, 450_000],
+      [100_000, 100_000, 1_000],
+    ] as Array<[number, number, number]>) {
+      const fee = deriveTenantFeeCents(base, charged, af);
+      expect(fee).toBeLessThanOrEqual(base);
+      expect(() => buildArCollectionEntry(AR_ACC, base, fee, LOC)).not.toThrow();
+    }
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Universal invariant — nothing may post unbalanced

@@ -12,6 +12,25 @@ import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
  *   card pass-thru: fee = 0  (the surcharge covered the processing)
  *   card absorbed:  fee = 3% (tenant bears it)
  */
+/**
+ * The fee the tenant actually bore on the invoice base — i.e. the amount they
+ * did NOT net. Pure so it can be asserted in isolation.
+ *
+ *   feeCents = base - (amountCharged - applicationFee)
+ *
+ *   ACH 1%:          base 15000000, charged 15000000, AF 150000 -> 150000
+ *   card pass-thru:  base 15000000, charged 15450000, AF 450000 -> 0
+ *   card absorbed:   base 15000000, charged 15000000, AF 450000 -> 450000
+ */
+export function deriveTenantFeeCents(
+  baseCents: number,
+  amountCents: number,
+  appFeeCents: number,
+): number {
+  const tenantNet = amountCents - appFeeCents;
+  return Math.max(0, baseCents - tenantNet);
+}
+
 export async function applyStripePaymentToInvoice(
   db: SupabaseClient,
   args: {
@@ -25,15 +44,22 @@ export async function applyStripePaymentToInvoice(
     .from('customer_payments').select('id').eq('reference_number', args.piId).maybeSingle();
   if (existing) return { applied: false };
 
-  const tenantNet = args.amountCents - args.appFeeCents;
-  const feeCents = Math.max(0, args.baseCents - tenantNet);
+  const feeCents = deriveTenantFeeCents(args.baseCents, args.amountCents, args.appFeeCents);
   const today = new Date().toISOString().slice(0, 10);
 
   const post = await postArCollection(db, {
     orgId: args.orgId, locationId: args.locationId, entryDate: today,
     grossCents: args.baseCents, feeCents, createdBy: null, sourceId: args.piId,
   });
-  const glEntryId = post.success ? post.entry_id ?? null : null;
+  // A book of record must never show a PAID invoice with no journal entry
+  // behind it. If the GL post failed, abort before recording the payment or
+  // flipping status — the caller returns 500 and Stripe retries the event.
+  if (!post.success || !post.entry_id) {
+    throw new Error(
+      `AR collection GL post failed for ${args.piId} (invoice ${args.invoiceId}): ${post.error ?? 'unknown error'}`,
+    );
+  }
+  const glEntryId = post.entry_id;
 
   const { data: pay } = await db.from('customer_payments').insert({
     org_id: args.orgId,
