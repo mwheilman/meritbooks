@@ -29,9 +29,21 @@ export async function POST(req: Request) {
 
   const db = createAdminSupabase();
 
-  // Idempotency — record the event id; skip if already seen.
+  // Idempotency — claim the event id before processing so concurrent
+  // redeliveries can't double-post. Only a unique violation (23505) means we
+  // have genuinely seen this event. Any OTHER insert error (table missing, RLS,
+  // transient connection) must NOT be treated as a duplicate: doing so returns
+  // 200 OK to Stripe while silently dropping the payment, which looks perfectly
+  // healthy in Recent Deliveries and never posts to the ledger.
   const { error: dupeErr } = await db.from('stripe_events').insert({ id: event.id, type: event.type });
-  if (dupeErr) return NextResponse.json({ received: true, duplicate: true });
+  if (dupeErr) {
+    if (dupeErr.code === '23505') {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    console.error('[stripe webhook] idempotency store unavailable', event.id, event.type, dupeErr);
+    // 500 → Stripe retries with backoff. Never 200 on an unverified claim.
+    return NextResponse.json({ error: 'idempotency_store_unavailable' }, { status: 500 });
+  }
 
   try {
     if (event.type === 'payment_intent.succeeded') {
@@ -104,8 +116,16 @@ export async function POST(req: Request) {
       }
     }
   } catch (e) {
-    console.error('[stripe webhook] handler error', event.type, e);
-    return NextResponse.json({ received: true, error: 'handler_error' });
+    console.error('[stripe webhook] handler error', event.type, event.id, e);
+    // The idempotency row was claimed before processing. Processing failed, so
+    // release the claim — otherwise the retry is rejected as a duplicate and the
+    // payment is permanently lost with no ledger entry and no error surfaced.
+    const { error: releaseErr } = await db.from('stripe_events').delete().eq('id', event.id);
+    if (releaseErr) {
+      console.error('[stripe webhook] FAILED TO RELEASE idempotency claim — event will not be retried', event.id, releaseErr);
+    }
+    // 500 → Stripe retries. Returning 200 here would mark the event delivered.
+    return NextResponse.json({ error: 'handler_error' }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });
