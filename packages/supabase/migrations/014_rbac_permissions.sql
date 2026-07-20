@@ -38,12 +38,23 @@ CREATE TABLE IF NOT EXISTS role_permission_overrides (
   -- Metadata
   set_by uuid REFERENCES employees(id),
   created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  
-  -- Unique: one override per role+feature at tier level, one per employee+feature at individual level
-  CONSTRAINT unique_tier_override UNIQUE (org_id, role, feature_id) WHERE employee_id IS NULL,
-  CONSTRAINT unique_individual_override UNIQUE (org_id, employee_id, feature_id) WHERE employee_id IS NOT NULL
+  updated_at timestamptz DEFAULT now()
 );
+
+-- NOTE: Postgres has no partial UNIQUE *constraint*. The original version of this
+-- migration used `CONSTRAINT ... UNIQUE (...) WHERE ...`, which is invalid syntax
+-- in every Postgres version, so this file never applied cleanly. The uniqueness
+-- rules are expressed as partial unique INDEXES, which is the supported form.
+--
+--   tier-level override:       one per (org, role, feature)     where employee_id IS NULL
+--   individual-level override: one per (org, employee, feature) where employee_id IS NOT NULL
+CREATE UNIQUE INDEX IF NOT EXISTS unique_tier_override
+  ON role_permission_overrides (org_id, role, feature_id)
+  WHERE employee_id IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS unique_individual_override
+  ON role_permission_overrides (org_id, employee_id, feature_id)
+  WHERE employee_id IS NOT NULL;
 
 -- Index for fast lookups
 CREATE INDEX IF NOT EXISTS idx_role_perm_overrides_role ON role_permission_overrides(org_id, role) WHERE employee_id IS NULL;
@@ -52,8 +63,13 @@ CREATE INDEX IF NOT EXISTS idx_role_perm_overrides_employee ON role_permission_o
 -- RLS
 ALTER TABLE role_permission_overrides ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "role_permission_overrides_org_isolation" ON role_permission_overrides
-  FOR ALL USING (org_id = (SELECT org_id FROM employees WHERE clerk_user_id = auth.uid() LIMIT 1));
+-- NOTE: this project authenticates with Clerk, not Supabase Auth. auth.uid() is
+-- Supabase Auth's helper and returns uuid, while employees.clerk_user_id is text
+-- ("user_..."), so the original predicate was both the wrong helper and a
+-- text = uuid type error. The deployed database uses get_org_id(); this file is
+-- aligned to that reality.
+CREATE POLICY "org_isolation" ON role_permission_overrides
+  FOR ALL USING (org_id = get_org_id());
 
 -- Employee-location assignments (if not already created)
 -- This tracks which companies each employee can access
@@ -73,8 +89,8 @@ CREATE INDEX IF NOT EXISTS idx_employee_locations_location ON employee_locations
 
 ALTER TABLE employee_locations ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "employee_locations_org_isolation" ON employee_locations
-  FOR ALL USING (org_id = (SELECT org_id FROM employees WHERE clerk_user_id = auth.uid() LIMIT 1));
+CREATE POLICY "org_isolation" ON employee_locations
+  FOR ALL USING (org_id = get_org_id());
 
 -- Add clerk_user_id to employees if not present
 DO $$ 
