@@ -87,6 +87,24 @@ export async function POST(req: Request) {
           }
         }
       }
+    } else if (event.type === 'payment_intent.processing') {
+      // ACH sits in `processing` for 1-2 business days before succeeding. Record
+      // it so the ISSUER can see money is in flight — otherwise the invoice looks
+      // identical to one the customer never touched. Informational only: no status
+      // change and no GL posting, because the funds have not settled.
+      const pi = event.data.object as Stripe.PaymentIntent;
+      const m = pi.metadata ?? {};
+      if (m.invoice_id && m.org_id) {
+        await recordInvoiceEvent(db, {
+          orgId: m.org_id, invoiceId: m.invoice_id, type: 'PAY_PROCESSING', actor: 'customer',
+          meta: {
+            pi: pi.id,
+            method: m.method === 'CARD' ? 'CARD' : 'ACH',
+            amount_cents: Number(m.amount_cents ?? pi.amount),
+            expected_settlement: 'ACH transfers typically clear in 1-2 business days',
+          },
+        });
+      }
     } else if (event.type === 'payment_intent.payment_failed') {
       const pi = event.data.object as Stripe.PaymentIntent;
       const m = pi.metadata ?? {};

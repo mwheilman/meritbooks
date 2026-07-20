@@ -10,7 +10,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
  */
 export type InvoiceEventType =
   | 'CREATED' | 'POSTED' | 'EDITED' | 'SENT' | 'DELIVERED' | 'VIEWED'
-  | 'PAY_INITIATED' | 'PAY_SUCCEEDED' | 'PAY_FAILED' | 'FUNDS_SETTLED'
+  | 'PAY_INITIATED' | 'PAY_PROCESSING' | 'PAY_SUCCEEDED' | 'PAY_FAILED' | 'FUNDS_SETTLED'
   | 'PAYMENT_APPLIED' | 'REMINDER_SENT' | 'MARKED_PAID' | 'REFUNDED'
   | 'VOIDED' | 'CREDITED' | 'WRITTEN_OFF';
 
