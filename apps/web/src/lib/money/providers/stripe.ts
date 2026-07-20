@@ -111,9 +111,39 @@ export async function createDestinationPaymentIntent(args: {
 
 /** Verify and parse a Stripe webhook event from the raw request body. */
 export function constructWebhookEvent(rawBody: string, signature: string): Stripe.Event {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret) throw new Error('STRIPE_WEBHOOK_SECRET is not set in the environment.');
-  return getPlatformStripe().webhooks.constructEvent(rawBody, signature, secret);
+  // Destination charges split events across TWO Stripe endpoints, and a Stripe
+  // endpoint is either a platform endpoint or a Connect endpoint — never both:
+  //
+  //   platform endpoint  -> payment_intent.succeeded / .processing / .payment_failed
+  //   Connect endpoint   -> payout.paid (fires on the connected account)
+  //
+  // Each endpoint has its own signing secret, so verification must try both.
+  // A single-secret implementation silently 400s every event from the endpoint
+  // whose secret it doesn't hold.
+  const secrets = [
+    process.env.STRIPE_WEBHOOK_SECRET,
+    process.env.STRIPE_WEBHOOK_SECRET_CONNECT,
+  ].filter((s): s is string => Boolean(s));
+
+  if (secrets.length === 0) {
+    throw new Error(
+      'No Stripe webhook secret configured. Set STRIPE_WEBHOOK_SECRET (platform endpoint) ' +
+        'and, if a Connect endpoint exists, STRIPE_WEBHOOK_SECRET_CONNECT.',
+    );
+  }
+
+  const stripe = getPlatformStripe();
+  let lastError: unknown;
+  for (const secret of secrets) {
+    try {
+      return stripe.webhooks.constructEvent(rawBody, signature, secret);
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Stripe webhook signature verification failed against every configured secret.');
 }
 
 /**
