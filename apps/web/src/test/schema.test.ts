@@ -8,6 +8,9 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createTestDb } from './pg';
 
 let db: PGlite;
@@ -105,6 +108,71 @@ describe('RBAC override uniqueness (regression: migration 014)', () => {
        where org_id = '00000000-0000-0000-0000-0000000000bb'`,
     );
     expect(Number(r.rows[0].n)).toBe(1);
+  });
+});
+
+describe('every entry_type the code posts exists in the enum', () => {
+  /**
+   * The bug this exists to prevent, found in production 2026-07-20:
+   *
+   * GATE 12 built AR / AP / payroll / platform-fee posting, each writing a
+   * domain-specific gl_entries.entry_type. entry_type_enum only ever contained
+   * the six generic values, so EVERY money-movement post failed at the insert:
+   *
+   *   invalid input value for enum entry_type_enum: "AR_COLLECTION"
+   *
+   * The whole layer had never written a journal entry. It went unnoticed because
+   * those modules were verified with DB-free harnesses that exercise the pure
+   * entry builders — correct arithmetic, impossible insert. Nothing tested the
+   * two together until a real card payment.
+   *
+   * This test reads the entry_type literals straight out of the source and
+   * asserts the database accepts each one, so a new posting module cannot ship
+   * with a value the enum doesn't know.
+   */
+  const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../lib');
+
+  const collectEntryTypes = (dir: string, found = new Set<string>()): Set<string> => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { collectEntryTypes(full, found); continue; }
+      if (!/\.tsx?$/.test(entry.name) || /\.test\.tsx?$/.test(entry.name)) continue;
+      const src = fs.readFileSync(full, 'utf8');
+      for (const m of src.matchAll(/entry_?[Tt]ype:\s*'([A-Z][A-Z_]+)'/g)) found.add(m[1]);
+    }
+    return found;
+  };
+
+  it('finds entry_type literals in the source to check', () => {
+    expect(collectEntryTypes(SRC).size).toBeGreaterThan(5);
+  });
+
+  it('accepts every entry_type the application posts', async () => {
+    const used = [...collectEntryTypes(SRC)].sort();
+    const r = await rows<{ enumlabel: string }>(
+      `select enumlabel from pg_enum e
+       join pg_type t on t.oid = e.enumtypid
+       where t.typname = 'entry_type_enum'`,
+    );
+    const allowed = new Set(r.map((x) => x.enumlabel));
+    const missing = used.filter((t) => !allowed.has(t));
+    expect(missing).toEqual([]);
+  });
+
+  it('includes the money-movement types specifically', async () => {
+    const r = await rows<{ enumlabel: string }>(
+      `select enumlabel from pg_enum e
+       join pg_type t on t.oid = e.enumtypid
+       where t.typname = 'entry_type_enum'`,
+    );
+    const allowed = new Set(r.map((x) => x.enumlabel));
+    for (const t of [
+      'AR_COLLECTION', 'AR_PAYOUT', 'AR_REFUND', 'PLATFORM_FEE', 'PAYROLL_RUN',
+      'AP_DISBURSEMENT_RELEASE', 'AP_DISBURSEMENT_SETTLE',
+      'AP_DISBURSEMENT_RETURN', 'AP_DISBURSEMENT_VOID',
+    ]) {
+      expect(allowed.has(t)).toBe(true);
+    }
   });
 });
 
