@@ -133,7 +133,9 @@ export default async function HostedInvoicePage(
               </div>
               <div style={S.heroBalance}>{money(doc.balance_cents)}</div>
             </div>
-            <a href={`/api/invoices/${doc.id}/pdf`} style={S.pdfLink} target="_blank" rel="noreferrer">↓ PDF</a>
+            {/* Token-scoped, not id-scoped: /api/invoices/[id]/pdf is behind Clerk
+                and 404s for customers, who never have a session. */}
+            <a href={`/api/pay/${doc.public_token}/pdf`} style={S.pdfLink} target="_blank" rel="noreferrer">↓ PDF</a>
           </section>
 
           {!paid && online.length > 0 && returnBanner?.tone !== 'ok' && (

@@ -41,6 +41,10 @@ describe('public routes — customer-facing payment surface', () => {
     expect(isPublic(`/api/pay/${TOKEN}/intent`)).toBe(true);
   });
 
+  it('the tokenized invoice PDF is public', () => {
+    expect(isPublic(`/api/pay/${TOKEN}/pdf`)).toBe(true);
+  });
+
   it('Stripe webhooks are public', () => {
     expect(isPublic('/api/webhooks/stripe')).toBe(true);
   });
@@ -78,10 +82,11 @@ describe('public routes — everything else stays protected', () => {
     expect(isPublic('/api/anything')).toBe(false);
   });
 
-  it('does not expose invoice PDFs by raw id — that needs a token-scoped route', () => {
-    // Known gap: the ↓PDF button on the hosted page hits /api/invoices/[id]/pdf,
-    // which is protected and so fails for customers. The fix is a tokenized
-    // /api/pay/[token]/pdf route, NOT widening this matcher to /api/invoices.
+  it('does not expose invoice PDFs by raw id', () => {
+    // The customer-facing PDF is served from the tokenized /api/pay/[token]/pdf
+    // route instead. The id-addressed one stays protected: a raw invoice id is
+    // not a credential, and widening the matcher to /api/invoices would expose
+    // every invoice API alongside it.
     expect(isPublic('/api/invoices/abc-123/pdf')).toBe(false);
   });
 });
