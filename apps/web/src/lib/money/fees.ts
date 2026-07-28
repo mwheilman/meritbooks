@@ -101,12 +101,22 @@ export async function resolveMerchantFeeSchedule(
   supabase: SupabaseClient,
   orgId: string,
 ): Promise<MerchantFeeSchedule> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .schema('core')
     .from('merchant_fee_schedules')
     .select('ach_fee_bps, ach_fee_cap_cents, ach_fee_min_cents, card_fee_bps, card_fee_cap_cents, card_fee_min_cents')
     .eq('org_id', orgId)
     .is('effective_to', null)
     .maybeSingle();
+
+  // A GENUINE query failure must not be mistaken for "no schedule set". Silently
+  // defaulting on a broken query would misprice every payment at the platform
+  // rate instead of the merchant's negotiated rate — the fee that becomes both
+  // MeritBooks' revenue and the merchant's expense. Fail loudly; a retryable
+  // payment error beats quietly charging the wrong amount.
+  if (error) {
+    throw new Error(`Failed to load fee schedule for org ${orgId}: ${error.message}`);
+  }
+  // No row is legitimate — the merchant has no custom schedule yet. Default.
   return data ? scheduleFromRow(data as Parameters<typeof scheduleFromRow>[0]) : DEFAULT_FEE_SCHEDULE;
 }
