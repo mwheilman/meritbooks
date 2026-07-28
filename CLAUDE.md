@@ -20,7 +20,14 @@ npm run db:reset         # Reset database
 npm run db:types         # Generate TypeScript types from Supabase schema
 ```
 
-No test framework is currently installed.
+**Testing: Vitest.** Run with `npm test --workspace apps/web` (or `npm run test:watch --workspace apps/web`). Config at `apps/web/vitest.config.ts`. ~124 test cases across 10 files (one integration file skips until a Supabase test branch is wired).
+
+Tests run against a real Postgres via a PGlite migration-replay harness (`apps/web/src/test/pg.ts`) — it replays `packages/supabase/migrations/*.sql` in order into an in-memory Postgres, so a test failure can mean a broken migration, not just broken code. Guard tests that fail the build on drift:
+- `src/test/schema.test.ts` — asserts every `entry_type` the code posts exists in the enum, and that every base table in `public`/`core` has RLS enabled.
+- `src/test/schema-contract.test.ts` — every constrained literal the code writes must be accepted by its CHECK/enum.
+- `src/test/tenant-isolation.test.ts` — RLS actually isolates orgs.
+- `src/test/payment-chain.integration.test.ts` — end-to-end payment → PAID → balanced GL post (skips until a test branch is wired).
+Plus unit suites: GL posting balance, fee arithmetic (`lib/money/fees.test.ts`), money-movement posting, RBAC `permissionDenied`, middleware, invoice email.
 
 ## Architecture
 
@@ -84,45 +91,21 @@ PLAID_CLIENT_ID                      # Plaid banking (server-side only)
 PLAID_SECRET                         # Plaid banking (server-side only)
 ```
 
-## Current Build State (Updated Session 7 — April 5, 2026)
+## Current Build State
 
-Bank Feed is the first page wired to real Supabase data. All other 33 pages still render hardcoded demo arrays.
+The authoritative, always-current build state lives in the latest session handoff. **Start every session by reading the newest `docs/MERITBOOKS-HANDOFF-session[N].md`** (highest N). Handoffs follow the Rule-11 8-section format and are the ground-truth record of what works, what's broken, and what to build next.
 
-WHAT WORKS:
-- Bank Feed page queries real bank_transactions table via GET /api/bank-feed
-- 25 seed transactions exist for Swan Creek Construction
-- Status tab filters with dollar amounts
-- Debounced search, pagination, loading/error/empty states
-- Approve button calls POST /api/bank-feed/approve and creates real journal entries
-- Toast notifications on approve/error
-- Keyboard shortcuts (j/k/a/f/Space/Esc)
-- Company selector dropdown (queries /api/locations)
-- Edit panel with GL account search, vendor recents, notes, Save & Approve
-- Job selector in edit panel (queries /api/jobs/search) — COGS accounts require job assignment
-- apps/web/.env.local exists with Supabase + Clerk credentials (do not commit to git)
-- docs/meritbooks-exhaustive-feature-audit.md is in the repo
+Latest handoff: **`docs/MERITBOOKS-HANDOFF-session38.md`** (2026-07-28).
 
-WHAT IS BROKEN OR INCOMPLETE:
-- Migration 010 (job_id columns on bank_transactions) has NOT been applied to Supabase — must run in SQL Editor
-- The bank-feed API had 500 errors from joining final_job before migration was applied — join was removed as workaround
-- Flag button shows not yet implemented toast
-- Edit button wiring needs verification
-- Processing metrics strip exists as component but may not render
-- Smart batch selection needs verification
-- Vendor batch selection needs verification
-- Sortable column headers need verification
-- 19 pre-existing TypeScript errors across other files (not bank-feed related)
+Snapshot as of session 38 (see the handoff for detail):
+- Live at `meritbooks-web.vercel.app`. 60 ordered migrations (001–060) plus supporting SQL.
+- **Stripe "Pay Now" is proven end-to-end** — a real card payment posts a balanced `AR_COLLECTION` journal entry. Invoices, customers, branded hosted pay page, invoice email send all wired to real data.
+- **Two-layer fee model** is live: Layer 1 (`core.merchant_fee_schedules`, per-merchant versioned pricing) drives the Stripe application fee via `lib/money/fees.ts`; Layer 2 (pass-through vs absorb) is the surcharge cascade.
+- **Security is mid-hardening**: auth now fails closed (dev-user backdoor removed), an RBAC `require-permission` guard is wired into `gl/post` as the reference pattern, RLS is enabled on every base table. Full identity/org-resolution/RBAC rollout is the open NO-GO gate — see the handoff backlog and `docs/FPB-identity-multitenancy.md`.
+- Seven subagents live in `.claude/agents/` (builder, verifier, auditor, reviewer, designer, scribe, security).
+- **Delivery workflow: work is committed directly to this repo** (no more tar.gz download-and-place). Migrations are still applied to Supabase first (SQL Editor / MCP), then code is committed; the human pushes.
 
-WHAT IS NOT BUILT:
-- All other 33 pages still render demo data
-- No Financial Reporting Engine
-- No Accounts Receivable
-- No Job Costing pages
-- No Onboarding Wizard
-- No Plaid or M365 integration
-- No RBAC enforcement
-
-NEXT SESSION PRIORITY: Verify bank feed features actually render in browser. Fix anything broken. Then wire the next page.
+Do NOT trust older "Session 7 / Bank Feed only" descriptions — that state is long superseded.
 
 ## Design System (BINDING)
 
