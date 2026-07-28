@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeritBooks — three design directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#e9e9ec;font-family:'Inter',system-ui,sans-serif;padding:40px 24px;color:#111}
+  .page{max-width:960px;margin:0 auto}
+  .lede{max-width:680px;margin:0 auto 40px}
+  .lede h1{font-size:24px;font-weight:600;letter-spacing:-.4px;margin-bottom:8px}
+  .lede p{color:#555;font-size:15px;line-height:1.6}
+  .dir{margin-bottom:56px}
+  .dirhead{display:flex;align-items:baseline;gap:12px;margin-bottom:6px}
+  .dirhead .n{font-size:12px;font-weight:600;color:#999;font-family:'JetBrains Mono',monospace}
+  .dirhead h2{font-size:19px;font-weight:600;letter-spacing:-.3px}
+  .dirnote{color:#666;font-size:13.5px;margin-bottom:16px;max-width:680px;line-height:1.55}
+  .frame{border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08),0 12px 40px rgba(0,0,0,.10)}
+  .mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+
+  /* ============ A · ATELIER (light, private-capital premium) ============ */
+  .A{background:#FBFAF7;color:#1a1712;padding:40px 44px;font-family:'Inter',sans-serif}
+  .A .ey{font-size:11px;letter-spacing:2.5px;color:#a89a80;font-weight:600}
+  .A .lead{font-family:'Fraunces',serif;font-size:15px;color:#6b6152;margin-top:22px}
+  .A .fig{font-family:'Fraunces',serif;font-size:58px;font-weight:500;letter-spacing:-1.5px;line-height:1;margin-top:6px;color:#1a1712}
+  .A .fig .c{color:#c3b9a5}
+  .A .rule{height:1px;background:#e7e1d6;margin:30px 0}
+  .A .row{display:flex;justify-content:space-between;align-items:center;padding:15px 0;border-bottom:1px solid #efeae0}
+  .A .row:last-child{border:0}
+  .A .cn{font-size:14.5px;font-weight:500}
+  .A .cs{font-size:12px;color:#a89a80;margin-top:2px}
+  .A .amt{font-family:'Fraunces',serif;font-size:19px;font-weight:500}
+  .A .tag{font-size:11px;letter-spacing:.5px;color:#7a6f3d;background:#f0ead4;padding:3px 10px;border-radius:20px;font-weight:600}
+  .A .tag.paid{color:#3f6b4a;background:#e3efe4}
+  .A .metar{display:flex;gap:40px;margin-top:26px}
+  .A .metar .k{font-size:12px;color:#a89a80}
+  .A .metar .v{font-family:'Fraunces',serif;font-size:22px;font-weight:500;margin-top:3px}
+
+  /* ============ B · OBSIDIAN (dark, refined — signature violet) ============ */
+  .B{background:#0c0c10;color:#eceef4;padding:38px 44px;font-family:'Space Grotesk',sans-serif}
+  .B .ey{font-size:11px;letter-spacing:2px;color:#7c7fa6;font-weight:600}
+  .B .fig{font-family:'Space Grotesk',sans-serif;font-size:56px;font-weight:600;letter-spacing:-2px;line-height:1;margin-top:14px;font-variant-numeric:tabular-nums}
+  .B .fig .c{color:#3a3b52}
+  .B .accent{color:#a78bfa}
+  .B .bar{display:flex;height:6px;border-radius:4px;overflow:hidden;background:#17171f;margin-top:22px}
+  .B .metar{display:flex;gap:34px;margin-top:22px;font-size:12px;color:#8b8ea8}
+  .B .metar b{display:block;font-size:20px;color:#eceef4;font-weight:600;margin-top:3px;font-variant-numeric:tabular-nums}
+  .B .rule{height:1px;background:#1c1c26;margin:26px 0}
+  .B .row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid #16161e}
+  .B .row:last-child{border:0}
+  .B .cn{font-size:14px;font-weight:500}
+  .B .cs{font-size:11.5px;color:#6a6d8a;margin-top:2px;font-family:'JetBrains Mono',monospace}
+  .B .amt{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:500;font-variant-numeric:tabular-nums}
+  .B .amt .c{color:#3a3b52}
+  .B .dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:7px}
+
+  /* ============ C · BROADSHEET (editorial light, bold ledger) ============ */
+  .C{background:#fff;color:#0a0a0a;padding:40px 44px;font-family:'Inter',sans-serif}
+  .C .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0a0a0a;padding-bottom:18px}
+  .C .eyb{font-family:'Newsreader',serif;font-size:13px;font-style:italic;color:#555}
+  .C .fig{font-size:64px;font-weight:700;letter-spacing:-3px;line-height:.95;margin-top:4px;font-variant-numeric:tabular-nums}
+  .C .fig .c{color:#c8c8c8}
+  .C .pill{background:#1f6feb;color:#fff;font-size:11px;font-weight:600;padding:5px 12px;border-radius:6px;letter-spacing:.3px}
+  .C .grid{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #e4e4e4}
+  .C .cell{padding:18px 0}
+  .C .cell:not(:last-child){border-right:1px solid #e4e4e4;padding-right:20px}
+  .C .cell:not(:first-child){padding-left:20px}
+  .C .ck{font-size:11px;letter-spacing:1px;color:#888;text-transform:uppercase;font-weight:600}
+  .C .cv{font-size:26px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums}
+  .C .row{display:grid;grid-template-columns:auto 1fr auto auto;gap:16px;align-items:center;padding:15px 0;border-bottom:1px solid #eee}
+  .C .idx{font-family:'JetBrains Mono',monospace;font-size:12px;color:#999}
+  .C .cn{font-weight:600;font-size:14.5px}
+  .C .cs{font-size:12px;color:#888}
+  .C .st{font-size:11px;font-weight:700;letter-spacing:.4px;padding:3px 9px;border-radius:4px}
+  .C .s-sent{background:#eaf1ff;color:#1f4fb0}
+  .C .s-paid{background:#e6f6ec;color:#1a7a3f}
+  .C .s-part{background:#fff3d6;color:#8a5a00}
+  .C .amt{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;text-align:right;min-width:110px}
+  .C .amt .c{color:#c8c8c8;font-weight:500}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="lede">
+    <h1>Three directions for MeritBooks</h1>
+    <p>Same screen — total receivable, the metrics, three open invoices — rendered as three distinct identities. This is about picking a personality, not polishing one. Tell me which lane feels like the product, and I build the whole system in that direction.</p>
+  </div>
+
+  <!-- A -->
+  <div class="dir">
+    <div class="dirhead"><span class="n">A</span><h2>Atelier</h2></div>
+    <div class="dirnote">Private-capital premium — warm paper, a serif for the numbers, air and restraint. Feels like a family office statement, not software. Signals: trust, discretion, old money. (Mercury / Ramp-premium.)</div>
+    <div class="frame"><div class="A">
+      <div class="ey">ACCOUNTS RECEIVABLE</div>
+      <div class="lead">Total outstanding</div>
+      <div class="fig">$168,500<span class="c">.00</span></div>
+      <div class="metar">
+        <div><div class="k">Days sales outstanding</div><div class="v">6.2</div></div>
+        <div><div class="k">Collected · July</div><div class="v">$100.00</div></div>
+        <div><div class="k">Collection rate</div><div class="v">98.4%</div></div>
+      </div>
+      <div class="rule"></div>
+      <div class="row"><div><div class="cn">Fabrikam Inc.</div><div class="cs">INV-NWC-0001 · due Aug 15</div></div><div style="display:flex;align-items:center;gap:16px"><span class="tag">SENT</span><span class="amt">$150,000</span></div></div>
+      <div class="row"><div><div class="cn">Contoso LLC</div><div class="cs">INV-NWC-0002 · due Aug 22</div></div><div style="display:flex;align-items:center;gap:16px"><span class="tag">PARTIAL</span><span class="amt">$18,400</span></div></div>
+      <div class="row"><div><div class="cn">Fabrikam Inc.</div><div class="cs">TEST-CARD-0042 · paid Jul 28</div></div><div style="display:flex;align-items:center;gap:16px"><span class="tag paid">PAID</span><span class="amt">$100</span></div></div>
+    </div></div>
+  </div>
+
+  <!-- B -->
+  <div class="dir">
+    <div class="dirhead"><span class="n">B</span><h2>Obsidian</h2></div>
+    <div class="dirnote">Dark, engineered, sophisticated — a signature violet instead of the generic SaaS emerald, geometric grotesk, mono ledgers. Feels like a trading terminal built by people with taste. Signals: precision, modern, power-user. (Linear.)</div>
+    <div class="frame"><div class="B">
+      <div class="ey">ACCOUNTS RECEIVABLE</div>
+      <div class="fig">$168,500<span class="c">.00</span></div>
+      <div class="bar"><div style="width:89%;background:#a78bfa"></div><div style="width:11%;background:#4c3f78"></div></div>
+      <div class="metar">
+        <div>Days sales outstanding<b>6.2</b></div>
+        <div>Collected · July<b>$100.00</b></div>
+        <div>Collection rate<b class="accent">98.4%</b></div>
+      </div>
+      <div class="rule"></div>
+      <div class="row"><div><div class="cn"><span class="dot" style="background:#60a5fa"></span>Fabrikam Inc.</div><div class="cs">INV-NWC-0001 · due Aug 15</div></div><div class="amt">$150,000<span class="c">.00</span></div></div>
+      <div class="row"><div><div class="cn"><span class="dot" style="background:#fbbf24"></span>Contoso LLC</div><div class="cs">INV-NWC-0002 · due Aug 22</div></div><div class="amt">$18,400<span class="c">.00</span></div></div>
+      <div class="row"><div><div class="cn"><span class="dot" style="background:#a78bfa"></span>Fabrikam Inc.</div><div class="cs">TEST-CARD-0042 · paid Jul 28</div></div><div class="amt">$100<span class="c">.00</span></div></div>
+    </div></div>
+  </div>
+
+  <!-- C -->
+  <div class="dir">
+    <div class="dirhead"><span class="n">C</span><h2>Broadsheet</h2></div>
+    <div class="dirnote">Editorial and confident — white, black, one electric accent, huge numbers with a newspaper-ledger authority. Nothing hides. Feels like a financial paper of record. Signals: clarity, confidence, institutional. (Ramp.)</div>
+    <div class="frame"><div class="C">
+      <div class="top">
+        <div><div class="eyb">Accounts receivable — outstanding</div><div class="fig">$168,500<span class="c">.00</span></div></div>
+        <span class="pill">3 OPEN</span>
+      </div>
+      <div class="grid">
+        <div class="cell"><div class="ck">DSO</div><div class="cv">6.2 days</div></div>
+        <div class="cell"><div class="ck">Collected · Jul</div><div class="cv">$100.00</div></div>
+        <div class="cell"><div class="ck">Collection rate</div><div class="cv">98.4%</div></div>
+      </div>
+      <div class="row"><span class="idx">01</span><div><div class="cn">Fabrikam Inc.</div><div class="cs">INV-NWC-0001 · due Aug 15</div></div><span class="st s-sent">SENT</span><span class="amt">$150,000<span class="c">.00</span></span></div>
+      <div class="row"><span class="idx">02</span><div><div class="cn">Contoso LLC</div><div class="cs">INV-NWC-0002 · due Aug 22</div></div><span class="st s-part">PARTIAL</span><span class="amt">$18,400<span class="c">.00</span></span></div>
+      <div class="row"><span class="idx">03</span><div><div class="cn">Fabrikam Inc.</div><div class="cs">TEST-CARD-0042 · paid Jul 28</div></div><span class="st s-paid">PAID</span><span class="amt">$100<span class="c">.00</span></span></div>
+    </div></div>
+  </div>
+
+  <div class="lede" style="margin-top:0"><p style="font-size:13px;color:#888">Static mockups to choose a direction. Once you pick, that identity becomes the system every screen is built to.</p></div>
+</div>
+</body>
+</html>

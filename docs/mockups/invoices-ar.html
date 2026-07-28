@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeritBooks — Invoices & AR (design mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#080b12; --rail:#0a0e17; --panel:#0d1220; --panel-2:#111828; --raise:#141c2e;
+    --line:rgba(255,255,255,.06); --line-2:rgba(255,255,255,.10);
+    --t1:#f4f7fb; --t2:#9aa7bd; --t3:#5b6880; --t4:#3d4763;
+    --em:#10b981; --em-dim:rgba(16,185,129,.14); --em-line:rgba(16,185,129,.35);
+    --blue:#60a5fa; --amber:#fbbf24; --red:#f87171;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+  html,body{background:var(--bg);color:var(--t1);-webkit-font-smoothing:antialiased}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .app{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+
+  /* ---- rail ---- */
+  .rail{background:var(--rail);border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:4px}
+  .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 20px}
+  .mark{width:26px;height:26px;border-radius:7px;background:var(--em);display:grid;place-items:center;color:#052015;font-weight:700;font-size:15px}
+  .brand b{font-size:15px;font-weight:600;letter-spacing:-.2px}
+  .brand span{font-size:10px;color:var(--t3);letter-spacing:1.5px;display:block;margin-top:1px}
+  .navlabel{font-size:10px;letter-spacing:1.4px;color:var(--t4);padding:16px 8px 6px;font-weight:600}
+  .nav{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--t2);font-size:13.5px;font-weight:500;cursor:pointer;transition:.12s}
+  .nav svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;opacity:.85}
+  .nav:hover{background:var(--panel-2);color:var(--t1)}
+  .nav.on{background:var(--em-dim);color:#a7f3d0}
+  .nav.on svg{opacity:1}
+  .rail .foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:8px;border-top:1px solid var(--line);margin-top:auto}
+  .av{width:28px;height:28px;border-radius:50%;background:#1e293b;display:grid;place-items:center;font-size:11px;font-weight:600;color:#cbd5e1}
+
+  /* ---- topbar ---- */
+  .top{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;border-bottom:1px solid var(--line)}
+  .crumb{font-size:12.5px;color:var(--t3)}
+  .crumb b{color:var(--t1);font-weight:600}
+  .top .actions{display:flex;gap:8px;align-items:center}
+  .btn{font-size:13px;font-weight:500;padding:8px 14px;border-radius:8px;border:1px solid var(--line-2);background:transparent;color:var(--t2);cursor:pointer;transition:.12s}
+  .btn:hover{background:var(--panel-2);color:var(--t1)}
+  .btn.primary{background:var(--em);border-color:var(--em);color:#052015;font-weight:600}
+  .btn.primary:hover{background:#12c98d}
+
+  .wrap{padding:26px 28px;max-width:1180px}
+  .h1{font-size:21px;font-weight:600;letter-spacing:-.3px}
+  .sub{font-size:13px;color:var(--t3);margin-top:3px}
+
+  /* ---- hero row ---- */
+  .hero{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin:22px 0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px}
+  .pad{padding:20px 22px}
+  .klabel{font-size:12px;color:var(--t3);font-weight:500}
+  .big{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:40px;font-weight:600;letter-spacing:-1.5px;margin-top:8px;line-height:1}
+  .big .c{color:var(--t4)}
+  .metaline{display:flex;gap:18px;margin-top:16px;font-size:12px;color:var(--t3)}
+  .metaline b{color:var(--t2);font-weight:600}
+
+  /* aging bar */
+  .aging{margin-top:20px}
+  .agebar{display:flex;height:10px;border-radius:6px;overflow:hidden;background:#0a0f1a}
+  .seg{height:100%}
+  .agekeys{display:flex;justify-content:space-between;margin-top:12px}
+  .agekey{font-size:11.5px;color:var(--t3)}
+  .agekey .d{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:6px;vertical-align:1px}
+  .agekey .v{font-family:var(--mono);color:var(--t1);font-weight:500;display:block;margin-top:3px;font-size:13px}
+
+  /* right stat stack */
+  .stat{display:flex;flex-direction:column;justify-content:center}
+  .statrow{padding:16px 22px;border-bottom:1px solid var(--line)}
+  .statrow:last-child{border-bottom:0}
+  .statrow .kl{font-size:12px;color:var(--t3)}
+  .statrow .kv{font-family:var(--mono);font-size:22px;font-weight:600;margin-top:4px}
+  .chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px}
+  .chip.up{color:#6ee7b7;background:var(--em-dim)}
+
+  /* ---- table ---- */
+  .tabs{display:flex;gap:2px;margin:8px 0 2px}
+  .tab{font-size:13px;color:var(--t3);padding:8px 13px;border-radius:8px;cursor:pointer;font-weight:500}
+  .tab.on{background:var(--panel-2);color:var(--t1)}
+  .tab .n{color:var(--t4);margin-left:6px;font-family:var(--mono)}
+  table{width:100%;border-collapse:collapse}
+  thead th{font-size:10.5px;letter-spacing:.7px;color:var(--t4);font-weight:600;text-align:left;padding:12px 16px}
+  thead th.r{text-align:right}
+  tbody td{padding:15px 16px;border-top:1px solid var(--line);font-size:13.5px}
+  tbody tr{cursor:pointer;transition:.1s}
+  tbody tr:hover td{background:var(--panel)}
+  tbody tr.sel td{background:var(--raise)}
+  .cust{display:flex;align-items:center;gap:11px}
+  .cav{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:11px;font-weight:600}
+  .num{font-family:var(--mono);color:var(--t2)}
+  .amt{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;color:var(--t1);font-weight:500}
+  .amt .c{color:var(--t4)}
+  .badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:5px;letter-spacing:.2px}
+  .b-sent{color:#93c5fd;background:rgba(59,130,246,.12)}
+  .b-paid{color:#6ee7b7;background:rgba(16,185,129,.13)}
+  .b-part{color:#fcd34d;background:rgba(245,158,11,.12)}
+  .b-over{color:#fca5a5;background:rgba(248,113,113,.12)}
+  .due{font-size:11.5px;color:var(--t3);margin-top:2px}
+  .foot{padding:14px 16px;font-size:12px;color:var(--t4);border-top:1px solid var(--line)}
+
+  /* ---- drawer ---- */
+  .layout{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
+  .drawer{background:var(--panel);border:1px solid var(--line);border-radius:14px;position:sticky;top:26px;overflow:hidden}
+  .dhead{background:var(--em);padding:18px 20px;color:#052015}
+  .dhead .co{font-size:12px;font-weight:600;opacity:.8;letter-spacing:.3px}
+  .dhead .amt{font-family:var(--mono);font-size:28px;font-weight:600;color:#052015;text-align:left;margin-top:4px}
+  .dhead .inv{font-family:var(--mono);font-size:12px;opacity:.75;margin-top:2px}
+  .drow{display:flex;justify-content:space-between;padding:13px 20px;border-bottom:1px solid var(--line);font-size:13px}
+  .drow .l{color:var(--t3)} .drow .v{color:var(--t1);font-weight:500}
+  .dact{padding:16px 20px;display:flex;gap:8px}
+  .dact .btn{flex:1;text-align:center}
+  .timeline{padding:16px 20px}
+  .tl{display:flex;gap:11px;padding:7px 0;font-size:12px}
+  .tl .dot{width:7px;height:7px;border-radius:50%;margin-top:5px;flex:none}
+  .tl .tt{color:var(--t1)} .tl .td{color:var(--t3);margin-top:1px}
+  .note{font-size:11px;color:var(--t4);text-align:center;padding:24px 0 40px}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- RAIL -->
+  <aside class="rail">
+    <div class="brand"><div class="mark">M</div><div><b>MeritBooks</b><span>MERIT ENTERPRISE</span></div></div>
+    <div class="navlabel">PROCESS</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>Dashboard</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>Bank feed</div>
+    <div class="nav on"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h5"/></svg>Invoices &amp; AR</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Bills &amp; AP</div>
+    <div class="navlabel">FINANCIAL</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><path d="M4 19V5m4 14V9m4 10V7m4 12v-8m4 8V4"/></svg>Reports</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Close &amp; audit</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v6c0 5-8 8-8 8s-8-3-8-8V7z"/></svg>Chart of accounts</div>
+    <div class="foot"><div class="av">MH</div><div style="font-size:12.5px"><div style="font-weight:600">Mike Heilman</div><div style="font-size:11px;color:var(--t3)">Platform admin</div></div></div>
+  </aside>
+
+  <!-- MAIN -->
+  <main>
+    <div class="top">
+      <div class="crumb">Northwind Construction · <b>Invoices &amp; AR</b></div>
+      <div class="actions">
+        <button class="btn">Export</button>
+        <button class="btn primary">New invoice</button>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="h1">Accounts receivable</div>
+      <div class="sub">What you're owed, who owes it, and how fast it's coming in.</div>
+
+      <div class="hero">
+        <!-- outstanding + aging -->
+        <div class="card pad">
+          <div class="klabel">Total outstanding</div>
+          <div class="big">$168,500<span class="c">.00</span></div>
+          <div class="metaline"><span><b>3</b> open invoices</span><span><b>0</b> overdue</span><span>oldest <b>12 days</b></span></div>
+          <div class="aging">
+            <div class="agebar">
+              <div class="seg" style="width:89%;background:var(--em)"></div>
+              <div class="seg" style="width:11%;background:#2b6f57"></div>
+            </div>
+            <div class="agekeys">
+              <div class="agekey"><span class="d" style="background:var(--em)"></span>Current<span class="v">$150,100</span></div>
+              <div class="agekey"><span class="d" style="background:#2b6f57"></span>1–30 days<span class="v">$18,400</span></div>
+              <div class="agekey"><span class="d" style="background:#3d4763"></span>31–60<span class="v">$0</span></div>
+              <div class="agekey"><span class="d" style="background:#3d4763"></span>60+<span class="v">$0</span></div>
+            </div>
+          </div>
+        </div>
+        <!-- collection health -->
+        <div class="card stat">
+          <div class="statrow">
+            <div class="kl">Collected this month</div>
+            <div class="kv" style="color:var(--t1)">$100<span style="color:var(--t4)">.00</span> <span class="chip up">1 payment</span></div>
+          </div>
+          <div class="statrow">
+            <div class="kl">Days sales outstanding</div>
+            <div class="kv" style="color:var(--t1)">6.2 <span style="font-size:12px;color:var(--t3);font-family:var(--font-sans)">days</span></div>
+          </div>
+          <div class="statrow">
+            <div class="kl">Collection rate · 90d</div>
+            <div class="kv" style="color:#6ee7b7">98.4<span style="color:var(--t4)">%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="layout">
+        <!-- table -->
+        <div class="card">
+          <div style="padding:12px 12px 0"><div class="tabs">
+            <div class="tab on">All <span class="n">3</span></div>
+            <div class="tab">Sent <span class="n">2</span></div>
+            <div class="tab">Overdue <span class="n">0</span></div>
+            <div class="tab">Paid <span class="n">1</span></div>
+          </div></div>
+          <table>
+            <thead><tr><th>INVOICE</th><th>CUSTOMER</th><th>STATUS</th><th class="r">AMOUNT</th></tr></thead>
+            <tbody>
+              <tr class="sel">
+                <td><span class="num">INV-NWC-0001</span><div class="due">due Aug 15</div></td>
+                <td><div class="cust"><div class="cav" style="background:rgba(96,165,250,.15);color:#93c5fd">FA</div>Fabrikam Inc.</div></td>
+                <td><span class="badge b-sent">SENT</span></td>
+                <td class="amt">$150,000<span class="c">.00</span></td>
+              </tr>
+              <tr>
+                <td><span class="num">INV-NWC-0002</span><div class="due">due Aug 22</div></td>
+                <td><div class="cust"><div class="cav" style="background:rgba(251,191,36,.15);color:#fcd34d">CO</div>Contoso LLC</div></td>
+                <td><span class="badge b-part">PARTIAL</span></td>
+                <td class="amt">$18,400<span class="c">.00</span></td>
+              </tr>
+              <tr>
+                <td><span class="num">TEST-CARD-0042</span><div class="due">paid Jul 28</div></td>
+                <td><div class="cust"><div class="cav" style="background:rgba(16,185,129,.15);color:#6ee7b7">FA</div>Fabrikam Inc.</div></td>
+                <td><span class="badge b-paid">PAID</span></td>
+                <td class="amt">$100<span class="c">.00</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="foot">3 of 3 · sorted by amount</div>
+        </div>
+
+        <!-- drawer -->
+        <div class="drawer">
+          <div class="dhead">
+            <div class="co">Fabrikam Inc.</div>
+            <div class="amt">$150,000.00</div>
+            <div class="inv">INV-NWC-0001</div>
+          </div>
+          <div class="drow"><span class="l">Status</span><span class="v" style="color:#93c5fd">Sent · viewed 2×</span></div>
+          <div class="drow"><span class="l">Issued</span><span class="v mono">Jul 15, 2026</span></div>
+          <div class="drow"><span class="l">Due</span><span class="v mono">Aug 15, 2026</span></div>
+          <div class="drow"><span class="l">Terms</span><span class="v">Net 30</span></div>
+          <div class="dact"><button class="btn" style="flex:1">Send reminder</button><button class="btn primary" style="flex:1">Record payment</button></div>
+          <div class="timeline" style="border-top:1px solid var(--line)">
+            <div class="tl"><div class="dot" style="background:var(--em)"></div><div><div class="tt">Invoice viewed</div><div class="td">by ap@fabrikam.com · 2 days ago</div></div></div>
+            <div class="tl"><div class="dot" style="background:var(--blue)"></div><div><div class="tt">Emailed to customer</div><div class="td">invoices@meritbooks.app · Jul 15</div></div></div>
+            <div class="tl"><div class="dot" style="background:var(--t4)"></div><div><div class="tt">Created</div><div class="td">from Progress draw #1 · Jul 15</div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="note">Design mockup · MeritBooks design system · not the live app</div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

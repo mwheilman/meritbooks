@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeritBooks — Atelier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBFAF7; --paper-2:#FFFFFF; --panel:#F3EFE6;
+    --ink:#1a1712; --ink-2:#6b6152; --ink-3:#a89a80; --ink-4:#c3b9a5;
+    --line:#efeae0; --line-2:#e7e1d6;
+    --gold-bg:#f0ead4; --gold-tx:#7a6f3d;
+    --green-bg:#e3efe4; --green-tx:#3f6b4a;
+    --serif:'Fraunces',Georgia,serif; --sans:'Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--paper);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  .serif{font-family:var(--serif)}
+  .app{display:grid;grid-template-columns:246px 1fr;min-height:100vh}
+
+  .rail{background:var(--paper);border-right:1px solid var(--line);padding:26px 16px;display:flex;flex-direction:column}
+  .brand{display:flex;align-items:center;gap:11px;padding:2px 8px 26px}
+  .mark{width:30px;height:30px;border-radius:8px;background:var(--ink);display:grid;place-items:center;color:var(--paper);font-family:var(--serif);font-weight:600;font-size:17px}
+  .brand b{font-family:var(--serif);font-size:18px;font-weight:600;letter-spacing:-.2px;color:var(--ink)}
+  .brand span{display:block;font-size:9.5px;color:var(--ink-3);letter-spacing:2px;margin-top:1px}
+  .sec{font-size:10px;letter-spacing:1.6px;color:var(--ink-4);font-weight:600;padding:18px 10px 7px}
+  .nav{display:flex;align-items:center;gap:11px;padding:8px 11px;border-radius:9px;color:var(--ink-2);font-size:13.5px;font-weight:450;cursor:pointer;transition:.13s}
+  .nav svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;opacity:.65}
+  .nav:hover{background:var(--panel);color:var(--ink)}
+  .nav.on{background:var(--panel);color:var(--ink);font-weight:500}
+  .nav.on svg{opacity:1}
+  .rail .foot{margin-top:auto;display:flex;align-items:center;gap:11px;padding-top:16px;border-top:1px solid var(--line)}
+  .av{width:30px;height:30px;border-radius:50%;background:var(--panel);border:1px solid var(--line-2);display:grid;place-items:center;font-size:11px;font-weight:600;color:var(--ink-2)}
+
+  .top{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;border-bottom:1px solid var(--line)}
+  .crumb{font-size:13px;color:var(--ink-3)}
+  .crumb b{color:var(--ink);font-weight:500}
+  .actions{display:flex;gap:10px;align-items:center}
+  .btn{font-size:13px;font-weight:500;padding:9px 15px;border-radius:9px;border:1px solid var(--line-2);background:var(--paper-2);color:var(--ink-2);cursor:pointer;transition:.13s}
+  .btn:hover{border-color:var(--ink-4);color:var(--ink)}
+  .btn.pri{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+  .btn.pri:hover{background:#2c261c}
+
+  .wrap{padding:38px 40px;max-width:1120px}
+  .title{font-family:var(--serif);font-size:30px;font-weight:500;letter-spacing:-.6px}
+  .lede{font-size:14px;color:var(--ink-2);margin-top:6px}
+
+  .hero{display:grid;grid-template-columns:1.5fr 1fr;gap:28px;margin:34px 0 10px;align-items:start}
+  .ey{font-size:11px;letter-spacing:2px;color:var(--ink-3);font-weight:600}
+  .lead{font-family:var(--serif);font-size:15px;color:var(--ink-2);margin-top:20px}
+  .fig{font-family:var(--serif);font-size:64px;font-weight:500;letter-spacing:-2px;line-height:.95;margin-top:6px;color:var(--ink)}
+  .fig .c{color:var(--ink-4)}
+  .subfig{font-size:13px;color:var(--ink-2);margin-top:16px}
+  .subfig b{color:var(--ink);font-weight:600}
+
+  .aging{margin-top:30px;max-width:520px}
+  .agebar{display:flex;height:8px;border-radius:5px;overflow:hidden;background:var(--panel)}
+  .agekeys{display:flex;gap:30px;margin-top:16px}
+  .agekey{font-size:11.5px;color:var(--ink-3)}
+  .agekey .d{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:6px;vertical-align:1px}
+  .agekey .v{font-family:var(--serif);color:var(--ink);font-weight:500;display:block;margin-top:4px;font-size:16px}
+
+  .metrics{background:var(--paper-2);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .mrow{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline}
+  .mrow:last-child{border:0}
+  .mrow .k{font-size:12.5px;color:var(--ink-2)}
+  .mrow .k small{display:block;color:var(--ink-3);font-size:11px;margin-top:2px}
+  .mrow .v{font-family:var(--serif);font-size:24px;font-weight:500;color:var(--ink)}
+  .mrow .v .c{color:var(--ink-4)}
+
+  .lhead{display:flex;align-items:baseline;justify-content:space-between;margin:40px 0 4px}
+  .lhead h2{font-family:var(--serif);font-size:20px;font-weight:500}
+  .filters{display:flex;gap:4px}
+  .fl{font-size:12.5px;color:var(--ink-3);padding:6px 12px;border-radius:8px;cursor:pointer}
+  .fl.on{background:var(--panel);color:var(--ink);font-weight:500}
+  .fl .n{color:var(--ink-4);margin-left:5px;font-size:11px}
+  .list{background:var(--paper-2);border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-top:14px}
+  .row{display:grid;grid-template-columns:auto 1fr auto auto;gap:20px;align-items:center;padding:18px 22px;border-bottom:1px solid var(--line);cursor:pointer;transition:.1s}
+  .row:last-child{border:0}
+  .row:hover{background:var(--panel)}
+  .cav{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:12px;font-weight:600;font-family:var(--serif)}
+  .cn{font-size:14.5px;font-weight:500;color:var(--ink)}
+  .cs{font-size:11.5px;color:var(--ink-3);margin-top:3px}
+  .tag{font-size:11px;font-weight:600;letter-spacing:.4px;padding:4px 12px;border-radius:20px;background:var(--gold-bg);color:var(--gold-tx)}
+  .tag.paid{background:var(--green-bg);color:var(--green-tx)}
+  .amt{font-family:var(--serif);font-size:20px;font-weight:500;text-align:right;min-width:140px;color:var(--ink)}
+  .amt .c{color:var(--ink-4)}
+  .lfoot{padding:16px 22px;font-size:12px;color:var(--ink-3)}
+  .note{text-align:center;font-size:11.5px;color:var(--ink-4);padding:34px 0 48px}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><div class="mark">M</div><div><b>MeritBooks</b><span>MERIT ENTERPRISE</span></div></div>
+    <div class="sec">PROCESS</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>Dashboard</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>Bank feed</div>
+    <div class="nav on"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h5"/></svg>Invoices &amp; AR</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Bills &amp; AP</div>
+    <div class="sec">FINANCIAL</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><path d="M4 19V5m4 14V9m4 10V7m4 12v-8m4 8V4"/></svg>Reports</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Close &amp; audit</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v6c0 5-8 8-8 8s-8-3-8-8V7z"/></svg>Chart of accounts</div>
+    <div class="foot"><div class="av">MH</div><div style="font-size:12.5px"><div style="font-weight:500">Mike Heilman</div><div style="font-size:11px;color:var(--ink-3)">Platform admin</div></div></div>
+  </aside>
+
+  <main>
+    <div class="top">
+      <div class="crumb">Northwind Construction &nbsp;·&nbsp; <b>Invoices &amp; AR</b></div>
+      <div class="actions"><button class="btn">Export</button><button class="btn pri">New invoice</button></div>
+    </div>
+
+    <div class="wrap">
+      <div class="title">Accounts receivable</div>
+      <div class="lede">What you're owed, who owes it, and how fast it's coming in.</div>
+
+      <div class="hero">
+        <div>
+          <div class="ey">ACCOUNTS RECEIVABLE</div>
+          <div class="lead">Total outstanding</div>
+          <div class="fig">$168,500<span class="c">.00</span></div>
+          <div class="subfig"><b>3</b> open invoices &nbsp;·&nbsp; <b>0</b> overdue &nbsp;·&nbsp; oldest <b>12 days</b></div>
+          <div class="aging">
+            <div class="agebar"><div style="width:89%;background:var(--green-tx)"></div><div style="width:11%;background:#9fbfa8"></div></div>
+            <div class="agekeys">
+              <div class="agekey"><span class="d" style="background:var(--green-tx)"></span>Current<span class="v">$150,100</span></div>
+              <div class="agekey"><span class="d" style="background:#9fbfa8"></span>1–30 days<span class="v">$18,400</span></div>
+              <div class="agekey"><span class="d" style="background:var(--line-2)"></span>31–60<span class="v" style="color:var(--ink-4)">$0</span></div>
+              <div class="agekey"><span class="d" style="background:var(--line-2)"></span>60+<span class="v" style="color:var(--ink-4)">$0</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="metrics">
+          <div class="mrow"><div class="k">Collected<small>this month</small></div><div class="v">$100<span class="c">.00</span></div></div>
+          <div class="mrow"><div class="k">Days sales outstanding<small>trailing 90</small></div><div class="v">6.2</div></div>
+          <div class="mrow"><div class="k">Collection rate<small>trailing 90</small></div><div class="v">98.4<span class="c">%</span></div></div>
+        </div>
+      </div>
+
+      <div class="lhead">
+        <h2>Open &amp; recent</h2>
+        <div class="filters">
+          <span class="fl on">All<span class="n">3</span></span>
+          <span class="fl">Sent<span class="n">2</span></span>
+          <span class="fl">Overdue<span class="n">0</span></span>
+          <span class="fl">Paid<span class="n">1</span></span>
+        </div>
+      </div>
+      <div class="list">
+        <div class="row">
+          <div class="cav" style="background:var(--gold-bg);color:var(--gold-tx)">F</div>
+          <div><div class="cn">Fabrikam Inc.</div><div class="cs">INV-NWC-0001 · due Aug 15</div></div>
+          <span class="tag">Sent</span>
+          <div class="amt">$150,000<span class="c">.00</span></div>
+        </div>
+        <div class="row">
+          <div class="cav" style="background:var(--gold-bg);color:var(--gold-tx)">C</div>
+          <div><div class="cn">Contoso LLC</div><div class="cs">INV-NWC-0002 · due Aug 22</div></div>
+          <span class="tag">Partial</span>
+          <div class="amt">$18,400<span class="c">.00</span></div>
+        </div>
+        <div class="row">
+          <div class="cav" style="background:var(--green-bg);color:var(--green-tx)">F</div>
+          <div><div class="cn">Fabrikam Inc.</div><div class="cs">TEST-CARD-0042 · paid Jul 28</div></div>
+          <span class="tag paid">Paid</span>
+          <div class="amt">$100<span class="c">.00</span></div>
+        </div>
+        <div class="lfoot">3 of 3 · sorted by amount</div>
+      </div>
+      <div class="note">Design mockup · Atelier direction · not the live app</div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

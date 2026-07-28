@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeritBooks — Tech</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0b0e; --panel:#101218; --panel-2:#14171f; --raise:#191d27;
+    --line:#1c2029; --line-2:#282d3a;
+    --t1:#eceef3; --t2:#8b919e; --t3:#565c69; --t4:#3a3f4b;
+    --acc:#4f7cff; --acc-dim:rgba(79,124,255,.13); --acc-line:rgba(79,124,255,.4);
+    --cyan:#38bdf8; --amber:#f5a623; --red:#f2555a;
+    --gr:'Space Grotesk',system-ui,sans-serif; --mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--t1);font-family:var(--gr);-webkit-font-smoothing:antialiased}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+
+  .rail{background:#08090c;border-right:1px solid var(--line);padding:18px 12px;display:flex;flex-direction:column}
+  .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 8px}
+  .mark{width:26px;height:26px;border-radius:6px;background:var(--acc);display:grid;place-items:center;color:#fff;font-weight:700;font-size:15px;font-family:var(--mono)}
+  .brand b{font-size:14.5px;font-weight:600;letter-spacing:-.2px}
+  .kbar{display:flex;align-items:center;gap:8px;margin:10px 4px 14px;padding:7px 10px;border:1px solid var(--line-2);border-radius:7px;color:var(--t3);font-size:12.5px;cursor:pointer}
+  .kbar .k{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--t3);border:1px solid var(--line-2);border-radius:4px;padding:1px 5px}
+  .sec{font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--t4);padding:14px 10px 6px;text-transform:uppercase}
+  .nav{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;color:var(--t2);font-size:13px;font-weight:500;cursor:pointer;transition:.1s}
+  .nav svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7;opacity:.7}
+  .nav:hover{background:var(--panel-2);color:var(--t1)}
+  .nav.on{background:var(--acc-dim);color:#a9c0ff}
+  .nav.on svg{opacity:1;stroke:var(--acc)}
+  .foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:12px 6px 4px;border-top:1px solid var(--line);margin-top:auto}
+  .dot-live{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 0 3px rgba(56,189,248,.15)}
+
+  .top{display:flex;align-items:center;justify-content:space-between;padding:14px 26px;border-bottom:1px solid var(--line)}
+  .crumb{font-family:var(--mono);font-size:12px;color:var(--t3)} .crumb b{color:var(--t1);font-weight:500}
+  .actions{display:flex;gap:8px;align-items:center}
+  .btn{font-size:12.5px;font-weight:500;padding:8px 13px;border-radius:7px;border:1px solid var(--line-2);background:transparent;color:var(--t2);cursor:pointer;transition:.1s}
+  .btn:hover{background:var(--panel-2);color:var(--t1)}
+  .btn.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+
+  .wrap{padding:24px 26px;max-width:1160px}
+  .title{font-size:20px;font-weight:600;letter-spacing:-.3px;display:flex;align-items:center;gap:10px}
+  .pill{font-family:var(--mono);font-size:10.5px;color:var(--cyan);background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.25);padding:2px 8px;border-radius:5px}
+  .lede{font-size:13px;color:var(--t3);margin-top:5px}
+
+  .hero{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:12px;margin:22px 0}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .tl{font-family:var(--mono);font-size:11px;letter-spacing:.5px;color:var(--t3);text-transform:uppercase}
+  .big{font-family:var(--mono);font-size:38px;font-weight:600;letter-spacing:-2px;line-height:1;margin-top:12px}
+  .big .c{color:var(--t4)}
+  .med{font-family:var(--mono);font-size:24px;font-weight:600;margin-top:14px} .med .c{color:var(--t4)}
+  .delta{font-family:var(--mono);font-size:11.5px;margin-top:8px}
+  .up{color:var(--cyan)}
+  .spark{display:flex;align-items:flex-end;gap:3px;height:26px;margin-top:12px}
+  .spark span{flex:1;background:var(--acc);border-radius:2px 2px 0 0;opacity:.55}
+
+  /* aging strip */
+  .aging{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:12px}
+  .aghead{display:flex;justify-content:space-between;align-items:center}
+  .agebar{display:flex;height:10px;border-radius:4px;overflow:hidden;background:#0c0e13;margin-top:14px;gap:2px}
+  .agekeys{display:flex;gap:26px;margin-top:14px}
+  .agekey{font-family:var(--mono);font-size:11px;color:var(--t3)}
+  .agekey .d{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:6px;vertical-align:1px}
+  .agekey .v{color:var(--t1);font-weight:600;display:block;margin-top:4px;font-size:14px}
+
+  .lhead{display:flex;justify-content:space-between;align-items:center;margin:24px 0 10px}
+  .lhead h2{font-size:15px;font-weight:600}
+  .tabs{display:flex;gap:2px}
+  .tab{font-family:var(--mono);font-size:12px;color:var(--t3);padding:6px 11px;border-radius:6px;cursor:pointer}
+  .tab.on{background:var(--panel-2);color:var(--t1)}
+  .table{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .thr{display:grid;grid-template-columns:150px 1fr 110px 140px;gap:16px;padding:10px 18px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:10.5px;letter-spacing:.5px;color:var(--t4);text-transform:uppercase}
+  .thr .r{text-align:right}
+  .tr{display:grid;grid-template-columns:150px 1fr 110px 140px;gap:16px;padding:14px 18px;border-bottom:1px solid var(--line);align-items:center;cursor:pointer;transition:.1s}
+  .tr:last-child{border:0}
+  .tr:hover{background:var(--raise)}
+  .id{font-family:var(--mono);font-size:12.5px;color:var(--acc)}
+  .cust{font-size:13.5px;font-weight:500} .due{font-family:var(--mono);font-size:11px;color:var(--t3);margin-top:2px}
+  .st{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500}
+  .sd{width:6px;height:6px;border-radius:50%}
+  .amt{font-family:var(--mono);font-size:14px;font-weight:600;text-align:right} .amt .c{color:var(--t4)}
+  .tfoot{padding:12px 18px;font-family:var(--mono);font-size:11px;color:var(--t4)}
+  .note{text-align:center;font-family:var(--mono);font-size:11px;color:var(--t4);padding:28px 0 44px}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><div class="mark">M</div><b>meritbooks</b></div>
+    <div class="kbar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Search<span class="k">⌘K</span></div>
+    <div class="sec">Process</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>Dashboard</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>Bank feed</div>
+    <div class="nav on"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h5"/></svg>Invoices &amp; AR</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Bills &amp; AP</div>
+    <div class="sec">Financial</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><path d="M4 19V5m4 14V9m4 10V7m4 12v-8m4 8V4"/></svg>Reports</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Close &amp; audit</div>
+    <div class="foot"><span class="dot-live"></span><div style="font-family:var(--mono);font-size:11px;color:var(--t2)">ledger synced · 2s ago</div></div>
+  </aside>
+
+  <main>
+    <div class="top">
+      <div class="crumb">northwind_construction / <b>invoices_ar</b></div>
+      <div class="actions"><button class="btn">Export</button><button class="btn pri">+ New invoice</button></div>
+    </div>
+    <div class="wrap">
+      <div class="title">Accounts receivable <span class="pill">LIVE</span></div>
+      <div class="lede">What you're owed, who owes it, and how fast it's coming in.</div>
+
+      <div class="hero">
+        <div class="tile">
+          <div class="tl">Total outstanding</div>
+          <div class="big">$168,500<span class="c">.00</span></div>
+          <div class="delta up">▲ 3 open · 0 overdue</div>
+        </div>
+        <div class="tile">
+          <div class="tl">DSO</div>
+          <div class="med">6.2<span class="c" style="font-size:13px"> days</span></div>
+          <div class="spark"><span style="height:40%"></span><span style="height:60%"></span><span style="height:35%"></span><span style="height:75%"></span><span style="height:50%"></span><span style="height:30%"></span></div>
+        </div>
+        <div class="tile">
+          <div class="tl">Collection · 90d</div>
+          <div class="med" style="color:var(--cyan)">98.4<span class="c">%</span></div>
+          <div class="delta up">▲ collected $100 · Jul</div>
+        </div>
+      </div>
+
+      <div class="aging">
+        <div class="aghead"><div class="tl">Aging</div><div class="mono" style="font-size:11px;color:var(--t3)">oldest 12d</div></div>
+        <div class="agebar"><div style="width:89%;background:var(--acc)"></div><div style="width:11%;background:var(--cyan)"></div></div>
+        <div class="agekeys">
+          <div class="agekey"><span class="d" style="background:var(--acc)"></span>Current<span class="v">$150,100</span></div>
+          <div class="agekey"><span class="d" style="background:var(--cyan)"></span>1–30d<span class="v">$18,400</span></div>
+          <div class="agekey"><span class="d" style="background:var(--line-2)"></span>31–60d<span class="v" style="color:var(--t4)">$0</span></div>
+          <div class="agekey"><span class="d" style="background:var(--line-2)"></span>60d+<span class="v" style="color:var(--t4)">$0</span></div>
+        </div>
+      </div>
+
+      <div class="lhead">
+        <h2>Open &amp; recent</h2>
+        <div class="tabs"><span class="tab on">all·3</span><span class="tab">sent·2</span><span class="tab">overdue·0</span><span class="tab">paid·1</span></div>
+      </div>
+      <div class="table">
+        <div class="thr"><div>INVOICE</div><div>CUSTOMER</div><div>STATUS</div><div class="r">AMOUNT</div></div>
+        <div class="tr">
+          <div class="id">INV-NWC-0001</div>
+          <div><div class="cust">Fabrikam Inc.</div><div class="due">due 2026-08-15</div></div>
+          <div><span class="st" style="color:var(--acc)"><span class="sd" style="background:var(--acc)"></span>Sent</span></div>
+          <div class="amt">$150,000<span class="c">.00</span></div>
+        </div>
+        <div class="tr">
+          <div class="id">INV-NWC-0002</div>
+          <div><div class="cust">Contoso LLC</div><div class="due">due 2026-08-22</div></div>
+          <div><span class="st" style="color:var(--amber)"><span class="sd" style="background:var(--amber)"></span>Partial</span></div>
+          <div class="amt">$18,400<span class="c">.00</span></div>
+        </div>
+        <div class="tr">
+          <div class="id">TEST-CARD-0042</div>
+          <div><div class="cust">Fabrikam Inc.</div><div class="due">paid 2026-07-28</div></div>
+          <div><span class="st" style="color:var(--cyan)"><span class="sd" style="background:var(--cyan)"></span>Paid</span></div>
+          <div class="amt">$100<span class="c">.00</span></div>
+        </div>
+        <div class="tfoot">3 of 3 · sorted by amount · ⏎ to open</div>
+      </div>
+      <div class="note">design mockup · tech direction · not the live app</div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
