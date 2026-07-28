@@ -30,7 +30,8 @@ export function MetricCard({ label, value, change, icon: Icon, className }: Metr
           </div>
         )}
       </div>
-      <p className="mt-2 text-2xl font-semibold text-white tracking-tight">{value}</p>
+      {/* Money and figures are always JetBrains Mono, tabular (design system). */}
+      <p className="mt-2 text-2xl font-semibold text-white tracking-tight font-mono tabular-nums">{value}</p>
       {change && (
         <div className="mt-2 flex items-center gap-1.5">
           <TrendIcon

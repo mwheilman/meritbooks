@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+import { Check, Clock, AlertTriangle } from 'lucide-react';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { loadInvoiceDocByToken } from '@/lib/invoices/invoice-doc';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
@@ -122,7 +123,10 @@ export default async function HostedInvoicePage(
               color: returnBanner.tone === 'ok' ? '#15803d' : returnBanner.tone === 'pending' ? '#1d4ed8' : '#b91c1c',
               borderColor: returnBanner.tone === 'ok' ? '#a7f3d0' : returnBanner.tone === 'pending' ? '#bfdbfe' : '#fecaca',
             }}>
-              {returnBanner.tone === 'ok' ? '✓ ' : returnBanner.tone === 'pending' ? '⏳ ' : '⚠️ '}{returnBanner.text}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                {returnBanner.tone === 'ok' ? <Check size={16} /> : returnBanner.tone === 'pending' ? <Clock size={16} /> : <AlertTriangle size={16} />}
+                <span>{returnBanner.text}</span>
+              </span>
             </div>
           )}
           {/* Hero: balance + primary pay action */}
@@ -156,7 +160,11 @@ export default async function HostedInvoicePage(
               <div style={{ whiteSpace: 'pre-line', color: '#475569', fontSize: 13.5, marginTop: 4 }}>{doc.template.remit_to}</div>
             </div>
           )}
-          {paid && <div style={S.paidBanner}>✓ Paid in full — thank you.</div>}
+          {paid && (
+            <div style={{ ...S.paidBanner, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <Check size={16} /> Paid in full — thank you.
+            </div>
+          )}
 
           {/* From / Bill to */}
           <section style={S.parties}>

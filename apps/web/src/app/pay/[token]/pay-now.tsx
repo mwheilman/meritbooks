@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { Lock } from 'lucide-react';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import type { PaymentMethod } from '@/lib/invoices/resolve-payment-methods';
@@ -62,7 +63,7 @@ export function PayNow({
         <Elements stripe={stripe} options={{ clientSecret, appearance: { theme: 'flat', variables: { colorPrimary: accent } } }}>
           <CheckoutForm token={token} accent={accent} balanceLabel={balanceLabel} payerName={payerName} payerEmail={payerEmail} />
         </Elements>
-        <div style={W.secure}>🔒 Card details are entered securely on Stripe and never touch this site.</div>
+        <div style={{ ...W.secure, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Lock size={12} /> Card details are entered securely on Stripe and never touch this site.</div>
       </div>
     );
   }
