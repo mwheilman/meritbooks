@@ -25,10 +25,16 @@ export interface PostJournalEntryInput {
   entry_type?: string;
   memo?: string;
   source_module?: string;
+  /** Internal uuid reference (a bill id, an invoice id). Must be a uuid. */
   source_id?: string;
+  /** External/string reference (Stripe pi_/po_ id, Plaid txn id). */
+  source_ref?: string;
   created_by: string | null;
   lines: JournalEntryLineInput[];
 }
+
+/** A source_id must be a real uuid; anything else is an external ref. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface PostResult {
   success: boolean;
@@ -85,7 +91,14 @@ export async function postJournalEntry(
       fiscal_period_id: period.id,
       memo: input.memo,
       source_module: input.source_module ?? 'MANUAL',
-      source_id: input.source_id,
+      // Guard the uuid column: a source_id that isn't a valid uuid (e.g. a Stripe
+      // 'pi_...' id passed by mistake) is rerouted to source_ref instead of
+      // crashing the insert. This makes the whole class of "external id into uuid
+      // column" bug impossible to reach the database, whatever a caller passes.
+      source_id: input.source_id && UUID_RE.test(input.source_id) ? input.source_id : null,
+      source_ref:
+        input.source_ref ??
+        (input.source_id && !UUID_RE.test(input.source_id) ? input.source_id : null),
       status: 'POSTED',
       posted_at: new Date().toISOString(),
       posted_by: input.created_by,

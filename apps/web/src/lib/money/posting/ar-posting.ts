@@ -102,7 +102,7 @@ async function postEntry(
     entry_type: entry.entryType,
     memo: entry.memo,
     source_module: 'MONEY_MOVEMENT',
-    source_id: sourceId,
+    source_ref: sourceId, // Stripe pi_/po_ id — external string, not a uuid
     created_by: createdBy,
     lines: entry.lines,
   });

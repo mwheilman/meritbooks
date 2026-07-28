@@ -120,7 +120,7 @@ async function postEntry(
     entry_type: entry.entryType,
     memo: entry.memo,
     source_module: 'MONEY_MOVEMENT',
-    source_id: sourceId,
+    source_ref: sourceId, // external processor id — string, not a uuid
     created_by: createdBy,
     lines: entry.lines,
   });

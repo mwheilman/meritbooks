@@ -73,7 +73,7 @@ export async function postPlatformFee(
     entry_type: 'PLATFORM_FEE',
     memo: entry.memo,
     source_module: 'PLATFORM_FEE',
-    source_id: args.sourceId,
+    source_ref: args.sourceId, // Stripe pi_ id — external string, not a uuid
     created_by: args.createdBy,
     lines: entry.lines,
   });
