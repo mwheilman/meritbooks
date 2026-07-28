@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
-import { Pencil, Plus, Trash2, Loader2, ShieldAlert, Download, Link2 } from 'lucide-react';
+import { Pencil, Plus, Trash2, Loader2, ShieldAlert, Download, Link2, Send } from 'lucide-react';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { StatusBadge } from '@/components/ui';
@@ -37,6 +37,32 @@ export function InvoiceDrawer({ invoiceId, onClose }: { invoiceId: string | null
   const [overrideReason, setOverrideReason] = useState('');
   const [needsOverride, setNeedsOverride] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  async function sendInvoice() {
+    if (!data) return;
+    if (!data.customerEmail) {
+      addToast('error', `${data.customerName} has no email address on file.`);
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await fetch(`/api/invoices/${data.id}/send`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.sent) {
+        addToast('success', `Invoice emailed to ${body.to}`);
+        refetch();
+      } else {
+        // Surface the real reason, not a generic failure — "not configured",
+        // "no email on file", and "provider rejected" are different problems.
+        addToast('error', body.error ?? 'Could not send the invoice.');
+      }
+    } catch {
+      addToast('error', 'Could not reach the send service. Try again.');
+    } finally {
+      setSending(false);
+    }
+  }
 
   const [memo, setMemo] = useState('');
   const [invoiceDate, setInvoiceDate] = useState('');
@@ -135,6 +161,12 @@ export function InvoiceDrawer({ invoiceId, onClose }: { invoiceId: string | null
                 <button onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/pay/${data.publicToken}`); addToast('success', 'Customer link copied'); }}
                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
                   <Link2 size={12} /> Link
+                </button>
+                <button onClick={sendInvoice} disabled={sending || !data.customerEmail}
+                   title={data.customerEmail ? `Email this invoice to ${data.customerEmail}` : 'No customer email on file'}
+                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                  {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                  {sending ? 'Sending…' : 'Send'}
                 </button>
               </>
             )}
