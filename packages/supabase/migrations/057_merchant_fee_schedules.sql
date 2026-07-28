@@ -53,3 +53,19 @@ create unique index if not exists uq_merchant_fee_schedule_active
 -- Fast lookup of a merchant's history.
 create index if not exists idx_merchant_fee_schedule_org
   on core.merchant_fee_schedules (org_id, effective_from desc);
+
+-- RLS (added in 059 after the advisor flagged this table shipped without it).
+-- A merchant may read its own schedule; writes are service_role only — a merchant
+-- must never price itself. Included here so a fresh replay is secure by default.
+alter table core.merchant_fee_schedules enable row level security;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='core' and tablename='merchant_fee_schedules' and policyname='org_read') then
+    create policy "org_read" on core.merchant_fee_schedules
+      for select using (org_id = public.get_org_id());
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='core' and tablename='merchant_fee_schedules' and policyname='service_all') then
+    create policy "service_all" on core.merchant_fee_schedules
+      for all to service_role using (true) with check (true);
+  end if;
+end $$;

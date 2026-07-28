@@ -41,6 +41,36 @@ describe('migrations', () => {
   });
 });
 
+describe('every exposed table has row-level security enabled', () => {
+  /**
+   * Supabase exposes the public and core schemas via PostgREST, reachable with the
+   * public anon key. A table with RLS OFF is therefore readable/writable directly,
+   * bypassing the app, auth, and every guard in it. Migration 057 shipped
+   * core.merchant_fee_schedules without RLS and Supabase's advisor caught it in
+   * production; this test makes that class of miss fail the build instead.
+   *
+   * Rule: every BASE TABLE in public/core has relrowsecurity = true. Storage/auth
+   * scaffolding tables (stubbed for the local harness) are excluded.
+   */
+  const STUB_SCHEMAS = new Set(['auth', 'storage', 'vault', 'extensions']);
+
+  it('no base table in public or core has RLS disabled', async () => {
+    const bad = await rows<{ schema: string; table: string }>(`
+      select n.nspname as schema, c.relname as table
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      where c.relkind = 'r'
+        and n.nspname in ('public','core')
+        and c.relrowsecurity = false
+      order by 1, 2
+    `);
+    const offenders = bad
+      .filter((r) => !STUB_SCHEMAS.has(r.schema))
+      .map((r) => `${r.schema}.${r.table}`);
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('double-entry enforcement exists at the database level', () => {
   it('defines the journal balance check function', async () => {
     const r = await rows<{ proname: string }>(
