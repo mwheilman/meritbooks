@@ -6,9 +6,7 @@ import { createAdminSupabase } from '@/lib/supabase/server';
 import { listConnections } from '@/lib/money/connections';
 import { createDestinationPaymentIntent } from '@/lib/money/providers/stripe';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
-
-const CARD_PCT = 0.03; // 3% flat (de minimis loss under the market cap)
-const ACH_PCT = 0.01;  // 1%, mirrors QuickBooks (no cap)
+import { computeFee, resolveMerchantFeeSchedule } from '@/lib/money/fees';
 
 /**
  * POST /api/pay/[token]/intent — create a Stripe PaymentIntent for the hosted
@@ -26,12 +24,12 @@ export async function POST(req: Request, { params }: { params: { token: string }
 
   const { data: inv } = await supabase
     .from('invoices')
-    .select('id, org_id, location_id, customer_id, balance_cents, status, card_surcharge_enabled')
+    .select('id, org_id, location_id, customer_id, balance_cents, status, card_surcharge_enabled, ach_surcharge_enabled')
     .eq('public_token', params.token)
     .maybeSingle();
   if (!inv) return NextResponse.json({ enabled: false, message: 'This invoice link is no longer valid.' }, { status: 404 });
 
-  const i = inv as { id: string; org_id: string; location_id: string; customer_id: string; balance_cents: number; status: string; card_surcharge_enabled: boolean | null };
+  const i = inv as { id: string; org_id: string; location_id: string; customer_id: string; balance_cents: number; status: string; card_surcharge_enabled: boolean | null; ach_surcharge_enabled: boolean | null };
   if (i.balance_cents <= 0) return NextResponse.json({ enabled: false, message: 'This invoice is already paid in full.' });
 
   const conns = await listConnections(supabase, i.org_id);
@@ -41,18 +39,30 @@ export async function POST(req: Request, { params }: { params: { token: string }
   }
 
   const base = i.balance_cents;
-  const surchargePass = method === 'CARD' && (i.card_surcharge_enabled !== false);
-  let amountCents = base;
-  let appFeeCents = 0;
-  if (method === 'ACH') {
-    appFeeCents = Math.round(base * ACH_PCT);
-  } else if (surchargePass) {
-    if (!acceptFee) return NextResponse.json({ enabled: false, message: 'Please accept the card processing fee to continue.' });
-    appFeeCents = Math.round(base * CARD_PCT);
-    amountCents = base + appFeeCents; // surcharge added to the amount charged, not the invoice
-  } else {
-    appFeeCents = Math.round(base * CARD_PCT); // absorbed by the business
+
+  // Layer 1 — what MeritBooks charges this merchant for this payment. Read from
+  // the merchant's fee schedule (falls back to the platform default), applying
+  // the merchant's rate and any cap/floor. Replaces the old hardcoded 1%/3%.
+  const schedule = await resolveMerchantFeeSchedule(supabase, i.org_id);
+  const appFeeCents = computeFee(schedule, method, base);
+
+  // Layer 2 — does the merchant pass this fee to the customer, or absorb it?
+  // Defaults asymmetric by method: card passes through, ACH is absorbed. Invoice
+  // level is the most-specific override honoured here.
+  const passThrough =
+    appFeeCents > 0 &&
+    (method === 'CARD'
+      ? i.card_surcharge_enabled !== false // card: pass-through unless explicitly off
+      : i.ach_surcharge_enabled === true); // ACH: absorbed unless explicitly on
+
+  if (passThrough && !acceptFee) {
+    const label = method === 'CARD' ? 'card' : 'bank transfer';
+    return NextResponse.json({ enabled: false, message: `Please accept the ${label} processing fee to continue.` });
   }
+
+  // Pass-through adds the fee to what the customer is charged (invoice total is
+  // immutable); absorbed leaves the charge at base and the merchant nets base − fee.
+  const amountCents = passThrough ? base + appFeeCents : base;
 
   try {
     const { clientSecret, id } = await createDestinationPaymentIntent({
