@@ -10,6 +10,36 @@ export interface ApiContext {
 }
 
 /**
+ * Resolves the Clerk auth context, failing CLOSED.
+ *
+ * SECURITY: if auth() throws or resolves without a userId, this returns a 401
+ * response that the caller MUST return immediately. It never substitutes a
+ * fallback identity. (Previously the code fell back to a privileged 'dev-user'
+ * running the RLS-bypassing admin client, so any auth failure executed as a
+ * trusted insider — an authentication-bypass vulnerability.)
+ *
+ * Usage in a raw route handler:
+ *   const authResult = await requireAuth();
+ *   if (authResult instanceof NextResponse) return authResult;
+ *   const { userId, orgId } = authResult;
+ */
+export async function requireAuth(): Promise<
+  { userId: string; orgId: string | null } | NextResponse
+> {
+  const authResult = await auth().catch(() => ({
+    userId: null as string | null,
+    orgId: null as string | null,
+  }));
+  if (!authResult.userId) {
+    return NextResponse.json(
+      { error: 'Unauthorized', code: 'UNAUTHENTICATED' },
+      { status: 401 }
+    );
+  }
+  return { userId: authResult.userId, orgId: authResult.orgId ?? null };
+}
+
+/**
  * Wraps an API handler with auth, validation, and error handling.
  * Eliminates boilerplate from every route.
  */
@@ -18,10 +48,10 @@ export function apiHandler<T>(
   handler: (body: T, ctx: ApiContext) => Promise<NextResponse>
 ) {
   return async (request: Request) => {
-    // Auth — fall back to dev user if Clerk session not available
-    const authResult = await auth().catch(() => ({ userId: null as string | null, orgId: null as string | null }));
-    const userId = authResult.userId ?? 'dev-user';
-    const orgId = authResult.orgId ?? null;
+    // Auth — fail closed. Never substitute a privileged fallback identity.
+    const authResult = await requireAuth();
+    if (authResult instanceof NextResponse) return authResult;
+    const { userId, orgId } = authResult;
 
     try {
       // Parse + validate body
@@ -79,10 +109,10 @@ export function apiQueryHandler<T>(
   handler: (params: T, ctx: ApiContext) => Promise<NextResponse>
 ) {
   return async (request: Request) => {
-    // Auth — fall back to dev user if Clerk session not available
-    const authResult = await auth().catch(() => ({ userId: null as string | null, orgId: null as string | null }));
-    const userId = authResult.userId ?? 'dev-user';
-    const orgId = authResult.orgId ?? null;
+    // Auth — fail closed. Never substitute a privileged fallback identity.
+    const authResult = await requireAuth();
+    if (authResult instanceof NextResponse) return authResult;
+    const { userId, orgId } = authResult;
 
     try {
       let params: T;

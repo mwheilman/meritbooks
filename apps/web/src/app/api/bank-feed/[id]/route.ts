@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuth } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
 
@@ -29,13 +29,10 @@ export async function PATCH(
 ) {
   const { id: txnId } = await params;
 
-  // Auth
-  const authResult = await auth().catch(() => ({
-    userId: null as string | null,
-    orgId: null as string | null,
-  }));
-  const userId = authResult.userId ?? 'dev-user';
-  const orgId = authResult.orgId ?? null;
+  // Auth — fail closed.
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+  const { userId, orgId } = authResult;
 
   try {
     const raw = await request.json();

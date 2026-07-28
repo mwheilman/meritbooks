@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuth } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
 
@@ -29,8 +29,8 @@ const jeCreateSchema = z.object({
 
 // GET — query journal entries (already exists, re-export for combined route)
 export async function GET(request: Request) {
-  const authResult = await auth().catch(() => ({ userId: null as string | null, orgId: null as string | null }));
-  const userId = authResult.userId ?? 'dev-user';
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
   const supabase = createAdminSupabase();
 
   const { searchParams } = new URL(request.url);
@@ -123,8 +123,9 @@ export async function GET(request: Request) {
 
 // POST — create a new journal entry
 export async function POST(request: Request) {
-  const authResult = await auth().catch(() => ({ userId: null as string | null, orgId: null as string | null }));
-  const userId = authResult.userId ?? 'dev-user';
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+  const { userId } = authResult;
   const supabase = createAdminSupabase();
 
   let body: z.infer<typeof jeCreateSchema>;

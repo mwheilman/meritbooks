@@ -1,14 +1,25 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuth } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { postJournalEntrySchema } from '@/lib/validations/gl';
 import { postJournalEntry, type JournalEntryLineInput } from '@/lib/services/gl-posting';
 
 export async function POST(request: Request) {
-  const authResult = await auth().catch(() => ({ userId: null as string | null, orgId: null as string | null }));
-  const userId = authResult.userId ?? 'dev-user';
-  const orgId = authResult.orgId ?? null;
+  // 1. Authenticate — fail CLOSED. No 'dev-user' fallback: an auth failure must
+  //    never resolve to a privileged identity running the RLS-bypassing client.
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+  const { userId, orgId } = authResult;
+
+  // 2. Authorize — REFERENCE PATTERN for guarding money/mutation routes.
+  //    Posting a journal entry requires journal_entries:post. Copy these two
+  //    lines into every mutating route with the appropriate (feature, action)
+  //    from lib/rbac/permissions.ts. (Follow-up: wire the remaining routes once
+  //    the identity/org-resolution FPB lands — see require-permission.ts TODO.)
+  const guard = await requirePermission(userId, 'journal_entries', 'post');
+  if (!guard.ok) return guard.response;
 
   try {
     const raw = await request.json();

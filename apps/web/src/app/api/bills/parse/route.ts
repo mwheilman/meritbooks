@@ -1,12 +1,13 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuth } from '@/lib/api-handler';
 import { parseInvoiceWithAI } from '@/lib/services/bill-parser';
 
 export async function POST(request: Request) {
-  const authResult = await auth().catch(() => ({ userId: null as string | null, orgId: null as string | null }));
-  const userId = authResult.userId ?? 'dev-user';
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+  const { userId } = authResult;
   const supabase = createAdminSupabase();
 
   // Get API key from environment

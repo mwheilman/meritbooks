@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuth } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { billTransitionSchema } from '@/lib/validations/transactions';
 import { approveBill, scheduleBill, payBill, voidBill } from '@/lib/services/bill-ap';
@@ -93,8 +94,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
 // POST /api/bills/[id] — lifecycle transition (approve | schedule | pay | void | override_approver).
 export async function POST(request: Request, { params }: { params: { id: string } }) {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  const actor = userId ?? 'dev-user';
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+  const actor = authResult.userId;
   const supabase = createAdminSupabase();
   const orgId = await getOrgId(supabase);
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
