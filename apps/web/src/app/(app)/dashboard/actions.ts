@@ -93,7 +93,11 @@ export async function getRecentActivity(limit = 20): Promise<RecentActivity[]> {
   const supabase = await createAuthedServerSupabase();
   if (!supabase) return [];
 
-  const { data: txns } = await supabase
+  // bank_transactions reaches locations two ways (direct location_id, and via
+  // bank_accounts), so a bare `locations(name)` embed is ambiguous and errors —
+  // disambiguate with the explicit FK. If the embed still fails for any reason,
+  // fall back to the plain columns so the feed always renders.
+  let { data: txns, error } = await supabase
     .from('bank_transactions')
     .select(`
       id,
@@ -101,10 +105,19 @@ export async function getRecentActivity(limit = 20): Promise<RecentActivity[]> {
       amount_cents,
       status,
       created_at,
-      locations ( name )
+      locations!bank_transactions_location_id_fkey ( name )
     `)
     .order('created_at', { ascending: false })
     .limit(limit);
+
+  if (error) {
+    const fallback = await supabase
+      .from('bank_transactions')
+      .select('id, description, amount_cents, status, created_at')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    txns = fallback.data as typeof txns;
+  }
 
   return (txns ?? []).map((t) => {
     // Supabase FK joins return arrays — extract first element
