@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { getImportType, type ImportFieldDef } from '@/lib/import/definitions';
 import { coerceValue } from '@/lib/import/csv';
 
@@ -45,8 +45,10 @@ function buildRecord(
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const ctx = await requireAuthedContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+    if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
     const body = (await req.json()) as ImportRequest;
     const def = getImportType(body.type);
@@ -57,11 +59,6 @@ export async function POST(req: NextRequest) {
     if (body.rows.length > 10000) {
       return NextResponse.json({ error: 'Import is limited to 10,000 rows per file' }, { status: 400 });
     }
-
-    const supabase = createAdminSupabase();
-    const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-    if (!org) return NextResponse.json({ error: 'No organization found — complete setup first' }, { status: 400 });
-    const orgId = org.id as string;
 
     // Resolve required company (location) for ledger imports.
     let location: { id: string; short_code: string } | null = null;
@@ -107,7 +104,7 @@ export async function POST(req: NextRequest) {
 // MASTER DATA (core): entities, customers, vendors, items
 // =============================================================
 async function importMasterData(
-  supabase: ReturnType<typeof createAdminSupabase>,
+  supabase: SupabaseClient,
   key: string,
   fields: ImportFieldDef[],
   body: ImportRequest,
@@ -218,7 +215,7 @@ function buildCoreRow(key: string, rec: Record<string, Cell>, orgId: string): Re
 // SUB-LEDGER (Books): open AR → invoices, open AP → bills
 // =============================================================
 async function importSubledger(
-  supabase: ReturnType<typeof createAdminSupabase>,
+  supabase: SupabaseClient,
   key: 'open_ar' | 'open_ap',
   fields: ImportFieldDef[],
   body: ImportRequest,
@@ -315,7 +312,7 @@ async function importSubledger(
 // TRIAL BALANCE (Books): one balanced opening-balance entry
 // =============================================================
 async function importTrialBalance(
-  supabase: ReturnType<typeof createAdminSupabase>,
+  supabase: SupabaseClient,
   fields: ImportFieldDef[],
   body: ImportRequest,
   orgId: string,
@@ -416,7 +413,7 @@ async function importTrialBalance(
 // GL HISTORY (Books): grouped balanced entries
 // =============================================================
 async function importGlHistory(
-  supabase: ReturnType<typeof createAdminSupabase>,
+  supabase: SupabaseClient,
   fields: ImportFieldDef[],
   body: ImportRequest,
   orgId: string,
@@ -517,13 +514,13 @@ async function importGlHistory(
 }
 
 // ── shared helpers ──────────────────────────────────────────────────────
-async function buildAccountMap(supabase: ReturnType<typeof createAdminSupabase>, orgId: string) {
+async function buildAccountMap(supabase: SupabaseClient, orgId: string) {
   const { data } = await supabase.from('accounts').select('id, account_number').eq('org_id', orgId);
   return new Map((data ?? []).map((a) => [String((a as { account_number: string }).account_number), (a as { id: string }).id]));
 }
 
 async function resolveFiscalPeriod(
-  supabase: ReturnType<typeof createAdminSupabase>,
+  supabase: SupabaseClient,
   orgId: string,
   locationId: string,
   isoDate: string

@@ -1,7 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 import { learnVendorPattern } from '@/lib/services/categorization';
 
@@ -13,22 +12,16 @@ const schema = z.object({
   location_id: z.string().uuid().nullable().optional(),
 });
 
-async function resolveOrgId(supabase: ReturnType<typeof createAdminSupabase>): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
-
 export async function POST(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   let raw: unknown;
   try { raw = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
   const parsed = schema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: 'Validation failed' }, { status: 422 });
-
-  const orgId = await resolveOrgId(supabase);
-  if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
   const res = await learnVendorPattern(supabase, {
     orgId,

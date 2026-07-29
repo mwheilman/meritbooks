@@ -1,22 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { ROLE_DEFINITIONS, getVisibleFeatures, getSidebarGrouped, type UserRole } from '@/lib/rbac/permissions';
 
 export async function GET(_req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireAuthedContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId, userId } = ctx;
 
-    const supabase = createAdminSupabase();
+    if (!orgId) {
+      return NextResponse.json({
+        authenticated: true,
+        hasOrg: false,
+        setupComplete: false,
+        user: { clerkId: userId },
+      });
+    }
 
     // 1. Find the org
     const { data: org } = await supabase
       .schema('core').from('organizations')
       .select('id, name, setup_complete')
-      .limit(1)
+      .eq('id', orgId)
       .single();
 
     if (!org) {
@@ -176,10 +181,9 @@ export async function GET(_req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireAuthedContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, userId } = ctx;
 
     const body = await req.json();
     const { firstName, lastName, email } = body as {
@@ -187,8 +191,6 @@ export async function PATCH(req: NextRequest) {
       lastName?: string;
       email?: string;
     };
-
-    const supabase = createAdminSupabase();
 
     const updates: Record<string, string> = {};
     if (firstName) updates.first_name = firstName.trim();

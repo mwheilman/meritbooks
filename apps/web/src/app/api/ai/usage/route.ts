@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { currentPeriodMonth } from '@meritbooks/core-ai';
 
 /**
@@ -14,19 +14,20 @@ import { currentPeriodMonth } from '@meritbooks/core-ai';
  * modules never sum spend themselves (§3A.8).
  */
 
-type Supa = ReturnType<typeof createAdminSupabase>;
+type Supa = SupabaseClient;
 
-async function getOrg(supabase: Supa): Promise<{ id: string; ai_tier: string } | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id, ai_tier').limit(1).single();
+async function getOrg(supabase: Supa, orgId: string): Promise<{ id: string; ai_tier: string } | null> {
+  const { data } = await supabase.schema('core').from('organizations').select('id, ai_tier').eq('id', orgId).single();
   return (data as { id: string; ai_tier: string } | null) ?? null;
 }
 
 export async function GET() {
-  const a = await auth().catch(() => ({ userId: null as string | null }));
-  if (!a.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
-  const supabase = createAdminSupabase();
-  const org = await getOrg(supabase);
+  const org = await getOrg(supabase, orgId);
   if (!org) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const periodMonth = currentPeriodMonth();

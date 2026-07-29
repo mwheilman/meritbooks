@@ -5,8 +5,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 import { suggestCategory, CATEGORIZE_MODEL, type CoaRow } from '@/lib/services/categorization';
 
@@ -62,14 +61,11 @@ type CodeOutcome =
   | { kind: 'failed' }
   | { kind: 'budget' };
 
-async function resolveOrgId(supabase: ReturnType<typeof createAdminSupabase>): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
-
 export async function POST(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   let raw: unknown;
   try {
@@ -84,9 +80,6 @@ export async function POST(request: Request) {
   if (!transaction_id && !transaction_ids?.length && !all_pending) {
     return NextResponse.json({ error: 'Provide transaction_id, transaction_ids, or all_pending: true' }, { status: 422 });
   }
-
-  const orgId = await resolveOrgId(supabase);
-  if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return NextResponse.json({ error: 'AI is not configured (ANTHROPIC_API_KEY missing).' }, { status: 503 });

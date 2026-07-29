@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 
 interface VendorInput {
   name: string;
@@ -24,12 +23,11 @@ interface VendorInput {
 
 export async function GET(req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireAuthedContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+    if (!orgId) return NextResponse.json({ vendors: [], total: 0 });
 
-    const supabase = createAdminSupabase();
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search') ?? '';
     const page = parseInt(searchParams.get('page') ?? '1', 10);
@@ -39,17 +37,6 @@ export async function GET(req: NextRequest) {
     const is1099 = searchParams.get('is_1099');
     const hasPaymentHold = searchParams.get('has_payment_hold');
 
-    // Get org
-    const { data: org } = await supabase
-      .schema('core').from('organizations')
-      .select('id')
-      .limit(1)
-      .single();
-
-    if (!org) {
-      return NextResponse.json({ vendors: [], total: 0 });
-    }
-
     // NOTE: no PostgREST embed on vendor_compliance_docs / vendor_payment_holds
     // here — vendors now lives in `core` while those child tables are in
     // `public`, and PostgREST cannot embed across schemas (it 500s). We fetch
@@ -57,7 +44,7 @@ export async function GET(req: NextRequest) {
     let query = supabase
       .schema('core').from('vendors')
       .select('*', { count: 'exact' })
-      .eq('org_id', org.id)
+      .eq('org_id', orgId)
       .is('deleted_at', null);
 
     if (search) {
@@ -94,12 +81,12 @@ export async function GET(req: NextRequest) {
         supabase
           .from('vendor_compliance_docs')
           .select('vendor_id, doc_type, status, expiration_date')
-          .eq('org_id', org.id)
+          .eq('org_id', orgId)
           .in('vendor_id', vendorIds),
         supabase
           .from('vendor_payment_holds')
           .select('vendor_id, hold_type, reason, start_date, end_date, created_at')
-          .eq('org_id', org.id)
+          .eq('org_id', orgId)
           .in('vendor_id', vendorIds),
       ]);
 
@@ -172,24 +159,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireAuthedContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId, userId } = ctx;
+    if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
     const body = (await req.json()) as VendorInput;
-    const supabase = createAdminSupabase();
-
-    // Get org
-    const { data: org } = await supabase
-      .schema('core').from('organizations')
-      .select('id')
-      .limit(1)
-      .single();
-
-    if (!org) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 400 });
-    }
 
     // Validate required fields
     if (!body.name || body.name.trim().length === 0) {
@@ -202,7 +177,7 @@ export async function POST(req: NextRequest) {
     const { data: existing } = await supabase
       .schema('core').from('vendors')
       .select('id, name')
-      .eq('org_id', org.id)
+      .eq('org_id', orgId)
       .is('deleted_at', null)
       .ilike('name', `%${trimmedName}%`)
       .limit(5);
@@ -222,7 +197,7 @@ export async function POST(req: NextRequest) {
 
     // Create vendor
     const insertData = {
-      org_id: org.id,
+      org_id: orgId,
       name: trimmedName,
       display_name: body.display_name?.trim() || trimmedName,
       email: body.email?.trim().toLowerCase() || null,
@@ -265,10 +240,9 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireAuthedContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
 
     const body = await req.json();
     const { id, ...updates } = body as { id: string } & Partial<VendorInput>;
@@ -276,8 +250,6 @@ export async function PATCH(req: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'Vendor ID required' }, { status: 400 });
     }
-
-    const supabase = createAdminSupabase();
 
     const updateData: Record<string, unknown> = {};
     if (updates.name !== undefined) updateData.name = updates.name.trim();

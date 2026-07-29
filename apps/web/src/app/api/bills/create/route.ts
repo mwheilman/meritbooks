@@ -1,17 +1,14 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { createBillSchema } from '@/lib/validations/transactions';
 import { createAttribution, resolveApprover } from '@/lib/services/cost-approval';
 
-async function getOrgId(supabase: ReturnType<typeof createAdminSupabase>): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
-
 export async function POST(request: Request) {
-  await auth().catch(() => null);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   try {
     const raw = await request.json();
@@ -28,9 +25,6 @@ export async function POST(request: Request) {
     }
 
     const body = result.data;
-    const supabase = createAdminSupabase();
-    const orgId = await getOrgId(supabase);
-    if (!orgId) return NextResponse.json({ error: 'No organization configured' }, { status: 400 });
 
     // Vendor compliance
     const { data: complianceDocs } = await supabase

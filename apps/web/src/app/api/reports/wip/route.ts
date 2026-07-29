@@ -1,14 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
-
-type Supa = ReturnType<typeof createAdminSupabase>;
-
-async function getOrgId(supabase: Supa): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
+import { requireAuthedContext } from '@/lib/api-handler';
 
 /**
  * GET /api/reports/wip — Work-in-Progress schedule.
@@ -17,9 +9,9 @@ async function getOrgId(supabase: Supa): Promise<string | null> {
  * cost-to-cost when not explicitly set.
  */
 export async function GET(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const locIds = new URL(request.url).searchParams.get('location_ids');

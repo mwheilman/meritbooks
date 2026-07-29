@@ -1,14 +1,13 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
-import { requireAuth } from '@/lib/api-handler';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { parseInvoiceWithAI } from '@/lib/services/bill-parser';
 
 export async function POST(request: Request) {
-  const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
-  const { userId } = authResult;
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, userId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   // Get API key from environment
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -163,20 +162,16 @@ export async function POST(request: Request) {
   }
 
   // ─── Log to AI audit ──────────────────────────────────────
-  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-
-  if (org) {
-    await supabase.from('ai_audit_log').insert({
-      org_id: org.id,
-      feature: 'BILL_PARSE',
-      model_version: parsed.aiModel,
-      prompt_summary: `Parse invoice: ${fileName}`,
-      output_summary: `Vendor: ${parsed.vendorName}, Total: ${parsed.totalCents}, Lines: ${parsed.lines.length}`,
-      confidence: parsed.totalConfidence,
-      processing_time_ms: parsed.parseTimeMs,
-      user_id: userId,
-    }).then(() => {}); // Fire and forget
-  }
+  await supabase.from('ai_audit_log').insert({
+    org_id: orgId,
+    feature: 'BILL_PARSE',
+    model_version: parsed.aiModel,
+    prompt_summary: `Parse invoice: ${fileName}`,
+    output_summary: `Vendor: ${parsed.vendorName}, Total: ${parsed.totalCents}, Lines: ${parsed.lines.length}`,
+    confidence: parsed.totalConfidence,
+    processing_time_ms: parsed.parseTimeMs,
+    user_id: userId,
+  }).then(() => {}); // Fire and forget
 
   return NextResponse.json({
     parsed: {

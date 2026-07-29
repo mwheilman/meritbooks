@@ -1,16 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 import { TEXT_SLOTS } from '@/lib/invoices/resolve-invoice-text';
-
-type Supa = ReturnType<typeof createAdminSupabase>;
-async function getOrgId(supabase: Supa): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
 
 const SCOPES = ['CUSTOMER', 'JOB', 'INVOICE_TYPE', 'INVOICE'] as const;
 
@@ -19,9 +12,9 @@ const SCOPES = ['CUSTOMER', 'JOB', 'INVOICE_TYPE', 'INVOICE'] as const;
  * one scope (the per-customer / per-job / per-invoice-type / per-invoice values).
  */
 export async function GET(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const { searchParams } = new URL(request.url);
@@ -53,9 +46,9 @@ const putSchema = z.object({
  * clears the override so it falls back up the cascade.
  */
 export async function PUT(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const parsed = putSchema.safeParse(await request.json().catch(() => ({})));

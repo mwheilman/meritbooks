@@ -1,15 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
-
-type Supa = ReturnType<typeof createAdminSupabase>;
-
-async function getOrgId(supabase: Supa): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
 
 const JOB_SELECT = `
   id, job_number, name, description, customer_name, job_type, status, archetype,
@@ -30,9 +22,9 @@ const JOB_SELECT = `
 interface CostEntry { id: string; amount_cents: number; entry_date: string; description: string | null; gl_entry_line_id: string | null; bill_line_id: string | null }
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const { data: job, error } = await supabase
@@ -190,9 +182,9 @@ const revRecInputSchema = z.object({
 }).refine((o) => Object.keys(o).length > 0, { message: 'No fields to update' });
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   let raw: unknown;

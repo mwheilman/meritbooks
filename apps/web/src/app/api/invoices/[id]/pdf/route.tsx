@@ -2,8 +2,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs'; // @react-pdf/renderer needs Node, not edge
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { loadInvoiceDocById } from '@/lib/invoices/invoice-doc';
 import { InvoicePdf } from '@/lib/invoices/invoice-pdf';
 import { renderToBuffer } from '@react-pdf/renderer';
@@ -13,11 +12,9 @@ import { renderToBuffer } from '@react-pdf/renderer';
  * Used by the drawer "Download PDF" / "Print" and as the attachment on send.
  */
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-
-  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  const orgId = (org as { id: string } | null)?.id;
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const doc = await loadInvoiceDocById(supabase, orgId, params.id);

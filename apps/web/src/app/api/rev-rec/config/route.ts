@@ -1,12 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { hasModule } from '@/lib/services/entitlements';
 import { z } from 'zod';
-
-type Supa = ReturnType<typeof createAdminSupabase>;
 
 export const REV_REC_METHODS = [
   { value: 'PCT_COMPLETE', label: 'POC — physical % complete', poc: true },
@@ -22,16 +19,11 @@ export const REV_REC_METHODS = [
 
 const METHOD_VALUES = REV_REC_METHODS.map((m) => m.value) as [string, ...string[]];
 
-async function getOrgId(supabase: Supa): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
-
 /** GET /api/rev-rec/config — per-company default + job_type map, plus whether Projects feeds inputs. */
 export async function GET() {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const projectsEntitled = await hasModule(supabase, orgId, 'projects');
@@ -72,9 +64,9 @@ const postSchema = z.union([
 ]);
 
 export async function POST(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   let raw: unknown;
@@ -98,9 +90,9 @@ export async function POST(request: Request) {
 
 // DELETE /api/rev-rec/config?id=<map rule id>
 export async function DELETE(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });

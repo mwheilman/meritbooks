@@ -1,24 +1,18 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
-
-async function resolveOrgId(supabase: ReturnType<typeof createAdminSupabase>): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
 
 // ─── GET: recent AI decisions (the explainability log) ────────────────────────
 export async function GET(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');           // PROPOSED | APPROVED | REJECTED | EXPIRED
   const feature = searchParams.get('feature');
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '50', 10) || 50, 200);
 
-  const orgId = await resolveOrgId(supabase);
   if (!orgId) return NextResponse.json({ decisions: [] });
 
   let q = supabase
@@ -66,15 +60,15 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(request: Request) {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, userId } = ctx;
 
   let raw: unknown;
   try { raw = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
   const parsed = patchSchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: 'Validation failed' }, { status: 422 });
 
-  const orgId = await resolveOrgId(supabase);
   if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
   const { error } = await supabase

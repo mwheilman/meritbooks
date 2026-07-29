@@ -1,21 +1,15 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { requireAuthedContext } from '@/lib/api-handler';
 
 type ChargeMethod = 'inherit' | 'revenue' | 'cost_transfer';
 const CHARGE_METHODS: ChargeMethod[] = ['inherit', 'revenue', 'cost_transfer'];
 
-/** Resolve the active organization (single-tenant resolution, matches other routes). */
-async function getOrgId(supabase: ReturnType<typeof createAdminSupabase>): Promise<string | null> {
-  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return org?.id ?? null;
-}
-
 /** Build a unique, slug-style department code for an org. */
 async function makeUniqueCode(
-  supabase: ReturnType<typeof createAdminSupabase>,
+  supabase: SupabaseClient,
   orgId: string,
   desired: string,
   ignoreId?: string
@@ -47,11 +41,9 @@ async function makeUniqueCode(
 // ── GET: list departments (grouped client-side), with company + parent context ──
 export async function GET(_req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const supabase = createAdminSupabase();
-    const orgId = await getOrgId(supabase);
+    const ctx = await requireAuthedContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
     if (!orgId) return NextResponse.json({ departments: [], total: 0 });
 
     const { data, error } = await supabase
@@ -95,8 +87,9 @@ export async function GET(_req: NextRequest) {
 // ── POST: create a department ──
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const ctx = await requireAuthedContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== 'object') {
@@ -116,8 +109,6 @@ export async function POST(req: NextRequest) {
     if (!name) return NextResponse.json({ error: 'Department name is required' }, { status: 400 });
     if (!locationId) return NextResponse.json({ error: 'A company (location) is required' }, { status: 400 });
 
-    const supabase = createAdminSupabase();
-    const orgId = await getOrgId(supabase);
     if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
     // Validate company belongs to org
@@ -177,16 +168,14 @@ export async function POST(req: NextRequest) {
 // ── PATCH: update a department ──
 export async function PATCH(req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const ctx = await requireAuthedContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+    if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
     const body = await req.json().catch(() => null);
     const id = body && typeof body.id === 'string' ? body.id : '';
     if (!id) return NextResponse.json({ error: 'Department id is required' }, { status: 400 });
-
-    const supabase = createAdminSupabase();
-    const orgId = await getOrgId(supabase);
-    if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
     const { data: existing } = await supabase
       .schema('core').from('departments')
@@ -255,16 +244,14 @@ export async function PATCH(req: NextRequest) {
 // ── DELETE: deactivate a department (soft; preserves GL/job references) ──
 export async function DELETE(req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const ctx = await requireAuthedContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+    if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id') ?? '';
     if (!id) return NextResponse.json({ error: 'Department id is required' }, { status: 400 });
-
-    const supabase = createAdminSupabase();
-    const orgId = await getOrgId(supabase);
-    if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
     // Block deactivation if it has active child departments
     const { count: childCount } = await supabase

@@ -2,8 +2,8 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { listConnections, connectProvider } from '@/lib/money/connections';
 import {
   isStripeConfigured,
@@ -14,9 +14,9 @@ import {
 
 const ENV = 'test' as const; // sandbox until live keys are swapped in
 
-type Supa = ReturnType<typeof createAdminSupabase>;
-async function getOrg(db: Supa): Promise<{ id: string; entitlements: Record<string, boolean> } | null> {
-  const { data } = await db.schema('core').from('organizations').select('id, entitlements').limit(1).single();
+type Supa = SupabaseClient;
+async function getOrg(db: Supa, orgId: string): Promise<{ id: string; entitlements: Record<string, boolean> } | null> {
+  const { data } = await db.schema('core').from('organizations').select('id, entitlements').eq('id', orgId).single();
   if (!data) return null;
   const d = data as { id: string; entitlements?: unknown };
   return { id: d.id, entitlements: (d.entitlements && typeof d.entitlements === 'object' ? d.entitlements : {}) as Record<string, boolean> };
@@ -33,12 +33,14 @@ function baseUrl(req: Request): string {
 
 /** GET — current payments-connect status for the settings screen. */
 export async function GET(req: Request) {
-  await auth().catch(() => null);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase: db, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
   if (!isStripeConfigured()) {
     return NextResponse.json({ configured: false, message: 'Stripe is not configured on the server (set STRIPE_SECRET_KEY).' });
   }
-  const db = createAdminSupabase();
-  const org = await getOrg(db);
+  const org = await getOrg(db, orgId);
   if (!org) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const conn = await findStripeArConnection(db, org.id);
@@ -64,12 +66,14 @@ export async function GET(req: Request) {
 
 /** POST — start or resume onboarding; returns the Stripe-hosted onboarding URL. */
 export async function POST(req: Request) {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase: db, orgId, userId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
   if (!isStripeConfigured()) {
     return NextResponse.json({ error: 'Stripe is not configured on the server (set STRIPE_SECRET_KEY).' }, { status: 400 });
   }
-  const db = createAdminSupabase();
-  const org = await getOrg(db);
+  const org = await getOrg(db, orgId);
   if (!org) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   // Entitlement must be set before connectProvider will register the connection.

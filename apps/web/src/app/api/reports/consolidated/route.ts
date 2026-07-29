@@ -1,7 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 
 /**
@@ -16,16 +15,13 @@ import { resolveRole, PostingError } from '@/lib/posting/account-roles';
  * reported as the matched intercompany AR/AP balance across the group.
  */
 export async function GET(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   const { searchParams } = new URL(request.url);
   const startDate = searchParams.get('start_date') ?? new Date().toISOString().slice(0, 8) + '01';
   const endDate = searchParams.get('end_date') ?? new Date().toISOString().slice(0, 10);
   const eliminateIc = searchParams.get('eliminate_ic') !== 'false'; // default true
-
-  // Resolve org (Clerk orgId is empty in this single-org deployment).
-  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  const orgId = org?.id as string | undefined;
 
   // Entities
   const { data: locations } = await supabase

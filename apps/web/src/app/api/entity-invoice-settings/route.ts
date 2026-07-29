@@ -1,8 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 
 /**
@@ -14,15 +13,10 @@ import { z } from 'zod';
  */
 const TABLE: Record<string, string> = { CUSTOMER: 'customers', JOB: 'jobs', LOCATION: 'locations' };
 
-type Supa = ReturnType<typeof createAdminSupabase>;
-async function orgIdOf(s: Supa) {
-  const { data } = await s.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
-
 export async function GET(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
   const { searchParams } = new URL(request.url);
   const scope = String(searchParams.get('scope') ?? '');
   const id = String(searchParams.get('id') ?? '');
@@ -55,9 +49,9 @@ const putSchema = z.object({
 });
 
 export async function PUT(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-  const orgId = await orgIdOf(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const parsed = putSchema.safeParse(await request.json().catch(() => ({})));

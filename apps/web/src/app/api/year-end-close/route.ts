@@ -1,7 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 import {
   getYearEndOverview,
@@ -10,19 +9,14 @@ import {
   reverseYearEndClose,
 } from '@/lib/services/year-end-close';
 
-async function resolveOrgId(supabase: ReturnType<typeof createAdminSupabase>): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
-
 // ─── GET: per-entity net income + close status for a year ─────────────────────
 export async function GET(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   const { searchParams } = new URL(request.url);
   const year = parseInt(searchParams.get('year') ?? String(new Date().getFullYear() - 1), 10);
 
-  const orgId = await resolveOrgId(supabase);
   if (!orgId) {
     return NextResponse.json({ fiscalYear: year, rows: [], totals: { revenueCents: 0, expenseCents: 0, netIncomeCents: 0, closedCount: 0 } });
   }
@@ -37,8 +31,9 @@ const bodySchema = z.discriminatedUnion('action', [
 ]);
 
 export async function POST(request: Request) {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, userId } = ctx;
 
   let raw: unknown;
   try {
@@ -56,7 +51,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Validation failed', details }, { status: 422 });
   }
 
-  const orgId = await resolveOrgId(supabase);
   if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
   const body = parsed.data;

@@ -1,8 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
 
 /**
@@ -12,11 +11,9 @@ import { fetchCoreMap } from '@/lib/stitch-core';
  * locations/departments/classes are in `core` and stitched in JS.
  */
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-
-  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  const orgId = (org as { id: string } | null)?.id;
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const { data: entry, error } = await supabase
@@ -133,10 +130,9 @@ const jePatchSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  const supabase = createAdminSupabase();
-  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  const orgId = (org as { id: string } | null)?.id;
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   let body: z.infer<typeof jePatchSchema>;

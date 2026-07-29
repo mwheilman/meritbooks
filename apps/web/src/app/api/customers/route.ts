@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 
 interface CustomerInput {
   name: string;
@@ -27,12 +26,11 @@ interface CustomerInput {
 
 export async function GET(req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireAuthedContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId } = ctx;
+    if (!orgId) return NextResponse.json({ customers: [], total: 0 });
 
-    const supabase = createAdminSupabase();
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search') ?? '';
     const page = parseInt(searchParams.get('page') ?? '1', 10);
@@ -40,20 +38,10 @@ export async function GET(req: NextRequest) {
     const sortBy = searchParams.get('sort_by') ?? 'name';
     const sortDir = searchParams.get('sort_dir') === 'desc' ? false : true;
 
-    const { data: org } = await supabase
-      .schema('core').from('organizations')
-      .select('id')
-      .limit(1)
-      .single();
-
-    if (!org) {
-      return NextResponse.json({ customers: [], total: 0 });
-    }
-
     let query = supabase
       .schema('core').from('customers')
       .select('*', { count: 'exact' })
-      .eq('org_id', org.id)
+      .eq('org_id', orgId)
       .is('deleted_at', null);
 
     if (search) {
@@ -123,23 +111,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireAuthedContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase, orgId, userId } = ctx;
+    if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
     const body = (await req.json()) as CustomerInput;
-    const supabase = createAdminSupabase();
-
-    const { data: org } = await supabase
-      .schema('core').from('organizations')
-      .select('id')
-      .limit(1)
-      .single();
-
-    if (!org) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 400 });
-    }
 
     if (!body.name || body.name.trim().length === 0) {
       return NextResponse.json({ error: 'Customer name is required' }, { status: 400 });
@@ -151,7 +128,7 @@ export async function POST(req: NextRequest) {
     const { data: existing } = await supabase
       .schema('core').from('customers')
       .select('id, name')
-      .eq('org_id', org.id)
+      .eq('org_id', orgId)
       .is('deleted_at', null)
       .ilike('name', `%${trimmedName}%`)
       .limit(5);
@@ -168,7 +145,7 @@ export async function POST(req: NextRequest) {
     }
 
     const insertData = {
-      org_id: org.id,
+      org_id: orgId,
       name: trimmedName,
       display_name: body.display_name?.trim() || trimmedName,
       email: body.email?.trim().toLowerCase() || null,
@@ -212,10 +189,9 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireAuthedContext();
+    if (ctx instanceof NextResponse) return ctx;
+    const { supabase } = ctx;
 
     const body = await req.json();
     const { id, ...updates } = body as { id: string } & Partial<CustomerInput>;
@@ -223,8 +199,6 @@ export async function PATCH(req: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'Customer ID required' }, { status: 400 });
     }
-
-    const supabase = createAdminSupabase();
 
     const updateData: Record<string, unknown> = {};
     if (updates.name !== undefined) updateData.name = updates.name.trim();

@@ -1,21 +1,14 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { createAttribution, approveAttribution, voidAttribution, overrideApprover } from '@/lib/services/cost-approval';
-
-async function getOrgId(supabase: ReturnType<typeof createAdminSupabase>): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
 
 // GET /api/cost-approvals?lifecycle=PENDING — the approval queue, enriched with job + company.
 export async function GET(request: Request) {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const lifecycle = new URL(request.url).searchParams.get('lifecycle') ?? 'PENDING';
@@ -42,10 +35,9 @@ export async function GET(request: Request) {
 
 // POST /api/cost-approvals — { action: 'create'|'approve'|'void'|'override', ... }
 export async function POST(request: Request) {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   let body: Record<string, unknown>;

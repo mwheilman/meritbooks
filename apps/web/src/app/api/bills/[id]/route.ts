@@ -1,24 +1,15 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
-import { requireAuth } from '@/lib/api-handler';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { billTransitionSchema } from '@/lib/validations/transactions';
 import { approveBill, scheduleBill, payBill, voidBill } from '@/lib/services/bill-ap';
 
-type Supa = ReturnType<typeof createAdminSupabase>;
-
-async function getOrgId(supabase: Supa): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
-
 // GET /api/bills/[id] — full bill detail for the AP panel.
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const { data: bill, error } = await supabase
@@ -94,12 +85,11 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
 // POST /api/bills/[id] — lifecycle transition (approve | schedule | pay | void | override_approver).
 export async function POST(request: Request, { params }: { params: { id: string } }) {
-  const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
-  const actor = authResult.userId;
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+  const actor = userId;
 
   let raw: unknown;
   try { raw = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }

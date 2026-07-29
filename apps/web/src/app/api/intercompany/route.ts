@@ -1,7 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 import {
   postIntercompany,
@@ -9,17 +8,11 @@ import {
   getIntercompanyOverview,
 } from '@/lib/services/intercompany';
 
-/** Resolve the single org for this deployment (Clerk orgId is empty in dev). */
-async function resolveOrgId(supabase: ReturnType<typeof createAdminSupabase>): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return data?.id ?? null;
-}
-
 // ─── GET: overview (entities, transactions, pair balances, group tie) ─────────
 export async function GET() {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-  const orgId = await resolveOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) {
     return NextResponse.json({ entities: [], transactions: [], pairBalances: [], groupTie: { totalReceivableCents: 0, totalPayableCents: 0, differenceCents: 0, balanced: true } });
   }
@@ -48,8 +41,9 @@ const createSchema = z
   });
 
 export async function POST(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
 
   let raw: unknown;
   try {
@@ -67,7 +61,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Validation failed', details }, { status: 422 });
   }
 
-  const orgId = await resolveOrgId(supabase);
   if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
   const result = await postIntercompany(supabase, {
@@ -97,8 +90,9 @@ export async function POST(request: Request) {
 
 // ─── DELETE: void an intercompany transaction (?id=...&reason=...) ─────────────
 export async function DELETE(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
   const reason = (searchParams.get('reason') ?? '').trim();
@@ -106,7 +100,6 @@ export async function DELETE(request: Request) {
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
   if (reason.length < 3) return NextResponse.json({ error: 'A void reason is required' }, { status: 400 });
 
-  const orgId = await resolveOrgId(supabase);
   if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
   const res = await voidIntercompany(supabase, orgId, id, reason);

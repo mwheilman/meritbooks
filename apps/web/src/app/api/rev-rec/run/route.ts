@@ -1,14 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { recognizeRun } from '@/lib/services/rev-rec';
-
-async function orgId(supabase: ReturnType<typeof createAdminSupabase>) {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
 
 function asOfFrom(url: string): string {
   const v = new URL(url).searchParams.get('as_of');
@@ -21,10 +15,9 @@ function asOfFrom(url: string): string {
 
 /** GET /api/rev-rec/run?as_of&location_id — preview what would be recognized (no posting). */
 export async function GET(request: Request) {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const supabase = createAdminSupabase();
-  const id = await orgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId: id, userId } = ctx;
   if (!id) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const asOf = asOfFrom(request.url);
@@ -39,10 +32,9 @@ export async function GET(request: Request) {
 
 /** POST /api/rev-rec/run { as_of?, location_id? } — recognize and post. */
 export async function POST(request: Request) {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const supabase = createAdminSupabase();
-  const id = await orgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId: id, userId } = ctx;
   if (!id) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   let body: { as_of?: string; location_id?: string | null } = {};

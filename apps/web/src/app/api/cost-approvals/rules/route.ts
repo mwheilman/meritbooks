@@ -1,19 +1,12 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
-
-async function getOrgId(supabase: ReturnType<typeof createAdminSupabase>): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
+import { requireAuthedContext } from '@/lib/api-handler';
 
 export async function GET() {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const { data, error } = await supabase
@@ -26,10 +19,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   let body: Record<string, unknown>;
@@ -58,10 +50,9 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const id = new URL(request.url).searchParams.get('id');

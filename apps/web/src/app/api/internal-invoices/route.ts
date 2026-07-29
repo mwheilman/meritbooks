@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
 
@@ -20,14 +20,9 @@ const createSchema = z.object({
   lines: z.array(lineSchema).min(1),
 });
 
-async function resolveOrgId(supabase: ReturnType<typeof createAdminSupabase>): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data?.id as string) ?? null;
-}
-
 // Generate the next per-org invoice number: II-000001, II-000002, ...
 async function nextInvoiceNumber(
-  supabase: ReturnType<typeof createAdminSupabase>,
+  supabase: SupabaseClient,
   orgId: string,
 ): Promise<string> {
   const { data } = await supabase
@@ -45,8 +40,9 @@ async function nextInvoiceNumber(
 }
 
 export async function GET(request: Request) {
-  const supabase = createAdminSupabase();
-  const orgId = await resolveOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ data: [], counts: {} });
 
   const { searchParams } = new URL(request.url);
@@ -120,9 +116,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const authResult = await auth().catch(() => ({ userId: null as string | null }));
-  const userId = authResult.userId ?? null;
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
 
   let body: z.infer<typeof createSchema>;
   try {
