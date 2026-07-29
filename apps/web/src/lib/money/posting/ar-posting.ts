@@ -21,9 +21,9 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { postJournalEntry, type PostResult } from '@/lib/services/gl-posting';
+import { type PostResult } from '@/lib/services/gl-posting';
 import { resolveRole } from '@/lib/posting/account-roles';
-import { type MoneyMovementEntry, line, assertBalanced } from './types';
+import { type MoneyMovementEntry, line, assertBalanced, postMoneyMovementEntry } from './types';
 
 export interface ArCollectionAccounts {
   settlementClearingId: string;
@@ -86,7 +86,8 @@ export function buildArRefundEntry(
 // Post wrappers (resolve roles, then post through the engine)
 // --------------------------------------------------------------------------
 
-async function postEntry(
+// Positional adapter over the single shared money-movement wrapper (types.ts).
+function postEntry(
   supabase: SupabaseClient,
   orgId: string,
   locationId: string,
@@ -95,16 +96,13 @@ async function postEntry(
   entry: MoneyMovementEntry,
   sourceId?: string,
 ): Promise<PostResult> {
-  return postJournalEntry(supabase, {
-    org_id: orgId,
-    location_id: locationId,
-    entry_date: entryDate,
-    entry_type: entry.entryType,
-    memo: entry.memo,
-    source_module: 'MONEY_MOVEMENT',
-    source_ref: sourceId, // Stripe pi_/po_ id — external string, not a uuid
-    created_by: createdBy,
-    lines: entry.lines,
+  return postMoneyMovementEntry(supabase, {
+    orgId,
+    locationId,
+    entryDate,
+    createdBy,
+    entry,
+    sourceId,
   });
 }
 

@@ -16,9 +16,9 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { postJournalEntry, type PostResult } from '@/lib/services/gl-posting';
+import { type PostResult } from '@/lib/services/gl-posting';
 import { resolveRole } from '@/lib/posting/account-roles';
-import { line, assertBalanced, type MoneyMovementEntry } from './types';
+import { line, assertBalanced, postMoneyMovementEntry, type MoneyMovementEntry } from './types';
 
 export interface PlatformFeeAccounts {
   inTransitId: string;
@@ -66,15 +66,13 @@ export async function postPlatformFee(
     args.locationId,
     args.sourceTenantOrgId ? `Payment processing income (tenant ${args.sourceTenantOrgId})` : 'Payment processing income',
   );
-  return postJournalEntry(supabase, {
-    org_id: args.platformOrgId,
-    location_id: args.locationId,
-    entry_date: args.entryDate,
-    entry_type: 'PLATFORM_FEE',
-    memo: entry.memo,
-    source_module: 'PLATFORM_FEE',
-    source_ref: args.sourceId, // Stripe pi_ id — external string, not a uuid
-    created_by: args.createdBy,
-    lines: entry.lines,
+  return postMoneyMovementEntry(supabase, {
+    orgId: args.platformOrgId,
+    locationId: args.locationId,
+    entryDate: args.entryDate,
+    createdBy: args.createdBy,
+    entry, // entryType is 'PLATFORM_FEE'
+    sourceId: args.sourceId, // Stripe pi_ id — external string, not a uuid
+    sourceModule: 'PLATFORM_FEE',
   });
 }

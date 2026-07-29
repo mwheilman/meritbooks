@@ -8,7 +8,9 @@
  * roles and hand the lines to the existing postJournalEntry engine.
  */
 
-import type { JournalEntryLineInput } from '@/lib/services/gl-posting';
+import type { JournalEntryLineInput, PostResult } from '@/lib/services/gl-posting';
+import { postJournalEntry } from '@/lib/services/gl-posting';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface MoneyMovementEntry {
   entryType: string;
@@ -32,6 +34,38 @@ export function line(
     location_id: locationId,
     ...extra,
   };
+}
+
+/**
+ * Post a money-movement entry through the GL engine. The single shared wrapper
+ * for AR / AP / payroll / platform-fee posting — the processor id (Stripe pi_/po_,
+ * Plaid txn) goes to source_ref (external string), never source_id (uuid). Was
+ * duplicated verbatim in three modules; consolidated here so a change to how
+ * money-movement entries post happens in one place.
+ */
+export function postMoneyMovementEntry(
+  supabase: SupabaseClient,
+  args: {
+    orgId: string;
+    locationId: string;
+    entryDate: string;
+    createdBy: string | null;
+    entry: MoneyMovementEntry;
+    sourceId?: string;
+    sourceModule?: string;
+  },
+): Promise<PostResult> {
+  return postJournalEntry(supabase, {
+    org_id: args.orgId,
+    location_id: args.locationId,
+    entry_date: args.entryDate,
+    entry_type: args.entry.entryType,
+    memo: args.entry.memo,
+    source_module: args.sourceModule ?? 'MONEY_MOVEMENT',
+    source_ref: args.sourceId, // Stripe pi_/po_ id — external string, not a uuid
+    created_by: args.createdBy,
+    lines: args.entry.lines,
+  });
 }
 
 /** Throws unless debits == credits and the entry has >= 2 non-zero lines. */
