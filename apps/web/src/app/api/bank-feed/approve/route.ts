@@ -18,9 +18,9 @@ import { learnVendorPattern } from '@/lib/services/categorization';
 export const POST = apiHandler(
   approveBankTransactionSchema,
   async (body: ApproveBankTransactionInput, ctx) => {
-    // Canonical org id (matches fiscal_periods + the cost/billing seam tables).
-    const { data: coreOrg } = await ctx.supabase.schema('core').from('organizations').select('id').limit(1).single();
-    const orgId = (coreOrg as { id: string } | null)?.id ?? ctx.orgId ?? '';
+    // Canonical org id — the token's org_id claim (a real core.organizations.id),
+    // which RLS also enforces. No lookup needed.
+    const orgId = ctx.orgId ?? '';
 
     const { data: txn, error: txnErr } = await ctx.supabase
       .from('bank_transactions')

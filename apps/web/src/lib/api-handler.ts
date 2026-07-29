@@ -1,12 +1,55 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { ZodSchema, ZodError } from 'zod';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAuthedSupabase } from '@/lib/supabase/authed';
 
 export interface ApiContext {
   userId: string;
+  /**
+   * The MeritBooks organization UUID, taken from the token's `org_id` claim.
+   * This is a real `core.organizations.id` (e.g. via the Clerk↔Supabase
+   * integration), NOT Clerk's `org_...` string. Routes may use it directly to
+   * scope inserts/queries; it also matches what get_org_id() enforces in RLS.
+   */
   orgId: string | null;
-  supabase: ReturnType<typeof createAdminSupabase>;
+  /**
+   * Request-scoped Supabase client running AS THE USER (RLS enforced). Tenant
+   * isolation is guaranteed by the database, not by the route remembering to
+   * filter. For no-session contexts (webhook, public pay page) use
+   * createAdminSupabase() directly instead of this wrapper.
+   */
+  supabase: SupabaseClient;
+}
+
+/**
+ * Full auth context: identity, org UUID (from the `org_id` claim), and the raw
+ * session token needed to build a user-scoped Supabase client. Fails CLOSED —
+ * returns a 401 NextResponse the caller must return immediately.
+ */
+async function resolveAuthContext(): Promise<
+  { userId: string; orgId: string | null; token: string } | NextResponse
+> {
+  const a = await auth().catch(() => null);
+  if (!a?.userId) {
+    return NextResponse.json(
+      { error: 'Unauthorized', code: 'UNAUTHENTICATED' },
+      { status: 401 }
+    );
+  }
+  // Session token carries our custom claims (role=authenticated, org_id=<uuid>).
+  // Without it we cannot run as the user, so fail closed rather than silently
+  // falling back to an unscoped or privileged client.
+  const token = await a.getToken().catch(() => null);
+  if (!token) {
+    return NextResponse.json(
+      { error: 'Unauthorized', code: 'NO_SESSION_TOKEN' },
+      { status: 401 }
+    );
+  }
+  const claims = a.sessionClaims as Record<string, unknown> | null;
+  const orgId = typeof claims?.org_id === 'string' ? claims.org_id : null;
+  return { userId: a.userId, orgId, token };
 }
 
 /**
@@ -18,6 +61,8 @@ export interface ApiContext {
  * running the RLS-bypassing admin client, so any auth failure executed as a
  * trusted insider — an authentication-bypass vulnerability.)
  *
+ * `orgId` is the MeritBooks org UUID from the token's `org_id` claim.
+ *
  * Usage in a raw route handler:
  *   const authResult = await requireAuth();
  *   if (authResult instanceof NextResponse) return authResult;
@@ -26,17 +71,9 @@ export interface ApiContext {
 export async function requireAuth(): Promise<
   { userId: string; orgId: string | null } | NextResponse
 > {
-  const authResult = await auth().catch(() => ({
-    userId: null as string | null,
-    orgId: null as string | null,
-  }));
-  if (!authResult.userId) {
-    return NextResponse.json(
-      { error: 'Unauthorized', code: 'UNAUTHENTICATED' },
-      { status: 401 }
-    );
-  }
-  return { userId: authResult.userId, orgId: authResult.orgId ?? null };
+  const ctx = await resolveAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  return { userId: ctx.userId, orgId: ctx.orgId };
 }
 
 /**
@@ -49,9 +86,9 @@ export function apiHandler<T>(
 ) {
   return async (request: Request) => {
     // Auth — fail closed. Never substitute a privileged fallback identity.
-    const authResult = await requireAuth();
+    const authResult = await resolveAuthContext();
     if (authResult instanceof NextResponse) return authResult;
-    const { userId, orgId } = authResult;
+    const { userId, orgId, token } = authResult;
 
     try {
       // Parse + validate body
@@ -74,9 +111,8 @@ export function apiHandler<T>(
         body = {} as T;
       }
 
-      // Create Supabase client
-      // TODO: Switch back to createServerSupabase() once Clerk JWT template is configured in Supabase
-      const supabase = createAdminSupabase();
+      // Run AS THE USER: RLS enforces tenant isolation at the database.
+      const supabase = createAuthedSupabase(token);
 
       // Execute handler
       return await handler(body, { userId, orgId, supabase });
@@ -110,9 +146,9 @@ export function apiQueryHandler<T>(
 ) {
   return async (request: Request) => {
     // Auth — fail closed. Never substitute a privileged fallback identity.
-    const authResult = await requireAuth();
+    const authResult = await resolveAuthContext();
     if (authResult instanceof NextResponse) return authResult;
-    const { userId, orgId } = authResult;
+    const { userId, orgId, token } = authResult;
 
     try {
       let params: T;
@@ -135,8 +171,8 @@ export function apiQueryHandler<T>(
         params = {} as T;
       }
 
-      // TODO: Switch back to createServerSupabase() once Clerk JWT template is configured in Supabase
-      const supabase = createAdminSupabase();
+      // Run AS THE USER: RLS enforces tenant isolation at the database.
+      const supabase = createAuthedSupabase(token);
       return await handler(params, { userId, orgId, supabase });
     } catch (error) {
       console.error('[API Error]', error);

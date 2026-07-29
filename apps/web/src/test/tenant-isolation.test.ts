@@ -32,6 +32,15 @@
  * first-org lookups is pinned, so remediation can proceed incrementally while
  * NEW routes cannot add to the pile. Lower the budget as routes are converted;
  * the test fails if it ever rises.
+ *
+ * PROGRESS (2026-07-29): the Clerk↔Supabase third-party-auth integration is live
+ * and the session token now carries the MeritBooks org uuid as the `org_id`
+ * claim. apiHandler/apiQueryHandler now (a) set ctx.orgId from that claim (a real
+ * core.organizations.id, not Clerk's org_ string) and (b) run ctx.supabase AS THE
+ * USER via createAuthedSupabase, so RLS engages for those 15 routes — first-org
+ * lookups there are now RLS-scoped rather than table-wide. The ~34 routes still
+ * building their own admin client are the remaining conversion work; the budget
+ * shrinks as each is moved off the service role.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -50,7 +59,7 @@ const API_ROOT = path.resolve(
  * a new route that needs the tenant must take it from the authenticated
  * context, not from whichever org sorts first.
  */
-const FIRST_ORG_LOOKUP_BUDGET = 49;
+const FIRST_ORG_LOOKUP_BUDGET = 48;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
