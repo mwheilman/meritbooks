@@ -9,3 +9,6 @@ dist/
 coverage/
 .vercel/
 supabase/.temp/
+
+# TypeScript incremental build cache (regenerated on every build)
+*.tsbuildinfo
