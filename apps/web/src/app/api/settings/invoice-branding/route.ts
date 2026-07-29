@@ -1,16 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
-
-type Supa = ReturnType<typeof createAdminSupabase>;
-
-async function getOrgId(supabase: Supa): Promise<string | null> {
-  const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  return (data as { id: string } | null)?.id ?? null;
-}
 
 /**
  * GET /api/settings/invoice-branding
@@ -19,9 +11,9 @@ async function getOrgId(supabase: Supa): Promise<string | null> {
  * without a saved template come back with the emerald/MODERN defaults.
  */
 export async function GET() {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const { data: locations } = await supabase
@@ -67,9 +59,9 @@ const putSchema = z.object({
 
 /** PUT /api/settings/invoice-branding — upsert one entity's display options. */
 export async function PUT(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-  const orgId = await getOrgId(supabase);
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const parsed = putSchema.safeParse(await request.json().catch(() => ({})));

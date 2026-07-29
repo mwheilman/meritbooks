@@ -59,7 +59,7 @@ const API_ROOT = path.resolve(
  * a new route that needs the tenant must take it from the authenticated
  * context, not from whichever org sorts first.
  */
-const FIRST_ORG_LOOKUP_BUDGET = 48;
+const FIRST_ORG_LOOKUP_BUDGET = 44;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

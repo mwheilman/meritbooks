@@ -1,24 +1,24 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 
 export async function GET() {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
 
   const { data, error } = await supabase
     .schema('core').from('organizations')
     .select('*')
-    .limit(1)
+    .eq('id', orgId ?? '')
     .single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Also get locations for portfolio companies
+  // Also get locations for portfolio companies (RLS scopes to this org)
   const { data: locations } = await supabase
     .schema('core').from('locations')
     .select('id, name, short_code, industry, is_active, created_at')
@@ -70,8 +70,9 @@ const updateSchema = z.object({
 });
 
 export async function PATCH(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
 
   const raw = await request.json();
   const result = updateSchema.safeParse(raw);
@@ -79,11 +80,8 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Validation failed', details: result.error.issues }, { status: 422 });
   }
 
-  // Get org id
-  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  if (!org) return NextResponse.json({ error: 'No organization found' }, { status: 404 });
-
-  const { error } = await supabase.schema('core').from('organizations').update(result.data).eq('id', org.id);
+  // Tenant is the token's org claim; RLS also enforces id = get_org_id().
+  const { error } = await supabase.schema('core').from('organizations').update(result.data).eq('id', orgId ?? '');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ success: true });

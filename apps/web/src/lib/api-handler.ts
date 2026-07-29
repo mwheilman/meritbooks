@@ -77,6 +77,24 @@ export async function requireAuth(): Promise<
 }
 
 /**
+ * Auth context for RAW route handlers (those not wrapped by apiHandler) — the
+ * one-call replacement for the `auth()` + `createAdminSupabase()` + first-org
+ * lookup trio. Returns the identity, the org UUID from the token claim, and a
+ * Supabase client scoped to the user (RLS enforced), or a 401 the caller must
+ * return immediately. Converting a route to this both closes the RLS-bypass and
+ * removes its `select id from organizations limit 1` (the tenant is the claim).
+ *
+ *   const ctx = await requireAuthedContext();
+ *   if (ctx instanceof NextResponse) return ctx;
+ *   // ctx.userId, ctx.orgId, ctx.supabase
+ */
+export async function requireAuthedContext(): Promise<ApiContext | NextResponse> {
+  const ctx = await resolveAuthContext();
+  if (ctx instanceof NextResponse) return ctx;
+  return { userId: ctx.userId, orgId: ctx.orgId, supabase: createAuthedSupabase(ctx.token) };
+}
+
+/**
  * Wraps an API handler with auth, validation, and error handling.
  * Eliminates boilerplate from every route.
  */

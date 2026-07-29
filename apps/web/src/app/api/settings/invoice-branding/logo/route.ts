@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
 
 /**
@@ -15,12 +15,16 @@ const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
 const ALLOWED = ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp'];
 
 export async function POST(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
-
-  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  const orgId = (org as { id: string } | null)?.id;
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Storage writes go through the service role: the `branding` bucket's object
+  // policies are a separate surface from table RLS and are not yet configured for
+  // the authenticated role. Identity/org are already verified above; the upload
+  // path is namespaced by the caller's orgId.
+  const supabase = createAdminSupabase();
 
   const form = await request.formData().catch(() => null);
   const file = form?.get('file');
