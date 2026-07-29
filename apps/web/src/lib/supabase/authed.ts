@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { auth } from '@clerk/nextjs/server';
 
 /**
  * Request-scoped Supabase client that runs as the AUTHENTICATED USER rather than
@@ -25,4 +26,18 @@ export function createAuthedSupabase(accessToken: string): SupabaseClient {
       auth: { persistSession: false, autoRefreshToken: false },
     },
   );
+}
+
+/**
+ * Server-side (server component / server action) user-scoped client. Pulls the
+ * Clerk session token via auth() and forwards it, so RLS engages the same way it
+ * does in the API routes. Returns null if there is no session token (caller
+ * should degrade gracefully). This is the server-action analogue of
+ * requireAuthedContext() — use it INSTEAD of createServerSupabase() (which sends
+ * no Clerk token, so RLS returns nothing) in authenticated server code.
+ */
+export async function createAuthedServerSupabase(): Promise<SupabaseClient | null> {
+  const { getToken } = await auth();
+  const token = await getToken().catch(() => null);
+  return token ? createAuthedSupabase(token) : null;
 }

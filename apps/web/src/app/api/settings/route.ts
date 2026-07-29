@@ -38,13 +38,15 @@ export async function GET() {
         firstReminderMinutes: data.chase_first_reminder_minutes,
         followupMinutes: data.chase_followup_minutes,
         escalationThreshold: data.chase_escalation_threshold,
-        quietStart: data.chase_quiet_start,
-        quietEnd: data.chase_quiet_end,
+        // Postgres `time` serializes as HH:MM:SS; the UI (and the round-trip) want HH:MM.
+        quietStart: data.chase_quiet_start ? String(data.chase_quiet_start).slice(0, 5) : data.chase_quiet_start,
+        quietEnd: data.chase_quiet_end ? String(data.chase_quiet_end).slice(0, 5) : data.chase_quiet_end,
         channel: data.chase_channel,
         autoApproveCents: data.chase_auto_approve_cents,
       },
       ai: {
-        autoApproveThreshold: data.ai_auto_approve_threshold,
+        // `numeric` serializes as a string ("0.8500"); hand the UI a real number.
+        autoApproveThreshold: data.ai_auto_approve_threshold == null ? null : Number(data.ai_auto_approve_threshold),
         autoApproveMaxCents: data.ai_auto_approve_max_cents,
       },
     },
@@ -52,21 +54,25 @@ export async function GET() {
   });
 }
 
+// HH:MM, tolerating an optional :SS (Postgres `time` serializes with seconds).
+const hhmm = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/);
 const updateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   primary_contact_name: z.string().max(200).optional(),
   primary_contact_email: z.string().email().optional(),
   timezone: z.string().optional(),
-  fiscal_year_start_month: z.number().int().min(1).max(12).optional(),
-  chase_first_reminder_minutes: z.number().int().min(5).max(1440).optional(),
-  chase_followup_minutes: z.number().int().min(15).max(1440).optional(),
-  chase_escalation_threshold: z.number().int().min(1).max(20).optional(),
-  chase_quiet_start: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  chase_quiet_end: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  // z.coerce.* so string-serialized numeric/int values (e.g. "0.8500" from a
+  // `numeric` column round-tripped through the form) validate instead of 422-ing.
+  fiscal_year_start_month: z.coerce.number().int().min(1).max(12).optional(),
+  chase_first_reminder_minutes: z.coerce.number().int().min(5).max(1440).optional(),
+  chase_followup_minutes: z.coerce.number().int().min(15).max(1440).optional(),
+  chase_escalation_threshold: z.coerce.number().int().min(1).max(20).optional(),
+  chase_quiet_start: hhmm.optional(),
+  chase_quiet_end: hhmm.optional(),
   chase_channel: z.enum(['PUSH_SMS', 'PUSH_ONLY', 'SMS_ONLY', 'PUSH_SMS_EMAIL']).optional(),
-  chase_auto_approve_cents: z.number().int().min(0).optional(),
-  ai_auto_approve_threshold: z.number().min(0).max(1).optional(),
-  ai_auto_approve_max_cents: z.number().int().min(0).optional(),
+  chase_auto_approve_cents: z.coerce.number().int().min(0).optional(),
+  ai_auto_approve_threshold: z.coerce.number().min(0).max(1).optional(),
+  ai_auto_approve_max_cents: z.coerce.number().int().min(0).optional(),
 });
 
 export async function PATCH(request: Request) {

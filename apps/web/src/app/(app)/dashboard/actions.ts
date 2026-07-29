@@ -1,6 +1,17 @@
 'use server';
 
-import { createServerSupabase } from '@/lib/supabase/server';
+import { createAuthedServerSupabase } from '@/lib/supabase/authed';
+
+const ZERO_METRICS: DashboardMetrics = {
+  pendingReview: 0,
+  pendingReceipts: 0,
+  pendingBills: 0,
+  pendingJEs: 0,
+  totalTransactionsToday: 0,
+  cashPositionCents: 0,
+  openAPCents: 0,
+  openARCents: 0,
+};
 
 export interface DashboardMetrics {
   pendingReview: number;
@@ -14,7 +25,8 @@ export interface DashboardMetrics {
 }
 
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
-  const supabase = await createServerSupabase();
+  const supabase = await createAuthedServerSupabase();
+  if (!supabase) return ZERO_METRICS;
 
   const [
     { count: pendingReceipts },
@@ -78,7 +90,8 @@ export interface RecentActivity {
 }
 
 export async function getRecentActivity(limit = 20): Promise<RecentActivity[]> {
-  const supabase = await createServerSupabase();
+  const supabase = await createAuthedServerSupabase();
+  if (!supabase) return [];
 
   const { data: txns } = await supabase
     .from('bank_transactions')
