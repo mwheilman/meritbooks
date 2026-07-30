@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
-import { useQuery } from '@/hooks';
+import { useQuery, addToast } from '@/hooks';
+import { api } from '@/lib/api-client';
 import { PageHeader } from '@/components/ui';
 
 // ── Types (mirror /api/exceptions) ─────────────────────────────────────────────
@@ -116,46 +117,67 @@ function confidenceClass(confidence: number): string {
 
 // ── Row ───────────────────────────────────────────────────────────────────────
 
-function ExceptionRow({ item, onOpen }: { item: ExceptionItem; onOpen: (href: string) => void }) {
+/** Sources with a SAFE (non-financial) resolve action + the button verb to show. */
+const RESOLVE_LABEL: Partial<Record<ExceptionSource, string>> = {
+  bank: 'Resolve',
+  receipt: 'Resolve',
+  bill: 'Resolve',
+  ai_proposal: 'Dismiss',
+};
+
+function ExceptionRow({
+  item,
+  onOpen,
+  onResolve,
+  isResolving,
+}: {
+  item: ExceptionItem;
+  onOpen: (href: string) => void;
+  onResolve: (item: ExceptionItem) => void;
+  isResolving: boolean;
+}) {
   const meta = SOURCE_META[item.source];
   const Icon = meta.icon;
+  const resolveLabel = RESOLVE_LABEL[item.source];
 
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(item.href)}
-      className="flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-slate-800/30 focus:bg-slate-800/40 focus:outline-none"
-    >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800/60">
-        <Icon size={16} className="text-slate-400" />
-      </div>
+    <div className="group flex w-full items-center gap-4 px-4 py-3 transition-colors hover:bg-slate-800/30">
+      <button
+        type="button"
+        onClick={() => onOpen(item.href)}
+        className="flex min-w-0 flex-1 items-center gap-4 text-left focus:outline-none"
+      >
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800/60">
+          <Icon size={16} className="text-slate-400" />
+        </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-medium text-white">{item.title}</p>
-          <span
-            className={clsx(
-              'inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
-              meta.badgeClass
-            )}
-          >
-            {meta.label}
-          </span>
-          {item.confidence !== null && (
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-medium text-white">{item.title}</p>
             <span
               className={clsx(
-                'inline-flex shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium',
-                confidenceClass(item.confidence)
+                'inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
+                meta.badgeClass
               )}
             >
-              {Math.round(item.confidence * 100)}%
+              {meta.label}
             </span>
+            {item.confidence !== null && (
+              <span
+                className={clsx(
+                  'inline-flex shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium',
+                  confidenceClass(item.confidence)
+                )}
+              >
+                {Math.round(item.confidence * 100)}%
+              </span>
+            )}
+          </div>
+          {item.subtitle && (
+            <p className="mt-0.5 truncate text-xs text-slate-500">{item.subtitle}</p>
           )}
         </div>
-        {item.subtitle && (
-          <p className="mt-0.5 truncate text-xs text-slate-500">{item.subtitle}</p>
-        )}
-      </div>
+      </button>
 
       <div className="flex shrink-0 flex-col items-end gap-0.5">
         {item.amountCents !== null && (
@@ -163,7 +185,25 @@ function ExceptionRow({ item, onOpen }: { item: ExceptionItem; onOpen: (href: st
         )}
         <span className="text-[11px] text-slate-500">{relativeTime(item.createdAt)}</span>
       </div>
-    </button>
+
+      {resolveLabel && (
+        <button
+          type="button"
+          disabled={isResolving}
+          onClick={(e) => {
+            e.stopPropagation();
+            onResolve(item);
+          }}
+          className={clsx(
+            'inline-flex w-20 shrink-0 items-center justify-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
+            'border-slate-700 bg-slate-800/40 text-slate-300 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400',
+            'disabled:cursor-not-allowed disabled:opacity-50'
+          )}
+        >
+          {isResolving ? <Loader2 size={13} className="animate-spin" /> : resolveLabel}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -173,6 +213,7 @@ export default function ExceptionsPage() {
   const router = useRouter();
   const { data, isLoading, error, refetch } = useQuery<ExceptionsResponse>('/api/exceptions');
   const [filter, setFilter] = useState<ExceptionSource | 'all'>('all');
+  const [resolvingKey, setResolvingKey] = useState<string | null>(null);
 
   const items = useMemo(() => data?.data ?? [], [data]);
   const counts = data?.counts;
@@ -196,6 +237,24 @@ export default function ExceptionsPage() {
 
   function open(href: string) {
     router.push(href);
+  }
+
+  async function resolve(item: ExceptionItem) {
+    const key = `${item.source}:${item.id}`;
+    setResolvingKey(key);
+    const verb = item.source === 'ai_proposal' ? 'Dismissed' : 'Resolved';
+    const result = await api.post<{ ok: boolean }>('/api/exceptions/resolve', {
+      source: item.source,
+      id: item.id,
+    });
+    if (result.error) {
+      addToast('error', result.error.error || 'Could not resolve item');
+      setResolvingKey(null);
+      return;
+    }
+    addToast('success', `${verb} — removed from queue`);
+    await refetch();
+    setResolvingKey(null);
   }
 
   return (
@@ -271,9 +330,18 @@ export default function ExceptionsPage() {
         </div>
       ) : (
         <div className="card divide-y divide-slate-800/40 overflow-hidden">
-          {filtered.map((item) => (
-            <ExceptionRow key={`${item.source}:${item.id}`} item={item} onOpen={open} />
-          ))}
+          {filtered.map((item) => {
+            const key = `${item.source}:${item.id}`;
+            return (
+              <ExceptionRow
+                key={key}
+                item={item}
+                onOpen={open}
+                onResolve={resolve}
+                isResolving={resolvingKey === key}
+              />
+            );
+          })}
         </div>
       )}
     </div>

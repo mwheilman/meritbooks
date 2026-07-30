@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 import { suggestCategory, CATEGORIZE_MODEL, type CoaRow } from '@/lib/services/categorization';
+import { scoreToTier, getTierPolicy } from '@/lib/trust/score-tier';
 
 /**
  * POST /api/bank-feed/categorize
@@ -133,6 +134,10 @@ export async function POST(request: Request) {
   let failed = 0;
   let budgetBlocked = false;
 
+  // Confidence-tier policy for this org (auto/review thresholds + cap), fetched
+  // once for the whole batch.
+  const tierPolicy = await getTierPolicy(supabase, orgId!);
+
   /** Code one transaction: run the categorizer, persist its suggestion. */
   async function codeOne(txn: TxnRow): Promise<CodeOutcome> {
     const res = await suggestCategory(supabase, apiKey!, {
@@ -151,6 +156,17 @@ export async function POST(request: Request) {
     const s = res.suggestion;
     if (!s.accountId) return { kind: 'failed' };
 
+    // Confidence tier decides disposition. Low-confidence (escalate) items are
+    // FLAGGED so they surface in the exception queue for a human rather than
+    // sitting in CATEGORIZED looking ready to post. auto/review still code in
+    // place (the Bank Feed review UI approves them).
+    const { tier } = scoreToTier(
+      { confidence: s.confidence, amountCents: Math.abs(txn.amount_cents) },
+      tierPolicy,
+    );
+    const nextStatus =
+      tier === 'escalate' ? 'FLAGGED' : txn.status === 'PENDING' ? 'CATEGORIZED' : txn.status;
+
     const { error: upErr } = await supabase
       .from('bank_transactions')
       .update({
@@ -160,7 +176,7 @@ export async function POST(request: Request) {
         ai_confidence: s.confidence,
         ai_reasoning: s.reasoning,
         ai_model_version: s.source === 'ai' ? CATEGORIZE_MODEL : 'vendor-pattern',
-        status: txn.status === 'PENDING' ? 'CATEGORIZED' : txn.status,
+        status: nextStatus,
         updated_at: new Date().toISOString(),
       })
       .eq('id', txn.id)

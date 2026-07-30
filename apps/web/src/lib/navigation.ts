@@ -32,6 +32,7 @@ import {
   FlaskConical,
   History,
   Inbox,
+  Activity,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -107,6 +108,7 @@ export const navigation: NavGroup[] = [
     items: [
       { label: 'Team & Access', href: '/team', icon: Users },
       { label: 'Audit Trail', href: '/audit', icon: History },
+      { label: 'Operations', href: '/operations', icon: Activity },
       { label: 'Companies', href: '/settings', icon: Building2 },
       { label: 'Compliance', href: '/compliance', icon: Shield },
       { label: 'Import Data', href: '/import', icon: Upload },
