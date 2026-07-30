@@ -161,3 +161,27 @@ Shipped and merged to `main` after this handoff was first written (spec → agen
   attach → tier → queue) as the first full autonomous pipeline.
 - Still open from §4: reconcile employees↔memberships + auto-provisioning; RBAC guard
   rollout; event-worker org resolution; PLATFORM_ORG_ID; Resend key rotation; Clerk prod.
+
+### Later batch 2026-07-30 (autonomous engine — trust loop closed end to end)
+Also shipped (typecheck-verified; some sections not yet browser-verified — user chose
+one-push batching):
+- **Exception queue actionable**: `/api/exceptions/resolve` (safe status transitions,
+  human-logged) + Resolve/Dismiss buttons.
+- **Operations overview** (`/operations`, manager-gated): autonomy rate, machine-vs-human,
+  review/escalate backlog, recent activity — reads `core.action_log`.
+- **Tier-driven disposition**: bank-feed categorizer runs each suggestion through
+  `scoreToTier`; low-confidence (escalate) → FLAGGED into the exception queue.
+- **Audit coverage**: human actions logged across gl.post, bankfeed.approve, bill
+  create/approve, invoice.send, period.status.
+- **Autonomous AP intake** (`/api/bills/intake`, `lib/ap/intake.ts`, "Auto-file invoice"
+  on Bills): upload invoice → AI extract → vendor resolve-or-create → PENDING (or
+  ON_HOLD if low-confidence) bill + lines → AI action logged. Never posts to GL.
+
+**Found issues to fix (surfaced during the batch):**
+- `api/vendors/route.ts` references `core.vendors` columns that don't exist on the live
+  table (country/notes/tax_id/payment_terms/is_1099) — that path errors; migrations lag
+  the live schema. Needs reconciliation.
+- **AP attachment deferred**: `bills.source_file_url` is set null — attaching the source
+  invoice needs a Supabase **storage bucket** (one-time setup) + upload wiring.
+- AP line coding falls back to acct 6660 (Misc OPEX) when the parser resolves no account;
+  human re-codes on approval — fine, but note it.
