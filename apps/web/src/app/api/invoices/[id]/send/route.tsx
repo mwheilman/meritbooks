@@ -9,6 +9,8 @@ import { buildInvoiceEmail } from '@/lib/invoices/invoice-email';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
 import { resolveEmailProvider, resolveFromAddress, EmailSendError } from '@/lib/email/provider';
 import { renderToBuffer } from '@react-pdf/renderer';
+import { auth } from '@clerk/nextjs/server';
+import { logHumanAction } from '@/lib/trust/action-log';
 
 /**
  * POST /api/invoices/[id]/send — email the invoice to the customer.
@@ -124,6 +126,20 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   // A draft that has now been sent is no longer a draft.
   if (doc.status === 'DRAFT') {
     await supabase.from('invoices').update({ status: 'SENT' }).eq('id', doc.id);
+  }
+
+  // Human-action audit trail. This route runs on the admin client with no authed
+  // context, so resolve the Clerk actor opportunistically — never fail the send.
+  const clerkUserId = await auth()
+    .then((a) => a.userId)
+    .catch(() => null);
+  if (clerkUserId) {
+    await logHumanAction(supabase, clerkUserId, orgId, {
+      action: 'invoice.send',
+      subjectTable: 'invoices',
+      subjectId: doc.id,
+      summary: `Sent invoice ${doc.invoice_number} to ${doc.customer?.name ?? to}`,
+    });
   }
 
   return NextResponse.json({

@@ -4,6 +4,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { billTransitionSchema } from '@/lib/validations/transactions';
 import { approveBill, scheduleBill, payBill, voidBill } from '@/lib/services/bill-ap';
+import { logHumanAction } from '@/lib/trust/action-log';
 
 // GET /api/bills/[id] — full bill detail for the AP panel.
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
@@ -102,17 +103,45 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   try {
     if (body.action === 'approve') {
-      return NextResponse.json({ ok: true, ...(await approveBill(supabase, orgId, params.id, actor)) });
+      const res = await approveBill(supabase, orgId, params.id, actor);
+      await logHumanAction(supabase, actor, orgId, {
+        action: 'bill.approve',
+        subjectTable: 'bills',
+        subjectId: params.id,
+        summary: 'Approved bill',
+      });
+      return NextResponse.json({ ok: true, ...res });
     }
     if (body.action === 'schedule') {
-      return NextResponse.json({ ok: true, ...(await scheduleBill(supabase, orgId, params.id, body.scheduled_payment_date, body.payment_method ?? null)) });
+      const res = await scheduleBill(supabase, orgId, params.id, body.scheduled_payment_date, body.payment_method ?? null);
+      await logHumanAction(supabase, actor, orgId, {
+        action: 'bill.update',
+        subjectTable: 'bills',
+        subjectId: params.id,
+        summary: `Scheduled bill payment for ${body.scheduled_payment_date}`,
+      });
+      return NextResponse.json({ ok: true, ...res });
     }
     if (body.action === 'pay') {
       const date = body.payment_date ?? new Date().toISOString().slice(0, 10);
-      return NextResponse.json({ ok: true, ...(await payBill(supabase, orgId, params.id, body.amount_cents, date, body.payment_method ?? null)) });
+      const res = await payBill(supabase, orgId, params.id, body.amount_cents, date, body.payment_method ?? null);
+      await logHumanAction(supabase, actor, orgId, {
+        action: 'bill.update',
+        subjectTable: 'bills',
+        subjectId: params.id,
+        summary: `Recorded bill payment on ${date}`,
+      });
+      return NextResponse.json({ ok: true, ...res });
     }
     if (body.action === 'void') {
-      return NextResponse.json({ ok: true, ...(await voidBill(supabase, orgId, params.id, body.reason)) });
+      const res = await voidBill(supabase, orgId, params.id, body.reason);
+      await logHumanAction(supabase, actor, orgId, {
+        action: 'bill.update',
+        subjectTable: 'bills',
+        subjectId: params.id,
+        summary: `Voided bill: ${body.reason}`,
+      });
+      return NextResponse.json({ ok: true, ...res });
     }
     if (body.action === 'override_approver') {
       const { error } = await supabase
@@ -121,6 +150,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
         .eq('org_id', orgId)
         .eq('id', params.id);
       if (error) throw new Error(error.message);
+      await logHumanAction(supabase, actor, orgId, {
+        action: 'bill.update',
+        subjectTable: 'bills',
+        subjectId: params.id,
+        summary: `Overrode bill approver to ${body.approver_type}`,
+      });
       return NextResponse.json({ ok: true, id: params.id, approver_type: body.approver_type });
     }
     if (body.action === 'release_hold') {
@@ -150,6 +185,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
         old_value: (bill as { payment_hold_reason: string | null }).payment_hold_reason ?? 'ON_HOLD',
         new_value: `RELEASED (one-time): ${body.reason}`,
         user_id: actor,
+      });
+      await logHumanAction(supabase, actor, orgId, {
+        action: 'bill.update',
+        subjectTable: 'bills',
+        subjectId: params.id,
+        summary: `Released bill compliance hold: ${body.reason}`,
       });
       return NextResponse.json({ ok: true, id: params.id, status: 'PENDING' });
     }

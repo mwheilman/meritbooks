@@ -5,6 +5,7 @@ import { requireAuth } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { postJournalEntrySchema } from '@/lib/validations/gl';
 import { postJournalEntry, type JournalEntryLineInput } from '@/lib/services/gl-posting';
+import { logHumanAction } from '@/lib/trust/action-log';
 
 export async function POST(request: Request) {
   // 1. Authenticate — fail CLOSED. No 'dev-user' fallback: an auth failure must
@@ -66,6 +67,16 @@ export async function POST(request: Request) {
 
     if (!postResult.success) {
       return NextResponse.json({ error: postResult.error, code: 'POST_FAILED' }, { status: 400 });
+    }
+
+    if (orgId) {
+      await logHumanAction(supabase, userId, orgId, {
+        action: 'gl.post',
+        subjectTable: 'gl_entries',
+        subjectId: postResult.entry_id ?? null,
+        summary: `Posted journal entry ${postResult.entry_number ?? body.memo ?? ''}`.trim(),
+        locationId: body.location_id,
+      });
     }
 
     return NextResponse.json(postResult, { status: 201 });

@@ -6,6 +6,7 @@ import { postJournalEntry } from '@/lib/services/gl-posting';
 import { recordBillPayment } from '@/lib/posting/lifecycle';
 import { createAttribution } from '@/lib/services/cost-approval';
 import { learnVendorPattern } from '@/lib/services/categorization';
+import { logHumanAction } from '@/lib/trust/action-log';
 
 /**
  * POST /api/bank-feed/approve
@@ -66,6 +67,15 @@ export const POST = apiHandler(
             gl_entry_id: res.gl_entry_id,
           })
           .eq('id', body.transaction_id);
+        if (ctx.orgId) {
+          await logHumanAction(ctx.supabase, ctx.userId, ctx.orgId, {
+            action: 'bankfeed.approve',
+            subjectTable: 'bank_transactions',
+            subjectId: txn.id as string,
+            summary: 'Approved & posted bank transaction (settled bill)',
+            locationId,
+          });
+        }
         return NextResponse.json(
           { success: true, settled_bill: true, bill_payment_id: res.payment_id, transaction_id: body.transaction_id },
           { status: 200 }
@@ -182,6 +192,16 @@ export const POST = apiHandler(
       await ctx.supabase.rpc('increment_vendor_stats', {
         p_vendor_id: body.vendor_id,
         p_amount_cents: absCents,
+      });
+    }
+
+    if (ctx.orgId) {
+      await logHumanAction(ctx.supabase, ctx.userId, ctx.orgId, {
+        action: 'bankfeed.approve',
+        subjectTable: 'bank_transactions',
+        subjectId: txn.id as string,
+        summary: 'Approved & posted bank transaction',
+        locationId,
       });
     }
 

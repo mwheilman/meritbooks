@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 import { generateYear, setPeriodStatus, type PeriodStatus } from '@/lib/services/fiscal-periods';
+import { logHumanAction } from '@/lib/trust/action-log';
 
 interface PeriodRow { id: string; location_id: string; period_year: number; period_month: number; status: PeriodStatus; closed_at: string | null }
 
@@ -120,6 +121,24 @@ export async function PATCH(request: Request) {
 
   try {
     await setPeriodStatus(supabase, orgId, parsed.data.period_id, parsed.data.status, actor, parsed.data.reason ?? null);
+
+    const { data: period } = await supabase
+      .from('fiscal_periods')
+      .select('period_year, period_month, location_id')
+      .eq('org_id', orgId)
+      .eq('id', parsed.data.period_id)
+      .maybeSingle();
+    const p = period as { period_year: number; period_month: number; location_id: string } | null;
+    await logHumanAction(supabase, actor, orgId, {
+      action: 'period.status',
+      subjectTable: 'fiscal_periods',
+      subjectId: parsed.data.period_id,
+      summary: p
+        ? `Set period ${p.period_year}/${String(p.period_month).padStart(2, '0')} to ${parsed.data.status}`
+        : `Set period to ${parsed.data.status}`,
+      locationId: p?.location_id ?? null,
+    });
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed' }, { status: 500 });

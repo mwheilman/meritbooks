@@ -3,11 +3,12 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { createBillSchema } from '@/lib/validations/transactions';
 import { createAttribution, resolveApprover } from '@/lib/services/cost-approval';
+import { logHumanAction } from '@/lib/trust/action-log';
 
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   try {
@@ -141,6 +142,14 @@ export async function POST(request: Request) {
         // Non-fatal: the bill + lines are saved; the committed-cost event can be retried.
       }
     }
+
+    await logHumanAction(supabase, userId, orgId, {
+      action: 'bill.create',
+      subjectTable: 'bills',
+      subjectId: bill.id as string,
+      summary: `Created bill ${body.bill_number}`,
+      locationId: body.location_id,
+    });
 
     return NextResponse.json({
       bill_id: bill.id,
