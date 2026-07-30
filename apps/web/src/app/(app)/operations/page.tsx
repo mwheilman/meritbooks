@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2, AlertCircle, Lock, Bot, Cpu, User, Activity, Gauge, Users, ClipboardList } from 'lucide-react';
+import { Loader2, AlertCircle, Lock, Bot, Cpu, User, Activity, Gauge, Users, ClipboardList, HeartPulse, ShieldAlert } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { useMe } from '@/lib/hooks/use-me';
@@ -28,6 +28,30 @@ interface OperationsResponse {
   aiTiers: Record<Tier, number>;
   autonomyRate: number | null;
   recent: RecentActivity[];
+}
+
+type HealthStatus = 'healthy' | 'attention' | 'behind';
+
+interface ClientHealth {
+  locationId: string;
+  name: string;
+  shortCode: string;
+  pendingBankTxns: number;
+  flaggedItems: number;
+  oldestUncategorizedDays: number | null;
+  overdueBills: number;
+  status: HealthStatus;
+}
+
+interface ClientHealthFlag {
+  severity: 'high' | 'medium';
+  companyName: string;
+  message: string;
+}
+
+interface ClientHealthResponse {
+  data: ClientHealth[];
+  flags: ClientHealthFlag[];
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
@@ -93,6 +117,157 @@ function TierChip({ tier }: { tier: Tier }) {
     >
       {label}
     </span>
+  );
+}
+
+// ── Health status pill ─────────────────────────────────────────────────────────
+
+function HealthPill({ status }: { status: HealthStatus }) {
+  const config: Record<HealthStatus, { label: string; className: string }> = {
+    healthy: { label: 'Healthy', className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+    attention: { label: 'Attention', className: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+    behind: { label: 'Behind', className: 'bg-red-500/10 text-red-400 border-red-500/20' },
+  };
+  const { label, className } = config[status];
+  return (
+    <span
+      className={clsx(
+        'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium',
+        className
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+// ── Client health section ───────────────────────────────────────────────────────
+
+function ClientHealthSection() {
+  const { data, isLoading, error } = useQuery<ClientHealthResponse>('/api/client-health');
+
+  const companies = data?.data ?? [];
+  const flags = data?.flags ?? [];
+  const allCurrent = !isLoading && !error && companies.length > 0 && companies.every((c) => c.status === 'healthy');
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold text-white">Needs your attention</h2>
+        <p className="mt-0.5 text-xs text-slate-500">Where to step in across the portfolio — computed from live books.</p>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+        </div>
+      ) : error ? (
+        <div className="p-6 text-center">
+          <AlertCircle className="mx-auto mb-2 h-6 w-6 text-red-400" />
+          <p className="text-sm text-red-400">{error}</p>
+        </div>
+      ) : (
+        <>
+          {/* Ranked intervention flags */}
+          {flags.length === 0 ? (
+            <div className="card flex items-center gap-3 p-5">
+              <HeartPulse className="h-5 w-5 text-emerald-400" />
+              <p className="text-sm text-slate-300">All books are current — nothing needs your attention right now.</p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {flags.map((f, i) => (
+                <span
+                  key={`${f.companyName}-${i}`}
+                  className={clsx(
+                    'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium',
+                    f.severity === 'high'
+                      ? 'border-red-500/20 bg-red-500/10 text-red-300'
+                      : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
+                  )}
+                >
+                  <ShieldAlert size={13} className={f.severity === 'high' ? 'text-red-400' : 'text-amber-400'} />
+                  {f.message}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Per-company health table */}
+          {companies.length === 0 ? (
+            <div className="card p-8 text-center">
+              <HeartPulse className="mx-auto mb-2 h-6 w-6 text-slate-600" />
+              <p className="text-sm text-slate-400">No active companies to report on yet.</p>
+            </div>
+          ) : (
+            <div className="card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800/50 text-left text-xs text-slate-500">
+                      <th className="px-4 py-2.5 font-medium">Company</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Pending</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Flagged</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Oldest</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Overdue bills</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/30">
+                    {companies.map((c) => (
+                      <tr key={c.locationId} className="text-slate-300">
+                        <td className="px-4 py-2.5">
+                          <span className="font-medium text-slate-200">{c.name}</span>
+                          <span className="ml-2 font-mono text-[10px] text-slate-500">{c.shortCode}</span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                          {c.pendingBankTxns > 0 ? (
+                            <span className="text-slate-200">{c.pendingBankTxns}</span>
+                          ) : (
+                            <span className="text-slate-600">0</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                          {c.flaggedItems > 0 ? (
+                            <span className="text-amber-400">{c.flaggedItems}</span>
+                          ) : (
+                            <span className="text-slate-600">0</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                          {c.oldestUncategorizedDays == null ? (
+                            <span className="text-slate-600">—</span>
+                          ) : (
+                            <span className={c.oldestUncategorizedDays >= 14 ? 'text-red-400' : 'text-slate-300'}>
+                              {c.oldestUncategorizedDays}d
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                          {c.overdueBills > 0 ? (
+                            <span className="text-red-400">{c.overdueBills}</span>
+                          ) : (
+                            <span className="text-slate-600">0</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <HealthPill status={c.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {allCurrent && (
+                <div className="border-t border-slate-800/50 px-4 py-2.5 text-center text-xs text-slate-500">
+                  All books are current.
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -235,6 +410,8 @@ export default function OperationsPage() {
               </div>
             )}
           </div>
+
+          <ClientHealthSection />
         </>
       )}
     </div>
