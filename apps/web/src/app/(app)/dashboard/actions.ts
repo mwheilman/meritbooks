@@ -93,44 +93,36 @@ export async function getRecentActivity(limit = 20): Promise<RecentActivity[]> {
   const supabase = await createAuthedServerSupabase();
   if (!supabase) return [];
 
-  // bank_transactions reaches locations two ways (direct location_id, and via
-  // bank_accounts), so a bare `locations(name)` embed is ambiguous and errors —
-  // disambiguate with the explicit FK. If the embed still fails for any reason,
-  // fall back to the plain columns so the feed always renders.
-  let { data: txns, error } = await supabase
+  // NOTE: `locations` lives in the `core` schema (post core-carve) while
+  // bank_transactions is in `public`, so a PostgREST embed (`locations(name)`)
+  // fails with PGRST200 "no relationship found" — REST embeds don't cross the
+  // public→core boundary here. Two-step instead: fetch the transactions, then
+  // resolve location names from core.locations by id.
+  const { data: txns } = await supabase
     .from('bank_transactions')
-    .select(`
-      id,
-      description,
-      amount_cents,
-      status,
-      created_at,
-      locations!bank_transactions_location_id_fkey ( name )
-    `)
+    .select('id, description, amount_cents, status, created_at, location_id')
     .order('created_at', { ascending: false })
     .limit(limit);
 
-  if (error) {
-    const fallback = await supabase
-      .from('bank_transactions')
-      .select('id, description, amount_cents, status, created_at')
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    txns = fallback.data as typeof txns;
+  const rows = txns ?? [];
+  const locIds = [...new Set(rows.map((t) => t.location_id).filter(Boolean))];
+  let names: Record<string, string> = {};
+  if (locIds.length) {
+    const { data: locs } = await supabase
+      .schema('core').from('locations')
+      .select('id, name')
+      .in('id', locIds);
+    names = Object.fromEntries((locs ?? []).map((l) => [l.id as string, l.name as string]));
   }
 
-  return (txns ?? []).map((t) => {
-    // Supabase FK joins return arrays — extract first element
-    const loc = Array.isArray(t.locations) ? t.locations[0] : t.locations;
-    return {
-      id: t.id,
-      type: 'bank_txn' as const,
-      description: t.description,
-      amount_cents: t.amount_cents,
-      status: t.status,
-      location_name: (loc as { name: string } | null)?.name ?? null,
-      created_at: t.created_at,
-      user_name: null,
-    };
-  });
+  return rows.map((t) => ({
+    id: t.id,
+    type: 'bank_txn' as const,
+    description: t.description,
+    amount_cents: t.amount_cents,
+    status: t.status,
+    location_name: t.location_id ? names[t.location_id] ?? null : null,
+    created_at: t.created_at,
+    user_name: null,
+  }));
 }
