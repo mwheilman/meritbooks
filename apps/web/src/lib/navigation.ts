@@ -31,6 +31,7 @@ import {
   Wand2,
   FlaskConical,
   History,
+  Inbox,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -56,6 +57,7 @@ export const navigation: NavGroup[] = [
   {
     label: 'Process',
     items: [
+      { label: 'Needs Attention', href: '/exceptions', icon: Inbox },
       { label: 'Bank Feed', href: '/bank-feed', icon: Landmark },
       { label: 'Credit Cards', href: '/credit-cards', icon: CreditCard },
       { label: 'Receipts', href: '/receipts', icon: Receipt },

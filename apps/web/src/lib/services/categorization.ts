@@ -17,6 +17,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { runAiGateway } from '@meritbooks/core-ai';
+import { logAction } from '@/lib/trust/action-log';
+import { scoreToTier, getTierPolicy } from '@/lib/trust/score-tier';
 
 export const CATEGORIZE_MODEL = 'claude-sonnet-4-20250514';
 export const CATEGORIZE_FEATURE = 'CATEGORIZATION';
@@ -240,6 +242,28 @@ Respond with ONLY this JSON, no markdown:
     decisionId = (data as { id: string } | null)?.id ?? null;
   } catch (e) {
     console.error('[categorize] decision log failed (non-fatal):', e);
+  }
+
+  // Trust log: the machine made a proposal. Record it as an AI action with its
+  // confidence-tier disposition so it surfaces in the audit trail (AI badge) and
+  // the exception queue picks up the PROPOSED decision. Best-effort.
+  try {
+    const policy = await getTierPolicy(supabase, orgId);
+    const { tier } = scoreToTier({ confidence, amountCents }, policy);
+    await logAction(supabase, {
+      orgId,
+      locationId,
+      actorType: 'AI',
+      action: 'ai.categorize.proposed',
+      subjectTable: 'ai_decisions',
+      subjectId: decisionId,
+      summary: `Proposed "${acct?.name ?? acctNum}" for ${description}`.slice(0, 300),
+      confidence,
+      tier,
+      correlationId: gw.correlation_id,
+    });
+  } catch (e) {
+    console.error('[categorize] action log failed (non-fatal):', e);
   }
 
   return {

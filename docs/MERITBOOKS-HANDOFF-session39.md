@@ -127,3 +127,37 @@ security, **chrome-auditor** (new — in-browser QA, never hands the user a clic
 - Production: `main` @ `ec79c4f` (+ the north star/handoff commit pending push).
 - Clerk↔Supabase integration active on the **dev** Clerk instance.
 - All money/isolation/UI work verified in the branch preview before merge.
+
+---
+
+## 8. Update — later 2026-07-30 (foundation build, agent-driven)
+
+Shipped and merged to `main` after this handoff was first written (spec → agent → central verify → push loop; browser-verified where user-facing):
+
+- **Team & Access** (Practice plane): add/edit/deactivate members with role + company
+  access on the `employees` system (drives real access); invite-claim in `/api/me`
+  (pre-added member links to their Clerk login by email on first sign-in). Verified.
+- **Trust layer** (migrations 062/063, applied to prod): `core.action_log` (append-only,
+  machine-vs-human `actor_type`, confidence/tier, RLS immutable), the Clerk→`core.users`
+  identity bridge (`resolveActor`, self_provision/self_update policies) that makes
+  attribution real, `logAction`/`logHumanAction`, `/api/me` syncs name/email, and the
+  **Audit Trail** page (`/audit`, Practice). Team routes log HUMAN actions. Verified:
+  a team action shows in the audit trail as "Mike Heilman · Human".
+- **Confidence-tier engine** `lib/trust/score-tier.ts` (`scoreToTier` pure + tested 7/7;
+  `getTierPolicy` reads the real org thresholds) — makes auto/review/escalate real.
+- **Unified exception queue** `/exceptions` "Needs Attention" (Process): folds the six
+  fragmented sources (flagged bank/receipt/bill + `ai_decisions` PROPOSED + `approvals`
+  PENDING + `job_cost_attributions` PENDING) into one list with source/confidence badges.
+- **First AI-logged action**: `categorization.suggestCategory` now logs an `AI`
+  action with its confidence + tier — the `AI` badge lights up in the audit trail as
+  categorization runs.
+
+**Revised next steps (north-star build path):**
+- Wire `scoreToTier` into the actual posting/approve decision (so high-confidence items
+  auto-post and the rest land in the queue), not just logging.
+- Add resolve/approve actions to the exception queue (the `approvals`/`ai_decisions`
+  engines have the state machines; give them the queue actions + UI).
+- Then the **AP inbox pipeline** (ingest email → extract → vendor auto-create → post →
+  attach → tier → queue) as the first full autonomous pipeline.
+- Still open from §4: reconcile employees↔memberships + auto-provisioning; RBAC guard
+  rollout; event-worker org resolution; PLATFORM_ORG_ID; Resend key rotation; Clerk prod.
