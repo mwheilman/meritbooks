@@ -419,6 +419,16 @@ export default function TeamPage() {
     );
   }
 
+  // Wait for identity before deciding admin vs read-only, so the roster doesn't
+  // flash for an admin during the /api/me round-trip.
+  if (meLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
+      </div>
+    );
+  }
+
   // Non-admins: read-only roster + notice
   if (!canManage) {
     return <ReadOnlyRoster />;
@@ -436,7 +446,7 @@ export default function TeamPage() {
         title="Team & Access"
         description={
           summary
-            ? `${summary.active} active · ${summary.invited} invited · ${summary.total} total`
+            ? `${summary.total} ${summary.total === 1 ? 'member' : 'members'}${summary.invited ? ` · ${summary.invited} invited` : ''}`
             : 'Manage members, roles, and company access.'
         }
       />
