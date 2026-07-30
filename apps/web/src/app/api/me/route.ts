@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { currentUser } from '@clerk/nextjs/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { ROLE_DEFINITIONS, getVisibleFeatures, getSidebarGrouped, type UserRole } from '@/lib/rbac/permissions';
 
@@ -42,6 +43,40 @@ export async function GET(_req: NextRequest) {
       .limit(1);
 
     let employee = employees?.[0] ?? null;
+
+    // 2b. Invite-claim: an admin may have pre-added this person as an employee
+    //     row (clerk_user_id IS NULL) keyed to their email. On their first
+    //     sign-in we link that row to the real Clerk login instead of creating a
+    //     new one. Match on the Clerk-verified primary email, case-insensitive.
+    if (!employee) {
+      const clerkUser = await currentUser().catch(() => null);
+      const primaryEmail =
+        clerkUser?.emailAddresses?.find((e) => e.id === clerkUser.primaryEmailAddressId)?.emailAddress ??
+        clerkUser?.emailAddresses?.[0]?.emailAddress ??
+        null;
+
+      if (primaryEmail) {
+        const { data: claimable } = await supabase
+          .schema('core').from('employees')
+          .select('id, org_id, clerk_user_id, first_name, last_name, email, role, department_id, is_active, created_at')
+          .eq('org_id', org.id)
+          .is('clerk_user_id', null)
+          .ilike('email', primaryEmail)
+          .limit(1);
+
+        const target = claimable?.[0];
+        if (target) {
+          const { data: linked } = await supabase
+            .schema('core').from('employees')
+            .update({ clerk_user_id: userId })
+            .eq('id', target.id)
+            .eq('org_id', org.id)
+            .select('id, org_id, clerk_user_id, first_name, last_name, email, role, department_id, is_active, created_at')
+            .single();
+          employee = linked ?? target;
+        }
+      }
+    }
 
     // 3. Auto-assign admin if setup is complete but no employee record exists
     if (!employee && org.setup_complete) {
@@ -111,7 +146,7 @@ export async function GET(_req: NextRequest) {
     if (roleDef?.companyScope === 'all' || roleDef?.companyScope === 'portcos_and_3rdparty') {
       const { data: allLocs } = await supabase
         .schema('core').from('locations')
-        .select('id, name, code')
+        .select('id, name, code:short_code')
         .eq('org_id', org.id)
         .order('name');
       locations = allLocs ?? [];
@@ -131,7 +166,7 @@ export async function GET(_req: NextRequest) {
         const locIds = assignedLocs.map((al: { location_id: string }) => al.location_id);
         const { data: locs } = await supabase
           .schema('core').from('locations')
-          .select('id, name, code')
+          .select('id, name, code:short_code')
           .in('id', locIds)
           .order('name');
         locations = locs ?? [];
