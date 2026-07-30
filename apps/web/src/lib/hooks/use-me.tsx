@@ -20,6 +20,7 @@ export interface MeUser {
   canManageUsers: boolean;
   canEditAccountingSettings: boolean;
   canEditSystemSettings: boolean;
+  isPlatformStaff: boolean;
 }
 
 export interface MeContextValue {

@@ -142,6 +142,15 @@ export async function GET(_req: NextRequest) {
     const visibleFeatures = getVisibleFeatures(role);
     const sidebarGrouped = getSidebarGrouped(role);
 
+    // Platform-staff flag from the identity layer (core.users). Drives access to
+    // the Platform plane (MeritBooks operator console) in the context switcher.
+    const { data: identity } = await supabase
+      .schema('core').from('users')
+      .select('is_platform_staff')
+      .eq('clerk_user_id', userId)
+      .maybeSingle();
+    const isPlatformStaff = identity?.is_platform_staff ?? false;
+
     return NextResponse.json({
       authenticated: true,
       hasOrg: true,
@@ -165,6 +174,7 @@ export async function GET(_req: NextRequest) {
         canManageUsers: roleDef?.canManageUsers ?? false,
         canEditAccountingSettings: roleDef?.canEditAccountingSettings ?? false,
         canEditSystemSettings: roleDef?.canEditSystemSettings ?? false,
+        isPlatformStaff,
       },
       permissions: {
         visibleFeatures,

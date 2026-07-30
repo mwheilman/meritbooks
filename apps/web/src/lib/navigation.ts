@@ -100,13 +100,20 @@ export const navigation: NavGroup[] = [
     ],
   },
   {
-    label: 'Admin',
+    label: 'Practice',
     items: [
-      { label: 'Import Data', href: '/import', icon: Upload },
-      { label: 'Team', href: '/team', icon: Users },
+      { label: 'Team & Access', href: '/team', icon: Users },
+      { label: 'Companies', href: '/settings', icon: Building2 },
       { label: 'Compliance', href: '/compliance', icon: Shield },
+      { label: 'Import Data', href: '/import', icon: Upload },
       { label: 'Sandbox', href: '/sandbox', icon: FlaskConical },
       { label: 'Settings', href: '/settings', icon: Settings },
+    ],
+  },
+  {
+    label: 'Platform',
+    items: [
+      { label: 'Operator Console', href: '/platform', icon: Building2 },
     ],
   },
 ];

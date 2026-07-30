@@ -5,6 +5,8 @@ import { Search, Bell, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { clsx } from 'clsx';
 import { useMe } from '@/lib/hooks/use-me';
+import { usePlane } from '@/lib/hooks/use-plane';
+import { PlaneSwitcher } from '@/components/layout/plane-switcher';
 
 interface CompanyOption {
   id: string;
@@ -26,11 +28,18 @@ export function Header() {
   const [selectedId, setSelectedId] = useState('all');
   const [companyOpen, setCompanyOpen] = useState(false);
   const selectedCompany = companies.find((c) => c.id === selectedId) ?? companies[0];
+  const { plane } = usePlane();
 
   return (
     <header className="flex h-[var(--header-height)] items-center justify-between border-b border-slate-800 bg-surface-950 px-6">
-      {/* Company Selector */}
-      <div className="relative">
+      {/* Context (which hat) + entity selector */}
+      <div className="flex items-center gap-1">
+        <PlaneSwitcher />
+        {/* Entity picker is only meaningful inside the Book-of-Record plane */}
+        {plane === 'books' && (
+          <>
+            <div className="h-5 w-px bg-slate-800 mx-1.5" />
+            <div className="relative">
         <button
           onClick={() => setCompanyOpen(!companyOpen)}
           className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm hover:bg-white/[0.03] transition-colors"
@@ -74,6 +83,9 @@ export function Header() {
                   <span>{company.name}</span>
                 </button>
               ))}
+            </div>
+          </>
+        )}
             </div>
           </>
         )}

@@ -6,10 +6,16 @@ import { usePathname } from 'next/navigation';
 import { ChevronLeft, Sparkles } from 'lucide-react';
 import { clsx } from 'clsx';
 import { navigation } from '@/lib/navigation';
+import { usePlane } from '@/lib/hooks/use-plane';
+import { PLANES } from '@/lib/planes';
 
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const { plane } = usePlane();
+  const activeGroups = PLANES[plane].groups;
+  const visibleNav = navigation.filter((g) => activeGroups.includes(g.label));
+  const PlaneIcon = PLANES[plane].icon;
 
   return (
     <aside
@@ -50,9 +56,20 @@ export function Sidebar() {
         </button>
       </div>
 
+      {/* Active plane indicator — which hat you're wearing */}
+      {!collapsed && (
+        <div className="mx-2 mt-3 mb-1 flex items-center gap-2 rounded-lg bg-brand-500/5 border border-brand-500/15 px-3 py-2">
+          <PlaneIcon size={15} className="text-brand-400 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-brand-300 leading-tight truncate">{PLANES[plane].label}</p>
+            <p className="text-2xs text-slate-500 leading-tight truncate">{PLANES[plane].tagline}</p>
+          </div>
+        </div>
+      )}
+
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-3 px-2">
-        {navigation.map((group) => (
+        {visibleNav.map((group) => (
           <div key={group.label} className="mb-4">
             {!collapsed && (
               <p className="px-3 mb-1 text-2xs font-semibold uppercase tracking-wider text-slate-500">
