@@ -5,6 +5,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requireManageUsers } from '@/lib/team/guard';
 import { updateMemberSchema } from '@/lib/validations/team';
 import { ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
+import { logHumanAction } from '@/lib/trust/action-log';
 
 function isAllCompaniesScope(role: UserRole): boolean {
   const scope = ROLE_DEFINITIONS[role]?.companyScope;
@@ -95,6 +96,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       }
     }
   }
+
+  // Trust-layer attribution (best-effort; never throws, never gates the action).
+  const changes: string[] = [];
+  if (role !== undefined) {
+    changes.push(`role to ${ROLE_DEFINITIONS[effectiveRole]?.label ?? effectiveRole}`);
+  }
+  if (companyIds !== undefined) {
+    changes.push(
+      `company access (${companyIds.length} ${companyIds.length === 1 ? 'company' : 'companies'})`
+    );
+  }
+  await logHumanAction(supabase, userId, orgId!, {
+    action: 'team.member.update',
+    subjectTable: 'employees',
+    subjectId: memberId,
+    summary: changes.length > 0 ? `Updated ${changes.join(' and ')}` : 'Updated member',
+    metadata: { role: role ?? null, companyIds: companyIds ?? null },
+  });
 
   return NextResponse.json({ data: { id: memberId } });
 }

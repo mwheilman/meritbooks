@@ -177,6 +177,21 @@ export async function GET(_req: NextRequest) {
     const visibleFeatures = getVisibleFeatures(role);
     const sidebarGrouped = getSidebarGrouped(role);
 
+    // Keep the identity-layer profile (core.users) in sync with the employee
+    // record, so attribution/audit shows real names. Self-provision on first
+    // sign-in; update name/email thereafter (RLS: self_provision + self_update).
+    await supabase
+      .schema('core').from('users')
+      .upsert(
+        {
+          clerk_user_id: userId,
+          email: employee.email || null,
+          first_name: employee.first_name || null,
+          last_name: employee.last_name || null,
+        },
+        { onConflict: 'clerk_user_id' },
+      );
+
     // Platform-staff flag from the identity layer (core.users). Drives access to
     // the Platform plane (MeritBooks operator console) in the context switcher.
     const { data: identity } = await supabase

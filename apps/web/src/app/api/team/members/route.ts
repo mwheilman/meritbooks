@@ -5,6 +5,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requireManageUsers } from '@/lib/team/guard';
 import { createMemberSchema } from '@/lib/validations/team';
 import { ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
+import { logHumanAction } from '@/lib/trust/action-log';
 
 interface MemberCompany {
   id: string;
@@ -201,6 +202,16 @@ export async function POST(req: NextRequest) {
       );
     }
   }
+
+  // Trust-layer attribution (best-effort; never throws, never gates the action).
+  const roleLabel = ROLE_DEFINITIONS[role]?.label ?? role;
+  await logHumanAction(supabase, userId, orgId!, {
+    action: 'team.member.add',
+    subjectTable: 'employees',
+    subjectId: created.id as string,
+    summary: `Added ${normalizedEmail} as ${roleLabel}`,
+    metadata: { role, companyIds },
+  });
 
   return NextResponse.json({ data: { id: created.id } }, { status: 201 });
 }
