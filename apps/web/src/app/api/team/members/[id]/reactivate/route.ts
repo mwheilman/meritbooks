@@ -5,6 +5,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requireManageUsers } from '@/lib/team/guard';
 import { setMemberActive } from '../../active';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { syncMembershipActiveState } from '@/lib/identity/sync-membership';
 
 /**
  * POST /api/team/members/[id]/reactivate
@@ -20,6 +21,9 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
 
   const res = await setMemberActive(supabase, orgId!, params.id, true);
   if (res.ok) {
+    // Reconcile the canonical spine: employee reactivated -> membership active,
+    // so authority resolves off the membership again. Fail-safe (never throws).
+    await syncMembershipActiveState(orgId!, params.id, true);
     await logHumanAction(supabase, userId, orgId!, {
       action: 'team.member.reactivate',
       subjectTable: 'employees',

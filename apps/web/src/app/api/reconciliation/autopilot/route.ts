@@ -56,6 +56,8 @@ interface TxnRow {
   ai_confidence: number | string | null;
   ai_reasoning: string | null;
   final_vendor_id: string | null;
+  reconciliation_id: string | null;
+  reconciled_at: string | null;
 }
 
 interface BillRow {
@@ -139,7 +141,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { data: txnsRaw, error: txnErr } = await supabase
     .from('bank_transactions')
     .select(
-      'id, description, amount_cents, transaction_date, status, gl_entry_id, match_type, matched_bill_id, match_confidence, ai_vendor_id, ai_confidence, ai_reasoning, final_vendor_id',
+      'id, description, amount_cents, transaction_date, status, gl_entry_id, match_type, matched_bill_id, match_confidence, ai_vendor_id, ai_confidence, ai_reasoning, final_vendor_id, reconciliation_id, reconciled_at',
     )
     .eq('bank_account_id', bankAccountId)
     .gte('transaction_date', period.start_date)
@@ -322,6 +324,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       isOutflow,
       transactionDate: t.transaction_date,
       status: t.status,
+      // Explicit per-line reconciliation state (migration 065) — a locked line is
+      // part of a finalized statement reconciliation and should not be re-matched.
+      reconciled: t.reconciled_at != null,
       persisted,
       proposal: { ...proposal, tier, tierReason },
     };
@@ -336,6 +341,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       transactionDate: t.transaction_date,
       glEntryId: t.gl_entry_id,
       glEntryNumber: gl?.entryNumber ?? null,
+      reconciled: t.reconciled_at != null,
     };
   });
 

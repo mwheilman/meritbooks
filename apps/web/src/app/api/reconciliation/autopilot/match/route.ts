@@ -75,7 +75,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Load the line (RLS scopes to org). Confirm it exists and isn't already posted.
   const { data: txn, error: txnErr } = await supabase
     .from('bank_transactions')
-    .select('id, status, gl_entry_id, description, amount_cents, ai_vendor_id, location_id')
+    .select('id, status, gl_entry_id, description, amount_cents, ai_vendor_id, location_id, reconciled_at')
     .eq('id', body.transaction_id)
     .maybeSingle();
   if (txnErr) {
@@ -91,9 +91,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     amount_cents: number | string;
     ai_vendor_id: string | null;
     location_id: string | null;
+    reconciled_at: string | null;
   };
   if (t.status === 'POSTED' && t.gl_entry_id) {
     return NextResponse.json({ error: 'Transaction is already cleared to the GL' }, { status: 400 });
+  }
+  if (t.reconciled_at != null) {
+    return NextResponse.json(
+      { error: 'Transaction is locked by a finalized reconciliation — undo it first' },
+      { status: 409 },
+    );
   }
 
   const confidence = body.confidence != null ? toMatchConfidence(body.confidence) : null;

@@ -5,6 +5,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requireManageUsers } from '@/lib/team/guard';
 import { setMemberActive } from '../../active';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { syncMembershipActiveState } from '@/lib/identity/sync-membership';
 
 /**
  * POST /api/team/members/[id]/deactivate
@@ -20,6 +21,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
 
   const res = await setMemberActive(supabase, orgId!, params.id, false);
   if (res.ok) {
+    // Reconcile the canonical spine: employee deactivated -> membership suspended,
+    // so the membership can no longer be more permissive than the employee record.
+    // Fail-safe (never throws) — a sync failure must not undo the deactivation the
+    // admin just requested; the interim canApprove is_active guard backs this up.
+    await syncMembershipActiveState(orgId!, params.id, false);
     await logHumanAction(supabase, userId, orgId!, {
       action: 'team.member.deactivate',
       subjectTable: 'employees',

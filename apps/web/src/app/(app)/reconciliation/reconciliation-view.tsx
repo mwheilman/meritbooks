@@ -3,19 +3,25 @@
 import { useState } from 'react';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
-import { CheckCircle2, AlertCircle, Loader2, Building2, CreditCard, ChevronDown, ArrowRight } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, Building2, CreditCard, ArrowRight, Lock } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlaidLinkButton } from '@/components/integrations/plaid-link-button';
-import { ReconciliationModal } from './reconciliation-modal';
+import { ReconciliationWorkspace } from './reconciliation-workspace';
 
 interface ReconciliationRow {
-  id: string; bankAccountName: string; bankAccountNumber: string;
+  id: string;
+  bankAccountId: string | null;
+  fiscalPeriodId: string | null;
+  bankAccountName: string; bankAccountNumber: string;
+  locationId: string | null;
   locationName: string; locationCode: string;
   periodYear: number; periodMonth: number;
   statementBalanceCents: number; glBalanceCents: number;
   outstandingDepositsCents: number; outstandingChecksCents: number;
   adjustedBankBalanceCents: number; differenceCents: number;
   isReconciled: boolean;
+  isFinalized: boolean;
+  reconciledAt: string | null;
 }
 interface NeedsRecRow {
   id: string; accountName: string; accountNumber: string;
@@ -27,9 +33,15 @@ interface RecResponse {
   needsReconciliation: NeedsRecRow[];
 }
 
+interface WorkspaceTarget {
+  account: { id: string; accountName: string; locationId: string | null; locationCode: string };
+  periodId: string | null;
+  year: number | null;
+}
+
 export function ReconciliationView() {
   const [locationId, setLocationId] = useState('');
-  const [modalAccount, setModalAccount] = useState<NeedsRecRow | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceTarget | null>(null);
   const { data: locData } = useQuery<{ id: string; name: string }[]>('/api/locations');
   const locations = locData ?? [];
 
@@ -67,7 +79,7 @@ export function ReconciliationView() {
             {needs.map((a) => (
               <button
                 key={a.id}
-                onClick={() => setModalAccount(a)}
+                onClick={() => setWorkspace({ account: { id: a.id, accountName: a.accountName, locationId: a.locationId, locationCode: a.locationCode }, periodId: null, year: null })}
                 className="text-left bg-gray-800/30 border border-amber-700/30 rounded-lg p-3 hover:border-emerald-500/50 hover:bg-gray-800/50 transition-colors cursor-pointer group"
               >
                 <div className="flex items-center gap-2 mb-1">
@@ -101,30 +113,41 @@ export function ReconciliationView() {
                   <th className="pb-3 pr-4">Period</th>
                   <th className="pb-3 pr-4 text-right">Statement</th>
                   <th className="pb-3 pr-4 text-right">GL Balance</th>
-                  <th className="pb-3 pr-4 text-right">Outstanding</th>
-                  <th className="pb-3 pr-4 text-right">Difference</th>
+                  <th className="pb-3 pr-4 text-right">Book − Stmt</th>
                   <th className="pb-3">Status</th>
+                  <th className="pb-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800/30">
                 {recs.map((r) => (
-                  <tr key={r.id} className="hover:bg-gray-800/20">
+                  <tr
+                    key={r.id}
+                    onClick={() =>
+                      r.bankAccountId &&
+                      setWorkspace({
+                        account: { id: r.bankAccountId, accountName: r.bankAccountName, locationId: r.locationId, locationCode: r.locationCode },
+                        periodId: r.fiscalPeriodId,
+                        year: r.periodYear,
+                      })
+                    }
+                    className="hover:bg-gray-800/20 cursor-pointer"
+                  >
                     <td className="py-2.5 pr-4 text-white">{r.bankAccountName}</td>
                     <td className="py-2.5 pr-4 text-xs text-gray-400">{r.locationCode}</td>
                     <td className="py-2.5 pr-4 font-mono text-xs text-gray-400">{r.periodYear}-{String(r.periodMonth).padStart(2, '0')}</td>
                     <td className="py-2.5 pr-4 text-right font-mono text-gray-300">{formatMoney(r.statementBalanceCents)}</td>
                     <td className="py-2.5 pr-4 text-right font-mono text-gray-300">{formatMoney(r.glBalanceCents)}</td>
-                    <td className="py-2.5 pr-4 text-right font-mono text-gray-400 text-xs">
-                      +{formatMoney(r.outstandingDepositsCents)} / -{formatMoney(r.outstandingChecksCents)}
-                    </td>
                     <td className={clsx('py-2.5 pr-4 text-right font-mono font-medium', r.differenceCents === 0 ? 'text-emerald-400' : 'text-red-400')}>
                       {formatMoney(r.differenceCents)}
                     </td>
                     <td className="py-2.5">
-                      {r.isReconciled
-                        ? <span className="flex items-center gap-1 text-emerald-400 text-xs"><CheckCircle2 className="w-3.5 h-3.5" /> Reconciled</span>
-                        : <span className="flex items-center gap-1 text-amber-400 text-xs"><AlertCircle className="w-3.5 h-3.5" /> Pending</span>
+                      {r.isFinalized
+                        ? <span className="flex items-center gap-1 text-emerald-400 text-xs"><Lock className="w-3.5 h-3.5" /> Reconciled</span>
+                        : <span className="flex items-center gap-1 text-amber-400 text-xs"><AlertCircle className="w-3.5 h-3.5" /> Draft</span>
                       }
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <ArrowRight className="w-3.5 h-3.5 text-gray-600 ml-auto" />
                     </td>
                   </tr>
                 ))}
@@ -143,17 +166,13 @@ export function ReconciliationView() {
         </div>
       ) : null}
 
-      {modalAccount && (
-        <ReconciliationModal
-          account={{
-            id: modalAccount.id,
-            accountName: modalAccount.accountName,
-            locationId: modalAccount.locationId,
-            locationCode: modalAccount.locationCode,
-            balanceCents: modalAccount.balanceCents,
-          }}
-          onClose={() => setModalAccount(null)}
-          onCreated={() => refetch()}
+      {workspace && (
+        <ReconciliationWorkspace
+          account={workspace.account}
+          initialPeriodId={workspace.periodId}
+          initialYear={workspace.year}
+          onClose={() => setWorkspace(null)}
+          onChanged={() => refetch()}
         />
       )}
     </div>

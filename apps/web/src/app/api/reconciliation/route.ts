@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { computeGlCashBalanceCents } from '@/lib/services/reconciliation-gl';
 import { z } from 'zod';
 
 /**
@@ -23,10 +24,10 @@ export async function GET(request: Request) {
   let query = supabase
     .from('bank_reconciliations')
     .select(`
-      id, statement_ending_balance_cents, gl_balance_cents,
+      id, fiscal_period_id, statement_ending_balance_cents, gl_balance_cents,
       outstanding_deposits_cents, outstanding_checks_cents,
       adjusted_bank_balance_cents, difference_cents,
-      is_reconciled, reconciled_by, created_at,
+      is_reconciled, reconciled_by, reconciled_at, created_at,
       bank_account:bank_accounts!bank_reconciliations_bank_account_id_fkey(id, account_name, account_mask, current_balance_cents, account_type, location_id),
       fiscal_period:fiscal_periods!bank_reconciliations_fiscal_period_id_fkey(period_year, period_month, status)
     `)
@@ -97,8 +98,11 @@ export async function GET(request: Request) {
       const loc = lid ? locMap.get(lid) ?? null : null;
       return {
         id: r.id,
+        bankAccountId: (ba as { id?: string } | null)?.id ?? null,
+        fiscalPeriodId: r.fiscal_period_id,
         bankAccountName: (ba as { account_name?: string } | null)?.account_name ?? '',
         bankAccountNumber: (ba as { account_mask?: string } | null)?.account_mask ?? '',
+        locationId: (ba as { location_id?: string | null } | null)?.location_id ?? null,
         locationName: loc?.name ?? '',
         locationCode: loc?.short_code ?? '',
         periodYear: fp?.period_year,
@@ -110,6 +114,10 @@ export async function GET(request: Request) {
         adjustedBankBalanceCents: Number(r.adjusted_bank_balance_cents),
         differenceCents: Number(r.difference_cents),
         isReconciled: r.is_reconciled,
+        // Finalized = the deliberate lock event (reconciled_at stamped), distinct
+        // from a legacy is_reconciled that may have been set at insert.
+        isFinalized: r.reconciled_at != null,
+        reconciledAt: r.reconciled_at ?? null,
       };
     }),
     needsReconciliation: needsReconciliation.map((a) => {
@@ -172,33 +180,18 @@ export async function POST(request: Request) {
       .single();
     if (pErr || !period) return NextResponse.json({ error: 'Fiscal period not found' }, { status: 404 });
 
-    // Compute the GL cash balance as of the period end: sum(debits) - sum(credits)
-    // over POSTED entries dated on/before end_date, for this account + location.
-    const { data: postedEntries } = await supabase
-      .from('gl_entries')
-      .select('id')
-      .eq('org_id', orgId)
-      .eq('location_id', ba.location_id)
-      .eq('status', 'POSTED')
-      .lte('entry_date', period.end_date);
-    const entryIds = (postedEntries ?? []).map((e: { id: string }) => e.id);
+    // Compute the GL cash balance (book side) as of the period end, server-side.
+    const glBalanceCents = await computeGlCashBalanceCents(supabase, {
+      orgId,
+      locationId: ba.location_id as string,
+      accountId: ba.account_id as string,
+      endDate: period.end_date as string,
+    });
 
-    let glBalanceCents = 0;
-    if (entryIds.length > 0) {
-      const { data: lines } = await supabase
-        .from('gl_entry_lines')
-        .select('debit_cents, credit_cents')
-        .eq('account_id', ba.account_id)
-        .in('gl_entry_id', entryIds);
-      for (const l of lines ?? []) {
-        glBalanceCents += Number(l.debit_cents ?? 0) - Number(l.credit_cents ?? 0);
-      }
-    }
-
-    const adjusted =
-      body.statement_ending_balance_cents + body.outstanding_deposits_cents - body.outstanding_checks_cents;
-    const difference = glBalanceCents - adjusted;
-
+    // Create a DRAFT reconciliation. Per FPB Wave A, "reconciled" is now a
+    // deliberate finalize/lock event (POST /api/reconciliation/session
+    // { action: 'finalize' }) after the per-line check-off ties to $0 — no longer
+    // auto-set at insert. is_reconciled stays false here.
     const { data, error } = await supabase
       .from('bank_reconciliations')
       .insert({
@@ -213,7 +206,7 @@ export async function POST(request: Request) {
         // period end as the statement "as of" date — the same date the GL cash
         // balance is computed through.
         statement_date: period.end_date,
-        is_reconciled: difference === 0,
+        is_reconciled: false,
       })
       .select('id, gl_balance_cents, difference_cents, is_reconciled')
       .single();

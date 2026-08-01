@@ -1,13 +1,14 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
-import { requireAuth } from '@/lib/api-handler';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 
 export async function GET(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  // SECURITY: run AS THE USER — org_isolation RLS enforces the tenant on the
+  // fiscal-period / close-checklist reads. Was the RLS-bypassing admin client.
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
   const { searchParams } = new URL(request.url);
   const periodYear = parseInt(searchParams.get('year') ?? String(new Date().getFullYear()), 10);
   const periodMonth = parseInt(searchParams.get('month') ?? String(new Date().getMonth() + 1), 10);
@@ -93,10 +94,11 @@ const toggleSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
-  const { userId } = authResult;
-  const supabase = createAdminSupabase();
+  // SECURITY: run AS THE USER — the checklist update is written through the
+  // RLS-scoped client so the tenant can't be spoofed by the request body.
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { userId, supabase } = ctx;
 
   try {
     const raw = await request.json();

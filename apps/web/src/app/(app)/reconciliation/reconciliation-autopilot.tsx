@@ -14,6 +14,7 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   ScanSearch,
+  Lock,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
@@ -55,6 +56,7 @@ interface UnmatchedRow {
   isOutflow: boolean;
   transactionDate: string;
   status: string;
+  reconciled: boolean;
   persisted: { matched: boolean; type: string | null; billId: string | null; confidence: number | null } | null;
   proposal: Proposal;
 }
@@ -66,6 +68,7 @@ interface MatchedRow {
   transactionDate: string;
   glEntryId: string | null;
   glEntryNumber: string | null;
+  reconciled: boolean;
 }
 
 interface Detail {
@@ -187,7 +190,7 @@ export function ReconciliationAutopilot() {
   async function bulkAutoClear() {
     if (!detail) return;
     const targets = detail.unmatched.filter(
-      (u) => u.proposal.tier === 'auto' && u.proposal.candidateType !== 'none' && !u.persisted,
+      (u) => u.proposal.tier === 'auto' && u.proposal.candidateType !== 'none' && !u.persisted && !u.reconciled,
     );
     if (targets.length === 0) {
       addToast('success', 'No auto-tier matches to clear');
@@ -235,7 +238,7 @@ export function ReconciliationAutopilot() {
   }
 
   const autoStageable = detail
-    ? detail.unmatched.filter((u) => u.proposal.tier === 'auto' && u.proposal.candidateType !== 'none' && !u.persisted).length
+    ? detail.unmatched.filter((u) => u.proposal.tier === 'auto' && u.proposal.candidateType !== 'none' && !u.persisted && !u.reconciled).length
     : 0;
 
   return (
@@ -466,9 +469,15 @@ export function ReconciliationAutopilot() {
                           {formatMoney(m.amountCents)}
                         </td>
                         <td className="px-4 py-2.5">
-                          <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Cleared
-                          </span>
+                          {m.reconciled ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                              <Lock className="h-3.5 w-3.5" /> Reconciled
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs text-slate-300">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Posted
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -535,7 +544,7 @@ function UnmatchedRowView({
 }) {
   const { proposal } = row;
   const tierMeta = TIER_META[proposal.tier];
-  const canAccept = proposal.candidateType !== 'none' && !row.persisted;
+  const canAccept = proposal.candidateType !== 'none' && !row.persisted && !row.reconciled;
 
   return (
     <div className="flex flex-col gap-3 px-4 py-3 transition-colors hover:bg-slate-800/20 md:flex-row md:items-center">
@@ -596,6 +605,11 @@ function UnmatchedRowView({
             <Link2 className="h-3 w-3" /> Match staged{row.persisted.type ? ` (${row.persisted.type})` : ''}
           </p>
         )}
+        {row.reconciled && (
+          <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-400">
+            <Lock className="h-3 w-3" /> Locked by a finalized reconciliation
+          </p>
+        )}
       </div>
 
       {/* Right: amount + actions */}
@@ -621,7 +635,7 @@ function UnmatchedRowView({
           </button>
           <button
             onClick={onReject}
-            disabled={busy || row.status === 'FLAGGED'}
+            disabled={busy || row.status === 'FLAGGED' || row.reconciled}
             title="Flag and send to Needs Attention"
             className={clsx(
               'inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400',

@@ -1,11 +1,14 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 
 export async function GET(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  // SECURITY: run AS THE USER so org_isolation RLS enforces the tenant on every
+  // budget/GL query. Previously this used the RLS-bypassing admin client, a
+  // cross-tenant leak on financial data (FPB Dimension 15 / AC15).
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase } = ctx;
   const { searchParams } = new URL(request.url);
   const locationId = searchParams.get('location_id');
   const startDate = searchParams.get('start_date');

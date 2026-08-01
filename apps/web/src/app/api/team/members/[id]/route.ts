@@ -6,6 +6,7 @@ import { requireManageUsers } from '@/lib/team/guard';
 import { updateMemberSchema } from '@/lib/validations/team';
 import { ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { syncMembershipRole } from '@/lib/identity/sync-membership';
 
 function isAllCompaniesScope(role: UserRole): boolean {
   const scope = ROLE_DEFINITIONS[role]?.companyScope;
@@ -69,6 +70,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (roleErr) {
       return NextResponse.json({ error: roleErr.message, code: 'UPDATE_ERROR' }, { status: 500 });
     }
+
+    // Reconcile the canonical spine: push the new role onto the (user, org)
+    // membership, normalized onto the same Books UserRole vocabulary canApprove
+    // reads with, so the spine can never stay more permissive than the employee's
+    // new role. Fail-safe (never throws) — a sync failure must not undo the role
+    // change the admin just committed.
+    await syncMembershipRole(orgId!, memberId, role);
   }
 
   if (companyIds !== undefined) {
