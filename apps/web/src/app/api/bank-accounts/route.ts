@@ -13,10 +13,16 @@ import { resolveOrgId } from '@/lib/posting/lifecycle';
  *   Core-schema location names are stitched in JS (no cross-schema embed).
  */
 export async function GET() {
-  await auth().catch(() => null);
+  const a = await auth().catch(() => null);
+  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
+  // first-org lookup stays only as a transitional fallback when no claim.
+  const claimOrgId =
+    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
+      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
+      : null;
   const db = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(db);
+    const orgId = await resolveOrgId(db, claimOrgId);
 
     const { data: accts, error } = await db
       .from('bank_accounts')

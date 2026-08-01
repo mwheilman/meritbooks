@@ -14,10 +14,16 @@ import { syncAllPlaidItems } from '@/lib/money/plaid-feed';
  *   -> runs an incremental sync of all Items and returns a summary.
  */
 export async function GET() {
-  await auth().catch(() => null);
+  const a = await auth().catch(() => null);
+  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
+  // first-org lookup stays only as a transitional fallback when no claim.
+  const claimOrgId =
+    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
+      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
+      : null;
   const supabase = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(supabase);
+    const orgId = await resolveOrgId(supabase, claimOrgId);
     const { data: items, error } = await supabase
       .from('plaid_items')
       .select('id, plaid_item_id, institution_name, status, status_detail, last_synced_at')
@@ -46,10 +52,16 @@ export async function POST() {
   const a = await auth().catch(() => null);
   const userId = (a as { userId?: string | null } | null)?.userId ?? null;
   if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
+  // first-org lookup stays only as a transitional fallback when no claim.
+  const claimOrgId =
+    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
+      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
+      : null;
 
   const supabase = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(supabase);
+    const orgId = await resolveOrgId(supabase, claimOrgId);
     const summary = await syncAllPlaidItems(supabase, orgId);
     return NextResponse.json({ ok: true, summary });
   } catch (e) {

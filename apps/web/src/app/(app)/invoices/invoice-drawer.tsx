@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
-import { Pencil, Plus, Trash2, Loader2, ShieldAlert, Download, Link2, Send, Receipt } from 'lucide-react';
+import { Pencil, Plus, Trash2, Loader2, ShieldAlert, Download, Link2, Send, Receipt, Ban, FileX } from 'lucide-react';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { StatusBadge } from '@/components/ui';
@@ -57,6 +57,39 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
 
+  // Irreversible AR corrections (void / write-off). `confirm` holds which action
+  // is armed; each requires a typed reason before it fires.
+  const [confirmAction, setConfirmAction] = useState<null | 'void' | 'write-off'>(null);
+  const [actionReason, setActionReason] = useState('');
+  const [actioning, setActioning] = useState(false);
+
+  async function runCorrection(action: 'void' | 'write-off') {
+    if (!data) return;
+    setActioning(true);
+    try {
+      const res = await fetch(`/api/invoices/${data.id}/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: actionReason.trim() || undefined }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.ok) {
+        addToast('success', action === 'void' ? 'Invoice voided' : 'Invoice written off to bad debt');
+        setConfirmAction(null);
+        setActionReason('');
+        refetch();
+      } else {
+        // Surface the real refusal — "paid, credit-memo instead", "no bad-debt
+        // account configured", "hard-closed period" are distinct problems.
+        addToast('error', body.error ?? `Could not ${action === 'void' ? 'void' : 'write off'} this invoice.`);
+      }
+    } catch {
+      addToast('error', 'Network error. Try again.');
+    } finally {
+      setActioning(false);
+    }
+  }
+
   async function sendInvoice() {
     if (!data) return;
     if (!data.customerEmail) {
@@ -92,7 +125,10 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
   );
   const accountOptions = [...(acctResp?.recent ?? []), ...(acctResp?.accounts ?? [])];
 
-  useEffect(() => { setEditing(false); setNeedsOverride(false); setOverrideReason(''); }, [invoiceId]);
+  useEffect(() => {
+    setEditing(false); setNeedsOverride(false); setOverrideReason('');
+    setConfirmAction(null); setActionReason('');
+  }, [invoiceId]);
 
   function beginEdit() {
     if (!data) return;
@@ -281,6 +317,74 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
             <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Customer-facing text — this invoice</h3>
             <InvoiceTextOverrides scope="INVOICE" refId={data.id} />
           </div>
+
+          {(() => {
+            const st = data.status;
+            const isTerminal = st === 'VOIDED' || st === 'WRITTEN_OFF';
+            const hasPayment = data.amountPaidCents > 0 || st === 'PAID' || st === 'PARTIALLY_PAID';
+            // Void: only an unpaid, non-terminal invoice (a paid one must be
+            // credit-memo'd). Write-off: an unpaid/partially-paid invoice that was
+            // posted and still carries an open balance.
+            const canVoid = !isTerminal && !hasPayment && st !== 'DRAFT';
+            const canWriteOff = !isTerminal && st !== 'PAID' && st !== 'DRAFT' && data.balanceCents > 0;
+            if (!canVoid && !canWriteOff) return null;
+
+            return (
+              <div className="mt-5 pt-4 border-t border-red-900/40">
+                <h3 className="text-2xs text-red-400/80 uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5">
+                  <ShieldAlert size={12} /> Irreversible corrections
+                </h3>
+
+                {!confirmAction && (
+                  <div className="flex items-center gap-2">
+                    {canVoid && (
+                      <button onClick={() => { setConfirmAction('void'); setActionReason(''); }}
+                        title="Reverse this invoice's GL posting and mark it VOIDED (unpaid invoices only)"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border border-red-800/60 bg-red-950/30 text-red-300 hover:bg-red-900/40">
+                        <Ban size={13} /> Void invoice
+                      </button>
+                    )}
+                    {canWriteOff && (
+                      <button onClick={() => { setConfirmAction('write-off'); setActionReason(''); }}
+                        title="Post DR Bad Debt Expense / CR Accounts Receivable for the open balance and mark it WRITTEN_OFF"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border border-amber-800/60 bg-amber-950/30 text-amber-300 hover:bg-amber-900/40">
+                        <FileX size={13} /> Write off bad debt
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {confirmAction && (
+                  <div className="rounded-lg border border-red-800/50 bg-red-950/20 p-3 space-y-2">
+                    <p className="text-xs text-slate-300">
+                      {confirmAction === 'void' ? (
+                        <>Void <span className="font-mono">{data.invoiceNumber}</span>? This reverses its GL entry and removes it from receivables. The invoice number is kept for audit and cannot be reused.</>
+                      ) : (
+                        <>Write off the <span className="font-mono tabular-nums">{formatMoney(data.balanceCents)}</span> open balance on <span className="font-mono">{data.invoiceNumber}</span> as bad debt? This posts DR Bad Debt Expense / CR Accounts Receivable and marks the invoice WRITTEN_OFF.</>
+                      )}
+                    </p>
+                    <input type="text" value={actionReason} onChange={(e) => setActionReason(e.target.value)}
+                      placeholder={confirmAction === 'void' ? 'Reason for voiding (recommended)…' : 'Reason for write-off (recommended)…'}
+                      className="w-full px-3 py-2 rounded-md bg-slate-900/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-red-500/40" />
+                    <div className="flex items-center justify-end gap-2">
+                      <button onClick={() => { setConfirmAction(null); setActionReason(''); }} disabled={actioning}
+                        className="px-3 py-1.5 rounded-md text-xs text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]">
+                        Cancel
+                      </button>
+                      <button onClick={() => runCorrection(confirmAction)} disabled={actioning}
+                        className={clsx('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium',
+                          actioning ? 'bg-slate-800 text-slate-600'
+                            : confirmAction === 'void' ? 'bg-red-600 text-white hover:bg-red-500'
+                            : 'bg-amber-600 text-white hover:bg-amber-500')}>
+                        {actioning ? <Loader2 size={13} className="animate-spin" /> : confirmAction === 'void' ? <Ban size={13} /> : <FileX size={13} />}
+                        {actioning ? 'Working…' : confirmAction === 'void' ? 'Void invoice' : 'Write off'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </>
       )}
 

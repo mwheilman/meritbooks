@@ -19,7 +19,13 @@ import { runDueRecurring } from '@/lib/posting/recurring-engine';
  * in parallel and is NOT posted to the financial GL.
  */
 export async function POST(request: Request) {
-  await auth().catch(() => null);
+  const a = await auth().catch(() => null);
+  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
+  // first-org lookup stays only as a transitional fallback when no claim.
+  const claimOrgId =
+    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
+      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
+      : null;
 
   let action = 'run-all';
   let asOf = new Date().toISOString().slice(0, 10);
@@ -38,7 +44,7 @@ export async function POST(request: Request) {
 
   const supabase = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(supabase);
+    const orgId = await resolveOrgId(supabase, claimOrgId);
     const out: Record<string, unknown> = { action, asOf, orgId };
 
     if (action === 'run-all' || action === 'run-recurring') {

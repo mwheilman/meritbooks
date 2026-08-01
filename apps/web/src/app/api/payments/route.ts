@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   // attribution is still captured via timestamps + sub-ledgers, not here.
   const authResult = await requireAuth();
   if (authResult instanceof NextResponse) return authResult;
-  const { userId } = authResult;
+  const { userId, orgId: claimOrgId } = authResult;
 
   // Authorize — recording a customer payment applies cash to AR and posts to the
   // GL, an AR write; gate on invoices:create. NOTE(NEEDS CENTRAL): there is no
@@ -53,9 +53,9 @@ export async function POST(request: Request) {
     const body = result.data;
     const supabase = createAdminSupabase();
 
-    // Canonical org id — the old path read an empty Clerk orgId, so it never
-    // resolved the cash/AR accounts and silently posted nothing (audit gap 5).
-    const orgId = await resolveOrgId(supabase);
+    // Operational org = the VERIFIED claim (ctx.orgId), matching RLS get_org_id();
+    // first-org lookup remains only as a transitional fallback when no claim.
+    const orgId = await resolveOrgId(supabase, claimOrgId);
 
     // If an explicit bank account was chosen, post the cash side to ITS GL account.
     let cashAccountId: string | undefined;

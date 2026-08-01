@@ -24,6 +24,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const a = await auth().catch(() => null);
   const userId = (a as { userId?: string | null } | null)?.userId ?? null;
   if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
+  // first-org lookup stays only as a transitional fallback when no claim.
+  const claimOrgId =
+    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
+      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
+      : null;
 
   let raw: unknown;
   try {
@@ -36,7 +42,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
   const db = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(db);
+    const orgId = await resolveOrgId(db, claimOrgId);
     await updateBankAccount(db, orgId, {
       bankAccountId: params.id,
       label: parsed.data.label,

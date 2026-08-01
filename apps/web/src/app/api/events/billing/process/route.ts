@@ -15,6 +15,10 @@ export async function POST() {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const supabase = createAdminSupabase();
+  // NEEDS CENTRAL: this is a queue-drain worker — it should resolve the org PER
+  // EVENT (each core.events row carries its own org_id), not pin the whole drain
+  // to the first org. Left on first-org intentionally until per-event org
+  // resolution lands (out of scope for the gate-#9 org-source fix).
   const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
   if (!org) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 

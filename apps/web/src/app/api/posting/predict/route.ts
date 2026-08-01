@@ -30,6 +30,12 @@ import { suggestExceptionViaGateway } from '@/lib/services/exception-ai';
 export async function POST(request: Request) {
   const authResult = await auth().catch(() => null);
   const userId = (authResult as { userId?: string | null } | null)?.userId ?? null;
+  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
+  // first-org lookup stays only as a transitional fallback when no claim.
+  const claimOrgId =
+    typeof (authResult?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
+      ? ((authResult!.sessionClaims as Record<string, unknown>).org_id as string)
+      : null;
 
   let body: {
     location_id?: string;
@@ -52,7 +58,7 @@ export async function POST(request: Request) {
   const supabase = createAdminSupabase();
 
   try {
-    const orgId = await resolveOrgId(supabase);
+    const orgId = await resolveOrgId(supabase, claimOrgId);
 
     // AI path: metered gateway predictor with decision-log + deterministic fallback.
     if (body.ai === true) {

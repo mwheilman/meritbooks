@@ -32,8 +32,15 @@ export async function GET() {
  *  - verify: run the four-path cross-module round-trip and report pass/fail
  */
 export async function POST(request: Request) {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
+  const a = await auth().catch(() => null);
+  const userId = (a as { userId?: string | null } | null)?.userId ?? null;
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
+  // first-org lookup stays only as a transitional fallback when no claim.
+  const claimOrgId =
+    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
+      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
+      : null;
 
   let action: string | undefined;
   let resetFirst = false;
@@ -62,7 +69,7 @@ export async function POST(request: Request) {
       // Ensure COA + entities + periods exist, then exercise the deterministic
       // posting engine + settlement lifecycle and assert the GATE 2 criteria.
       await seedSandbox(supabase);
-      const result = await runPostingEngineChecks(supabase);
+      const result = await runPostingEngineChecks(supabase, claimOrgId);
       return NextResponse.json({ ok: true, action, ...result }, { status: result.allPassed ? 200 : 207 });
     }
     // verify

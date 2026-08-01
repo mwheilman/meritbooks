@@ -24,10 +24,16 @@ import {
  *   On a successful map, a sync is triggered so transactions import immediately.
  */
 export async function GET() {
-  await auth().catch(() => null);
+  const a = await auth().catch(() => null);
+  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
+  // first-org lookup stays only as a transitional fallback when no claim.
+  const claimOrgId =
+    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
+      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
+      : null;
   const db = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(db);
+    const orgId = await resolveOrgId(db, claimOrgId);
 
     const [pending, entitiesRes, glRes] = await Promise.all([
       listPendingAccounts(db, orgId),
@@ -64,6 +70,12 @@ export async function POST(request: Request) {
   const a = await auth().catch(() => null);
   const userId = (a as { userId?: string | null } | null)?.userId ?? null;
   if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
+  // first-org lookup stays only as a transitional fallback when no claim.
+  const claimOrgId =
+    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
+      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
+      : null;
 
   let raw: unknown;
   try {
@@ -76,7 +88,7 @@ export async function POST(request: Request) {
 
   const db = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(db);
+    const orgId = await resolveOrgId(db, claimOrgId);
 
     if (parsed.data.action === 'ignore') {
       await ignorePendingAccount(db, orgId, parsed.data.pending_id);

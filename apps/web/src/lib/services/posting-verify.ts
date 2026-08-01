@@ -136,9 +136,11 @@ async function createBill(db: DB, ctx: Ctx, vendorId: string, totalCents: number
   return billId;
 }
 
-export async function runPostingEngineChecks(db: DB): Promise<PostingVerifyResult> {
+export async function runPostingEngineChecks(db: DB, preferredOrgId?: string | null): Promise<PostingVerifyResult> {
   const checks: PostingCheck[] = [];
-  const orgId = await resolveOrgId(db);
+  // Operational org = the caller's VERIFIED claim (matches RLS get_org_id());
+  // first-org lookup stays only as a transitional fallback when no claim.
+  const orgId = await resolveOrgId(db, preferredOrgId);
 
   const { data: loc } = await db.schema('core').from('locations').select('id').limit(1).maybeSingle();
   const locationId = (loc as { id: string } | null)?.id;

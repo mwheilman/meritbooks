@@ -15,10 +15,16 @@ import { resolveOrgId } from '@/lib/posting/lifecycle';
  *        Confirming is a human action; the actor is captured on confirmed_by.
  */
 export async function GET() {
-  await auth().catch(() => null);
+  const a = await auth().catch(() => null);
+  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
+  // first-org lookup stays only as a transitional fallback when no claim.
+  const claimOrgId =
+    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
+      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
+      : null;
   const supabase = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(supabase);
+    const orgId = await resolveOrgId(supabase, claimOrgId);
     const { data, error } = await supabase
       .from('tax_year_params')
       .select('tax_year, section_179_max_cents, section_179_phaseout_threshold_cents, bonus_pct, source, confirmed, confirmed_by, confirmed_at')
@@ -32,7 +38,14 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { userId } = (await auth().catch(() => ({ userId: null }))) as { userId: string | null };
+  const a = await auth().catch(() => null);
+  const userId = (a as { userId?: string | null } | null)?.userId ?? null;
+  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
+  // first-org lookup stays only as a transitional fallback when no claim.
+  const claimOrgId =
+    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
+      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
+      : null;
   let body: Record<string, unknown> = {};
   try {
     body = await request.json();
@@ -44,7 +57,7 @@ export async function POST(request: Request) {
 
   const supabase = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(supabase);
+    const orgId = await resolveOrgId(supabase, claimOrgId);
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (body.section_179_max_cents != null) update.section_179_max_cents = Number(body.section_179_max_cents);
     if (body.section_179_phaseout_threshold_cents != null) update.section_179_phaseout_threshold_cents = Number(body.section_179_phaseout_threshold_cents);

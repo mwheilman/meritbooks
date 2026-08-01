@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import React from 'react';
 import { clsx } from 'clsx';
 import {
-  Download, Calendar, Building2, AlertCircle, Loader2, ChevronRight,
+  Calendar, Building2, AlertCircle, Loader2, ChevronRight,
   FileText, Users, Briefcase, BarChart3, Shield, DollarSign,
   GitCompare, List, LayoutGrid, Sparkles, ChevronDown, Check,
   Landmark, PieChart, Filter
@@ -18,6 +18,7 @@ import { ApAgingReport } from './ap-aging-report';
 import { ArAgingReport } from './ar-aging-report';
 import { JobProfitabilityReport } from './job-profitability-report';
 import { ExpenseByVendorReport } from './expense-by-vendor-report';
+import { ExportMenu } from './export-menu';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -217,6 +218,20 @@ export function ReportViewer() {
   const currentCat = CATALOG.find((c) => c.key === catKey);
   const locIdsParam = selectedLocs.length > 0 ? selectedLocs.join(',') : '';
 
+  // ── Export labels (entity / period / basis) for the currently-viewed statement ──
+  const entityLabel = useMemo(() => {
+    if (selectedLocs.length === 0) return 'All Companies (Consolidated)';
+    if (selectedLocs.length === 1) return locations.find((l) => l.id === selectedLocs[0])?.name ?? 'Company';
+    return `${selectedLocs.length} Companies (Consolidated)`;
+  }, [selectedLocs, locations]);
+
+  const exportPeriodLabel = useMemo(() => {
+    if (reportDef?.needsDates === false) return ed ? `As of ${ed}` : 'All posted activity';
+    return sd && ed ? `${sd} to ${ed}` : 'Current period';
+  }, [reportDef, sd, ed]);
+
+  const exportBasisLabel = reportDef?.hasBasis ? (basis === 'cash' ? 'Cash basis' : 'Accrual basis') : undefined;
+
   const companyOptions = useMemo(() =>
     locations.map((l) => ({ value: l.id, label: `${l.short_code} · ${l.name}`, group: l.industry ?? 'Other' })),
     [locations]
@@ -293,7 +308,17 @@ export function ReportViewer() {
           <div>
             <div className="flex items-start justify-between mb-4">
               <div><h1 className="text-xl font-semibold text-white">{reportDef?.label}</h1><p className="text-xs text-slate-500 mt-0.5">{reportDef?.desc}</p></div>
-              <button className="btn-secondary btn-sm flex items-center gap-1.5"><Download size={14} />Export</button>
+              <ExportMenu
+                reportKey={reportKey}
+                sd={sd}
+                ed={ed}
+                locIds={locIdsParam}
+                basis={basis}
+                reportLabel={reportDef?.label ?? 'Report'}
+                entityLabel={entityLabel}
+                periodLabel={exportPeriodLabel}
+                basisLabel={exportBasisLabel}
+              />
             </div>
 
             {/* ─── Controls Bar ─── */}

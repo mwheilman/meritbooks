@@ -12,12 +12,18 @@ import { resolveOrgId } from '@/lib/posting/lifecycle';
  * connect/sync stopped, without server log access. Safe: no writes, no secrets.
  */
 export async function GET() {
-  await auth().catch(() => null);
+  const a = await auth().catch(() => null);
+  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
+  // first-org lookup stays only as a transitional fallback when no claim.
+  const claimOrgId =
+    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
+      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
+      : null;
   const db = createAdminSupabase();
   const out: Record<string, unknown> = {};
 
   try {
-    const orgId = await resolveOrgId(db);
+    const orgId = await resolveOrgId(db, claimOrgId);
     out.orgId = orgId;
 
     // 1. Locations (need at least one to attach a bank account)

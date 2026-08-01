@@ -4,6 +4,11 @@ import { NextResponse } from 'next/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { processDeptInvoiceEvents } from '@/lib/services/dept-invoice-consumer';
 
+// NEEDS CENTRAL: queue-drain worker — should resolve the org PER EVENT (each
+// core.events row carries its own org_id) rather than pin the drain to the first
+// org. Also note this route has NO auth guard (session-less). Left on first-org
+// intentionally until per-event org resolution lands (out of scope for the
+// gate-#9 org-source fix).
 async function orgId(supabase: ReturnType<typeof createAdminSupabase>) {
   const { data } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
   return (data as { id: string } | null)?.id ?? null;

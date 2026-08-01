@@ -27,8 +27,21 @@ import type { PaymentRail } from './transaction-types';
 
 type DB = SupabaseClient;
 
-/** Canonical org id for this (single-org) deployment — matches fiscal_periods. */
-export async function resolveOrgId(db: DB): Promise<string> {
+/**
+ * Resolve the OPERATIONAL org id.
+ *
+ * SECURITY: prefer the caller's VERIFIED org — the Clerk `org_id` claim exposed
+ * as `ctx.orgId`, which is exactly what `get_org_id()` enforces in RLS. Callers
+ * on an authenticated (money/write) path MUST pass it so the operational org can
+ * never diverge from the authorized tenant.
+ *
+ * The `select id from core.organizations limit 1` below is a TRANSITIONAL
+ * fallback for session-less/internal callers that have no claim; it is NOT a
+ * tenant selector and must never override a supplied claim. Backward-compatible:
+ * callers passing nothing still get the first-org lookup.
+ */
+export async function resolveOrgId(db: DB, preferredOrgId?: string | null): Promise<string> {
+  if (typeof preferredOrgId === 'string' && preferredOrgId.length > 0) return preferredOrgId;
   const { data, error } = await db.schema('core').from('organizations').select('id').limit(1).maybeSingle();
   if (error) throw new PostingError(`Could not resolve organization: ${error.message}`);
   const id = (data as { id: string } | null)?.id;
