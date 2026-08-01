@@ -6,6 +6,8 @@ import { requireAuth } from '@/lib/api-handler';
 import { z } from 'zod';
 import { postJournalEntry } from '@/lib/services/gl-posting';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
+import { resolveInvoiceCreditAccounts } from '@/lib/invoices/rev-rec-credit';
+import { resolveRole } from '@/lib/posting/account-roles';
 
 // ─── GET: List invoices ───────────────────────────────────────────────
 const querySchema = z.object({
@@ -284,58 +286,119 @@ export async function POST(request: Request) {
       meta: { invoice_number: invoiceNumber, total_cents: totalCents },
     });
 
-    // Optionally post to GL (Debit AR, Credit Revenue per line)
+    // Optionally post to GL. Rev-rec-aware: a line tied to a rev-rec-managed job
+    // credits Deferred Revenue (2410) — the rev-rec engine earns it out later —
+    // while POINT_OF_SALE / AS_BILLED and ad-hoc (no-job) invoices credit Revenue
+    // directly. The per-line credit account is resolved by the SHARED rev-rec
+    // resolver (lib/invoices/rev-rec-credit.ts → posting/rev-rec-method.ts), the
+    // same one the Projects-driven JOB_BILLING consumer uses, so the two paths
+    // never disagree. GL posting is best-effort: a COA/config gap leaves the
+    // invoice DRAFT rather than failing creation (the invoice already exists).
     if (body.post_to_gl && totalCents > 0) {
-      // Find the AR control account (12xxx range)
-      const { data: arAccount } = await supabase
-        .from('accounts')
-        .select('id')
-        .eq('org_id', orgId)
-        .gte('account_number', '12000')
-        .lt('account_number', '13000')
-        .eq('is_active', true)
-        .limit(1)
-        .single();
+      try {
+        // Find the AR control account (12xxx range)
+        const { data: arAccount } = await supabase
+          .from('accounts')
+          .select('id')
+          .eq('org_id', orgId)
+          .gte('account_number', '12000')
+          .lt('account_number', '13000')
+          .eq('is_active', true)
+          .limit(1)
+          .single();
 
-      if (arAccount) {
-        const jeLines = [
-          // Debit AR
-          {
-            account_id: arAccount.id,
-            debit_cents: totalCents,
-            credit_cents: 0,
-            location_id: body.location_id,
-          },
-          // Credit each revenue line's account
-          ...lines.map((l) => ({
-            account_id: l.account_id,
-            debit_cents: 0,
-            credit_cents: l.amount_cents,
-            location_id: body.location_id,
-          })),
-        ];
-
-        const jeResult = await postJournalEntry(supabase, {
-          org_id: orgId,
-          location_id: body.location_id,
-          entry_date: body.invoice_date,
-          entry_type: 'STANDARD',
-          memo: `Invoice ${invoiceNumber} — ${body.memo ?? ''}`,
-          source_module: 'AR',
-          source_id: invoice.id,
-          created_by: userId,
-          lines: jeLines,
-        });
-
-        if (jeResult.success) {
-          await supabase.from('invoices')
-            .update({ gl_entry_id: jeResult.entry_id, status: 'SENT' })
-            .eq('id', invoice.id);
-          await recordInvoiceEvent(supabase, {
-            orgId, invoiceId: invoice.id, type: 'POSTED', actor: userId,
-            meta: { gl_entry_id: jeResult.entry_id, total_cents: totalCents },
+        if (arAccount) {
+          // Resolve each line's credit account (revenue vs deferred) per the job's
+          // rev-rec method. Reuses the shared resolver — no rev-rec logic here.
+          const creditLines = await resolveInvoiceCreditAccounts(supabase, {
+            orgId,
+            locationId: body.location_id,
+            jobId: body.job_id,
+            lines: lines.map((l) => ({ account_id: l.account_id, amount_cents: l.amount_cents })),
           });
+
+          // Job dimension carried onto every GL line for job costing / rev-rec.
+          const jobDim = body.job_id ?? undefined;
+          const jeLines: Parameters<typeof postJournalEntry>[1]['lines'] = [
+            // DR Accounts Receivable — what the customer owes (subtotal + tax − retainage).
+            {
+              account_id: arAccount.id,
+              debit_cents: totalCents,
+              credit_cents: 0,
+              location_id: body.location_id,
+              job_id: jobDim,
+              memo: 'Accounts receivable',
+            },
+            // CR Revenue OR Deferred Revenue, per line, per the resolved rev-rec method.
+            ...creditLines.map((cl) => ({
+              account_id: cl.account_id,
+              debit_cents: 0,
+              credit_cents: cl.amount_cents,
+              location_id: body.location_id,
+              job_id: jobDim,
+              memo: cl.deferred ? 'Deferred revenue' : 'Revenue',
+            })),
+          ];
+
+          // Sales tax is a liability the customer owes on top of revenue — credit
+          // Sales Tax Payable so the entry balances (AR carries the tax).
+          if (body.tax_cents > 0) {
+            const taxAcct = await resolveRole(supabase, orgId, 'SALES_TAX_PAYABLE');
+            jeLines.push({
+              account_id: taxAcct.id,
+              debit_cents: 0,
+              credit_cents: body.tax_cents,
+              location_id: body.location_id,
+              job_id: jobDim,
+              memo: 'Sales tax payable',
+            });
+          }
+
+          // Retainage withheld from current AR is still receivable later — debit
+          // Retainage Receivable so total debits (AR + retainage) match credits.
+          if (retainageCents > 0) {
+            const retAcct = await resolveRole(supabase, orgId, 'RETAINAGE_RECEIVABLE');
+            jeLines.push({
+              account_id: retAcct.id,
+              debit_cents: retainageCents,
+              credit_cents: 0,
+              location_id: body.location_id,
+              job_id: jobDim,
+              memo: 'Retainage receivable',
+            });
+          }
+
+          const jeResult = await postJournalEntry(supabase, {
+            org_id: orgId,
+            location_id: body.location_id,
+            entry_date: body.invoice_date,
+            entry_type: 'STANDARD',
+            memo: `Invoice ${invoiceNumber} — ${body.memo ?? ''}`,
+            source_module: 'AR',
+            source_id: invoice.id,
+            // gl_entries.created_by/posted_by are uuid + nullable; Clerk ids are
+            // text, so write null (canon §2). Human attribution lives in the
+            // invoice event log below.
+            created_by: null,
+            lines: jeLines,
+          });
+
+          if (jeResult.success) {
+            await supabase.from('invoices')
+              .update({ gl_entry_id: jeResult.entry_id, status: 'SENT' })
+              .eq('id', invoice.id);
+            await recordInvoiceEvent(supabase, {
+              orgId, invoiceId: invoice.id, type: 'POSTED', actor: userId,
+              meta: { gl_entry_id: jeResult.entry_id, total_cents: totalCents },
+            });
+          } else {
+            console.error('[Invoice Create] GL post failed, invoice left DRAFT:', jeResult.error);
+          }
         }
+      } catch (glErr) {
+        // A COA/role gap (e.g. no Deferred Revenue / Sales Tax / Retainage account)
+        // must not fail invoice creation — the invoice is already persisted.
+        console.error('[Invoice Create] GL posting skipped:', glErr instanceof Error ? glErr.message : glErr);
       }
     }
 

@@ -42,7 +42,7 @@ export async function applyStripePaymentToInvoice(
   // Steady-state idempotency: once the customer_payments anchor exists for this
   // PaymentIntent, the payment is fully applied — nothing left to do.
   const { data: existing } = await db
-    .from('customer_payments').select('id').eq('reference_number', args.piId).maybeSingle();
+    .from('customer_payments').select('id').eq('org_id', args.orgId).eq('reference_number', args.piId).maybeSingle();
   if (existing) return { applied: false };
 
   const feeCents = deriveTenantFeeCents(args.baseCents, args.amountCents, args.appFeeCents);
