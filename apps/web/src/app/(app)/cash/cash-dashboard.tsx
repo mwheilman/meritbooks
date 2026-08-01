@@ -49,7 +49,9 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: typeof A
 
 export function CashDashboard() {
   const [expandedLoc, setExpandedLoc] = useState<string | null>(null);
-  const { data, isLoading, error, refetch } = useQuery<CashResponse>('/api/cash');
+  const [filterLoc, setFilterLoc] = useState('');
+  const cashParams = filterLoc ? { location_id: filterLoc } : undefined;
+  const { data, isLoading, error, refetch } = useQuery<CashResponse>('/api/cash', cashParams);
   const { data: entitiesData } = useQuery<Array<{ id: string; name: string }>>('/api/locations');
   const entities = entitiesData ?? [];
 
@@ -114,9 +116,21 @@ export function CashDashboard() {
         </div>
       </div>
 
-      {/* Refresh + bank connection */}
-      <div className="flex items-center justify-between gap-3">
-        <PlaidLinkButton variant="full" entities={entities} onChanged={() => refetch()} />
+      {/* Company filter + refresh + bank connection */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <PlaidLinkButton variant="full" entities={entities} onChanged={() => refetch()} />
+          <select
+            value={filterLoc}
+            onChange={(e) => { setFilterLoc(e.target.value); setExpandedLoc(null); }}
+            className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:border-emerald-500 focus:outline-none"
+          >
+            <option value="">All companies</option>
+            {entities.map((e) => (
+              <option key={e.id} value={e.id}>{e.name}</option>
+            ))}
+          </select>
+        </div>
         <button onClick={() => refetch()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0">
           <RefreshCw size={12} /> Refresh
         </button>

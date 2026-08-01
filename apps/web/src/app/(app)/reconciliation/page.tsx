@@ -1,14 +1,14 @@
 import { PageHeader } from '@/components/ui';
-import { ReconciliationView } from './reconciliation-view';
+import { ReconciliationTabs } from './reconciliation-tabs';
 
 export default function ReconciliationPage() {
   return (
     <>
       <PageHeader
         title="Bank Reconciliation"
-        description="Match GL balances against bank statements"
+        description="Clear statement lines against the GL, then reconcile to the statement"
       />
-      <ReconciliationView />
+      <ReconciliationTabs />
     </>
   );
 }

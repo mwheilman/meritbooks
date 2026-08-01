@@ -8,17 +8,61 @@ import {
   releaseOverride,
   runComplianceMaintenance,
 } from '@/lib/services/vendor-compliance';
+import { getTierPolicy } from '@/lib/trust/score-tier';
+import { assessVendorRisk } from '@/lib/compliance/risk';
+import { assessAndEscalate } from '@/lib/compliance/assess';
 
-// ─── GET: vendor-compliance overview ──────────────────────────────────────────
+type DocState = 'valid' | 'expiring' | 'expired' | 'missing' | 'pending';
+
+const EMPTY_DOC_COUNTS = { valid: 0, expiring: 0, expired: 0, missing: 0, pending: 0 };
+
+// ─── GET: vendor-compliance overview (decorated with AI risk tiers) ───────────
 export async function GET() {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId } = ctx;
   if (!orgId) {
-    return NextResponse.json({ rows: [], summary: { total: 0, onHold: 0, withOverride: 0, compliant: 0, blockedBalanceCents: 0 } });
+    return NextResponse.json({
+      rows: [],
+      summary: {
+        total: 0, onHold: 0, withOverride: 0, compliant: 0, blockedBalanceCents: 0,
+        atRisk: 0, escalations: 0, docCounts: EMPTY_DOC_COUNTS,
+      },
+    });
   }
-  const overview = await getVendorComplianceOverview(supabase, orgId);
-  return NextResponse.json(overview);
+
+  const [overview, policy] = await Promise.all([
+    getVendorComplianceOverview(supabase, orgId),
+    getTierPolicy(supabase, orgId),
+  ]);
+
+  const docCounts = { ...EMPTY_DOC_COUNTS };
+  let escalations = 0;
+  let atRisk = 0;
+
+  const rows = overview.rows.map((r) => {
+    for (const d of r.docs) docCounts[d.state as DocState] = (docCounts[d.state as DocState] ?? 0) + 1;
+    const risk = assessVendorRisk(
+      {
+        docs: r.docs.map((d) => ({ doc_type: d.doc_type, state: d.state })),
+        onHold: r.onHold,
+        hasActiveOverride: !!r.activeOverride,
+        openBillsCents: r.openBillsCents,
+      },
+      policy,
+    );
+    if (risk.tier === 'escalate' && r.onHold) escalations += 1;
+    if (!r.compliant) atRisk += 1;
+    return { ...r, risk };
+  });
+
+  // Most urgent first (highest risk score), exposure as tiebreak.
+  rows.sort((a, b) => b.risk.score - a.risk.score || b.openBillsCents - a.openBillsCents);
+
+  return NextResponse.json({
+    rows,
+    summary: { ...overview.summary, atRisk, escalations, docCounts },
+  });
 }
 
 // ─── POST: override grant / release / maintenance run ─────────────────────────
@@ -81,7 +125,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  // run_maintenance
+  // run_maintenance: auto-expire + advance chase cadence, THEN run the AI risk
+  // assessment (logs to the trust audit trail) and escalate on-hold/high-risk
+  // vendors into the /exceptions queue.
   const res = await runComplianceMaintenance(supabase, orgId);
-  return NextResponse.json({ expired: res.expired, chased: res.chased });
+  const assessment = await assessAndEscalate(supabase, orgId);
+  return NextResponse.json({
+    expired: res.expired,
+    chased: res.chased,
+    assessed: assessment.assessed,
+    escalated: assessment.escalated,
+    queued: assessment.queued,
+  });
 }

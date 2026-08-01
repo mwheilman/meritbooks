@@ -209,6 +209,10 @@ export async function POST(request: Request) {
         gl_balance_cents: glBalanceCents,
         outstanding_deposits_cents: body.outstanding_deposits_cents,
         outstanding_checks_cents: body.outstanding_checks_cents,
+        // statement_date is NOT NULL with no default (migration 007). Use the
+        // period end as the statement "as of" date — the same date the GL cash
+        // balance is computed through.
+        statement_date: period.end_date,
         is_reconciled: difference === 0,
       })
       .select('id, gl_balance_cents, difference_cents, is_reconciled')
