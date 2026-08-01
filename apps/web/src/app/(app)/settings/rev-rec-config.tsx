@@ -5,7 +5,7 @@ import { Loader2, AlertCircle, Plus, Trash2, Percent, Zap, Pencil } from 'lucide
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 
-interface MethodOpt { value: string; label: string; poc: boolean }
+interface MethodOpt { value: string; label: string; poc: boolean; help?: string }
 interface MapRule { id: string; jobType: string; method: string }
 interface Company { locationId: string; name: string; shortCode: string; defaultMethod: string; map: MapRule[] }
 interface ConfigResponse {
@@ -21,6 +21,7 @@ export function RevRecConfig() {
 
   const methods = data?.methods ?? [];
   const methodLabel = useCallback((v: string) => methods.find((m) => m.value === v)?.label ?? v, [methods]);
+  const methodHelp = useCallback((v: string) => methods.find((m) => m.value === v)?.help, [methods]);
 
   const setDefault = useCallback(async (locationId: string, method: string) => {
     const res = await fetch('/api/rev-rec/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'default', location_id: locationId, method }) });
@@ -85,6 +86,11 @@ export function RevRecConfig() {
                 </select>
               </div>
             </div>
+
+            {/* plain-language description of the selected default */}
+            {methodHelp(c.defaultMethod) && (
+              <p className="text-2xs text-slate-500 leading-relaxed border-l-2 border-slate-700 pl-2.5">{methodHelp(c.defaultMethod)}</p>
+            )}
 
             {/* job_type → method rules */}
             <div className="space-y-1.5">

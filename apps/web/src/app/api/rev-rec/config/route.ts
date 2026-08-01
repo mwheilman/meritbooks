@@ -6,15 +6,24 @@ import { hasModule } from '@/lib/services/entitlements';
 import { z } from 'zod';
 
 export const REV_REC_METHODS = [
-  { value: 'PCT_COMPLETE', label: 'POC — physical % complete', poc: true },
-  { value: 'PCT_COSTS_INCURRED', label: 'POC — cost-to-cost', poc: true },
-  { value: 'COMPLETED_CONTRACT', label: 'Completed contract', poc: false },
-  { value: 'MILESTONE', label: 'Milestone / point-in-time', poc: false },
-  { value: 'POINT_OF_SALE', label: 'Point of sale', poc: false },
-  { value: 'AS_BILLED', label: 'Billing-based', poc: false },
-  { value: 'RATABLY', label: 'Straight-line / ratable', poc: false },
-  { value: 'SUBSCRIPTION', label: 'Subscription (ratable)', poc: false },
-  { value: 'CASH', label: 'Cash', poc: false },
+  { value: 'POINT_OF_SALE', label: 'Point of sale', poc: false,
+    help: 'Retail, restaurants, e-commerce — recognize revenue the moment you invoice or ring the sale. No deferral.' },
+  { value: 'AS_BILLED', label: 'Billing-based (as billed)', poc: false,
+    help: 'Time & materials and open-ended service work — revenue equals what you bill, recognized as each invoice goes out.' },
+  { value: 'PCT_COSTS_INCURRED', label: 'Percent of costs incurred (cost-to-cost)', poc: true,
+    help: 'Construction and long jobs — recognize revenue as costs are incurred (costs to date ÷ total estimated cost). The default for contractors.' },
+  { value: 'PCT_COMPLETE', label: 'Percent complete (physical)', poc: true,
+    help: 'Construction and long jobs — recognize revenue by measured physical progress (units in place / milestones surveyed) rather than by cost.' },
+  { value: 'COMPLETED_CONTRACT', label: 'Completed contract', poc: false,
+    help: 'Short or high-uncertainty jobs — hold all revenue in deferral until the job is fully complete, then recognize it at once.' },
+  { value: 'MILESTONE', label: 'Milestone / point-in-time', poc: false,
+    help: 'Project work with acceptance gates — recognize revenue in chunks as each defined milestone is accepted by the customer.' },
+  { value: 'RATABLY', label: 'Straight-line / ratable', poc: false,
+    help: 'Retainers and fixed-term service agreements — spread revenue evenly (straight-line) across the term of the engagement.' },
+  { value: 'SUBSCRIPTION', label: 'Subscription (ratable)', poc: false,
+    help: 'SaaS and memberships — recognize the subscription fee evenly across each billing period the customer has paid for.' },
+  { value: 'CASH', label: 'Cash basis', poc: false,
+    help: 'Cash-basis books — recognize revenue only when the customer’s payment actually lands, regardless of when you invoice.' },
 ] as const;
 
 const METHOD_VALUES = REV_REC_METHODS.map((m) => m.value) as [string, ...string[]];

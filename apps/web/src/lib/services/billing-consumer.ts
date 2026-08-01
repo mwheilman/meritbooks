@@ -10,6 +10,9 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { shouldDeferAtBilling } from '@/lib/posting/rev-rec-method';
+import { resolveRole } from '@/lib/posting/account-roles';
+import { postJournalEntry } from '@/lib/services/gl-posting';
 
 type DB = SupabaseClient;
 
@@ -82,10 +85,11 @@ export async function processBillingEvents(db: DB, orgId: string): Promise<Billi
       const lineTotal = (p.lines ?? []).reduce((s, l) => s + Math.round(Number(l.amount_cents ?? 0)), 0);
       if (!p.lines?.length || lineTotal <= 0) { await rejectEvent(db, ev.id, 'No billable lines'); out.rejected++; out.results.push({ event_id: ev.event_id, status: 'rejected', error: 'No billable lines' }); continue; }
 
-      // Company + rev-rec config.
-      const { data: loc } = await db.schema('core').from('locations').select('id, short_code, rev_rec_method').eq('id', p.location_id).eq('org_id', orgId).single();
+      // Company (short_code mints the invoice #). Rev-rec method is resolved by
+      // the canonical resolver below, not read here — it needs the per-job /
+      // per-revenue-type tiers, not just the company default.
+      const { data: loc } = await db.schema('core').from('locations').select('id, short_code').eq('id', p.location_id).eq('org_id', orgId).single();
       if (!loc) { await rejectEvent(db, ev.id, 'Company not found'); out.rejected++; out.results.push({ event_id: ev.event_id, status: 'rejected', error: 'Company not found' }); continue; }
-      const revRec = (loc as { rev_rec_method: string }).rev_rec_method;
 
       // Job + its customer (invoices.customer_id is NOT NULL).
       const { data: job } = await db.schema('core').from('jobs').select('id, customer_id').eq('id', p.job_id).eq('org_id', orgId).single();
@@ -97,11 +101,28 @@ export async function processBillingEvents(db: DB, orgId: string): Promise<Billi
       if (!period) { await rejectEvent(db, ev.id, `No fiscal period for ${p.occurred_on}`); out.rejected++; out.results.push({ event_id: ev.event_id, status: 'rejected', error: `No fiscal period for ${p.occurred_on}` }); continue; }
       if ((period as { status: string }).status === 'HARD_CLOSE') { await rejectEvent(db, ev.id, 'Period is closed/locked'); out.rejected++; out.results.push({ event_id: ev.event_id, status: 'rejected', error: 'Period is closed/locked' }); continue; }
 
-      // Accounts: AR (1100 control), and revenue or deferred (2410) per rev-rec.
+      // Accounts + rev-rec routing. Billing is decoupled from recognition: the
+      // canonical resolver (posting/rev-rec-method.ts) decides defer-vs-recognize
+      // for THIS job — per-job override → per-revenue-type → company default —
+      // exactly as the manual-invoice path (invoices/rev-rec-credit.ts) does, so
+      // both post identically. POINT_OF_SALE / AS_BILLED recognize at billing
+      // (credit Revenue); the deferral methods (PCT_*, COMPLETED_CONTRACT,
+      // MILESTONE, RATABLY, SUBSCRIPTION, CASH) credit Deferred Revenue (2410,
+      // resolved by ROLE — never a hard-coded number) for the rev-rec engine to
+      // earn out later.
       const arId = await acctByNumber(db, orgId, '1100');
-      const recognizeNow = revRec === 'POINT_OF_SALE';
-      const creditId = recognizeNow ? await revenueAccount(db, orgId) : await acctByNumber(db, orgId, '2410');
-      if (!arId || !creditId) { await rejectEvent(db, ev.id, 'Required AR/revenue/deferred accounts missing from COA'); out.rejected++; out.results.push({ event_id: ev.event_id, status: 'rejected', error: 'Required AR/revenue/deferred accounts missing from COA' }); continue; }
+      const revenueAcctId = await revenueAccount(db, orgId);
+      if (!arId || !revenueAcctId) { await rejectEvent(db, ev.id, 'Required AR/revenue accounts missing from COA'); out.rejected++; out.results.push({ event_id: ev.event_id, status: 'rejected', error: 'Required AR/revenue accounts missing from COA' }); continue; }
+
+      let deferred: boolean;
+      let creditId: string;
+      try {
+        deferred = await shouldDeferAtBilling(db, { orgId, locationId: p.location_id, revenueAccountId: revenueAcctId, jobId: p.job_id });
+        creditId = deferred ? (await resolveRole(db, orgId, 'DEFERRED_REVENUE')).id : revenueAcctId;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Rev-rec resolution failed';
+        await rejectEvent(db, ev.id, msg); out.rejected++; out.results.push({ event_id: ev.event_id, status: 'rejected', error: msg }); continue;
+      }
 
       const invoiceNumber = await mintInvoiceNumber(db, orgId, (loc as { short_code: string }).short_code, p.occurred_on);
       const dueDate = new Date(new Date(p.occurred_on).getTime() + 30 * 86400000).toISOString().split('T')[0];
@@ -117,33 +138,39 @@ export async function processBillingEvents(db: DB, orgId: string): Promise<Billi
       if (invErr || !inv) { await rejectEvent(db, ev.id, `Invoice insert: ${invErr?.message}`); out.rejected++; out.results.push({ event_id: ev.event_id, status: 'rejected', error: invErr?.message }); continue; }
       const invoiceId = (inv as { id: string }).id;
 
-      // Invoice lines (revenue/deferred account on each line).
+      // Invoice lines reference the REVENUE account (what was sold); any deferral
+      // is reflected only in the GL credit below — matching the manual-invoice
+      // path, and so the rev-rec engine can read the revenue account to earn out.
       const lineRows = p.lines.map((l, i) => ({
         org_id: orgId, invoice_id: invoiceId, line_number: i + 1,
-        description: l.description || 'Billing', account_id: creditId,
+        description: l.description || 'Billing', account_id: revenueAcctId,
         quantity: 1, unit_price_cents: Math.round(Number(l.amount_cents)), amount_cents: Math.round(Number(l.amount_cents)),
       }));
       const { error: lineErr } = await db.from('invoice_lines').insert(lineRows);
       if (lineErr) { await db.from('invoices').delete().eq('id', invoiceId); await rejectEvent(db, ev.id, `Invoice lines: ${lineErr.message}`); out.rejected++; out.results.push({ event_id: ev.event_id, status: 'rejected', error: lineErr.message }); continue; }
 
-      // GL: DR AR / CR revenue|deferred, job-dimensioned.
-      const { data: entry, error: entryErr } = await db.from('gl_entries').insert({
-        org_id: orgId, location_id: p.location_id, entry_date: p.occurred_on, entry_type: 'STANDARD',
-        fiscal_period_id: (period as { id: string }).id, memo: `AR invoice ${invoiceNumber}`,
-        source_module: 'AR', status: 'POSTED', posted_at: new Date().toISOString(), created_by: null, posted_by: null,
-      }).select('id').single();
-      if (entryErr || !entry) { await db.from('invoices').delete().eq('id', invoiceId); await rejectEvent(db, ev.id, `GL entry: ${entryErr?.message}`); out.rejected++; out.results.push({ event_id: ev.event_id, status: 'rejected', error: entryErr?.message }); continue; }
-      const entryId = (entry as { id: string }).id;
-
-      const { error: glLineErr } = await db.from('gl_entry_lines').insert([
-        { org_id: orgId, gl_entry_id: entryId, line_number: 1, account_id: arId, debit_cents: lineTotal, credit_cents: 0, location_id: p.location_id, job_id: p.job_id, memo: 'Accounts receivable' },
-        { org_id: orgId, gl_entry_id: entryId, line_number: 2, account_id: creditId, debit_cents: 0, credit_cents: lineTotal, location_id: p.location_id, job_id: p.job_id, memo: recognizeNow ? 'Revenue' : 'Deferred revenue' },
-      ]);
-      if (glLineErr) {
-        await db.from('gl_entries').delete().eq('id', entryId);
+      // GL: DR AR / CR Revenue|Deferred, job-dimensioned, balanced through the
+      // canonical posting engine (postJournalEntry → check_journal_balance()) —
+      // the same path the manual-invoice route posts on.
+      const jeResult = await postJournalEntry(db, {
+        org_id: orgId,
+        location_id: p.location_id,
+        entry_date: p.occurred_on,
+        entry_type: 'STANDARD',
+        memo: `AR invoice ${invoiceNumber}`,
+        source_module: 'AR',
+        source_id: invoiceId,
+        created_by: null,
+        lines: [
+          { account_id: arId, debit_cents: lineTotal, credit_cents: 0, location_id: p.location_id, job_id: p.job_id, memo: 'Accounts receivable' },
+          { account_id: creditId, debit_cents: 0, credit_cents: lineTotal, location_id: p.location_id, job_id: p.job_id, memo: deferred ? 'Deferred revenue' : 'Revenue' },
+        ],
+      });
+      if (!jeResult.success || !jeResult.entry_id) {
         await db.from('invoices').delete().eq('id', invoiceId);
-        await rejectEvent(db, ev.id, `GL lines: ${glLineErr.message}`); out.rejected++; out.results.push({ event_id: ev.event_id, status: 'rejected', error: glLineErr.message }); continue;
+        await rejectEvent(db, ev.id, `GL post: ${jeResult.error ?? 'unknown'}`); out.rejected++; out.results.push({ event_id: ev.event_id, status: 'rejected', error: jeResult.error }); continue;
       }
+      const entryId = jeResult.entry_id;
 
       await db.from('invoices').update({ gl_entry_id: entryId }).eq('id', invoiceId);
       await db.schema('core').from('events').update({ status: 'processed', invoice_id: invoiceId, invoice_number: invoiceNumber, gl_entry_id: entryId, processed_at: new Date().toISOString() }).eq('id', ev.id);

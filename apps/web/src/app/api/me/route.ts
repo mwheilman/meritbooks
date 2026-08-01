@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { ROLE_DEFINITIONS, getVisibleFeatures, getSidebarGrouped, type UserRole } from '@/lib/rbac/permissions';
+import { provisionMembershipOnLogin } from '@/lib/identity/provision-membership';
 
 export async function GET(_req: NextRequest) {
   try {
@@ -191,6 +192,20 @@ export async function GET(_req: NextRequest) {
         },
         { onConflict: 'clerk_user_id' },
       );
+
+    // Auto-provision the canonical membership so every active user has a
+    // core.memberships row mirroring their access. This lets money-movement
+    // authorization (canApprove) resolve on the identity spine instead of the
+    // interim core.employees.role fallback. The membership role is derived from
+    // (and normalized to) the employee's UserRole, so the vocabulary the
+    // permission catalog understands is preserved. Idempotent + fail-safe (runs on
+    // the service-role client because core.memberships is service_role-write only).
+    await provisionMembershipOnLogin({
+      clerkUserId: userId,
+      orgId: org.id,
+      employeeRole: employee.role,
+      employeeId: employee.id,
+    });
 
     // Platform-staff flag from the identity layer (core.users). Drives access to
     // the Platform plane (MeritBooks operator console) in the context switcher.

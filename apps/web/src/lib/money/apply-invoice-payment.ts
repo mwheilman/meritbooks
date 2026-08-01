@@ -137,7 +137,14 @@ export async function applyStripePaymentToInvoice(
     }).eq('id', args.invoiceId);
   }
 
-  await recordInvoiceEvent(db, { orgId: args.orgId, invoiceId: args.invoiceId, type: 'PAY_SUCCEEDED', actor: 'customer', meta: { pi: args.piId, amount_cents: args.amountCents, method: args.method } });
+  // Persist realized platform-fee data per payment. MeritBooks intentionally does
+  // NOT post platform-fee income to any tenant GL (owner decision — the operator's
+  // own bank deposit is bank-fed as 4910 income instead), so the PAY_SUCCEEDED
+  // event is the durable per-payment record of the application fee the platform
+  // earned: app_fee_cents (bigint cents) + fee_rail (CARD/ACH). The Operator
+  // Console reads realized fee revenue from these events (org_id = tenant that
+  // paid it, created_at = occurred-at) with no GL dependency.
+  await recordInvoiceEvent(db, { orgId: args.orgId, invoiceId: args.invoiceId, type: 'PAY_SUCCEEDED', actor: 'customer', meta: { pi: args.piId, amount_cents: args.amountCents, method: args.method, app_fee_cents: args.appFeeCents, fee_rail: args.method } });
   await recordInvoiceEvent(db, { orgId: args.orgId, invoiceId: args.invoiceId, type: 'PAYMENT_APPLIED', actor: 'system', meta: { applied_cents: args.baseCents, gl_entry_id: glEntryId } });
   if (fullyPaid) await recordInvoiceEvent(db, { orgId: args.orgId, invoiceId: args.invoiceId, type: 'MARKED_PAID', actor: 'system', meta: {} });
 

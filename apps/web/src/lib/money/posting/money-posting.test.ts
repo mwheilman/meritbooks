@@ -12,7 +12,6 @@
 
 import { describe, it, expect } from 'vitest';
 import { buildArCollectionEntry, buildArPayoutEntry } from './ar-posting';
-import { buildPlatformFeeEntry } from './platform-fee';
 import { deriveTenantFeeCents } from '../apply-invoice-payment';
 import { assertBalanced, line, type MoneyMovementEntry } from './types';
 
@@ -26,12 +25,6 @@ const AR_ACC = {
   settlementClearingId: 'acct-1095-settlement-clearing',
   merchantFeeExpenseId: 'acct-6xxx-merchant-fee',
   arControlId: 'acct-1100-ar-control',
-};
-
-const PF_ACC = {
-  inTransitId: 'acct-1096-payments-in-transit',
-  processingCostId: 'acct-6xxx-processing-cost',
-  feeIncomeId: 'acct-4910-payment-processing-income',
 };
 
 /** The canonical scenario invoice: $150,000.00 */
@@ -257,49 +250,6 @@ describe('AR collection guards', () => {
     const entry = buildArCollectionEntry(AR_ACC, 100_000, 100_000, LOC);
     expect(debits(entry)).toBe(credits(entry));
     expect(amountOn(entry, AR_ACC.settlementClearingId, 'debit')).toBe(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Platform fee income — Merit's own books
-// ---------------------------------------------------------------------------
-
-describe('platform fee income on a $150,000 ACH payment', () => {
-  const grossFee = 150_000; // $1,500.00 application fee
-  const stripeCost = 500; //     $5.00 Stripe processing cost
-  const entry = buildPlatformFeeEntry(PF_ACC, grossFee, stripeCost, LOC);
-
-  it('credits Payment Processing Income 4910 the GROSS fee', () => {
-    expect(amountOn(entry, PF_ACC.feeIncomeId, 'credit')).toBe(150_000);
-  });
-
-  it("debits Stripe's cost as processing expense", () => {
-    expect(amountOn(entry, PF_ACC.processingCostId, 'debit')).toBe(500);
-  });
-
-  it('debits Payments in Transit the net $1,495.00', () => {
-    expect(amountOn(entry, PF_ACC.inTransitId, 'debit')).toBe(149_500);
-  });
-
-  it('balances', () => {
-    expect(debits(entry)).toBe(credits(entry));
-    expect(debits(entry)).toBe(150_000);
-  });
-
-  it('omits the cost line when Stripe cost is unavailable (fallback to gross-only)', () => {
-    const e = buildPlatformFeeEntry(PF_ACC, grossFee, 0, LOC);
-    expect(e.lines.some((l) => l.account_id === PF_ACC.processingCostId)).toBe(false);
-    expect(debits(e)).toBe(credits(e));
-  });
-});
-
-describe('platform fee guards', () => {
-  it('rejects a Stripe cost exceeding the gross fee', () => {
-    expect(() => buildPlatformFeeEntry(PF_ACC, 1_000, 1_001, LOC)).toThrow(/out of range/);
-  });
-
-  it('rejects a non-positive gross fee', () => {
-    expect(() => buildPlatformFeeEntry(PF_ACC, 0, 0, LOC)).toThrow(/must be > 0/);
   });
 });
 

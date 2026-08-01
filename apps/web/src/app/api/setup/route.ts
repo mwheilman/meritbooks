@@ -59,8 +59,12 @@ const companySchema = z.object({
   industry: z.string().max(100).optional(),
   fiscal_year_start_month: z.number().int().min(1).max(12).default(1),
   // Rev-rec is a per-company wizard setting (FROZEN contract §1); Books drives
-  // recognition from it. Defaults to point-of-sale.
-  rev_rec_method: z.enum(['PCT_COSTS_INCURRED', 'PCT_COMPLETE', 'COMPLETED_CONTRACT', 'POINT_OF_SALE']).default('POINT_OF_SALE'),
+  // recognition from it. All 9 canonical methods are selectable at onboarding and
+  // refinable later in Settings → Revenue Recognition. Defaults to point-of-sale.
+  rev_rec_method: z.enum([
+    'POINT_OF_SALE', 'AS_BILLED', 'PCT_COSTS_INCURRED', 'PCT_COMPLETE', 'COMPLETED_CONTRACT',
+    'MILESTONE', 'RATABLY', 'SUBSCRIPTION', 'CASH',
+  ]).default('POINT_OF_SALE'),
 });
 
 // ─── Step 3: Seed COA ───────────────────────────────────────

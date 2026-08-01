@@ -38,6 +38,21 @@ const ROLES = [
 
 const INDUSTRIES = ['HVAC', 'Construction', 'Cabinetry', 'Plumbing', 'Electrical', 'Marketing', 'IT Services', 'HR Services', 'Bookkeeping', 'Property Management', 'Manufacturing', 'Retail', 'Professional Services', 'Other'];
 
+// The 9 canonical rev-rec methods (Books-owned) with plain-language guidance so a
+// non-accountant can pick the right one at onboarding. Matches REV_REC_METHODS in
+// /api/rev-rec/config; this company default is later refinable in Settings → Revenue Recognition.
+const REV_REC_OPTIONS: { value: string; label: string; help: string }[] = [
+  { value: 'POINT_OF_SALE', label: 'Point of sale', help: 'Retail, restaurants, e-commerce — recognize revenue the moment you invoice or ring the sale. No deferral.' },
+  { value: 'AS_BILLED', label: 'Billing-based (as billed)', help: 'Time & materials and open-ended service work — revenue equals what you bill, recognized as each invoice goes out.' },
+  { value: 'PCT_COSTS_INCURRED', label: 'Percent of costs incurred (cost-to-cost)', help: 'Construction and long jobs — recognize revenue as costs are incurred (costs to date ÷ total estimated cost). The default for contractors.' },
+  { value: 'PCT_COMPLETE', label: 'Percent complete (physical)', help: 'Construction and long jobs — recognize revenue by measured physical progress (units in place / milestones surveyed) rather than by cost.' },
+  { value: 'COMPLETED_CONTRACT', label: 'Completed contract', help: 'Short or high-uncertainty jobs — hold all revenue in deferral until the job is fully complete, then recognize it at once.' },
+  { value: 'MILESTONE', label: 'Milestone / point-in-time', help: 'Project work with acceptance gates — recognize revenue in chunks as each defined milestone is accepted by the customer.' },
+  { value: 'RATABLY', label: 'Straight-line / ratable', help: 'Retainers and fixed-term service agreements — spread revenue evenly (straight-line) across the term of the engagement.' },
+  { value: 'SUBSCRIPTION', label: 'Subscription (ratable)', help: 'SaaS and memberships — recognize the subscription fee evenly across each billing period the customer has paid for.' },
+  { value: 'CASH', label: 'Cash basis', help: 'Cash-basis books — recognize revenue only when the customer’s payment actually lands, regardless of when you invoice.' },
+];
+
 function genKey() { return Math.random().toString(36).slice(2, 8); }
 
 export default function SetupPage() {
@@ -203,7 +218,16 @@ export default function SetupPage() {
                     <div><label className={labelCls}>Industry</label><select value={co.industry} onChange={(e) => setCompanies((p) => p.map((c) => c.key === co.key ? { ...c, industry: e.target.value } : c))} className={inputCls}><option value="">Select...</option>{INDUSTRIES.map((i) => <option key={i} value={i}>{i}</option>)}</select></div>
                   </div>
                   <div className="mt-3"><label className={labelCls}>Fiscal Year Starts</label><select value={co.fiscalYearStartMonth} onChange={(e) => setCompanies((p) => p.map((c) => c.key === co.key ? { ...c, fiscalYearStartMonth: Number(e.target.value) } : c))} className={clsx(inputCls, 'w-48')}>{Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{new Date(2000, m - 1).toLocaleString('en', { month: 'long' })}</option>)}</select></div>
-                  <div className="mt-3"><label className={labelCls}>Revenue Recognition</label><select value={co.revRecMethod} onChange={(e) => setCompanies((p) => p.map((c) => c.key === co.key ? { ...c, revRecMethod: e.target.value } : c))} className={clsx(inputCls, 'w-72')}><option value="POINT_OF_SALE">Point of sale (recognize on billing)</option><option value="PCT_COMPLETE">Percent complete</option><option value="PCT_COSTS_INCURRED">Percent of costs incurred</option><option value="COMPLETED_CONTRACT">Completed contract</option></select></div>
+                  <div className="mt-3">
+                    <label className={labelCls}>Revenue Recognition</label>
+                    <select value={co.revRecMethod} onChange={(e) => setCompanies((p) => p.map((c) => c.key === co.key ? { ...c, revRecMethod: e.target.value } : c))} className={clsx(inputCls, 'max-w-md')}>
+                      {REV_REC_OPTIONS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    </select>
+                    <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed border-l-2 border-slate-700 pl-2.5">
+                      {REV_REC_OPTIONS.find((m) => m.value === co.revRecMethod)?.help}
+                    </p>
+                    <p className="text-[10px] text-slate-600 mt-1">Sets how this company recognizes revenue by default. You can refine it — and add per-job-type overrides — later in Settings → Revenue Recognition.</p>
+                  </div>
                 </div>
               ))}
             </div>

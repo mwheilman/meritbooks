@@ -4,10 +4,9 @@ export const runtime = 'nodejs';
 import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { constructWebhookEvent, getChargeProcessingFeeCents } from '@/lib/money/providers/stripe';
+import { constructWebhookEvent } from '@/lib/money/providers/stripe';
 import { applyStripePaymentToInvoice } from '@/lib/money/apply-invoice-payment';
 import { postArPayout } from '@/lib/money/posting/ar-posting';
-import { postPlatformFee } from '@/lib/money/posting/platform-fee';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
 import { resolvePiPaymentContext } from '@/lib/money/resolve-pi-context';
 
@@ -67,32 +66,16 @@ export async function POST(req: Request) {
           piId: pi.id,
         });
 
-        // Book the application fee as income on the platform operator's own
-        // ledger (Merit-as-platform). Gated on PLATFORM_ORG_ID; no-op otherwise.
-        const platformOrgId = process.env.PLATFORM_ORG_ID;
-        const grossFeeCents = ctx.appFeeCents;
-        if (platformOrgId && grossFeeCents > 0 && platformOrgId !== ctx.orgId) {
-          try {
-            const { data: loc } = await db.schema('core').from('locations')
-              .select('id').eq('org_id', platformOrgId).limit(1).maybeSingle();
-            const platformLocationId = (loc as { id: string } | null)?.id;
-            if (platformLocationId) {
-              let stripeCostCents = 0;
-              try {
-                const fee = await getChargeProcessingFeeCents(pi.id);
-                if (fee != null) stripeCostCents = Math.min(fee, grossFeeCents);
-              } catch { /* fall back to gross-only if the fee isn't retrievable */ }
-              await postPlatformFee(db, {
-                platformOrgId, locationId: platformLocationId,
-                entryDate: new Date().toISOString().slice(0, 10),
-                grossFeeCents, stripeCostCents,
-                createdBy: null, sourceId: pi.id, sourceTenantOrgId: ctx.orgId,
-              });
-            }
-          } catch (e) {
-            console.error('[stripe webhook] platform fee posting failed', pi.id, e);
-          }
-        }
+        // NOTE: MeritBooks does NOT post platform-fee income onto any tenant's GL
+        // via code (owner decision). With a destination charge the application fee
+        // pays out to the platform operator's OWN Stripe balance / bank; if that
+        // operator keeps books in MeritBooks, the resulting bank deposit is booked
+        // as Payment Processing Income (4910) through normal AI bank-feed
+        // categorization — no special code, no hardcoded platform-org pointer.
+        // The realized application fee is still persisted per payment (app_fee_cents
+        // + fee_rail on the PAY_SUCCEEDED invoice_event, written by
+        // applyStripePaymentToInvoice) so the Operator Console can report fee
+        // revenue without a GL post.
       }
     } else if (event.type === 'payment_intent.processing') {
       // ACH sits in `processing` for 1-2 business days before succeeding. Record
