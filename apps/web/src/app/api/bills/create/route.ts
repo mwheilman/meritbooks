@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { createBillSchema } from '@/lib/validations/transactions';
 import { createAttribution, resolveApprover } from '@/lib/services/cost-approval';
 import { logHumanAction } from '@/lib/trust/action-log';
@@ -10,6 +11,10 @@ export async function POST(request: Request) {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — creating a payable requires bills:create (defense-in-depth on RLS).
+  const guard = await requirePermission(userId, 'bills', 'create');
+  if (!guard.ok) return guard.response;
 
   try {
     const raw = await request.json();

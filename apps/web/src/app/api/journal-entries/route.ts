@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
 
@@ -126,6 +127,13 @@ export async function POST(request: Request) {
   const authResult = await requireAuth();
   if (authResult instanceof NextResponse) return authResult;
   const { userId } = authResult;
+
+  // Authorize — this endpoint posts a journal entry to the GL immediately
+  // (post_immediately defaults true), so gate on journal_entries:post — the same
+  // (feature, action) the /api/gl/post reference guards.
+  const guard = await requirePermission(userId, 'journal_entries', 'post');
+  if (!guard.ok) return guard.response;
+
   const supabase = createAdminSupabase();
 
   let body: z.infer<typeof jeCreateSchema>;

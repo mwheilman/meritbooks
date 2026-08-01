@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { fetchCoreMap } from '@/lib/stitch-core';
 
 /**
@@ -154,6 +155,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — editing an invoice (a posted invoice is reversed + re-posted to
+  // the GL under override) is an approval-tier money action; gate on
+  // invoices:approve. The typed override-reason + audit trail remain in place.
+  const guard = await requirePermission(userId, 'invoices', 'approve');
+  if (!guard.ok) return guard.response;
 
   let body: z.infer<typeof patchSchema>;
   try {

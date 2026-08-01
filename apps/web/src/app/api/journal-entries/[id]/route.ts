@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { fetchCoreMap } from '@/lib/stitch-core';
 
 /**
@@ -134,6 +135,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — editing a journal entry (a posted entry is reversed + re-posted
+  // under override) writes the GL, so gate on journal_entries:post.
+  const guard = await requirePermission(userId, 'journal_entries', 'post');
+  if (!guard.ok) return guard.response;
 
   let body: z.infer<typeof jePatchSchema>;
   try {

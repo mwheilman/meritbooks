@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { intakeInvoice } from '@/lib/ap/intake';
 
 /**
@@ -13,10 +14,14 @@ import { intakeInvoice } from '@/lib/ap/intake';
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) {
     return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
   }
+
+  // Authorize — AP intake writes a PENDING bill, so gate on bills:create.
+  const guard = await requirePermission(userId, 'bills', 'create');
+  if (!guard.ok) return guard.response;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { composeViaGateway, type ComposerAccount } from '@/lib/services/je-composer';
 import { z } from 'zod';
 
@@ -18,6 +19,12 @@ const schema = z.object({
 export async function POST(request: Request) {
   const { userId } = await auth().catch(() => ({ userId: null as string | null }));
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Authorize — composing a JE proposal is a journal_entries write path (it logs
+  // an AI decision that feeds posting); gate on journal_entries:create. No GL is
+  // written here — posting still requires journal_entries:post on /api/gl/post.
+  const composeGuard = await requirePermission(userId, 'journal_entries', 'create');
+  if (!composeGuard.ok) return composeGuard.response;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

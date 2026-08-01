@@ -4,6 +4,7 @@ export const runtime = 'nodejs';
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { listConnections, connectProvider } from '@/lib/money/connections';
 import {
   isStripeConfigured,
@@ -70,6 +71,13 @@ export async function POST(req: Request) {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase: db, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — connecting a payment provider provisions a Stripe account and
+  // flips a money-movement entitlement; gate on settings_system:edit (an admin
+  // integration action). GET (status) stays open to any authed member.
+  const guard = await requirePermission(userId, 'settings_system', 'edit');
+  if (!guard.ok) return guard.response;
+
   if (!isStripeConfigured()) {
     return NextResponse.json({ error: 'Stripe is not configured on the server (set STRIPE_SECRET_KEY).' }, { status: 400 });
   }

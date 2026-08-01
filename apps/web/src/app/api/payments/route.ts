@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { requireAuth } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { resolveOrgId, recordCustomerPayment } from '@/lib/posting/lifecycle';
@@ -21,9 +22,19 @@ const paymentSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  // Auth is enforced by middleware; the GL author column is uuid and Clerk ids
-  // are text, so attribution is captured via timestamps + sub-ledgers, not here.
-  await auth().catch(() => null);
+  // Authenticate — fail CLOSED (this previously swallowed auth() and relied on
+  // middleware alone). The GL author column is uuid and Clerk ids are text, so
+  // attribution is still captured via timestamps + sub-ledgers, not here.
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
+  const { userId } = authResult;
+
+  // Authorize — recording a customer payment applies cash to AR and posts to the
+  // GL, an AR write; gate on invoices:create. NOTE(NEEDS CENTRAL): there is no
+  // dedicated payments/money-movement feature in rbac/permissions.ts, so this
+  // reuses the AR-write permission as the closest fit — see the report.
+  const guard = await requirePermission(userId, 'invoices', 'create');
+  if (!guard.ok) return guard.response;
 
   try {
     const raw = await request.json();

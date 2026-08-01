@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import {
   createApproval,
@@ -43,6 +44,11 @@ export async function POST(request: Request) {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — the check run QUEUES disbursement approvals; gate it on
+  // checks:create (defense-in-depth on top of RLS + the approvals SoD).
+  const guard = await requirePermission(userId, 'checks', 'create');
+  if (!guard.ok) return guard.response;
 
   let body: RunBody = {};
   try {

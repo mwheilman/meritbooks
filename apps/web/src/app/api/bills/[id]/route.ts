@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { billTransitionSchema } from '@/lib/validations/transactions';
 import { approveBill, scheduleBill, payBill, voidBill } from '@/lib/services/bill-ap';
@@ -91,6 +92,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
   const actor = userId;
+
+  // Authorize — every bill lifecycle transition here (approve / schedule / pay /
+  // void / override_approver / release_hold) is an approval-tier money action, so
+  // gate the whole mutating endpoint on bills:approve. This sits IN ADDITION to
+  // the service-level SoD/state guards; it does not replace them.
+  const guard = await requirePermission(userId, 'bills', 'approve');
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try { raw = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }

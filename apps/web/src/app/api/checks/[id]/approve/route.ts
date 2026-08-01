@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import {
   approve,
@@ -22,6 +23,12 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — an ADDITIONAL role gate before the approvals service. Separation
+  // of duties (approver != preparer) is still enforced inside approve()/the DB
+  // CHECK; this fails closed for any role lacking checks:approve.
+  const guard = await requirePermission(userId, 'checks', 'approve');
+  if (!guard.ok) return guard.response;
 
   try {
     const result = await approve(supabase, orgId, params.id, userId);

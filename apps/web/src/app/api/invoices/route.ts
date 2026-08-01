@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
 import { postJournalEntry } from '@/lib/services/gl-posting';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
@@ -177,6 +178,11 @@ export async function POST(request: Request) {
   if (authResult instanceof NextResponse) return authResult;
   const { userId } = authResult;
   const orgId = authResult.orgId ?? '';
+
+  // Authorize — creating an invoice (optionally posting AR to the GL) requires
+  // invoices:create (defense-in-depth on top of RLS).
+  const guard = await requirePermission(userId, 'invoices', 'create');
+  if (!guard.ok) return guard.response;
 
   try {
     const raw = await request.json();
