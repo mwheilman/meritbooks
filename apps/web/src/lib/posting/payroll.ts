@@ -79,7 +79,10 @@ export async function recordPayrollRun(db: DB, input: PayrollRunInput): Promise<
     org_id: input.orgId,
     location_id: input.locationId,
     entry_date: input.payDate,
-    entry_type: 'STANDARD',
+    // A payroll run posts under its dedicated entry_type (enum value added in
+    // migration 055) so the schema-drift guard and reporting can distinguish
+    // payroll entries from generic manual entries. FPB-payroll §11 wiring gap.
+    entry_type: 'PAYROLL_RUN',
     memo: 'Payroll run',
     source_module: 'PAYROLL',
     created_by: null,

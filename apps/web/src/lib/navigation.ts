@@ -78,6 +78,7 @@ export const navigation: NavGroup[] = [
       { label: 'Revenue Recognition', href: '/rev-rec', icon: Percent },
       { label: 'Invoices', href: '/invoices', icon: DollarSign },
       { label: 'Payments', href: '/settings/payments', icon: CreditCard },
+      { label: 'Payroll', href: '/payroll', icon: Wallet },
     ],
   },
   {
