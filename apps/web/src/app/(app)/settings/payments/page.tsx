@@ -1,8 +1,13 @@
 export const dynamic = 'force-dynamic';
 
 import { PaymentsConnect } from '../payments-connect';
+import { requirePagePermission } from '@/lib/rbac/page-guard';
 
-export default function PaymentsSettingsPage() {
+export default async function PaymentsSettingsPage() {
+  // PAGE-LEVEL RBAC (identity gate #9). Connecting a payment processor is a
+  // system/integration setting — restrict the screen to roles that may view it.
+  // Fails closed.
+  await requirePagePermission('settings_system', 'view');
   return (
     <div className="p-6">
       <h1 className="text-lg font-semibold text-white mb-1">Payments</h1>

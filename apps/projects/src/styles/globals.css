@@ -1,0 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html { background-color: #020617; }
+body { @apply bg-surface-950 text-slate-100 font-sans antialiased; }
+.num { @apply font-mono tabular-nums; }

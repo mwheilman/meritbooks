@@ -1,7 +1,13 @@
 import { PageHeader } from '@/components/ui';
 import { CloseGrid } from './close-grid';
+import { requirePagePermission } from '@/lib/rbac/page-guard';
 
-export default function ClosePage() {
+export const dynamic = 'force-dynamic';
+
+export default async function ClosePage() {
+  // PAGE-LEVEL RBAC (identity gate #9). Only roles that may view close
+  // management reach this screen; everyone else is redirected. Fails closed.
+  await requirePagePermission('close_mgmt', 'view');
   return (
     <>
       <PageHeader
