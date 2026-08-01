@@ -18,6 +18,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { hasPermission, type UserRole } from '@/lib/rbac/permissions';
 
 export type ApprovalKind = 'AR_REFUND' | 'AP_DISBURSEMENT' | 'AP_BATCH' | 'PAYROLL_RUN';
 export type ApprovalStatus =
@@ -94,24 +95,32 @@ async function logStep(
 }
 
 /**
- * Role authorization — FAILS CLOSED. Consults core.memberships/core.roles for a
- * payment-approval permission; if that authority is unavailable (tables not yet
- * built), returns false. Do not replace this with a Books-private scheme that
- * won't reconcile to core.memberships at merge.
+ * Role authorization — FAILS CLOSED. Resolves the caller's role from the SAME
+ * source the rest of the app trusts (core.employees.role + ROLE_DEFINITIONS via
+ * permissions.ts) and grants money-movement approval when that role may approve
+ * on any money surface (checks / bills / payroll). This reconciles what used to
+ * read an unbuilt core.roles table. Separation of duties is enforced separately
+ * (approve() + a DB CHECK), so this only answers "may this role approve at all".
  */
 export async function canApprove(adminDb: SupabaseClient, orgId: string, userId: string): Promise<boolean> {
   try {
     const { data, error } = await adminDb
       .schema('core')
-      .from('memberships')
-      .select('role:roles(permissions)')
+      .from('employees')
+      .select('role')
       .eq('org_id', orgId)
-      .eq('clerk_user_id', userId);
-    if (error) return false; // tables/columns not present -> fail closed
-    const rows = (data ?? []) as Array<{ role?: { permissions?: Record<string, boolean> } | null }>;
-    return rows.some((r) => r.role?.permissions?.approve_money_movement === true);
+      .eq('clerk_user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (error || !data?.role) return false; // no active role in this org -> fail closed
+    const role = data.role as UserRole;
+    return (
+      hasPermission(role, 'checks', 'approve') ||
+      hasPermission(role, 'bills', 'approve') ||
+      hasPermission(role, 'payroll', 'approve')
+    );
   } catch {
-    return false; // schema absent -> fail closed
+    return false; // fail closed
   }
 }
 
@@ -162,7 +171,7 @@ export async function submitForApproval(adminDb: SupabaseClient, orgId: string, 
 }
 
 export class NotAuthorizedToApproveError extends Error {
-  constructor() { super('Not authorized to approve money movement. Approval authority requires Core identity (core.memberships/roles), which is not yet available.'); this.name = 'NotAuthorizedToApproveError'; }
+  constructor() { super('Not authorized to approve money movement. Your role does not have approval authority on checks, bills, or payroll.'); this.name = 'NotAuthorizedToApproveError'; }
 }
 export class SeparationOfDutiesError extends Error {
   constructor() { super('The approver cannot be the preparer (separation of duties).'); this.name = 'SeparationOfDutiesError'; }
