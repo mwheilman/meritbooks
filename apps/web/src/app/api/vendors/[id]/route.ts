@@ -4,9 +4,22 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 
 /**
- * GET /api/vendors/[id] — vendor record for the detail drawer/peek:
- * identity + compliance + AP summary (open balance, overdue) + recent bills.
- * vendors is in `core`; bills is in `public` (filtered by vendor_id).
+ * GET /api/vendors/[id] — vendor detail + ledger rollup for the detail drawer/peek.
+ *
+ * Returns identity + compliance (W-9 / GL COI / WC COI + payment-hold state),
+ * the open-bills list, payment history (POSTED bill_payments), an A/P summary,
+ * YTD + trailing-12-month spend, and the raw compliance docs.
+ *
+ * Schema notes (Rule 11):
+ *  - vendors live in `core`; bills / bill_payments / vendor_compliance_docs /
+ *    vendor_payment_holds live in `public`. PostgREST cannot embed core↔public,
+ *    so every child set is fetched separately and stitched in JS.
+ *  - money is bigint cents everywhere; balance_cents is a generated column
+ *    (total_cents - amount_paid_cents).
+ *  - bill.status ∈ PENDING|APPROVED|PARTIALLY_PAID|PAID|VOIDED|ON_HOLD.
+ *  - bill_payments.status ∈ POSTED|VOIDED; only POSTED count as real cash out.
+ *  - vendor_compliance_docs.status ∈ MISSING|PENDING|VALID|EXPIRED;
+ *    doc_type ∈ W9|GL_COI|WC_COI|WC_EXEMPTION.
  */
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const ctx = await requireAuthedContext();
@@ -19,38 +32,118 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .eq('org_id', orgId).eq('id', params.id).single();
   if (error || !v) return NextResponse.json({ error: 'Vendor not found' }, { status: 404 });
 
+  // ---- Bills (public), all of this vendor's — bounded, newest first. Used for
+  // the open-bills list, A/P summary, spend rollups, and the payment-number map.
   const { data: billRows } = await supabase
     .from('bills')
-    .select('id, bill_number, bill_date, due_date, total_cents, balance_cents, status')
+    .select('id, bill_number, bill_date, due_date, total_cents, balance_cents, amount_paid_cents, status')
     .eq('org_id', orgId).eq('vendor_id', params.id)
     .order('bill_date', { ascending: false })
-    .limit(50);
+    .limit(500);
+  const bills = (billRows ?? []) as Array<Record<string, any>>;
+  const billIds = bills.map((b) => b.id as string);
 
-  // Payment-hold state lives in public.vendor_payment_holds (not a column on
-  // core.vendors). A hold is active if its window covers today.
-  const { data: holdRows } = await supabase
-    .from('vendor_payment_holds')
-    .select('start_date, end_date')
-    .eq('org_id', orgId).eq('vendor_id', params.id);
+  // ---- Payment history (public.bill_payments, POSTED), joined to bill # in JS.
+  let paymentRows: Array<Record<string, any>> = [];
+  if (billIds.length > 0) {
+    const { data: pays } = await supabase
+      .from('bill_payments')
+      .select('id, bill_id, amount_cents, payment_date, method, rail, status')
+      .eq('org_id', orgId).in('bill_id', billIds)
+      .eq('status', 'POSTED')
+      .order('payment_date', { ascending: false })
+      .limit(100);
+    paymentRows = (pays ?? []) as Array<Record<string, any>>;
+  }
+
+  // ---- Compliance docs (public) + payment holds (public).
+  const [{ data: docRows }, { data: holdRows }] = await Promise.all([
+    supabase
+      .from('vendor_compliance_docs')
+      .select('id, doc_type, status, issued_date, expiration_date, coverage_amount_cents, file_url')
+      .eq('org_id', orgId).eq('vendor_id', params.id),
+    supabase
+      .from('vendor_payment_holds')
+      .select('id, hold_type, reason, start_date, end_date, released_at')
+      .eq('org_id', orgId).eq('vendor_id', params.id),
+  ]);
+  const docs = (docRows ?? []) as Array<Record<string, any>>;
+  const holds = (holdRows ?? []) as Array<Record<string, any>>;
+
   const now = new Date();
-  const hasPaymentHold = (holdRows ?? []).some((h: { start_date: string | null; end_date: string | null }) => {
+  const today = now;
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  // A hold is in effect if its window covers today and it hasn't been released.
+  const holdInEffect = (h: Record<string, any>) => {
+    if (h.released_at) return false;
     if (h.start_date && new Date(h.start_date) > now) return false;
     if (h.end_date && new Date(h.end_date) < now) return false;
     return true;
-  });
+  };
+  const activeHold = holds.find(holdInEffect) ?? null;
+  const hasPaymentHold = !!activeHold;
 
-  const bills = (billRows ?? []) as Array<Record<string, any>>;
-  const today = new Date();
+  // ---- Compliance status per doc-type (mirrors the list route's logic).
+  const docStatus = (docType: string): 'valid' | 'expired' | 'pending' | 'missing' => {
+    const d = docs.find((x) => x.doc_type === docType);
+    if (!d) return 'missing';
+    if (d.status === 'PENDING') return 'pending';
+    if (d.status !== 'VALID') return 'expired';
+    if (d.expiration_date && new Date(d.expiration_date) < now) return 'expired';
+    return 'valid';
+  };
+
+  // ---- A/P summary + open bills.
   let openBalance = 0;
   let overdueCount = 0;
+  const openBills = bills
+    .filter((b) => Number(b.balance_cents ?? 0) > 0 && b.status !== 'VOIDED')
+    .map((b) => {
+      const balance = Number(b.balance_cents ?? 0);
+      openBalance += balance;
+      const due = b.due_date ? startOfDay(new Date(b.due_date)) : null;
+      const overdue = due != null && due < startOfDay(today);
+      if (overdue) overdueCount += 1;
+      const daysOverdue = overdue && due ? Math.floor((startOfDay(today).getTime() - due.getTime()) / 86_400_000) : 0;
+      return {
+        id: b.id, billNumber: b.bill_number, billDate: b.bill_date, dueDate: b.due_date,
+        totalCents: Number(b.total_cents ?? 0), balanceCents: balance, status: b.status, daysOverdue,
+      };
+    });
+
+  // ---- Spend rollups (from bills posted, excluding voided). YTD = since Jan 1
+  // of the current year; TTM = trailing 12 months by bill_date.
+  const yearStart = new Date(now.getFullYear(), 0, 1);
+  const ttmStart = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  let ytdCents = 0;
+  let ttmCents = 0;
+  let lifetimeBilledCents = 0;
   for (const b of bills) {
-    const bal = Number(b.balance_cents ?? 0);
-    if (bal > 0) {
-      openBalance += bal;
-      if (b.due_date && new Date(b.due_date) < today) overdueCount += 1;
-    }
+    if (b.status === 'VOIDED') continue;
+    const amt = Number(b.total_cents ?? 0);
+    lifetimeBilledCents += amt;
+    const bd = b.bill_date ? new Date(b.bill_date) : null;
+    if (!bd) continue;
+    if (bd >= yearStart) ytdCents += amt;
+    if (bd >= ttmStart) ttmCents += amt;
   }
-  const recentBills = bills.slice(0, 5).map((b) => ({
+
+  // ---- Payment history with bill-number stitched in.
+  const billNumberById = new Map(bills.map((b) => [b.id as string, b.bill_number as string | null]));
+  const payments = paymentRows.map((p) => ({
+    id: p.id,
+    billId: p.bill_id,
+    billNumber: billNumberById.get(p.bill_id as string) ?? null,
+    paymentDate: p.payment_date,
+    amountCents: Number(p.amount_cents ?? 0),
+    method: p.method ?? p.rail ?? null,
+  }));
+  const paidYtdCents = payments
+    .filter((p) => p.paymentDate && new Date(p.paymentDate) >= yearStart)
+    .reduce((s, p) => s + p.amountCents, 0);
+
+  const recentBills = bills.slice(0, 8).map((b) => ({
     id: b.id, billNumber: b.bill_number, billDate: b.bill_date,
     totalCents: Number(b.total_cents ?? 0), balanceCents: Number(b.balance_cents ?? 0), status: b.status,
   }));
@@ -62,17 +155,48 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     legalName: ven.name,
     email: ven.email ?? null,
     phone: ven.phone ?? null,
+    website: ven.website ?? null,
     addressLine: [ven.address_line1, ven.city, ven.state, ven.zip].filter(Boolean).join(', ') || null,
     paymentTermsDays: ven.payment_terms_days ?? null,
     is1099: !!ven.is_1099_eligible,
     autoApprove: !!ven.auto_approve,
-    taxId: null, // no plaintext TIN column on core.vendors (tin_encrypted is not surfaced)
+    taxId: null, // no plaintext TIN column on core.vendors (tin_encrypted not surfaced)
     isActive: ven.is_active !== false,
+    w9Status: ven.w9_status ?? null,
+
     compliance: {
-      w9: ven.w9_status ?? null,
+      w9: docStatus('W9'),
+      glCoi: docStatus('GL_COI'),
+      wcCoi: docStatus('WC_COI'),
       hasPaymentHold,
+      hold: activeHold
+        ? { type: activeHold.hold_type, reason: activeHold.reason, endDate: activeHold.end_date ?? null }
+        : null,
     },
-    ap: { openBalance, overdueCount, openBillCount: bills.filter((b) => Number(b.balance_cents ?? 0) > 0).length },
+    complianceDocs: docs.map((d) => ({
+      id: d.id,
+      docType: d.doc_type,
+      status: d.status,
+      issuedDate: d.issued_date ?? null,
+      expirationDate: d.expiration_date ?? null,
+      coverageAmountCents: d.coverage_amount_cents != null ? Number(d.coverage_amount_cents) : null,
+      hasFile: !!d.file_url,
+    })),
+
+    ap: {
+      openBalance,
+      overdueCount,
+      openBillCount: openBills.length,
+    },
+    spend: {
+      ytdCents,
+      ttmCents,
+      lifetimeBilledCents,
+      paidYtdCents,
+    },
+
+    openBills,
+    payments,
     recentBills,
   });
 }

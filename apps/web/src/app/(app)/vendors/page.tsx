@@ -5,6 +5,7 @@ import {
   Search, Plus, X, Truck, AlertTriangle, Check, FileText,
   ChevronDown, ChevronUp, Loader2, ExternalLink, Shield,
 } from 'lucide-react';
+import { VendorDrawer } from './vendor-drawer';
 
 interface Vendor {
   id: string;
@@ -86,6 +87,7 @@ export default function VendorsPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [total, setTotal] = useState(0);
   const [filter1099, setFilter1099] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const fetchVendors = useCallback(async () => {
     setLoading(true);
@@ -451,7 +453,12 @@ export default function VendorsPage() {
               {vendors.map((v) => (
                 <tr key={v.id} className="border-b border-zinc-800 hover:bg-zinc-800/50 transition-colors">
                   <td className="px-4 py-3">
-                    <div className="text-sm font-medium text-white">{v.display_name || v.name}</div>
+                    <button
+                      onClick={() => setDetailId(v.id)}
+                      className="text-sm font-medium text-white hover:text-emerald-400 transition-colors text-left"
+                    >
+                      {v.display_name || v.name}
+                    </button>
                     {v.display_name && v.display_name !== v.name && (
                       <div className="text-xs text-zinc-500">{v.name}</div>
                     )}
@@ -496,12 +503,20 @@ export default function VendorsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => startEdit(v)}
-                      className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
-                    >
-                      Edit
-                    </button>
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        onClick={() => setDetailId(v.id)}
+                        className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={() => startEdit(v)}
+                        className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -509,6 +524,8 @@ export default function VendorsPage() {
           </table>
         </div>
       )}
+
+      <VendorDrawer vendorId={detailId} onClose={() => setDetailId(null)} />
     </div>
   );
 }

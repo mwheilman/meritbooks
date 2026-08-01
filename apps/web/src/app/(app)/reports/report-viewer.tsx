@@ -169,6 +169,52 @@ const PERIODS = [
 ];
 
 // ═══════════════════════════════════════════════════════════════
+// COMPARATIVES — derive the comparison window from the SELECTED range
+// (fix: the old P&L compare always used the single calendar month before
+//  start_date, so a quarter/year compared against one prior month. Wrong.)
+// ═══════════════════════════════════════════════════════════════
+
+type CompareMode = 'none' | 'prior_period' | 'prior_year' | 'budget';
+
+function parseISO(s: string) { const [y, m, d] = s.split('-').map(Number); return { y, m, d }; }
+function isoStr(y: number, m: number, d: number) { return `${y}-${pad(m)}-${pad(d)}`; }
+function lastDayOfMonth(y: number, m: number) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+function addMonthsYM(y: number, m: number, delta: number) { const idx = y * 12 + (m - 1) + delta; return { y: Math.floor(idx / 12), m: ((idx % 12) + 12) % 12 + 1 }; }
+function shiftDaysISO(s: { y: number; m: number; d: number }, delta: number) { const t = new Date(Date.UTC(s.y, s.m - 1, s.d) + delta * 86400000); return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate() }; }
+function daysInclusive(a: { y: number; m: number; d: number }, b: { y: number; m: number; d: number }) { return Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / 86400000) + 1; }
+
+// Equal-length period ending immediately before the selected range. Whole-month
+// ranges shift by whole calendar months (a full year → the prior full year);
+// arbitrary ranges shift by exact day count.
+function derivePriorPeriod(sd: string, ed: string): { s: string; e: string } {
+  const a = parseISO(sd), b = parseISO(ed);
+  const wholeMonths = a.d === 1 && b.d === lastDayOfMonth(b.y, b.m);
+  if (wholeMonths) {
+    const span = (b.y * 12 + b.m) - (a.y * 12 + a.m) + 1;
+    const ps = addMonthsYM(a.y, a.m, -span);
+    const pe = addMonthsYM(a.y, a.m, -1);
+    return { s: isoStr(ps.y, ps.m, 1), e: isoStr(pe.y, pe.m, lastDayOfMonth(pe.y, pe.m)) };
+  }
+  const len = daysInclusive(a, b);
+  const pe = shiftDaysISO(a, -1);
+  const ps = shiftDaysISO(pe, -(len - 1));
+  return { s: isoStr(ps.y, ps.m, ps.d), e: isoStr(pe.y, pe.m, pe.d) };
+}
+
+// The same calendar range exactly one year earlier (month-end aware).
+function derivePriorYear(sd: string, ed: string): { s: string; e: string } {
+  const a = parseISO(sd), b = parseISO(ed);
+  const sD = Math.min(a.d, lastDayOfMonth(a.y - 1, a.m));
+  const eD = b.d === lastDayOfMonth(b.y, b.m) ? lastDayOfMonth(b.y - 1, b.m) : Math.min(b.d, lastDayOfMonth(b.y - 1, b.m));
+  return { s: isoStr(a.y - 1, a.m, sD), e: isoStr(b.y - 1, b.m, eD) };
+}
+
+// P&L favorability: revenue up is good, cost up is bad. 1 favorable / -1 unfavorable / 0 flat.
+function favorability(type: string, variance: number) { if (variance === 0) return 0; const good = type === 'REVENUE' ? variance > 0 : variance < 0; return good ? 1 : -1; }
+function favClass(f: number) { return f > 0 ? 'text-emerald-400' : f < 0 ? 'text-red-400' : 'text-slate-500'; }
+function variancePct(variance: number, base: number) { return base !== 0 ? `${variance > 0 ? '+' : ''}${Math.round((variance / Math.abs(base)) * 1000) / 10}%` : '—'; }
+
+// ═══════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
 
@@ -184,7 +230,7 @@ export function ReportViewer() {
   const [selectedIndustries, setSelectedIndustries] = useState<string[]>([]);
   const [basis, setBasis] = useState<'accrual'|'cash'>('accrual');
   const [viewMode, setViewMode] = useState<'summary'|'detail'>('summary');
-  const [compare, setCompare] = useState(false);
+  const [compareMode, setCompareMode] = useState<CompareMode>('none');
   const [drill, setDrill] = useState<DrillDownTarget | null>(null);
   const [nlQuery, setNlQuery] = useState('');
 
@@ -357,13 +403,20 @@ export function ReportViewer() {
               )}
 
               {reportDef?.hasCompare && (
-                <button onClick={() => setCompare(!compare)} className={clsx('flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border', compare ? 'bg-indigo-600/20 text-indigo-400 border-indigo-500/30' : 'bg-slate-800 text-slate-400 border-slate-700')}>
-                  <GitCompare size={11}/>{compare ? 'Comparing' : 'Compare'}
-                </button>
+                <div className={clsx('flex items-center gap-1.5 px-2 py-1 rounded-lg border', compareMode !== 'none' ? 'bg-indigo-600/20 border-indigo-500/30' : 'bg-slate-800 border-slate-700')}>
+                  <GitCompare size={12} className={compareMode !== 'none' ? 'text-indigo-400' : 'text-slate-500'} />
+                  <select value={compareMode} onChange={(e) => setCompareMode(e.target.value as CompareMode)}
+                    className={clsx('bg-transparent text-xs font-medium focus:outline-none cursor-pointer', compareMode !== 'none' ? 'text-indigo-300' : 'text-slate-400')}>
+                    <option value="none" className="bg-slate-900 text-white">No comparison</option>
+                    <option value="prior_period" className="bg-slate-900 text-white">vs Prior Period</option>
+                    <option value="prior_year" className="bg-slate-900 text-white">vs Prior Year</option>
+                    {reportDef?.hasBasis && <option value="budget" className="bg-slate-900 text-white">vs Budget</option>}
+                  </select>
+                </div>
               )}
             </div>
 
-            <ReportContent reportKey={reportKey} sd={sd} ed={ed} locIds={locIdsParam} basis={basis} viewMode={viewMode} compare={compare} onDrill={setDrill} />
+            <ReportContent reportKey={reportKey} sd={sd} ed={ed} locIds={locIdsParam} basis={basis} viewMode={viewMode} compareMode={compareMode} onDrill={setDrill} />
           </div>
         )}
       </div>
@@ -377,8 +430,8 @@ export function ReportViewer() {
 // REPORT CONTENT ROUTER (TS-fixed: proper typing on params)
 // ═══════════════════════════════════════════════════════════════
 
-function ReportContent({ reportKey, sd, ed, locIds, basis, viewMode, compare, onDrill }: {
-  reportKey: string; sd: string; ed: string; locIds: string; basis: string; viewMode: string; compare: boolean; onDrill: (t: DrillDownTarget) => void;
+function ReportContent({ reportKey, sd, ed, locIds, basis, viewMode, compareMode, onDrill }: {
+  reportKey: string; sd: string; ed: string; locIds: string; basis: string; viewMode: string; compareMode: CompareMode; onDrill: (t: DrillDownTarget) => void;
 }) {
   // Build params with location_ids for ALL APIs (multi-select support)
   const p: Record<string, string> = {};
@@ -391,11 +444,11 @@ function ReportContent({ reportKey, sd, ed, locIds, basis, viewMode, compare, on
     case 'pnl':
     case 'pnl_dept':
     case 'pnl_class':
-      return <PnlReport p={p} onDrill={onDrill} compare={compare} />;
+      return <PnlReport p={p} onDrill={onDrill} compareMode={compareMode} />;
     case 'pnl_month':
       return <PnlByMonthReport locIds={locIds} basis={basis} year={sd?.slice(0,4) ?? String(new Date().getFullYear())} />;
     case 'bs':
-      return <BsReport ed={ed} locIds={locIds} onDrill={onDrill} />;
+      return <BsReport ed={ed} locIds={locIds} onDrill={onDrill} compareMode={compareMode} />;
     case 'cf':
       return <CashFlowReport startDate={sd} endDate={ed} locationId={locIds.split(',')[0] || 'all'} />;
     case 'tb':
@@ -483,21 +536,60 @@ interface ISGroup { name: string; accounts: ISAcct[]; totalCents: number }
 interface ISSection { type: string; label: string; groups: ISGroup[]; totalCents: number }
 interface ISR { sections: ISSection[]; summary: { revenueCents: number; grossProfitCents: number; netIncomeCents: number; grossMarginPct: number; netMarginPct: number } }
 
-function PnlReport({ p, onDrill, compare }: { p: Record<string, string>; onDrill: (t: DrillDownTarget) => void; compare: boolean }) {
+interface BudgetVsActual { data: { accountNumber: string; budgetCents: number }[]; totals?: Record<string, { budget: number; actual: number; variance: number }> }
+
+function PnlReport({ p, onDrill, compareMode }: { p: Record<string, string>; onDrill: (t: DrillDownTarget) => void; compareMode: CompareMode }) {
   const { data, isLoading, error } = useQuery<ISR>('/api/reports/income-statement', p);
-  const pe = p.start_date ? new Date(p.start_date) : new Date(); pe.setDate(pe.getDate()-1);
-  const pp = { ...p, start_date: `${pe.getFullYear()}-${pad(pe.getMonth()+1)}-01`, end_date: fmt(pe) };
-  const { data: pd } = useQuery<ISR>(compare ? '/api/reports/income-statement' : null, compare ? pp : undefined);
+
+  // ── Derive the comparison window from the SELECTED range (the fix). ──
+  const cmp = useMemo(() => {
+    if (!p.start_date || !p.end_date) return null;
+    if (compareMode === 'prior_period') return derivePriorPeriod(p.start_date, p.end_date);
+    if (compareMode === 'prior_year') return derivePriorYear(p.start_date, p.end_date);
+    return null;
+  }, [compareMode, p.start_date, p.end_date]);
+  const cmpParams = cmp ? { ...p, start_date: cmp.s, end_date: cmp.e } : undefined;
+  const { data: cmpData } = useQuery<ISR>(cmp ? '/api/reports/income-statement' : null, cmpParams);
+
+  // ── Budget comparison: consume the existing budgets endpoint (read-only). ──
+  const budgetActive = compareMode === 'budget' && !!p.start_date;
+  const budgetParams = useMemo(() => {
+    if (!budgetActive) return undefined;
+    const a = parseISO(p.start_date); const b = parseISO(p.end_date ?? p.start_date);
+    const bp: Record<string, string> = { ...p, fiscal_year: String(a.y) };
+    // Single whole calendar month → scope budget to that fiscal period so it matches.
+    if (a.d === 1 && a.y === b.y && a.m === b.m && b.d === lastDayOfMonth(b.y, b.m)) bp.period_number = String(a.m);
+    return bp;
+  }, [budgetActive, p]);
+  const { data: budgetData } = useQuery<BudgetVsActual>(budgetActive ? '/api/budgets/vs-actual' : null, budgetParams);
+
   if (isLoading) return <Ld />; if (error) return <Er m={String(error)} />; if (!data) return <Em />;
-  const { sections, summary: s } = data; const rb = Math.abs(s.revenueCents)||1;
-  const pm = new Map<string,number>(); if(pd) pd.sections.forEach((sec: ISSection) => sec.groups.forEach((g: ISGroup) => g.accounts.forEach((a: ISAcct) => pm.set(a.accountNumber,a.amountCents))));
+  const { sections, summary: s } = data; const rb = Math.abs(s.revenueCents) || 1;
+  const comparing = compareMode !== 'none';
+
+  // ── Merge comparison figures by account number. ──
+  const cmpMap = new Map<string, number>();
+  if (compareMode === 'budget') { budgetData?.data?.forEach((r) => cmpMap.set(r.accountNumber, r.budgetCents)); }
+  else if (cmpData) { cmpData.sections.forEach((sec) => sec.groups.forEach((g) => g.accounts.forEach((a) => cmpMap.set(a.accountNumber, a.amountCents)))); }
+
+  // ── Comparison subtotals for Gross Profit / Net Income. ──
+  let cmpGP = 0, cmpNI = 0;
+  if (compareMode === 'budget' && budgetData?.totals) {
+    const t = budgetData.totals;
+    const rev = t.REVENUE?.budget ?? 0, cogs = t.COGS?.budget ?? 0, opex = t.OPEX?.budget ?? 0, other = t.OTHER?.budget ?? 0;
+    cmpGP = rev - cogs; cmpNI = cmpGP - opex - other;
+  } else if (cmpData) { cmpGP = cmpData.summary.grossProfitCents; cmpNI = cmpData.summary.netIncomeCents; }
+  const cmpLabel = compareMode === 'prior_year' ? 'Prior Yr' : compareMode === 'budget' ? 'Budget' : 'Prior';
+  const cols = comparing ? 7 : 4;
+  const gpVar = s.grossProfitCents - cmpGP, niVar = s.netIncomeCents - cmpNI;
+
   return (
-    <div className="card overflow-hidden"><table className="w-full"><thead><tr className="border-b border-slate-800/50"><th className="px-6 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24">Acct</th><th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Description</th><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Amount</th><th className="px-3 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-12">%</th>{compare&&<><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Prior</th><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Var</th></>}</tr></thead><tbody>
-      {sections.map((sec: ISSection) => (<React.Fragment key={sec.type}><tr className="bg-slate-800/30"><td colSpan={compare?6:4} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase">{sec.label} <span className="font-mono text-slate-500 ml-1">{formatMoney(sec.totalCents)}</span></td></tr>
-        {sec.groups.flatMap((g: ISGroup) => g.accounts.map((a: ISAcct) => { const pv=pm.get(a.accountNumber)??0; const v=a.amountCents-pv; return <tr key={a.accountNumber} onClick={() => onDrill({accountId:a.accountId,accountNumber:a.accountNumber,accountName:a.accountName})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td><td className="px-4 py-1.5 text-sm text-slate-300 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600"/></td><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-200">{formatMoney(a.amountCents)}</td><td className="px-3 py-1.5 text-right text-2xs font-mono text-slate-600">{Math.round(Math.abs(a.amountCents)/rb*100)}%</td>{compare&&<><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-400">{formatMoney(pv)}</td><td className={clsx('px-4 py-1.5 text-right text-sm font-mono',v>0?'text-emerald-400':v<0?'text-red-400':'text-slate-500')}>{v>0?'+':''}{formatMoney(v)}</td></>}</tr>; }))}
+    <div className="card overflow-hidden"><table className="w-full"><thead><tr className="border-b border-slate-800/50"><th className="px-6 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24">Acct</th><th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Description</th><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Amount</th><th className="px-3 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-12">%</th>{comparing&&<><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">{cmpLabel}</th><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Var $</th><th className="px-3 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-14">Var %</th></>}</tr></thead><tbody>
+      {sections.map((sec: ISSection) => (<React.Fragment key={sec.type}><tr className="bg-slate-800/30"><td colSpan={cols} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase">{sec.label} <span className="font-mono text-slate-500 ml-1">{formatMoney(sec.totalCents)}</span></td></tr>
+        {sec.groups.flatMap((g: ISGroup) => g.accounts.map((a: ISAcct) => { const pv=cmpMap.get(a.accountNumber)??0; const v=a.amountCents-pv; const f=favorability(sec.type,v); return <tr key={a.accountNumber} onClick={() => onDrill({accountId:a.accountId,accountNumber:a.accountNumber,accountName:a.accountName})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td><td className="px-4 py-1.5 text-sm text-slate-300 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600"/></td><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-200">{formatMoney(a.amountCents)}</td><td className="px-3 py-1.5 text-right text-2xs font-mono text-slate-600">{Math.round(Math.abs(a.amountCents)/rb*100)}%</td>{comparing&&<><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-400">{formatMoney(pv)}</td><td className={clsx('px-4 py-1.5 text-right text-sm font-mono',favClass(f))}>{v>0?'+':''}{formatMoney(v)}</td><td className={clsx('px-3 py-1.5 text-right text-2xs font-mono',favClass(f))}>{variancePct(v,pv)}</td></>}</tr>; }))}
       </React.Fragment>))}
-      <tr className="bg-slate-800/20"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Gross Profit</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(s.grossProfitCents)} <span className="text-2xs text-slate-500">{s.grossMarginPct}%</span></td><td/>{compare&&<td colSpan={2}/>}</tr>
-      <tr className="bg-brand-500/[0.04]"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Net Income</td><td className={clsx('px-4 py-2.5 text-right font-mono font-semibold',s.netIncomeCents>=0?'text-emerald-400':'text-red-400')}>{formatMoney(s.netIncomeCents)} <span className="text-2xs text-slate-500">{s.netMarginPct}%</span></td><td/>{compare&&<td colSpan={2}/>}</tr>
+      <tr className="bg-slate-800/20"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Gross Profit</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(s.grossProfitCents)} <span className="text-2xs text-slate-500">{s.grossMarginPct}%</span></td><td/>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{formatMoney(cmpGP)}</td><td className={clsx('px-4 py-2.5 text-right font-mono text-sm',favClass(favorability('REVENUE',gpVar)))}>{gpVar>0?'+':''}{formatMoney(gpVar)}</td><td className={clsx('px-3 py-2.5 text-right text-2xs font-mono',favClass(favorability('REVENUE',gpVar)))}>{variancePct(gpVar,cmpGP)}</td></>}</tr>
+      <tr className="bg-brand-500/[0.04]"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Net Income</td><td className={clsx('px-4 py-2.5 text-right font-mono font-semibold',s.netIncomeCents>=0?'text-emerald-400':'text-red-400')}>{formatMoney(s.netIncomeCents)} <span className="text-2xs text-slate-500">{s.netMarginPct}%</span></td><td/>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{formatMoney(cmpNI)}</td><td className={clsx('px-4 py-2.5 text-right font-mono text-sm',favClass(favorability('REVENUE',niVar)))}>{niVar>0?'+':''}{formatMoney(niVar)}</td><td className={clsx('px-3 py-2.5 text-right text-2xs font-mono',favClass(favorability('REVENUE',niVar)))}>{variancePct(niVar,cmpNI)}</td></>}</tr>
     </tbody></table></div>
   );
 }
@@ -588,21 +680,44 @@ function PnlByMonthReport({ locIds, basis, year }: { locIds: string; basis: stri
 // BS (multi-location)
 // ═══════════════════════════════════════════════════════════════
 
-function BsReport({ ed, locIds, onDrill }: { ed: string; locIds: string; onDrill: (t: DrillDownTarget) => void }) {
+interface BSData { sections: { type: string; label: string; subTypes: { groups: { accounts: { accountId: string; accountNumber: string; accountName: string; balanceCents: number }[] }[] }[]; totalCents: number }[]; summary: { totalAssetsCents: number; totalLiabilitiesCents: number; totalEquityCents: number; isBalanced: boolean; varianceCents: number } }
+
+function BsReport({ ed, locIds, onDrill, compareMode }: { ed: string; locIds: string; onDrill: (t: DrillDownTarget) => void; compareMode: CompareMode }) {
   const p: Record<string,string> = { as_of_date: ed };
   if (locIds) p.location_ids = locIds;
-  const { data, isLoading, error } = useQuery<{ sections: { type: string; label: string; subTypes: { groups: { accounts: { accountId: string; accountNumber: string; accountName: string; balanceCents: number }[] }[] }[]; totalCents: number }[]; summary: { totalAssetsCents: number; totalLiabilitiesCents: number; totalEquityCents: number; isBalanced: boolean; varianceCents: number } }>('/api/reports/balance-sheet', p);
+  const { data, isLoading, error } = useQuery<BSData>('/api/reports/balance-sheet', p);
+
+  // A Balance Sheet is a point in time: compare against a prior as-of date derived
+  // from the selected date (prior period = prior month-end; prior year = same date −1yr).
+  // Budget is not meaningful for the BS, so it renders no comparison.
+  const cmpAsOf = useMemo(() => {
+    if (!ed) return null;
+    const b = parseISO(ed);
+    if (compareMode === 'prior_year') return isoStr(b.y - 1, b.m, b.d === lastDayOfMonth(b.y, b.m) ? lastDayOfMonth(b.y - 1, b.m) : b.d);
+    if (compareMode === 'prior_period') { const pm = addMonthsYM(b.y, b.m, -1); return isoStr(pm.y, pm.m, lastDayOfMonth(pm.y, pm.m)); }
+    return null;
+  }, [compareMode, ed]);
+  const cmpParams = cmpAsOf ? { ...p, as_of_date: cmpAsOf } : undefined;
+  const { data: cmpData } = useQuery<BSData>(cmpAsOf ? '/api/reports/balance-sheet' : null, cmpParams);
+
   if (isLoading) return <Ld />; if (error) return <Er m={String(error)} />; if (!data) return <Em />;
   const { sections, summary: s } = data;
+  const comparing = !!cmpAsOf;
+  const cmpMap = new Map<string, number>();
+  if (cmpData) cmpData.sections.forEach((sec) => sec.subTypes.forEach((st) => st.groups.forEach((g) => g.accounts.forEach((a) => cmpMap.set(a.accountNumber, a.balanceCents)))));
+  const cmpLabel = compareMode === 'prior_year' ? 'Prior Yr' : 'Prior';
+  const cmpAssets = cmpData?.summary.totalAssetsCents ?? 0;
+  const cmpLE = (cmpData?.summary.totalLiabilitiesCents ?? 0) + (cmpData?.summary.totalEquityCents ?? 0);
+
   return (
     <div className="card overflow-hidden">
-      <div className="px-6 py-3 border-b border-slate-800 flex items-center justify-between"><p className="text-2xs text-slate-500 font-mono">As of {ed}</p>{s.isBalanced?<span className="px-2 py-0.5 rounded text-xs bg-emerald-500/10 text-emerald-400">Balanced ✓</span>:<span className="px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-400">Off by {formatMoney(Math.abs(s.varianceCents))}</span>}</div>
-      <table className="w-full"><thead><tr className="border-b border-slate-800/50"><th className="px-6 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24">Acct</th><th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Description</th><th className="px-6 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Balance</th></tr></thead><tbody>
-        {sections.map((sec) => (<React.Fragment key={sec.type}><tr className="bg-slate-800/30"><td colSpan={2} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase">{sec.label}</td><td className="px-6 py-2 text-right text-xs font-mono font-semibold text-slate-300">{formatMoney(sec.totalCents)}</td></tr>
-          {sec.subTypes.flatMap((st) => st.groups.flatMap((g) => g.accounts.map((a) => <tr key={a.accountNumber} onClick={() => onDrill({accountId:a.accountId,accountNumber:a.accountNumber,accountName:a.accountName})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td><td className="px-4 py-1.5 text-sm text-slate-400 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600"/></td><td className="px-6 py-1.5 text-right text-sm font-mono text-slate-300">{formatMoney(a.balanceCents)}</td></tr>)))}
-        </React.Fragment>))}
-        <tr className="bg-slate-800/30"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Total Assets</td><td className="px-6 py-2.5 text-right text-base font-mono font-semibold text-white">{formatMoney(s.totalAssetsCents)}</td></tr>
-        <tr className="bg-brand-500/[0.04]"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Total L + E</td><td className="px-6 py-2.5 text-right text-base font-mono font-semibold text-white">{formatMoney(s.totalLiabilitiesCents+s.totalEquityCents)}</td></tr>
+      <div className="px-6 py-3 border-b border-slate-800 flex items-center justify-between"><p className="text-2xs text-slate-500 font-mono">As of {ed}{comparing && <span className="text-slate-600"> · vs {cmpAsOf}</span>}</p>{s.isBalanced?<span className="px-2 py-0.5 rounded text-xs bg-emerald-500/10 text-emerald-400">Balanced ✓</span>:<span className="px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-400">Off by {formatMoney(Math.abs(s.varianceCents))}</span>}</div>
+      <table className="w-full"><thead><tr className="border-b border-slate-800/50"><th className="px-6 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24">Acct</th><th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Description</th><th className="px-6 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Balance</th>{comparing&&<><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">{cmpLabel}</th><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Change</th></>}</tr></thead><tbody>
+        {sections.map((sec) => { let secPrior=0; sec.subTypes.forEach((st) => st.groups.forEach((g) => g.accounts.forEach((a) => { secPrior += cmpMap.get(a.accountNumber)??0; }))); const secChg=sec.totalCents-secPrior; return (<React.Fragment key={sec.type}><tr className="bg-slate-800/30"><td colSpan={2} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase">{sec.label}</td><td className="px-6 py-2 text-right text-xs font-mono font-semibold text-slate-300">{formatMoney(sec.totalCents)}</td>{comparing&&<><td className="px-4 py-2 text-right text-xs font-mono text-slate-500">{formatMoney(secPrior)}</td><td className="px-4 py-2 text-right text-xs font-mono text-slate-400">{secChg>0?'+':''}{formatMoney(secChg)}</td></>}</tr>
+          {sec.subTypes.flatMap((st) => st.groups.flatMap((g) => g.accounts.map((a) => { const pv=cmpMap.get(a.accountNumber)??0; const chg=a.balanceCents-pv; return <tr key={a.accountNumber} onClick={() => onDrill({accountId:a.accountId,accountNumber:a.accountNumber,accountName:a.accountName})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td><td className="px-4 py-1.5 text-sm text-slate-400 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600"/></td><td className="px-6 py-1.5 text-right text-sm font-mono text-slate-300">{formatMoney(a.balanceCents)}</td>{comparing&&<><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-500">{formatMoney(pv)}</td><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-400">{chg>0?'+':''}{formatMoney(chg)}</td></>}</tr>; })))}
+        </React.Fragment>); })}
+        <tr className="bg-slate-800/30"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Total Assets</td><td className="px-6 py-2.5 text-right text-base font-mono font-semibold text-white">{formatMoney(s.totalAssetsCents)}</td>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-500">{formatMoney(cmpAssets)}</td><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{s.totalAssetsCents-cmpAssets>0?'+':''}{formatMoney(s.totalAssetsCents-cmpAssets)}</td></>}</tr>
+        <tr className="bg-brand-500/[0.04]"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Total L + E</td><td className="px-6 py-2.5 text-right text-base font-mono font-semibold text-white">{formatMoney(s.totalLiabilitiesCents+s.totalEquityCents)}</td>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-500">{formatMoney(cmpLE)}</td><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{(s.totalLiabilitiesCents+s.totalEquityCents)-cmpLE>0?'+':''}{formatMoney((s.totalLiabilitiesCents+s.totalEquityCents)-cmpLE)}</td></>}</tr>
       </tbody></table>
     </div>
   );
