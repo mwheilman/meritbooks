@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { scanUncategorizedLeakage } from '@/lib/controls/uncategorized-leakage';
 
 /**
@@ -28,10 +29,17 @@ import { scanUncategorizedLeakage } from '@/lib/controls/uncategorized-leakage';
 export async function POST(request: Request): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) {
     return NextResponse.json({ error: 'No organization found', code: 'NO_ORG' }, { status: 400 });
   }
+
+  // Authorize — control scans enqueue exceptions + write AI-attributed audit rows,
+  // so gate on journal_entries:create (same guard the missed-accruals control uses,
+  // keeping the whole EC-* set consistent). Held by controller/accounting-manager/
+  // -specialist; denied to general_admin, business_user, check_processor (403).
+  const guard = await requirePermission(userId, 'journal_entries', 'create');
+  if (!guard.ok) return guard.response;
 
   const dryRun = new URL(request.url).searchParams.get('dryRun') === '1';
   const summary = await scanUncategorizedLeakage(supabase, orgId, { dryRun });

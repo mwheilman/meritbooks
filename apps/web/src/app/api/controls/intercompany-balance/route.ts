@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { scanIntercompanyBalance } from '@/lib/controls/intercompany-balance';
 
 /**
@@ -32,10 +33,17 @@ const bodySchema = z.object({
 export async function POST(request: Request): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) {
     return NextResponse.json({ error: 'No organization found', code: 'NO_ORG' }, { status: 400 });
   }
+
+  // Authorize — control scans enqueue exceptions + write AI-attributed audit rows,
+  // so gate on journal_entries:create (same guard the missed-accruals control uses,
+  // keeping the whole EC-* set consistent). Held by controller/accounting-manager/
+  // -specialist; denied to general_admin, business_user, check_processor (403).
+  const guard = await requirePermission(userId, 'journal_entries', 'create');
+  if (!guard.ok) return guard.response;
 
   // Body is optional; tolerate an empty request.
   let raw: unknown = {};
