@@ -179,7 +179,23 @@ export async function canApprove(adminDb: SupabaseClient, orgId: string, clerkUs
         // Authoritative: honor the membership decision, do NOT fall back.
         const role = normalizeMembershipRole(membership.role as string);
         if (!role) return false; // membership present but role unrecognized -> fail closed
-        return roleMayApproveMoney(role);
+        if (!roleMayApproveMoney(role)) return false;
+        // H1 guard (security audit, 2026-08-01): a membership is minted ACTIVE at
+        // login and is NOT yet synced when an employee is deactivated/downgraded, so
+        // a stale active membership could keep approval authority a deactivated
+        // employee should have lost. Until membership lifecycle is reconciled to
+        // employee status (identity gate #9), deny money approval when an employee
+        // row exists for this org and is inactive. A caller with NO employee row
+        // (a future invitation-only membership user) is unaffected.
+        const { data: emp, error: empErr } = await adminDb
+          .schema('core').from('employees')
+          .select('is_active')
+          .eq('org_id', orgId)
+          .eq('clerk_user_id', clerkUserId)
+          .maybeSingle();
+        if (empErr) return false; // fail closed on lookup error
+        if (emp && emp.is_active === false) return false; // deactivated employee -> no authority
+        return true;
       }
       // user exists but no active membership in this org -> transitional fallback.
     }
