@@ -33,6 +33,7 @@ import {
   History,
   Inbox,
   Activity,
+  Banknote,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -63,6 +64,7 @@ export const navigation: NavGroup[] = [
       { label: 'Credit Cards', href: '/credit-cards', icon: CreditCard },
       { label: 'Receipts', href: '/receipts', icon: Receipt },
       { label: 'Bills', href: '/bills', icon: FileText },
+      { label: 'Check Run', href: '/checks', icon: Banknote },
       { label: 'Flagged Items', href: '/flagged', icon: AlertTriangle },
     ],
   },
