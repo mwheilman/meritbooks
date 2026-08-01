@@ -38,48 +38,67 @@ export function permissionDenied(
  * role model as /api/me (packages: lib/rbac/permissions.ts) — do not invent a
  * parallel model.
  *
- * TODO(identity FPB): the org is resolved as the "first org" and the admin
- * client bypasses RLS — this mirrors the interim pattern in /api/me and
- * apiHandler and is NOT the final tenancy story. When the Clerk-JWT org mapping
- * lands, resolve the org from the verified claim instead of limit(1). This
- * authorization LAYER is intentionally decoupled so it is ready for that change.
+ * MULTI-TENANT (security HIGH-1 / identity gate #9, fixed 2026-08-01): the org is
+ * now resolved from the caller's VERIFIED Clerk `org_id` claim (the same source
+ * `get_org_id()` enforces in RLS) — NOT "first org". So authorization is evaluated
+ * against the org the request actually targets. "First org" survives only as a
+ * transitional fallback for the window before the org_id claim is provisioned; it
+ * is removed once every tenant's JWT carries the claim. The role is read scoped to
+ * that org and normalized through the same `normalizeMembershipRole` the money-
+ * approval path uses, so page/route/approval authz can't disagree.
  */
 export async function requirePermission(
   userId: string,
   featureId: string,
   action: FeatureAction
 ): Promise<PermissionResult> {
-  // Lazy import keeps this module's top-level graph free of next/headers +
+  // Lazy imports keep this module's top-level graph free of next/headers +
   // Supabase env access, so the pure permissionDenied() decision above stays
   // unit-testable without a DB or request context.
+  const { requireAuth } = await import('@/lib/api-handler');
   const { createAdminSupabase } = await import('@/lib/supabase/server');
+  const { normalizeMembershipRole } = await import('@/lib/rbac/role-normalize');
+
+  // 1. Resolve the caller's ACTUAL org from the verified Clerk claim (RLS's source).
+  const authRes = await requireAuth();
+  if (authRes instanceof NextResponse) {
+    // Not authenticated → cannot authorize → deny (fail closed).
+    return { ok: false, response: permissionDenied(null, featureId, action)! };
+  }
+  let orgId: string | null = authRes.orgId;
+
   const supabase = createAdminSupabase();
 
-  // Interim org resolution — see TODO(identity FPB) above.
-  const { data: org } = await supabase
-    .schema('core')
-    .from('organizations')
-    .select('id')
-    .limit(1)
-    .single();
-
-  if (!org) {
-    // No org resolvable → cannot authorize → deny.
+  // Transitional fallback ONLY when the claim hasn't been provisioned yet.
+  if (!orgId) {
+    const { data: org } = await supabase
+      .schema('core')
+      .from('organizations')
+      .select('id')
+      .limit(1)
+      .single();
+    orgId = (org as { id: string } | null)?.id ?? null;
+  }
+  if (!orgId) {
     return { ok: false, response: permissionDenied(null, featureId, action)! };
   }
 
+  // 2. Read the caller's role SCOPED TO THAT ORG, normalized to the canonical
+  //    UserRole vocabulary (so 'owner'/'org_admin' reconcile like canApprove).
   const { data: employees } = await supabase
     .schema('core')
     .from('employees')
     .select('role')
     .eq('clerk_user_id', userId)
-    .eq('org_id', org.id)
+    .eq('org_id', orgId)
+    .eq('is_active', true)
     .limit(1);
 
-  const role = (employees?.[0]?.role ?? null) as UserRole | null;
+  const rawRole = (employees?.[0]?.role ?? null) as string | null;
+  const role = rawRole ? normalizeMembershipRole(rawRole) : null;
 
   const denied = permissionDenied(role, featureId, action);
   if (denied) return { ok: false, response: denied };
 
-  return { ok: true, role: role as UserRole, orgId: org.id };
+  return { ok: true, role: role as UserRole, orgId };
 }
