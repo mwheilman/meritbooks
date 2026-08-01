@@ -79,6 +79,7 @@ export const navigation: NavGroup[] = [
       { label: 'Invoices', href: '/invoices', icon: DollarSign },
       { label: 'Payments', href: '/settings/payments', icon: CreditCard },
       { label: 'Payroll', href: '/payroll', icon: Wallet },
+      { label: 'Budgets', href: '/budgets', icon: BarChart3 },
     ],
   },
   {
@@ -87,6 +88,7 @@ export const navigation: NavGroup[] = [
       { label: 'Cash Position', href: '/cash', icon: Wallet },
       { label: '13-Week Forecast', href: '/forecast', icon: TrendingUp },
       { label: 'Reports', href: '/reports', icon: BarChart3 },
+      { label: 'Profitability', href: '/profitability', icon: TrendingUp },
       { label: 'AI Decision Log', href: '/ai-decisions', icon: Sparkles },
       { label: 'AI Categorizer', href: '/categorize', icon: Wand2 },
     ],
@@ -102,6 +104,7 @@ export const navigation: NavGroup[] = [
       { label: 'Customers', href: '/customers', icon: Contact },
       { label: 'Retainage', href: '/retainage', icon: PiggyBank },
       { label: 'Vendor Compliance', href: '/vendor-compliance', icon: Shield },
+      { label: '1099 Readiness', href: '/compliance-1099', icon: FileCheck },
       { label: 'Close Management', href: '/close', icon: ClipboardCheck },
       { label: 'Close Command Center', href: '/close-status', icon: Activity },
       { label: 'Year-End Close', href: '/year-end-close', icon: Lock },
