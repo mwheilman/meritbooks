@@ -1,29 +1,26 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { processBillingEvents } from '@/lib/services/billing-consumer';
+import { authorizeEventWorker } from '../../_auth';
 
 /**
  * POST /api/events/billing/process
  * Drains pending JOB_BILLING events (Projects -> Books) into issued invoices.
  * Async, on-demand drain (no synchronous coupling with the emitter).
+ *
+ * PER-EVENT ORG: each core.events row carries its own org_id (FROZEN v3); the
+ * consumer posts every event under THAT event's org, so a single drain safely
+ * spans all tenants without cross-tenant posting. No first-org pin.
  */
-export async function POST() {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export async function POST(req: Request) {
+  const authz = await authorizeEventWorker(req);
+  if (!authz.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const supabase = createAdminSupabase();
-  // NEEDS CENTRAL: this is a queue-drain worker — it should resolve the org PER
-  // EVENT (each core.events row carries its own org_id), not pin the whole drain
-  // to the first org. Left on first-org intentionally until per-event org
-  // resolution lands (out of scope for the gate-#9 org-source fix).
-  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  if (!org) return NextResponse.json({ error: 'No organization' }, { status: 400 });
-
   try {
-    const result = await processBillingEvents(supabase, (org as { id: string }).id);
+    const result = await processBillingEvents(supabase);
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Drain failed' }, { status: 500 });
@@ -31,18 +28,14 @@ export async function POST() {
 }
 
 // GET — peek at the JOB_BILLING queue (pending/processed/rejected counts + recent).
-export async function GET() {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export async function GET(req: Request) {
+  const authz = await authorizeEventWorker(req);
+  if (!authz.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const supabase = createAdminSupabase();
-  const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).single();
-  if (!org) return NextResponse.json({ error: 'No organization' }, { status: 400 });
-  const orgId = (org as { id: string }).id;
 
   const { data } = await supabase
     .schema('core').from('events')
-    .select('event_id, status, invoice_id, error, occurred_on, created_at, payload')
-    .eq('org_id', orgId)
+    .select('event_id, org_id, status, invoice_id, error, occurred_on, created_at, payload')
     .eq('event_type', 'JOB_BILLING')
     .order('created_at', { ascending: false })
     .limit(50);

@@ -5,10 +5,7 @@ import { createAdminSupabase } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
-import { postJournalEntry } from '@/lib/services/gl-posting';
-import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
-import { resolveInvoiceCreditAccounts } from '@/lib/invoices/rev-rec-credit';
-import { resolveRole } from '@/lib/posting/account-roles';
+import { createInvoice } from '@/lib/invoices/create-invoice';
 
 // ─── GET: List invoices ───────────────────────────────────────────────
 const querySchema = z.object({
@@ -201,217 +198,34 @@ export async function POST(request: Request) {
     const body = result.data;
     const supabase = createAdminSupabase();
 
-    // Generate invoice number: INV-{YYYYMMDD}-{seq}
-    const dateStr = body.invoice_date.replace(/-/g, '');
-    const { count } = await supabase
-      .from('invoices')
-      .select('*', { count: 'exact', head: true })
-      .eq('org_id', orgId);
-    const seq = String((count ?? 0) + 1).padStart(4, '0');
-    const invoiceNumber = `INV-${dateStr}-${seq}`;
-
-    // Calculate totals
-    const lines = body.lines.map((l, i) => ({
-      ...l,
-      line_number: i + 1,
-      amount_cents: Math.round(l.quantity * l.unit_price_cents),
-    }));
-    const subtotalCents = lines.reduce((s, l) => s + l.amount_cents, 0);
-
-    // Retainage is conditional: only customers/jobs that opted in at creation
-    // withhold it. Resolve job -> customer -> entity; if none enabled, no
-    // retainage line regardless of any pct passed in.
-    const [{ data: custR }, { data: jobR }] = await Promise.all([
-      supabase.schema('core').from('customers').select('retainage_enabled, default_retainage_pct').eq('id', body.customer_id).maybeSingle(),
-      body.job_id
-        ? supabase.schema('core').from('jobs').select('retainage_enabled, default_retainage_pct').eq('id', body.job_id).maybeSingle()
-        : Promise.resolve({ data: null }),
-    ]);
-    const j = jobR as { retainage_enabled: boolean | null; default_retainage_pct: number | null } | null;
-    const c = custR as { retainage_enabled: boolean | null; default_retainage_pct: number | null } | null;
-    const retainageEnabled = j?.retainage_enabled ?? c?.retainage_enabled ?? false;
-    const resolvedPct = body.retainage_pct > 0
-      ? body.retainage_pct
-      : Number(j?.default_retainage_pct ?? c?.default_retainage_pct ?? 0);
-    const retainageCents = retainageEnabled && resolvedPct > 0
-      ? Math.round(subtotalCents * resolvedPct / 100)
-      : 0;
-    const totalCents = subtotalCents + body.tax_cents - retainageCents;
-
-    // Insert invoice header
-    const { data: invoice, error: invErr } = await supabase
-      .from('invoices')
-      .insert({
-        org_id: orgId,
+    // Delegate to the shared invoice-create core — the same path the recurring
+    // generator uses, so numbering, rev-rec treatment, and GL posting never fork.
+    const outcome = await createInvoice(supabase, {
+      orgId,
+      actor: userId,
+      input: {
         location_id: body.location_id,
         customer_id: body.customer_id,
         job_id: body.job_id ?? null,
-        invoice_number: invoiceNumber,
         invoice_date: body.invoice_date,
         due_date: body.due_date,
-        subtotal_cents: subtotalCents,
-        tax_cents: body.tax_cents,
-        retainage_cents: retainageCents,
-        total_cents: totalCents,
-        status: 'DRAFT',
-        is_progress_bill: body.is_progress_bill,
         memo: body.memo,
-      })
-      .select('id, invoice_number')
-      .single();
-
-    if (invErr || !invoice) {
-      return NextResponse.json({ error: invErr?.message ?? 'Failed to create invoice' }, { status: 500 });
-    }
-
-    // Insert lines
-    const lineInserts = lines.map((l) => ({
-      org_id: orgId,
-      invoice_id: invoice.id,
-      line_number: l.line_number,
-      description: l.description,
-      account_id: l.account_id,
-      quantity: l.quantity,
-      unit_price_cents: l.unit_price_cents,
-      amount_cents: l.amount_cents,
-      job_phase_id: l.job_phase_id ?? null,
-      cost_code_id: l.cost_code_id ?? null,
-    }));
-
-    const { error: linesErr } = await supabase
-      .from('invoice_lines')
-      .insert(lineInserts);
-
-    if (linesErr) {
-      await supabase.from('invoices').delete().eq('id', invoice.id);
-      return NextResponse.json({ error: linesErr.message }, { status: 500 });
-    }
-
-    await recordInvoiceEvent(supabase, {
-      orgId, invoiceId: invoice.id, type: 'CREATED', actor: userId,
-      meta: { invoice_number: invoiceNumber, total_cents: totalCents },
+        tax_cents: body.tax_cents,
+        retainage_pct: body.retainage_pct,
+        is_progress_bill: body.is_progress_bill,
+        post_to_gl: body.post_to_gl,
+        lines: body.lines,
+      },
     });
 
-    // Optionally post to GL. Rev-rec-aware: a line tied to a rev-rec-managed job
-    // credits Deferred Revenue (2410) — the rev-rec engine earns it out later —
-    // while POINT_OF_SALE / AS_BILLED and ad-hoc (no-job) invoices credit Revenue
-    // directly. The per-line credit account is resolved by the SHARED rev-rec
-    // resolver (lib/invoices/rev-rec-credit.ts → posting/rev-rec-method.ts), the
-    // same one the Projects-driven JOB_BILLING consumer uses, so the two paths
-    // never disagree. GL posting is best-effort: a COA/config gap leaves the
-    // invoice DRAFT rather than failing creation (the invoice already exists).
-    if (body.post_to_gl && totalCents > 0) {
-      try {
-        // Find the AR control account (12xxx range)
-        const { data: arAccount } = await supabase
-          .from('accounts')
-          .select('id')
-          .eq('org_id', orgId)
-          .gte('account_number', '12000')
-          .lt('account_number', '13000')
-          .eq('is_active', true)
-          .limit(1)
-          .single();
-
-        if (arAccount) {
-          // Resolve each line's credit account (revenue vs deferred) per the job's
-          // rev-rec method. Reuses the shared resolver — no rev-rec logic here.
-          const creditLines = await resolveInvoiceCreditAccounts(supabase, {
-            orgId,
-            locationId: body.location_id,
-            jobId: body.job_id,
-            lines: lines.map((l) => ({ account_id: l.account_id, amount_cents: l.amount_cents })),
-          });
-
-          // Job dimension carried onto every GL line for job costing / rev-rec.
-          const jobDim = body.job_id ?? undefined;
-          const jeLines: Parameters<typeof postJournalEntry>[1]['lines'] = [
-            // DR Accounts Receivable — what the customer owes (subtotal + tax − retainage).
-            {
-              account_id: arAccount.id,
-              debit_cents: totalCents,
-              credit_cents: 0,
-              location_id: body.location_id,
-              job_id: jobDim,
-              memo: 'Accounts receivable',
-            },
-            // CR Revenue OR Deferred Revenue, per line, per the resolved rev-rec method.
-            ...creditLines.map((cl) => ({
-              account_id: cl.account_id,
-              debit_cents: 0,
-              credit_cents: cl.amount_cents,
-              location_id: body.location_id,
-              job_id: jobDim,
-              memo: cl.deferred ? 'Deferred revenue' : 'Revenue',
-            })),
-          ];
-
-          // Sales tax is a liability the customer owes on top of revenue — credit
-          // Sales Tax Payable so the entry balances (AR carries the tax).
-          if (body.tax_cents > 0) {
-            const taxAcct = await resolveRole(supabase, orgId, 'SALES_TAX_PAYABLE');
-            jeLines.push({
-              account_id: taxAcct.id,
-              debit_cents: 0,
-              credit_cents: body.tax_cents,
-              location_id: body.location_id,
-              job_id: jobDim,
-              memo: 'Sales tax payable',
-            });
-          }
-
-          // Retainage withheld from current AR is still receivable later — debit
-          // Retainage Receivable so total debits (AR + retainage) match credits.
-          if (retainageCents > 0) {
-            const retAcct = await resolveRole(supabase, orgId, 'RETAINAGE_RECEIVABLE');
-            jeLines.push({
-              account_id: retAcct.id,
-              debit_cents: retainageCents,
-              credit_cents: 0,
-              location_id: body.location_id,
-              job_id: jobDim,
-              memo: 'Retainage receivable',
-            });
-          }
-
-          const jeResult = await postJournalEntry(supabase, {
-            org_id: orgId,
-            location_id: body.location_id,
-            entry_date: body.invoice_date,
-            entry_type: 'STANDARD',
-            memo: `Invoice ${invoiceNumber} — ${body.memo ?? ''}`,
-            source_module: 'AR',
-            source_id: invoice.id,
-            // gl_entries.created_by/posted_by are uuid + nullable; Clerk ids are
-            // text, so write null (canon §2). Human attribution lives in the
-            // invoice event log below.
-            created_by: null,
-            lines: jeLines,
-          });
-
-          if (jeResult.success) {
-            await supabase.from('invoices')
-              .update({ gl_entry_id: jeResult.entry_id, status: 'SENT' })
-              .eq('id', invoice.id);
-            await recordInvoiceEvent(supabase, {
-              orgId, invoiceId: invoice.id, type: 'POSTED', actor: userId,
-              meta: { gl_entry_id: jeResult.entry_id, total_cents: totalCents },
-            });
-          } else {
-            console.error('[Invoice Create] GL post failed, invoice left DRAFT:', jeResult.error);
-          }
-        }
-      } catch (glErr) {
-        // A COA/role gap (e.g. no Deferred Revenue / Sales Tax / Retainage account)
-        // must not fail invoice creation — the invoice is already persisted.
-        console.error('[Invoice Create] GL posting skipped:', glErr instanceof Error ? glErr.message : glErr);
-      }
+    if (!outcome.ok) {
+      return NextResponse.json({ error: outcome.error }, { status: outcome.status });
     }
 
     return NextResponse.json({
-      invoice_id: invoice.id,
-      invoice_number: invoiceNumber,
-      total_cents: totalCents,
+      invoice_id: outcome.result.invoice_id,
+      invoice_number: outcome.result.invoice_number,
+      total_cents: outcome.result.total_cents,
     }, { status: 201 });
   } catch (error) {
     console.error('[Invoice Create Error]', error);

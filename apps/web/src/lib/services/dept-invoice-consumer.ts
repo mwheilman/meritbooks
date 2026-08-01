@@ -179,21 +179,29 @@ async function processEvent(
   out.results.push({ event_id: ev.event_id, status: 'processed', invoice_number: invoiceNumber });
 }
 
-/** Drain all pending DEPT_INVOICE_ISSUE events (source_module='projects') for an org. */
-export async function processDeptInvoiceEvents(db: DB, orgId: string): Promise<DeptInvoiceDrainResult> {
-  const { data: events } = await db
+/**
+ * Drain pending DEPT_INVOICE_ISSUE events (source_module='projects'). Each
+ * core.events row carries its own org_id (FROZEN v3), and every eliminating entry
+ * is booked under THAT event's org — no cross-tenant posting.
+ *
+ * `orgFilter` is optional: pass an org id to restrict the drain to one tenant;
+ * omit it to drain all tenants. Per-event org is authoritative for the work.
+ */
+export async function processDeptInvoiceEvents(db: DB, orgFilter?: string | null): Promise<DeptInvoiceDrainResult> {
+  let query = db
     .schema('core').from('events')
-    .select('id, event_id, payload, occurred_on')
-    .eq('org_id', orgId)
+    .select('id, event_id, org_id, payload, occurred_on')
     .eq('event_type', 'DEPT_INVOICE_ISSUE')
     .eq('source_module', 'projects')
-    .eq('status', 'pending')
-    .order('created_at', { ascending: true });
+    .eq('status', 'pending');
+  if (orgFilter) query = query.eq('org_id', orgFilter);
+  const { data: events } = await query.order('created_at', { ascending: true });
 
   const out: DeptInvoiceDrainResult = { processed: 0, rejected: 0, results: [] };
-  for (const ev of (events ?? []) as { id: string; event_id: string; payload: DeptInvoicePayload; occurred_on: string }[]) {
+  for (const ev of (events ?? []) as { id: string; event_id: string; org_id: string; payload: DeptInvoicePayload; occurred_on: string }[]) {
     try {
-      await processEvent(db, orgId, ev, out);
+      // Per-event org — authoritative for validation, insert and GL booking.
+      await processEvent(db, ev.org_id, ev, out);
     } catch (e) {
       await rejectEvent(db, ev.id, e instanceof Error ? e.message : 'consumer error');
       out.rejected++;

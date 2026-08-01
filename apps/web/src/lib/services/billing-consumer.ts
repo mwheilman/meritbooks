@@ -67,19 +67,29 @@ async function rejectEvent(db: DB, eventRowId: string, error: string) {
   await db.schema('core').from('events').update({ status: 'rejected', error, processed_at: new Date().toISOString() }).eq('id', eventRowId);
 }
 
-/** Process all pending JOB_BILLING events for an org. */
-export async function processBillingEvents(db: DB, orgId: string): Promise<BillingDrainResult> {
-  const { data: events } = await db
+/**
+ * Process pending JOB_BILLING events. Each core.events row carries its own org_id
+ * (FROZEN v3), and EVERY read/insert/post below is scoped to THAT event's org — so
+ * a single drain safely spans all tenants without cross-tenant posting.
+ *
+ * `orgFilter` is optional: pass an org id to restrict the drain to one tenant
+ * (used by tests); omit it to drain all tenants. Either way, per-event org is
+ * authoritative for the actual work.
+ */
+export async function processBillingEvents(db: DB, orgFilter?: string | null): Promise<BillingDrainResult> {
+  let query = db
     .schema('core').from('events')
-    .select('id, event_id, payload, occurred_on')
-    .eq('org_id', orgId)
+    .select('id, event_id, org_id, payload, occurred_on')
     .eq('event_type', 'JOB_BILLING')
-    .eq('status', 'pending')
-    .order('created_at', { ascending: true });
+    .eq('status', 'pending');
+  if (orgFilter) query = query.eq('org_id', orgFilter);
+  const { data: events } = await query.order('created_at', { ascending: true });
 
   const out: BillingDrainResult = { processed: 0, rejected: 0, results: [] };
 
-  for (const ev of (events ?? []) as { id: string; event_id: string; payload: BillingPayload; occurred_on: string }[]) {
+  for (const ev of (events ?? []) as { id: string; event_id: string; org_id: string; payload: BillingPayload; occurred_on: string }[]) {
+    // Per-event org — authoritative for all downstream reads, inserts and GL posts.
+    const orgId = ev.org_id;
     const p = ev.payload;
     try {
       const lineTotal = (p.lines ?? []).reduce((s, l) => s + Math.round(Number(l.amount_cents ?? 0)), 0);

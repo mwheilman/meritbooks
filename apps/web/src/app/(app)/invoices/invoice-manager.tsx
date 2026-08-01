@@ -6,6 +6,7 @@ import { useQuery } from '@/hooks/use-query';
 import { formatMoney } from '@meritbooks/shared';
 import { InvoiceDrawer } from './invoice-drawer';
 import { CreditMemosPanel, type CreditMemoPrefill } from './credit-memos-panel';
+import { RecurringPanel } from './recurring-panel';
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { InvoicePeek } from './invoice-peek';
 import {
@@ -662,7 +663,7 @@ export function InvoiceManager() {
   const [showCreate, setShowCreate] = useState(false);
   const [paymentInvoice, setPaymentInvoice] = useState<InvoiceRow | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [view, setView] = useState<'invoices' | 'credit-memos'>('invoices');
+  const [view, setView] = useState<'invoices' | 'credit-memos' | 'recurring'>('invoices');
   const [creditPrefill, setCreditPrefill] = useState<CreditMemoPrefill | null>(null);
 
   // Deep-link: open the panel from ?invoice=<id> on load, and keep the URL in
@@ -689,7 +690,7 @@ export function InvoiceManager() {
     <div className="p-6" key={refreshKey}>
       {/* View switcher: customer invoices ⇄ credit memos (both live in the AR area). */}
       <div className="inline-flex items-center gap-1 mb-5 p-1 rounded-lg bg-gray-800/60 border border-gray-700/50">
-        {(['invoices', 'credit-memos'] as const).map((v) => (
+        {(['invoices', 'recurring', 'credit-memos'] as const).map((v) => (
           <button
             key={v}
             onClick={() => setView(v)}
@@ -697,7 +698,7 @@ export function InvoiceManager() {
               view === v ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-white'
             }`}
           >
-            {v === 'invoices' ? 'Invoices' : 'Credit memos'}
+            {v === 'invoices' ? 'Invoices' : v === 'recurring' ? 'Recurring' : 'Credit memos'}
           </button>
         ))}
       </div>
@@ -721,6 +722,8 @@ export function InvoiceManager() {
           {showCreate && <CreateInvoiceForm onClose={() => setShowCreate(false)} onCreated={refresh} />}
           {paymentInvoice && <PaymentDialog invoice={paymentInvoice} onClose={() => setPaymentInvoice(null)} onPaid={refresh} />}
         </>
+      ) : view === 'recurring' ? (
+        <RecurringPanel />
       ) : (
         <CreditMemosPanel prefill={creditPrefill} onConsumePrefill={() => setCreditPrefill(null)} />
       )}

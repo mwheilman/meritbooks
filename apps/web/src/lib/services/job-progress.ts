@@ -41,19 +41,27 @@ async function rejectEvent(db: DB, rowId: string, error: string) {
   await db.schema('core').from('events').update({ status: 'rejected', error, processed_at: new Date().toISOString() }).eq('id', rowId);
 }
 
-/** Drain pending JOB_PROGRESS events for an org. */
-export async function processProgressEvents(db: DB, orgId: string, runBy: string | null): Promise<ProgressDrainResult> {
-  const { data: events } = await db
+/**
+ * Drain pending JOB_PROGRESS events. Each core.events row carries its own org_id
+ * (FROZEN v3), and every pin/recognition below is scoped to THAT event's org.
+ *
+ * `orgFilter` is optional: pass an org id to restrict the drain to one tenant;
+ * omit it to drain all tenants. Per-event org is authoritative for the work.
+ */
+export async function processProgressEvents(db: DB, orgFilter: string | null | undefined, runBy: string | null): Promise<ProgressDrainResult> {
+  let query = db
     .schema('core').from('events')
-    .select('id, event_id, payload, occurred_on')
-    .eq('org_id', orgId)
+    .select('id, event_id, org_id, payload, occurred_on')
     .eq('event_type', 'JOB_PROGRESS')
-    .eq('status', 'pending')
-    .order('created_at', { ascending: true });
+    .eq('status', 'pending');
+  if (orgFilter) query = query.eq('org_id', orgFilter);
+  const { data: events } = await query.order('created_at', { ascending: true });
 
   const out: ProgressDrainResult = { processed: 0, rejected: 0, results: [] };
 
-  for (const ev of (events ?? []) as { id: string; event_id: string; payload: ProgressPayload; occurred_on: string }[]) {
+  for (const ev of (events ?? []) as { id: string; event_id: string; org_id: string; payload: ProgressPayload; occurred_on: string }[]) {
+    // Per-event org — authoritative for the job pin + recognition below.
+    const orgId = ev.org_id;
     const p = ev.payload;
     try {
       // Job must exist and belong to the named company.
