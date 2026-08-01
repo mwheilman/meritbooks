@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
-import { Pencil, Plus, Trash2, Loader2, ShieldAlert, Download, Link2, Send } from 'lucide-react';
+import { Pencil, Plus, Trash2, Loader2, ShieldAlert, Download, Link2, Send, Receipt } from 'lucide-react';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { StatusBadge } from '@/components/ui';
@@ -17,6 +17,7 @@ interface InvLine {
 interface InvDetail {
   id: string; invoiceNumber: string; invoiceDate: string; dueDate: string;
   status: string; memo: string | null; isProgressBill: boolean; publicToken: string;
+  customerId?: string; locationId?: string;
   subtotalCents: number; taxCents: number; totalCents: number;
   amountPaidCents: number; balanceCents: number;
   customerName: string; customerEmail: string | null;
@@ -41,7 +42,11 @@ const fmtWhen = (iso: string | null) =>
       })
     : null;
 
-export function InvoiceDrawer({ invoiceId, onClose }: { invoiceId: string | null; onClose: () => void }) {
+export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
+  invoiceId: string | null;
+  onClose: () => void;
+  onCreateCreditMemo?: (ctx: { invoiceId: string; customerId?: string; locationId?: string }) => void;
+}) {
   const { data, isLoading, error, refetch } = useQuery<InvDetail>(
     invoiceId ? `/api/invoices/${invoiceId}` : '', undefined, { enabled: !!invoiceId }
   );
@@ -182,6 +187,14 @@ export function InvoiceDrawer({ invoiceId, onClose }: { invoiceId: string | null
                   {sending ? 'Sending…' : data.delivery?.sentAt ? 'Resend' : 'Send'}
                 </button>
               </>
+            )}
+            {!editing && onCreateCreditMemo && data.status !== 'DRAFT' && data.status !== 'VOIDED' && (
+              <button
+                onClick={() => onCreateCreditMemo({ invoiceId: data.id, customerId: data.customerId, locationId: data.locationId })}
+                title="Issue a customer credit against this invoice"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
+                <Receipt size={12} /> Credit memo
+              </button>
             )}
             {!editing && (
               <button onClick={beginEdit} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">

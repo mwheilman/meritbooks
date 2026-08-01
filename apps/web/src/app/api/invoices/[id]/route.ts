@@ -103,6 +103,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     memo: inv.memo,
     isProgressBill: inv.is_progress_bill,
     publicToken: inv.public_token,
+    customerId: inv.customer_id,
+    locationId: inv.location_id,
     subtotalCents: Number(inv.subtotal_cents ?? 0),
     taxCents: Number(inv.tax_cents ?? 0),
     totalCents: Number(inv.total_cents ?? 0),

@@ -103,6 +103,7 @@ export const navigation: NavGroup[] = [
       { label: 'Retainage', href: '/retainage', icon: PiggyBank },
       { label: 'Vendor Compliance', href: '/vendor-compliance', icon: Shield },
       { label: 'Close Management', href: '/close', icon: ClipboardCheck },
+      { label: 'Close Command Center', href: '/close-status', icon: Activity },
       { label: 'Year-End Close', href: '/year-end-close', icon: Lock },
     ],
   },

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery } from '@/hooks/use-query';
 import { formatMoney } from '@meritbooks/shared';
 import { InvoiceDrawer } from './invoice-drawer';
+import { CreditMemosPanel, type CreditMemoPrefill } from './credit-memos-panel';
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { InvoicePeek } from './invoice-peek';
 import {
@@ -661,6 +662,8 @@ export function InvoiceManager() {
   const [showCreate, setShowCreate] = useState(false);
   const [paymentInvoice, setPaymentInvoice] = useState<InvoiceRow | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [view, setView] = useState<'invoices' | 'credit-memos'>('invoices');
+  const [creditPrefill, setCreditPrefill] = useState<CreditMemoPrefill | null>(null);
 
   // Deep-link: open the panel from ?invoice=<id> on load, and keep the URL in
   // sync so a refresh re-opens it and the link is shareable.
@@ -684,14 +687,43 @@ export function InvoiceManager() {
 
   return (
     <div className="p-6" key={refreshKey}>
-      <InvoiceList
-        onCreateClick={() => setShowCreate(true)}
-        onPaymentClick={(inv) => setPaymentInvoice(inv)}
-        onRowClick={(id) => setDetailId(id)}
-      />
-      <InvoiceDrawer invoiceId={detailId} onClose={() => setDetailId(null)} />
-      {showCreate && <CreateInvoiceForm onClose={() => setShowCreate(false)} onCreated={refresh} />}
-      {paymentInvoice && <PaymentDialog invoice={paymentInvoice} onClose={() => setPaymentInvoice(null)} onPaid={refresh} />}
+      {/* View switcher: customer invoices ⇄ credit memos (both live in the AR area). */}
+      <div className="inline-flex items-center gap-1 mb-5 p-1 rounded-lg bg-gray-800/60 border border-gray-700/50">
+        {(['invoices', 'credit-memos'] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              view === v ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {v === 'invoices' ? 'Invoices' : 'Credit memos'}
+          </button>
+        ))}
+      </div>
+
+      {view === 'invoices' ? (
+        <>
+          <InvoiceList
+            onCreateClick={() => setShowCreate(true)}
+            onPaymentClick={(inv) => setPaymentInvoice(inv)}
+            onRowClick={(id) => setDetailId(id)}
+          />
+          <InvoiceDrawer
+            invoiceId={detailId}
+            onClose={() => setDetailId(null)}
+            onCreateCreditMemo={(ctx) => {
+              setDetailId(null);
+              setCreditPrefill(ctx);
+              setView('credit-memos');
+            }}
+          />
+          {showCreate && <CreateInvoiceForm onClose={() => setShowCreate(false)} onCreated={refresh} />}
+          {paymentInvoice && <PaymentDialog invoice={paymentInvoice} onClose={() => setPaymentInvoice(null)} onPaid={refresh} />}
+        </>
+      ) : (
+        <CreditMemosPanel prefill={creditPrefill} onConsumePrefill={() => setCreditPrefill(null)} />
+      )}
     </div>
   );
 }
