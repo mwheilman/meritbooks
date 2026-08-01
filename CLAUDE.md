@@ -95,17 +95,19 @@ PLAID_SECRET                         # Plaid banking (server-side only)
 
 The authoritative, always-current build state lives in the latest session handoff. **Start every session by reading the newest `docs/MERITBOOKS-HANDOFF-session[N].md`** (highest N). Handoffs follow the Rule-11 8-section format and are the ground-truth record of what works, what's broken, and what to build next.
 
-Latest handoff: **`docs/MERITBOOKS-HANDOFF-session38.md`** (2026-07-28).
+Latest handoff: **`docs/MERITBOOKS-HANDOFF-session40.md`** (2026-08-01).
 
-Snapshot as of session 38 (see the handoff for detail):
-- Live at `meritbooks-web.vercel.app`. 60 ordered migrations (001–060) plus supporting SQL.
-- **Stripe "Pay Now" is proven end-to-end** — a real card payment posts a balanced `AR_COLLECTION` journal entry. Invoices, customers, branded hosted pay page, invoice email send all wired to real data.
-- **Two-layer fee model** is live: Layer 1 (`core.merchant_fee_schedules`, per-merchant versioned pricing) drives the Stripe application fee via `lib/money/fees.ts`; Layer 2 (pass-through vs absorb) is the surcharge cascade.
-- **Security is mid-hardening**: auth now fails closed (dev-user backdoor removed), an RBAC `require-permission` guard is wired into `gl/post` as the reference pattern, RLS is enabled on every base table. Full identity/org-resolution/RBAC rollout is the open NO-GO gate — see the handoff backlog and `docs/FPB-identity-multitenancy.md`.
-- Seven subagents live in `.claude/agents/` (builder, verifier, auditor, reviewer, designer, scribe, security).
-- **Delivery workflow: work is committed directly to this repo** (no more tar.gz download-and-place). Migrations are still applied to Supabase first (SQL Editor / MCP), then code is committed; the human pushes.
+Snapshot as of session 40 (see the handoff for detail):
+- Live at `meritbooks-web.vercel.app`, production `main` @ `95b52b2`, Vercel state READY (so `next build` — the authoritative full-project typecheck — is green).
+- **Money-approval layer unblocked**: `canApprove()` now reads `core.employees.role` + `ROLE_DEFINITIONS` (it used to fail closed against an unbuilt `core.roles` table), so check/bill/payroll approval works for `company_admin`. Separation of duties unchanged.
+- **Three autonomous pipelines shipped via a parallel-agent wave**: Vendor Compliance risk engine (COI/W9 → tier → escalate to `/exceptions`), Reconciliation autopilot (composite matcher → tiered accept/reject), 13-Week Cash Forecast (real projection off bank + AR/AP by due date). Plus a `/api/cash` RLS-leak fix and a statement-reconciliation `NOT NULL` crash fix.
+- **Stripe "Pay Now"** end-to-end (balanced `AR_COLLECTION`), invoices/customers/hosted pay page/email; **two-layer fee model** live (`core.merchant_fee_schedules` + `lib/money/fees.ts`).
+- **Security mid-hardening**: RLS enforced across the authed API (org_isolation, Clerk token → `org_id`), auth fails closed, `require-permission` guard on `gl/post` as the reference pattern. Full RBAC rollout + identity reconciliation is the open NO-GO gate (task #9) — see the handoff backlog.
+- Eight subagents in `.claude/agents/` (builder, verifier, auditor, reviewer, designer, scribe, security, chrome-auditor). Parallel `general-purpose` builders on disjoint slices are the current execution model.
+- **Delivery workflow: committed directly to this repo; an auto-push loop on Mike's machine ships commits automatically** (no manual push gate). Migrations applied to Supabase first, then code committed.
+- **Immediate next step:** browser-verify `/vendor-compliance`, `/reconciliation` (autopilot tab), and `/forecast` with real data, then the **AP inbox pipeline** as the next parallel wave.
 
-Do NOT trust older "Session 7 / Bank Feed only" descriptions — that state is long superseded.
+Do NOT trust older "Session 7 / Bank Feed only" or "session 38" snapshots — long superseded.
 
 ## Design System (BINDING)
 
