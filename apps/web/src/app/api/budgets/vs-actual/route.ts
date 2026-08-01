@@ -10,9 +10,16 @@ export async function GET(request: Request) {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase } = ctx;
   const { searchParams } = new URL(request.url);
-  const locationId = searchParams.get('location_id');
-  const startDate = searchParams.get('start_date');
-  const endDate = searchParams.get('end_date');
+  // Accept a single `location_id` or a comma-separated `location_ids` (the
+  // report-viewer multiselect passes the plural form). Empty => all companies
+  // (consolidated budget vs actual).
+  const locationIds = [
+    ...(searchParams.get('location_id') ? [searchParams.get('location_id') as string] : []),
+    ...(searchParams.get('location_ids')?.split(',').filter(Boolean) ?? []),
+  ];
+  const departmentId = searchParams.get('department_id'); // optional dimension scope
+  const startDateParam = searchParams.get('start_date');
+  const endDateParam = searchParams.get('end_date');
   const fiscalYear = parseInt(searchParams.get('fiscal_year') ?? String(new Date().getFullYear()), 10);
   const periodNumber = parseInt(searchParams.get('period_number') ?? '0', 10);
 
@@ -25,7 +32,9 @@ export async function GET(request: Request) {
     `)
     .eq('fiscal_year', fiscalYear);
 
-  if (locationId) budgetQ = budgetQ.eq('location_id', locationId);
+  if (locationIds.length === 1) budgetQ = budgetQ.eq('location_id', locationIds[0]);
+  else if (locationIds.length > 1) budgetQ = budgetQ.in('location_id', locationIds);
+  if (departmentId) budgetQ = budgetQ.eq('department_id', departmentId);
   if (periodNumber > 0) budgetQ = budgetQ.eq('period_number', periodNumber);
 
   const { data: budgetData } = await budgetQ;
@@ -48,9 +57,19 @@ export async function GET(request: Request) {
     }
   }
 
-  // Get actual data from GL for the same period
-  const actualStart = startDate ?? `${fiscalYear}-01-01`;
-  const actualEnd = endDate ?? `${fiscalYear}-12-31`;
+  // Get actual data from GL for the same period. When a fiscal period (month)
+  // is selected and no explicit date range is given, derive the month range so
+  // the actuals window matches the budgeted period exactly.
+  const pad = (n: number) => String(n).padStart(2, '0');
+  let derivedStart = `${fiscalYear}-01-01`;
+  let derivedEnd = `${fiscalYear}-12-31`;
+  if (periodNumber >= 1 && periodNumber <= 12) {
+    const lastDay = new Date(fiscalYear, periodNumber, 0).getDate();
+    derivedStart = `${fiscalYear}-${pad(periodNumber)}-01`;
+    derivedEnd = `${fiscalYear}-${pad(periodNumber)}-${pad(lastDay)}`;
+  }
+  const actualStart = startDateParam ?? derivedStart;
+  const actualEnd = endDateParam ?? derivedEnd;
 
   let entriesQ = supabase
     .from('gl_entries')
@@ -58,17 +77,20 @@ export async function GET(request: Request) {
     .eq('status', 'POSTED')
     .gte('entry_date', actualStart)
     .lte('entry_date', actualEnd);
-  if (locationId) entriesQ = entriesQ.eq('location_id', locationId);
+  if (locationIds.length === 1) entriesQ = entriesQ.eq('location_id', locationIds[0]);
+  else if (locationIds.length > 1) entriesQ = entriesQ.in('location_id', locationIds);
 
   const { data: entries } = await entriesQ;
   const entryIds = (entries ?? []).map((e) => e.id);
 
   const actualMap = new Map<string, number>();
   if (entryIds.length > 0) {
-    const { data: lines } = await supabase
+    let linesQ = supabase
       .from('gl_entry_lines')
       .select('account_id, debit_cents, credit_cents')
       .in('gl_entry_id', entryIds);
+    if (departmentId) linesQ = linesQ.eq('department_id', departmentId);
+    const { data: lines } = await linesQ;
 
     for (const line of lines ?? []) {
       const existing = actualMap.get(line.account_id) ?? 0;
@@ -156,7 +178,7 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({
-    period: { fiscalYear, startDate: actualStart, endDate: actualEnd },
+    period: { fiscalYear, periodNumber: periodNumber || null, startDate: actualStart, endDate: actualEnd },
     data: rows,
     totals,
   });

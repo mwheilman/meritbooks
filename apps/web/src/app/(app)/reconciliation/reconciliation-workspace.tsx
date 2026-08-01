@@ -12,6 +12,8 @@ import {
   ArrowDownLeft,
   Building2,
   ShieldCheck,
+  Plus,
+  Receipt,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
@@ -58,6 +60,19 @@ interface WorkspaceResponse {
   lines: WorkspaceLine[];
 }
 
+interface AccountOption {
+  id: string;
+  account_number: string;
+  name: string;
+  account_type: string;
+}
+interface AccountsResponse {
+  recent: AccountOption[];
+  accounts: AccountOption[];
+}
+
+type AdjustmentType = 'bank_fee' | 'interest' | 'other';
+
 interface PeriodMonth {
   month: number;
   status: string;
@@ -77,6 +92,16 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 function dollarsToCents(v: string): number {
   const n = parseFloat(v.replace(/[^0-9.-]/g, ''));
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
+}
+
+/** A v4-shaped uuid for the adjustment idempotency key (schema requires uuid). */
+function newUuid(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 export function ReconciliationWorkspace({
@@ -116,6 +141,75 @@ export function ReconciliationWorkspace({
   const rec = data?.reconciliation ?? null;
   const summary = data?.summary ?? null;
   const finalized = rec?.isFinalized ?? false;
+
+  // ── Adjusting-entry (bank fee / interest / other) state ───────────────────────
+  const [showAdjust, setShowAdjust] = useState(false);
+  const [adjType, setAdjType] = useState<AdjustmentType>('bank_fee');
+  const [adjAmount, setAdjAmount] = useState('');
+  const [adjDate, setAdjDate] = useState('');
+  const [adjMemo, setAdjMemo] = useState('');
+  const [adjOffsetId, setAdjOffsetId] = useState('');
+  const [adjCashEffect, setAdjCashEffect] = useState<'increase' | 'decrease'>('decrease');
+  // Stable per form-open so a double-submit is one idempotent no-op, not two entries.
+  const [adjKey, setAdjKey] = useState('');
+
+  // Load the chart once the form is open (offset-account picker for interest/other).
+  const { data: accountsData } = useQuery<AccountsResponse>(showAdjust ? '/api/accounts/search' : null);
+  const offsetOptions = useMemo(() => {
+    const all = [...(accountsData?.recent ?? []), ...(accountsData?.accounts ?? [])];
+    if (adjType === 'interest') {
+      return all.filter((a) => a.account_type === 'REVENUE' || a.account_type === 'OTHER');
+    }
+    return all;
+  }, [accountsData, adjType]);
+
+  function openAdjust() {
+    setAdjType('bank_fee');
+    setAdjAmount('');
+    setAdjDate(data?.period.endDate ?? '');
+    setAdjMemo('');
+    setAdjOffsetId('');
+    setAdjCashEffect('decrease');
+    setAdjKey(newUuid());
+    setShowAdjust(true);
+  }
+
+  async function submitAdjustment() {
+    if (!rec) return;
+    const amountCents = dollarsToCents(adjAmount);
+    if (amountCents <= 0) {
+      addToast('error', 'Enter an amount greater than $0');
+      return;
+    }
+    if (!adjMemo.trim()) {
+      addToast('error', 'Add a memo describing the adjustment');
+      return;
+    }
+    if (adjType !== 'bank_fee' && !adjOffsetId) {
+      addToast('error', 'Choose the offsetting GL account');
+      return;
+    }
+    setBusy('adjust');
+    const result = await api.post<{ ok: boolean }>('/api/reconciliation/adjustment', {
+      reconciliation_id: rec.id,
+      adjustment_type: adjType,
+      amount_cents: amountCents,
+      entry_date: adjDate || data?.period.endDate,
+      memo: adjMemo.trim(),
+      offset_account_id: adjType === 'bank_fee' ? undefined : adjOffsetId,
+      cash_effect: adjType === 'other' ? adjCashEffect : undefined,
+      idempotency_key: adjKey || newUuid(),
+    });
+    setBusy(null);
+    if (result.error) {
+      addToast('error', result.error.error || 'Could not post adjustment');
+      return;
+    }
+    addToast('success', 'Adjusting entry posted and cleared');
+    setShowAdjust(false);
+    await refetch();
+    onChanged();
+  }
   // Reflect the server statement balance unless the user is mid-edit.
   const statementValue =
     statementDirty || rec == null ? statement : (rec.statementEndingBalanceCents / 100).toFixed(2);
@@ -363,6 +457,155 @@ export function ReconciliationWorkspace({
                   <Lock className="h-4 w-4" />
                   Finalized {rec?.reconciledAt ? `on ${new Date(rec.reconciledAt).toLocaleDateString()}` : ''} — lines
                   are locked. Undo to make changes.
+                </div>
+              )}
+
+              {/* Adjusting entry — book a bank fee / interest / correction so the rec ties */}
+              {rec && !finalized && !showAdjust && (
+                <button
+                  onClick={openAdjust}
+                  className="mb-4 inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-brand-500/40 hover:text-white"
+                >
+                  <Plus size={13} /> Add adjustment
+                </button>
+              )}
+
+              {rec && !finalized && showAdjust && (
+                <div className="mb-4 rounded-lg border border-slate-700 bg-slate-800/40 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-sm font-medium text-white">
+                      <Receipt size={14} className="text-indigo-400" /> Adjusting entry
+                    </span>
+                    <button
+                      onClick={() => setShowAdjust(false)}
+                      className="rounded p-1 text-slate-500 hover:bg-white/[0.04] hover:text-slate-300"
+                      aria-label="Cancel adjustment"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-2xs font-semibold uppercase tracking-wider text-slate-500">
+                        Type
+                      </label>
+                      <select
+                        value={adjType}
+                        onChange={(e) => {
+                          const t = e.target.value as AdjustmentType;
+                          setAdjType(t);
+                          setAdjOffsetId('');
+                          if (t === 'bank_fee') setAdjCashEffect('decrease');
+                          if (t === 'interest') setAdjCashEffect('increase');
+                        }}
+                        className="w-full rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-2 text-sm text-slate-200"
+                      >
+                        <option value="bank_fee">Bank fee</option>
+                        <option value="interest">Interest income</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-2xs font-semibold uppercase tracking-wider text-slate-500">
+                        Amount
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-500">$</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={adjAmount}
+                          onChange={(e) => setAdjAmount(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full rounded-md border border-slate-700 bg-slate-900/60 py-2 pl-6 pr-2.5 font-mono text-sm tabular-nums text-slate-200 placeholder-slate-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-2xs font-semibold uppercase tracking-wider text-slate-500">
+                        Date
+                      </label>
+                      <input
+                        type="date"
+                        value={adjDate}
+                        min={data.period.startDate}
+                        max={data.period.endDate}
+                        onChange={(e) => setAdjDate(e.target.value)}
+                        className="w-full rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-2 text-sm text-slate-200"
+                      />
+                    </div>
+
+                    {adjType !== 'bank_fee' && (
+                      <div className="col-span-2 sm:col-span-2">
+                        <label className="mb-1 block text-2xs font-semibold uppercase tracking-wider text-slate-500">
+                          {adjType === 'interest' ? 'Income account' : 'Offset account'}
+                        </label>
+                        <select
+                          value={adjOffsetId}
+                          onChange={(e) => setAdjOffsetId(e.target.value)}
+                          className="w-full rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-2 text-sm text-slate-200"
+                        >
+                          <option value="">Select account…</option>
+                          {offsetOptions.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.account_number} · {a.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {adjType === 'other' && (
+                      <div>
+                        <label className="mb-1 block text-2xs font-semibold uppercase tracking-wider text-slate-500">
+                          Cash effect
+                        </label>
+                        <select
+                          value={adjCashEffect}
+                          onChange={(e) => setAdjCashEffect(e.target.value as 'increase' | 'decrease')}
+                          className="w-full rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-2 text-sm text-slate-200"
+                        >
+                          <option value="decrease">Money out (charge)</option>
+                          <option value="increase">Money in (credit)</option>
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="col-span-2 sm:col-span-3">
+                      <label className="mb-1 block text-2xs font-semibold uppercase tracking-wider text-slate-500">
+                        Memo
+                      </label>
+                      <input
+                        type="text"
+                        value={adjMemo}
+                        maxLength={200}
+                        onChange={(e) => setAdjMemo(e.target.value)}
+                        placeholder={adjType === 'bank_fee' ? 'Monthly service charge' : 'Description'}
+                        className="w-full rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-2 text-sm text-slate-200 placeholder-slate-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between">
+                    <p className="text-2xs text-slate-500">
+                      {adjType === 'bank_fee'
+                        ? 'DR Bank Fees / CR Cash — posts and clears in this rec'
+                        : adjType === 'interest'
+                          ? 'DR Cash / CR Income — posts and clears in this rec'
+                          : 'Balanced entry — posts and clears in this rec'}
+                    </p>
+                    <button
+                      onClick={submitAdjustment}
+                      disabled={busy === 'adjust'}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                    >
+                      {busy === 'adjust' ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                      Post adjustment
+                    </button>
+                  </div>
                 </div>
               )}
 
