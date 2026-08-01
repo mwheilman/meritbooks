@@ -2,9 +2,89 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## §0. SESSION-START & RE-GROUND PROTOCOL (READ FIRST — non-negotiable)
+
+The canon lives in `docs/canon/`. It was mirrored there because a session once built downstream,
+ungated, spec-less work off a stale copy of this file. Do not repeat that.
+
+**Re-ground at every one of these triggers — not just at session start:**
+
+1. **Cold session start.**
+2. **Immediately after any context compaction** — the tell is that the turn opens with a
+   "summary of the conversation so far" block instead of real history. STOP and re-ground before building.
+3. **Before starting any new module / gate / build wave** (the Phase-0 reconcile).
+4. **On any contradiction** between what you remember and what the repo/docs say.
+5. **Periodically on long sessions**, even absent a formal compaction.
+
+**What re-grounding means (cheap → deep):**
+
+- Always read `docs/canon/CANON-ANCHOR.md` in full (small, ~5 min). It holds the hard invariants,
+  the current GATE state, and the immediate priorities.
+- Read the newest `docs/MERITBOOKS-HANDOFF-session[N].md` (highest N).
+- For the area you're about to build, read the relevant digest in `docs/canon/` (index: `00-INDEX.md`),
+  and the exact source doc in Project knowledge for precise wording.
+- **Reconcile before building** (Future-Session-Instructions Phase 0): the Master Doc register is
+  authoritative only after you've checked it against the live repo/DB.
+
+**Governing-doc hierarchy (highest wins on conflict):** the Project-knowledge **Master Document**
+(`MeritBooks-Master-Document`, highest version) → the suite contracts (architecture, ownership matrix,
+FROZEN v3 event contract, identity model) → the Transaction Posting Engine Spec (GATE 2) → the Build
+Spec v4.3 → the newest handoff → this `CLAUDE.md`. Where this file disagrees with the canon, **the
+canon wins** — fix this file.
+
+## §0.1 AGENT & BUILD OPERATING RULES
+
+**The eight defined agents (`.claude/agents/`) and when each MUST run:**
+
+| Agent | Model | Role | Mandatory when |
+|---|---|---|---|
+| **builder** | sonnet | Implements a well-specified change (migration/route/resolver/UI) on a branch, with passing tests. Won't invent product/pricing/data-model decisions — stops and reports ambiguity. | Every implementation slice. |
+| **designer** | opus | Owns the design system; makes UI look authored, not generated. | Any new/elevated user-facing screen. |
+| **verifier** | sonnet | Read-only. Runs tests, typecheck, inspects live Supabase/Vercel to report TRUTH vs claims. | After EVERY build/deploy, before trusting any "done." |
+| **chrome-auditor** | sonnet | Drives the deployed app in Chrome; confirms render + org-scoping + reversible writes; reads console/network. | After any user-facing deploy (never hand Mike a click-through). |
+| **security** | opus | Audits RLS/tenant isolation/authz/secrets/PII on a fintech book of record. | Any change to auth, data access, money movement, public routes, or before a new tenant. |
+| **reviewer** | opus | Code-craft/maintainability review (right-sized files, layering, no god-files). | After a build, before merge of non-trivial code. |
+| **auditor** | opus | Rule-16 depth audit vs the FPB; scores the Completeness Ledger; **writes FPBs**. | Before calling a module "Complete"; to author a module's FPB. |
+| **scribe** | sonnet | Writes the handoff + updates Master Doc banner/Ledger from git + live schema (never from memory). | Session end / when docs drift. |
+
+Plus SDK agents: **general-purpose** (parallel builders on disjoint slices — the wave workhorse),
+**Explore** (read-only fan-out search), **Plan** (implementation planning).
+
+**How many run at once:** launch builder/general-purpose agents on **file-disjoint** slices,
+**3–5 concurrently** (comfortable ceiling given one verification lane + a memory-limited sandbox);
+issue them in ONE message so they run in parallel. Use `isolation: "worktree"` for any that must
+touch overlapping files. **The verification lane is a single thread (the lead) — that, plus
+migration serialization and FPB authorship, is the real throughput ceiling, not agent count.**
+
+**Reserved shared spine (single-threaded through the lead — agents REPORT needs, never edit these):**
+`packages/supabase/migrations/*` (sequentially numbered; apply to Supabase first), `packages/shared/*`,
+`apps/web/src/lib/api-handler.ts`, `apps/web/src/lib/navigation.ts`, `apps/web/src/lib/rbac/permissions.ts`.
+Agents that need a new table/column/nav entry/permission stop and report it; they never invent schema.
+
+**Mandatory wave pipeline:** re-ground (§0) → confirm/author the module **FPB** (auditor, Rule 13) →
+carve disjoint slices → parallel **builder/general-purpose** wave (+ **designer** on UI) → **verifier**
++ **chrome-auditor** (+ **security** for money/identity/public routes) → **reviewer** → lead integrates
+→ **scribe** updates handoff + Ledger.
+
+**Auto-deploy loop:** commit to `main` locally → an auto-push loop on Mike's machine
+(`while true; do git -C ~/Projects/meritbooks push origin main; sleep 30; done`) ships it → Vercel runs
+`next build` (the **authoritative full-project typecheck — fails closed**, so a type error blocks the
+deploy, never prod) → the lead pulls the Vercel deployment result (READY = build/typecheck green) and
+fixes anything it flags. **Migrations go to Supabase FIRST, then the code that depends on them is committed.**
+Claude cannot push from the sandbox and must not handle a push token — the loop is the sanctioned mechanism.
+
 ## What This Is
 
-MeritBooks is an AI-native accounting platform for Merit Management Group's 17 portfolio companies. It handles GL posting, bank feed categorization, financial reports, bills/invoices, workforce chargebacks, and compliance tracking. This is Module 1 of 12 in the Merit Enterprise Suite.
+MeritBooks is a generic, AI-native, multi-tenant SaaS **book of record** — it OWNS the general
+ledger (it is NOT an automation layer on top of QuickBooks/Sage; those are one-time migration import
+sources). It is **Module 1 of 12** in the Merit Enterprise Suite (white-label, resellable). Merit
+Management Group is simply its first tenant — nothing Merit-specific is hardcoded. It handles GL
+posting, bank-feed categorization, financial reports, bills/invoices/AR, revenue recognition,
+inter-department internal invoicing with consolidation eliminations, vendor compliance, and money
+movement (Plaid/Stripe). NOTE: the old "workforce chargebacks / overhead burden-rate / 5 labor
+classifications / in-app time tracking" engine was **RETIRED in Session 12 — do not rebuild it**
+(see `docs/canon/CANON-ANCHOR.md` §2). Time tracking lives in the separate PM module. The three
+pillars are: the GL (book of record), AI automation that eliminates manual data entry, and native FP&A.
 
 ## Commands
 
@@ -115,7 +195,7 @@ Primary accent: #10b981 (Tailwind emerald-500). Dark dominant, surface-900 for c
 
 ## Business Rules
 
-Overhead Rate: Shared OpEx Pool = Total Merit 6000-series OpEx minus 10% Owner Group minus 100% Deal Team minus 100% Direct Assigned. OH Rate = Pool / (Production Employees x 150 hrs/mo). Bill Rate = Employee Hourly + OH Rate. Burdened Cost = Base/12 + 7.65% FICA + 3.50% WC + $680/mo benefits.
+Overhead Rate / burden / 5-labor-classifications / chargebacks: **RETIRED in Session 12 — do NOT rebuild** (superseded by inter-department internal invoices with consolidation eliminations; see `docs/canon/CANON-ANCHOR.md` §2). The formula is retained here only as historical context, not as something to build: (retired) Shared OpEx Pool = Total 6000-series OpEx − 10% Owner Group − 100% Deal Team − 100% Direct Assigned; OH Rate = Pool / (Production Employees × 150 hrs/mo).
 
 Bank Feed Matching: Composite Score = Vendor 40% + Amount 40% + Date 20%. >=90% auto-categorize, 70-89% review, <70% flagged. Auto-approve: confidence >=85% AND trusted vendor AND amount <= $10,000.
 
