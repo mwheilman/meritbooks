@@ -523,7 +523,7 @@ export async function scanAnomalousJournalEntries(
       .from('ai_decisions')
       .select('proposed_output')
       .eq('feature', ANOMALOUS_JE_FEATURE)
-      .eq('status', 'PROPOSED');
+      .in('status', ['PROPOSED', 'APPROVED', 'REJECTED']);
     for (const row of open ?? []) {
       const po = (row as { proposed_output?: { gl_entry_id?: string } }).proposed_output;
       if (po?.gl_entry_id) alreadyQueued.add(po.gl_entry_id);
@@ -574,25 +574,6 @@ export async function scanAnomalousJournalEntries(
     if (!surface) continue;
     result.flagged++;
 
-    // Trust audit trail — the AI's judgment on every flagged entry.
-    await logAction(supabase, {
-      orgId,
-      actorType: 'AI',
-      actorUserId: null,
-      action: 'controls.anomalous_je.flag',
-      subjectTable: 'gl_entries',
-      subjectId: e.id,
-      summary: assessment.reason,
-      confidence: assessment.confidence,
-      tier: assessment.tier,
-      metadata: {
-        entry_number: e.entry_number,
-        amount_at_risk_cents: assessment.amountAtRiskCents,
-        flags: assessment.flags.map((f) => f.code),
-        score: assessment.score,
-      },
-    });
-
     if (alreadyQueued.has(e.id)) continue;
 
     const { error } = await supabase.from('ai_decisions').insert({
@@ -622,6 +603,26 @@ export async function scanAnomalousJournalEntries(
     alreadyQueued.add(e.id);
     result.queued++;
     if (assessment.tier === 'escalate') result.escalated++;
+
+    // Trust audit trail — logged ONLY on a newly queued exception (after the dedup
+    // skip), so re-scans don't append duplicate AI-attributed action_log rows.
+    await logAction(supabase, {
+      orgId,
+      actorType: 'AI',
+      actorUserId: null,
+      action: 'controls.anomalous_je.flag',
+      subjectTable: 'gl_entries',
+      subjectId: e.id,
+      summary: assessment.reason,
+      confidence: assessment.confidence,
+      tier: assessment.tier,
+      metadata: {
+        entry_number: e.entry_number,
+        amount_at_risk_cents: assessment.amountAtRiskCents,
+        flags: assessment.flags.map((f) => f.code),
+        score: assessment.score,
+      },
+    });
   }
 
   return result;
