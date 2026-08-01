@@ -34,25 +34,27 @@ canon wins** — fix this file.
 
 ## §0.1 AGENT & BUILD OPERATING RULES
 
+**BINDING MODEL: every agent runs on `opus` — `claude-opus-4-8` — with no exceptions** (Owner
+directive, 2026-08-01). Pass `model: "opus"` on every Agent/subagent launch. This OVERRIDES the
+per-agent `model:` frontmatter in `.claude/agents/*.md` (several of which still say `sonnet`); the
+frontmatter is legacy and the binding value is opus 4.8. No agent — builder, verifier,
+chrome-auditor, scribe, or any SDK agent — runs on sonnet or haiku.
+
 **The eight defined agents (`.claude/agents/`) and when each MUST run:**
 
-| Agent | Model | Role | Mandatory when |
+| Agent | Model (binding) | Role | Mandatory when |
 |---|---|---|---|
-| **builder** | sonnet | Implements a well-specified change (migration/route/resolver/UI) on a branch, with passing tests. Won't invent product/pricing/data-model decisions — stops and reports ambiguity. | Every implementation slice. |
-| **designer** | opus | Owns the design system; makes UI look authored, not generated. | Any new/elevated user-facing screen. |
-| **verifier** | sonnet | Read-only. Runs tests, typecheck, inspects live Supabase/Vercel to report TRUTH vs claims. | After EVERY build/deploy, before trusting any "done." |
-| **chrome-auditor** | sonnet | Drives the deployed app in Chrome; confirms render + org-scoping + reversible writes; reads console/network. | After any user-facing deploy (never hand Mike a click-through). |
-| **security** | opus | Audits RLS/tenant isolation/authz/secrets/PII on a fintech book of record. | Any change to auth, data access, money movement, public routes, or before a new tenant. |
-| **reviewer** | opus | Code-craft/maintainability review (right-sized files, layering, no god-files). | After a build, before merge of non-trivial code. |
-| **auditor** | opus | Rule-16 depth audit vs the FPB; scores the Completeness Ledger; **writes FPBs**. | Before calling a module "Complete"; to author a module's FPB. |
-| **scribe** | sonnet | Writes the handoff + updates Master Doc banner/Ledger from git + live schema (never from memory). | Session end / when docs drift. |
+| **builder** | opus 4.8 | Implements a well-specified change (migration/route/resolver/UI) on a branch, with passing tests. Won't invent product/pricing/data-model decisions — stops and reports ambiguity. | Every implementation slice. |
+| **designer** | opus 4.8 | Owns the design system; makes UI look authored, not generated. | Any new/elevated user-facing screen. |
+| **verifier** | opus 4.8 | Read-only. Runs tests, typecheck, inspects live Supabase/Vercel to report TRUTH vs claims. | After EVERY build/deploy, before trusting any "done." |
+| **chrome-auditor** | opus 4.8 | Drives the deployed app in Chrome; confirms render + org-scoping + reversible writes; reads console/network. | After any user-facing deploy (never hand Mike a click-through). |
+| **security** | opus 4.8 | Audits RLS/tenant isolation/authz/secrets/PII on a fintech book of record. | Any change to auth, data access, money movement, public routes, or before a new tenant. |
+| **reviewer** | opus 4.8 | Code-craft/maintainability review (right-sized files, layering, no god-files). | After a build, before merge of non-trivial code. |
+| **auditor** | opus 4.8 | Rule-16 depth audit vs the FPB; scores the Completeness Ledger; **writes FPBs**. | Before calling a module "Complete"; to author a module's FPB. |
+| **scribe** | opus 4.8 | Writes the handoff + updates Master Doc banner/Ledger from git + live schema (never from memory). | Session end / when docs drift. |
 
-Plus SDK agents: **general-purpose** (parallel builders on disjoint slices — the wave workhorse),
-**Explore** (read-only fan-out search), **Plan** (implementation planning).
-
-**OWNER DIRECTIVE (2026-08-01): run EVERY agent on `opus` (claude-opus-4-8).** Pass
-`model: "opus"` on every Agent/subagent launch, overriding the sonnet defaults in the frontmatter
-of builder / verifier / chrome-auditor / scribe. No agent runs on sonnet or haiku.
+Plus SDK agents (also **opus 4.8**): **general-purpose** (parallel builders on disjoint slices — the
+wave workhorse), **Explore** (read-only fan-out search), **Plan** (implementation planning).
 
 **How many run at once:** launch builder/general-purpose agents on **file-disjoint** slices,
 **3–5 concurrently** (comfortable ceiling given one verification lane + a memory-limited sandbox);
