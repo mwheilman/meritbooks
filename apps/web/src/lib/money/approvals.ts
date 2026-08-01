@@ -4,13 +4,16 @@
  * Generic approval lifecycle for every money movement (AR refunds, AP
  * disbursements/batches, payroll runs). Two guarantees:
  *   1. preparer != approver — enforced by a DB CHECK (migration 042) AND here.
- *   2. who-may-approve — role authorization. Per the Core ruling this depends on
- *      core.users / core.memberships / core.roles, which are SPECCED BUT NOT
- *      BUILT. So canApprove() FAILS CLOSED: until that identity authority exists
- *      (or an interim membership source is deliberately wired), no one is
- *      authorized to approve, and releases are blocked. This is intentional —
- *      it prevents an insecure "anyone can release money" path. Records,
- *      transitions, and the audit trail all function now.
+ *   2. who-may-approve — role authorization RECONCILED TO CORE IDENTITY. Per the
+ *      suite identity/access contract (docs/canon/10-suite-contracts-digest.md
+ *      FILE 4 + CANON-ANCHOR §3), money-movement authorization is Books-owned but
+ *      MUST reconcile to `core.users` / `core.memberships` — Books must NOT bake a
+ *      private "who may approve" that won't reconcile to the membership spine.
+ *      canApprove() therefore resolves the caller through core.users ->
+ *      core.memberships (the canonical spine, migration 061) and gates on the
+ *      normalized membership role. It FAILS CLOSED on any error/absence and, only
+ *      when no active membership exists yet, falls back to the interim
+ *      core.employees.role path so nothing regresses while memberships backfill.
  *
  * Every transition appends an immutable approval_steps row (actor, timestamp,
  * before/after, provider_correlation_id). Call with the admin Supabase client;
@@ -19,6 +22,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { hasPermission, type UserRole } from '@/lib/rbac/permissions';
+import { normalizeMembershipRole } from '@/lib/rbac/role-normalize';
 
 export type ApprovalKind = 'AR_REFUND' | 'AP_DISBURSEMENT' | 'AP_BATCH' | 'PAYROLL_RUN';
 export type ApprovalStatus =
@@ -94,31 +98,94 @@ async function logStep(
   });
 }
 
+/** The money surfaces on which "may approve at all" is decided. A role that may
+ * approve on ANY of these has money-movement approval authority. */
+function roleMayApproveMoney(role: UserRole): boolean {
+  return (
+    hasPermission(role, 'checks', 'approve') ||
+    hasPermission(role, 'bills', 'approve') ||
+    hasPermission(role, 'payroll', 'approve')
+  );
+}
+
 /**
- * Role authorization — FAILS CLOSED. Resolves the caller's role from the SAME
- * source the rest of the app trusts (core.employees.role + ROLE_DEFINITIONS via
- * permissions.ts) and grants money-movement approval when that role may approve
- * on any money surface (checks / bills / payroll). This reconciles what used to
- * read an unbuilt core.roles table. Separation of duties is enforced separately
- * (approve() + a DB CHECK), so this only answers "may this role approve at all".
+ * TRANSITIONAL fallback — reads the interim `core.employees.role` source that
+ * canApprove() used before the identity spine existed. Kept ONLY so approval does
+ * not regress for callers who have an employee row but not yet an active
+ * membership while memberships are backfilled (identity FPB Phase 2). Remove once
+ * every approver has a `core.memberships` row (see "NEEDS CENTRAL" below).
+ * Fails closed on any error/absence.
  */
-export async function canApprove(adminDb: SupabaseClient, orgId: string, userId: string): Promise<boolean> {
+async function canApproveViaEmployeesFallback(
+  adminDb: SupabaseClient,
+  orgId: string,
+  clerkUserId: string,
+): Promise<boolean> {
+  const { data, error } = await adminDb
+    .schema('core')
+    .from('employees')
+    .select('role')
+    .eq('org_id', orgId)
+    .eq('clerk_user_id', clerkUserId)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (error || !data?.role) return false; // no active role in this org -> fail closed
+  const role = normalizeMembershipRole(data.role as string);
+  if (!role) return false; // unrecognized role -> fail closed
+  return roleMayApproveMoney(role);
+}
+
+/**
+ * Role authorization — FAILS CLOSED, reconciled to Core identity.
+ *
+ * Resolution order (per the suite identity/access contract):
+ *   1. CANONICAL: core.users (by clerk_user_id) -> core.memberships
+ *      (by user_id, org_id, status='active') -> normalize the membership role
+ *      onto a Books UserRole -> gate via hasPermission on the money surfaces.
+ *      'owner'/'org_admin'/'admin' normalize to company_admin (full approver).
+ *      A membership that exists but whose role is unrecognized fails CLOSED — we
+ *      do NOT fall through to a possibly-more-permissive source once the
+ *      authoritative membership has spoken.
+ *   2. TRANSITIONAL: only when NO active membership is found (user missing, or no
+ *      active membership in this org yet) do we fall back to core.employees.role,
+ *      so approval does not regress mid-backfill.
+ *
+ * Separation of duties (approver != preparer) is enforced separately in approve()
+ * and by a DB CHECK; this only answers "may this role approve at all".
+ */
+export async function canApprove(adminDb: SupabaseClient, orgId: string, clerkUserId: string): Promise<boolean> {
   try {
-    const { data, error } = await adminDb
+    // 1. Resolve the caller on the canonical identity spine.
+    const { data: user, error: userErr } = await adminDb
       .schema('core')
-      .from('employees')
-      .select('role')
-      .eq('org_id', orgId)
-      .eq('clerk_user_id', userId)
-      .eq('is_active', true)
+      .from('users')
+      .select('id')
+      .eq('clerk_user_id', clerkUserId)
       .maybeSingle();
-    if (error || !data?.role) return false; // no active role in this org -> fail closed
-    const role = data.role as UserRole;
-    return (
-      hasPermission(role, 'checks', 'approve') ||
-      hasPermission(role, 'bills', 'approve') ||
-      hasPermission(role, 'payroll', 'approve')
-    );
+    if (userErr) return false; // fail closed on lookup error
+
+    if (user?.id) {
+      const { data: membership, error: memErr } = await adminDb
+        .schema('core')
+        .from('memberships')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('org_id', orgId)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (memErr) return false; // fail closed on lookup error
+
+      if (membership?.role) {
+        // Authoritative: honor the membership decision, do NOT fall back.
+        const role = normalizeMembershipRole(membership.role as string);
+        if (!role) return false; // membership present but role unrecognized -> fail closed
+        return roleMayApproveMoney(role);
+      }
+      // user exists but no active membership in this org -> transitional fallback.
+    }
+
+    // 2. TRANSITIONAL fallback while memberships backfill (see NEEDS CENTRAL note).
+    return await canApproveViaEmployeesFallback(adminDb, orgId, clerkUserId);
   } catch {
     return false; // fail closed
   }

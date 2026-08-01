@@ -9,6 +9,7 @@ import { applyStripePaymentToInvoice } from '@/lib/money/apply-invoice-payment';
 import { postArPayout } from '@/lib/money/posting/ar-posting';
 import { postPlatformFee } from '@/lib/money/posting/platform-fee';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
+import { resolvePiPaymentContext } from '@/lib/money/resolve-pi-context';
 
 /**
  * POST /api/webhooks/stripe — Stripe Connect event endpoint.
@@ -48,23 +49,29 @@ export async function POST(req: Request) {
   try {
     if (event.type === 'payment_intent.succeeded') {
       const pi = event.data.object as Stripe.PaymentIntent;
-      const m = pi.metadata ?? {};
-      if (m.invoice_id && m.org_id) {
+      const ctx = await resolvePiPaymentContext(db, pi);
+      if (!ctx) {
+        // A payment SUCCEEDED at Stripe but we cannot identify its invoice from
+        // the PI id (no metadata, no PAY_INITIATED trail). Retrying will not
+        // recover missing data, so we do not 500-loop — but we must NEVER treat
+        // this as a clean success: log LOUD for manual reconciliation.
+        console.error('[stripe webhook] CRITICAL: succeeded PI could not be routed to an invoice', pi.id, event.id);
+      } else {
         await applyStripePaymentToInvoice(db, {
-          orgId: m.org_id, invoiceId: m.invoice_id, locationId: m.location_id ?? '',
-          customerId: m.customer_id ?? '',
-          baseCents: Number(m.base_cents ?? pi.amount),
-          amountCents: Number(m.amount_cents ?? pi.amount),
-          appFeeCents: Number(m.app_fee_cents ?? 0),
-          method: m.method === 'CARD' ? 'CARD' : 'ACH',
+          orgId: ctx.orgId, invoiceId: ctx.invoiceId, locationId: ctx.locationId,
+          customerId: ctx.customerId,
+          baseCents: ctx.baseCents,
+          amountCents: ctx.amountCents,
+          appFeeCents: ctx.appFeeCents,
+          method: ctx.method,
           piId: pi.id,
         });
 
         // Book the application fee as income on the platform operator's own
         // ledger (Merit-as-platform). Gated on PLATFORM_ORG_ID; no-op otherwise.
         const platformOrgId = process.env.PLATFORM_ORG_ID;
-        const grossFeeCents = Number(m.app_fee_cents ?? 0);
-        if (platformOrgId && grossFeeCents > 0 && platformOrgId !== m.org_id) {
+        const grossFeeCents = ctx.appFeeCents;
+        if (platformOrgId && grossFeeCents > 0 && platformOrgId !== ctx.orgId) {
           try {
             const { data: loc } = await db.schema('core').from('locations')
               .select('id').eq('org_id', platformOrgId).limit(1).maybeSingle();
@@ -79,7 +86,7 @@ export async function POST(req: Request) {
                 platformOrgId, locationId: platformLocationId,
                 entryDate: new Date().toISOString().slice(0, 10),
                 grossFeeCents, stripeCostCents,
-                createdBy: null, sourceId: pi.id, sourceTenantOrgId: m.org_id,
+                createdBy: null, sourceId: pi.id, sourceTenantOrgId: ctx.orgId,
               });
             }
           } catch (e) {
@@ -93,24 +100,24 @@ export async function POST(req: Request) {
       // identical to one the customer never touched. Informational only: no status
       // change and no GL posting, because the funds have not settled.
       const pi = event.data.object as Stripe.PaymentIntent;
-      const m = pi.metadata ?? {};
-      if (m.invoice_id && m.org_id) {
+      const ctx = await resolvePiPaymentContext(db, pi);
+      if (ctx) {
         await recordInvoiceEvent(db, {
-          orgId: m.org_id, invoiceId: m.invoice_id, type: 'PAY_PROCESSING', actor: 'customer',
+          orgId: ctx.orgId, invoiceId: ctx.invoiceId, type: 'PAY_PROCESSING', actor: 'customer',
           meta: {
             pi: pi.id,
-            method: m.method === 'CARD' ? 'CARD' : 'ACH',
-            amount_cents: Number(m.amount_cents ?? pi.amount),
+            method: ctx.method,
+            amount_cents: ctx.amountCents,
             expected_settlement: 'ACH transfers typically clear in 1-2 business days',
           },
         });
       }
     } else if (event.type === 'payment_intent.payment_failed') {
       const pi = event.data.object as Stripe.PaymentIntent;
-      const m = pi.metadata ?? {};
-      if (m.invoice_id && m.org_id) {
+      const ctx = await resolvePiPaymentContext(db, pi);
+      if (ctx) {
         await recordInvoiceEvent(db, {
-          orgId: m.org_id, invoiceId: m.invoice_id, type: 'PAY_FAILED', actor: 'customer',
+          orgId: ctx.orgId, invoiceId: ctx.invoiceId, type: 'PAY_FAILED', actor: 'customer',
           meta: { pi: pi.id, reason: pi.last_payment_error?.message ?? 'failed' },
         });
       }

@@ -50,6 +50,10 @@ canon wins** — fix this file.
 Plus SDK agents: **general-purpose** (parallel builders on disjoint slices — the wave workhorse),
 **Explore** (read-only fan-out search), **Plan** (implementation planning).
 
+**OWNER DIRECTIVE (2026-08-01): run EVERY agent on `opus` (claude-opus-4-8).** Pass
+`model: "opus"` on every Agent/subagent launch, overriding the sonnet defaults in the frontmatter
+of builder / verifier / chrome-auditor / scribe. No agent runs on sonnet or haiku.
+
 **How many run at once:** launch builder/general-purpose agents on **file-disjoint** slices,
 **3–5 concurrently** (comfortable ceiling given one verification lane + a memory-limited sandbox);
 issue them in ONE message so they run in parallel. Use `isolation: "worktree"` for any that must

@@ -22,11 +22,24 @@ interface InvDetail {
   customerName: string; customerEmail: string | null;
   locationName: string; locationCode: string; jobLabel: string | null;
   lines: InvLine[];
+  delivery?: {
+    sentAt: string | null; sentTo: string | null; sentCount: number;
+    deliveredAt: string | null; viewCount: number;
+    lastViewedAt: string | null; lastReminderAt: string | null;
+  } | null;
 }
 interface AccountOption { id: string; account_number: string; name: string; account_type?: string }
 
 const centsToInput = (c: number) => (c / 100).toFixed(2);
 const inputToCents = (v: string) => Math.round((parseFloat(v.replace(/[^0-9.-]/g, '')) || 0) * 100);
+
+/** "Jul 3, 2026, 4:12 PM" — a delivery timestamp reads better with the time. */
+const fmtWhen = (iso: string | null) =>
+  iso
+    ? new Date(iso).toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+      })
+    : null;
 
 export function InvoiceDrawer({ invoiceId, onClose }: { invoiceId: string | null; onClose: () => void }) {
   const { data, isLoading, error, refetch } = useQuery<InvDetail>(
@@ -166,7 +179,7 @@ export function InvoiceDrawer({ invoiceId, onClose }: { invoiceId: string | null
                    title={data.customerEmail ? `Email this invoice to ${data.customerEmail}` : 'No customer email on file'}
                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed">
                   {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-                  {sending ? 'Sending…' : 'Send'}
+                  {sending ? 'Sending…' : data.delivery?.sentAt ? 'Resend' : 'Send'}
                 </button>
               </>
             )}
@@ -216,6 +229,39 @@ export function InvoiceDrawer({ invoiceId, onClose }: { invoiceId: string | null
             <DetailField label="Total" value={formatMoney(data.totalCents)} mono />
             <DetailField label="Paid" value={formatMoney(data.amountPaidCents)} mono />
             <DetailField label="Balance" value={formatMoney(data.balanceCents)} mono />
+          </DetailSection>
+
+          <DetailSection title="Delivery">
+            {data.delivery?.sentAt ? (
+              <>
+                <DetailField
+                  label={data.delivery.sentCount > 1 ? `Sent (${data.delivery.sentCount}×)` : 'Sent'}
+                  value={
+                    data.delivery.sentTo
+                      ? `${fmtWhen(data.delivery.sentAt)} → ${data.delivery.sentTo}`
+                      : (fmtWhen(data.delivery.sentAt) ?? '--')
+                  }
+                />
+                {data.delivery.deliveredAt && (
+                  <DetailField label="Delivered" value={fmtWhen(data.delivery.deliveredAt) ?? '--'} />
+                )}
+                {data.delivery.viewCount > 0 && (
+                  <DetailField
+                    label="Opened"
+                    value={`${data.delivery.viewCount}×${data.delivery.lastViewedAt ? ` · last ${fmtWhen(data.delivery.lastViewedAt)}` : ''}`}
+                  />
+                )}
+                {data.delivery.lastReminderAt && (
+                  <DetailField label="Reminder sent" value={fmtWhen(data.delivery.lastReminderAt) ?? '--'} />
+                )}
+              </>
+            ) : (
+              <div className="px-4 py-3 text-xs text-slate-500">
+                {data.customerEmail
+                  ? 'Not sent yet. Use Send to email the branded invoice and a Pay Now link to the customer.'
+                  : `Not sent. Add an email to ${data.customerName || 'this customer'} to enable sending.`}
+              </div>
+            )}
           </DetailSection>
 
           <div className="mt-5 pt-4 border-t border-slate-800">

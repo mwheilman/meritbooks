@@ -26,6 +26,19 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .order('bill_date', { ascending: false })
     .limit(50);
 
+  // Payment-hold state lives in public.vendor_payment_holds (not a column on
+  // core.vendors). A hold is active if its window covers today.
+  const { data: holdRows } = await supabase
+    .from('vendor_payment_holds')
+    .select('start_date, end_date')
+    .eq('org_id', orgId).eq('vendor_id', params.id);
+  const now = new Date();
+  const hasPaymentHold = (holdRows ?? []).some((h: { start_date: string | null; end_date: string | null }) => {
+    if (h.start_date && new Date(h.start_date) > now) return false;
+    if (h.end_date && new Date(h.end_date) < now) return false;
+    return true;
+  });
+
   const bills = (billRows ?? []) as Array<Record<string, any>>;
   const today = new Date();
   let openBalance = 0;
@@ -53,11 +66,11 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     paymentTermsDays: ven.payment_terms_days ?? null,
     is1099: !!ven.is_1099_eligible,
     autoApprove: !!ven.auto_approve,
-    taxId: ven.tax_id ?? null,
+    taxId: null, // no plaintext TIN column on core.vendors (tin_encrypted is not surfaced)
     isActive: ven.is_active !== false,
     compliance: {
-      w9: ven.w9_status ?? ven.w9_on_file ?? null,
-      hasPaymentHold: !!ven.payment_hold,
+      w9: ven.w9_status ?? null,
+      hasPaymentHold,
     },
     ap: { openBalance, overdueCount, openBillCount: bills.filter((b) => Number(b.balance_cents ?? 0) > 0).length },
     recentBills,

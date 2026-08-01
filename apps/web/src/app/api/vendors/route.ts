@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 
+// VendorInput is the shape the UI form sends. Several of these are API-level
+// fields that do NOT map 1:1 onto columns of `core.vendors` (the live table) —
+// they are translated at the route boundary below:
+//   is_1099        -> is_1099_eligible (boolean column)
+//   payment_terms  -> payment_terms_days (integer column; see TERMS_TO_DAYS)
+//   tax_id, notes, country -> NO column exists (see "NEEDS CENTRAL" in the
+//     handoff). tax_id/notes/country are accepted but not persisted, so the
+//     route stops 500ing; tax_id/notes round-trip back as null.
 interface VendorInput {
   name: string;
   display_name?: string;
@@ -19,6 +27,45 @@ interface VendorInput {
   tax_id?: string;
   notes?: string;
   website?: string;
+}
+
+// core.vendors stores terms as an integer day count (payment_terms_days), but
+// the UI speaks in term codes. This mapping is lossy: '2_10_NET_30' (a 2%
+// early-pay discount) collapses to 30 days. See "NEEDS CENTRAL".
+const TERMS_TO_DAYS: Record<string, number> = {
+  DUE_ON_RECEIPT: 0,
+  NET_10: 10,
+  NET_15: 15,
+  NET_30: 30,
+  NET_45: 45,
+  NET_60: 60,
+  NET_90: 90,
+  '2_10_NET_30': 30,
+};
+
+function termsToDays(code: string | undefined | null): number {
+  if (!code) return 30;
+  return TERMS_TO_DAYS[code] ?? 30;
+}
+
+function daysToTerms(days: number | null | undefined): string {
+  const d = Number(days ?? 30);
+  const match = Object.entries(TERMS_TO_DAYS).find(
+    ([code, val]) => code !== '2_10_NET_30' && val === d,
+  );
+  return match ? match[0] : `NET_${d}`;
+}
+
+// Surface the API-shaped fields the UI expects on top of the raw DB row so the
+// response contract stays stable even though the underlying columns differ.
+function withApiFields(v: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...v,
+    is_1099: !!v.is_1099_eligible,
+    payment_terms: daysToTerms(v.payment_terms_days as number | null),
+    tax_id: null, // no plaintext TIN column on core.vendors (tin_encrypted is not surfaced)
+    notes: null, // no notes column on core.vendors
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -52,11 +99,17 @@ export async function GET(req: NextRequest) {
     }
 
     if (is1099 === 'true') {
-      query = query.eq('is_1099', true);
+      query = query.eq('is_1099_eligible', true);
     }
 
-    const validSortColumns = ['name', 'created_at', 'is_1099', 'payment_terms'];
-    const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'name';
+    // Map API-level sort keys onto the real column names on core.vendors.
+    const sortAliases: Record<string, string> = {
+      name: 'name',
+      created_at: 'created_at',
+      is_1099: 'is_1099_eligible',
+      payment_terms: 'payment_terms_days',
+    };
+    const sortColumn = sortAliases[sortBy] ?? 'name';
     query = query.order(sortColumn, { ascending: sortDir });
 
     const offset = (page - 1) * perPage;
@@ -135,7 +188,7 @@ export async function GET(req: NextRequest) {
         hasActiveHold: holds.some(holdInEffect),
       };
 
-      return { ...v, compliance: complianceStatus };
+      return { ...withApiFields(v), compliance: complianceStatus };
     });
 
     // Filter by payment hold after enrichment
@@ -195,7 +248,9 @@ export async function POST(req: NextRequest) {
       }, { status: 409 });
     }
 
-    // Create vendor
+    // Create vendor. Only columns that exist on core.vendors are written;
+    // is_1099/payment_terms are translated, and tax_id/notes/country are
+    // dropped (no column — see "NEEDS CENTRAL" in the handoff).
     const insertData = {
       org_id: orgId,
       name: trimmedName,
@@ -207,13 +262,10 @@ export async function POST(req: NextRequest) {
       city: body.city?.trim() || null,
       state: body.state?.trim()?.toUpperCase() || null,
       zip: body.zip?.trim() || null,
-      country: body.country?.trim() || 'US',
-      payment_terms: body.payment_terms || 'NET_30',
+      payment_terms_days: termsToDays(body.payment_terms),
       default_account_id: body.default_account_id || null,
       default_department_id: body.default_department_id || null,
-      is_1099: body.is_1099 ?? false,
-      tax_id: body.tax_id?.trim() || null,
-      notes: body.notes?.trim() || null,
+      is_1099_eligible: body.is_1099 ?? false,
       website: body.website?.trim() || null,
       ai_confidence: 0,
       auto_approve: false,
@@ -231,7 +283,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to create vendor', detail: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ vendor }, { status: 201 });
+    return NextResponse.json({ vendor: withApiFields(vendor as Record<string, unknown>) }, { status: 201 });
   } catch (error) {
     console.error('POST /api/vendors error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -251,6 +303,9 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Vendor ID required' }, { status: 400 });
     }
 
+    // Only real core.vendors columns are updated. is_1099/payment_terms are
+    // translated; country/tax_id/notes have no column and are ignored (see
+    // "NEEDS CENTRAL").
     const updateData: Record<string, unknown> = {};
     if (updates.name !== undefined) updateData.name = updates.name.trim();
     if (updates.display_name !== undefined) updateData.display_name = updates.display_name.trim();
@@ -261,13 +316,10 @@ export async function PATCH(req: NextRequest) {
     if (updates.city !== undefined) updateData.city = updates.city.trim();
     if (updates.state !== undefined) updateData.state = updates.state.trim().toUpperCase();
     if (updates.zip !== undefined) updateData.zip = updates.zip.trim();
-    if (updates.country !== undefined) updateData.country = updates.country.trim();
-    if (updates.payment_terms !== undefined) updateData.payment_terms = updates.payment_terms;
+    if (updates.payment_terms !== undefined) updateData.payment_terms_days = termsToDays(updates.payment_terms);
     if (updates.default_account_id !== undefined) updateData.default_account_id = updates.default_account_id;
     if (updates.default_department_id !== undefined) updateData.default_department_id = updates.default_department_id;
-    if (updates.is_1099 !== undefined) updateData.is_1099 = updates.is_1099;
-    if (updates.tax_id !== undefined) updateData.tax_id = updates.tax_id?.trim();
-    if (updates.notes !== undefined) updateData.notes = updates.notes?.trim();
+    if (updates.is_1099 !== undefined) updateData.is_1099_eligible = updates.is_1099;
     if (updates.website !== undefined) updateData.website = updates.website?.trim();
 
     updateData.updated_at = new Date().toISOString();
@@ -284,7 +336,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to update vendor' }, { status: 500 });
     }
 
-    return NextResponse.json({ vendor });
+    return NextResponse.json({ vendor: withApiFields(vendor as Record<string, unknown>) });
   } catch (error) {
     console.error('PATCH /api/vendors error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

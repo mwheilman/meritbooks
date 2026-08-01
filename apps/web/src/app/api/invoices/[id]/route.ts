@@ -48,6 +48,37 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const loc = inv.location_id ? locMap.get(inv.location_id) ?? null : null;
   const job = inv.job_id ? jobMap.get(inv.job_id) ?? null : null;
 
+  // Delivery timeline. The invoice_events log is the ground truth for the "sent"
+  // state the drawer shows — a record is only SENT after the email provider
+  // confirmed acceptance with a message id, so this is a real signal, not a
+  // hopeful status flip. We surface the last send, who it went to, delivery
+  // confirmation (if a provider webhook ever records DELIVERED), and how many
+  // times the customer opened the hosted page.
+  const { data: eventRows } = await supabase
+    .from('invoice_events')
+    .select('event_type, actor, meta, created_at')
+    .eq('invoice_id', params.id)
+    .order('created_at', { ascending: true });
+
+  const events = (eventRows ?? []) as Array<{
+    event_type: string; actor: string | null; meta: Record<string, any> | null; created_at: string;
+  }>;
+  const lastAt = (type: string) =>
+    events.filter((e) => e.event_type === type).map((e) => e.created_at).sort().at(-1) ?? null;
+  const sentEvents = events.filter((e) => e.event_type === 'SENT');
+  const viewEvents = events.filter((e) => e.event_type === 'VIEWED');
+  const lastSent = sentEvents.at(-1) ?? null;
+
+  const delivery = {
+    sentAt: lastAt('SENT'),
+    sentTo: (lastSent?.meta?.to as string | undefined) ?? null,
+    sentCount: sentEvents.length,
+    deliveredAt: lastAt('DELIVERED'),
+    viewCount: viewEvents.length,
+    lastViewedAt: viewEvents.map((e) => e.created_at).sort().at(-1) ?? null,
+    lastReminderAt: lastAt('REMINDER_SENT'),
+  };
+
   const lines = (lineRows ?? []).map((l: Record<string, any>) => {
     const acct = Array.isArray(l.account) ? l.account[0] : l.account;
     return {
@@ -82,6 +113,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     locationCode: loc?.short_code ?? '',
     jobLabel: job ? `${job.job_number} · ${job.name}` : null,
     lines,
+    delivery,
   });
 }
 

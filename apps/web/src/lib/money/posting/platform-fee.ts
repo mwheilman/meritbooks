@@ -54,6 +54,24 @@ export async function postPlatformFee(
     createdBy: string | null; sourceId?: string; sourceTenantOrgId?: string;
   },
 ): Promise<PostResult> {
+  // Idempotency (defense in depth behind the webhook's event-level dedupe): the
+  // platform fee posts exactly once per processor id. If a PLATFORM_FEE entry for
+  // this pi_ already exists on the platform's books, reuse it rather than
+  // double-booking fee income.
+  if (args.sourceId) {
+    const { data: prior } = await supabase.from('gl_entries')
+      .select('id, entry_number')
+      .eq('org_id', args.platformOrgId)
+      .eq('source_ref', args.sourceId)
+      .eq('entry_type', 'PLATFORM_FEE')
+      .eq('status', 'POSTED')
+      .maybeSingle();
+    if (prior) {
+      const p = prior as { id: string; entry_number: string };
+      return { success: true, entry_id: p.id, entry_number: p.entry_number };
+    }
+  }
+
   const [inTransit, cost, income] = await Promise.all([
     resolveRole(supabase, args.platformOrgId, 'PAYMENTS_IN_TRANSIT', args.locationId),
     resolveRole(supabase, args.platformOrgId, 'MERCHANT_FEE_EXPENSE'),
