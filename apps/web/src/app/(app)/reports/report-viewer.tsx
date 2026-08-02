@@ -13,6 +13,7 @@ import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import type { Location } from '@meritbooks/shared';
 import { CashFlowReport } from './cash-flow-report';
+import { CashFlowDirectReport } from './cash-flow-direct-report';
 import { GlDrillDown } from './gl-drill-down';
 import { ApAgingReport } from './ap-aging-report';
 import { ArAgingReport } from './ar-aging-report';
@@ -114,6 +115,7 @@ const CATALOG: ReportCategory[] = [
     { key: 'pnl_class', label: 'P&L by Class', desc: 'Class dimension filter', needsDates: true, hasBasis: true, hasDetail: true, hasCompare: false },
     { key: 'bs', label: 'Balance Sheet', desc: 'Assets, liabilities, equity at a point in time', needsDates: false, hasBasis: false, hasDetail: true, hasCompare: true },
     { key: 'cf', label: 'Cash Flow Statement', desc: 'Indirect method: operating, investing, financing', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: false },
+    { key: 'cf_direct', label: 'Cash Flow (Direct)', desc: 'Direct method: cash from customers, to suppliers/employees', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: false },
     { key: 'equity_changes', label: 'Changes in Equity', desc: 'Beginning + activity = ending per equity account', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: false },
     { key: 'equity_table', label: 'Equity Table', desc: 'Current holders, ownership %, invested, distributions', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
     { key: 'debt', label: 'Debt Schedule', desc: 'All loans, lines of credit: balance, rate, maturity, payment', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
@@ -462,6 +464,8 @@ function ReportContent({ reportKey, sd, ed, locIds, basis, viewMode, compareMode
       return <BsReport ed={ed} locIds={locIds} onDrill={onDrill} compareMode={compareMode} />;
     case 'cf':
       return <CashFlowReport startDate={sd} endDate={ed} locationId={locIds.split(',')[0] || 'all'} />;
+    case 'cf_direct':
+      return <CashFlowDirectReport startDate={sd} endDate={ed} locIds={locIds} />;
     case 'tb':
       return <TbReport locIds={locIds} onDrill={onDrill} />;
     case 'ap_aging':

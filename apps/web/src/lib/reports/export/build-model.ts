@@ -163,6 +163,39 @@ export function buildCashFlow(data: CFData, meta: ExportMeta): StatementModel {
   return base(meta, 'Cash Flow Statement', [{ key: 'amount', label: 'Amount', money: true }], rows, period);
 }
 
+// ─── Cash Flow (direct) ──────────────────────────────────────────────────────
+interface CFDirectLine { key: string; label: string; section: string; amountCents: number }
+interface CFDirectSection { lines: CFDirectLine[]; totalCents: number }
+interface CFDirectData {
+  period?: { startDate: string; endDate: string };
+  operating: CFDirectSection;
+  investing: CFDirectSection;
+  financing: CFDirectSection;
+  netChangeCents: number;
+  beginningCashCents: number;
+  endingCashCents: number;
+}
+
+export function buildCashFlowDirect(data: CFDirectData, meta: ExportMeta): StatementModel {
+  const rows: StmtRow[] = [];
+  const section = (label: string, s: CFDirectSection, totalLabel: string) => {
+    rows.push({ kind: 'section', label, values: [null] });
+    for (const l of s.lines) rows.push({ kind: 'account', label: l.label, values: [l.amountCents], indent: 1 });
+    rows.push({ kind: 'subtotal', label: totalLabel, values: [s.totalCents] });
+    rows.push({ kind: 'spacer', values: [null] });
+  };
+  section('Operating Activities', data.operating, 'Net Cash from Operating Activities');
+  section('Investing Activities', data.investing, 'Net Cash from Investing Activities');
+  section('Financing Activities', data.financing, 'Net Cash from Financing Activities');
+
+  rows.push({ kind: 'total', label: 'Net Change in Cash', values: [data.netChangeCents] });
+  rows.push({ kind: 'account', label: 'Beginning Cash', values: [data.beginningCashCents] });
+  rows.push({ kind: 'total', label: 'Ending Cash', values: [data.endingCashCents] });
+
+  const period = data.period ? `${data.period.startDate} to ${data.period.endDate}` : undefined;
+  return base(meta, 'Cash Flow Statement (Direct Method)', [{ key: 'amount', label: 'Amount', money: true }], rows, period);
+}
+
 // ─── Trial Balance ───────────────────────────────────────────────────────────
 interface TBRow { account_number: string; account_name: string; account_type?: string; total_debits: number | string; total_credits: number | string; net_balance: number | string }
 
@@ -229,6 +262,7 @@ const STATEMENT_BUILDERS: Record<string, { url: string; build: ExportSpec['build
   pnl_class:{ url: '/api/reports/income-statement', build: buildIncomeStatement, query: periodQuery },
   bs:       { url: '/api/reports/balance-sheet',    build: buildBalanceSheet,    query: (c) => clean({ as_of_date: c.ed, location_ids: c.locIds }) },
   cf:       { url: '/api/reports/cash-flow',        build: buildCashFlow,        query: (c) => clean({ start_date: c.sd, end_date: c.ed, location_ids: c.locIds }) },
+  cf_direct:{ url: '/api/reports/cash-flow-direct', build: buildCashFlowDirect,  query: (c) => clean({ start_date: c.sd, end_date: c.ed, location_ids: c.locIds }) },
   tb:       { url: '/api/gl/trial-balance',         build: buildTrialBalance,    query: (c) => clean({ location_ids: c.locIds }) },
 };
 
