@@ -4,7 +4,6 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler, apiQueryHandler } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
-import { createAdminSupabase } from '@/lib/supabase/server';
 import {
   listWorkflows,
   createWorkflow,
@@ -19,8 +18,9 @@ import { ALL_ROLES } from '@/lib/rbac/permissions';
  *
  * Defining an approval workflow is a financial-CONTROL action (it governs how money
  * documents route for approval), so both verbs sit behind settings_system:edit. Reads
- * and writes use the admin client with an explicit org filter (the workflow tables are
- * org-isolated by RLS; the service also filters by org_id). NEEDS CENTRAL: a dedicated
+ * and writes use the RLS-scoped client (ctx.supabase); the migration-092 workflow tables
+ * are org-isolated by `org_id = get_org_id()`, so the database enforces tenancy (the
+ * service also keeps an explicit org_id filter). NEEDS CENTRAL: a dedicated
  * `approvals`/`workflows` permission + a nav entry (reserved spine) — see report.
  */
 
@@ -28,7 +28,7 @@ export const GET = apiQueryHandler(null, async (_params, ctx) => {
   if (!ctx.orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
   const guard = await requirePermission(ctx.userId, 'settings_system', 'edit');
   if (!guard.ok) return guard.response;
-  const workflows = await listWorkflows(createAdminSupabase(), ctx.orgId);
+  const workflows = await listWorkflows(ctx.supabase, ctx.orgId);
   return NextResponse.json({ workflows });
 });
 
@@ -54,7 +54,7 @@ export const POST = apiHandler(createSchema, async (body, ctx) => {
   if (!guard.ok) return guard.response;
 
   try {
-    const workflow = await createWorkflow(createAdminSupabase(), ctx.orgId, {
+    const workflow = await createWorkflow(ctx.supabase, ctx.orgId, {
       name: body.name,
       docType: body.docType as (typeof WORKFLOW_DOC_TYPES)[number],
       description: body.description ?? null,

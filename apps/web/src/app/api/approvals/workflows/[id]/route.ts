@@ -4,7 +4,6 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
-import { createAdminSupabase } from '@/lib/supabase/server';
 import { setWorkflowActive } from '@/lib/approvals/service';
 
 /**
@@ -28,6 +27,6 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: 'Validation failed', code: 'VALIDATION_ERROR' }, { status: 422 });
   }
 
-  await setWorkflowActive(createAdminSupabase(), ctx.orgId, params.id, parsed.data.active);
+  await setWorkflowActive(ctx.supabase, ctx.orgId, params.id, parsed.data.active);
   return NextResponse.json({ ok: true });
 }

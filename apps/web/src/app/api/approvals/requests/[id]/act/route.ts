@@ -3,7 +3,6 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
-import { createAdminSupabase } from '@/lib/supabase/server';
 import { actOnRequest } from '@/lib/approvals/service';
 import { WorkflowError } from '@/lib/approvals/workflow';
 
@@ -37,7 +36,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   try {
-    const result = await actOnRequest(createAdminSupabase(), ctx.orgId, {
+    const result = await actOnRequest(ctx.supabase, ctx.orgId, {
       requestId: params.id,
       actorUserId: ctx.userId,
       decision: parsed.data.decision,

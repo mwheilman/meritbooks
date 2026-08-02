@@ -3,7 +3,6 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler, apiQueryHandler } from '@/lib/api-handler';
-import { createAdminSupabase } from '@/lib/supabase/server';
 import {
   submitToWorkflow,
   listRequests,
@@ -21,7 +20,8 @@ import { WORKFLOW_DOC_TYPES } from '@/lib/approvals/workflow';
  *
  * Any authenticated org member may submit their own document for approval and read the
  * chain state; the ACT endpoint is where role-at-step authority is enforced. Uses the
- * admin client with an explicit org filter (tables are RLS org-isolated).
+ * RLS-scoped client (ctx.supabase): the migration-092 tables are org-isolated by
+ * `org_id = get_org_id()`, so the database enforces tenancy even if a filter is dropped.
  */
 
 const querySchema = z.object({
@@ -32,11 +32,10 @@ const querySchema = z.object({
 
 export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
   if (!ctx.orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
-  const admin = createAdminSupabase();
 
   if (params.doc_type && params.doc_id) {
     const request = await getOpenRequestForDoc(
-      admin,
+      ctx.supabase,
       ctx.orgId,
       params.doc_type as (typeof WORKFLOW_DOC_TYPES)[number],
       params.doc_id
@@ -44,7 +43,7 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
     return NextResponse.json({ request });
   }
 
-  const requests = await listRequests(admin, ctx.orgId, {
+  const requests = await listRequests(ctx.supabase, ctx.orgId, {
     status: params.status,
     docType: params.doc_type as (typeof WORKFLOW_DOC_TYPES)[number] | undefined,
   });
@@ -60,7 +59,7 @@ const submitSchema = z.object({
 
 export const POST = apiHandler(submitSchema, async (body, ctx) => {
   if (!ctx.orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
-  const result = await submitToWorkflow(createAdminSupabase(), ctx.orgId, {
+  const result = await submitToWorkflow(ctx.supabase, ctx.orgId, {
     docType: body.docType as (typeof WORKFLOW_DOC_TYPES)[number],
     docId: body.docId,
     amountCents: body.amountCents,

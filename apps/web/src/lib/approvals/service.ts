@@ -6,10 +6,18 @@
  * request, and records approve/reject decisions — delegating EVERY authorization and
  * state-transition decision to the pure engine in ./workflow.ts (which is unit-tested).
  *
- * Called with the ADMIN client + an explicit, VERIFIED org_id (the same convention the
- * money-movement approval engine uses — SoD/role checks must read the core identity
- * spine, which RLS shields from the user client). Every function filters by org_id, so
- * tenant isolation holds even on the admin client.
+ * TENANT ISOLATION (defense in depth): the migration-092 workflow tables
+ * (approval_workflows, approval_workflow_steps, approval_requests, approval_request_actions)
+ * are all in `public` with RLS `org_id = get_org_id()`. Every function here takes the
+ * RLS-SCOPED client (`ctx.supabase`, running as the user) for those tables, so the
+ * DATABASE refuses another tenant's rows even if an .eq('org_id', ...) filter is ever
+ * dropped. We ALSO keep the explicit org filter on each query as belt-and-suspenders.
+ *
+ * TWO operations genuinely need the RLS-BYPASSING admin client and build it internally
+ * (never taken from the route): (1) `resolveActorRole` reads the `core` identity spine
+ * (core.users/memberships/employees), which RLS shields from the user client; (2) the
+ * money bridge `approveSingle` → `canApprove`, which also reads `core`. Both carry an
+ * explicit, VERIFIED org_id filter and mirror the money-movement engine's convention.
  *
  * BRIDGE (no forked posting): when a request's FINAL step approves and the request is
  * linked to an existing single-approval row (public.approvals, migration 042), the
@@ -18,6 +26,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAdminSupabase } from '@/lib/supabase/server';
 import { normalizeMembershipRole } from '@/lib/rbac/role-normalize';
 import type { UserRole } from '@/lib/rbac/permissions';
 import { approve as approveSingle } from '@/lib/money/approvals';
@@ -130,11 +139,11 @@ function toStepDef(r: StepRow): WorkflowStepDef {
 
 /** The single ACTIVE workflow (with steps) for a doc_type, or null (degrade-safe). */
 export async function getActiveWorkflow(
-  adminDb: SupabaseClient,
+  db: SupabaseClient,
   orgId: string,
   docType: WorkflowDocType
 ): Promise<WorkflowDef | null> {
-  const { data: wf, error } = await adminDb
+  const { data: wf, error } = await db
     .from('approval_workflows')
     .select('*')
     .eq('org_id', orgId)
@@ -143,7 +152,7 @@ export async function getActiveWorkflow(
     .maybeSingle();
   if (error || !wf) return null;
   const row = wf as WorkflowRow;
-  const { data: stepRows } = await adminDb
+  const { data: stepRows } = await db
     .from('approval_workflow_steps')
     .select('*')
     .eq('org_id', orgId)
@@ -153,8 +162,8 @@ export async function getActiveWorkflow(
   return { id: row.id, docType: row.doc_type, name: row.name, active: row.active, steps };
 }
 
-export async function listWorkflows(adminDb: SupabaseClient, orgId: string): Promise<WorkflowView[]> {
-  const { data: wfs, error } = await adminDb
+export async function listWorkflows(db: SupabaseClient, orgId: string): Promise<WorkflowView[]> {
+  const { data: wfs, error } = await db
     .from('approval_workflows')
     .select('*')
     .eq('org_id', orgId)
@@ -162,7 +171,7 @@ export async function listWorkflows(adminDb: SupabaseClient, orgId: string): Pro
     .order('created_at', { ascending: false });
   if (error || !wfs) return [];
   const rows = wfs as WorkflowRow[];
-  const { data: allSteps } = await adminDb
+  const { data: allSteps } = await db
     .from('approval_workflow_steps')
     .select('*')
     .eq('org_id', orgId);
@@ -208,7 +217,7 @@ export class WorkflowValidationError extends Error {
  * guarantor; this keeps the app from racing into it).
  */
 export async function createWorkflow(
-  adminDb: SupabaseClient,
+  db: SupabaseClient,
   orgId: string,
   input: CreateWorkflowInput
 ): Promise<WorkflowView> {
@@ -217,7 +226,7 @@ export async function createWorkflow(
 
   const active = input.active ?? true;
   if (active) {
-    await adminDb
+    await db
       .from('approval_workflows')
       .update({ active: false })
       .eq('org_id', orgId)
@@ -225,7 +234,7 @@ export async function createWorkflow(
       .eq('active', true);
   }
 
-  const { data: wf, error } = await adminDb
+  const { data: wf, error } = await db
     .from('approval_workflows')
     .insert({
       org_id: orgId,
@@ -249,7 +258,7 @@ export async function createWorkflow(
     approver_role: s.approverRole,
     require_distinct: s.requireDistinct,
   }));
-  const { error: stepErr } = await adminDb.from('approval_workflow_steps').insert(stepInserts);
+  const { error: stepErr } = await db.from('approval_workflow_steps').insert(stepInserts);
   if (stepErr) throw new Error(stepErr.message);
 
   return {
@@ -265,20 +274,20 @@ export async function createWorkflow(
 
 /** Activate/deactivate a workflow, keeping the one-active-per-doc_type invariant. */
 export async function setWorkflowActive(
-  adminDb: SupabaseClient,
+  db: SupabaseClient,
   orgId: string,
   workflowId: string,
   active: boolean
 ): Promise<void> {
   if (active) {
-    const { data: wf } = await adminDb
+    const { data: wf } = await db
       .from('approval_workflows')
       .select('doc_type')
       .eq('org_id', orgId)
       .eq('id', workflowId)
       .maybeSingle();
     if (wf) {
-      await adminDb
+      await db
         .from('approval_workflows')
         .update({ active: false })
         .eq('org_id', orgId)
@@ -286,7 +295,7 @@ export async function setWorkflowActive(
         .eq('active', true);
     }
   }
-  const { error } = await adminDb
+  const { error } = await db
     .from('approval_workflows')
     .update({ active })
     .eq('org_id', orgId)
@@ -314,7 +323,7 @@ export interface SubmitResult {
  * second open request for the same doc).
  */
 export async function submitToWorkflow(
-  adminDb: SupabaseClient,
+  db: SupabaseClient,
   orgId: string,
   input: {
     docType: WorkflowDocType;
@@ -324,7 +333,7 @@ export async function submitToWorkflow(
     linkApprovalId?: string | null;
   }
 ): Promise<SubmitResult> {
-  const wf = await getActiveWorkflow(adminDb, orgId, input.docType);
+  const wf = await getActiveWorkflow(db, orgId, input.docType);
   if (!wf) return { entered: false, reason: 'NO_ACTIVE_WORKFLOW' };
 
   const steps = applicableSteps(wf, input.amountCents);
@@ -332,7 +341,7 @@ export async function submitToWorkflow(
   if (first === null) return { entered: false, reason: 'NO_APPLICABLE_STEPS' };
 
   // Reuse an already-open request for this doc (idempotent submit).
-  const { data: existing } = await adminDb
+  const { data: existing } = await db
     .from('approval_requests')
     .select('*')
     .eq('org_id', orgId)
@@ -341,10 +350,10 @@ export async function submitToWorkflow(
     .eq('status', 'PENDING')
     .maybeSingle();
   if (existing) {
-    return { entered: true, request: await hydrateRequest(adminDb, orgId, existing as RequestRow, wf) };
+    return { entered: true, request: await hydrateRequest(db, orgId, existing as RequestRow, wf) };
   }
 
-  const { data: req, error } = await adminDb
+  const { data: req, error } = await db
     .from('approval_requests')
     .insert({
       org_id: orgId,
@@ -360,11 +369,11 @@ export async function submitToWorkflow(
     .select('*')
     .single();
   if (error) throw new Error(error.message);
-  return { entered: true, request: await hydrateRequest(adminDb, orgId, req as RequestRow, wf) };
+  return { entered: true, request: await hydrateRequest(db, orgId, req as RequestRow, wf) };
 }
 
 async function hydrateRequest(
-  adminDb: SupabaseClient,
+  db: SupabaseClient,
   orgId: string,
   row: RequestRow,
   wf?: WorkflowDef | null
@@ -372,9 +381,9 @@ async function hydrateRequest(
   const workflow =
     wf && wf.id === row.workflow_id
       ? wf
-      : await getWorkflowById(adminDb, orgId, row.workflow_id);
+      : await getWorkflowById(db, orgId, row.workflow_id);
   const steps = workflow ? applicableSteps(workflow, Number(row.amount_cents)) : [];
-  const { data: actionRows } = await adminDb
+  const { data: actionRows } = await db
     .from('approval_request_actions')
     .select('*')
     .eq('org_id', orgId)
@@ -405,11 +414,11 @@ async function hydrateRequest(
 }
 
 async function getWorkflowById(
-  adminDb: SupabaseClient,
+  db: SupabaseClient,
   orgId: string,
   workflowId: string
 ): Promise<WorkflowDef | null> {
-  const { data: wf } = await adminDb
+  const { data: wf } = await db
     .from('approval_workflows')
     .select('*')
     .eq('org_id', orgId)
@@ -417,7 +426,7 @@ async function getWorkflowById(
     .maybeSingle();
   if (!wf) return null;
   const row = wf as WorkflowRow;
-  const { data: stepRows } = await adminDb
+  const { data: stepRows } = await db
     .from('approval_workflow_steps')
     .select('*')
     .eq('org_id', orgId)
@@ -434,28 +443,28 @@ async function getWorkflowById(
 
 /** Read a single request (with steps + audit trail). */
 export async function getRequest(
-  adminDb: SupabaseClient,
+  db: SupabaseClient,
   orgId: string,
   requestId: string
 ): Promise<RequestView | null> {
-  const { data: req } = await adminDb
+  const { data: req } = await db
     .from('approval_requests')
     .select('*')
     .eq('org_id', orgId)
     .eq('id', requestId)
     .maybeSingle();
   if (!req) return null;
-  return hydrateRequest(adminDb, orgId, req as RequestRow);
+  return hydrateRequest(db, orgId, req as RequestRow);
 }
 
 /** Read the open (PENDING) request for a document, if any. */
 export async function getOpenRequestForDoc(
-  adminDb: SupabaseClient,
+  db: SupabaseClient,
   orgId: string,
   docType: WorkflowDocType,
   docId: string
 ): Promise<RequestView | null> {
-  const { data: req } = await adminDb
+  const { data: req } = await db
     .from('approval_requests')
     .select('*')
     .eq('org_id', orgId)
@@ -464,20 +473,20 @@ export async function getOpenRequestForDoc(
     .eq('status', 'PENDING')
     .maybeSingle();
   if (!req) return null;
-  return hydrateRequest(adminDb, orgId, req as RequestRow);
+  return hydrateRequest(db, orgId, req as RequestRow);
 }
 
 export async function listRequests(
-  adminDb: SupabaseClient,
+  db: SupabaseClient,
   orgId: string,
   opts?: { status?: RequestStatus; docType?: WorkflowDocType }
 ): Promise<RequestView[]> {
-  let q = adminDb.from('approval_requests').select('*').eq('org_id', orgId);
+  let q = db.from('approval_requests').select('*').eq('org_id', orgId);
   if (opts?.status) q = q.eq('status', opts.status);
   if (opts?.docType) q = q.eq('doc_type', opts.docType);
   const { data } = await q.order('created_at', { ascending: false }).limit(200);
   const rows = (data ?? []) as RequestRow[];
-  return Promise.all(rows.map((r) => hydrateRequest(adminDb, orgId, r)));
+  return Promise.all(rows.map((r) => hydrateRequest(db, orgId, r)));
 }
 
 /**
@@ -485,21 +494,27 @@ export async function listRequests(
  * core.memberships), falling back to core.employees while memberships backfill —
  * mirroring canApprove()'s resolution so the two authz paths can't disagree. Returns
  * null (fail-closed) on any error/absence/unrecognized role.
+ *
+ * ADMIN CLIENT REQUIRED: the `core` identity spine is deliberately NOT exposed to the
+ * user (RLS) client, so this reads it via the service-role client built here. Isolation
+ * still holds because every query carries an explicit, VERIFIED org_id filter and the
+ * caller-supplied `clerkUserId`. Kept self-contained (builds its own admin client) so it
+ * can never be handed an RLS client that silently returns nothing from `core`.
  */
 export async function resolveActorRole(
-  adminDb: SupabaseClient,
   orgId: string,
   clerkUserId: string
 ): Promise<UserRole | null> {
+  const admin = createAdminSupabase();
   try {
-    const { data: user } = await adminDb
+    const { data: user } = await admin
       .schema('core')
       .from('users')
       .select('id')
       .eq('clerk_user_id', clerkUserId)
       .maybeSingle();
     if (user?.id) {
-      const { data: membership } = await adminDb
+      const { data: membership } = await admin
         .schema('core')
         .from('memberships')
         .select('role')
@@ -510,7 +525,7 @@ export async function resolveActorRole(
       if (membership?.role) {
         // Deactivated employee guard (mirrors canApprove H1): a stale-active membership
         // must not retain authority for a deactivated employee.
-        const { data: emp } = await adminDb
+        const { data: emp } = await admin
           .schema('core')
           .from('employees')
           .select('is_active')
@@ -522,7 +537,7 @@ export async function resolveActorRole(
       }
     }
     // Transitional fallback: core.employees.role while memberships backfill.
-    const { data: emp } = await adminDb
+    const { data: emp } = await admin
       .schema('core')
       .from('employees')
       .select('role')
@@ -559,11 +574,11 @@ export interface ActResult {
  * audited); it is surfaced as `bridgeError` for the caller to handle.
  */
 export async function actOnRequest(
-  adminDb: SupabaseClient,
+  db: SupabaseClient,
   orgId: string,
   input: { requestId: string; actorUserId: string; decision: ApprovalDecision; reason?: string | null }
 ): Promise<ActResult> {
-  const { data: reqRow } = await adminDb
+  const { data: reqRow } = await db
     .from('approval_requests')
     .select('*')
     .eq('org_id', orgId)
@@ -572,11 +587,11 @@ export async function actOnRequest(
   if (!reqRow) throw new Error('Approval request not found');
   const row = reqRow as RequestRow;
 
-  const workflow = await getWorkflowById(adminDb, orgId, row.workflow_id);
+  const workflow = await getWorkflowById(db, orgId, row.workflow_id);
   if (!workflow) throw new Error('Workflow definition not found');
   const steps = applicableSteps(workflow, Number(row.amount_cents));
 
-  const { data: actionRows } = await adminDb
+  const { data: actionRows } = await db
     .from('approval_request_actions')
     .select('*')
     .eq('org_id', orgId)
@@ -588,7 +603,7 @@ export async function actOnRequest(
     decision: a.decision,
   }));
 
-  const role = await resolveActorRole(adminDb, orgId, input.actorUserId);
+  const role = await resolveActorRole(orgId, input.actorUserId);
 
   // Pure decision — throws WorkflowError on any violation (caller maps to 4xx).
   const result = advanceChain(
@@ -598,7 +613,7 @@ export async function actOnRequest(
   );
 
   // Append the audit action.
-  const { error: actErr } = await adminDb.from('approval_request_actions').insert({
+  const { error: actErr } = await db.from('approval_request_actions').insert({
     org_id: orgId,
     request_id: row.id,
     step_order: row.current_step,
@@ -611,7 +626,7 @@ export async function actOnRequest(
   // Advance/close the request.
   const patch: Record<string, unknown> = { status: result.status, current_step: result.currentStep };
   if (result.completed) patch.decided_at = new Date().toISOString();
-  const { error: updErr } = await adminDb
+  const { error: updErr } = await db
     .from('approval_requests')
     .update(patch)
     .eq('org_id', orgId)
@@ -619,16 +634,19 @@ export async function actOnRequest(
   if (updErr) throw new Error(updErr.message);
 
   // Bridge: on full approval with a linked single-approval, fire the existing gate.
+  // ADMIN CLIENT REQUIRED: approveSingle → canApprove reads the `core` identity spine
+  // (RLS-shielded from the user client). It carries its own explicit org_id filter and
+  // preparer!=approver check, so isolation and SoD are preserved on the admin path.
   let bridgeError: string | undefined;
   if (result.approvedComplete && row.link_approval_id) {
     try {
-      await approveSingle(adminDb, orgId, row.link_approval_id, input.actorUserId);
+      await approveSingle(createAdminSupabase(), orgId, row.link_approval_id, input.actorUserId);
     } catch (e) {
       bridgeError = e instanceof Error ? e.message : 'Linked approval bridge failed';
     }
   }
 
-  const request = await hydrateRequest(adminDb, orgId, { ...row, status: result.status, current_step: result.currentStep }, workflow);
+  const request = await hydrateRequest(db, orgId, { ...row, status: result.status, current_step: result.currentStep }, workflow);
   return { request, completed: result.completed, approvedComplete: result.approvedComplete, bridgeError };
 }
 
