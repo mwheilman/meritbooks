@@ -12,6 +12,7 @@ import {
   ArrowDown,
   CalendarClock,
   EyeOff,
+  UploadCloud,
 } from 'lucide-react';
 import { PageHeader, EmptyState } from '@/components/ui';
 import { useQuery } from '@/hooks';
@@ -21,6 +22,7 @@ import { fmtDate, type RunListItem, type RunsResponse, type RunStatus } from './
 import { RunStatusBadge } from './run-status';
 import { RunWizard } from './run-wizard';
 import { RunDetailDrawer } from './run-detail-drawer';
+import { ImportRegister } from './register-import';
 
 type SortKey = 'periodEnd' | 'payDate' | 'status' | 'grossCents' | 'netCents' | 'employeeCount';
 type SortDir = 'asc' | 'desc';
@@ -37,6 +39,7 @@ export function PayrollClient() {
   const runs = useMemo(() => data?.runs ?? [], [data]);
 
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'payDate', dir: 'desc' });
 
@@ -81,12 +84,21 @@ export function PayrollClient() {
         description="Run payroll every pay period: draft the roster, preview the provider-computed gross-to-net, approve under separation of duties, then release the funding. Every run posts a balanced, job-costed entry to the ledger."
         actions={
           canCreate ? (
-            <button
-              onClick={() => setWizardOpen(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
-            >
-              <Play size={14} /> Run payroll
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setImportOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-slate-700 text-slate-200 hover:bg-slate-800 transition-colors"
+                title="For payroll run outside MeritBooks: drop the processor's register and post a balanced payroll entry"
+              >
+                <UploadCloud size={14} /> Import payroll register (PDF)
+              </button>
+              <button
+                onClick={() => setWizardOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
+              >
+                <Play size={14} /> Run payroll
+              </button>
+            </div>
           ) : undefined
         }
       />
@@ -162,6 +174,14 @@ export function PayrollClient() {
             setWizardOpen(false);
             setDetailId(id);
           }}
+        />
+      )}
+
+      {importOpen && (
+        <ImportRegister
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          onPosted={() => refetch()}
         />
       )}
 
