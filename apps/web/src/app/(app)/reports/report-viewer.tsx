@@ -417,9 +417,9 @@ export function ReportViewer() {
               )}
             </div>
 
-            {(reportKey === 'pnl' || reportKey === 'pnl_dept' || reportKey === 'pnl_class' || reportKey === 'bs') && (
+            {(reportKey === 'pnl' || reportKey === 'pnl_dept' || reportKey === 'pnl_class' || reportKey === 'bs' || reportKey === 'cf') && (
               <NarrativePanel
-                report={reportKey === 'bs' ? 'balance_sheet' : 'pnl'}
+                report={reportKey === 'bs' ? 'balance_sheet' : reportKey === 'cf' ? 'cash_flow' : 'pnl'}
                 sd={sd}
                 ed={ed}
                 locIds={locIdsParam}

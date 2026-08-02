@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { Loader2, AlertCircle, Calendar, TrendingUp, TrendingDown } from 'lucide-react';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
+import { NarrativePanel } from '../reports/narrative-panel';
 
 const PNL_TYPES = ['REVENUE', 'COGS', 'OPEX', 'OTHER'];
 const TYPE_LABEL: Record<string, string> = {
@@ -74,6 +75,15 @@ export function BudgetVsActual({ locationId, fiscalYear, departmentId }: {
           {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m} {fiscalYear} (P{i + 1})</option>)}
         </select>
       </div>
+
+      {/* AI budget-variance narrative — explains where actuals beat or missed budget. */}
+      <NarrativePanel
+        report="budget_vs_actual"
+        locIds={locationId || ''}
+        fiscalYear={fiscalYear}
+        periodNumber={period}
+        departmentId={departmentId}
+      />
 
       {isLoading ? (
         <div className="card p-12 flex items-center justify-center"><Loader2 size={24} className="animate-spin text-slate-500" /></div>

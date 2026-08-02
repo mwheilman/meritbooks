@@ -26,7 +26,7 @@ interface NarrativeResponse {
   meta: { report: string; source: 'ai' | 'deterministic'; model: string | null; decisionId: string | null; budgetState: string; message?: string | null };
 }
 
-type ReportKind = 'pnl' | 'balance_sheet';
+type ReportKind = 'pnl' | 'balance_sheet' | 'cash_flow' | 'budget_vs_actual';
 type Compare = 'prior_period' | 'prior_year';
 
 // ── Compact date helpers (self-contained) ─────────────────────────────────────
@@ -64,26 +64,48 @@ function priorAsOf(ed: string, mode: Compare): string {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export function NarrativePanel({ report, sd, ed, locIds, basis }: {
+export function NarrativePanel({ report, sd = '', ed = '', locIds = '', basis = 'accrual', fiscalYear, periodNumber = 0, departmentId }: {
   report: ReportKind;
-  sd: string;
-  ed: string;
-  locIds: string;
-  basis: string;
+  sd?: string;
+  ed?: string;
+  locIds?: string;
+  basis?: string;
+  /** Budget-vs-actual scope (only used when report === 'budget_vs_actual'). */
+  fiscalYear?: number;
+  periodNumber?: number; // 0 = full year, 1..12 = fiscal month
+  departmentId?: string | null;
 }) {
   const [compare, setCompare] = useState<Compare>('prior_period');
   const { mutate, data, error, isLoading, reset } = useMutation<Record<string, unknown>, NarrativeResponse>('/api/reports/narrative');
 
-  // The periods change → clear any stale narrative so we never show one for the wrong window.
-  const periodKeyId = `${report}|${sd}|${ed}|${locIds}|${basis}|${compare}`;
+  const isBudget = report === 'budget_vs_actual';
+
+  // The scope changes → clear any stale narrative so we never show one for the wrong window.
+  const periodKeyId = `${report}|${sd}|${ed}|${locIds}|${basis}|${compare}|${fiscalYear}|${periodNumber}|${departmentId ?? ''}`;
   useEffect(() => { reset(); }, [periodKeyId, reset]);
 
-  const ready = report === 'balance_sheet' ? !!ed : !!sd && !!ed;
+  const ready = isBudget
+    ? !!fiscalYear
+    : report === 'balance_sheet' ? !!ed : !!sd && !!ed;
 
   const buildRequest = useCallback((): Record<string, unknown> | null => {
     const dimensions: Record<string, string> = {};
     if (locIds) dimensions.location_ids = locIds;
     if (basis && basis !== 'accrual') dimensions.basis = basis;
+
+    if (report === 'budget_vs_actual') {
+      if (!fiscalYear) return null;
+      if (departmentId) dimensions.department_id = departmentId;
+      const scope = periodNumber >= 1 ? `FY ${fiscalYear} · P${periodNumber}` : `FY ${fiscalYear}`;
+      return {
+        report: 'budget_vs_actual',
+        fiscal_year: fiscalYear,
+        period_number: periodNumber,
+        periodA: { label: scope },
+        periodB: { label: 'budget' },
+        dimensions,
+      };
+    }
     if (report === 'balance_sheet') {
       if (!ed) return null;
       return {
@@ -93,22 +115,29 @@ export function NarrativePanel({ report, sd, ed, locIds, basis }: {
         dimensions,
       };
     }
+    // pnl and cash_flow share the same period/comparison shape.
     if (!sd || !ed) return null;
     const prior = compare === 'prior_year' ? derivePriorYear(sd, ed) : derivePriorPeriod(sd, ed);
     return {
-      report: 'pnl',
+      report,
       periodA: { start_date: sd, end_date: ed, label: `${sd} to ${ed}` },
       periodB: { start_date: prior.s, end_date: prior.e, label: `${prior.s} to ${prior.e}` },
       dimensions,
     };
-  }, [report, sd, ed, locIds, basis, compare]);
+  }, [report, sd, ed, locIds, basis, compare, fiscalYear, periodNumber, departmentId]);
 
   const generate = useCallback(() => {
     const req = buildRequest();
     if (req) mutate(req);
   }, [buildRequest, mutate]);
 
-  const compareLabel = compare === 'prior_year' ? 'prior year' : 'prior period';
+  const compareLabel = isBudget ? 'budget' : compare === 'prior_year' ? 'prior year' : 'prior period';
+  const title = isBudget ? 'Budget Variance Narrative' : report === 'cash_flow' ? 'Cash Flow Narrative' : 'Flux Narrative';
+  const subtitle = isBudget
+    ? 'AI explains where actuals beat or missed budget — figures computed in the ledger, not by the model'
+    : report === 'cash_flow'
+      ? 'AI explains the biggest sources and uses of cash vs prior period — figures computed in the ledger, not by the model'
+      : `AI explains the movement vs ${compareLabel} — figures computed in the ledger, not by the model`;
 
   return (
     <div className="mb-5 rounded-xl border border-indigo-500/20 bg-indigo-500/[0.04] overflow-hidden">
@@ -119,20 +148,22 @@ export function NarrativePanel({ report, sd, ed, locIds, basis }: {
             <Sparkles size={14} className="text-indigo-400" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-white">Flux Narrative</p>
-            <p className="text-[11px] text-indigo-300/60">AI explains the movement vs {compareLabel} — figures computed in the ledger, not by the model</p>
+            <p className="text-sm font-semibold text-white">{title}</p>
+            <p className="text-[11px] text-indigo-300/60">{subtitle}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <select
-            value={compare}
-            onChange={(e) => setCompare(e.target.value as Compare)}
-            className="px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-indigo-500/40"
-            aria-label="Comparison basis"
-          >
-            <option value="prior_period">vs Prior Period</option>
-            <option value="prior_year">vs Prior Year</option>
-          </select>
+          {!isBudget && (
+            <select
+              value={compare}
+              onChange={(e) => setCompare(e.target.value as Compare)}
+              className="px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-indigo-500/40"
+              aria-label="Comparison basis"
+            >
+              <option value="prior_period">vs Prior Period</option>
+              <option value="prior_year">vs Prior Year</option>
+            </select>
+          )}
           <button
             onClick={generate}
             disabled={!ready || isLoading}
