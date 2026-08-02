@@ -28,6 +28,23 @@ describe('rulesClassify (fast verb pre-filter)', () => {
     expect(c?.intent).toBe('P2_CATEGORIZE');
   });
 
+  it('routes an "enter a bill from …" to PROCESSING P3 (not a journal entry)', () => {
+    const c = rulesClassify('enter a $1,200 bill from Acme due next Friday');
+    expect(c?.lane).toBe('PROCESSING');
+    expect(c?.intent).toBe('P3_CREATE_BILL');
+  });
+
+  it('routes a leading "invoice <customer>" to PROCESSING P4', () => {
+    const c = rulesClassify('invoice Coho $5k for June retainer');
+    expect(c?.lane).toBe('PROCESSING');
+    expect(c?.intent).toBe('P4_CREATE_INVOICE');
+  });
+
+  it('routes "create an invoice for X" to PROCESSING P4', () => {
+    const c = rulesClassify('create an invoice for Heartland for the Phase 2 milestone');
+    expect(c?.intent).toBe('P4_CREATE_INVOICE');
+  });
+
   it('routes a why/what question to ANALYTICAL', () => {
     const c = rulesClassify('why did OpEx jump in July?');
     expect(c?.lane).toBe('ANALYTICAL');
@@ -95,6 +112,17 @@ describe('buildRouteResult (lane mapping)', () => {
   it('PROCESSING P2 → categorize directive', () => {
     const r = buildRouteResult(mk({ intent: 'P2_CATEGORIZE' }), 'code the last 5 charges', { degraded: false });
     expect(r.processing?.kind).toBe('P2_CATEGORIZE');
+  });
+
+  it('PROCESSING P3 → create-bill directive', () => {
+    const r = buildRouteResult(mk({ intent: 'P3_CREATE_BILL' }), 'enter a $1,200 bill from Acme', { degraded: false });
+    expect(r.processing?.kind).toBe('P3_CREATE_BILL');
+    expect(r.processing?.description).toBe('enter a $1,200 bill from Acme');
+  });
+
+  it('PROCESSING P4 → create-invoice directive', () => {
+    const r = buildRouteResult(mk({ intent: 'P4_CREATE_INVOICE' }), 'invoice Coho $5k', { degraded: false });
+    expect(r.processing?.kind).toBe('P4_CREATE_INVOICE');
   });
 
   it('ANALYTICAL → forwards the prompt for /api/nl/query', () => {

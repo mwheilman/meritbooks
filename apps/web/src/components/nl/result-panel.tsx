@@ -12,6 +12,9 @@
 import { useRouter } from 'next/navigation';
 import { ArrowRight, HelpCircle, Compass, Ban, Info } from 'lucide-react';
 import { ProcessingPanel } from './processing-panel';
+import { CategorizePanel } from './categorize-panel';
+import { BillDraftPanel } from './bill-draft-panel';
+import { InvoiceDraftPanel } from './invoice-draft-panel';
 import { AnalyticalPanel } from './analytical-panel';
 import type { NlRouteResult } from './intent';
 
@@ -44,8 +47,23 @@ export function ResultPanel({ result, onDone }: { result: NlRouteResult; onDone:
   }
 
   switch (result.lane) {
-    case 'PROCESSING':
-      return <ProcessingPanel description={result.processing?.description ?? ''} onPosted={onDone} />;
+    case 'PROCESSING': {
+      // Each processing intent drives its own propose→approve panel, and each
+      // panel reuses an EXISTING gated route (no parallel posting path).
+      const kind = result.processing?.kind ?? 'P1_RECORD_JE';
+      const description = result.processing?.description ?? '';
+      switch (kind) {
+        case 'P2_CATEGORIZE':
+          return <CategorizePanel prompt={description} onDone={onDone} />;
+        case 'P3_CREATE_BILL':
+          return <BillDraftPanel description={description} onDone={onDone} />;
+        case 'P4_CREATE_INVOICE':
+          return <InvoiceDraftPanel description={description} onDone={onDone} />;
+        case 'P1_RECORD_JE':
+        default:
+          return <ProcessingPanel description={description} onPosted={onDone} />;
+      }
+    }
 
     case 'ANALYTICAL':
       return <AnalyticalPanel prompt={result.analytical?.prompt ?? ''} />;

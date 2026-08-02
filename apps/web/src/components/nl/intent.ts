@@ -15,8 +15,19 @@
 
 export type NlLane = 'PROCESSING' | 'ANALYTICAL' | 'NAVIGATION' | 'ABSTAIN';
 
-/** Processing intents wired in the MVP (P1/P2). Others are future waves. */
-export type ProcessingKind = 'P1_RECORD_JE' | 'P2_CATEGORIZE';
+/**
+ * Processing intents wired to the bar. Each drives a propose→approve panel that
+ * reuses an EXISTING gated route — the copilot adds no parallel posting path:
+ *   P1 → /api/journal-entries/compose then /api/journal-entries (post)
+ *   P2 → /api/nl/categorize (propose) then /api/bank-feed/approve (post)
+ *   P3 → /api/nl/draft-bill (propose) then /api/bills/create
+ *   P4 → /api/nl/draft-invoice (propose) then /api/invoices (create)
+ */
+export type ProcessingKind =
+  | 'P1_RECORD_JE'
+  | 'P2_CATEGORIZE'
+  | 'P3_CREATE_BILL'
+  | 'P4_CREATE_INVOICE';
 
 export interface NlContext {
   surface?: string;
@@ -113,6 +124,12 @@ export const NAV_CATALOG: Array<{ label: string; href: string; keywords: string[
 const NAV_VERBS = /\b(go to|take me to|open|navigate to|show me the|jump to|bring up)\b/i;
 const PROCESSING_VERBS = /\b(record|accrue|book|post a|enter (a|the)|create (a|an|the)|draft (a|an|the)|reclass|reclassify|journalize|write off|write-off|invoice|bill)\b/i;
 const CATEGORIZE_VERBS = /\b(categorize|categorise|code (the|these|those|last)|recode)\b/i;
+// AP bill (P3): "enter a $1,800 bill from Ace Plumbing due Aug 30". Anchored on a
+// create verb + the word "bill" + "from" (a vendor) so it never eats an AR ask.
+const BILL_VERBS = /^\s*(enter|create|add|record|book|draft|new|log)\b.*\bbill\b.*\bfrom\b/i;
+// AR invoice (P4): "invoice Coho $5k for June retainer" / "create an invoice for X".
+const INVOICE_VERBS = /^\s*invoice\b/i;
+const INVOICE_CREATE_VERBS = /^\s*(create|draft|send|new|raise|generate)\b.*\binvoice\b/i;
 const ANALYTICAL_VERBS = /\b(why|how much|what(?:'s| is| are| was)|how many|show me (?:the )?(?:p&l|balance|cash|revenue|expenses|profit)|trend|compare|budget vs|variance|forecast|runway|dscr|margin)\b/i;
 const CONTROL_VERBS = /\b(check for duplicate|find duplicate|anomalous|run a control|any anomalies)\b/i;
 
@@ -174,6 +191,17 @@ export function rulesClassify(prompt: string, _context?: NlContext): Classificat
     return { lane: 'PROCESSING', intent: 'P2_CATEGORIZE', entities: {}, confidence: 0.82, clarifyingQuestion: null };
   }
 
+  // AP bill draft — checked BEFORE the generic P1 block ("enter …" would otherwise
+  // classify as a journal entry).
+  if (BILL_VERBS.test(trimmed)) {
+    return { lane: 'PROCESSING', intent: 'P3_CREATE_BILL', entities: {}, confidence: 0.82, clarifyingQuestion: null };
+  }
+
+  // AR invoice draft — a leading "invoice …" or an explicit create+invoice.
+  if (INVOICE_VERBS.test(trimmed) || INVOICE_CREATE_VERBS.test(trimmed)) {
+    return { lane: 'PROCESSING', intent: 'P4_CREATE_INVOICE', entities: {}, confidence: 0.82, clarifyingQuestion: null };
+  }
+
   // Analytical question shapes take precedence over the generic processing verbs
   // (e.g. "what bills are due" is a query, not "enter a bill").
   if (ANALYTICAL_VERBS.test(trimmed) && !/^\s*(record|accrue|book|post|enter|create|draft|reclass)/i.test(trimmed)) {
@@ -198,6 +226,8 @@ LANES & INTENTS:
 - PROCESSING (create/record/categorize — produces a PROPOSAL a human approves; never posts):
   - P1_RECORD_JE: record/accrue/book/reclass a journal entry ("accrue $4,200 rent for Coho for July").
   - P2_CATEGORIZE: code/categorize bank-feed or card charges ("code the last 5 Home Depot charges to job materials").
+  - P3_CREATE_BILL: enter a vendor BILL / accounts-payable ("enter a $1,800 bill from Ace Plumbing due Aug 30"). A bill is money we OWE a vendor; the entities.vendor is the payee.
+  - P4_CREATE_INVOICE: raise a customer INVOICE / accounts-receivable ("invoice Coho $5k for the June retainer"). An invoice is money a CUSTOMER owes us; entities.customer is the payer. "invoice <name>" is ALWAYS P4, never P3.
 - ANALYTICAL (read-only ledger question — answered later by a constrained query):
   - A_QUERY: any question about the numbers ("why did OpEx jump?", "cash on hand for Heartland", "P&L for Coho Q2", "budget vs actual", "will we have cash in 8 weeks").
 - NAVIGATION (get somewhere / how-to):
@@ -278,7 +308,14 @@ export function buildRouteResult(
 
   switch (classification.lane) {
     case 'PROCESSING': {
-      const kind: ProcessingKind = classification.intent === 'P2_CATEGORIZE' ? 'P2_CATEGORIZE' : 'P1_RECORD_JE';
+      const kind: ProcessingKind =
+        classification.intent === 'P2_CATEGORIZE'
+          ? 'P2_CATEGORIZE'
+          : classification.intent === 'P3_CREATE_BILL'
+            ? 'P3_CREATE_BILL'
+            : classification.intent === 'P4_CREATE_INVOICE'
+              ? 'P4_CREATE_INVOICE'
+              : 'P1_RECORD_JE';
       return { ...base, processing: { kind, description: prompt.trim() } };
     }
     case 'ANALYTICAL':

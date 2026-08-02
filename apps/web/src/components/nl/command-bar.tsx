@@ -21,11 +21,12 @@ import type { NlRouteResult } from './intent';
 
 const SUGGESTIONS: string[] = [
   'Accrue $4,200 of rent for July',
-  'Why did OpEx jump last month?',
-  'Open the bank feed',
-  'What is cash on hand right now?',
+  'Enter a $1,200 bill from Acme due next Friday',
+  'Invoice Coho $5k for the June retainer',
   'Code the last 5 Home Depot charges to job materials',
-  'Take me to invoices',
+  'Why did OpEx jump last month?',
+  'What is cash on hand right now?',
+  'Open the bank feed',
 ];
 
 type Phase =
