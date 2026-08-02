@@ -4,7 +4,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 import { generateYear, setPeriodStatus, type PeriodStatus } from '@/lib/services/fiscal-periods';
 import { logHumanAction } from '@/lib/trust/action-log';
-import { gatherReconciliationCloseStatus } from '@/lib/services/reconciliation-close-gate';
+import { gatherHardCloseGate } from '@/lib/close/readiness';
 
 interface PeriodRow { id: string; location_id: string; period_year: number; period_month: number; status: PeriodStatus; closed_at: string | null }
 
@@ -120,12 +120,15 @@ export async function PATCH(request: Request) {
   const parsed = statusSchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid request' }, { status: 422 });
 
-  // ── Must-tie-to-close gate (FPB Bank Reconciliation D10.1) ─────────────────────
-  // A period cannot HARD_CLOSE while a bank account is un-reconciled or a
-  // reconciliation carries a non-zero (unexplained) variance. Additive: it only
+  // ── Hard-close gate (close orchestration) ──────────────────────────────────────
+  // A period may HARD_CLOSE only when every BLOCKING task in the standard close task
+  // graph passes (bank feeds coded, reconciliations tied, AR/AP subledgers tie to
+  // GL, material uncategorized activity cleared, accruals/prepaids/depreciation
+  // posted, reviewed). This EXTENDS the must-tie bank-reconciliation gate — that
+  // check is now one task inside the graph, not a separate fork. Additive: it only
   // gates the transition INTO HARD_CLOSE, and an authorized user may override with
-  // an explicit reason (which is audited alongside the blockers).
-  let recGateBlockers: { accountName: string; reason: string; kind: string }[] = [];
+  // an explicit reason (audited alongside the named blockers).
+  let closeGateBlockers: { key: string; label: string; reason: string }[] = [];
   if (parsed.data.status === 'HARD_CLOSE') {
     const { data: gatePeriod } = await supabase
       .from('fiscal_periods')
@@ -137,34 +140,29 @@ export async function PATCH(request: Request) {
     // Only gate a real transition (not a HARD_CLOSE→HARD_CLOSE no-op).
     if (gp && gp.status !== 'HARD_CLOSE') {
       try {
-        const gate = await gatherReconciliationCloseStatus(supabase, {
+        const { gate } = await gatherHardCloseGate(supabase, orgId, {
           locationId: gp.location_id,
           fiscalPeriodId: gp.id,
+          overrideReason: parsed.data.reason ?? null,
         });
         if (!gate.pass) {
-          recGateBlockers = gate.blockers.map((b) => ({
-            accountName: b.accountName,
-            reason: b.reason,
-            kind: b.kind,
-          }));
-          const hasReason = !!parsed.data.reason && parsed.data.reason.trim().length >= 4;
-          if (!hasReason) {
-            return NextResponse.json(
-              {
-                error: 'Reconciliation must tie before this period can be hard-closed',
-                code: 'RECONCILIATION_GATE',
-                blockers: recGateBlockers,
-              },
-              { status: 409 },
-            );
-          }
+          return NextResponse.json(
+            {
+              error: 'This period is not ready to hard-close — resolve the blocking tasks or provide an override reason',
+              code: 'CLOSE_GATE',
+              blockers: gate.blockers,
+            },
+            { status: 409 },
+          );
         }
+        // Passed only because of an override ⇒ record which blockers were bypassed.
+        if (gate.overridden) closeGateBlockers = gate.blockers;
       } catch {
         // A gate read failure must not silently allow a close — fail closed unless
         // an explicit override reason was supplied.
         if (!parsed.data.reason || parsed.data.reason.trim().length < 4) {
           return NextResponse.json(
-            { error: 'Could not verify reconciliation status; provide an override reason to force the close', code: 'RECONCILIATION_GATE' },
+            { error: 'Could not verify close readiness; provide an override reason to force the close', code: 'CLOSE_GATE' },
             { status: 409 },
           );
         }
@@ -191,12 +189,12 @@ export async function PATCH(request: Request) {
         : `Set period to ${parsed.data.status}`,
       locationId: p?.location_id ?? null,
       metadata:
-        recGateBlockers.length > 0
-          ? { reconciliationGateOverridden: true, blockers: recGateBlockers, reason: parsed.data.reason ?? null }
+        closeGateBlockers.length > 0
+          ? { closeGateOverridden: true, blockers: closeGateBlockers, reason: parsed.data.reason ?? null }
           : undefined,
     });
 
-    return NextResponse.json({ ok: true, reconciliationGateOverridden: recGateBlockers.length > 0 });
+    return NextResponse.json({ ok: true, closeGateOverridden: closeGateBlockers.length > 0 });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed' }, { status: 500 });
   }
