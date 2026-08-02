@@ -53,8 +53,12 @@ export interface DebtPostResult {
   alreadyPosted: boolean;
 }
 
+// PostgREST aliases map the EXISTING migration-008 columns to the DebtInstrumentRow
+// field names (name -> loan_name, gl_liability_account_id -> liability_account_id,
+// gl_interest_account_id -> interest_expense_account_id).
 const INSTRUMENT_COLS =
-  'id, org_id, location_id, loan_name, liability_account_id, interest_expense_account_id, interest_payable_account_id, cash_account_id';
+  'id, org_id, location_id, loan_name:name, liability_account_id:gl_liability_account_id, ' +
+  'interest_expense_account_id:gl_interest_account_id, interest_payable_account_id, cash_account_id';
 
 async function loadInstrument(db: DB, orgId: string, instrumentId: string): Promise<DebtInstrumentRow> {
   const { data, error } = await db

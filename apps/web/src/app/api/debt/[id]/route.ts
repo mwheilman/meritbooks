@@ -14,12 +14,16 @@ import { requireAuthedContext } from '@/lib/api-handler';
  * Dynamic-param routes can't use apiHandler (it only forwards the request).
  */
 
+// PostgREST aliases map the EXISTING migration-008 columns to the feature field
+// names the API + UI expect (name -> loan_name, original_amount_cents ->
+// principal_cents, monthly_payment_cents -> payment_cents, gl_liability_account_id ->
+// liability_account_id, gl_interest_account_id -> interest_expense_account_id).
 const INSTRUMENT_COLS =
-  'id, location_id, loan_name, lender, facility, principal_cents, interest_rate, rate_type, ' +
-  'amortization_method, payment_frequency, compounding, term_periods, payment_cents, ' +
-  'origination_date, maturity_date, status, loan_covenant_id, liability_account_id, ' +
-  'interest_expense_account_id, interest_payable_account_id, cash_account_id, notes, ' +
-  'created_at, updated_at';
+  'id, location_id, loan_name:name, lender, facility, principal_cents:original_amount_cents, ' +
+  'interest_rate, rate_type, amortization_method, payment_frequency, compounding, term_periods, ' +
+  'payment_cents:monthly_payment_cents, origination_date, maturity_date, status, loan_covenant_id, ' +
+  'liability_account_id:gl_liability_account_id, interest_expense_account_id:gl_interest_account_id, ' +
+  'interest_payable_account_id, cash_account_id, notes, created_at, updated_at';
 
 interface Params {
   params: { id: string };

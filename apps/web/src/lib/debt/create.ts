@@ -43,26 +43,34 @@ export async function createDebtInstrument(
 
   const { data: inst, error: instError } = await db
     .from('debt_instruments')
+    // Column names reconcile onto the EXISTING migration-008 table:
+    //   loan_name -> name, principal_cents -> original_amount_cents,
+    //   payment_cents -> monthly_payment_cents,
+    //   liability_account_id -> gl_liability_account_id,
+    //   interest_expense_account_id -> gl_interest_account_id.
+    // current_balance_cents opens at the original principal; instrument_type is left
+    // to its column default ('OTHER') since the feature doesn't collect it.
     .insert({
       org_id: orgId,
       location_id: input.location_id ?? null,
-      loan_name: input.loan_name,
+      name: input.loan_name,
       lender: input.lender ?? null,
       facility: input.facility ?? null,
-      principal_cents: input.principal_cents,
+      original_amount_cents: input.principal_cents,
+      current_balance_cents: input.principal_cents,
       interest_rate: input.interest_rate,
       rate_type: input.rate_type,
       amortization_method: input.amortization_method,
       payment_frequency: input.payment_frequency,
       compounding: input.compounding,
       term_periods: input.term_periods ?? schedule.periods,
-      payment_cents: input.payment_cents ?? schedule.regularPaymentCents,
+      monthly_payment_cents: input.payment_cents ?? schedule.regularPaymentCents,
       origination_date: input.origination_date ?? null,
       maturity_date: input.maturity_date ?? null,
       status: input.status,
       loan_covenant_id: input.loan_covenant_id ?? null,
-      liability_account_id: input.liability_account_id ?? null,
-      interest_expense_account_id: input.interest_expense_account_id ?? null,
+      gl_liability_account_id: input.liability_account_id ?? null,
+      gl_interest_account_id: input.interest_expense_account_id ?? null,
       interest_payable_account_id: input.interest_payable_account_id ?? null,
       cash_account_id: input.cash_account_id ?? null,
       notes: input.notes ?? null,
