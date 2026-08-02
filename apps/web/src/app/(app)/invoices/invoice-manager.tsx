@@ -7,11 +7,12 @@ import { formatMoney } from '@meritbooks/shared';
 import { InvoiceDrawer } from './invoice-drawer';
 import { CreditMemosPanel, type CreditMemoPrefill } from './credit-memos-panel';
 import { RecurringPanel } from './recurring-panel';
+import { ContractImport } from './contract-import';
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { InvoicePeek } from './invoice-peek';
 import {
   FileText, Plus, DollarSign, Clock, AlertCircle, Search, ChevronDown,
-  Check, Send, CreditCard, X, Loader2, Building2, ChevronRight, TrendingUp } from 'lucide-react';
+  Check, Send, CreditCard, X, Loader2, Building2, ChevronRight, TrendingUp, Sparkles } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -53,10 +54,12 @@ interface LocationOption {
 
 function InvoiceList({
   onCreateClick,
+  onImportClick,
   onPaymentClick,
   onRowClick,
 }: {
   onCreateClick: () => void;
+  onImportClick: () => void;
   onPaymentClick: (inv: InvoiceRow) => void;
   onRowClick: (id: string) => void;
 }) {
@@ -115,6 +118,13 @@ function InvoiceList({
             <TrendingUp className="w-4 h-4 text-indigo-400" />
             Collections &amp; DSO
           </Link>
+          <button
+            onClick={onImportClick}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Sparkles className="w-4 h-4 text-indigo-400" />
+            Import from contract
+          </button>
           <button
             onClick={onCreateClick}
             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
@@ -661,6 +671,7 @@ function PaymentDialog({
 
 export function InvoiceManager() {
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [paymentInvoice, setPaymentInvoice] = useState<InvoiceRow | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [view, setView] = useState<'invoices' | 'credit-memos' | 'recurring'>('invoices');
@@ -683,6 +694,7 @@ export function InvoiceManager() {
   const refresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
     setShowCreate(false);
+    setShowImport(false);
     setPaymentInvoice(null);
   }, []);
 
@@ -707,6 +719,7 @@ export function InvoiceManager() {
         <>
           <InvoiceList
             onCreateClick={() => setShowCreate(true)}
+            onImportClick={() => setShowImport(true)}
             onPaymentClick={(inv) => setPaymentInvoice(inv)}
             onRowClick={(id) => setDetailId(id)}
           />
@@ -720,6 +733,7 @@ export function InvoiceManager() {
             }}
           />
           {showCreate && <CreateInvoiceForm onClose={() => setShowCreate(false)} onCreated={refresh} />}
+          {showImport && <ContractImport onClose={() => setShowImport(false)} onCreated={refresh} />}
           {paymentInvoice && <PaymentDialog invoice={paymentInvoice} onClose={() => setPaymentInvoice(null)} onPaid={refresh} />}
         </>
       ) : view === 'recurring' ? (
