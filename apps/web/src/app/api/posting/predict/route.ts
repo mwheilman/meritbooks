@@ -6,6 +6,7 @@ import { createAdminSupabase } from '@/lib/supabase/server';
 import { resolveOrgId } from '@/lib/posting/lifecycle';
 import { predictException } from '@/lib/posting/exception-predictor';
 import { suggestExceptionViaGateway } from '@/lib/services/exception-ai';
+import { getAnthropicApiKey } from '@/lib/ai/gateway';
 
 /**
  * POST /api/posting/predict
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
 
     // AI path: metered gateway predictor with decision-log + deterministic fallback.
     if (body.ai === true) {
-      const apiKey = process.env.ANTHROPIC_API_KEY;
+      const apiKey = getAnthropicApiKey();
       if (!apiKey) {
         // No key configured — degrade gracefully to the deterministic verdict.
         const prediction = await predictException(supabase, {
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
         return NextResponse.json({
           ok: true,
           source: 'deterministic',
-          note: 'AI is not configured (ANTHROPIC_API_KEY missing) — returned the rule-based verdict.',
+          note: 'AI is not configured (Anthropic key missing) — returned the rule-based verdict.',
           prediction,
         });
       }

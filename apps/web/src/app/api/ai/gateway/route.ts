@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { runAiGateway, SERVICE_TOKEN_HEADER, type GatewayRequest } from '@meritbooks/core-ai';
 
 /**
@@ -114,7 +115,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
+  const apiKey = getAnthropicApiKey() ?? '';
   const gwReq: GatewayRequest = {
     tenant_id: tenantId,
     user_id: userId,

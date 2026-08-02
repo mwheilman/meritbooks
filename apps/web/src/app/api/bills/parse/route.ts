@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { parseInvoiceWithAI } from '@/lib/services/bill-parser';
 
 export async function POST(request: Request) {
@@ -9,11 +10,11 @@ export async function POST(request: Request) {
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
-  // Get API key from environment
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  // Anthropic key — obtained solely to inject into the Core AI gateway.
+  const apiKey = getAnthropicApiKey();
   if (!apiKey) {
     return NextResponse.json({
-      error: 'ANTHROPIC_API_KEY not configured. Add it to your environment variables.',
+      error: 'AI is not configured (Anthropic key missing). Add it to your environment variables.',
       code: 'NO_API_KEY',
     }, { status: 500 });
   }
@@ -55,8 +56,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to read uploaded file', code: 'UPLOAD_ERROR' }, { status: 400 });
   }
 
-  // Parse with Claude
-  const parseResult = await parseInvoiceWithAI(base64Data, mediaType, apiKey);
+  // Parse via the metered Core AI gateway (org-scoped).
+  const parseResult = await parseInvoiceWithAI(supabase, apiKey, {
+    orgId,
+    userId,
+    base64Data,
+    mediaType,
+  });
 
   if (!parseResult.success || !parseResult.data) {
     return NextResponse.json({

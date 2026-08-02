@@ -7,6 +7,7 @@ export const maxDuration = 300;
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
+import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { suggestCategory, CATEGORIZE_MODEL, type CoaRow } from '@/lib/services/categorization';
 import { scoreToTier, getTierPolicy } from '@/lib/trust/score-tier';
 
@@ -83,8 +84,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Provide transaction_id, transaction_ids, or all_pending: true' }, { status: 422 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: 'AI is not configured (ANTHROPIC_API_KEY missing).' }, { status: 503 });
+  const apiKey = getAnthropicApiKey();
+  if (!apiKey) return NextResponse.json({ error: 'AI is not configured (Anthropic key missing).' }, { status: 503 });
 
   // Preload the COA + vendors + departments ONCE for the whole batch. Previously
   // suggestCategory re-fetched all three on every transaction (48x redundant

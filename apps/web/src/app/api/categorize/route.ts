@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
+import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { suggestCategory } from '@/lib/services/categorization';
 
 const schema = z.object({
@@ -21,8 +22,8 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: 'Validation failed' }, { status: 422 });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: 'AI is not configured (ANTHROPIC_API_KEY missing).' }, { status: 503 });
+  const apiKey = getAnthropicApiKey();
+  if (!apiKey) return NextResponse.json({ error: 'AI is not configured (Anthropic key missing).' }, { status: 503 });
 
   const res = await suggestCategory(supabase, apiKey, {
     orgId,

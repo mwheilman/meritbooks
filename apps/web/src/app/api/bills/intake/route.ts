@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { intakeInvoice } from '@/lib/ap/intake';
 
 /**
@@ -23,11 +24,12 @@ export async function POST(request: Request) {
   const guard = await requirePermission(userId, 'bills', 'create');
   if (!guard.ok) return guard.response;
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  // Anthropic key — obtained solely to inject into the Core AI gateway.
+  const apiKey = getAnthropicApiKey();
   if (!apiKey) {
     return NextResponse.json(
       {
-        error: 'ANTHROPIC_API_KEY not configured. Add it to your environment variables.',
+        error: 'AI is not configured (Anthropic key missing). Add it to your environment variables.',
         code: 'NO_API_KEY',
       },
       { status: 500 },
@@ -93,6 +95,7 @@ export async function POST(request: Request) {
     base64,
     mediaType,
     fileName,
+    userId,
   });
 
   if (!result.ok) {

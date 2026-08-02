@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { composeViaGateway, type ComposerAccount } from '@/lib/services/je-composer';
 import { z } from 'zod';
 
@@ -26,9 +27,9 @@ export async function POST(request: Request) {
   const composeGuard = await requirePermission(userId, 'journal_entries', 'create');
   if (!composeGuard.ok) return composeGuard.response;
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = getAnthropicApiKey();
   if (!apiKey) {
-    return NextResponse.json({ error: 'ANTHROPIC_API_KEY is not configured.', code: 'NO_API_KEY' }, { status: 503 });
+    return NextResponse.json({ error: 'AI is not configured (Anthropic key missing).', code: 'NO_API_KEY' }, { status: 503 });
   }
 
   let body: z.infer<typeof schema>;

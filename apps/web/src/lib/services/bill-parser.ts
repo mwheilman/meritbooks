@@ -1,8 +1,18 @@
 /**
  * AI Bill Parsing Service
- * Sends invoice documents (PDF or image) to Claude API for extraction.
- * Returns structured bill data with confidence scores per field.
+ * Sends invoice documents (PDF or image) through the Core AI gateway for
+ * extraction. Returns structured bill data with confidence scores per field.
+ *
+ * Canon §2: the model call routes through `runAiGateway` (metered to
+ * core.ai_usage_log, tenant budget enforced across the combined suite) — never a
+ * direct Anthropic call. The gateway is org-scoped via `tenant_id = orgId`.
  */
+
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { runAiGateway } from '@meritbooks/core-ai';
+
+export const BILL_PARSE_MODEL = 'claude-sonnet-4-20250514';
+export const BILL_PARSE_FEATURE = 'BILL_PARSE';
 
 interface ParsedBillLine {
   description: string;
@@ -37,6 +47,15 @@ export interface ParseResult {
   success: boolean;
   data?: ParsedBill;
   error?: string;
+  /** True when the gateway blocked the call for budget/entitlement reasons. */
+  budgetBlocked?: boolean;
+}
+
+/** Pull the first text block out of the gateway result (Anthropic content array). */
+function extractText(result: unknown): string | null {
+  if (!Array.isArray(result)) return null;
+  const b = (result as Array<{ type?: string; text?: string }>).find((c) => c?.type === 'text');
+  return b?.text ?? null;
 }
 
 const EXTRACTION_PROMPT = `You are an expert accounting clerk. Extract all data from this vendor invoice/bill.
@@ -83,14 +102,21 @@ Rules:
 - If payment terms say "Net 30" and bill date is visible, calculate the due date`;
 
 /**
- * Parse an invoice document using Claude API.
- * Accepts base64-encoded PDF or image data.
+ * Parse an invoice document through the Core AI gateway.
+ * Accepts base64-encoded PDF or image data. The model call is metered and budget-
+ * capped per tenant; `orgId` scopes it (gateway `tenant_id`), `userId` attributes it.
  */
 export async function parseInvoiceWithAI(
-  base64Data: string,
-  mediaType: string,
-  apiKey: string
+  supabase: SupabaseClient,
+  apiKey: string,
+  args: {
+    orgId: string;
+    userId?: string | null;
+    base64Data: string;
+    mediaType: string;
+  },
 ): Promise<ParseResult> {
+  const { orgId, userId, base64Data, mediaType } = args;
   const startTime = Date.now();
 
   const isPdf = mediaType === 'application/pdf';
@@ -105,42 +131,37 @@ export async function parseInvoiceWithAI(
     : { type: 'image' as const, source: { type: 'base64' as const, media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: base64Data } };
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              contentBlock,
-              { type: 'text', text: EXTRACTION_PROMPT },
-            ],
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error('[bill-parse] Claude API error:', response.status, errBody);
-      return { success: false, error: `Claude API returned ${response.status}` };
+    let gw;
+    try {
+      gw = await runAiGateway(
+        { supabase, anthropicApiKey: apiKey },
+        {
+          tenant_id: orgId,
+          user_id: userId ?? null,
+          module: 'BOOKS',
+          feature: BILL_PARSE_FEATURE,
+          model: BILL_PARSE_MODEL,
+          messages: [
+            { role: 'user', content: [contentBlock, { type: 'text', text: EXTRACTION_PROMPT }] },
+          ],
+          max_tokens: 4000,
+        },
+      );
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Gateway error' };
     }
 
-    const result = await response.json();
-    const textContent = result.content?.find((c: { type: string }) => c.type === 'text');
-    if (!textContent?.text) {
+    if (gw.status === 'blocked' || gw.result == null) {
+      return { success: false, error: gw.message ?? 'AI request blocked', budgetBlocked: gw.status === 'blocked' };
+    }
+
+    const text = extractText(gw.result);
+    if (!text) {
       return { success: false, error: 'Claude returned empty response' };
     }
 
     // Parse JSON — strip any markdown fencing
-    const jsonStr = textContent.text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const jsonStr = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(jsonStr);
@@ -177,7 +198,7 @@ export async function parseInvoiceWithAI(
       currency: String(parsed.currency ?? 'USD'),
       lines,
       rawText: String(parsed.notes ?? ''),
-      aiModel: 'claude-sonnet-4-20250514',
+      aiModel: gw.model_used ?? BILL_PARSE_MODEL,
       parseTimeMs: Date.now() - startTime,
     };
 

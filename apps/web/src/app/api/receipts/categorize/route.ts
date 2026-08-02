@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
+import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { suggestCategory } from '@/lib/services/categorization';
 
 /**
@@ -57,8 +58,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Provide receipt_id or all_pending: true' }, { status: 422 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: 'AI is not configured (ANTHROPIC_API_KEY missing).' }, { status: 503 });
+  const apiKey = getAnthropicApiKey();
+  if (!apiKey) return NextResponse.json({ error: 'AI is not configured (Anthropic key missing).' }, { status: 503 });
 
   let query = supabase
     .from('receipts')

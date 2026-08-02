@@ -30,6 +30,8 @@ export interface IntakeInvoiceArgs {
   base64: string;
   mediaType: string;
   fileName: string;
+  /** Clerk user id for gateway attribution; null for system/service runs. */
+  userId?: string | null;
 }
 
 export type IntakeResult =
@@ -110,10 +112,15 @@ export async function intakeInvoice(
   supabase: SupabaseClient,
   args: IntakeInvoiceArgs,
 ): Promise<IntakeResult> {
-  const { orgId, locationId, apiKey, base64, mediaType, fileName } = args;
+  const { orgId, locationId, apiKey, base64, mediaType, fileName, userId } = args;
 
-  // ── 1. Parse ──────────────────────────────────────────────
-  const parseResult = await parseInvoiceWithAI(base64, mediaType, apiKey);
+  // ── 1. Parse (metered Core AI gateway, org-scoped) ────────
+  const parseResult = await parseInvoiceWithAI(supabase, apiKey, {
+    orgId,
+    userId: userId ?? null,
+    base64Data: base64,
+    mediaType,
+  });
   if (!parseResult.success || !parseResult.data) {
     return { ok: false, error: parseResult.error ?? 'Failed to parse invoice' };
   }
