@@ -26,6 +26,10 @@ type SearchType =
   | 'journal_entry' | 'bank_transaction' | 'invoice' | 'bill'
   | 'vendor' | 'customer' | 'account';
 
+interface HeadlineSegment {
+  text: string;
+  hit: boolean;
+}
 interface SearchResult {
   type: SearchType;
   id: string;
@@ -35,6 +39,7 @@ interface SearchResult {
   date: string | null;
   href: string;
   snippet: string;
+  headline: HeadlineSegment[] | null;
   score: number;
 }
 interface SearchGroup {
@@ -57,6 +62,16 @@ const TYPE_ICON: Record<SearchType, React.ComponentType<{ size?: number; classNa
   vendor: Truck,
   customer: Users,
   account: Wallet,
+};
+
+const TYPE_LABEL: Record<SearchType, string> = {
+  journal_entry: 'Journal entries',
+  bank_transaction: 'Bank transactions',
+  invoice: 'Invoices',
+  bill: 'Bills',
+  vendor: 'Vendors',
+  customer: 'Customers',
+  account: 'GL accounts',
 };
 
 const SUGGESTIONS = [
@@ -87,6 +102,7 @@ function SearchInner() {
   const initial = params.get('q') ?? '';
   const [query, setQuery] = useState(initial);
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
+  const [typeFilter, setTypeFilter] = useState<SearchType | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -99,6 +115,7 @@ function SearchInner() {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    setTypeFilter(null);
     setPhase({ kind: 'loading' });
     try {
       const res = await fetch('/api/search', {
@@ -130,14 +147,20 @@ function SearchInner() {
     inputRef.current?.focus();
   }, []);
 
-  const grouped = phase.kind === 'done' ? phase.data.groups : [];
+  const allGroups = phase.kind === 'done' ? phase.data.groups : [];
   const total = phase.kind === 'done' ? phase.data.total : 0;
   const aiAssisted = phase.kind === 'done' ? phase.data.aiAssisted : false;
 
+  // Selecting a type chip narrows the visible groups to that one lane.
+  const grouped = useMemo(
+    () => (typeFilter ? allGroups.filter((g) => g.type === typeFilter) : allGroups),
+    [allGroups, typeFilter],
+  );
+
   const headerCount = useMemo(() => {
     if (phase.kind !== 'done') return null;
-    return `${total} result${total === 1 ? '' : 's'} across ${grouped.length} categor${grouped.length === 1 ? 'y' : 'ies'}`;
-  }, [phase.kind, total, grouped.length]);
+    return `${total} result${total === 1 ? '' : 's'} across ${allGroups.length} categor${allGroups.length === 1 ? 'y' : 'ies'}`;
+  }, [phase.kind, total, allGroups.length]);
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8" style={{ fontFamily: 'var(--font-jakarta, inherit)' }}>
@@ -214,6 +237,42 @@ function SearchInner() {
         {phase.kind === 'done' && total > 0 && (
           <div className="space-y-6">
             {headerCount && <p className="text-xs text-slate-500">{headerCount}</p>}
+
+            {/* Type filter — narrow to a single lane. */}
+            {allGroups.length > 1 && (
+              <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filter by type">
+                <button
+                  onClick={() => setTypeFilter(null)}
+                  aria-pressed={typeFilter === null}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                    typeFilter === null
+                      ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
+                      : 'border-slate-700 bg-slate-800/60 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  All ({total})
+                </button>
+                {allGroups.map((g) => {
+                  const Icon = TYPE_ICON[g.type];
+                  const active = typeFilter === g.type;
+                  return (
+                    <button
+                      key={g.type}
+                      onClick={() => setTypeFilter(active ? null : g.type)}
+                      aria-pressed={active}
+                      className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
+                        active
+                          ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
+                          : 'border-slate-700 bg-slate-800/60 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Icon size={12} /> {TYPE_LABEL[g.type]} ({g.results.length})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {grouped.map((group) => {
               const Icon = TYPE_ICON[group.type];
               return (
@@ -230,7 +289,9 @@ function SearchInner() {
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium text-white">{r.title}</p>
                             <p className="truncate text-xs text-slate-400">{r.subtitle}</p>
-                            {r.snippet && <p className="mt-0.5 truncate text-xs text-slate-500">{r.snippet}</p>}
+                            {r.headline && r.headline.length > 0
+                              ? <Headline segments={r.headline} />
+                              : r.snippet && <p className="mt-0.5 truncate text-xs text-slate-500">{r.snippet}</p>}
                           </div>
                           {r.amountCents != null && (
                             <span className="shrink-0 text-sm text-slate-300" style={{ fontFamily: 'var(--font-jetbrains, monospace)' }}>
@@ -249,6 +310,23 @@ function SearchInner() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Grounded "why it matched" snippet. Each segment is quoted verbatim from the
+ * record's own text; matched spans render highlighted so the user can see the
+ * evidence for the hit (the ts_headline-equivalent, computed server-side).
+ */
+function Headline({ segments }: { segments: HeadlineSegment[] }) {
+  return (
+    <p className="mt-0.5 truncate text-xs text-slate-500">
+      {segments.map((s, i) =>
+        s.hit
+          ? <mark key={i} className="rounded bg-emerald-500/20 px-0.5 text-emerald-200">{s.text}</mark>
+          : <span key={i}>{s.text}</span>,
+      )}
+    </p>
   );
 }
 

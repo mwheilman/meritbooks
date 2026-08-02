@@ -83,6 +83,17 @@ export interface FieldMatch {
   kind: FieldKind;
 }
 
+/**
+ * A span of a grounded result "headline" — the ts_headline-equivalent snippet
+ * that shows the user *why* a record matched. `hit: true` marks a matched span
+ * (rendered highlighted). Built deterministically from the record's own text, so
+ * nothing here is fabricated — it always quotes real field content.
+ */
+export interface HeadlineSegment {
+  text: string;
+  hit: boolean;
+}
+
 /** A single ranked search hit returned to the client. */
 export interface SearchResult {
   type: SearchType;
@@ -94,6 +105,8 @@ export interface SearchResult {
   date: string | null;
   href: string;
   snippet: string;
+  /** Highlighted "why it matched" snippet, or null when no field span matched. */
+  headline: HeadlineSegment[] | null;
   score: number;
 }
 

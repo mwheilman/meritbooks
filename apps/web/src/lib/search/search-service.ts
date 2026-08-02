@@ -17,9 +17,11 @@ import { fetchCoreMap } from '../stitch-core';
 import { computeScore, deriveFieldMatches, type FieldValue } from './rank';
 import { hasNoConstraint, isAmbiguous, parseQuery } from './parse';
 import { aiParseIntent } from './ai-parse';
+import { buildHeadline, buildTsQuery, headlineNeedles } from './fts';
 import {
   ALL_SEARCH_TYPES,
   TYPE_LABELS,
+  type HeadlineSegment,
   type ParsedQuery,
   type SearchGroup,
   type SearchResponse,
@@ -105,28 +107,106 @@ function score(
   return computeScore({ fieldMatches: fm, date, amountCents, amounts: parsed.amounts, nowMs });
 }
 
+/** Grounded "why it matched" headline from a row's own text fields. */
+function headline(parsed: ParsedQuery, ...values: Array<string | null | undefined>): HeadlineSegment[] | null {
+  return buildHeadline(values, headlineNeedles(parsed));
+}
+
+// ── Lexical retrieval with degrade-safe fallback ──────────────────────────────
+//
+// Each text-bearing retriever runs a GIN-indexed `search_tsv` full-text filter
+// (real retrieval: stemming, prefix, phrase). If the `search_tsv` columns do not
+// exist yet — i.e. the app is live but the migration has not been applied —
+// PostgREST returns an "column does not exist" error and we transparently retry
+// the SAME query with the legacy `.ilike` substring filter, so search never
+// breaks in the window between this commit and the migration.
+
+type TextMode = 'fts' | 'ilike';
+
+interface QueryError {
+  code?: string;
+  message?: string;
+}
+
+/** True when an error means "no `search_tsv` yet / bad tsquery" → fall back. */
+function isFtsFallbackError(error: QueryError | null): boolean {
+  if (!error) return false;
+  const code = error.code ?? '';
+  // undefined_column / undefined_function / undefined_table / syntax_error.
+  if (code === '42703' || code === '42883' || code === '42P01' || code === '42601') return true;
+  const msg = (error.message ?? '').toLowerCase();
+  return (
+    msg.includes('search_tsv') ||
+    msg.includes('tsquery') ||
+    msg.includes('text search') ||
+    msg.includes('does not exist')
+  );
+}
+
+/** Filter builder surface used to attach the text predicate in either mode. */
+interface TextFilterable<T> {
+  or(filter: string): T;
+  textSearch(
+    column: string,
+    query: string,
+    options?: { config?: string; type?: 'plain' | 'phrase' | 'websearch' },
+  ): T;
+}
+
+/** Attach the text predicate: `search_tsv` FTS in fts mode, `.ilike` OR otherwise. */
+function applyText<T extends TextFilterable<T>>(
+  q: T,
+  mode: TextMode,
+  tsq: string | null,
+  ilikeOr: string | null,
+): T {
+  if (mode === 'fts') return tsq ? q.textSearch('search_tsv', tsq, { config: 'english' }) : q;
+  return ilikeOr ? q.or(ilikeOr) : q;
+}
+
+/**
+ * Run a query built by `build(mode)`, preferring the FTS path and degrading to
+ * the ilike path when the tsvector column is absent (or the query text couldn't
+ * form a tsquery). `ftsUsable` short-circuits straight to ilike when there is no
+ * lexical constraint to push into `search_tsv`.
+ */
+async function execWithFallback<R>(
+  build: (mode: TextMode) => PromiseLike<{ data: unknown; error: QueryError | null }>,
+  ftsUsable: boolean,
+): Promise<R[]> {
+  if (ftsUsable) {
+    const { data, error } = await build('fts');
+    if (!error) return (data ?? []) as R[];
+    if (!isFtsFallbackError(error)) return []; // genuine failure — don't hammer
+  }
+  const { data, error } = await build('ilike');
+  if (error) return [];
+  return (data ?? []) as R[];
+}
+
 // ── Per-type retrieval ────────────────────────────────────────────────────────
 
 async function searchBankTransactions(a: RunSearchArgs, parsed: ParsedQuery, nowMs: number): Promise<SearchResult[]> {
+  const tsq = buildTsQuery(parsed);
   const textOr = orIlike(['description', 'category', 'plaid_transaction_id'], needles(parsed));
   const amtOr = amountOr('amount_cents', parsed, true);
-  if (!textOr && !amtOr && !parsed.dateRange) return [];
+  const hasText = tsq != null || textOr != null;
+  if (!hasText && !amtOr && !parsed.dateRange) return [];
 
-  let q = a.supabase
-    .from('bank_transactions')
-    .select('id, transaction_date, description, amount_cents, category, final_vendor_id, ai_vendor_id')
-    .limit(FETCH_PER_TYPE);
-  if (textOr) q = q.or(textOr);
-  if (amtOr) q = q.or(amtOr);
-  q = applyDate(q, 'transaction_date', parsed);
-
-  const { data, error } = await q;
-  if (error || !data) return [];
-
-  const rows = data as Array<{
+  const rows = await execWithFallback<{
     id: string; transaction_date: string; description: string; amount_cents: number;
     category: string | null; final_vendor_id: string | null; ai_vendor_id: string | null;
-  }>;
+  }>((mode) => {
+    let q = a.supabase
+      .from('bank_transactions')
+      .select('id, transaction_date, description, amount_cents, category, final_vendor_id, ai_vendor_id')
+      .limit(FETCH_PER_TYPE);
+    q = applyText(q, mode, tsq, textOr);
+    if (amtOr) q = q.or(amtOr);
+    q = applyDate(q, 'transaction_date', parsed);
+    return q;
+  }, tsq != null);
+  if (rows.length === 0) return [];
   const vendorMap = await fetchCoreMap<{ id: string; name: string }>(
     a.supabase, 'vendors', 'id, name',
     rows.flatMap((r) => [r.final_vendor_id, r.ai_vendor_id]),
@@ -148,31 +228,33 @@ async function searchBankTransactions(a: RunSearchArgs, parsed: ParsedQuery, now
       date: r.transaction_date,
       href: `/bank-feed?txn=${r.id}`,
       snippet: r.category ? `Category: ${r.category}` : '',
+      headline: headline(parsed, r.description, vendor, r.category),
       score: score(fields, parsed, r.transaction_date, r.amount_cents, nowMs),
     };
   });
 }
 
 async function searchInvoices(a: RunSearchArgs, parsed: ParsedQuery, nowMs: number): Promise<SearchResult[]> {
+  const tsq = buildTsQuery(parsed);
   const textOr = orIlike(['invoice_number', 'memo'], needles(parsed));
   const amtOr = amountOr('total_cents', parsed);
-  if (!textOr && !amtOr && !parsed.dateRange) return [];
+  const hasText = tsq != null || textOr != null;
+  if (!hasText && !amtOr && !parsed.dateRange) return [];
 
-  let q = a.supabase
-    .from('invoices')
-    .select('id, invoice_number, invoice_date, total_cents, balance_cents, status, memo, customer_id')
-    .limit(FETCH_PER_TYPE);
-  if (textOr) q = q.or(textOr);
-  if (amtOr) q = q.or(amtOr);
-  q = applyDate(q, 'invoice_date', parsed);
-
-  const { data, error } = await q;
-  if (error || !data) return [];
-
-  const rows = data as Array<{
+  const rows = await execWithFallback<{
     id: string; invoice_number: string; invoice_date: string; total_cents: number;
     balance_cents: number; status: string; memo: string | null; customer_id: string;
-  }>;
+  }>((mode) => {
+    let q = a.supabase
+      .from('invoices')
+      .select('id, invoice_number, invoice_date, total_cents, balance_cents, status, memo, customer_id')
+      .limit(FETCH_PER_TYPE);
+    q = applyText(q, mode, tsq, textOr);
+    if (amtOr) q = q.or(amtOr);
+    q = applyDate(q, 'invoice_date', parsed);
+    return q;
+  }, tsq != null);
+  if (rows.length === 0) return [];
   const custMap = await fetchCoreMap<{ id: string; name: string }>(
     a.supabase, 'customers', 'id, name', rows.map((r) => r.customer_id),
   );
@@ -193,31 +275,33 @@ async function searchInvoices(a: RunSearchArgs, parsed: ParsedQuery, nowMs: numb
       date: r.invoice_date,
       href: `/invoices?invoice=${r.id}`,
       snippet: r.balance_cents > 0 ? `Balance ${formatMoney(r.balance_cents)}` : (r.memo ?? ''),
+      headline: headline(parsed, r.invoice_number, customer, r.memo),
       score: score(fields, parsed, r.invoice_date, r.total_cents, nowMs),
     };
   });
 }
 
 async function searchBills(a: RunSearchArgs, parsed: ParsedQuery, nowMs: number): Promise<SearchResult[]> {
+  const tsq = buildTsQuery(parsed);
   const textOr = orIlike(['bill_number'], needles(parsed));
   const amtOr = amountOr('total_cents', parsed);
-  if (!textOr && !amtOr && !parsed.dateRange) return [];
+  const hasText = tsq != null || textOr != null;
+  if (!hasText && !amtOr && !parsed.dateRange) return [];
 
-  let q = a.supabase
-    .from('bills')
-    .select('id, bill_number, bill_date, total_cents, balance_cents, status, vendor_id')
-    .limit(FETCH_PER_TYPE);
-  if (textOr) q = q.or(textOr);
-  if (amtOr) q = q.or(amtOr);
-  q = applyDate(q, 'bill_date', parsed);
-
-  const { data, error } = await q;
-  if (error || !data) return [];
-
-  const rows = data as Array<{
+  const rows = await execWithFallback<{
     id: string; bill_number: string | null; bill_date: string; total_cents: number;
     balance_cents: number; status: string; vendor_id: string;
-  }>;
+  }>((mode) => {
+    let q = a.supabase
+      .from('bills')
+      .select('id, bill_number, bill_date, total_cents, balance_cents, status, vendor_id')
+      .limit(FETCH_PER_TYPE);
+    q = applyText(q, mode, tsq, textOr);
+    if (amtOr) q = q.or(amtOr);
+    q = applyDate(q, 'bill_date', parsed);
+    return q;
+  }, tsq != null);
+  if (rows.length === 0) return [];
   const vendorMap = await fetchCoreMap<{ id: string; name: string }>(
     a.supabase, 'vendors', 'id, name', rows.map((r) => r.vendor_id),
   );
@@ -237,28 +321,33 @@ async function searchBills(a: RunSearchArgs, parsed: ParsedQuery, nowMs: number)
       date: r.bill_date,
       href: `/bills?bill=${r.id}`,
       snippet: r.balance_cents > 0 ? `Balance ${formatMoney(r.balance_cents)}` : '',
+      headline: headline(parsed, r.bill_number, vendor),
       score: score(fields, parsed, r.bill_date, r.total_cents, nowMs),
     };
   });
 }
 
 async function searchJournalEntries(a: RunSearchArgs, parsed: ParsedQuery, nowMs: number): Promise<SearchResult[]> {
+  const tsq = buildTsQuery(parsed);
   const textOr = orIlike(['entry_number', 'memo', 'source_module'], needles(parsed));
+  const hasText = tsq != null || textOr != null;
   const wantAmount = hasAmountExact(parsed);
-  if (!textOr && !wantAmount && !parsed.dateRange) return [];
+  if (!hasText && !wantAmount && !parsed.dateRange) return [];
 
   const entryIds = new Set<string>();
 
   // Text / date branch on the header.
-  if (textOr || parsed.dateRange) {
-    let q = a.supabase
-      .from('gl_entries')
-      .select('id, entry_number, entry_date, memo, source_module, status')
-      .limit(FETCH_PER_TYPE);
-    if (textOr) q = q.or(textOr);
-    q = applyDate(q, 'entry_date', parsed);
-    const { data } = await q;
-    for (const r of (data ?? []) as Array<{ id: string }>) entryIds.add(r.id);
+  if (hasText || parsed.dateRange) {
+    const headerRows = await execWithFallback<{ id: string }>((mode) => {
+      let q = a.supabase
+        .from('gl_entries')
+        .select('id, entry_number, entry_date, memo, source_module, status')
+        .limit(FETCH_PER_TYPE);
+      q = applyText(q, mode, tsq, textOr);
+      q = applyDate(q, 'entry_date', parsed);
+      return q;
+    }, tsq != null);
+    for (const r of headerRows) entryIds.add(r.id);
   }
 
   // Amount branch on the lines (JE totals live on gl_entry_lines).
@@ -311,26 +400,31 @@ async function searchJournalEntries(a: RunSearchArgs, parsed: ParsedQuery, nowMs
       date: r.entry_date,
       href: `/journal-entries?entry=${r.id}`,
       snippet: r.memo ?? '',
+      headline: headline(parsed, r.entry_number, r.memo, r.source_module),
       score: score(fields, parsed, r.entry_date, total, nowMs),
     };
   });
 }
 
 async function searchVendors(a: RunSearchArgs, parsed: ParsedQuery, nowMs: number): Promise<SearchResult[]> {
+  const tsq = buildTsQuery(parsed);
   const textOr = orIlike(['name', 'display_name', 'email', 'city'], needles(parsed));
-  if (!textOr) return []; // masters have no amount/date anchor
-  const { data, error } = await a.supabase
-    .schema('core')
-    .from('vendors')
-    .select('id, name, display_name, email, city, state, ytd_spend_cents')
-    .or(textOr)
-    .limit(FETCH_PER_TYPE);
-  if (error || !data) return [];
-
-  return (data as Array<{
+  if (tsq == null && textOr == null) return []; // masters have no amount/date anchor
+  const rows = await execWithFallback<{
     id: string; name: string; display_name: string | null; email: string | null;
     city: string | null; state: string | null; ytd_spend_cents: number | null;
-  }>).map((r) => {
+  }>((mode) => {
+    let q = a.supabase
+      .schema('core')
+      .from('vendors')
+      .select('id, name, display_name, email, city, state, ytd_spend_cents')
+      .limit(FETCH_PER_TYPE);
+    q = applyText(q, mode, tsq, textOr);
+    return q;
+  }, tsq != null);
+  if (rows.length === 0) return [];
+
+  return rows.map((r) => {
     const fields: FieldValue[] = [
       { field: 'name', value: r.name },
       { field: 'name', value: r.display_name },
@@ -347,23 +441,30 @@ async function searchVendors(a: RunSearchArgs, parsed: ParsedQuery, nowMs: numbe
       date: null,
       href: `/vendors?vendor=${r.id}`,
       snippet: r.email ?? '',
+      headline: headline(parsed, r.display_name, r.name, r.email, r.city),
       score: score(fields, parsed, null, null, nowMs),
     };
   });
 }
 
 async function searchCustomers(a: RunSearchArgs, parsed: ParsedQuery, nowMs: number): Promise<SearchResult[]> {
+  const tsq = buildTsQuery(parsed);
   const textOr = orIlike(['name', 'email', 'city'], needles(parsed));
-  if (!textOr) return [];
-  const { data, error } = await a.supabase
-    .schema('core')
-    .from('customers')
-    .select('id, name, email, city, state')
-    .or(textOr)
-    .limit(FETCH_PER_TYPE);
-  if (error || !data) return [];
+  if (tsq == null && textOr == null) return [];
+  const rows = await execWithFallback<{
+    id: string; name: string; email: string | null; city: string | null; state: string | null;
+  }>((mode) => {
+    let q = a.supabase
+      .schema('core')
+      .from('customers')
+      .select('id, name, email, city, state')
+      .limit(FETCH_PER_TYPE);
+    q = applyText(q, mode, tsq, textOr);
+    return q;
+  }, tsq != null);
+  if (rows.length === 0) return [];
 
-  return (data as Array<{ id: string; name: string; email: string | null; city: string | null; state: string | null }>).map((r) => {
+  return rows.map((r) => {
     const fields: FieldValue[] = [
       { field: 'name', value: r.name },
       { field: 'other', value: r.email },
@@ -379,25 +480,30 @@ async function searchCustomers(a: RunSearchArgs, parsed: ParsedQuery, nowMs: num
       date: null,
       href: `/customers?customer=${r.id}`,
       snippet: r.email ?? '',
+      headline: headline(parsed, r.name, r.email, r.city),
       score: score(fields, parsed, null, null, nowMs),
     };
   });
 }
 
 async function searchAccounts(a: RunSearchArgs, parsed: ParsedQuery, nowMs: number): Promise<SearchResult[]> {
+  const tsq = buildTsQuery(parsed);
   const textOr = orIlike(['name', 'account_number', 'description'], needles(parsed));
-  if (!textOr) return [];
-  const { data, error } = await a.supabase
-    .from('accounts')
-    .select('id, account_number, name, description, account_type, is_active')
-    .or(textOr)
-    .limit(FETCH_PER_TYPE);
-  if (error || !data) return [];
-
-  return (data as Array<{
+  if (tsq == null && textOr == null) return [];
+  const rows = await execWithFallback<{
     id: string; account_number: string; name: string; description: string | null;
     account_type: string; is_active: boolean;
-  }>).map((r) => {
+  }>((mode) => {
+    let q = a.supabase
+      .from('accounts')
+      .select('id, account_number, name, description, account_type, is_active')
+      .limit(FETCH_PER_TYPE);
+    q = applyText(q, mode, tsq, textOr);
+    return q;
+  }, tsq != null);
+  if (rows.length === 0) return [];
+
+  return rows.map((r) => {
     const fields: FieldValue[] = [
       { field: 'number', value: r.account_number },
       { field: 'name', value: r.name },
@@ -412,6 +518,7 @@ async function searchAccounts(a: RunSearchArgs, parsed: ParsedQuery, nowMs: numb
       date: null,
       href: `/chart-of-accounts?account=${r.id}`,
       snippet: r.description ?? '',
+      headline: headline(parsed, r.name, r.account_number, r.description),
       score: score(fields, parsed, null, null, nowMs),
     };
   });
