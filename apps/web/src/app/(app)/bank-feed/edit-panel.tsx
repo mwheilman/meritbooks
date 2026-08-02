@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { X, Search, Check, Loader2, Bot, ChevronRight, Briefcase, AlertCircle, Layers, Building2 } from 'lucide-react';
+import { X, Search, Check, Loader2, Bot, ChevronRight, Briefcase, AlertCircle, Layers, Building2, Sparkles } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
@@ -27,6 +27,27 @@ interface AccountOption {
 interface AccountSearchResponse {
   recent: AccountOption[];
   accounts: AccountOption[];
+}
+
+/** M14 learning memory: how this vendor is usually coded (derived from history). */
+interface VendorMemorySuggestion {
+  accountId: string;
+  accountNumber: string | null;
+  accountName: string | null;
+  accountType: string | null;
+  count: number;
+  total: number;
+  share: number;
+  confidence: number;
+  lastUsedAt: string | null;
+}
+
+interface VendorMemoryResponse {
+  vendorId: string | null;
+  vendorName: string | null;
+  total: number;
+  suggestions: VendorMemorySuggestion[];
+  top: VendorMemorySuggestion | null;
 }
 
 interface DeptOption {
@@ -157,6 +178,33 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
     searchParams,
     { enabled: showAccountDropdown }
   );
+
+  // M14 learning: what account this vendor is usually coded to, derived live from
+  // the tenant's own approved history. Powers the one-click "you usually code…"
+  // hint below. Amount-aware so it biases toward similar-sized past charges.
+  const vendorMemoryParams: Record<string, string> = {
+    amount_cents: String(Math.abs(transaction.amount_cents)),
+  };
+  if (transaction.ai_vendor?.id) vendorMemoryParams.vendor_id = transaction.ai_vendor.id;
+  const { data: vendorMemory, isLoading: memoryLoading } = useQuery<VendorMemoryResponse>(
+    '/api/learning/vendor-memory',
+    vendorMemoryParams,
+    { enabled: !!transaction.ai_vendor?.id }
+  );
+  // Only surface a hint once there is enough history to be worth trusting (>=2).
+  const memoryTop =
+    vendorMemory?.top && vendorMemory.top.count >= 2 ? vendorMemory.top : null;
+
+  const applyMemory = useCallback((s: VendorMemorySuggestion) => {
+    setSelectedAccount({
+      id: s.accountId,
+      account_number: s.accountNumber ?? '',
+      name: s.accountName ?? '',
+      account_type: s.accountType ?? undefined,
+    });
+    setShowAccountDropdown(false);
+    setAccountSearch('');
+  }, []);
 
   // Job search query
   const jobSearchParams: Record<string, string> = {};
@@ -357,6 +405,49 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
             <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
               GL Account
             </label>
+
+            {/* M14 learning hint: "You usually code {vendor} to {account}". Proposes
+                only — a human still approves. Shown when we have enough history. */}
+            {transaction.ai_vendor?.id && memoryLoading && !memoryTop && (
+              <div className="mb-2 flex items-center gap-2 rounded-lg bg-indigo-500/5 border border-indigo-500/10 px-3 py-2 text-xs text-slate-500">
+                <Loader2 size={12} className="animate-spin text-indigo-400" />
+                Checking how you usually code this vendor…
+              </div>
+            )}
+            {memoryTop && (
+              <div className="mb-2 rounded-lg bg-indigo-500/5 border border-indigo-500/15 px-3 py-2.5">
+                <div className="flex items-start gap-2">
+                  <Sparkles size={13} className="text-indigo-400 mt-0.5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      You usually code{' '}
+                      <span className="text-slate-100 font-medium">
+                        {vendorMemory?.vendorName ?? transaction.ai_vendor?.display_name ?? transaction.ai_vendor?.name ?? 'this vendor'}
+                      </span>{' '}
+                      to{' '}
+                      <span className="text-indigo-300 font-medium">
+                        <span className="font-mono text-2xs text-slate-400">{memoryTop.accountNumber}</span>
+                        {' · '}
+                        {memoryTop.accountName}
+                      </span>
+                      <span className="text-slate-500"> ({memoryTop.count} of {memoryTop.total} times).</span>
+                    </p>
+                    {selectedAccount?.id === memoryTop.accountId ? (
+                      <span className="mt-1.5 inline-flex items-center gap-1 text-2xs text-emerald-400 font-medium">
+                        <Check size={11} /> Applied
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => applyMemory(memoryTop)}
+                        className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-indigo-500/15 px-2 py-1 text-2xs font-medium text-indigo-300 hover:bg-indigo-500/25 transition-colors"
+                      >
+                        <Check size={11} /> Use this account
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {selectedAccount && !showAccountDropdown && (
               <button

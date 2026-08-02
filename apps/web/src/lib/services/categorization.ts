@@ -19,6 +19,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { runAiGateway } from '@meritbooks/core-ai';
 import { logAction } from '@/lib/trust/action-log';
 import { scoreToTier, getTierPolicy } from '@/lib/trust/score-tier';
+import { suggestAccountForVendor, boostConfidenceWithMemory } from '@/lib/learning/vendor-memory';
 
 export const CATEGORIZE_MODEL = 'claude-sonnet-4-20250514';
 export const CATEGORIZE_FEATURE = 'CATEGORIZATION';
@@ -83,6 +84,47 @@ export async function matchVendorPattern(
     // Stale/absent vendor_patterns table — skip tier 1 silently.
   }
   return null;
+}
+
+/**
+ * M14 learning boost: when a proposal names a vendor we have consistent human
+ * coding history for, raise its confidence toward that history (never lower it,
+ * always capped below certainty — the human still approves). Purely additive; a
+ * failure or absent history leaves the proposal untouched. The extra query only
+ * fires when a vendor was actually resolved, so novel/unknown-vendor rows pay
+ * nothing. Note: the raw AI confidence is what we log to ai_decisions; the
+ * boosted value is the EFFECTIVE confidence the caller acts on (tier + storage).
+ */
+async function boostSuggestionWithMemory(
+  supabase: SupabaseClient,
+  orgId: string,
+  suggestion: CategorySuggestion,
+  accounts: CoaRow[],
+): Promise<CategorySuggestion> {
+  if (!suggestion.vendorId || !suggestion.accountId) return suggestion;
+  try {
+    const memory = await suggestAccountForVendor(supabase, {
+      orgId,
+      vendorId: suggestion.vendorId,
+      preloadedAccounts: accounts,
+    });
+    const { confidence, applied, note } = boostConfidenceWithMemory(
+      suggestion.confidence,
+      suggestion.accountId,
+      memory.top,
+      suggestion.vendorName ?? undefined,
+    );
+    if (applied) {
+      return {
+        ...suggestion,
+        confidence,
+        reasoning: note ? `${suggestion.reasoning} ${note}`.trim() : suggestion.reasoning,
+      };
+    }
+  } catch {
+    // Learning is an enhancement — never let it break categorization.
+  }
+  return suggestion;
 }
 
 function extractText(result: unknown): string | null {
@@ -152,22 +194,20 @@ export async function suggestCategory(
   const pat = await matchVendorPattern(supabase, description, orgId);
   if (pat && pat.confidence >= 0.85) {
     const a = accounts.find((x) => x.id === pat.accountId);
-    return {
-      ok: true,
-      suggestion: {
-        accountId: pat.accountId,
-        accountNumber: a?.account_number ?? null,
-        accountName: a?.name ?? null,
-        vendorId: pat.vendorId,
-        vendorName: vendorList.find((v) => v.id === pat.vendorId)?.name ?? null,
-        departmentId: pat.departmentId,
-        departmentName: deptList.find((d) => d.id === pat.departmentId)?.name ?? null,
-        confidence: pat.confidence,
-        reasoning: `Matched a prior coding pattern: "${pat.raw}".`,
-        source: 'pattern',
-        decisionId: null,
-      },
+    const patternSuggestion: CategorySuggestion = {
+      accountId: pat.accountId,
+      accountNumber: a?.account_number ?? null,
+      accountName: a?.name ?? null,
+      vendorId: pat.vendorId,
+      vendorName: vendorList.find((v) => v.id === pat.vendorId)?.name ?? null,
+      departmentId: pat.departmentId,
+      departmentName: deptList.find((d) => d.id === pat.departmentId)?.name ?? null,
+      confidence: pat.confidence,
+      reasoning: `Matched a prior coding pattern: "${pat.raw}".`,
+      source: 'pattern',
+      decisionId: null,
     };
+    return { ok: true, suggestion: await boostSuggestionWithMemory(supabase, orgId, patternSuggestion, accounts) };
   }
 
   // Tier 2: gateway AI.
@@ -266,19 +306,17 @@ Respond with ONLY this JSON, no markdown:
     console.error('[categorize] action log failed (non-fatal):', e);
   }
 
-  return {
-    ok: true,
-    suggestion: {
-      accountId: acct?.id ?? null,
-      accountNumber: acct ? acctNum : null,
-      accountName: acct?.name ?? null,
-      vendorId: vendor?.id ?? null,
-      vendorName: vendor?.name ?? null,
-      departmentId: dept?.id ?? null,
-      departmentName: dept?.name ?? null,
-      confidence, reasoning, source: 'ai', decisionId,
-    },
+  const aiSuggestion: CategorySuggestion = {
+    accountId: acct?.id ?? null,
+    accountNumber: acct ? acctNum : null,
+    accountName: acct?.name ?? null,
+    vendorId: vendor?.id ?? null,
+    vendorName: vendor?.name ?? null,
+    departmentId: dept?.id ?? null,
+    departmentName: dept?.name ?? null,
+    confidence, reasoning, source: 'ai', decisionId,
   };
+  return { ok: true, suggestion: await boostSuggestionWithMemory(supabase, orgId, aiSuggestion, accounts) };
 }
 
 /**
