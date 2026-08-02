@@ -2,10 +2,11 @@
 
 import { useMemo, useState, type ElementType } from 'react';
 import { clsx } from 'clsx';
-import { Building2, Calendar, LayoutGrid, GitCompare, Layers } from 'lucide-react';
+import { Building2, Calendar, LayoutGrid, GitCompare, Layers, SlidersHorizontal } from 'lucide-react';
 import { useQuery } from '@/hooks';
 import { BudgetEntryGrid } from './budget-entry-grid';
 import { BudgetVsActual } from './budget-vs-actual';
+import { ScenarioModeler } from './scenario-modeler';
 
 // ── Shared shapes (fields verified against migration 013 + /api routes) ──
 export interface LocationLite { id: string; name: string; short_code: string; industry: string | null }
@@ -14,7 +15,7 @@ export interface DepartmentLite { id: string; name: string; location_id: string 
 const CURRENT_YEAR = new Date().getFullYear();
 const FISCAL_YEARS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2];
 
-type Tab = 'entry' | 'variance';
+type Tab = 'entry' | 'variance' | 'scenarios';
 
 export function BudgetsWorkspace() {
   const [tab, setTab] = useState<Tab>('entry');
@@ -38,6 +39,7 @@ export function BudgetsWorkspace() {
       <div className="flex items-center gap-1 mb-5">
         <TabButton active={tab === 'entry'} icon={LayoutGrid} label="Budget Entry" onClick={() => setTab('entry')} />
         <TabButton active={tab === 'variance'} icon={GitCompare} label="Budget vs Actual" onClick={() => setTab('variance')} />
+        <TabButton active={tab === 'scenarios'} icon={SlidersHorizontal} label="Scenarios" onClick={() => setTab('scenarios')} />
       </div>
 
       {/* ─── Shared scope controls ─── */}
@@ -89,8 +91,14 @@ export function BudgetsWorkspace() {
           fiscalYear={fiscalYear}
           departmentId={departmentId || null}
         />
-      ) : (
+      ) : tab === 'variance' ? (
         <BudgetVsActual
+          locationId={locationId}
+          fiscalYear={fiscalYear}
+          departmentId={departmentId || null}
+        />
+      ) : (
+        <ScenarioModeler
           locationId={locationId}
           fiscalYear={fiscalYear}
           departmentId={departmentId || null}
