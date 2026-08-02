@@ -5,7 +5,7 @@ It is deliberately small (~5 min read) so re-grounding is cheap. It is the disti
 always-current truth. When it conflicts with the repo, **the canon wins** — fix the repo.
 Source of truth: the Project-knowledge doc set (mirrored/digested in `docs/canon/`, indexed in `00-INDEX.md`).
 
-Last reconciled: **2026-08-02 (Session 43)**.
+Last reconciled: **2026-08-02 (Session 44)**.
 
 ---
 
@@ -111,17 +111,18 @@ ungated, spec-less work in Session 40.)
   fee from `invoice_events` meta; `PLATFORM_ORG_ID` removed.
 - **Build-complete, live-stamp pending:** GATE 3 (AI proposal layer) — owed: exercise the
   `ai:true` predict path against the live gateway once.
-- **NO-GO gate #9 (identity/RBAC) — SUBSTANTIALLY ADVANCED (Session 42: the dominant blocker
-  moved), STILL OPEN.** Done: **multi-tenant org resolution fixed** — `require-permission` +
-  money/write routes resolve the caller's real org from the **verified Clerk claim** (not
-  first-org; `resolveOrgId` claim-first), event workers post **per-event org** + shared
-  `authorizeEventWorker` guard; plus (from S41) `canApprove` → `core.memberships`
-  (+ role-normalize, inactive-employee deny), membership auto-provision + lifecycle sync,
-  `require-permission` on 12 money routes, page-guards on 7 pages, report-route RLS sweep +
-  migration 068 (security_invoker). **Still open:** a dedicated **`payments` permission** +
-  first-class control/`team_performance` permissions (routes still borrow
-  `journal_entries:create`); full control-route RBAC consistency; **`core.assignments`**
-  (per-user scoping); the **event-worker read/"peek" scoping**; **location-scoped RLS**.
+- **NO-GO gate #9 (identity/RBAC) — SUBSTANTIALLY ADVANCED, STILL OPEN; residual is now
+  mostly MANUAL-for-Mike.** Done: **multi-tenant org resolution** (`resolveOrgId` claim-first),
+  per-event-org event workers + `authorizeEventWorker`, `canApprove` → `core.memberships`,
+  membership auto-provision + lifecycle sync, report-route RLS sweep (mig 068). **Session 44:**
+  a **dedicated `payments` money-movement permission** (permissions.ts) now gates
+  **payments / payroll-release / checks-run**; **`/api/accounts` RLS-scoped fix**; **5 direct
+  Anthropic key reads routed through the Core AI gateway helper**. **Still open:** the **MANUAL**
+  work — stand up the **Clerk production instance + `org_id` claim** (to drop the first-org
+  fallbacks), set **`EVENT_WORKER_SECRET`**, rotate the **Resend key**; plus (Claude-side)
+  **split `payments` into per-route keys** so `check_processor` regains check-run without
+  payroll-release (task #56), control/`team_performance` permissions, **`core.assignments`**,
+  event-worker read/"peek" scoping, **location-scoped RLS**.
 - **Financial Control Exception Library — ~11 detect-only classes (Session 42)** on the
   `ai_decisions → /exceptions` rail (migration 070 dedup guarantor): EC-1 duplicate-payment,
   EC-2 missed-accrual, EC-3 intercompany-balance, EC-4 uncategorized-leakage, EC-6
@@ -149,10 +150,11 @@ ungated, spec-less work in Session 40.)
 - **Blocked:** GATE 4 (M365 email ingestion) — on IT returning Azure creds.
 - **Open:** GATE 5 (confidence routing/learning), 6 (job-costing depth), 7 (reporting/FP&A
   depth — FPB written), 8 (remaining modules incl. bank-rec to Complete — FPB written — and
-  AI cash application), **11a multi-entity consolidation — NOW HAS DEPTH (Session 43: migration
-  076, `/consolidation` — ownership %, NCI, intercompany eliminations); polish per task #47**,
-  11b–e (PO/3-way, inventory, sales-tax, approval-workflow), 10 (productization incl. Clerk
-  dev→prod + RBAC nav enforcement + go-live key swap).
+  AI cash application — apply path + subledger↔GL tie-out shipped S44), **11a multi-entity
+  consolidation — DEPTH (migration 076: ownership %, NCI, eliminations); 11b PO + 3-way match
+  now DEPTH too (Session 44: migration 080, `/purchase-orders`)**; 11c–e (inventory, sales-tax
+  [return-prep worksheet + GL tie-out shipped S44], approval-workflow), 10 (productization incl.
+  Clerk dev→prod + RBAC nav enforcement + go-live key swap).
 - **Session-43 depth builds (each behind its FPB):** the pervasive **NL surface (M8)** — global ⌘K
   command bar + FP&A Copilot (safe NL→ledger analytics on an allowlisted metric catalog, model never
   writes SQL, abstains; NL processing lanes P2–P4 propose→approve; FPB `docs/FPB-nl-copilot.md`);
@@ -160,25 +162,38 @@ ungated, spec-less work in Session 40.)
   only); **M13 search/knowledge** (`/search`); a **payment-run fraud screen** (new-payee/BEC/unusual/
   duplicate, detect-only); and depth in the thin segments — **job costing** (EAC + WIP over/under-
   billing), **customer mgmt** (dedupe + credit/risk dossier), **fixed assets** (methods + disposal +
-  roll-forward). Gateway governance sweep closed the **7 direct-Anthropic seams** the AI-capability
-  matrix flagged. **Still thin / in flight:** tax book-to-tax, onboarding conversion, covenant
-  monitor, and the **M14 learning** column (untouched).
+  roll-forward). Gateway governance sweep closed the direct-Anthropic seams the AI-capability
+  matrix flagged. **Session-44 depth builds (each behind its FPB):** the thin segments that were
+  in flight now shipped — **book-to-tax** M-1/M-3 (migration 077), **onboarding historical
+  conversion** (AI-mapped opening TB + tie-out gate + balanced go-live post), **covenant monitor**
+  DSCR/FCCR/leverage (migration 078), **fixed-asset methods** enum + disposal roles (migration
+  079), **purchase orders + 3-way match** (migration 080), **sales-tax return prep**, **AR
+  collections + dunning**, **driver-based budgeting + reforecast**, **board-package generator**,
+  and **AR cash-application apply** + subledger tie-out. The **M14 learning** column is now
+  **OPENED** — a vendor→GL categorization-memory engine (learns from approved history; still
+  the largest column but no longer untouched). **AP doc-intake** queue built, Azure-ready (GATE 4).
 - **No gate may start until its `Prereq:` gates are DONE. "Complete" is demonstrated, not asserted.**
 
-## 6. Canonical immediate priorities (Session 43 reconciliation)
+## 6. Canonical immediate priorities (Session 44 reconciliation)
 
-1. **Finish closing identity gate #9** — org resolution is DONE; land the dedicated
-   `payments` + control/`team_performance` permissions, `core.assignments`, event-worker
+1. **Finish closing identity gate #9** — org resolution + the dedicated `payments` permission
+   are DONE. The residual is now mostly **MANUAL for Mike:** stand up the **Clerk production
+   instance + `org_id` claim** (drops the first-org fallbacks), set **`EVENT_WORKER_SECRET`**,
+   rotate the **Resend key**. Then (Claude-side) **split `payments` into per-route keys** (task
+   #56), add control/`team_performance` permissions, `core.assignments`, event-worker
    read-scoping, and location-scoped RLS.
-2. **Finish the thin-segment deepening now IN FLIGHT** — tax **book-to-tax**, **onboarding
-   conversion**, **covenant monitor** — each behind its FPB; polish the Session-43 depth builds
-   (consolidation 11a, job-costing, fixed-assets, customer-mgmt) against task #47.
+2. **Polish the now-deepened segments** — consolidation (11a), job-costing, fixed-assets,
+   customer-mgmt, book-to-tax (077), onboarding conversion, covenant monitor (078), POs (080),
+   sales-tax, collections, driver budgeting, board package, cash-application — against their
+   follow-ups; clear **verifier concerns (task #52)**.
 3. **Payroll Phase B** once the provider is picked (releaser≠preparer, double-post guard,
    live Check). Invoices near-complete — finish write-off account role + `v_ar_aging`.
-4. **Extend the control library toward EC-1..EC-13** and let the now-live **M10 autonomy plane**
-   govern more dispositions (it currently governs 10 detectors).
-5. **Open the M14 learning/personalization column** — the last untouched AI modality the
-   14×24 matrix exposed (author the FPB first).
+   **Unblock GATE 4** (AP OCR / email ingestion) with **Azure creds** — the AP intake queue is
+   built and Azure-ready.
+4. **Extend the control library toward EC-1..EC-13** and let the **M10 autonomy plane** govern
+   more dispositions (it currently governs 10 detectors).
+5. **Grow the M14 learning column** — now OPENED with vendor→GL categorization memory; extend
+   personalization beyond it (the modality is opened, not full).
 
 ## 7. Session-40/41 note (honest)
 
