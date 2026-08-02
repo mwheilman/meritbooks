@@ -31,11 +31,13 @@ Projects migrations sort after all Books migrations, which is safe: `proj` depen
 | 1003 | `1003_proj_commitments.sql` | G5 | ✅ applied — commitments + drain draw-down + third number (`committed_open`, `projected_final`) |
 | 1004 | _(reserved)_ | G7 | SOV (`sov_versions`, `sov_lines`) + retainage + allowances + `billing_type` enum + payer columns |
 | 1005 | `1005_proj_operational.sql` | G6 | ✅ applied — scheduling/dispatch (crews, work_orders), field (daily_logs, tasks, time_entries dual-rate pinned, field_attachments, `materialize_time_cost`), procurement (reuses `commitments`; adds `po_receipts`, `doc_number_counters`/`next_doc_number`, PO# mint in `approve_commitment`, `ordered_qty`/`uom`), gates/compliance (external_gates, compliance_docs, submittals, rfis + `advance_external_gate`/`payment_eligible`/`draw_precondition_met`/`close_eligible` + presence-based billing precondition in `approve_and_emit_billing` + views). Also backfills `job_settings.uses_external_gates` (latent 1001 gap) and hardens the drain cache refresh (auditor note). |
-| 1006 | _(reserved)_ | G8 | recurring_service + entitlements + routes + generator + `RECURRING` billing_type |
-| 1007 | _(reserved)_ | G9 | engagement stitching (`core.jobs.parent_job_id` [CORE]) + warranty + `v_job_margin` child rollup |
+| 1006 | `1006_proj_security_org_scoping.sql` | hotfix | ✅ applied — SECURITY: org-scope the SECURITY DEFINER mutators (`approve_and_emit_billing`, `approve_commitment`, `advance_external_gate`, `approve_change_order`, `set_contract`, `update_progress`). They fetched by id/job with no org filter; once exposed via write-path routes a cross-org caller could act on / emit money into another tenant. Verified both ways (legit works, cross-org rejected). |
+| 1007 | _(reserved)_ | G8 | recurring_service + entitlements + routes + generator + `RECURRING` billing_type |
+| 1008 | _(reserved)_ | G9 | engagement stitching (`core.jobs.parent_job_id` [CORE]) + warranty + `v_job_margin` child rollup |
 
-> `1004` (G7 SOV) is intentionally reserved and built after `1005` (G6) — they're independent and
-> apply idempotently regardless of numeric order. **Next free after 1005: `1004` (G7) then `1006` (G8).**
+> `1004` (G7 SOV) reserved and built after `1005`/`1006` — independent, idempotent. **Next free: `1004` (G7), then `1007` (G8), `1008` (G9).**
+>
+> **Known follow-ups (security agent, non-blocking after 1006):** (a) no RBAC permission gate on the money/approve routes yet — any authenticated member can issue a draw (intra-org; Projects has no role layer yet, mirrors Books' open RBAC gate); (b) create routes trust a client `job_id` (FK bypasses RLS) — low impact (row lands in caller's org), fix = job-visibility pre-check or composite FK; (c) work-orders PATCH keys off body id not URL id (RLS keeps it in-org).
 
 ## G6 app slices (designed by the parallel builder wave, not yet built as code)
 

@@ -12,6 +12,12 @@ import {
   ClipboardList,
 } from 'lucide-react';
 import { createAuthedServerSupabase } from '@/lib/supabase/authed';
+import {
+  NewWorkOrderButton,
+  WorkOrderControls,
+  type EmployeeOption,
+  type JobOption,
+} from './work-order-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +51,7 @@ interface Job {
   id: string;
   job_number: string;
   name: string;
+  status: string;
 }
 
 // The lanes that make up the board, in dispatch flow order. ON_HOLD / CANCELED
@@ -109,14 +116,20 @@ export default async function SchedulePage() {
     );
   }
 
-  const [{ data: wos, error: woErr }, { data: jobRows }] = await Promise.all([
+  const [{ data: wos, error: woErr }, { data: jobRows }, { data: empRows }] = await Promise.all([
     sb
       .schema('proj')
       .from('work_orders')
       .select(
         'id, job_id, title, status, required_capability, zone, priority, estimated_minutes, assigned_employee_id, scheduled_window',
       ),
-    sb.schema('core').from('jobs').select('id, job_number, name'),
+    sb.schema('core').from('jobs').select('id, job_number, name, status'),
+    sb
+      .schema('core')
+      .from('employees')
+      .select('id, first_name, last_name')
+      .eq('is_active', true)
+      .order('last_name', { ascending: true }),
   ]);
 
   if (woErr) {
@@ -134,10 +147,17 @@ export default async function SchedulePage() {
   const workOrders = (wos ?? []) as WorkOrder[];
   const jobs = (jobRows ?? []) as Job[];
   const jobById = new Map<string, Job>(jobs.map((j) => [j.id, j]));
+  const employees = (empRows ?? []) as EmployeeOption[];
+  // Only ACTIVE jobs are dispatchable targets in the "new work order" picker.
+  const activeJobs: JobOption[] = jobs
+    .filter((j) => j.status === 'ACTIVE')
+    .map(({ id, job_number, name }) => ({ id, job_number, name }));
+
+  const newWorkOrderButton = <NewWorkOrderButton jobs={activeJobs} />;
 
   if (workOrders.length === 0) {
     return (
-      <Shell>
+      <Shell action={newWorkOrderButton}>
         <StateCard
           icon={<Inbox className="h-5 w-5 text-slate-400" />}
           title="No work orders yet"
@@ -176,6 +196,7 @@ export default async function SchedulePage() {
 
   return (
     <Shell
+      action={newWorkOrderButton}
       meta={
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-2xs text-slate-500">
           <span>
@@ -218,7 +239,12 @@ export default async function SchedulePage() {
                   <div className="px-2 py-6 text-center text-2xs text-slate-600">No work orders</div>
                 ) : (
                   lane.map((wo) => (
-                    <WorkOrderCard key={wo.id} wo={wo} job={jobById.get(wo.job_id)} />
+                    <WorkOrderCard
+                      key={wo.id}
+                      wo={wo}
+                      job={jobById.get(wo.job_id)}
+                      employees={employees}
+                    />
                   ))
                 )}
               </div>
@@ -230,7 +256,15 @@ export default async function SchedulePage() {
   );
 }
 
-function WorkOrderCard({ wo, job }: { wo: WorkOrder; job: Job | undefined }) {
+function WorkOrderCard({
+  wo,
+  job,
+  employees,
+}: {
+  wo: WorkOrder;
+  job: Job | undefined;
+  employees: EmployeeOption[];
+}) {
   const prio = priorityMeta(wo.priority);
   const duration = formatDuration(wo.estimated_minutes);
   const scheduled = Boolean(wo.scheduled_window);
@@ -299,6 +333,13 @@ function WorkOrderCard({ wo, job }: { wo: WorkOrder; job: Job | undefined }) {
           )}
         </span>
       </div>
+
+      <WorkOrderControls
+        id={wo.id}
+        status={wo.status}
+        assignedEmployeeId={wo.assigned_employee_id}
+        employees={employees}
+      />
     </article>
   );
 }
@@ -330,20 +371,27 @@ function Chip({
 function Shell({
   children,
   meta,
+  action,
 }: {
   children: React.ReactNode;
   meta?: React.ReactNode;
+  action?: React.ReactNode;
 }) {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <div className="flex items-center gap-2">
-          <Layers className="h-5 w-5 text-brand-400" />
-          <h1 className="text-title text-white">Schedule</h1>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Layers className="h-5 w-5 text-brand-400" />
+              <h1 className="text-title text-white">Schedule</h1>
+            </div>
+            <p className="text-sm text-slate-400">
+              Dispatch board — every work order, lane-grouped from draft through completion.
+            </p>
+          </div>
+          {action && <div className="shrink-0">{action}</div>}
         </div>
-        <p className="text-sm text-slate-400">
-          Dispatch board — every work order, lane-grouped from draft through completion.
-        </p>
         {meta && <div className="pt-1">{meta}</div>}
       </header>
       {children}

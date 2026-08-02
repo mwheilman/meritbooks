@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { createAuthedServerSupabase } from '@/lib/supabase/authed';
+import { AddCostCode, AddGate, GateAdvance } from './job-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,6 +72,7 @@ interface CommitmentStatusRow {
 }
 
 interface GateRow {
+  id: string;
   gate_type: string | null;
   name: string | null;
   status: string | null;
@@ -174,17 +176,22 @@ function Kpi({
 function SectionCard({
   title,
   count,
+  action,
   children,
 }: {
   title: string;
   count?: number;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="rounded-xl border border-surface-800 bg-surface-900">
-      <div className="flex items-center justify-between border-b border-surface-800 px-4 py-3">
-        <h2 className="text-heading text-white">{title}</h2>
-        {count !== undefined && <span className="num text-2xs text-slate-500">{count}</span>}
+      <div className="flex items-center justify-between gap-3 border-b border-surface-800 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-heading text-white">{title}</h2>
+          {count !== undefined && <span className="num text-2xs text-slate-500">{count}</span>}
+        </div>
+        {action}
       </div>
       {children}
     </section>
@@ -213,7 +220,7 @@ export default async function JobDetailPage({ params }: { params: { jobId: strin
       sb.schema('proj').from('v_cost_code_slippage').select('cost_code, cost_code_name, budgeted_cents, actual_cents, committed_open_cents, projected_final_cents, variance_cents').eq('job_id', jobId),
       sb.schema('proj').from('commitments').select('id, number, commitment_type, status, original_amount_cents, revised_amount_cents').eq('job_id', jobId),
       sb.schema('proj').from('v_commitment_status').select('commitment_id, amount_cents, invoiced_cents, open_cents').eq('job_id', jobId),
-      sb.schema('proj').from('external_gates').select('gate_type, name, status').eq('job_id', jobId),
+      sb.schema('proj').from('external_gates').select('id, gate_type, name, status').eq('job_id', jobId),
     ]);
 
   if (jobRes.error) {
@@ -324,7 +331,7 @@ export default async function JobDetailPage({ params }: { params: { jobId: strin
       )}
 
       {/* Cost-code slippage */}
-      <SectionCard title="Cost-code slippage" count={slippage.length}>
+      <SectionCard title="Cost-code slippage" count={slippage.length} action={<AddCostCode jobId={jobId} />}>
         {slippage.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-slate-500">No cost-code budget or activity yet.</p>
         ) : (
@@ -427,29 +434,33 @@ export default async function JobDetailPage({ params }: { params: { jobId: strin
       </SectionCard>
 
       {/* External gates */}
-      <SectionCard title="External gates" count={gates.length}>
+      <SectionCard title="External gates" count={gates.length} action={<AddGate jobId={jobId} />}>
         {gates.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
             <ShieldCheck className="h-6 w-6 text-slate-600" />
             <p className="text-sm text-slate-500">No permits, inspections or acceptance gates tracked.</p>
+            <p className="text-2xs text-slate-600">Use “Add gate” above to start tracking one.</p>
           </div>
         ) : (
-          <div className="flex flex-wrap gap-2 p-4">
-            {gates.map((g, i) => (
+          <div className="grid grid-cols-1 gap-2 p-4 sm:grid-cols-2">
+            {gates.map((g) => (
               <div
-                key={`${g.gate_type ?? 'g'}-${i}`}
-                className="flex items-center gap-2 rounded-lg border border-surface-800 bg-surface-950 px-3 py-2"
+                key={g.id}
+                className="flex flex-col gap-2.5 rounded-lg border border-surface-800 bg-surface-950 px-3 py-2.5"
               >
-                <div className="flex flex-col">
-                  <span className="text-2xs uppercase tracking-wide text-slate-500">
-                    {(g.gate_type ?? 'gate').replace(/_/g, ' ').toLowerCase()}
-                  </span>
-                  <span className="text-sm text-slate-200">{g.name ?? '—'}</span>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-col">
+                    <span className="text-2xs uppercase tracking-wide text-slate-500">
+                      {(g.gate_type ?? 'gate').replace(/_/g, ' ').toLowerCase()}
+                    </span>
+                    <span className="text-sm text-slate-200">{g.name ?? '—'}</span>
+                  </div>
+                  <Chip
+                    label={g.status ?? 'pending'}
+                    tone={GATE_TONE[g.status ?? ''] ?? 'bg-surface-800 text-slate-400 ring-surface-800'}
+                  />
                 </div>
-                <Chip
-                  label={g.status ?? 'pending'}
-                  tone={GATE_TONE[g.status ?? ''] ?? 'bg-surface-800 text-slate-400 ring-surface-800'}
-                />
+                <GateAdvance gateId={g.id} status={g.status ?? 'PENDING'} />
               </div>
             ))}
           </div>

@@ -9,6 +9,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { createAuthedServerSupabase } from '@/lib/supabase/authed';
+import { NewDraw, IssueDraw, type JobOption } from './billing-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -175,6 +176,11 @@ export default async function BillingPage() {
 
   const jobById = new Map<string, JobRow>(jobs.map((j) => [j.id, j]));
 
+  // Job options for the "New draw" picker (sorted by job number for scanability).
+  const jobOptions: JobOption[] = [...jobs]
+    .sort((a, b) => a.job_number.localeCompare(b.job_number))
+    .map((j) => ({ id: j.id, jobNumber: j.job_number, name: j.name }));
+
   const draws: Draw[] = requests.map((r) => {
     const job = jobById.get(r.job_id);
     return {
@@ -219,6 +225,11 @@ export default async function BillingPage() {
           </p>
         </div>
       </header>
+
+      {/* New draw: a right-aligned button that expands into a full-width composer. */}
+      <div className="flex justify-end">
+        <NewDraw jobs={jobOptions} />
+      </div>
 
       {/* KPI strip */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -287,6 +298,7 @@ export default async function BillingPage() {
                   <th className="px-5 py-2.5 font-medium">Invoice</th>
                   <th className="px-5 py-2.5 text-right font-medium">Amount</th>
                   <th className="px-5 py-2.5 text-right font-medium">Status</th>
+                  <th className="px-5 py-2.5 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -334,6 +346,15 @@ export default async function BillingPage() {
                             <span className={clsx('h-1.5 w-1.5 rounded-full', meta.dot)} />
                             {meta.label}
                           </span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex justify-end">
+                          {d.status === 'DRAFT' ? (
+                            <IssueDraw drawId={d.id} />
+                          ) : (
+                            <span className="text-slate-600">—</span>
+                          )}
                         </div>
                       </td>
                     </tr>
