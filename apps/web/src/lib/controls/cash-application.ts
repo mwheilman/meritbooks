@@ -38,7 +38,9 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { logAction } from '@/lib/trust/action-log';
+import { logAction, logHumanAction } from '@/lib/trust/action-log';
+import { recordCustomerPayment } from '@/lib/posting/lifecycle';
+import { PostingError } from '@/lib/posting/account-roles';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
 import {
   loadAutonomyGovernance,
@@ -604,4 +606,324 @@ export async function scanCashApplication(
   }
 
   return summary;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// APPLY PATH — a human APPROVES a proposal; the EXISTING gated customer-payment
+// path posts DR Cash / CR AR, reduces the invoice balance(s), and clears the
+// deposit. The AI never moves money (canon §3). No parallel posting path exists:
+// this delegates entirely to lib/posting/lifecycle.recordCustomerPayment.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** One requested application line (a human may adjust the proposed picks). */
+export interface CashApplyRequestLine {
+  invoiceId: string;
+  /** cents to apply to this invoice; must be > 0 and <= the invoice balance. */
+  amountCents: number;
+}
+
+/** A line resolved against the invoice's live balance, ready to validate. */
+export interface CashApplyLine {
+  invoiceId: string;
+  amountCents: number;
+  balanceCents: number;
+}
+
+export interface CashApplyPlan {
+  ok: boolean;
+  totalAppliedCents: number;
+  /** deposit cents NOT applied to any invoice — becomes an on-account credit. */
+  unappliedCents: number;
+  error?: string;
+}
+
+/**
+ * Validate a cash-application plan. PURE — the single source of truth for the
+ * apply amount rules, unit-tested for single / sum-to-total / partial / over-apply:
+ *
+ *   - the deposit must be a positive credit;
+ *   - at least one line, no duplicate invoices, each amount a positive integer;
+ *   - PARTIAL is allowed (a line < its balance) but OVER-APPLY is not
+ *     (a line may never exceed its invoice balance);
+ *   - the applied total may not exceed the deposit (SUM-TO-TOTAL = equal;
+ *     a smaller total leaves an on-account remainder, which is allowed).
+ */
+export function validateCashApplyPlan(depositAmountCents: number, lines: CashApplyLine[]): CashApplyPlan {
+  if (!Number.isFinite(depositAmountCents) || depositAmountCents <= 0) {
+    return { ok: false, totalAppliedCents: 0, unappliedCents: 0, error: 'Deposit amount must be a positive credit.' };
+  }
+  if (lines.length === 0) {
+    return { ok: false, totalAppliedCents: 0, unappliedCents: depositAmountCents, error: 'Apply to at least one invoice.' };
+  }
+  const seen = new Set<string>();
+  let total = 0;
+  for (const l of lines) {
+    if (seen.has(l.invoiceId)) {
+      return { ok: false, totalAppliedCents: 0, unappliedCents: 0, error: `Invoice ${l.invoiceId} is listed more than once.` };
+    }
+    seen.add(l.invoiceId);
+    if (!Number.isInteger(l.amountCents) || l.amountCents <= 0) {
+      return { ok: false, totalAppliedCents: 0, unappliedCents: 0, error: 'Each applied amount must be a positive whole number of cents.' };
+    }
+    if (l.amountCents > l.balanceCents) {
+      return {
+        ok: false,
+        totalAppliedCents: 0,
+        unappliedCents: 0,
+        error: `Applied ${formatMoney(l.amountCents)} exceeds the ${formatMoney(l.balanceCents)} open balance.`,
+      };
+    }
+    total += l.amountCents;
+  }
+  if (total > depositAmountCents) {
+    return {
+      ok: false,
+      totalAppliedCents: total,
+      unappliedCents: 0,
+      error: `Applied total ${formatMoney(total)} exceeds the ${formatMoney(depositAmountCents)} deposit.`,
+    };
+  }
+  return { ok: true, totalAppliedCents: total, unappliedCents: depositAmountCents - total };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AR subledger ↔ GL control tie-out (a standard controllership control). Pure.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ArTieOut {
+  /** Σ open invoice balances (the AR subledger, from v_ar_aging). */
+  subledgerCents: number;
+  /** the AR control account's GL balance (from v_trial_balance net_balance). */
+  glControlCents: number;
+  /** GL − subledger. Non-zero is a reconciling item requiring investigation. */
+  varianceCents: number;
+  tiesOut: boolean;
+}
+
+/**
+ * Compute the AR subledger↔GL variance. PURE. The subledger is the sum of open
+ * invoice balances; the control is the AR account's GL balance. They should be
+ * equal — any difference is surfaced as a reconciling item (variance).
+ */
+export function computeArTieOut(subledgerCents: number, glControlCents: number): ArTieOut {
+  const variance = glControlCents - subledgerCents;
+  return { subledgerCents, glControlCents, varianceCents: variance, tiesOut: variance === 0 };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Apply orchestration (I/O). Reuses the EXISTING gated customer-payment path.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The shape the scanner writes into ai_decisions.proposed_output. */
+interface CashAppProposedOutput {
+  bank_transaction_id?: string;
+  customer_id?: string;
+  invoice_ids?: string[];
+  deposit_amount_cents?: number;
+  kind?: CashAppKind;
+}
+
+export interface ApplyProposalInput {
+  orgId: string;
+  /** Clerk user id of the approver (for the disposition + human audit trail). */
+  userId: string;
+  proposalId: string;
+  /** Optional human-adjusted picks; when omitted, the proposal's own invoices
+   *  are applied at their full current balance. */
+  applications?: CashApplyRequestLine[];
+}
+
+export interface ApplyProposalResult {
+  payment_id: string;
+  gl_entry_id: string | null;
+  bank_transaction_id: string;
+  appliedCents: number;
+  unappliedCents: number;
+  invoiceIds: string[];
+  adjusted: boolean;
+}
+
+/** Sentinel: this line should apply the invoice's full live balance. */
+const FULL_BALANCE = -1;
+
+/**
+ * Approve + apply one cash-application proposal.
+ *
+ * Reuses the EXISTING gated path (recordCustomerPayment → DR Cash / CR AR, reduce
+ * the invoice balance) — this function posts NO GL itself. The deposit is already
+ * in the bank feed: applying it books that deposit as the cash side and clears the
+ * receivable; no money moves.
+ *
+ * Double-post guard (belt + suspenders): (1) the deposit must still be UNPOSTED
+ * (gl_entry_id IS NULL); (2) the proposal is atomically CLAIMED PROPOSED→APPROVED
+ * before posting, so a concurrent apply loses the race and gets a clear error. If
+ * the post then fails, the claim is rolled back so the human can retry.
+ */
+export async function applyCashApplicationProposal(
+  db: SupabaseClient,
+  input: ApplyProposalInput,
+): Promise<ApplyProposalResult> {
+  // 1. Load the proposal (org-scoped; feature-locked).
+  const { data: propRaw, error: propErr } = await db
+    .from('ai_decisions')
+    .select('id, status, location_id, proposed_output')
+    .eq('id', input.proposalId)
+    .eq('org_id', input.orgId)
+    .eq('feature', CASHAPP_FEATURE)
+    .maybeSingle();
+  if (propErr) throw new PostingError(`Could not load proposal: ${propErr.message}`);
+  if (!propRaw) throw new PostingError('Cash-application proposal not found');
+  const prop = propRaw as { status: string; location_id: string | null; proposed_output: CashAppProposedOutput | null };
+  if (prop.status !== 'PROPOSED') {
+    throw new PostingError(`Proposal already ${prop.status.toLowerCase()} — nothing to apply`);
+  }
+
+  const po = prop.proposed_output ?? {};
+  const bankTxnId = po.bank_transaction_id;
+  const customerId = po.customer_id;
+  if (!bankTxnId || !customerId) {
+    throw new PostingError('Proposal is missing its deposit or customer reference');
+  }
+
+  // 2. Load the deposit; refuse if it already posted.
+  const { data: txnRaw, error: txnErr } = await db
+    .from('bank_transactions')
+    .select('id, bank_account_id, location_id, transaction_date, amount_cents, gl_entry_id')
+    .eq('id', bankTxnId)
+    .eq('org_id', input.orgId)
+    .maybeSingle();
+  if (txnErr) throw new PostingError(`Could not load deposit: ${txnErr.message}`);
+  if (!txnRaw) throw new PostingError('Deposit not found');
+  const txn = txnRaw as {
+    bank_account_id: string;
+    location_id: string;
+    transaction_date: string;
+    amount_cents: number | string;
+    gl_entry_id: string | null;
+  };
+  if (txn.gl_entry_id) throw new PostingError('This deposit is already posted — it cannot be applied again');
+  const depositAmountCents = Number(txn.amount_cents) || 0;
+  if (depositAmountCents <= 0) throw new PostingError('Deposit is not a positive credit');
+
+  // 3. Resolve the requested picks (human override, else the proposal at full balance).
+  const adjusted = Boolean(input.applications && input.applications.length > 0);
+  const requested: CashApplyRequestLine[] = adjusted
+    ? input.applications!
+    : (po.invoice_ids ?? []).map((id) => ({ invoiceId: id, amountCents: FULL_BALANCE }));
+  if (requested.length === 0) throw new PostingError('Proposal has no invoices to apply');
+
+  const invoiceIds = Array.from(new Set(requested.map((r) => r.invoiceId)));
+  const { data: invRaw, error: invErr } = await db
+    .from('invoices')
+    .select('id, balance_cents')
+    .eq('org_id', input.orgId)
+    .in('id', invoiceIds);
+  if (invErr) throw new PostingError(`Could not load invoices: ${invErr.message}`);
+  const balById = new Map<string, number>();
+  for (const r of (invRaw ?? []) as Array<{ id: string; balance_cents: number | string }>) {
+    balById.set(r.id, Number(r.balance_cents) || 0);
+  }
+
+  const lines: CashApplyLine[] = [];
+  for (const r of requested) {
+    const bal = balById.get(r.invoiceId);
+    if (bal === undefined) throw new PostingError(`Invoice ${r.invoiceId} not found or not open`);
+    const amountCents = r.amountCents === FULL_BALANCE ? bal : r.amountCents;
+    lines.push({ invoiceId: r.invoiceId, amountCents, balanceCents: bal });
+  }
+
+  // 4. Validate the plan (single / sum-to-total / partial / over-apply guard).
+  const plan = validateCashApplyPlan(depositAmountCents, lines);
+  if (!plan.ok) throw new PostingError(plan.error ?? 'Invalid application plan');
+
+  // 5. Cash-side GL account = the deposit's own bank account (so cash ties out).
+  const { data: ba } = await db
+    .from('bank_accounts')
+    .select('account_id')
+    .eq('org_id', input.orgId)
+    .eq('id', txn.bank_account_id)
+    .maybeSingle();
+  const cashAccountId = (ba as { account_id: string } | null)?.account_id ?? undefined;
+
+  // 6. Double-post guard: atomically CLAIM the proposal before posting.
+  const nowIso = new Date().toISOString();
+  const { data: claimed, error: claimErr } = await db
+    .from('ai_decisions')
+    .update({ status: 'APPROVED', disposition_by_user: input.userId, disposition_at: nowIso })
+    .eq('id', input.proposalId)
+    .eq('org_id', input.orgId)
+    .eq('status', 'PROPOSED')
+    .select('id')
+    .maybeSingle();
+  if (claimErr) throw new PostingError(`Could not claim proposal: ${claimErr.message}`);
+  if (!claimed) throw new PostingError('Proposal was just applied by someone else');
+
+  // 7. Post through the EXISTING gated customer-payment path (DR Cash / CR AR).
+  let result: { payment_id: string; gl_entry_id: string | null };
+  try {
+    result = await recordCustomerPayment(db, {
+      orgId: input.orgId,
+      customerId,
+      locationId: txn.location_id,
+      paymentDate: txn.transaction_date,
+      amountCents: depositAmountCents,
+      method: 'ACH',
+      cashAccountId,
+      referenceNumber: `CASHAPP ${bankTxnId.slice(0, 8)}`,
+      bankAccountId: txn.bank_account_id,
+      applications: lines.map((l) => ({ invoice_id: l.invoiceId, amount_cents: l.amountCents })),
+    });
+  } catch (e) {
+    // Roll the claim back so the human can fix the picks and retry.
+    await db
+      .from('ai_decisions')
+      .update({ status: 'PROPOSED', disposition_by_user: null, disposition_at: null })
+      .eq('id', input.proposalId)
+      .eq('org_id', input.orgId);
+    throw e;
+  }
+
+  // 8. Mark the deposit posted (it IS the cash side now) and finalize the proposal.
+  await db
+    .from('bank_transactions')
+    .update({ status: 'POSTED', gl_entry_id: result.gl_entry_id })
+    .eq('id', bankTxnId)
+    .eq('org_id', input.orgId);
+  await db
+    .from('ai_decisions')
+    .update({
+      posted_gl_entry_id: result.gl_entry_id,
+      disposition_note: adjusted ? 'Applied with human-adjusted invoice selection' : 'Applied as proposed',
+    })
+    .eq('id', input.proposalId)
+    .eq('org_id', input.orgId);
+
+  // 9. Human audit trail (never throws).
+  await logHumanAction(db, input.userId, input.orgId, {
+    action: 'controls.cash_application.apply',
+    subjectTable: 'bank_transactions',
+    subjectId: bankTxnId,
+    summary: `Applied ${formatMoney(plan.totalAppliedCents)} to ${lines.length} invoice(s)${
+      plan.unappliedCents > 0 ? ` (${formatMoney(plan.unappliedCents)} on account)` : ''
+    }`,
+    locationId: txn.location_id,
+    metadata: {
+      proposal_id: input.proposalId,
+      gl_entry_id: result.gl_entry_id,
+      invoice_ids: lines.map((l) => l.invoiceId),
+      applied_cents: plan.totalAppliedCents,
+      unapplied_cents: plan.unappliedCents,
+      adjusted,
+    },
+  });
+
+  return {
+    payment_id: result.payment_id,
+    gl_entry_id: result.gl_entry_id,
+    bank_transaction_id: bankTxnId,
+    appliedCents: plan.totalAppliedCents,
+    unappliedCents: plan.unappliedCents,
+    invoiceIds: lines.map((l) => l.invoiceId),
+    adjusted,
+  };
 }
