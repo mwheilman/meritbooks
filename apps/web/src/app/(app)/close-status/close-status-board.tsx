@@ -478,6 +478,7 @@ function EntityDetail({ e }: { e: EntityCloseStatus }) {
             sub={e.bankRecTotal > 0 ? `${e.bankRecReconciled}/${e.bankRecTotal} accounts` : 'no run yet'}
             tone={e.bankRec === 'complete' ? 'good' : e.bankRec === 'incomplete' ? 'danger' : 'muted'}
           />
+          <RecGateRow e={e} />
         </dl>
 
         {kinds.length > 0 && (
@@ -502,6 +503,36 @@ function EntityDetail({ e }: { e: EntityCloseStatus }) {
       </div>
     </div>
   );
+}
+
+/**
+ * The must-tie-to-close gate as a first-class pass/blocked signal. Mirrors the
+ * enforced gate in PATCH /api/periods (every active bank account must have a
+ * finalized, tied reconciliation before HARD_CLOSE). Already-closed periods read
+ * as pass; entities with no bank accounts have no gate to satisfy.
+ */
+function RecGateRow({ e }: { e: EntityCloseStatus }) {
+  let value: string;
+  let sub: string;
+  let tone: 'good' | 'warn' | 'danger' | 'muted';
+  if (e.periodStatus === 'HARD_CLOSE') {
+    value = 'Passed';
+    sub = 'period closed';
+    tone = 'good';
+  } else if (e.bankRecTotal === 0) {
+    value = 'N/A';
+    sub = 'no bank accounts';
+    tone = 'muted';
+  } else if (e.bankRec === 'complete') {
+    value = 'Pass';
+    sub = 'ties — clear to close';
+    tone = 'good';
+  } else {
+    value = 'Blocked';
+    sub = e.bankRec === 'incomplete' ? `${e.bankRecReconciled}/${e.bankRecTotal} tied` : 'not reconciled';
+    tone = 'danger';
+  }
+  return <SignalRow label="Close gate (reconciliation)" value={value} sub={sub} tone={tone} />;
 }
 
 function SignalRow({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: 'good' | 'warn' | 'danger' | 'muted' }) {

@@ -50,6 +50,10 @@ const bodySchema = z
     offset_account_id: z.string().uuid().optional(),
     // Required for 'other' (which way cash moves); ignored for fee/interest.
     cash_effect: z.enum(['increase', 'decrease']).optional(),
+    // When approving an AI-drafted proposal: the existing unmatched bank line this
+    // adjustment books. Present ⇒ categorize/clear that line in place (no new mirror
+    // row); absent ⇒ insert a mirror line (a fee only on the paper statement).
+    source_transaction_id: z.string().uuid().optional(),
     // Client-generated idempotency token — a retry is a no-op.
     idempotency_key: z.string().uuid(),
   })
@@ -123,6 +127,52 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (baErr || !baRaw) return NextResponse.json({ error: 'Bank account not found' }, { status: 404 });
   const ba = baRaw as { id: string; account_id: string; location_id: string };
 
+  // ── If approving an AI proposal: validate the source line before we post ────────
+  // The proposed adjustment must match the actual feed line's account, direction,
+  // and magnitude — never post an adjustment that doesn't correspond to the line.
+  const cashEffectForCheck: CashEffect =
+    body.adjustment_type === 'other'
+      ? (body.cash_effect as CashEffect)
+      : (DEFAULT_CASH_EFFECT[body.adjustment_type] as CashEffect);
+  let sourceLine: { id: string } | null = null;
+  if (body.source_transaction_id) {
+    const { data: srcRaw, error: srcErr } = await supabase
+      .from('bank_transactions')
+      .select('id, bank_account_id, amount_cents, status, gl_entry_id, reconciliation_id, reconciled_at')
+      .eq('id', body.source_transaction_id)
+      .maybeSingle();
+    if (srcErr) return NextResponse.json({ error: 'Failed to load source transaction' }, { status: 500 });
+    if (!srcRaw) return NextResponse.json({ error: 'Source transaction not found' }, { status: 404 });
+    const src = srcRaw as {
+      id: string;
+      bank_account_id: string;
+      amount_cents: number | string;
+      gl_entry_id: string | null;
+      reconciliation_id: string | null;
+      reconciled_at: string | null;
+    };
+    if (src.bank_account_id !== ba.id) {
+      return NextResponse.json({ error: 'Source line is not on this bank account' }, { status: 400 });
+    }
+    if (src.reconciled_at != null) {
+      return NextResponse.json({ error: 'Source line is locked by a finalized reconciliation' }, { status: 409 });
+    }
+    if (src.gl_entry_id != null) {
+      return NextResponse.json({ error: 'Source line is already posted to the GL' }, { status: 409 });
+    }
+    if (src.reconciliation_id != null && src.reconciliation_id !== rec.id) {
+      return NextResponse.json({ error: 'Source line belongs to another reconciliation' }, { status: 409 });
+    }
+    const expectedSigned = signedStatementAmountCents(cashEffectForCheck, body.amount_cents);
+    if (num(src.amount_cents) !== expectedSigned) {
+      return NextResponse.json(
+        { error: 'Adjustment amount/direction does not match the source line' },
+        { status: 422 },
+      );
+    }
+    sourceLine = { id: src.id };
+  }
+
   // ── Period: entry date must fall in the rec's period and not be hard-closed ─────
   const { data: period, error: pErr } = await supabase
     .from('fiscal_periods')
@@ -158,10 +208,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   // ── Resolve accounts (by role / explicit choice) ────────────────────────────────
-  const cashEffect: CashEffect =
-    body.adjustment_type === 'other'
-      ? (body.cash_effect as CashEffect)
-      : (DEFAULT_CASH_EFFECT[body.adjustment_type] as CashEffect);
+  const cashEffect: CashEffect = cashEffectForCheck;
 
   let cashAccount;
   let offsetAccount;
@@ -210,32 +257,62 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: msg }, { status });
   }
 
-  // ── Mirror as a POSTED, auto-cleared bank line so the rec ties ───────────────────
+  // ── Record the statement line so the rec ties ───────────────────────────────────
+  // Two paths: approving an AI proposal categorizes/clears the EXISTING feed line
+  // in place (no duplicate row); a manual adjustment inserts a mirror line.
   const signedAmount = signedStatementAmountCents(cashEffect, body.amount_cents);
-  const { data: txn, error: txnErr } = await supabase
-    .from('bank_transactions')
-    .insert({
-      org_id: orgId,
-      bank_account_id: ba.id,
-      location_id: ba.location_id,
-      transaction_date: body.entry_date,
-      description: body.memo,
-      amount_cents: signedAmount,
-      status: 'POSTED',
-      gl_entry_id: posted.entry_id,
-      match_type: 'NONE',
-      // Auto-clear into THIS reconciliation (cleared, not yet locked).
-      reconciliation_id: rec.id,
-      reconciled_at: null,
-    })
-    .select('id')
-    .single();
+  let txnId: string;
 
-  if (txnErr || !txn) {
-    // Roll the GL entry back so the idempotency key is free to retry cleanly.
-    await supabase.from('gl_entry_lines').delete().eq('gl_entry_id', posted.entry_id);
-    await supabase.from('gl_entries').delete().eq('id', posted.entry_id);
-    return NextResponse.json({ error: 'Failed to record the statement line for the adjustment' }, { status: 500 });
+  if (sourceLine) {
+    const { data: updated, error: updErr } = await supabase
+      .from('bank_transactions')
+      .update({
+        status: 'POSTED',
+        gl_entry_id: posted.entry_id,
+        match_type: 'NONE',
+        // Auto-clear into THIS reconciliation (cleared, not yet locked).
+        reconciliation_id: rec.id,
+        reconciled_at: null,
+      })
+      .eq('id', sourceLine.id)
+      .is('gl_entry_id', null) // guard against a concurrent post
+      .is('reconciled_at', null)
+      .select('id')
+      .maybeSingle();
+    if (updErr || !updated) {
+      // Roll the GL entry back so the idempotency key is free to retry cleanly.
+      await supabase.from('gl_entry_lines').delete().eq('gl_entry_id', posted.entry_id);
+      await supabase.from('gl_entries').delete().eq('id', posted.entry_id);
+      return NextResponse.json({ error: 'Failed to attach the adjustment to the source line' }, { status: 500 });
+    }
+    txnId = (updated as { id: string }).id;
+  } else {
+    const { data: txn, error: txnErr } = await supabase
+      .from('bank_transactions')
+      .insert({
+        org_id: orgId,
+        bank_account_id: ba.id,
+        location_id: ba.location_id,
+        transaction_date: body.entry_date,
+        description: body.memo,
+        amount_cents: signedAmount,
+        status: 'POSTED',
+        gl_entry_id: posted.entry_id,
+        match_type: 'NONE',
+        // Auto-clear into THIS reconciliation (cleared, not yet locked).
+        reconciliation_id: rec.id,
+        reconciled_at: null,
+      })
+      .select('id')
+      .single();
+
+    if (txnErr || !txn) {
+      // Roll the GL entry back so the idempotency key is free to retry cleanly.
+      await supabase.from('gl_entry_lines').delete().eq('gl_entry_id', posted.entry_id);
+      await supabase.from('gl_entries').delete().eq('id', posted.entry_id);
+      return NextResponse.json({ error: 'Failed to record the statement line for the adjustment' }, { status: 500 });
+    }
+    txnId = (txn as { id: string }).id;
   }
 
   await logHumanAction(supabase, userId, orgId, {
@@ -249,7 +326,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       signedAmountCents: signedAmount,
       entryId: posted.entry_id,
       entryNumber: posted.entry_number,
-      bankTransactionId: (txn as { id: string }).id,
+      bankTransactionId: txnId,
+      sourceTransactionId: body.source_transaction_id ?? null,
+      aiProposed: body.source_transaction_id != null,
     },
   });
 
@@ -258,7 +337,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       ok: true,
       entryId: posted.entry_id,
       entryNumber: posted.entry_number,
-      bankTransactionId: (txn as { id: string }).id,
+      bankTransactionId: txnId,
       signedAmountCents: signedAmount,
     },
     { status: 201 },

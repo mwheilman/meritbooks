@@ -68,6 +68,14 @@ export const AUTONOMY_FEATURES: readonly AutonomyFeatureDef[] = [
     defaultMode: 'PROPOSE',
   },
   {
+    feature: 'RECON_ADJUSTMENT',
+    label: 'Reconciliation adjusting entries',
+    description:
+      'Drafts categorized adjusting entries (bank fees, interest, NSF, FX/rounding) for unmatched bank lines so a reconciliation ties. Proposes only; a human approves and posts. An unexplained residual is never plugged.',
+    category: 'processing',
+    defaultMode: 'PROPOSE',
+  },
+  {
     feature: 'EXCEPTION_PREDICTION',
     label: 'Exception resolution assistant',
     description:

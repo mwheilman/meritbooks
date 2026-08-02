@@ -4,6 +4,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 import { generateYear, setPeriodStatus, type PeriodStatus } from '@/lib/services/fiscal-periods';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { gatherReconciliationCloseStatus } from '@/lib/services/reconciliation-close-gate';
 
 interface PeriodRow { id: string; location_id: string; period_year: number; period_month: number; status: PeriodStatus; closed_at: string | null }
 
@@ -119,6 +120,58 @@ export async function PATCH(request: Request) {
   const parsed = statusSchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid request' }, { status: 422 });
 
+  // ── Must-tie-to-close gate (FPB Bank Reconciliation D10.1) ─────────────────────
+  // A period cannot HARD_CLOSE while a bank account is un-reconciled or a
+  // reconciliation carries a non-zero (unexplained) variance. Additive: it only
+  // gates the transition INTO HARD_CLOSE, and an authorized user may override with
+  // an explicit reason (which is audited alongside the blockers).
+  let recGateBlockers: { accountName: string; reason: string; kind: string }[] = [];
+  if (parsed.data.status === 'HARD_CLOSE') {
+    const { data: gatePeriod } = await supabase
+      .from('fiscal_periods')
+      .select('id, location_id, status')
+      .eq('org_id', orgId)
+      .eq('id', parsed.data.period_id)
+      .maybeSingle();
+    const gp = gatePeriod as { id: string; location_id: string; status: PeriodStatus } | null;
+    // Only gate a real transition (not a HARD_CLOSE→HARD_CLOSE no-op).
+    if (gp && gp.status !== 'HARD_CLOSE') {
+      try {
+        const gate = await gatherReconciliationCloseStatus(supabase, {
+          locationId: gp.location_id,
+          fiscalPeriodId: gp.id,
+        });
+        if (!gate.pass) {
+          recGateBlockers = gate.blockers.map((b) => ({
+            accountName: b.accountName,
+            reason: b.reason,
+            kind: b.kind,
+          }));
+          const hasReason = !!parsed.data.reason && parsed.data.reason.trim().length >= 4;
+          if (!hasReason) {
+            return NextResponse.json(
+              {
+                error: 'Reconciliation must tie before this period can be hard-closed',
+                code: 'RECONCILIATION_GATE',
+                blockers: recGateBlockers,
+              },
+              { status: 409 },
+            );
+          }
+        }
+      } catch {
+        // A gate read failure must not silently allow a close — fail closed unless
+        // an explicit override reason was supplied.
+        if (!parsed.data.reason || parsed.data.reason.trim().length < 4) {
+          return NextResponse.json(
+            { error: 'Could not verify reconciliation status; provide an override reason to force the close', code: 'RECONCILIATION_GATE' },
+            { status: 409 },
+          );
+        }
+      }
+    }
+  }
+
   try {
     await setPeriodStatus(supabase, orgId, parsed.data.period_id, parsed.data.status, actor, parsed.data.reason ?? null);
 
@@ -137,9 +190,13 @@ export async function PATCH(request: Request) {
         ? `Set period ${p.period_year}/${String(p.period_month).padStart(2, '0')} to ${parsed.data.status}`
         : `Set period to ${parsed.data.status}`,
       locationId: p?.location_id ?? null,
+      metadata:
+        recGateBlockers.length > 0
+          ? { reconciliationGateOverridden: true, blockers: recGateBlockers, reason: parsed.data.reason ?? null }
+          : undefined,
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, reconciliationGateOverridden: recGateBlockers.length > 0 });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed' }, { status: 500 });
   }

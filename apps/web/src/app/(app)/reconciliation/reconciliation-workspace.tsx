@@ -14,6 +14,10 @@ import {
   ShieldCheck,
   Plus,
   Receipt,
+  Sparkles,
+  Check,
+  Ban,
+  AlertTriangle,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
@@ -72,6 +76,35 @@ interface AccountsResponse {
 }
 
 type AdjustmentType = 'bank_fee' | 'interest' | 'other';
+
+interface AdjustmentProposalDto {
+  sourceTransactionId: string;
+  category: 'bank_fee' | 'interest' | 'nsf' | 'fx_rounding';
+  adjustmentType: AdjustmentType;
+  cashEffect: 'increase' | 'decrease';
+  amountCents: number;
+  offsetAccountId: string | null;
+  needsOffsetAccount: boolean;
+  suggestedMemo: string;
+  confidence: number;
+  reasoning: string;
+}
+interface SuggestResponse {
+  reconciliationId: string;
+  finalized: boolean;
+  differenceCents: number;
+  ties: boolean;
+  unexplainedVarianceCents: number;
+  unexplainedLineCount: number;
+  proposals: AdjustmentProposalDto[];
+}
+
+const CATEGORY_LABEL: Record<AdjustmentProposalDto['category'], string> = {
+  bank_fee: 'Bank fee',
+  interest: 'Interest income',
+  nsf: 'NSF / returned item',
+  fx_rounding: 'FX / rounding',
+};
 
 interface PeriodMonth {
   month: number;
@@ -150,8 +183,19 @@ export function ReconciliationWorkspace({
   const [adjMemo, setAdjMemo] = useState('');
   const [adjOffsetId, setAdjOffsetId] = useState('');
   const [adjCashEffect, setAdjCashEffect] = useState<'increase' | 'decrease'>('decrease');
+  // When the form was opened from an AI proposal, the feed line it books in place.
+  const [adjSourceTxnId, setAdjSourceTxnId] = useState<string | null>(null);
   // Stable per form-open so a double-submit is one idempotent no-op, not two entries.
   const [adjKey, setAdjKey] = useState('');
+
+  // ── AI-drafted adjusting-entry proposals (feature RECON_ADJUSTMENT) ────────────
+  const suggestUrl = rec && !finalized ? `/api/reconciliation/adjustment/suggest?reconciliation_id=${rec.id}` : null;
+  const { data: suggestData, refetch: refetchSuggest } = useQuery<SuggestResponse>(suggestUrl);
+  const [rejectedIds, setRejectedIds] = useState<Set<string>>(new Set());
+  const [busyProposal, setBusyProposal] = useState<string | null>(null);
+  const proposals = (suggestData?.proposals ?? []).filter((p) => !rejectedIds.has(p.sourceTransactionId));
+  const unexplainedCents = suggestData?.unexplainedVarianceCents ?? 0;
+  const hasUnexplained = !!suggestData && !suggestData.ties;
 
   // Load the chart once the form is open (offset-account picker for interest/other).
   const { data: accountsData } = useQuery<AccountsResponse>(showAdjust ? '/api/accounts/search' : null);
@@ -170,8 +214,55 @@ export function ReconciliationWorkspace({
     setAdjMemo('');
     setAdjOffsetId('');
     setAdjCashEffect('decrease');
+    setAdjSourceTxnId(null);
     setAdjKey(newUuid());
     setShowAdjust(true);
+  }
+
+  // Approve an AI proposal. When the offset account is resolved we post straight
+  // through the vetted adjustment route (attaching to the source feed line so the
+  // rec ties without a duplicate row); when it isn't (e.g. which income account for
+  // interest), we pre-fill the form so the human picks it — never auto-posted.
+  async function approveProposal(p: AdjustmentProposalDto) {
+    if (!rec) return;
+    if (p.needsOffsetAccount) {
+      setAdjType(p.adjustmentType);
+      setAdjAmount((p.amountCents / 100).toFixed(2));
+      setAdjDate(data?.period.endDate ?? '');
+      setAdjMemo(p.suggestedMemo);
+      setAdjOffsetId(p.offsetAccountId ?? '');
+      setAdjCashEffect(p.cashEffect);
+      setAdjSourceTxnId(p.sourceTransactionId);
+      setAdjKey(newUuid());
+      setShowAdjust(true);
+      addToast('success', 'Choose the offsetting account, then post');
+      return;
+    }
+    setBusyProposal(p.sourceTransactionId);
+    const result = await api.post<{ ok: boolean }>('/api/reconciliation/adjustment', {
+      reconciliation_id: rec.id,
+      adjustment_type: p.adjustmentType,
+      amount_cents: p.amountCents,
+      entry_date: data?.period.endDate,
+      memo: p.suggestedMemo,
+      offset_account_id: p.adjustmentType === 'bank_fee' ? undefined : p.offsetAccountId ?? undefined,
+      cash_effect: p.adjustmentType === 'other' ? p.cashEffect : undefined,
+      source_transaction_id: p.sourceTransactionId,
+      idempotency_key: newUuid(),
+    });
+    setBusyProposal(null);
+    if (result.error) {
+      addToast('error', result.error.error || 'Could not post the suggested adjustment');
+      return;
+    }
+    addToast('success', 'Suggested adjustment posted and cleared');
+    await refetch();
+    await refetchSuggest();
+    onChanged();
+  }
+
+  function rejectProposal(id: string) {
+    setRejectedIds((prev) => new Set(prev).add(id));
   }
 
   async function submitAdjustment() {
@@ -198,6 +289,7 @@ export function ReconciliationWorkspace({
       memo: adjMemo.trim(),
       offset_account_id: adjType === 'bank_fee' ? undefined : adjOffsetId,
       cash_effect: adjType === 'other' ? adjCashEffect : undefined,
+      source_transaction_id: adjSourceTxnId ?? undefined,
       idempotency_key: adjKey || newUuid(),
     });
     setBusy(null);
@@ -208,6 +300,7 @@ export function ReconciliationWorkspace({
     addToast('success', 'Adjusting entry posted and cleared');
     setShowAdjust(false);
     await refetch();
+    await refetchSuggest();
     onChanged();
   }
   // Reflect the server statement balance unless the user is mid-edit.
@@ -249,6 +342,7 @@ export function ReconciliationWorkspace({
       return;
     }
     await refetch();
+    await refetchSuggest();
   }
 
   async function finalize() {
@@ -457,6 +551,89 @@ export function ReconciliationWorkspace({
                   <Lock className="h-4 w-4" />
                   Finalized {rec?.reconciledAt ? `on ${new Date(rec.reconciledAt).toLocaleDateString()}` : ''} — lines
                   are locked. Undo to make changes.
+                </div>
+              )}
+
+              {/* Unexplained variance — surfaced, never plugged (canon §3) */}
+              {rec && !finalized && hasUnexplained && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-4 py-2.5 text-sm text-amber-200">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                  <div>
+                    <p className="font-medium text-amber-100">
+                      Unexplained variance {formatMoney(unexplainedCents)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-amber-300/80">
+                      {proposals.length > 0
+                        ? 'Review the suggested adjustments below, or check off outstanding lines. Do not force it to $0 — an unexplained difference must be investigated, never plugged.'
+                        : `${suggestData?.unexplainedLineCount ?? 0} unmatched line(s) with no auto-drafted cause. Investigate — the rec must tie legitimately, not by a plug.`}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* AI-drafted adjusting entries (RECON_ADJUSTMENT) — propose → human approves */}
+              {rec && !finalized && proposals.length > 0 && (
+                <div className="mb-4 rounded-lg border border-indigo-500/25 bg-indigo-500/[0.05] p-4">
+                  <div className="mb-3 flex items-center gap-1.5 text-sm font-medium text-white">
+                    <Sparkles size={14} className="text-indigo-400" />
+                    Suggested adjustments
+                    <span className="ml-1 rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-medium text-indigo-300">
+                      {proposals.length}
+                    </span>
+                    <span className="ml-auto text-2xs font-normal text-slate-500">AI proposes · you approve</span>
+                  </div>
+                  <ul className="space-y-2">
+                    {proposals.map((p) => (
+                      <li
+                        key={p.sourceTransactionId}
+                        className="flex items-start justify-between gap-3 rounded-md border border-slate-700/60 bg-slate-900/50 px-3 py-2.5"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
+                              {CATEGORY_LABEL[p.category]}
+                            </span>
+                            <span className="truncate text-sm text-slate-200">{p.suggestedMemo}</span>
+                            <span
+                              className={clsx(
+                                'font-mono text-sm tabular-nums',
+                                p.cashEffect === 'decrease' ? 'text-red-400' : 'text-emerald-400',
+                              )}
+                            >
+                              {p.cashEffect === 'decrease' ? '−' : '+'}
+                              {formatMoney(p.amountCents)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-2xs leading-relaxed text-slate-500">{p.reasoning}</p>
+                          {p.needsOffsetAccount && (
+                            <p className="mt-0.5 text-2xs text-amber-400/80">Needs an offset account — approve to choose it</p>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            onClick={() => approveProposal(p)}
+                            disabled={busyProposal === p.sourceTransactionId}
+                            className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                          >
+                            {busyProposal === p.sourceTransactionId ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              <Check size={12} />
+                            )}
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => rejectProposal(p.sourceTransactionId)}
+                            disabled={busyProposal === p.sourceTransactionId}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2.5 py-1.5 text-xs font-medium text-slate-300 hover:border-red-500/40 hover:text-red-300 disabled:opacity-50"
+                          >
+                            <Ban size={12} />
+                            Reject
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
 
