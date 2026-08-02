@@ -9,6 +9,8 @@ import { BankFeedList } from './bank-feed-list';
 import { BankFeedMetricsStrip } from './bank-feed-metrics';
 import { EditPanel } from './edit-panel';
 import { CompanySelector } from './company-selector';
+import { StatementImport } from './statement-import';
+import { FileUp } from 'lucide-react';
 
 interface ApproveResult {
   success: boolean;
@@ -69,6 +71,7 @@ export function BankFeedContent() {
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [flaggingTxn, setFlaggingTxn] = useState<BankFeedRow | null>(null);
   const [isCategorizing, setIsCategorizing] = useState(false);
+  const [showStatementImport, setShowStatementImport] = useState(false);
 
   // Build query params
   const params: Record<string, string> = {};
@@ -383,15 +386,33 @@ export function BankFeedContent() {
     <>
       <div className="mb-4 flex items-center justify-between gap-3">
         <CompanySelector selectedId={selectedLocationId} onChange={setSelectedLocationId} />
-        <button
-          onClick={handleCategorizeAll}
-          disabled={isCategorizing}
-          className="btn-secondary btn-sm whitespace-nowrap"
-          title="Run AI categorization on uncoded pending transactions"
-        >
-          {isCategorizing ? 'Categorizing…' : 'AI Categorize'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowStatementImport(true)}
+            className="btn-secondary btn-sm whitespace-nowrap flex items-center gap-1.5"
+            title="Import a bank/credit-card statement PDF for a manual (non-Plaid) account"
+          >
+            <FileUp size={14} /> Import statement (PDF)
+          </button>
+          <button
+            onClick={handleCategorizeAll}
+            disabled={isCategorizing}
+            className="btn-secondary btn-sm whitespace-nowrap"
+            title="Run AI categorization on uncoded pending transactions"
+          >
+            {isCategorizing ? 'Categorizing…' : 'AI Categorize'}
+          </button>
+        </div>
       </div>
+      {showStatementImport && (
+        <StatementImport
+          onClose={() => setShowStatementImport(false)}
+          onImported={() => {
+            setShowStatementImport(false);
+            refetch();
+          }}
+        />
+      )}
       <BankFeedFilters
         activeTab={activeTab}
         onTabChange={setActiveTab}
