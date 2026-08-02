@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { currentOrgId, getEntitlements } from '@/lib/entitlements';
 import { createAuthedServerSupabase } from '@/lib/supabase/authed';
+import { PortfolioBriefing } from '@/components/portfolio-briefing';
 
 export const dynamic = 'force-dynamic';
 
@@ -140,6 +141,8 @@ export default async function Dashboard() {
         </div>
         <PulseBar contract={contract} cost={cost} committed={committed} pending={pending} />
       </section>
+
+      <PortfolioBriefing />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <section className="lg:col-span-2 rounded-2xl border border-surface-800 bg-surface-900">

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { currentOrgId, getEntitlements, hasModule } from '@/lib/entitlements';
 import { Nav } from '@/components/nav';
+import { CommandBar } from '@/components/command-bar';
 
 // Entitlements gate: MeritProjects renders ONLY if the tenant owns the module.
 // Standalone-sellable and bundle-safe, decided by core.organizations.entitlements
@@ -30,6 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen flex bg-surface-950">
       <Nav />
       <main className="flex-1 min-w-0 p-8">{children}</main>
+      <CommandBar />
     </div>
   );
 }
