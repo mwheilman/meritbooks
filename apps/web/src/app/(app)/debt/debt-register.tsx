@@ -8,10 +8,11 @@ import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
 import {
   Loader2, AlertCircle, Plus, Sparkles, Landmark, X, Trash2, ShieldCheck,
-  CalendarClock, ChevronRight, CheckCircle2,
+  CalendarClock, ChevronRight, CheckCircle2, RefreshCw, ArrowLeftRight,
 } from 'lucide-react';
 import { DebtForm } from './debt-form';
 import { DebtParseReview } from './debt-parse-review';
+import { ResetModal, RefinanceModal, PayoffModal, type ActionInstrument } from './debt-actions';
 
 type Frequency = 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
 type Status = 'ACTIVE' | 'PAID_OFF' | 'CLOSED' | 'INACTIVE';
@@ -229,11 +230,30 @@ export function DebtRegister() {
 function ScheduleDrawer({ instrumentId, onClose, onPosted }: { instrumentId: string; onClose: () => void; onPosted: () => void }) {
   const [refreshKey, setRefreshKey] = useState('0');
   const [busy, setBusy] = useState<string | null>(null);
+  const [action, setAction] = useState<null | 'reset' | 'refinance' | 'payoff'>(null);
   const { data, isLoading, error, refetch } = useQuery<DetailResponse>(`/api/debt/${instrumentId}`, undefined, { key: refreshKey });
 
   const detail = data?.data;
   const inst = detail?.instrument;
   const lines = detail?.schedule ?? [];
+
+  function afterAction() {
+    setAction(null);
+    setRefreshKey((k) => String(Number(k) + 1));
+    refetch();
+    onPosted();
+  }
+
+  const actionInst: ActionInstrument | null = inst
+    ? {
+        id: instrumentId,
+        loan_name: inst.loan_name,
+        principal_cents: inst.principal_cents,
+        interest_rate: inst.interest_rate,
+        amortization_method: inst.amortization_method,
+        payment_frequency: inst.payment_frequency,
+      }
+    : null;
 
   async function post(period: number, kind: 'ACCRUAL' | 'PAYMENT') {
     setBusy(`${period}:${kind}`);
@@ -261,6 +281,27 @@ function ScheduleDrawer({ instrumentId, onClose, onPosted }: { instrumentId: str
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close"><X size={18} /></button>
         </div>
+
+        {inst && inst.status === 'ACTIVE' && (
+          <div className="flex items-center gap-2 mb-4">
+            <button onClick={() => setAction('reset')} className="px-2.5 py-1 text-[11px] font-medium bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 rounded-md flex items-center gap-1">
+              <RefreshCw size={12} /> Rate reset
+            </button>
+            <button onClick={() => setAction('refinance')} className="px-2.5 py-1 text-[11px] font-medium bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-md flex items-center gap-1">
+              <ArrowLeftRight size={12} /> Refinance
+            </button>
+            <button onClick={() => setAction('payoff')} className="px-2.5 py-1 text-[11px] font-medium bg-emerald-600/80 hover:bg-emerald-500 text-white rounded-md flex items-center gap-1">
+              <CheckCircle2 size={12} /> Pay off
+            </button>
+          </div>
+        )}
+        {inst && inst.status !== 'ACTIVE' && (
+          <div className="mb-4 text-[11px] text-slate-500">This loan is {inst.status.replace('_', ' ').toLowerCase()} — lifecycle actions are closed.</div>
+        )}
+
+        {actionInst && action === 'reset' && <ResetModal inst={actionInst} onClose={() => setAction(null)} onDone={afterAction} />}
+        {actionInst && action === 'refinance' && <RefinanceModal inst={actionInst} lines={lines} onClose={() => setAction(null)} onDone={afterAction} />}
+        {actionInst && action === 'payoff' && <PayoffModal inst={actionInst} onClose={() => setAction(null)} onDone={afterAction} />}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
