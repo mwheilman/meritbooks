@@ -12,6 +12,7 @@ import {
   Users,
   FileWarning,
   DollarSign,
+  FileOutput,
   type LucideIcon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -19,6 +20,7 @@ import { formatMoney } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { PageHeader } from '@/components/ui';
+import { Generate1099Modal } from './generate-1099-modal';
 
 // ── Types (mirror /api/compliance/1099) ─────────────────────────────────────────
 
@@ -107,6 +109,7 @@ export function Compliance1099Client() {
   });
   const [flaggingId, setFlaggingId] = useState<string | null>(null);
   const [queued, setQueued] = useState<Set<string>>(new Set());
+  const [showGenerate, setShowGenerate] = useState(false);
 
   const rows = data?.rows ?? [];
   const summary = data?.summary;
@@ -135,27 +138,38 @@ export function Compliance1099Client() {
     <div className="space-y-6">
       <PageHeader
         title="1099-NEC Readiness"
-        description={`Vendors paid $600 or more by check / ACH / wire in ${year} — card payments excluded (those are 1099-K). Flag gaps to queue a W-9 chase.`}
+        description={`Vendors paid $600 or more by check / ACH / wire in ${year} — card payments excluded (those are 1099-K). Flag gaps to queue a W-9 chase, then generate the 1099s.`}
       />
 
-      {/* Tax-year selector */}
-      <div className="flex items-center gap-2">
-        <label htmlFor="tax-year" className="text-xs text-slate-500">
-          Tax year
-        </label>
-        <select
-          id="tax-year"
-          value={year}
-          onChange={(e) => setYear(Number(e.target.value))}
-          className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-sm text-white focus:border-emerald-500/50 focus:outline-none"
+      {/* Tax-year selector + generate */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <label htmlFor="tax-year" className="text-xs text-slate-500">
+            Tax year
+          </label>
+          <select
+            id="tax-year"
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-sm text-white focus:border-emerald-500/50 focus:outline-none"
+          >
+            {years.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowGenerate(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3.5 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-400"
         >
-          {years.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
+          <FileOutput size={15} /> Generate 1099s
+        </button>
       </div>
+
+      {showGenerate && <Generate1099Modal year={year} onClose={() => setShowGenerate(false)} />}
 
       {/* Summary tiles */}
       {!isLoading && !error && summary && summary.candidates > 0 && (
