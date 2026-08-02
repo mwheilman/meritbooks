@@ -102,6 +102,7 @@ export const navigation: NavGroup[] = [
       { label: 'Departments', href: '/departments', icon: Network },
       { label: 'Internal Invoices', href: '/internal-invoices', icon: ArrowLeftRight },
       { label: 'Intercompany', href: '/intercompany', icon: Combine },
+      { label: 'Consolidation', href: '/consolidation', icon: Building2 },
       { label: 'Jobs & Projects', href: '/jobs', icon: Briefcase },
       { label: 'Vendors', href: '/vendors', icon: Building2 },
       { label: 'Customers', href: '/customers', icon: Contact },
