@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 // POST /api/jobs/[jobId]/cost-codes — create a job-scoped cost code.
 // org_id is defaulted by the DB (public.get_org_id()); job_id comes from the
@@ -15,6 +16,9 @@ const bodySchema = z.object({
 
 export function POST(request: Request, { params }: { params: { jobId: string } }) {
   return apiHandler(bodySchema, async (body, ctx) => {
+    const guard = await requirePermission(ctx, 'proj_jobs', 'edit');
+    if (!guard.ok) return guard.response;
+
     const { data, error } = await ctx.supabase
       .schema('proj')
       .from('cost_codes')

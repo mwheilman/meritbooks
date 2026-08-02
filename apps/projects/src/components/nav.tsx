@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, FileText, Hammer, CalendarDays, Receipt, Coins, PackageCheck } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Hammer, CalendarDays, Receipt, Coins, PackageCheck, Wallet } from 'lucide-react';
 import clsx from 'clsx';
 
 // Sections light up as their gates ship. Live: Dashboard, Jobs, Schedule, Costs,
@@ -13,6 +13,7 @@ const ITEMS = [
   { href: '/procurement', label: 'Procurement', icon: PackageCheck, ready: true },
   { href: '/costs', label: 'Costs', icon: Coins, ready: true },
   { href: '/billing', label: 'Billing', icon: Receipt, ready: true },
+  { href: '/allowances', label: 'Allowances', icon: Wallet, ready: true },
   { href: '/leads', label: 'Leads', icon: Users, ready: false },
   { href: '/estimates', label: 'Estimates', icon: FileText, ready: false },
 ];

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 // PATCH /api/schedule/work-orders/[id] — advance a work order's status and/or
 // (re)assign it. RLS-scoped (ctx.supabase AS THE USER): the .eq('id') update
@@ -30,7 +31,10 @@ const patchSchema = z
     message: 'Provide a status change or an assignment.',
   });
 
-export const PATCH = apiHandler(patchSchema, async (body, { supabase }) => {
+export const PATCH = apiHandler(patchSchema, async (body, { supabase, userId }) => {
+  const guard = await requirePermission({ userId, supabase }, 'proj_schedule', 'edit');
+  if (!guard.ok) return guard.response;
+
   const patch: {
     updated_at: string;
     status?: string;

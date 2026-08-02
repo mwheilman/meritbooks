@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 // POST /api/schedule/work-orders — create a dispatch-board work order.
 // RLS-scoped: ctx.supabase runs AS THE USER, so org_id auto-fills from
@@ -28,7 +29,10 @@ const createSchema = z.object({
   cost_code_id: z.string().uuid().nullish(),
 });
 
-export const POST = apiHandler(createSchema, async (body, { supabase }) => {
+export const POST = apiHandler(createSchema, async (body, { supabase, userId }) => {
+  const guard = await requirePermission({ userId, supabase }, 'proj_schedule', 'create');
+  if (!guard.ok) return guard.response;
+
   const row: {
     job_id: string;
     title: string;

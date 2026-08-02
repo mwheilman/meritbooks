@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
 
 // ---- Domain types (no `any`) -------------------------------------------------
 
-type BillingType = 'MILESTONE' | 'PROGRESS' | 'TIME_MATERIALS' | 'DRAW';
+type BillingType = 'MILESTONE' | 'PROGRESS' | 'TIME_MATERIALS' | 'DRAW' | 'SOV' | 'RETAINAGE_RELEASE' | 'ALLOWANCE';
 type BillingStatus = 'DRAFT' | 'EMITTED' | 'PROCESSED' | 'REJECTED' | 'UNISSUED';
 
 interface BillingRequestRow {
@@ -93,6 +93,9 @@ const BILLING_TYPE_LABEL: Record<BillingType, string> = {
   PROGRESS: 'Progress',
   TIME_MATERIALS: 'T&M',
   DRAW: 'Draw',
+  SOV: 'SOV progress',
+  RETAINAGE_RELEASE: 'Retainage',
+  ALLOWANCE: 'Allowance',
 };
 
 interface StatusMeta {

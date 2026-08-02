@@ -6,6 +6,9 @@ import {
   FileWarning,
   ClipboardList,
   ShieldCheck,
+  ListChecks,
+  PiggyBank,
+  Wallet,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { createAuthedServerSupabase } from '@/lib/supabase/authed';
@@ -290,6 +293,31 @@ export default async function JobDetailPage({ params }: { params: { jobId: strin
           />
         </div>
       </header>
+
+      {/* Billing tools — G7 progress-billing surfaces for this job */}
+      <nav className="flex flex-wrap items-center gap-2">
+        <Link
+          href={`/billing/sov/${job.id}`}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-surface-800 bg-surface-900 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-brand-500/40 hover:text-brand-300"
+        >
+          <ListChecks className="h-3.5 w-3.5" />
+          Schedule of values
+        </Link>
+        <Link
+          href={`/billing/retainage/${job.id}`}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-surface-800 bg-surface-900 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-brand-500/40 hover:text-brand-300"
+        >
+          <PiggyBank className="h-3.5 w-3.5" />
+          Retainage
+        </Link>
+        <Link
+          href={`/allowances?jobId=${job.id}`}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-surface-800 bg-surface-900 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-brand-500/40 hover:text-brand-300"
+        >
+          <Wallet className="h-3.5 w-3.5" />
+          Allowances
+        </Link>
+      </nav>
 
       {/* KPI row — the three-number operational picture */}
       {margin ? (

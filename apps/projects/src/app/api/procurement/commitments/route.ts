@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 // POST /api/procurement/commitments — create a DRAFT PO / subcontract.
 // Two writes on the RLS-scoped client: the `commitments` header (org_id defaults
@@ -22,7 +23,10 @@ const CreateCommitmentSchema = z.object({
   lines: z.array(LineSchema).min(1, 'At least one line is required').max(200),
 });
 
-export const POST = apiHandler(CreateCommitmentSchema, async (body, { supabase }) => {
+export const POST = apiHandler(CreateCommitmentSchema, async (body, { supabase, userId }) => {
+  const guard = await requirePermission({ userId, supabase }, 'proj_commitments', 'create');
+  if (!guard.ok) return guard.response;
+
   const originalAmountCents = body.lines.reduce((sum, l) => sum + l.amount_cents, 0);
 
   const { data: header, error: headerError } = await supabase

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 // POST /api/gates/[id]/transition — advance an external gate through its state
 // machine via the security-definer RPC. The RPC is the single source of truth
@@ -20,6 +21,9 @@ const bodySchema = z.object({
 
 export function POST(request: Request, { params }: { params: { id: string } }) {
   return apiHandler(bodySchema, async (body, ctx) => {
+    const guard = await requirePermission(ctx, 'proj_gates', 'approve');
+    if (!guard.ok) return guard.response;
+
     const { data, error } = await ctx.supabase.schema('proj').rpc('advance_external_gate', {
       p_gate_id: params.id,
       p_new_status: body.new_status,

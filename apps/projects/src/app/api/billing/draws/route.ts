@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 // POST /api/billing/draws — create a DRAFT billing request (draw) + its lines.
 //
@@ -42,6 +43,9 @@ function dollarsToCents(dollars: number): number {
 }
 
 export const POST = apiHandler(bodySchema, async (body, ctx) => {
+  const guard = await requirePermission(ctx, 'proj_billing', 'create');
+  if (!guard.ok) return guard.response;
+
   // 1. Resolve the job's location_id. billing_requests.location_id is NOT NULL,
   //    and RLS scopes this read to the caller's org — a job outside the org (or
   //    a bad id) resolves to null and is rejected here, before any write.

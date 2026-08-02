@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 // POST /api/procurement/commitments/[id]/approve — DRAFT → APPROVED, minting the
 // PO#/SUB# on first approval. All the work is in the security-definer RPC
@@ -23,6 +24,9 @@ export async function POST(
   }
 
   return apiHandler(null, async (_body, { supabase, userId }) => {
+    const guard = await requirePermission({ userId, supabase }, 'proj_commitments', 'approve');
+    if (!guard.ok) return guard.response;
+
     const { error } = await supabase
       .schema('proj')
       .rpc('approve_commitment', {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 // POST /api/gates — create an external gate (permit / inspection / acceptance
 // state machine) for a job. Defaults from the DB: status=PENDING and
@@ -21,6 +22,9 @@ const bodySchema = z.object({
 });
 
 export const POST = apiHandler(bodySchema, async (body, ctx) => {
+  const guard = await requirePermission(ctx, 'proj_gates', 'create');
+  if (!guard.ok) return guard.response;
+
   const { data, error } = await ctx.supabase
     .schema('proj')
     .from('external_gates')

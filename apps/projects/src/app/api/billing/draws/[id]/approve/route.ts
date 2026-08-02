@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 // POST /api/billing/draws/[id]/approve — approve a DRAFT draw and emit its
 // JOB_BILLING event via the pre-built seam.
@@ -40,6 +41,9 @@ export async function POST(
   // apiHandler gives us auth + the RLS-scoped client. No request body: the id is
   // the only input and it comes from the path.
   return apiHandler(null, async (_body, ctx) => {
+    const guard = await requirePermission(ctx, 'proj_billing', 'approve');
+    if (!guard.ok) return guard.response;
+
     const { data, error } = await ctx.supabase
       .schema('proj')
       .rpc('approve_and_emit_billing', {
