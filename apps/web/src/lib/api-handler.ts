@@ -48,7 +48,15 @@ async function resolveAuthContext(): Promise<
     );
   }
   const claims = a.sessionClaims as Record<string, unknown> | null;
-  const rawClaimOrgId = typeof claims?.org_id === 'string' ? claims.org_id : null;
+  // The active org can arrive either as an explicit custom `org_id` claim OR via
+  // Clerk's native active-organization object `o` ({ id, rol, slg }). Prefer the
+  // explicit claim when present; otherwise fall back to o.id. resolveTenantOrgId
+  // then maps either a Books uuid or a Clerk 'org_...' id to the tenant uuid.
+  const directOrgId =
+    typeof claims?.org_id === 'string' && claims.org_id ? claims.org_id : null;
+  const nativeOrg = claims?.o as { id?: unknown } | undefined;
+  const rawClaimOrgId =
+    directOrgId ?? (typeof nativeOrg?.id === 'string' ? nativeOrg.id : null);
   // Resolve the raw claim (a Books uuid OR a Clerk org id) to the real MeritBooks
   // tenant uuid — the same mapping get_org_id() enforces in RLS. ctx.orgId is ALWAYS
   // a real core.organizations.id (or null → callers fail closed); it is NEVER a raw

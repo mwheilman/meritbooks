@@ -45,10 +45,17 @@ security definer
 set search_path = public, core
 as $$
 declare
+  claims json;
   v      text;
   result uuid;
 begin
-  v := current_setting('request.jwt.claims', true)::json ->> 'org_id';
+  claims := current_setting('request.jwt.claims', true)::json;
+  -- Prefer an explicit org_id claim; fall back to Clerk's native active-org
+  -- object (o.id) so resolution never depends on a custom JWT template.
+  v := nullif(claims ->> 'org_id', '');
+  if v is null then
+    v := claims -> 'o' ->> 'id';
+  end if;
   if v is null or v = '' then
     return null;
   end if;
