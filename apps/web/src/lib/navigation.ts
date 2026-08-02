@@ -39,6 +39,7 @@ import {
   Scale,
   ShieldCheck,
   ClipboardList,
+  Bot,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -119,6 +120,7 @@ export const navigation: NavGroup[] = [
       { label: 'Profitability', href: '/profitability', icon: TrendingUp },
       { label: 'AI Decision Log', href: '/ai-decisions', icon: Sparkles },
       { label: 'AI Categorizer', href: '/categorize', icon: Wand2 },
+      { label: 'Agents', href: '/agents', icon: Bot },
     ],
   },
   {
