@@ -82,7 +82,7 @@ export type AccountRoleKey =
   | 'ACCUMULATED_AMORTIZATION';
 
 /** Standard COA numbers per role — fallback when account_roles isn't seeded. */
-const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
+export const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
   AP_CONTROL: '2000',
   AR_CONTROL: '1100',
   OPERATING_BANK: '1000',
