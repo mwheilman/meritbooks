@@ -5,7 +5,8 @@ import { requirePermission } from '@/lib/rbac/require-permission';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { billTransitionSchema } from '@/lib/validations/transactions';
 import { approveBill, scheduleBill, payBill, voidBill } from '@/lib/services/bill-ap';
-import { logHumanAction } from '@/lib/trust/action-log';
+import { logHumanAction, logAction } from '@/lib/trust/action-log';
+import { evaluateBillById } from '@/lib/policy/ap-enforce';
 
 // GET /api/bills/[id] — full bill detail for the AP panel.
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
@@ -77,11 +78,32 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     job: (l as { job_id: string | null }).job_id ? jobMap.get((l as { job_id: string }).job_id) ?? null : null,
   }));
 
+  // Deterministic AP-policy evaluation against the ACTIVE ruleset — surfaces the required
+  // approval tier and the WARN/BLOCK violations for the reviewer. Degrades to null.
+  let policy: {
+    active: { name: string; version: number } | null;
+    requiredApprovalTier: string | null;
+    blocked: boolean;
+    violations: unknown[];
+  } | null = null;
+  try {
+    const res = await evaluateBillById(supabase, orgId, params.id);
+    policy = {
+      active: res.active,
+      requiredApprovalTier: res.evaluation.requiredApprovalTier,
+      blocked: res.evaluation.blocked,
+      violations: res.evaluation.violations,
+    };
+  } catch {
+    policy = null;
+  }
+
   return NextResponse.json({
     bill,
     lines: enrichedLines,
     attributions: attributions ?? [],
     approver: { type: (bill as { approver_type: string | null }).approver_type, ref, name: approverName },
+    policy,
   });
 }
 
@@ -111,6 +133,31 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   try {
     if (body.action === 'approve') {
+      // ── AP POLICY GATE ──────────────────────────────────────────────────────
+      // Re-evaluate the persisted bill (now with any PO link / 3-way-match verdict)
+      // against the ACTIVE AP policy. A BLOCK violation stops approval unless a human
+      // supplies an audited `policy_override` reason. Degrades to non-blocking when no
+      // policy is active. Sits IN ADDITION to the service-level SoD/state guards.
+      const overrideReason =
+        raw && typeof raw === 'object' && typeof (raw as { policy_override?: unknown }).policy_override === 'string'
+          ? ((raw as { policy_override: string }).policy_override).trim().slice(0, 500)
+          : null;
+      const policy = await evaluateBillById(supabase, orgId, params.id);
+      if (policy.evaluation.blocked && !overrideReason) {
+        return NextResponse.json(
+          {
+            error: 'This bill is blocked by the active AP approval policy. Supply a policy_override reason to approve.',
+            code: 'AP_POLICY_BLOCKED',
+            policy: {
+              active: policy.active,
+              requiredApprovalTier: policy.evaluation.requiredApprovalTier,
+              violations: policy.evaluation.violations,
+            },
+          },
+          { status: 409 }
+        );
+      }
+
       const res = await approveBill(supabase, orgId, params.id, actor);
       await logHumanAction(supabase, actor, orgId, {
         action: 'bill.approve',
@@ -118,7 +165,24 @@ export async function POST(request: Request, { params }: { params: { id: string 
         subjectId: params.id,
         summary: 'Approved bill',
       });
-      return NextResponse.json({ ok: true, ...res });
+      if (policy.evaluation.blocked && overrideReason) {
+        await logAction(supabase, {
+          orgId,
+          actorType: 'HUMAN',
+          actorUserId: null,
+          action: 'ap_policy.override',
+          subjectTable: 'bills',
+          subjectId: params.id,
+          summary: `AP policy override on approve: ${overrideReason}`,
+          metadata: {
+            by_clerk_user: actor,
+            reason: overrideReason,
+            policy: policy.active,
+            violations: policy.evaluation.violations.map((v) => v.rule_id),
+          },
+        });
+      }
+      return NextResponse.json({ ok: true, ...res, policy: policy.active ? { active: policy.active, requiredApprovalTier: policy.evaluation.requiredApprovalTier, overridden: policy.evaluation.blocked && !!overrideReason } : null });
     }
     if (body.action === 'schedule') {
       const res = await scheduleBill(supabase, orgId, params.id, body.scheduled_payment_date, body.payment_method ?? null);

@@ -53,6 +53,12 @@ interface BillDetailData {
   lines: DetailLine[];
   attributions: Attribution[];
   approver: { type: string | null; ref: string | null; name: string | null };
+  policy: {
+    active: { name: string; version: number } | null;
+    requiredApprovalTier: string | null;
+    blocked: boolean;
+    violations: { rule_id: string; severity: 'WARN' | 'BLOCK'; message: string }[];
+  } | null;
 }
 
 const APPROVER_LABEL: Record<string, string> = {
@@ -182,6 +188,48 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
               )}
               {bill.status === 'VOIDED' && bill.void_reason && (
                 <div className="px-3 py-2 rounded-lg bg-slate-800/60 text-xs text-slate-400">Voided: {bill.void_reason}</div>
+              )}
+
+              {/* AP policy evaluation — deterministic engine vs the ACTIVE ruleset */}
+              {data?.policy?.active && (data.policy.violations.length > 0 || data.policy.requiredApprovalTier) && (
+                <div className={clsx(
+                  'rounded-lg border p-3 space-y-2',
+                  data.policy.blocked ? 'border-red-500/30 bg-red-500/10' : 'border-amber-500/25 bg-amber-500/[0.05]'
+                )}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert size={14} className={data.policy.blocked ? 'text-red-400' : 'text-amber-400'} />
+                      <span className="text-xs font-semibold text-slate-200">
+                        AP policy: {data.policy.active.name} v{data.policy.active.version}
+                      </span>
+                    </div>
+                    {data.policy.requiredApprovalTier && (
+                      <span className="text-2xs font-mono text-slate-300 bg-slate-800/70 rounded px-2 py-0.5">
+                        Requires {data.policy.requiredApprovalTier}
+                      </span>
+                    )}
+                  </div>
+                  {data.policy.violations.length === 0 ? (
+                    <p className="text-[11px] text-emerald-300">No policy violations.</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {data.policy.violations.map((v, i) => (
+                        <li key={i} className="flex items-start gap-2 text-[11px]">
+                          <span className={clsx(
+                            'mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold',
+                            v.severity === 'BLOCK' ? 'bg-red-500/20 text-red-300' : 'bg-amber-500/20 text-amber-300'
+                          )}>{v.severity}</span>
+                          <span className="text-slate-300">{v.message}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {data.policy.blocked && (
+                    <p className="text-[10px] text-red-300/80">
+                      This bill is BLOCKED by policy. Approval requires an audited override reason.
+                    </p>
+                  )}
+                </div>
               )}
 
               {/* Approver routing */}

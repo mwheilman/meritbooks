@@ -4,7 +4,8 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { createBillSchema } from '@/lib/validations/transactions';
 import { createAttribution, resolveApprover } from '@/lib/services/cost-approval';
-import { logHumanAction } from '@/lib/trust/action-log';
+import { logHumanAction, logAction } from '@/lib/trust/action-log';
+import { evaluateProposedBill } from '@/lib/policy/ap-enforce';
 
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
@@ -52,6 +53,50 @@ export async function POST(request: Request) {
 
     // Route the bill to an approver (by vendor, falling back to ACCOUNTING).
     const approver = await resolveApprover(supabase, orgId, { vendorId: body.vendor_id, sourceType: 'BILL' });
+
+    // ── AP POLICY GATE (deterministic engine vs the ACTIVE ruleset) ──────────────
+    // Evaluate the proposed bill against the org's ACTIVE AP approval policy. A BLOCK
+    // violation stops creation UNLESS a human supplies an audited override reason
+    // (`policy_override`). Degrades to non-blocking when no policy is active. This
+    // reuses the gated bill-create route — no fork of the AP lifecycle.
+    const overrideReason =
+      raw && typeof raw === 'object' && typeof (raw as { policy_override?: unknown }).policy_override === 'string'
+        ? ((raw as { policy_override: string }).policy_override).trim().slice(0, 500)
+        : null;
+
+    let vendorName: string | null = null;
+    {
+      const { data: ven } = await supabase.schema('core').from('vendors').select('name, display_name').eq('id', body.vendor_id).maybeSingle();
+      if (ven) vendorName = (ven as { display_name: string | null; name: string }).display_name ?? (ven as { name: string }).name;
+    }
+
+    const policy = await evaluateProposedBill(supabase, orgId, {
+      vendorId: body.vendor_id,
+      vendorName,
+      billNumber: body.bill_number,
+      totalCents: totalCents,
+      lines: body.lines.map((l) => ({
+        accountId: l.account_id,
+        accountNumber: null,
+        categoryLabel: l.description ?? null,
+        amountCents: l.amount_cents,
+      })),
+    });
+
+    if (policy.evaluation.blocked && !overrideReason) {
+      return NextResponse.json(
+        {
+          error: 'This bill is blocked by the active AP approval policy. Supply a policy_override reason to proceed.',
+          code: 'AP_POLICY_BLOCKED',
+          policy: {
+            active: policy.active,
+            requiredApprovalTier: policy.evaluation.requiredApprovalTier,
+            violations: policy.evaluation.violations,
+          },
+        },
+        { status: 409 }
+      );
+    }
 
     const { data: bill, error: billErr } = await supabase
       .from('bills')
@@ -158,11 +203,38 @@ export async function POST(request: Request) {
       locationId: body.location_id,
     });
 
+    // Audit an AP-policy override (a human knowingly created a policy-BLOCKED bill).
+    if (policy.evaluation.blocked && overrideReason) {
+      await logAction(supabase, {
+        orgId,
+        actorType: 'HUMAN',
+        actorUserId: null,
+        action: 'ap_policy.override',
+        subjectTable: 'bills',
+        subjectId: bill.id as string,
+        summary: `AP policy override on create: ${overrideReason}`,
+        metadata: {
+          by_clerk_user: userId,
+          reason: overrideReason,
+          policy: policy.active,
+          violations: policy.evaluation.violations.map((v) => v.rule_id),
+        },
+      });
+    }
+
     return NextResponse.json({
       bill_id: bill.id,
       status: hasIssue ? 'ON_HOLD' : 'PENDING',
       committed_cost_lines: committedCosts,
       compliance_warning: hasIssue ? 'Bill placed on hold due to vendor compliance issues' : null,
+      policy: policy.active
+        ? {
+            active: policy.active,
+            requiredApprovalTier: policy.evaluation.requiredApprovalTier,
+            violations: policy.evaluation.violations,
+            overridden: policy.evaluation.blocked && !!overrideReason,
+          }
+        : null,
     }, { status: 201 });
   } catch (error) {
     console.error('[Bill Create Error]', error);
