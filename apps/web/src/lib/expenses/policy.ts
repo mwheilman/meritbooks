@@ -14,7 +14,21 @@
  *   WEEKEND_EXPENSE     — expense dated on a Saturday/Sunday (informational).
  *   DUPLICATE           — same merchant + amount + date appears more than once.
  *   PERSONAL_ON_CARD    — a personal-category expense charged to the corporate card.
+ *
+ * UPGRADE (Session 44 — policy compiler): the POLICY-DRIVEN checks (category
+ * limits, receipt threshold, prohibited/pre-approval, per-diem, alcohol/
+ * entertainment caps, amount-tiered approval routing) now come from the ACTIVE
+ * compiled ruleset via the deterministic engine (`policy-engine.ts`). This file's
+ * legacy `evaluateExpensePolicy(config)` remains for back-compat, but the live
+ * flow calls `evaluateLinesWithRuleset()` below, which DELEGATES to the engine and
+ * folds in the two always-on, policy-independent heuristics (DUPLICATE, WEEKEND).
  */
+
+import { evaluateReport, type EngineLine } from './policy-engine';
+import type {
+  ExpensePolicyRuleset,
+  RuleSeverity as EngineRuleSeverity,
+} from './policy-schema';
 
 export type PolicyFlagCode =
   | 'OVER_CATEGORY_LIMIT'
@@ -22,7 +36,18 @@ export type PolicyFlagCode =
   | 'OVER_MAX'
   | 'WEEKEND_EXPENSE'
   | 'DUPLICATE'
-  | 'PERSONAL_ON_CARD';
+  | 'PERSONAL_ON_CARD'
+  // Ruleset-engine rule ids (stored verbatim so the UI can cite the rule).
+  | 'CATEGORY_PROHIBITED'
+  | 'PREAPPROVAL_REQUIRED'
+  | 'CATEGORY_PER_EXPENSE_LIMIT'
+  | 'CATEGORY_PER_DAY_LIMIT'
+  | 'CATEGORY_PER_TRIP_LIMIT'
+  | 'ABSOLUTE_CEILING'
+  | 'RECEIPT_REQUIRED'
+  | 'ALCOHOL_CAP'
+  | 'ENTERTAINMENT_CAP'
+  | 'PER_DIEM_EXCEEDED';
 
 export type PolicySeverity = 'info' | 'warn' | 'block';
 
@@ -199,5 +224,108 @@ export function evaluateExpensePolicy(
   return {
     lines: results,
     flaggedCount: results.filter((r) => r.flagged).length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Ruleset-driven evaluation — the live path. DELEGATES to the deterministic
+// engine (policy-engine.ts) for every policy-driven rule, then folds in the two
+// always-on, policy-independent heuristics (DUPLICATE, WEEKEND) so the reviewer
+// still sees those regardless of whether a policy is active.
+// ---------------------------------------------------------------------------
+
+/** Result shape for the ruleset path: PolicyResult + the routing/block summary. */
+export interface RulesetPolicyResult extends PolicyResult {
+  /** Number of BLOCK-severity flags across the report. */
+  blockCount: number;
+  /** Number of WARN-severity flags across the report. */
+  warnCount: number;
+  /** Approval tier required for the report total (null when no tiers defined). */
+  requiredApprovalTier: string | null;
+}
+
+/** Map an engine severity (WARN|BLOCK) onto the stored PolicySeverity vocab. */
+function engineSeverity(s: EngineRuleSeverity): PolicySeverity {
+  return s === 'BLOCK' ? 'block' : 'warn';
+}
+
+/**
+ * Evaluate report lines against the ACTIVE compiled ruleset. The engine owns all
+ * limit / receipt / prohibited / per-diem / cap / approval-tier logic; here we
+ * add the DUPLICATE and WEEKEND heuristics (never blocking) and shape the result
+ * into the stored `policy_reasons` form the UI already renders.
+ */
+export function evaluateLinesWithRuleset(
+  lines: PolicyLineInput[],
+  ruleset: ExpensePolicyRuleset
+): RulesetPolicyResult {
+  const engineLines: EngineLine[] = lines.map((l) => ({
+    id: l.id,
+    amountCents: l.amountCents,
+    accountId: l.categoryKey,
+    categoryLabel: l.merchant,
+    hasReceipt: l.hasReceipt,
+    paymentSource: l.paymentSource,
+    expenseDate: l.expenseDate,
+  }));
+
+  const report = evaluateReport(engineLines, ruleset);
+  const byLine = new Map(report.lines.map((e) => [e.lineId, e]));
+
+  // Always-on DUPLICATE grouping (policy-independent, informational/warn).
+  const dupCounts = new Map<string, number>();
+  for (const l of lines) {
+    const sig = `${normMerchant(l.merchant)}|${l.amountCents}|${l.expenseDate}`;
+    dupCounts.set(sig, (dupCounts.get(sig) ?? 0) + 1);
+  }
+
+  const results: PolicyLineResult[] = lines.map((l) => {
+    const flags: PolicyFlag[] = [];
+
+    // Engine (policy-driven) violations first.
+    const ev = byLine.get(l.id);
+    if (ev) {
+      for (const v of ev.violations) {
+        flags.push({
+          code: v.rule_id as PolicyFlagCode,
+          message: v.message,
+          severity: engineSeverity(v.severity),
+        });
+      }
+    }
+
+    // DUPLICATE heuristic.
+    const sig = `${normMerchant(l.merchant)}|${l.amountCents}|${l.expenseDate}`;
+    if ((dupCounts.get(sig) ?? 0) > 1) {
+      flags.push({
+        code: 'DUPLICATE',
+        message: 'Possible duplicate — same merchant, amount, and date appears more than once',
+        severity: 'warn',
+      });
+    }
+
+    // WEEKEND heuristic (informational only).
+    if (isWeekend(l.expenseDate)) {
+      flags.push({ code: 'WEEKEND_EXPENSE', message: 'Expense dated on a weekend', severity: 'info' });
+    }
+
+    return { lineId: l.id, flags, flagged: flags.length > 0 };
+  });
+
+  let blockCount = 0;
+  let warnCount = 0;
+  for (const r of results) {
+    for (const f of r.flags) {
+      if (f.severity === 'block') blockCount += 1;
+      else if (f.severity === 'warn') warnCount += 1;
+    }
+  }
+
+  return {
+    lines: results,
+    flaggedCount: results.filter((r) => r.flagged).length,
+    blockCount,
+    warnCount,
+    requiredApprovalTier: report.requiredApprovalTier,
   };
 }

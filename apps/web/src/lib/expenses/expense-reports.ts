@@ -21,12 +21,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry, type JournalEntryLineInput } from '../services/gl-posting';
 import { resolveApAccount } from '../services/bill-ap';
-import {
-  evaluateExpensePolicy,
-  DEFAULT_EXPENSE_POLICY,
-  type ExpensePolicyConfig,
-  type PolicyLineInput,
-} from './policy';
+import { evaluateLinesWithRuleset, type PolicyLineInput } from './policy';
+import { loadActivePolicyRuleset } from './policy-active';
+import { DEFAULT_RULESET, type ExpensePolicyRuleset } from './policy-schema';
 
 type DB = SupabaseClient;
 
@@ -177,18 +174,49 @@ export async function loadReport(
   return { report: report as ExpenseReportRow, lines: (lines ?? []) as ExpenseReportLineRow[] };
 }
 
+export interface RecomputeResult {
+  totals: ReportTotals;
+  flaggedCount: number;
+  /** BLOCK-severity flags — these gate submission unless a human overrides. */
+  blockCount: number;
+  warnCount: number;
+  /** Approval tier the ACTIVE ruleset routes this report to (null = none). */
+  requiredApprovalTier: string | null;
+  /** The ACTIVE policy id/version applied (null when none is active). */
+  policyId: string | null;
+  policyVersion: number | null;
+}
+
 /**
  * Recompute policy flags + roll-up totals from the report's lines and persist
- * them. Returns the fresh totals + flagged count. Called after any line mutation
- * and on submit so the approver always sees current facts.
+ * them. Loads the org's ACTIVE compiled ruleset (migration 086) and evaluates
+ * every line through the DETERMINISTIC ENGINE; with no active policy it falls
+ * back to `DEFAULT_RULESET` (conservative — blocks nothing). Returns fresh totals,
+ * the flagged/block counts, and the required approval tier. Called after any line
+ * mutation and on submit so the approver always sees current facts.
+ *
+ * A caller may pass an explicit ruleset (tests / preview); otherwise the active
+ * policy is loaded here.
  */
 export async function recomputeReport(
   db: DB,
   orgId: string,
   reportId: string,
-  config: ExpensePolicyConfig = DEFAULT_EXPENSE_POLICY
-): Promise<{ totals: ReportTotals; flaggedCount: number }> {
+  rulesetOverride?: ExpensePolicyRuleset
+): Promise<RecomputeResult> {
   const { lines } = await loadReport(db, orgId, reportId);
+
+  let ruleset = rulesetOverride ?? DEFAULT_RULESET;
+  let policyId: string | null = null;
+  let policyVersion: number | null = null;
+  if (!rulesetOverride) {
+    const active = await loadActivePolicyRuleset(db, orgId);
+    if (active) {
+      ruleset = active.ruleset;
+      policyId = active.policyId;
+      policyVersion = active.version;
+    }
+  }
 
   const policyInput: PolicyLineInput[] = lines.map((l) => ({
     id: l.id,
@@ -199,7 +227,7 @@ export async function recomputeReport(
     hasReceipt: l.has_receipt,
     paymentSource: l.payment_source,
   }));
-  const policy = evaluateExpensePolicy(policyInput, config);
+  const policy = evaluateLinesWithRuleset(policyInput, ruleset);
   const byLine = new Map(policy.lines.map((r) => [r.lineId, r]));
 
   for (const l of lines) {
@@ -224,7 +252,15 @@ export async function recomputeReport(
     .eq('id', reportId)
     .eq('org_id', orgId);
 
-  return { totals, flaggedCount: policy.flaggedCount };
+  return {
+    totals,
+    flaggedCount: policy.flaggedCount,
+    blockCount: policy.blockCount,
+    warnCount: policy.warnCount,
+    requiredApprovalTier: policy.requiredApprovalTier,
+    policyId,
+    policyVersion,
+  };
 }
 
 export interface BuildFromReceiptsInput {
@@ -299,20 +335,64 @@ export async function buildReportFromReceipts(
   return { report_id: reportId, line_count: receipts.length };
 }
 
-/** Submit a DRAFT report for approval. Recomputes policy + totals first. */
+/** Thrown when submission is blocked by BLOCK-severity policy violations. */
+export class PolicyBlockError extends Error {
+  code = 'POLICY_BLOCK' as const;
+  blockCount: number;
+  constructor(blockCount: number, message: string) {
+    super(message);
+    this.name = 'PolicyBlockError';
+    this.blockCount = blockCount;
+  }
+}
+
+export interface SubmitOptions {
+  /** Human override of BLOCK-severity violations (requires a reason). Audited by caller. */
+  override?: boolean;
+  overrideReason?: string;
+}
+
+export interface SubmitResult {
+  id: string;
+  status: ExpenseReportStatus;
+  flaggedCount: number;
+  blockCount: number;
+  requiredApprovalTier: string | null;
+  overridden: boolean;
+}
+
+/**
+ * Submit a DRAFT report for approval. Recomputes policy + totals against the
+ * ACTIVE ruleset first. BLOCK-severity violations HALT submission unless the
+ * caller passes an explicit `override` with a reason (audited upstream). WARN
+ * violations never block — they surface to the approver. The required approval
+ * tier (from the ruleset's amount-tiered routing) is returned for the approver UI.
+ */
 export async function submitReport(
   db: DB,
   orgId: string,
   reportId: string,
-  submittedBy: string
-): Promise<{ id: string; status: ExpenseReportStatus; flaggedCount: number }> {
+  submittedBy: string,
+  opts: SubmitOptions = {}
+): Promise<SubmitResult> {
   const { report, lines } = await loadReport(db, orgId, reportId);
   if (report.status !== 'DRAFT' && report.status !== 'REJECTED') {
     throw new Error(`Only a draft (or rejected) report can be submitted (current: ${report.status})`);
   }
   if (lines.length === 0) throw new Error('Cannot submit an empty expense report');
 
-  const { flaggedCount } = await recomputeReport(db, orgId, reportId);
+  const recompute = await recomputeReport(db, orgId, reportId);
+
+  const overridden = recompute.blockCount > 0 && opts.override === true;
+  if (recompute.blockCount > 0 && !opts.override) {
+    throw new PolicyBlockError(
+      recompute.blockCount,
+      `Blocked by expense policy: ${recompute.blockCount} rule violation(s) must be resolved or overridden with a reason before submitting.`
+    );
+  }
+  if (overridden && !(opts.overrideReason && opts.overrideReason.trim())) {
+    throw new Error('An override reason is required to submit past a policy block.');
+  }
 
   const { error } = await db
     .from('expense_reports')
@@ -325,7 +405,14 @@ export async function submitReport(
     .eq('id', reportId)
     .eq('org_id', orgId);
   if (error) throw new Error(error.message);
-  return { id: reportId, status: 'SUBMITTED', flaggedCount };
+  return {
+    id: reportId,
+    status: 'SUBMITTED',
+    flaggedCount: recompute.flaggedCount,
+    blockCount: recompute.blockCount,
+    requiredApprovalTier: recompute.requiredApprovalTier,
+    overridden,
+  };
 }
 
 /**

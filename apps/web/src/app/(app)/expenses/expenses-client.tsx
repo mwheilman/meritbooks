@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import {
   Plus, Receipt, CreditCard, AlertTriangle, Check, X, Send, Wallet,
-  Loader2, Inbox, FileText, ChevronRight, Trash2,
+  Loader2, Inbox, FileText, ChevronRight, Trash2, ShieldCheck,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
@@ -106,9 +106,14 @@ export function ExpensesClient() {
             );
           })}
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary btn-sm inline-flex items-center gap-1.5">
-          <Plus size={14} /> New report
-        </button>
+        <div className="flex items-center gap-2">
+          <a href="/expenses/policy" className="btn-ghost btn-sm inline-flex items-center gap-1.5">
+            <ShieldCheck size={14} /> Policy
+          </a>
+          <button onClick={() => setShowCreate(true)} className="btn-primary btn-sm inline-flex items-center gap-1.5">
+            <Plus size={14} /> New report
+          </button>
+        </div>
       </div>
 
       {/* List */}

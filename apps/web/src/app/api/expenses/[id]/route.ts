@@ -5,6 +5,8 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { loadReport } from '@/lib/expenses/expense-reports';
 import { fetchCoreMap } from '@/lib/stitch-core';
+import { loadActivePolicyRuleset } from '@/lib/expenses/policy-active';
+import { evaluateReport, type EngineLine } from '@/lib/expenses/policy-engine';
 
 /**
  * GET    /api/expenses/[id]  — report header + lines (stitched category + entity).
@@ -49,6 +51,41 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     : new Map();
   const emp = report.employee_id ? empMap.get(report.employee_id) ?? null : null;
 
+  // Deterministic policy evaluation against the ACTIVE ruleset — surfaces the
+  // required approval tier and the WARN/BLOCK summary for the approver. Degrades
+  // to null (no policy) so the report always renders.
+  let policy: {
+    active: { name: string; version: number } | null;
+    requiredApprovalTier: string | null;
+    blockCount: number;
+    warnCount: number;
+  } | null = null;
+  try {
+    const active = await loadActivePolicyRuleset(supabase, orgId);
+    if (active) {
+      const engineLines: EngineLine[] = lines.map((l) => ({
+        id: l.id,
+        amountCents: l.amount_cents,
+        accountId: l.account_id,
+        categoryLabel: l.merchant,
+        hasReceipt: l.has_receipt,
+        paymentSource: l.payment_source,
+        expenseDate: l.expense_date,
+      }));
+      const ev = evaluateReport(engineLines, active.ruleset);
+      policy = {
+        active: { name: active.name, version: active.version },
+        requiredApprovalTier: ev.requiredApprovalTier,
+        blockCount: ev.blockCount,
+        warnCount: ev.warnCount,
+      };
+    } else {
+      policy = { active: null, requiredApprovalTier: null, blockCount: 0, warnCount: 0 };
+    }
+  } catch {
+    policy = { active: null, requiredApprovalTier: null, blockCount: 0, warnCount: 0 };
+  }
+
   return NextResponse.json({
     report: {
       ...report,
@@ -58,6 +95,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       ...l,
       account: l.account_id ? acctMap.get(l.account_id) ?? null : null,
     })),
+    policy,
   });
 }
 
