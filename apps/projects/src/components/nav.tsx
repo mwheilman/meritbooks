@@ -1,18 +1,19 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, FileText, Hammer, CalendarDays, Receipt } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Hammer, CalendarDays, Receipt, Coins } from 'lucide-react';
 import clsx from 'clsx';
 
-// G0' shell. Sections are placeholders that light up as their gates ship
-// (G2 Leads, G3 Estimates, G4 Jobs, G6 Schedule, G7 Billing).
+// Sections light up as their gates ship. Live: Dashboard, Jobs, Schedule, Costs,
+// Billing (G4/G5/G6/G7). Soon: Leads (G2), Estimates (G3).
 const ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard, ready: true },
+  { href: '/jobs', label: 'Jobs', icon: Hammer, ready: true },
+  { href: '/schedule', label: 'Schedule', icon: CalendarDays, ready: true },
+  { href: '/costs', label: 'Costs', icon: Coins, ready: true },
+  { href: '/billing', label: 'Billing', icon: Receipt, ready: true },
   { href: '/leads', label: 'Leads', icon: Users, ready: false },
   { href: '/estimates', label: 'Estimates', icon: FileText, ready: false },
-  { href: '/jobs', label: 'Jobs', icon: Hammer, ready: false },
-  { href: '/schedule', label: 'Schedule', icon: CalendarDays, ready: false },
-  { href: '/billing', label: 'Billing', icon: Receipt, ready: false },
 ];
 
 export function Nav() {
