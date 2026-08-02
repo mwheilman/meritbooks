@@ -103,7 +103,7 @@ create index if not exists idx_debt_instruments_covenant
 -- ── Amortization schedule (generated; one row per period) — NEW table ─────────
 create table if not exists public.debt_schedule_lines (
   id uuid primary key default uuid_generate_v4(),
-  org_id uuid not null references organizations(id) on delete cascade,
+  org_id uuid not null references core.organizations(id) on delete cascade,
   instrument_id uuid not null references public.debt_instruments(id) on delete cascade,
   period int not null check (period > 0),          -- 1-based period index
   period_date date,                                -- scheduled date (from origination + frequency)

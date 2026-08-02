@@ -103,6 +103,7 @@ export const navigation: NavGroup[] = [
       { label: 'Cash Position', href: '/cash', icon: Wallet },
       { label: '13-Week Forecast', href: '/forecast', icon: TrendingUp },
       { label: 'Covenant Monitor', href: '/covenants', icon: ShieldCheck },
+      { label: 'Debt & Loans', href: '/debt', icon: Landmark },
       { label: 'Reports', href: '/reports', icon: BarChart3 },
       { label: 'Board Package', href: '/board-package', icon: FileText },
       { label: 'Profitability', href: '/profitability', icon: TrendingUp },
