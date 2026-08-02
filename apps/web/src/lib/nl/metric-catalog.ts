@@ -318,7 +318,9 @@ async function agingExecutor(
   ctx: NlExecContext,
   opts: { view: 'v_ap_aging' | 'v_ar_aging'; slug: string; label: string; party: 'owe' | 'owed'; locationId?: string },
 ): Promise<NlResult> {
-  let query = ctx.supabase.from(opts.view).select('aging_bucket, balance_cents');
+  // `> 0` defensively excludes WRITTEN_OFF/settled (balance 0) rows from aging
+  // before the v_ar_aging view is re-created to drop WRITTEN_OFF.
+  let query = ctx.supabase.from(opts.view).select('aging_bucket, balance_cents').gt('balance_cents', 0);
   if (opts.locationId) query = query.eq('location_id', opts.locationId);
   const { data, error } = await query;
   if (error) throw new Error(error.message);

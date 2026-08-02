@@ -37,6 +37,8 @@ export type AccountRoleKey =
   | 'RETAINAGE_PAYABLE'
   | 'ACCRUED_EXPENSES'
   | 'ALLOWANCE_DOUBTFUL'
+  // Bad-debt write-off (AR uncollectible) — DR expense / CR AR control
+  | 'BAD_DEBT_EXPENSE'
   | 'RETAINED_EARNINGS'
   | 'CURRENT_YEAR_EARNINGS'
   | 'OWNERS_CAPITAL'
@@ -97,6 +99,11 @@ export const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
   RETAINAGE_PAYABLE: '2010',
   ACCRUED_EXPENSES: '2400',
   ALLOWANCE_DOUBTFUL: '1150',
+  // Bad-debt write-off. 6670 is a NEW free number in the standard COA's OPEX
+  // "Office & Administrative" group (6600-6660 used, 6700 is Insurance); the
+  // seeding migration creates it so a role miss can never post bad debt to a
+  // colliding account.
+  BAD_DEBT_EXPENSE: '6670',
   RETAINED_EARNINGS: '3020',
   CURRENT_YEAR_EARNINGS: '3030',
   OWNERS_CAPITAL: '3000',

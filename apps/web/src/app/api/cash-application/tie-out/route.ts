@@ -50,7 +50,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       : [];
 
   // 1. Subledger — Σ open invoice balances from v_ar_aging.
-  let arQ = supabase.from('v_ar_aging').select('balance_cents, location_id');
+  // `> 0` defensively drops WRITTEN_OFF (balance 0) rows from the subledger Σ
+  // even before the v_ar_aging view is re-created to exclude that status.
+  let arQ = supabase.from('v_ar_aging').select('balance_cents, location_id').gt('balance_cents', 0);
   if (locFilter.length === 1) arQ = arQ.eq('location_id', locFilter[0]);
   else if (locFilter.length > 1) arQ = arQ.in('location_id', locFilter);
   const { data: arData, error: arErr } = await arQ;

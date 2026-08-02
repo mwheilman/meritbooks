@@ -442,7 +442,9 @@ export async function fetchCashFlow(
 
 // ── AR / AP Aging ────────────────────────────────────────────────────────────
 async function fetchAging(supabase: SupabaseClient, view: 'v_ar_aging' | 'v_ap_aging', locationIds: string[]): Promise<AgingPayload> {
-  let query = applyLoc(supabase.from(view).select('*'), locationIds);
+  // `> 0` defensively excludes WRITTEN_OFF/settled rows (balance 0) from aging,
+  // for both AR and AP, before the v_ar_aging view drops WRITTEN_OFF.
+  let query = applyLoc(supabase.from(view).select('*').gt('balance_cents', 0), locationIds);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   const buckets: AgingPayload['buckets'] = {

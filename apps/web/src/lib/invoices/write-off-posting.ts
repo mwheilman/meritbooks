@@ -17,17 +17,18 @@
  * trigger — this never posts a guess).
  *
  * Account resolution: AR control resolves by the AR_CONTROL role. Bad Debt
- * Expense has **no account role defined** in `posting/account-roles.ts`, so this
- * module resolves it by (1) an explicit `account_roles` mapping under the key
- * 'BAD_DEBT_EXPENSE' if a tenant has seeded one, else (2) an active OPEX/COGS
- * account whose name reads "bad debt". If neither resolves it throws
- * WriteOffAccountUnresolvedError rather than hard-code a number (canon: reference
- * accounts by role, never by a fixed number). See the route's NEEDS-CENTRAL note
- * to promote BAD_DEBT_EXPENSE to a first-class role.
+ * Expense is now a first-class account role ('BAD_DEBT_EXPENSE') in
+ * `posting/account-roles.ts`, so this module resolves it via `resolveRole`,
+ * which walks (1) an explicit `account_roles` mapping, then (2) the role's
+ * standard COA number fallback (6670). If the role can't resolve, we degrade to
+ * (3) an active OPEX/COGS account whose name reads "bad debt" before finally
+ * throwing WriteOffAccountUnresolvedError — never hard-coding a number at the
+ * call site (canon §2/§3: reference accounts by role, never by a fixed number).
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { JournalEntryLineInput } from '@/lib/services/gl-posting';
+import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 
 /** Thrown when the tenant's COA has no resolvable Bad Debt Expense account. */
 export class WriteOffAccountUnresolvedError extends Error {
@@ -121,17 +122,18 @@ export async function resolveBadDebtAccount(
   db: SupabaseClient,
   orgId: string,
 ): Promise<{ id: string }> {
-  // 1. Explicit account_roles mapping under 'BAD_DEBT_EXPENSE' (org-wide),
-  //    if a tenant/central has seeded one. This lets the role be promoted to a
-  //    first-class key later with zero code change here.
-  const { data: maps } = await db
-    .from('account_roles')
-    .select('account_id')
-    .eq('org_id', orgId)
-    .eq('role_key', 'BAD_DEBT_EXPENSE')
-    .limit(1);
-  const mapped = (maps ?? [])[0] as { account_id: string } | undefined;
-  if (mapped?.account_id) return { id: mapped.account_id };
+  // 1. Resolve by the BAD_DEBT_EXPENSE role — this walks the explicit
+  //    account_roles mapping first, then the role's standard COA number
+  //    fallback (6670). PostingError just means the role is unmapped and the
+  //    fallback number isn't in this tenant's COA; we degrade below rather than
+  //    fail hard, so a tenant with a differently-numbered "Bad Debt" account
+  //    still works.
+  try {
+    const byRole = await resolveRole(db, orgId, 'BAD_DEBT_EXPENSE');
+    if (byRole?.id) return { id: byRole.id };
+  } catch (err) {
+    if (!(err instanceof PostingError)) throw err;
+  }
 
   // 2. Name match on an active expense account ("Bad Debt Expense").
   const { data: byName } = await db

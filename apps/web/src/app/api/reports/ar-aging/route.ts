@@ -11,7 +11,10 @@ export async function GET(request: Request) {
   const locationId = searchParams.get('location_id');
   const locFilter = locationIds ? locationIds.split(',').filter(Boolean) : (locationId && locationId !== 'all' ? [locationId] : []);
 
-  let query = supabase.from('v_ar_aging').select('*');
+  // Defensive: exclude WRITTEN_OFF (and any settled) rows. A written-off invoice
+  // has balance_cents = 0 (paid advanced to total), so `> 0` drops it from the
+  // aging even before the v_ar_aging view is re-created to exclude WRITTEN_OFF.
+  let query = supabase.from('v_ar_aging').select('*').gt('balance_cents', 0);
   if (locFilter.length === 1) query = query.eq('location_id', locFilter[0]);
   else if (locFilter.length > 1) query = query.in('location_id', locFilter);
 

@@ -64,7 +64,7 @@ async function loadSubledgerVariance(supabase: SupabaseClient, orgId: string): P
   try {
     const ar = await resolveRole(supabase, orgId, 'AR_CONTROL');
     const [{ data: aging }, { data: tb }] = await Promise.all([
-      supabase.from('v_ar_aging').select('location_id, balance_cents').limit(ROW_CAP),
+      supabase.from('v_ar_aging').select('location_id, balance_cents').gt('balance_cents', 0).limit(ROW_CAP),
       supabase.from('v_trial_balance').select('location_id, net_balance').eq('account_id', ar.id).limit(ROW_CAP),
     ]);
     const sub = new Map<string, number>();
