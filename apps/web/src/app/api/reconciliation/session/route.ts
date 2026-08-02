@@ -6,6 +6,8 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { resolveActor } from '@/lib/trust/actor';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { createAdminSupabase } from '@/lib/supabase/server';
+import { canApprove } from '@/lib/money/approvals';
 import { computeGlCashBalanceCents } from '@/lib/services/reconciliation-gl';
 import {
   reconciliationDifferenceCents,
@@ -15,6 +17,13 @@ import {
   lineFinalizedUpdate,
   lineUnreconciledUpdate,
 } from '@/lib/services/reconciliation-balance';
+import {
+  detectStaleItems,
+  summarizeStaleItems,
+  assessPlug,
+  DEFAULT_STALE_THRESHOLD_DAYS,
+  type OutstandingItem,
+} from '@/lib/services/reconciliation-plug';
 
 /**
  * /api/reconciliation/session — the per-line reconciliation workspace (FPB Wave A).
@@ -77,6 +86,21 @@ const num = (v: number | string | null | undefined): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
+
+type RecClient = Parameters<typeof computeGlCashBalanceCents>[0];
+
+/**
+ * Degrade-safe probe: do the override columns exist on bank_reconciliations?
+ * The finalize-override columns ship in a RESERVED migration; until it is applied
+ * the override path is UNAVAILABLE and the must-tie finalize path is unaffected.
+ */
+async function hasOverrideColumns(supabase: RecClient): Promise<boolean> {
+  const { error } = await supabase
+    .from('bank_reconciliations')
+    .select('finalized_via_override')
+    .limit(1);
+  return error == null;
+}
 
 // ── GET: workspace read model ─────────────────────────────────────────────────
 export async function GET(request: Request): Promise<NextResponse> {
@@ -195,6 +219,51 @@ export async function GET(request: Request): Promise<NextResponse> {
     };
   });
 
+  // ── Plug + stale reconciling items (Wave B) ────────────────────────────────────
+  // Aged outstanding items can predate the period, so scan the account's feed for
+  // lines never linked to any reconciliation as of the statement date.
+  const staleThresholdDays = (() => {
+    const raw = Number(searchParams.get('stale_days'));
+    return Number.isFinite(raw) && raw > 0 ? Math.min(365, Math.trunc(raw)) : DEFAULT_STALE_THRESHOLD_DAYS;
+  })();
+  const { data: outRaw } = await supabase
+    .from('bank_transactions')
+    .select('id, description, amount_cents, transaction_date')
+    .eq('bank_account_id', bankAccountId)
+    .is('reconciliation_id', null)
+    .is('reconciled_at', null)
+    .lte('transaction_date', period.end_date)
+    .order('transaction_date', { ascending: true })
+    .limit(500);
+  const outstandingItems: OutstandingItem[] = (outRaw ?? []).map((r) => {
+    const row = r as { id: string; description: string | null; amount_cents: number | string; transaction_date: string };
+    return {
+      id: row.id,
+      description: row.description ?? 'Bank transaction',
+      amountCents: num(row.amount_cents),
+      transactionDate: row.transaction_date,
+    };
+  });
+  const staleItems = detectStaleItems(outstandingItems, {
+    asOfDate: period.end_date,
+    thresholdDays: staleThresholdDays,
+  });
+  const staleTotals = summarizeStaleItems(staleItems);
+  const plug = differenceCents == null ? null : assessPlug(differenceCents);
+
+  // Override availability + (if finalized) recorded override reason — degrade-safe.
+  const overrideAvailable = await hasOverrideColumns(supabase);
+  let overrideInfo: { overridden: boolean; reason: string | null } = { overridden: false, reason: null };
+  if (overrideAvailable && header) {
+    const { data: ovRaw } = await supabase
+      .from('bank_reconciliations')
+      .select('finalized_via_override, finalize_override_reason')
+      .eq('id', header.id)
+      .maybeSingle();
+    const ov = ovRaw as { finalized_via_override?: boolean | null; finalize_override_reason?: string | null } | null;
+    if (ov) overrideInfo = { overridden: ov.finalized_via_override === true, reason: ov.finalize_override_reason ?? null };
+  }
+
   return NextResponse.json({
     account: {
       id: account.id,
@@ -221,8 +290,11 @@ export async function GET(request: Request): Promise<NextResponse> {
           isReconciled: header.is_reconciled,
           reconciledAt: header.reconciled_at,
           isFinalized,
+          overridden: overrideInfo.overridden,
+          overrideReason: overrideInfo.reason,
         }
       : null,
+    capabilities: { overrideAvailable },
     summary: {
       beginningBalanceCents,
       statementEndingBalanceCents,
@@ -235,7 +307,28 @@ export async function GET(request: Request): Promise<NextResponse> {
       unclearedCount: lines.filter((l) => !l.cleared && !l.linkedElsewhere).length,
       differenceCents,
       ties: differenceCents === 0,
+      // Plug: the unexplained residual. Surfaced, NEVER auto-posted (canon §3).
+      plugCents: plug?.plugCents ?? null,
+      hasPlug: plug?.hasPlug ?? false,
     },
+    plug: plug
+      ? { plugCents: plug.plugCents, hasPlug: plug.hasPlug, ties: plug.ties }
+      : null,
+    staleSummary: {
+      thresholdDays: staleThresholdDays,
+      count: staleTotals.count,
+      outstandingChecksCents: staleTotals.outstandingChecksCents,
+      depositsInTransitCents: staleTotals.depositsInTransitCents,
+      netCents: staleTotals.netCents,
+    },
+    staleItems: staleItems.slice(0, 25).map((s) => ({
+      id: s.id,
+      description: s.description,
+      amountCents: s.amountCents,
+      transactionDate: s.transactionDate,
+      ageDays: s.ageDays,
+      isOutflow: s.isOutflow,
+    })),
     lines,
   });
 }
@@ -254,7 +347,15 @@ const bodySchema = z.discriminatedUnion('action', [
     transaction_id: z.string().uuid(),
     cleared: z.boolean(),
   }),
-  z.object({ action: z.literal('finalize'), reconciliation_id: z.string().uuid() }),
+  z.object({
+    action: z.literal('finalize'),
+    reconciliation_id: z.string().uuid(),
+    // Authorized override of the must-tie gate: finalize despite a non-zero
+    // difference. Requires approval authority AND a recorded reason. The plug is
+    // documented on the header — it is NEVER auto-posted to the GL.
+    override: z.boolean().optional(),
+    override_reason: z.string().trim().min(8).max(500).optional(),
+  }),
   z.object({ action: z.literal('unreconcile'), reconciliation_id: z.string().uuid() }),
 ]);
 
@@ -447,19 +548,67 @@ export async function POST(request: Request): Promise<NextResponse> {
       beginningBalanceCents,
       clearedLines,
     });
+
+    // The must-tie gate. When the rec does not tie, the ONLY way past it is an
+    // AUTHORIZED override with a recorded reason — and even then the plug is
+    // documented on the header, never posted to the GL.
+    const wantsOverride = body.action === 'finalize' && body.override === true;
+    let overrideApplied = false;
     if (!isReconcilable(differenceCents)) {
-      return NextResponse.json(
-        { error: 'Difference is not zero — reconciliation does not tie', differenceCents },
-        { status: 422 },
-      );
+      if (!wantsOverride) {
+        return NextResponse.json(
+          { error: 'Difference is not zero — reconciliation does not tie', differenceCents, canOverride: true },
+          { status: 422 },
+        );
+      }
+      const reason = (body.override_reason ?? '').trim();
+      if (reason.length < 8) {
+        return NextResponse.json(
+          { error: 'An override requires a reason of at least 8 characters', differenceCents },
+          { status: 422 },
+        );
+      }
+      // Authorization: only a money-approval-authorized caller may override.
+      const admin = createAdminSupabase();
+      const authorized = await canApprove(admin, orgId, userId);
+      if (!authorized) {
+        return NextResponse.json(
+          { error: 'You are not authorized to override the reconciliation tie-out gate', code: 'FORBIDDEN' },
+          { status: 403 },
+        );
+      }
+      // Degrade-safe: the override columns ship in a reserved migration.
+      if (!(await hasOverrideColumns(supabase))) {
+        return NextResponse.json(
+          {
+            error:
+              'Override is unavailable until the reconciliation-override migration is applied. Resolve the difference to $0 to finalize.',
+            code: 'OVERRIDE_UNAVAILABLE',
+            differenceCents,
+          },
+          { status: 409 },
+        );
+      }
+      overrideApplied = true;
     }
 
     const finalizedAt = new Date().toISOString();
     const { coreUserId } = await resolveActor(supabase, userId);
 
+    const headerUpdate: Record<string, unknown> = {
+      is_reconciled: true,
+      reconciled_at: finalizedAt,
+      reconciled_by: coreUserId,
+    };
+    if (overrideApplied) {
+      headerUpdate.finalized_via_override = true;
+      headerUpdate.finalize_override_reason = (body.override_reason ?? '').trim();
+      headerUpdate.finalize_override_variance_cents = differenceCents;
+    }
+
     const { error: hdrErr } = await supabase
       .from('bank_reconciliations')
-      .update({ is_reconciled: true, reconciled_at: finalizedAt, reconciled_by: coreUserId })
+      .update(headerUpdate)
       .eq('id', header.id)
       .is('reconciled_at', null); // guard against a concurrent finalize
     if (hdrErr) return NextResponse.json({ error: 'Failed to finalize reconciliation' }, { status: 500 });
@@ -474,14 +623,27 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (lineErr) return NextResponse.json({ error: 'Failed to lock reconciled lines' }, { status: 500 });
 
     await logHumanAction(supabase, userId, orgId, {
-      action: 'reconciliation.finalize',
+      action: overrideApplied ? 'reconciliation.finalize_override' : 'reconciliation.finalize',
       subjectTable: 'bank_reconciliations',
       subjectId: header.id,
-      summary: `Finalized reconciliation — ${clearedLines.length} lines cleared, difference $0`,
-      metadata: { clearedCount: clearedLines.length, differenceCents },
+      summary: overrideApplied
+        ? `Finalized via AUTHORIZED OVERRIDE — ${clearedLines.length} lines cleared, unexplained difference ${differenceCents} cents accepted (not posted). Reason: ${(body.override_reason ?? '').trim()}`
+        : `Finalized reconciliation — ${clearedLines.length} lines cleared, difference $0`,
+      metadata: {
+        clearedCount: clearedLines.length,
+        differenceCents,
+        override: overrideApplied,
+        overrideReason: overrideApplied ? (body.override_reason ?? '').trim() : undefined,
+      },
     });
 
-    return NextResponse.json({ ok: true, reconciledAt: finalizedAt, clearedCount: clearedLines.length });
+    return NextResponse.json({
+      ok: true,
+      reconciledAt: finalizedAt,
+      clearedCount: clearedLines.length,
+      override: overrideApplied,
+      differenceCents,
+    });
   }
 
   // ── unreconcile: undo, detach all lines ──────────────────────────────────────

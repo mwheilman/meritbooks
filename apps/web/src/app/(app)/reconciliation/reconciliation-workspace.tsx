@@ -18,6 +18,9 @@ import {
   Check,
   Ban,
   AlertTriangle,
+  FileText,
+  Clock,
+  ShieldAlert,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
@@ -37,6 +40,14 @@ interface WorkspaceLine {
   glPosted: boolean;
   linkedElsewhere: boolean;
 }
+interface StaleItemDto {
+  id: string;
+  description: string;
+  amountCents: number;
+  transactionDate: string;
+  ageDays: number;
+  isOutflow: boolean;
+}
 interface WorkspaceResponse {
   account: { id: string; accountName: string; accountMask: string; locationCode: string; locationName: string };
   period: { id: string; year: number; month: number; startDate: string; endDate: string; status: string };
@@ -47,7 +58,10 @@ interface WorkspaceResponse {
     isReconciled: boolean;
     reconciledAt: string | null;
     isFinalized: boolean;
+    overridden: boolean;
+    overrideReason: string | null;
   } | null;
+  capabilities: { overrideAvailable: boolean };
   summary: {
     beginningBalanceCents: number;
     statementEndingBalanceCents: number | null;
@@ -60,8 +74,35 @@ interface WorkspaceResponse {
     unclearedCount: number;
     differenceCents: number | null;
     ties: boolean;
+    plugCents: number | null;
+    hasPlug: boolean;
   };
+  plug: { plugCents: number; hasPlug: boolean; ties: boolean } | null;
+  staleSummary: {
+    thresholdDays: number;
+    count: number;
+    outstandingChecksCents: number;
+    depositsInTransitCents: number;
+    netCents: number;
+  };
+  staleItems: StaleItemDto[];
   lines: WorkspaceLine[];
+}
+
+interface MemoResponse {
+  memo: string;
+  summary: {
+    differenceCents: number;
+    ties: boolean;
+    plugCents: number;
+    clearedCount: number;
+    outstandingCount: number;
+    staleCount: number;
+    finalized: boolean;
+    overridden: boolean;
+  };
+  staleItems: StaleItemDto[];
+  meta: { source: string; model: string | null; message?: string };
 }
 
 interface AccountOption {
@@ -174,6 +215,14 @@ export function ReconciliationWorkspace({
   const rec = data?.reconciliation ?? null;
   const summary = data?.summary ?? null;
   const finalized = rec?.isFinalized ?? false;
+
+  // ── Override (must-tie gate) + memo state (Wave B) ────────────────────────────
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [memoOpen, setMemoOpen] = useState(false);
+  const [memoLoading, setMemoLoading] = useState(false);
+  const [memoError, setMemoError] = useState<string | null>(null);
+  const [memo, setMemo] = useState<MemoResponse | null>(null);
 
   // ── Adjusting-entry (bank fee / interest / other) state ───────────────────────
   const [showAdjust, setShowAdjust] = useState(false);
@@ -345,21 +394,57 @@ export function ReconciliationWorkspace({
     await refetchSuggest();
   }
 
-  async function finalize() {
+  async function finalize(override?: { reason: string }) {
     if (!rec) return;
     setBusy('finalize');
-    const result = await api.post<{ ok: boolean }>('/api/reconciliation/session', {
+    const result = await api.post<{ ok: boolean; override?: boolean }>('/api/reconciliation/session', {
       action: 'finalize',
       reconciliation_id: rec.id,
+      ...(override ? { override: true, override_reason: override.reason } : {}),
     });
     setBusy(null);
     if (result.error) {
       addToast('error', result.error.error || 'Could not finalize');
       return;
     }
-    addToast('success', 'Reconciliation finalized and locked');
+    addToast('success', override ? 'Finalized with authorized override' : 'Reconciliation finalized and locked');
+    setOverrideOpen(false);
+    setOverrideReason('');
     await refetch();
     onChanged();
+  }
+
+  async function submitOverride() {
+    const reason = overrideReason.trim();
+    if (reason.length < 8) {
+      addToast('error', 'Enter an override reason of at least 8 characters');
+      return;
+    }
+    await finalize({ reason });
+  }
+
+  async function loadMemo() {
+    if (!rec) return;
+    setMemoOpen(true);
+    setMemoLoading(true);
+    setMemoError(null);
+    const result = await api.get<MemoResponse>(`/api/reconciliation/memo?reconciliation_id=${rec.id}`);
+    setMemoLoading(false);
+    if (result.error) {
+      setMemoError(result.error.error || 'Could not draft the memo');
+      return;
+    }
+    setMemo(result.data ?? null);
+  }
+
+  async function copyMemo() {
+    if (!memo?.memo) return;
+    try {
+      await navigator.clipboard.writeText(memo.memo);
+      addToast('success', 'Memo copied to clipboard');
+    } catch {
+      addToast('error', 'Could not copy the memo');
+    }
   }
 
   async function unreconcile() {
@@ -554,6 +639,19 @@ export function ReconciliationWorkspace({
                 </div>
               )}
 
+              {finalized && rec?.overridden && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-4 py-2.5 text-sm">
+                  <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                  <div>
+                    <p className="font-medium text-amber-100">Finalized with authorized override</p>
+                    <p className="mt-0.5 text-xs text-amber-300/80">
+                      A non-zero difference was accepted (not posted).
+                      {rec.overrideReason ? ` Reason: ${rec.overrideReason}` : ''}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Unexplained variance — surfaced, never plugged (canon §3) */}
               {rec && !finalized && hasUnexplained && (
                 <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-4 py-2.5 text-sm text-amber-200">
@@ -568,6 +666,110 @@ export function ReconciliationWorkspace({
                         : `${suggestData?.unexplainedLineCount ?? 0} unmatched line(s) with no auto-drafted cause. Investigate — the rec must tie legitimately, not by a plug.`}
                     </p>
                   </div>
+                </div>
+              )}
+
+              {/* Stale reconciling items — aged, never-cleared items to investigate */}
+              {data.staleItems.length > 0 && (
+                <div className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/[0.05] p-4">
+                  <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-white">
+                    <Clock size={14} className="text-amber-400" />
+                    Stale reconciling items
+                    <span className="ml-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
+                      {data.staleSummary.count}
+                    </span>
+                    <span className="ml-auto text-2xs font-normal text-slate-500">
+                      older than {data.staleSummary.thresholdDays} days · investigate, do not force
+                    </span>
+                  </div>
+                  <ul className="divide-y divide-amber-500/10">
+                    {data.staleItems.map((s) => (
+                      <li key={s.id} className="flex items-center justify-between gap-3 py-1.5">
+                        <div className="min-w-0">
+                          <span className="truncate text-sm text-slate-200">{s.description}</span>
+                          <span className="ml-2 font-mono text-2xs text-slate-500">{s.transactionDate}</span>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-3">
+                          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-2xs font-medium text-amber-300">
+                            {s.ageDays}d old
+                          </span>
+                          <span
+                            className={clsx(
+                              'font-mono text-sm tabular-nums',
+                              s.isOutflow ? 'text-red-400' : 'text-emerald-400',
+                            )}
+                          >
+                            {formatMoney(s.amountCents)}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* The plug — unexplained residual surfaced, NEVER auto-posted (canon §3) */}
+              {rec && !finalized && summary?.hasPlug && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/25 bg-red-500/[0.06] px-4 py-2.5 text-sm">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+                  <div>
+                    <p className="font-medium text-red-200">
+                      Unexplained difference (plug) {formatMoney(summary.plugCents ?? 0)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-red-300/80">
+                      This residual is shown for investigation only — it is never posted. Clear the remaining lines or
+                      book a legitimate adjustment to tie to $0. An authorized override is required to finalize with a
+                      plug outstanding.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Authorized override of the must-tie gate — reason required */}
+              {rec && !finalized && overrideOpen && (
+                <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] p-4">
+                  <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-white">
+                    <ShieldAlert size={14} className="text-amber-400" /> Override the tie-out gate
+                  </div>
+                  {data.capabilities.overrideAvailable ? (
+                    <>
+                      <p className="mb-2 text-xs text-amber-300/80">
+                        Finalizing with an unexplained difference of{' '}
+                        <span className="font-mono">{formatMoney(summary?.plugCents ?? 0)}</span> requires approval
+                        authority and a recorded reason. The plug is documented on the reconciliation — it is never
+                        posted to the ledger.
+                      </p>
+                      <textarea
+                        value={overrideReason}
+                        onChange={(e) => setOverrideReason(e.target.value)}
+                        rows={2}
+                        maxLength={500}
+                        placeholder="Why is this difference acceptable to finalize? (min 8 characters)"
+                        className="w-full rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
+                      />
+                      <div className="mt-3 flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => { setOverrideOpen(false); setOverrideReason(''); }}
+                          className="rounded-md px-3 py-1.5 text-xs text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={submitOverride}
+                          disabled={busy === 'finalize' || overrideReason.trim().length < 8}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {busy === 'finalize' ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />}
+                          Override &amp; finalize
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-amber-300/80">
+                      Override is unavailable in this environment (the reconciliation-override migration has not been
+                      applied). Resolve the difference to $0 to finalize.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -873,11 +1075,19 @@ export function ReconciliationWorkspace({
 
         {/* Footer actions */}
         <div className="flex items-center justify-between gap-2 border-t border-slate-800 px-5 py-4">
-          <div className="text-xs text-slate-500">
+          <div className="flex items-center gap-3 text-xs text-slate-500">
             {summary && rec && !finalized && (
               <span>
                 {summary.clearedCount} cleared · {summary.unclearedCount} outstanding
               </span>
+            )}
+            {rec && (
+              <button
+                onClick={loadMemo}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:border-indigo-500/40 hover:text-white"
+              >
+                <FileText size={13} className="text-indigo-400" /> Draft memo
+              </button>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -896,25 +1106,133 @@ export function ReconciliationWorkspace({
                 {busy === 'unreconcile' ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
                 Undo reconciliation
               </button>
-            ) : (
+            ) : canFinalize ? (
               <button
-                onClick={finalize}
-                disabled={!canFinalize || busy === 'finalize'}
-                title={canFinalize ? 'Finalize and lock' : 'Difference must be $0 with at least one cleared line'}
-                className={clsx(
-                  'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium',
-                  canFinalize
-                    ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                    : 'cursor-not-allowed bg-slate-800 text-slate-600',
-                )}
+                onClick={() => finalize()}
+                disabled={busy === 'finalize'}
+                title="Finalize and lock"
+                className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
               >
                 {busy === 'finalize' ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
                 Finalize &amp; lock
+              </button>
+            ) : rec && (summary?.hasPlug ?? false) && (summary?.clearedCount ?? 0) > 0 ? (
+              <button
+                onClick={() => setOverrideOpen(true)}
+                disabled={overrideOpen}
+                title="Finalize despite a non-zero difference (authorized override)"
+                className="inline-flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20 disabled:opacity-50"
+              >
+                <ShieldAlert size={14} /> Finalize with override…
+              </button>
+            ) : (
+              <button
+                disabled
+                title="Difference must be $0 with at least one cleared line"
+                className="inline-flex cursor-not-allowed items-center gap-2 rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-slate-600"
+              >
+                <Lock size={14} /> Finalize &amp; lock
               </button>
             )}
           </div>
         </div>
       </div>
+
+      {/* Reconciliation memo drawer (AI phrases deterministic figures) */}
+      {memoOpen && (
+        <>
+          <div className="fixed inset-0 z-[60] bg-black/50" onClick={() => setMemoOpen(false)} />
+          <div className="fixed left-1/2 top-1/2 z-[70] flex max-h-[85vh] w-[620px] max-w-[94vw] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-slate-700 bg-surface-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-white">
+                <FileText size={16} className="text-indigo-400" /> Reconciliation memo
+              </h3>
+              <button
+                onClick={() => setMemoOpen(false)}
+                className="rounded-md p-1.5 text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"
+                aria-label="Close memo"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              {memoLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+                </div>
+              ) : memoError ? (
+                <div className="py-12 text-center">
+                  <AlertCircle className="mx-auto mb-2 h-8 w-8 text-red-400" />
+                  <p className="text-sm text-red-400">{memoError}</p>
+                  <button
+                    onClick={loadMemo}
+                    className="mt-3 rounded-lg bg-slate-800 px-3.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : memo ? (
+                <>
+                  <div className="mb-3 flex items-center gap-2 text-2xs text-slate-500">
+                    <Sparkles size={12} className="text-indigo-400" />
+                    {memo.meta.source === 'ai'
+                      ? `Drafted by ${memo.meta.model ?? 'AI'} — figures computed in code`
+                      : 'Deterministic draft — figures computed in code'}
+                    {memo.meta.message ? ` · ${memo.meta.message}` : ''}
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{memo.memo}</p>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg border border-slate-800 bg-slate-800/30 p-3 text-xs sm:grid-cols-4">
+                    <div>
+                      <p className="text-2xs uppercase tracking-wider text-slate-500">Cleared</p>
+                      <p className="mt-0.5 font-mono text-slate-200">{memo.summary.clearedCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-2xs uppercase tracking-wider text-slate-500">Outstanding</p>
+                      <p className="mt-0.5 font-mono text-slate-200">{memo.summary.outstandingCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-2xs uppercase tracking-wider text-slate-500">Stale</p>
+                      <p className="mt-0.5 font-mono text-slate-200">{memo.summary.staleCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-2xs uppercase tracking-wider text-slate-500">Difference</p>
+                      <p
+                        className={clsx(
+                          'mt-0.5 font-mono',
+                          memo.summary.ties ? 'text-emerald-400' : 'text-red-400',
+                        )}
+                      >
+                        {formatMoney(memo.summary.differenceCents)}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="py-12 text-center">
+                  <FileText className="mx-auto mb-2 h-8 w-8 text-slate-600" />
+                  <p className="text-sm text-slate-400">No memo yet.</p>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-slate-800 px-5 py-4">
+              <button
+                onClick={() => setMemoOpen(false)}
+                className="rounded-md px-4 py-2 text-sm text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+              >
+                Close
+              </button>
+              <button
+                onClick={copyMemo}
+                disabled={!memo?.memo}
+                className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                <FileText size={14} /> Copy memo
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }
