@@ -55,6 +55,10 @@ export interface WorklistResult {
     accountsInWorklist: number;
     brokenPromiseCount: number;
     remindersDueCount: number;
+    /** Overdue dollars weighted by predicted lateness, summed across accounts. */
+    totalExpectedValueAtRiskCents: number;
+    /** Accounts predicted to pay LATE (predicted pay date beyond the due date). */
+    predictedLateCount: number;
   };
 }
 
@@ -248,6 +252,7 @@ export async function loadWorklist(
       wlInvoices.push({
         id: inv.id,
         invoiceNumber: inv.invoice_number,
+        invoiceDate: inv.invoice_date,
         dueDate: inv.due_date,
         balanceCents: balance,
         daysOverdue,
@@ -286,6 +291,15 @@ export async function loadWorklist(
       overdueBalanceCents,
       invoices: wlInvoices,
       promises: classified,
+      termsDays,
+      payHistory: {
+        sampleSize: dossier.behavior.paidApplicationCount,
+        medianDaysToPay: dossier.behavior.medianDaysToPay,
+        avgDaysToPay: dossier.behavior.avgDaysToPay,
+        worstDaysToPay: dossier.behavior.worstDaysToPay,
+        avgDaysBeyondTerms: dossier.behavior.avgDaysBeyondTerms,
+        onTimeRate: dossier.behavior.onTimeRate,
+      },
     });
   }
 
@@ -300,6 +314,8 @@ export async function loadWorklist(
       accountsInWorklist: accounts.filter((a) => a.overdueInvoiceCount > 0).length,
       brokenPromiseCount: accounts.reduce((s, a) => s + a.brokenPromiseCount, 0),
       remindersDueCount: accounts.filter((a) => a.reminderDue).length,
+      totalExpectedValueAtRiskCents: accounts.reduce((s, a) => s + a.expectedValueAtRiskCents, 0),
+      predictedLateCount: accounts.filter((a) => (a.focusPrediction?.predictedDaysLate ?? 0) > 0).length,
     },
   };
 }

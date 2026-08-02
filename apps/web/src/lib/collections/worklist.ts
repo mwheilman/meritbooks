@@ -10,8 +10,21 @@
  * and promise state — the AI only phrases the letter, never picks the action.
  */
 
-import { cadenceStageForDays, decideReminder, type DunningStage, type DunningStageKey } from './cadence';
+import {
+  cadenceStageForDays,
+  decideReminder,
+  nextCadenceStep,
+  type DunningStage,
+  type DunningStageKey,
+  type NextCadenceStep,
+} from './cadence';
 import type { ClassifiedPromise } from './promises';
+import {
+  predictPayDate,
+  computeExpectedValueAtRisk,
+  type PayHistoryStats,
+  type PayPrediction,
+} from './prediction';
 
 export type RiskLevel = 'low' | 'medium' | 'high';
 
@@ -19,6 +32,8 @@ export type RiskLevel = 'low' | 'medium' | 'high';
 export interface WorklistInvoiceInput {
   id: string;
   invoiceNumber: string;
+  /** Invoice date, YYYY-MM-DD. Optional — required for a pay-date prediction. */
+  invoiceDate?: string;
   dueDate: string; // YYYY-MM-DD
   balanceCents: number;
   daysOverdue: number;
@@ -26,6 +41,12 @@ export interface WorklistInvoiceInput {
   lastStageSent: DunningStageKey | null;
   lastReminderAt: string | null;
   reminderCount: number;
+}
+
+/** An invoice enriched with its pay-date prediction + next scheduled cadence step. */
+export interface WorklistInvoice extends WorklistInvoiceInput {
+  prediction: PayPrediction | null;
+  nextStep: NextCadenceStep | null;
 }
 
 export interface WorklistAccountInput {
@@ -42,6 +63,10 @@ export interface WorklistAccountInput {
   invoices: WorklistInvoiceInput[];
   /** Classified promises for this account (pending/kept/broken). */
   promises: ClassifiedPromise[];
+  /** Historical pay behavior for pay-date prediction (from the dossier). Optional. */
+  payHistory?: PayHistoryStats;
+  /** Net terms in days (for the terms-default prediction fallback). Default 30. */
+  termsDays?: number;
 }
 
 export type RecommendedActionKind =
@@ -83,7 +108,13 @@ export interface WorklistAccount {
   reminderDue: boolean;
   recommendedAction: RecommendedAction;
   priorityScore: number;
-  invoices: WorklistInvoiceInput[];
+  /** Overdue dollars weighted by predicted lateness — the ranking driver. */
+  expectedValueAtRiskCents: number;
+  /** Pay-date prediction for the focus (oldest overdue) invoice, if any. */
+  focusPrediction: PayPrediction | null;
+  /** The next scheduled cadence step for the focus invoice, if any. */
+  nextStep: NextCadenceStep | null;
+  invoices: WorklistInvoice[];
   promises: ClassifiedPromise[];
 }
 
@@ -172,13 +203,38 @@ export function recommendAction(input: {
  */
 export function buildWorklist(accounts: WorklistAccountInput[], asOf: string): WorklistAccount[] {
   const out: WorklistAccount[] = accounts.map((acc) => {
-    const overdueInvoices = acc.invoices.filter((i) => i.daysOverdue > 0 && i.balanceCents > 0);
+    const termsDays = acc.termsDays ?? 30;
+    const history = acc.payHistory ?? null;
+
+    // Enrich every invoice with a pay-date prediction + its next scheduled step.
+    const predictInvoice = (inv: WorklistInvoiceInput): PayPrediction | null =>
+      history && inv.invoiceDate
+        ? predictPayDate({ invoiceDate: inv.invoiceDate, dueDate: inv.dueDate, asOf, termsDays, history })
+        : null;
+
+    const enrichedInvoices: WorklistInvoice[] = acc.invoices.map((inv) => ({
+      ...inv,
+      prediction: predictInvoice(inv),
+      nextStep: nextCadenceStep({
+        dueDate: inv.dueDate,
+        daysOverdue: inv.daysOverdue,
+        lastStageSent: inv.lastStageSent,
+        lastReminderAt: inv.lastReminderAt,
+        asOf,
+      }),
+    }));
+    const byId = new Map(enrichedInvoices.map((i) => [i.id, i]));
+
+    const overdueInvoices = enrichedInvoices.filter((i) => i.daysOverdue > 0 && i.balanceCents > 0);
     const maxDaysOverdue = overdueInvoices.reduce((m, i) => Math.max(m, i.daysOverdue), 0);
 
     // Focus invoice: the oldest overdue, tie-broken by largest balance.
     const focus = [...overdueInvoices].sort(
       (a, b) => b.daysOverdue - a.daysOverdue || b.balanceCents - a.balanceCents,
     )[0] ?? null;
+    const focusEnriched = focus ? byId.get(focus.id) ?? null : null;
+    const focusPrediction = focusEnriched?.prediction ?? null;
+    const nextStep = focusEnriched?.nextStep ?? null;
 
     const currentStage = focus ? cadenceStageForDays(focus.daysOverdue) : null;
     const decision = focus
@@ -204,9 +260,19 @@ export function buildWorklist(accounts: WorklistAccountInput[], asOf: string): W
       reminderDue: decision?.isDue ?? false,
     });
 
+    // Expected value-at-risk drives the ranking (balance × predicted lateness).
+    const expectedValueAtRiskCents = computeExpectedValueAtRisk({
+      overdueBalanceCents: acc.overdueBalanceCents,
+      predictedDaysLate: focusPrediction?.predictedDaysLate ?? null,
+      maxDaysOverdue,
+    });
+
+    // Priority folds predicted lateness into the age factor (falls back to current
+    // aging when there's no prediction, preserving prior behavior).
+    const effectiveLateness = Math.max(maxDaysOverdue, focusPrediction?.predictedDaysLate ?? 0);
     const priorityScore = computeAccountPriority({
       overdueBalanceCents: acc.overdueBalanceCents,
-      maxDaysOverdue,
+      maxDaysOverdue: effectiveLateness,
       riskLevel: acc.riskLevel,
       hasBrokenPromise,
     });
@@ -231,10 +297,13 @@ export function buildWorklist(accounts: WorklistAccountInput[], asOf: string): W
       reminderDue: decision?.isDue ?? false,
       recommendedAction,
       priorityScore,
-      invoices: [...acc.invoices].sort((a, b) => b.balanceCents - a.balanceCents),
+      expectedValueAtRiskCents,
+      focusPrediction,
+      nextStep,
+      invoices: [...enrichedInvoices].sort((a, b) => b.balanceCents - a.balanceCents),
       promises: acc.promises,
     };
   });
 
-  return out.sort((a, b) => b.priorityScore - a.priorityScore);
+  return out.sort((a, b) => b.priorityScore - a.priorityScore || b.expectedValueAtRiskCents - a.expectedValueAtRiskCents);
 }

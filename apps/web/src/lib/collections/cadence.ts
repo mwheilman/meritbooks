@@ -168,3 +168,79 @@ export function decideReminder(input: ReminderDecisionInput): ReminderDecision {
     reason: `${stage.label} sent recently (${gap}d ago); hold until the ${minGap}d gap elapses.`,
   };
 }
+
+/** Add `n` whole days to an ISO/YYYY-MM-DD date, returning YYYY-MM-DD. */
+function addDays(iso: string, n: number): string {
+  const base = Date.parse(iso.length <= 10 ? `${iso}T00:00:00Z` : iso);
+  if (Number.isNaN(base)) return iso.slice(0, 10);
+  return new Date(base + n * 86_400_000).toISOString().slice(0, 10);
+}
+
+export interface NextCadenceStep {
+  stage: DunningStage;
+  /** YYYY-MM-DD the step becomes due (today when already due). */
+  scheduledDate: string;
+  /** Whole days from `asOf` to `scheduledDate` (<= 0 = due now/overdue). */
+  daysUntil: number;
+  isDueNow: boolean;
+  kind: 'first-contact' | 'escalation' | 're-nudge';
+  reason: string;
+}
+
+/**
+ * The NEXT scheduled cadence step for an invoice — what a collector should expect
+ * to do next, and when. Pure. If a reminder is already due it reports that (using
+ * the same authority as `decideReminder`); otherwise it projects the earlier of:
+ *   • the next escalation (one ladder rung above what's been sent), triggered when
+ *     the invoice ages to that rung's threshold (dueDate + minDaysOverdue), or
+ *   • a re-nudge of the last stage sent once the quiet gap elapses.
+ * Returns null only when the due date is unparseable.
+ */
+export function nextCadenceStep(input: ReminderDecisionInput & { dueDate: string }): NextCadenceStep | null {
+  const dueMs = Date.parse(input.dueDate.length <= 10 ? `${input.dueDate}T00:00:00Z` : input.dueDate);
+  if (Number.isNaN(dueMs)) return null;
+  const minGap = input.minGapDays ?? 7;
+  const asOfDay = input.asOf.slice(0, 10);
+
+  // Already due → report the stage the cadence authority picks, dated now.
+  const decision = decideReminder(input);
+  if (decision.isDue && decision.stage) {
+    const lastOrder = stageOrder(input.lastStageSent);
+    const kind: NextCadenceStep['kind'] = decision.isEscalation
+      ? (lastOrder === 0 ? 'first-contact' : 'escalation')
+      : 're-nudge';
+    return { stage: decision.stage, scheduledDate: asOfDay, daysUntil: 0, isDueNow: true, kind, reason: decision.reason };
+  }
+
+  // Not due → the earliest FUTURE trigger among escalation / re-nudge.
+  const lastOrder = stageOrder(input.lastStageSent);
+  const candidates: Array<{ stage: DunningStage; date: string; kind: NextCadenceStep['kind'] }> = [];
+  const escalation = DUNNING_LADDER.find((s) => s.order === lastOrder + 1) ?? null;
+  if (escalation) {
+    candidates.push({
+      stage: escalation,
+      date: addDays(input.dueDate, escalation.minDaysOverdue),
+      kind: lastOrder === 0 ? 'first-contact' : 'escalation',
+    });
+  }
+  if (input.lastStageSent && input.lastReminderAt) {
+    candidates.push({
+      stage: getDunningStage(input.lastStageSent),
+      date: addDays(input.lastReminderAt.slice(0, 10), minGap),
+      kind: 're-nudge',
+    });
+  }
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : b.stage.order - a.stage.order));
+  const next = candidates[0];
+  const daysUntil = Math.floor(
+    (Date.parse(`${next.date}T00:00:00Z`) - Date.parse(`${asOfDay}T00:00:00Z`)) / 86_400_000,
+  );
+  const isDueNow = daysUntil <= 0;
+  const reason =
+    next.kind === 're-nudge'
+      ? `Re-send ${next.stage.label} on ${next.date} (in ${daysUntil}d).`
+      : `${next.kind === 'first-contact' ? 'First contact' : 'Escalate to'} ${next.stage.label} on ${next.date} (in ${daysUntil}d).`;
+  return { stage: next.stage, scheduledDate: next.date, daysUntil, isDueNow, kind: next.kind, reason };
+}

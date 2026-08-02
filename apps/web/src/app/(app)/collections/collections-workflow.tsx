@@ -7,7 +7,7 @@ import { formatMoney } from '@meritbooks/shared';
 import {
   ArrowLeft, AlertCircle, Loader2, Send, Sparkles, ChevronDown, ChevronRight,
   Building2, Wallet, Clock, HandCoins, ShieldAlert, X, FileText, PhoneCall,
-  CalendarClock, CheckCircle2, Ban, RefreshCw,
+  CalendarClock, CheckCircle2, Ban, RefreshCw, TrendingUp, Target,
 } from 'lucide-react';
 
 // ─── Types (mirror /api/collections/worklist) ──────────────────────────────
@@ -18,9 +18,22 @@ type ActionKind =
   | 'AWAIT_PROMISE' | 'CALL_BROKEN_PROMISE' | 'SEND_FIRST_NOTICE' | 'SEND_SECOND_NOTICE'
   | 'SEND_THIRD_NOTICE' | 'SEND_FINAL_NOTICE' | 'ESCALATE' | 'MONITOR';
 
+type PredConfidence = 'low' | 'medium' | 'high';
+type PredBasis = 'history_median' | 'history_avg' | 'terms_default';
+interface PayPrediction {
+  predictedPayDate: string; predictedDaysToPay: number; predictedDaysLate: number;
+  basis: PredBasis; confidence: PredConfidence; confidenceScore: number;
+  isOverdueBeyondPrediction: boolean; rationale: string;
+}
+interface NextStep {
+  stage: { key: StageKey; label: string; tone: string };
+  scheduledDate: string; daysUntil: number; isDueNow: boolean;
+  kind: 'first-contact' | 'escalation' | 're-nudge'; reason: string;
+}
 interface WlInvoice {
-  id: string; invoiceNumber: string; dueDate: string; balanceCents: number;
+  id: string; invoiceNumber: string; invoiceDate?: string; dueDate: string; balanceCents: number;
   daysOverdue: number; lastStageSent: StageKey | null; lastReminderAt: string | null; reminderCount: number;
+  prediction: PayPrediction | null; nextStep: NextStep | null;
 }
 interface WlPromise {
   id: string; customerId: string; invoiceId: string | null; amountCents: number;
@@ -36,12 +49,17 @@ interface WlAccount {
   hasBrokenPromise: boolean; hasPendingPromise: boolean; pendingPromise: WlPromise | null;
   brokenPromiseCount: number; currentStage: StageKey | null; reminderDue: boolean;
   recommendedAction: RecommendedAction; priorityScore: number;
+  expectedValueAtRiskCents: number; focusPrediction: PayPrediction | null; nextStep: NextStep | null;
   invoices: WlInvoice[]; promises: WlPromise[];
 }
 interface WorklistPayload {
   asOf: string;
   accounts: WlAccount[];
-  kpis: { totalOverdueCents: number; totalOpenCents: number; accountsInWorklist: number; brokenPromiseCount: number; remindersDueCount: number };
+  kpis: {
+    totalOverdueCents: number; totalOpenCents: number; accountsInWorklist: number;
+    brokenPromiseCount: number; remindersDueCount: number;
+    totalExpectedValueAtRiskCents: number; predictedLateCount: number;
+  };
 }
 interface LocationOption { id: string; name: string; short_code: string }
 
@@ -69,6 +87,17 @@ function actionStyle(kind: ActionKind): { cls: string; Icon: React.ComponentType
 }
 const fmtWhen = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null;
+
+const CONF_STYLE: Record<PredConfidence, { cls: string; label: string }> = {
+  high: { cls: 'text-emerald-300', label: 'high' },
+  medium: { cls: 'text-amber-300', label: 'med' },
+  low: { cls: 'text-slate-400', label: 'low' },
+};
+function latenessChip(daysLate: number): { cls: string; text: string } {
+  if (daysLate > 0) return { cls: 'text-red-300', text: `~${daysLate}d late` };
+  if (daysLate === 0) return { cls: 'text-amber-300', text: 'on the wire' };
+  return { cls: 'text-emerald-300', text: `~${-daysLate}d early` };
+}
 
 // ─── Draft + Promise modal state ─────────────────────────────────────────────
 
@@ -213,8 +242,9 @@ export function CollectionsWorkflow() {
       {data && (
         <>
           {/* KPI strip */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
             <Kpi icon={Wallet} color="text-red-400" label="Overdue AR" value={formatMoney(data.kpis.totalOverdueCents)} sub={`${data.kpis.accountsInWorklist} accounts`} />
+            <Kpi icon={Target} color="text-indigo-300" label="Expected at-risk" value={formatMoney(data.kpis.totalExpectedValueAtRiskCents)} sub={`${data.kpis.predictedLateCount} predicted late`} />
             <Kpi icon={Send} color="text-emerald-400" label="Reminders due" value={String(data.kpis.remindersDueCount)} sub="cadence stage reached" />
             <Kpi icon={ShieldAlert} color="text-amber-300" label="Broken promises" value={String(data.kpis.brokenPromiseCount)} sub="need follow-up" />
             <Kpi icon={HandCoins} color="text-blue-400" label="Open AR (worklist)" value={formatMoney(data.kpis.totalOpenCents)} sub={`${data.accounts.length} customers`} />
@@ -234,8 +264,8 @@ export function CollectionsWorkflow() {
                     <th className="py-2.5 px-4">Customer</th>
                     <th className="py-2.5 px-4">Risk</th>
                     <th className="py-2.5 px-4 text-right">Overdue</th>
-                    <th className="py-2.5 px-4 text-right">Oldest</th>
-                    <th className="py-2.5 px-4">Stage</th>
+                    <th className="py-2.5 px-4">Forecast pay</th>
+                    <th className="py-2.5 px-4">Cadence</th>
                     <th className="py-2.5 px-4">Recommended action</th>
                     <th className="py-2.5 px-4 text-right">Do it</th>
                   </tr>
@@ -266,11 +296,38 @@ export function CollectionsWorkflow() {
                           <td className="py-3 px-4 text-right font-mono text-white tabular-nums">{formatMoney(acc.overdueBalanceCents)}
                             <div className="text-[11px] text-slate-500">{acc.overdueInvoiceCount} inv</div>
                           </td>
-                          <td className="py-3 px-4 text-right font-mono text-xs text-slate-400">{acc.maxDaysOverdue > 0 ? `${acc.maxDaysOverdue}d` : '—'}</td>
                           <td className="py-3 px-4">
-                            {acc.currentStage
-                              ? <span className={`text-xs font-medium ${STAGE_TEXT[acc.currentStage]}`}>{STAGE_LABEL[acc.currentStage]}{acc.reminderDue && <span className="ml-1 text-emerald-400">• due</span>}</span>
-                              : <span className="text-xs text-slate-500">grace</span>}
+                            {acc.focusPrediction ? (
+                              <div className="text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  <TrendingUp className="w-3 h-3 text-indigo-300" />
+                                  <span className="font-mono text-slate-200">{acc.focusPrediction.predictedPayDate}</span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className={latenessChip(acc.focusPrediction.predictedDaysLate).cls}>{latenessChip(acc.focusPrediction.predictedDaysLate).text}</span>
+                                  <span className={`text-[11px] ${CONF_STYLE[acc.focusPrediction.confidence].cls}`} title={acc.focusPrediction.rationale}>{CONF_STYLE[acc.focusPrediction.confidence].label} conf</span>
+                                </div>
+                                <div className="text-[11px] text-slate-600">oldest {acc.maxDaysOverdue}d</div>
+                              </div>
+                            ) : (
+                              <div className="text-xs text-slate-500">
+                                <span className="font-mono">{acc.maxDaysOverdue > 0 ? `${acc.maxDaysOverdue}d oldest` : '—'}</span>
+                                <div className="text-[11px] text-slate-600">no pay history</div>
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="text-xs">
+                              {acc.currentStage
+                                ? <span className={`font-medium ${STAGE_TEXT[acc.currentStage]}`}>{STAGE_LABEL[acc.currentStage]}{acc.reminderDue && <span className="ml-1 text-emerald-400">• due</span>}</span>
+                                : <span className="text-slate-500">grace</span>}
+                              {acc.nextStep && (
+                                <div className="text-[11px] text-slate-500 mt-0.5" title={acc.nextStep.reason}>
+                                  <CalendarClock className="w-3 h-3 inline -mt-0.5 mr-0.5" />
+                                  next: {acc.nextStep.stage.label} {acc.nextStep.isDueNow ? <span className="text-emerald-400">now</span> : `in ${acc.nextStep.daysUntil}d`}
+                                </div>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3 px-4">
                             <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border ${cls}`} title={acc.recommendedAction.reason}>
@@ -301,23 +358,41 @@ export function CollectionsWorkflow() {
                               <p className="text-xs text-slate-400 mb-2">{acc.riskSummary}</p>
                               <div className="space-y-1">
                                 {acc.invoices.map((inv) => (
-                                  <div key={inv.id} className="flex items-center gap-3 text-xs py-1.5 border-b border-slate-800/40 last:border-0">
-                                    <FileText className="w-3.5 h-3.5 text-slate-600" />
-                                    <span className="font-mono text-slate-300 w-28">{inv.invoiceNumber}</span>
-                                    <span className="font-mono text-white tabular-nums w-24 text-right">{formatMoney(inv.balanceCents)}</span>
-                                    <span className={`w-20 text-right ${inv.daysOverdue > 0 ? 'text-red-300' : 'text-emerald-400'}`}>{inv.daysOverdue > 0 ? `${inv.daysOverdue}d late` : 'current'}</span>
-                                    <span className="text-slate-500 w-28">due {inv.dueDate}</span>
-                                    <span className="text-slate-500 flex-1">{inv.lastReminderAt ? `last reminded ${fmtWhen(inv.lastReminderAt)}${inv.reminderCount > 1 ? ` ·×${inv.reminderCount}` : ''}${inv.lastStageSent ? ` (${STAGE_LABEL[inv.lastStageSent]})` : ''}` : 'never reminded'}</span>
-                                    {inv.daysOverdue > 0 && (
-                                      <button onClick={() => openDraft(acc, inv.id, null)}
-                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-emerald-300 hover:bg-emerald-500/10">
-                                        <Sparkles className="w-3 h-3" /> draft
+                                  <div key={inv.id} className="py-1.5 border-b border-slate-800/40 last:border-0">
+                                    <div className="flex items-center gap-3 text-xs">
+                                      <FileText className="w-3.5 h-3.5 text-slate-600" />
+                                      <span className="font-mono text-slate-300 w-28">{inv.invoiceNumber}</span>
+                                      <span className="font-mono text-white tabular-nums w-24 text-right">{formatMoney(inv.balanceCents)}</span>
+                                      <span className={`w-20 text-right ${inv.daysOverdue > 0 ? 'text-red-300' : 'text-emerald-400'}`}>{inv.daysOverdue > 0 ? `${inv.daysOverdue}d late` : 'current'}</span>
+                                      <span className="text-slate-500 w-28">due {inv.dueDate}</span>
+                                      <span className="text-slate-500 flex-1">{inv.lastReminderAt ? `last reminded ${fmtWhen(inv.lastReminderAt)}${inv.reminderCount > 1 ? ` ·×${inv.reminderCount}` : ''}${inv.lastStageSent ? ` (${STAGE_LABEL[inv.lastStageSent]})` : ''}` : 'never reminded'}</span>
+                                      {inv.daysOverdue > 0 && (
+                                        <button onClick={() => openDraft(acc, inv.id, null)}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-emerald-300 hover:bg-emerald-500/10">
+                                          <Sparkles className="w-3 h-3" /> draft
+                                        </button>
+                                      )}
+                                      <button onClick={() => setPromiseModal({ account: acc, invoiceId: inv.id, amount: (inv.balanceCents / 100).toFixed(2), date: today, note: '', saving: false })}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-slate-400 hover:bg-slate-800">
+                                        <HandCoins className="w-3 h-3" /> promise
                                       </button>
+                                    </div>
+                                    {(inv.prediction || inv.nextStep) && (
+                                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 pl-6 text-[11px] text-slate-500">
+                                        {inv.prediction && (
+                                          <span title={inv.prediction.rationale}>
+                                            <TrendingUp className="w-3 h-3 inline -mt-0.5 mr-1 text-indigo-300" />
+                                            forecast pay {inv.prediction.predictedPayDate} · <span className={latenessChip(inv.prediction.predictedDaysLate).cls}>{latenessChip(inv.prediction.predictedDaysLate).text}</span> · <span className={CONF_STYLE[inv.prediction.confidence].cls}>{CONF_STYLE[inv.prediction.confidence].label} conf</span>
+                                          </span>
+                                        )}
+                                        {inv.nextStep && (
+                                          <span title={inv.nextStep.reason}>
+                                            <CalendarClock className="w-3 h-3 inline -mt-0.5 mr-1" />
+                                            next: {inv.nextStep.stage.label} {inv.nextStep.isDueNow ? 'now' : `in ${inv.nextStep.daysUntil}d (${inv.nextStep.scheduledDate})`}
+                                          </span>
+                                        )}
+                                      </div>
                                     )}
-                                    <button onClick={() => setPromiseModal({ account: acc, invoiceId: inv.id, amount: (inv.balanceCents / 100).toFixed(2), date: today, note: '', saving: false })}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-slate-400 hover:bg-slate-800">
-                                      <HandCoins className="w-3 h-3" /> promise
-                                    </button>
                                   </div>
                                 ))}
                                 {acc.promises.filter((p) => p.status !== 'KEPT').length > 0 && (

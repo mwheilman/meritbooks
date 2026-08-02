@@ -10,8 +10,14 @@ import { describe, it, expect } from 'vitest';
 import {
   cadenceStageForDays,
   decideReminder,
+  nextCadenceStep,
   stageOrder,
 } from './cadence';
+import {
+  predictPayDate,
+  computeExpectedValueAtRisk,
+  type PayHistoryStats,
+} from './prediction';
 import {
   computeAccountPriority,
   recommendAction,
@@ -267,5 +273,132 @@ describe('parseDunningReply', () => {
   it('returns null on malformed or empty output', () => {
     expect(parseDunningReply('not json', 'FIRST_NOTICE', 'friendly')).toBeNull();
     expect(parseDunningReply('{"subject":"","body":""}', 'FIRST_NOTICE', 'friendly')).toBeNull();
+  });
+});
+
+// ── Pay-date prediction ──────────────────────────────────────────────────────
+
+describe('predictPayDate', () => {
+  const noHistory: PayHistoryStats = {
+    sampleSize: 0, medianDaysToPay: null, avgDaysToPay: null,
+    worstDaysToPay: null, avgDaysBeyondTerms: null, onTimeRate: null,
+  };
+
+  it('falls back to net terms with low confidence when there is no history', () => {
+    const p = predictPayDate({ invoiceDate: '2026-07-01', dueDate: '2026-07-31', asOf: '2026-07-10', termsDays: 30, history: noHistory });
+    expect(p).not.toBeNull();
+    expect(p!.basis).toBe('terms_default');
+    expect(p!.predictedPayDate).toBe('2026-07-31'); // invoice + 30d terms
+    expect(p!.predictedDaysLate).toBe(0);
+    expect(p!.confidence).toBe('low');
+  });
+
+  it('uses the median pace and reads high confidence for a tight, on-time payer', () => {
+    const history: PayHistoryStats = {
+      sampleSize: 6, medianDaysToPay: 20, avgDaysToPay: 21,
+      worstDaysToPay: 25, avgDaysBeyondTerms: 0, onTimeRate: 0.95,
+    };
+    const p = predictPayDate({ invoiceDate: '2026-07-01', dueDate: '2026-07-31', asOf: '2026-07-10', termsDays: 30, history })!;
+    expect(p.basis).toBe('history_median');
+    expect(p.predictedPayDate).toBe('2026-07-21'); // invoice + 20d median
+    expect(p.predictedDaysLate).toBeLessThan(0); // pays before due
+    expect(p.confidence).toBe('high');
+  });
+
+  it('re-slips forward and caps confidence once past the customer’s own pace', () => {
+    const history: PayHistoryStats = {
+      sampleSize: 5, medianDaysToPay: 15, avgDaysToPay: 16,
+      worstDaysToPay: null, avgDaysBeyondTerms: null, onTimeRate: null,
+    };
+    const p = predictPayDate({ invoiceDate: '2026-06-01', dueDate: '2026-07-01', asOf: '2026-08-01', termsDays: 30, history })!;
+    expect(p.isOverdueBeyondPrediction).toBe(true);
+    expect(p.predictedPayDate > '2026-08-01').toBe(true); // pushed past today
+    expect(p.predictedDaysLate).toBeGreaterThan(0);
+    expect(p.confidence).not.toBe('high'); // capped when behaving abnormally
+  });
+
+  it('returns null on an unparseable date', () => {
+    expect(predictPayDate({ invoiceDate: 'nope', dueDate: '2026-07-31', asOf: '2026-07-10', termsDays: 30, history: noHistory })).toBeNull();
+  });
+});
+
+describe('computeExpectedValueAtRisk', () => {
+  it('weights the balance up by predicted lateness when worse than current aging', () => {
+    const ev = computeExpectedValueAtRisk({ overdueBalanceCents: 100_000, predictedDaysLate: 60, maxDaysOverdue: 30 });
+    expect(ev).toBe(300_000); // 1 + 60/30 = 3×
+  });
+  it('falls back to current aging when there is no prediction', () => {
+    const ev = computeExpectedValueAtRisk({ overdueBalanceCents: 100_000, predictedDaysLate: null, maxDaysOverdue: 30 });
+    expect(ev).toBe(200_000); // 1 + 30/30 = 2×
+  });
+  it('caps the lateness factor at 120 days', () => {
+    const ev = computeExpectedValueAtRisk({ overdueBalanceCents: 100_000, predictedDaysLate: 400, maxDaysOverdue: 400 });
+    expect(ev).toBe(500_000); // 1 + 120/30 = 5×
+  });
+});
+
+// ── Next scheduled cadence step ──────────────────────────────────────────────
+
+describe('nextCadenceStep', () => {
+  it('projects first contact at the grace threshold when nothing is sent yet', () => {
+    const s = nextCadenceStep({ dueDate: '2026-07-31', daysOverdue: 0, lastStageSent: null, lastReminderAt: null, asOf: '2026-07-10' })!;
+    expect(s.stage.key).toBe('FIRST_NOTICE');
+    expect(s.kind).toBe('first-contact');
+    expect(s.isDueNow).toBe(false);
+    expect(s.scheduledDate).toBe('2026-08-07'); // due + 7
+  });
+
+  it('reports the escalation as due now when a reminder is currently due', () => {
+    const s = nextCadenceStep({ dueDate: '2026-06-27', daysOverdue: 35, lastStageSent: 'FIRST_NOTICE', lastReminderAt: '2026-07-01', asOf: '2026-08-01' })!;
+    expect(s.isDueNow).toBe(true);
+    expect(s.stage.key).toBe('SECOND_NOTICE');
+    expect(s.kind).toBe('escalation');
+  });
+
+  it('picks the earlier of a re-nudge vs escalation while holding the quiet gap', () => {
+    const s = nextCadenceStep({ dueDate: '2026-07-22', daysOverdue: 10, lastStageSent: 'FIRST_NOTICE', lastReminderAt: '2026-07-29', asOf: '2026-08-01' })!;
+    expect(s.isDueNow).toBe(false);
+    expect(s.kind).toBe('re-nudge');
+    expect(s.stage.key).toBe('FIRST_NOTICE');
+    expect(s.scheduledDate).toBe('2026-08-05'); // lastReminder + 7d gap, before the +30d escalation
+  });
+
+  it('returns null on an unparseable due date', () => {
+    expect(nextCadenceStep({ dueDate: 'nope', daysOverdue: 40, lastStageSent: null, lastReminderAt: null, asOf: '2026-08-01' })).toBeNull();
+  });
+});
+
+describe('buildWorklist — prediction wiring', () => {
+  const asOf = '2026-08-01';
+  it('attaches a pay-date prediction, next step, and EV-at-risk to accounts', () => {
+    const acct: WorklistAccountInput = {
+      customerId: 'c1', customerName: 'Acme', customerEmail: 'ap@acme.test',
+      riskLevel: 'medium', riskFlags: [], riskSummary: '', avgDaysBeyondTerms: 20,
+      openBalanceCents: 200_000, overdueBalanceCents: 200_000,
+      termsDays: 30,
+      payHistory: { sampleSize: 5, medianDaysToPay: 40, avgDaysToPay: 42, worstDaysToPay: 55, avgDaysBeyondTerms: 12, onTimeRate: 0.4 },
+      invoices: [{ id: 'i1', invoiceNumber: 'INV-1', invoiceDate: '2026-06-01', dueDate: '2026-07-01', balanceCents: 200_000, daysOverdue: 31, lastStageSent: 'FIRST_NOTICE', lastReminderAt: '2026-07-10', reminderCount: 1 }],
+      promises: [],
+    };
+    const [row] = buildWorklist([acct], asOf);
+    expect(row.focusPrediction).not.toBeNull();
+    expect(row.expectedValueAtRiskCents).toBeGreaterThan(row.overdueBalanceCents);
+    expect(row.nextStep).not.toBeNull();
+    expect(row.invoices[0].prediction).not.toBeNull();
+    expect(row.invoices[0].nextStep).not.toBeNull();
+  });
+
+  it('degrades safe (null prediction) when an account has no pay history', () => {
+    const acct: WorklistAccountInput = {
+      customerId: 'c2', customerName: 'NoHist', customerEmail: null,
+      riskLevel: 'low', riskFlags: [], riskSummary: '', avgDaysBeyondTerms: null,
+      openBalanceCents: 50_000, overdueBalanceCents: 50_000,
+      invoices: [{ id: 'i2', invoiceNumber: 'INV-2', dueDate: '2026-07-01', balanceCents: 50_000, daysOverdue: 31, lastStageSent: null, lastReminderAt: null, reminderCount: 0 }],
+      promises: [],
+    };
+    const [row] = buildWorklist([acct], asOf);
+    expect(row.focusPrediction).toBeNull(); // no payHistory / no invoiceDate
+    expect(row.nextStep).not.toBeNull(); // cadence step still computed
+    expect(row.expectedValueAtRiskCents).toBeGreaterThan(0);
   });
 });

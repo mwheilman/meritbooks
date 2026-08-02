@@ -9,6 +9,7 @@
  */
 
 export * from './cadence';
+export * from './prediction';
 export * from './worklist';
 export * from './promises';
 export * from './dunning-copy';
