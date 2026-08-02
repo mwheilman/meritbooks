@@ -11,6 +11,7 @@ import { formatMoney } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
 import { EntityInvoiceSettings } from '@/components/entity-invoice-settings';
 import { InvoiceTextOverrides } from '@/components/invoice-text-overrides';
+import { JobCostEacPanel } from './jobcost-eac-panel';
 
 const REV_REC_METHOD_OPTS: { value: string; label: string }[] = [
   { value: 'PCT_COMPLETE', label: 'POC — physical % complete' },
@@ -147,6 +148,9 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
           </div>
         </div>
       )}
+
+      {/* Cost-to-complete / EAC forecast (deterministic; AI phrases only) */}
+      <JobCostEacPanel jobId={job.id} />
 
       {/* Recognition inputs (standalone direct entry / pinned snapshot) */}
       <RevRecInputs job={job} onSaved={refetch} />
