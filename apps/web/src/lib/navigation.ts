@@ -64,6 +64,7 @@ export const navigation: NavGroup[] = [
   {
     label: 'Process',
     items: [
+      { label: 'Action Inbox', href: '/inbox', icon: Inbox },
       { label: 'Needs Attention', href: '/exceptions', icon: Inbox },
       { label: 'Bank Feed', href: '/bank-feed', icon: Landmark },
       { label: 'Credit Cards', href: '/credit-cards', icon: CreditCard },
@@ -148,6 +149,8 @@ export const navigation: NavGroup[] = [
       { label: 'Operations', href: '/operations', icon: Activity },
       { label: 'Companies', href: '/settings', icon: Building2 },
       { label: 'Compliance', href: '/compliance', icon: Shield },
+      { label: 'Controls / SOX', href: '/controls', icon: ShieldCheck },
+      { label: 'Documents', href: '/documents', icon: FileText },
       { label: 'Import Data', href: '/import', icon: Upload },
       { label: 'Historical Conversion', href: '/onboarding/conversion', icon: Upload },
       { label: 'Sandbox', href: '/sandbox', icon: FlaskConical },
