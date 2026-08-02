@@ -236,6 +236,11 @@ export function ReportViewer() {
   const [compareMode, setCompareMode] = useState<CompareMode>('none');
   const [drill, setDrill] = useState<DrillDownTarget | null>(null);
   const [nlQuery, setNlQuery] = useState('');
+  // ── Learned report preferences (M14): remember how the user usually runs each
+  // report and default the selectors to that. Read-only personalization — it only
+  // pre-selects; the user can change anything. ──
+  const [rememberedHint, setRememberedHint] = useState<string | null>(null);
+  const hydratedFor = useRef<string | null>(null);
 
   const { data: rawLocs } = useQuery<LocationEx[]>('/api/locations');
   const locations = rawLocs ?? [];
@@ -258,6 +263,60 @@ export function ReportViewer() {
     if (periodKey === 'custom') return { s: customS, e: customE };
     return PERIODS.find((p) => p.key === periodKey)?.get() ?? { s: '', e: '' };
   }, [periodKey, customS, customE]);
+
+  // ── HYDRATE: when a report is selected, recall the user's remembered defaults for
+  // it (period preset / comparative / basis) and pre-select them. Degrade-safe: a
+  // missing store or no history just leaves today's defaults. Only applies ONCE per
+  // report so it never fights the user mid-session. ──
+  useEffect(() => {
+    if (!reportKey) { setRememberedHint(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/learning/preferences?scope=REPORT_PREFS&key=${encodeURIComponent(`report:${reportKey}`)}`,
+        );
+        if (!res.ok || cancelled) return;
+        const j = (await res.json()) as {
+          value?: { period?: string; compare?: string; basis?: string } | null;
+          observations?: number;
+        };
+        if (cancelled || !j?.value) { setRememberedHint(null); return; }
+        const v = j.value;
+        if (hydratedFor.current !== reportKey) {
+          if (v.period && PERIODS.some((p) => p.key === v.period)) setPeriodKey(v.period);
+          if (v.compare === 'none' || v.compare === 'prior_period' || v.compare === 'prior_year' || v.compare === 'budget') {
+            setCompareMode(v.compare);
+          }
+          if (v.basis === 'accrual' || v.basis === 'cash') setBasis(v.basis);
+          hydratedFor.current = reportKey;
+        }
+        const n = j.observations ?? 0;
+        setRememberedHint(n >= 2 ? `Defaults remembered from how you usually run this report (${n} views)` : null);
+      } catch {
+        /* degrade-safe: keep today's defaults */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [reportKey]);
+
+  // ── LEARN: quietly record the active selector combo for the current report, so the
+  // typical choice is remembered next time. Debounced; best-effort; never blocks. ──
+  useEffect(() => {
+    if (!reportKey) return;
+    const t = setTimeout(() => {
+      fetch('/api/learning/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope: 'REPORT_PREFS',
+          key: `report:${reportKey}`,
+          sample: { period: periodKey, compare: compareMode, basis },
+        }),
+      }).catch(() => {});
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [reportKey, periodKey, compareMode, basis]);
 
   const reportDef = useMemo(() => {
     for (const cat of CATALOG) { const r = cat.reports.find((r) => r.key === reportKey); if (r) return r; }
@@ -356,7 +415,15 @@ export function ReportViewer() {
         ) : (
           <div>
             <div className="flex items-start justify-between mb-4">
-              <div><h1 className="text-xl font-semibold text-white">{reportDef?.label}</h1><p className="text-xs text-slate-500 mt-0.5">{reportDef?.desc}</p></div>
+              <div>
+                <h1 className="text-xl font-semibold text-white">{reportDef?.label}</h1>
+                <p className="text-xs text-slate-500 mt-0.5">{reportDef?.desc}</p>
+                {rememberedHint && (
+                  <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-indigo-300/80" title="Learned from your past runs — you can change anything">
+                    <Sparkles size={11} className="text-indigo-400" />{rememberedHint}
+                  </p>
+                )}
+              </div>
               <ExportMenu
                 reportKey={reportKey}
                 sd={sd}

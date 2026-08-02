@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import {
   CheckCircle2, Circle, AlertTriangle, Lock, AlertCircle, Loader2, Zap, Hand,
-  ChevronDown, ChevronRight, ChevronLeft, ShieldAlert, ShieldCheck, Clock,
+  ChevronDown, ChevronRight, ChevronLeft, ShieldAlert, ShieldCheck, Clock, Sparkles,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
@@ -62,6 +62,14 @@ interface BoardResponse {
   period: { year: number; month: number; key: string; label: string };
   summary: { totalEntities: number; readyToClose: number; blocked: number; closed: number; noPeriod: number };
   entities: Entity[];
+  /** Learned close-cadence hint (M14), null when nothing learned yet. */
+  cadence?: { typicalCloseDay: number; confidence: number; observations: number } | null;
+}
+
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
 }
 
 const PHASE_LABEL: Record<Phase, string> = {
@@ -191,6 +199,15 @@ export function CloseOrchestration() {
         <span className="flex items-center gap-1 text-red-400"><ShieldAlert size={14} />{summary?.blocked ?? 0} blocked</span>
         <span className="flex items-center gap-1 text-slate-400"><Lock size={13} />{summary?.closed ?? 0} closed</span>
         {(summary?.noPeriod ?? 0) > 0 && <span className="text-slate-500">{summary?.noPeriod} no period</span>}
+        {data?.cadence && data.cadence.observations >= 2 && (
+          <span
+            className="flex items-center gap-1 text-indigo-300/80"
+            title={`Learned from ${data.cadence.observations} past close${data.cadence.observations === 1 ? '' : 's'} — informational only`}
+          >
+            <Sparkles size={13} className="text-indigo-400" />
+            You usually wrap close by the {ordinal(data.cadence.typicalCloseDay)}
+          </span>
+        )}
       </div>
 
       {entities.length === 0 ? (

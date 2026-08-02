@@ -26,6 +26,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { gatherReconciliationCloseStatus } from '@/lib/services/reconciliation-close-gate';
+import { getLearnedPreference } from '@/lib/learning/preferences';
 import { scanUncategorizedLeakage } from '@/lib/controls/uncategorized-leakage';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import {
@@ -174,11 +175,27 @@ export interface CloseOrchestrationSummary {
   noPeriod: number;
 }
 
+/**
+ * A learned close-cadence hint (M14). Derived read-only from how this tenant has
+ * historically finished their close (the day-of-month the final sign-off landed).
+ * It INFORMS the UI (a subtle "you usually wrap by day N"); it never gates a close.
+ */
+export interface CloseCadenceHint {
+  /** Typical day-of-month the tenant finishes close (their learned cadence). */
+  typicalCloseDay: number;
+  /** 0..1 confidence in that cadence. */
+  confidence: number;
+  /** How many past closes informed it. */
+  observations: number;
+}
+
 export interface CloseOrchestrationBoard {
   period: { year: number; month: number; key: string; label: string };
   generatedAt: string;
   summary: CloseOrchestrationSummary;
   entities: EntityCloseOrchestration[];
+  /** Learned close-cadence hint for the org, or null when nothing learned yet. */
+  cadence: CloseCadenceHint | null;
 }
 
 interface LocationRow {
@@ -311,7 +328,23 @@ export async function gatherCloseOrchestration(
     noPeriod: entities.filter((e) => e.periodStatus === 'NO_PERIOD').length,
   };
 
-  return { period: { year, month, key: periodKey, label: periodLabel }, generatedAt: now.toISOString(), summary, entities };
+  // Learned close-cadence hint (M14) — read-only, degrade-safe (null if unavailable).
+  const cadencePref = await getLearnedPreference<{ closeDay: number }>(
+    supabase,
+    orgId,
+    'CLOSE_CADENCE',
+    'monthly',
+  );
+  const cadence: CloseCadenceHint | null =
+    cadencePref && typeof cadencePref.value?.closeDay === 'number'
+      ? {
+          typicalCloseDay: cadencePref.value.closeDay,
+          confidence: cadencePref.confidence,
+          observations: cadencePref.observations,
+        }
+      : null;
+
+  return { period: { year, month, key: periodKey, label: periodLabel }, generatedAt: now.toISOString(), summary, entities, cadence };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

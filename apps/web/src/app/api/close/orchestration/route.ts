@@ -7,6 +7,7 @@ import { resolveActor } from '@/lib/trust/actor';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { gatherCloseOrchestration, setManualCloseTask } from '@/lib/close/readiness';
 import { isManualTaskKey, getCloseTask } from '@/lib/close/orchestration';
+import { recordObservation } from '@/lib/learning/preferences';
 
 /**
  * Close Command Center — orchestration board + manual sign-off.
@@ -85,6 +86,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     actorCoreUserId: coreUserId,
   });
   if (!ok) return NextResponse.json({ error: 'Failed to record sign-off', code: 'INTERNAL_ERROR' }, { status: 500 });
+
+  // LEARN (M14, read-only informing): when the FINAL close sign-off lands, remember
+  // WHEN in the month this tenant finishes their close. Feeds the "you usually wrap
+  // by day N" cadence hint on the board. Degrade-safe + best-effort — a learning miss
+  // never fails the sign-off.
+  if (body.task_key === 'reviewed' && body.is_complete) {
+    await recordObservation(supabase, orgId, 'CLOSE_CADENCE', 'monthly', {
+      closeDay: new Date().getUTCDate(),
+    });
+  }
 
   const def = getCloseTask(body.task_key);
   await logHumanAction(supabase, userId, orgId, {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Settings, Building2, Bell, Brain, Globe, Save, Loader2, AlertCircle, Check, Route, Percent, Receipt } from 'lucide-react';
+  Settings, Building2, Bell, Brain, Globe, Save, Loader2, AlertCircle, Check, Route, Percent, Receipt, Sparkles } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/ui';
 import { CostRouting } from './cost-routing';
 import { RevRecConfig } from './rev-rec-config';
 import { InvoiceBranding } from './invoice-branding';
+import { LearnedPreferences } from './learned-preferences';
 
 interface OrgSettings {
   id: string;
@@ -48,7 +49,7 @@ interface SettingsResponse {
   locations: LocationRow[];
 }
 
-type TabKey = 'organization' | 'chase' | 'ai' | 'routing' | 'revrec' | 'branding' | 'companies';
+type TabKey = 'organization' | 'chase' | 'ai' | 'routing' | 'revrec' | 'branding' | 'learned' | 'companies';
 
 const TABS: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'organization', label: 'Organization', icon: Globe },
@@ -57,6 +58,7 @@ const TABS: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'routing', label: 'Cost Routing', icon: Route },
   { key: 'revrec', label: 'Revenue Recognition', icon: Percent },
   { key: 'branding', label: 'Invoice Display', icon: Receipt },
+  { key: 'learned', label: 'Learned Preferences', icon: Sparkles },
   { key: 'companies', label: 'Companies', icon: Building2 },
 ];
 
@@ -150,7 +152,7 @@ export default function SettingsPage() {
   const labelCls = "block text-xs text-slate-500 mb-1.5 font-medium";
 
   // The Cost Routing tab manages its own persistence; the org Save bar doesn't apply there.
-  const showSaveBar = activeTab !== 'routing' && activeTab !== 'companies' && activeTab !== 'branding';
+  const showSaveBar = activeTab !== 'routing' && activeTab !== 'companies' && activeTab !== 'branding' && activeTab !== 'learned';
 
   return (
     <div className="space-y-6">
@@ -239,6 +241,7 @@ export default function SettingsPage() {
           {activeTab === 'revrec' && <RevRecConfig />}
 
           {activeTab === 'branding' && <InvoiceBranding />}
+          {activeTab === 'learned' && <LearnedPreferences />}
           {activeTab === 'companies' && (
             <div className="card p-6 space-y-5">
               <h2 className="text-lg font-semibold text-white">Companies</h2>
