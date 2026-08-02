@@ -22,10 +22,10 @@
  *      the interim core.employees.role (active rows only), normalized through the
  *      SAME normalizer, so nothing regresses while memberships backfill.
  *
- * ORG RESOLUTION mirrors the interim tenancy story used by /api/me and
- * require-permission.ts: prefer the verified `org_id` token claim; fall back to the
- * first org only when the claim is absent. When the Clerk-JWT org mapping fully
- * lands, drop the fallback and resolve the org from the claim alone.
+ * ORG RESOLUTION (identity gate #9): the org is resolved from the verified `org_id`
+ * token claim via resolveTenantOrgId() (a Books uuid passes through; a Clerk org id
+ * maps through core.organizations.clerk_org_id). There is NO first-org fallback — an
+ * unresolved claim yields null and the page fails closed (redirect).
  */
 
 import { redirect } from 'next/navigation';
@@ -33,6 +33,7 @@ import { auth } from '@clerk/nextjs/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { hasPermission, type FeatureAction, type UserRole } from '@/lib/rbac/permissions';
 import { normalizeMembershipRole } from '@/lib/rbac/role-normalize';
+import { resolveTenantOrgId } from '@/lib/rbac/resolve-tenant';
 
 /** Where an unauthorized (but authenticated) user is bounced. Their own book of
  *  record dashboard is always visible to every internal role, so this is a safe,
@@ -46,16 +47,9 @@ async function resolveOrgId(
   admin: SupabaseClient,
   claimOrgId: string | null,
 ): Promise<string | null> {
-  if (claimOrgId) return claimOrgId;
-  // Interim fallback — see file header. Matches require-permission.ts.
-  const { data, error } = await admin
-    .schema('core')
-    .from('organizations')
-    .select('id')
-    .limit(1)
-    .single();
-  if (error) return null;
-  return (data?.id as string | undefined) ?? null;
+  // Resolve the claim to the real Books tenant (uuid passthrough OR Clerk-id mapping).
+  // No first-org fallback: unresolved -> null -> fail closed.
+  return resolveTenantOrgId(claimOrgId, admin);
 }
 
 /**

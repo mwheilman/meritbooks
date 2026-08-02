@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { ROLE_DEFINITIONS, getVisibleFeatures, getSidebarGrouped, type UserRole } from '@/lib/rbac/permissions';
 import { provisionMembershipOnLogin } from '@/lib/identity/provision-membership';
+import { bindClerkOrgOnLogin } from '@/lib/rbac/resolve-tenant';
+import { createAdminSupabase } from '@/lib/supabase/server';
 
 export async function GET(_req: NextRequest) {
   try {
@@ -32,6 +34,21 @@ export async function GET(_req: NextRequest) {
         hasOrg: false,
         setupComplete: false,
         user: { clerkId: userId },
+      });
+    }
+
+    // 1b. Auto-bind this tenant to the caller's Clerk organization on first login, so
+    //     get_org_id()/resolveTenantOrgId can map the Clerk org id -> this Books
+    //     tenant on every later request (no manual id entry). Idempotent, fail-safe,
+    //     and guarded (never rebinds a Clerk org to a second tenant). Uses the admin
+    //     client because core.organizations.clerk_org_id is service-role-write only.
+    const clerkAuth = await auth().catch(() => null);
+    const clerkNativeOrgId = clerkAuth?.orgId ?? null;
+    if (clerkNativeOrgId) {
+      await bindClerkOrgOnLogin({
+        clerkOrgId: clerkNativeOrgId,
+        booksOrgId: org.id,
+        admin: createAdminSupabase(),
       });
     }
 

@@ -33,12 +33,9 @@ export async function GET(request: Request): Promise<NextResponse> {
   const guard = await requirePermission(userId, 'reports', 'view');
   if (!guard.ok) return guard.response;
 
-  // Resolve the org for the AR-control account lookup (RLS still scopes the reads).
-  let orgId = claimOrgId;
-  if (!orgId) {
-    const { data: org } = await supabase.schema('core').from('organizations').select('id').limit(1).maybeSingle();
-    orgId = (org as { id: string } | null)?.id ?? null;
-  }
+  // Org is the caller's RESOLVED tenant (ctx.orgId; identity gate #9) for the
+  // AR-control account lookup (RLS still scopes the reads). No first-org fallback.
+  const orgId = claimOrgId;
   if (!orgId) {
     return NextResponse.json({ error: 'No organization found', code: 'NO_ORG' }, { status: 400 });
   }

@@ -48,7 +48,14 @@ async function resolveAuthContext(): Promise<
     );
   }
   const claims = a.sessionClaims as Record<string, unknown> | null;
-  const orgId = typeof claims?.org_id === 'string' ? claims.org_id : null;
+  const rawClaimOrgId = typeof claims?.org_id === 'string' ? claims.org_id : null;
+  // Resolve the raw claim (a Books uuid OR a Clerk org id) to the real MeritBooks
+  // tenant uuid — the same mapping get_org_id() enforces in RLS. ctx.orgId is ALWAYS
+  // a real core.organizations.id (or null → callers fail closed); it is NEVER a raw
+  // Clerk 'org_...' string, and there is no "first org" fallback. (Identity gate #9.)
+  const { createAdminSupabase } = await import('@/lib/supabase/server');
+  const { resolveTenantOrgId } = await import('@/lib/rbac/resolve-tenant');
+  const orgId = await resolveTenantOrgId(rawClaimOrgId, createAdminSupabase());
   return { userId: a.userId, orgId, token };
 }
 

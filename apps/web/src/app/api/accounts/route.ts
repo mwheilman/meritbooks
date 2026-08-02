@@ -156,17 +156,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body', code: 'PARSE_ERROR' }, { status: 400 });
   }
 
-  // Resolve the caller's org CLAIM-FIRST (matches get_org_id()); the first-location
-  // lookup survives only as a transitional fallback until every JWT carries org_id.
-  let orgId: string | null = claimOrgId;
-  if (!orgId) {
-    const { data: orgRow } = await supabase
-      .schema('core').from('locations')
-      .select('org_id')
-      .limit(1)
-      .single();
-    orgId = (orgRow as { org_id: string } | null)?.org_id ?? null;
-  }
+  // Org is the caller's RESOLVED tenant (requireAuth maps the claim; identity gate
+  // #9). No first-location fallback — an unresolved tenant fails closed.
+  const orgId: string | null = claimOrgId;
   if (!orgId) {
     return NextResponse.json({ error: 'No organization found', code: 'NO_ORG' }, { status: 404 });
   }
@@ -241,17 +233,10 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'account_id and action (approve|reject) required', code: 'VALIDATION_ERROR' }, { status: 422 });
   }
 
-  // Resolve the caller's org CLAIM-FIRST; scope the update to it so an approver can
-  // never approve/reject another tenant's account by UUID (admin bypasses RLS).
-  let orgId: string | null = claimOrgId;
-  if (!orgId) {
-    const { data: orgRow } = await supabase
-      .schema('core').from('locations')
-      .select('org_id')
-      .limit(1)
-      .single();
-    orgId = (orgRow as { org_id: string } | null)?.org_id ?? null;
-  }
+  // Org is the caller's RESOLVED tenant (identity gate #9); scope the update to it so
+  // an approver can never approve/reject another tenant's account by UUID (admin
+  // bypasses RLS). No first-location fallback — unresolved fails closed.
+  const orgId: string | null = claimOrgId;
   if (!orgId) {
     return NextResponse.json({ error: 'No organization found', code: 'NO_ORG' }, { status: 404 });
   }

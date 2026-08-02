@@ -27,25 +27,44 @@ import type { PaymentRail } from './transaction-types';
 
 type DB = SupabaseClient;
 
+/** Canonical v4-shaped uuid matcher (mirrors get_org_id()'s cast guard). */
+const ORG_UUID_RE =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
 /**
- * Resolve the OPERATIONAL org id.
+ * Resolve the OPERATIONAL org id from the caller's VERIFIED `org_id` claim — the
+ * same value `get_org_id()` enforces in RLS. This is the app-layer mirror of
+ * lib/rbac/resolve-tenant.ts, kept dependency-free here so the posting layer stays
+ * unit-testable with a stub db.
  *
- * SECURITY: prefer the caller's VERIFIED org — the Clerk `org_id` claim exposed
- * as `ctx.orgId`, which is exactly what `get_org_id()` enforces in RLS. Callers
- * on an authenticated (money/write) path MUST pass it so the operational org can
- * never diverge from the authorized tenant.
+ * FAILS CLOSED (identity gate #9): the old `select id from core.organizations
+ * limit 1` first-org fallback is GONE. A missing claim, or a Clerk org id that maps
+ * to no tenant, throws — never silently posts to an arbitrary tenant.
  *
- * The `select id from core.organizations limit 1` below is a TRANSITIONAL
- * fallback for session-less/internal callers that have no claim; it is NOT a
- * tenant selector and must never override a supplied claim. Backward-compatible:
- * callers passing nothing still get the first-org lookup.
+ *   - a uuid-shaped claim is passed through (RLS's get_org_id() is the authoritative
+ *     existence check; the claim is Clerk-signed and un-forgeable);
+ *   - a non-uuid claim is treated as a Clerk org id and mapped via
+ *     core.organizations.clerk_org_id using the supplied (admin) client;
+ *   - an absent/empty/unmapped claim throws PostingError (the route surfaces it).
+ *
+ * Every money/write caller passes the request's claim; `db` is the admin client the
+ * route already built (the Clerk→tenant mapping must work even before RLS can see
+ * the row).
  */
 export async function resolveOrgId(db: DB, preferredOrgId?: string | null): Promise<string> {
-  if (typeof preferredOrgId === 'string' && preferredOrgId.length > 0) return preferredOrgId;
-  const { data, error } = await db.schema('core').from('organizations').select('id').limit(1).maybeSingle();
+  const claim = typeof preferredOrgId === 'string' ? preferredOrgId.trim() : '';
+  if (claim.length === 0) {
+    throw new PostingError('No organization claim on request; cannot resolve tenant');
+  }
+  // uuid-shaped claim -> passthrough (no db hit).
+  if (ORG_UUID_RE.test(claim)) return claim;
+  // Clerk org id -> the bound Books tenant.
+  const { data, error } = await db
+    .schema('core').from('organizations')
+    .select('id').eq('clerk_org_id', claim).maybeSingle();
   if (error) throw new PostingError(`Could not resolve organization: ${error.message}`);
   const id = (data as { id: string } | null)?.id;
-  if (!id) throw new PostingError('No organization found in core.organizations');
+  if (!id) throw new PostingError('Could not resolve organization from tenant claim');
   return id;
 }
 

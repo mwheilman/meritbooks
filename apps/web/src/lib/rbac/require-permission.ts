@@ -38,14 +38,14 @@ export function permissionDenied(
  * role model as /api/me (packages: lib/rbac/permissions.ts) — do not invent a
  * parallel model.
  *
- * MULTI-TENANT (security HIGH-1 / identity gate #9, fixed 2026-08-01): the org is
- * now resolved from the caller's VERIFIED Clerk `org_id` claim (the same source
- * `get_org_id()` enforces in RLS) — NOT "first org". So authorization is evaluated
- * against the org the request actually targets. "First org" survives only as a
- * transitional fallback for the window before the org_id claim is provisioned; it
- * is removed once every tenant's JWT carries the claim. The role is read scoped to
- * that org and normalized through the same `normalizeMembershipRole` the money-
- * approval path uses, so page/route/approval authz can't disagree.
+ * MULTI-TENANT (security HIGH-1 / identity gate #9): the org is resolved from the
+ * caller's VERIFIED Clerk `org_id` claim (the same source `get_org_id()` enforces in
+ * RLS) — via requireAuth(), which now returns the RESOLVED Books tenant uuid (Clerk
+ * org ids are mapped; see lib/rbac/resolve-tenant.ts). There is NO first-org
+ * fallback: an unresolved org fails closed (403). Authorization is evaluated against
+ * the org the request actually targets, and the role is read scoped to that org and
+ * normalized through the same `normalizeMembershipRole` the money-approval path
+ * uses, so page/route/approval authz can't disagree.
  */
 export async function requirePermission(
   userId: string,
@@ -60,28 +60,19 @@ export async function requirePermission(
   const { normalizeMembershipRole } = await import('@/lib/rbac/role-normalize');
 
   // 1. Resolve the caller's ACTUAL org from the verified Clerk claim (RLS's source).
+  //    requireAuth() returns the RESOLVED Books tenant uuid (or null). No first-org
+  //    fallback: an unresolved tenant fails closed.
   const authRes = await requireAuth();
   if (authRes instanceof NextResponse) {
     // Not authenticated → cannot authorize → deny (fail closed).
     return { ok: false, response: permissionDenied(null, featureId, action)! };
   }
-  let orgId: string | null = authRes.orgId;
-
-  const supabase = createAdminSupabase();
-
-  // Transitional fallback ONLY when the claim hasn't been provisioned yet.
-  if (!orgId) {
-    const { data: org } = await supabase
-      .schema('core')
-      .from('organizations')
-      .select('id')
-      .limit(1)
-      .single();
-    orgId = (org as { id: string } | null)?.id ?? null;
-  }
+  const orgId: string | null = authRes.orgId;
   if (!orgId) {
     return { ok: false, response: permissionDenied(null, featureId, action)! };
   }
+
+  const supabase = createAdminSupabase();
 
   // 2. Read the caller's role SCOPED TO THAT ORG, normalized to the canonical
   //    UserRole vocabulary (so 'owner'/'org_admin' reconcile like canApprove).
