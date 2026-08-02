@@ -1,9 +1,11 @@
 'use client';
+import { useState } from 'react';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { StatusBadge } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
-import { CheckCircle, AlertTriangle, FileWarning, Clock, ShieldAlert, FileText, Paperclip } from 'lucide-react';
+import { CheckCircle, AlertTriangle, FileWarning, Clock, ShieldAlert, FileText, Paperclip, UploadCloud, ShieldCheck } from 'lucide-react';
+import { VendorDocIntake } from './vendor-doc-intake';
 
 type ComplianceStatus = 'valid' | 'expired' | 'pending' | 'missing';
 
@@ -54,7 +56,8 @@ function fmtDate(d: string | null): string {
 }
 
 export function VendorDrawer({ vendorId, onClose }: { vendorId: string | null; onClose: () => void }) {
-  const { data, isLoading, error } = useQuery<VenDetail>(vendorId ? `/api/vendors/${vendorId}` : '', undefined, { enabled: !!vendorId });
+  const { data, isLoading, error, refetch } = useQuery<VenDetail>(vendorId ? `/api/vendors/${vendorId}` : '', undefined, { enabled: !!vendorId });
+  const [intake, setIntake] = useState<'W9' | 'COI' | null>(null);
   const year = new Date().getFullYear();
 
   return (
@@ -102,8 +105,24 @@ export function VendorDrawer({ vendorId, onClose }: { vendorId: string | null; o
             </div>
           </div>
 
-          {/* Compliance chips */}
-          <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Compliance</h3>
+          {/* Compliance chips + drop-and-parse intake */}
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Compliance</h3>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setIntake('W9')}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/40 px-2 py-1 text-2xs font-medium text-slate-300 hover:text-white hover:border-slate-600"
+              >
+                <UploadCloud size={12} /> Upload W-9
+              </button>
+              <button
+                onClick={() => setIntake('COI')}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/40 px-2 py-1 text-2xs font-medium text-slate-300 hover:text-white hover:border-slate-600"
+              >
+                <ShieldCheck size={12} /> Upload COI
+              </button>
+            </div>
+          </div>
           <div className="mb-6 grid grid-cols-3 gap-2">
             <ComplianceChip label="W-9" status={data.compliance.w9} />
             <ComplianceChip label="GL COI" status={data.compliance.glCoi} />
@@ -195,6 +214,16 @@ export function VendorDrawer({ vendorId, onClose }: { vendorId: string | null; o
             <DetailField label="Lifetime billed" value={formatMoney(data.spend.lifetimeBilledCents)} mono />
           </DetailSection>
         </>
+      )}
+
+      {intake && data && vendorId && (
+        <VendorDocIntake
+          vendorId={vendorId}
+          vendorName={data.name}
+          mode={intake}
+          onClose={() => setIntake(null)}
+          onConfirmed={() => { setIntake(null); refetch(); }}
+        />
       )}
     </DetailDrawer>
   );
