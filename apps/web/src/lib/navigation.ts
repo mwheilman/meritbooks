@@ -83,6 +83,7 @@ export const navigation: NavGroup[] = [
     label: 'Financial',
     items: [
       { label: 'Journal Entries', href: '/journal-entries', icon: BookOpen },
+      { label: 'Recurring Entries', href: '/recurring-journal-entries', icon: History },
       { label: 'Chart of Accounts', href: '/chart-of-accounts', icon: Calculator },
       { label: 'Reconciliation', href: '/reconciliation', icon: FileCheck },
       { label: 'Leases', href: '/leases', icon: Landmark },
@@ -134,6 +135,7 @@ export const navigation: NavGroup[] = [
       { label: 'Vendor Compliance', href: '/vendor-compliance', icon: Shield },
       { label: '1099 Readiness', href: '/compliance-1099', icon: FileCheck },
       { label: 'Book-to-Tax (M-1)', href: '/book-to-tax', icon: Scale },
+      { label: 'Tax Provision (ASC 740)', href: '/tax-provision', icon: Percent },
       { label: 'Sales Tax Return', href: '/sales-tax-return', icon: Landmark },
       { label: 'Tax Depreciation', href: '/tax-depreciation', icon: Calculator },
       { label: 'Close Management', href: '/close', icon: ClipboardCheck },

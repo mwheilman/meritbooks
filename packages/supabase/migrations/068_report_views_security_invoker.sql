@@ -1,4 +1,4 @@
--- Migration 066: force security_invoker on all public views (security audit HIGH, 2026-08-01)
+-- Migration 068: force security_invoker on all public views (security audit HIGH, 2026-08-01)
 -- The reporting views (v_income_statement, v_balance_sheet, v_trial_balance, v_cash_position,
 -- v_ap_aging, v_ar_aging, v_gl_detail, v_job_profitability, v_journal_entry_audit, etc.) had
 -- security_invoker set only in the live DB, not in migration source. Views are owned by a
