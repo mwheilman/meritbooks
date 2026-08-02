@@ -3,12 +3,13 @@ import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { AssetDrawer, type AssetLike } from './asset-drawer';
 
 import { useState } from 'react';
-import { Package, Loader2, AlertCircle, Search, DollarSign, TrendingDown, Archive, ChevronRight } from 'lucide-react';
+import { Package, Loader2, AlertCircle, Search, DollarSign, TrendingDown, Archive, ChevronRight, UploadCloud } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { PageHeader } from '@/components/ui';
 import { RollForwardView } from './roll-forward-view';
+import { ImportFromInvoice } from './import-from-invoice';
 
 interface AssetRow {
   id: string; assetTag: string | null; name: string; description: string | null;
@@ -55,6 +56,7 @@ export default function FixedAssetsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [view, setView] = useState<'registry' | 'roll-forward'>('registry');
+  const [importOpen, setImportOpen] = useState(false);
 
   const params: Record<string, string> = {};
   if (statusFilter) params.status = statusFilter;
@@ -76,7 +78,13 @@ export default function FixedAssetsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Fixed Assets" description={`${summary?.count ?? 0} assets registered`} />
+      <div className="flex items-start justify-between gap-3">
+        <PageHeader title="Fixed Assets" description={`${summary?.count ?? 0} assets registered`} />
+        <button onClick={() => setImportOpen(true)}
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-medium text-white">
+          <UploadCloud size={14} /> Add from invoice
+        </button>
+      </div>
 
       {/* View toggle */}
       <div className="flex items-center gap-1 border-b border-slate-800">
@@ -88,6 +96,8 @@ export default function FixedAssetsPage() {
           </button>
         ))}
       </div>
+
+      <ImportFromInvoice open={importOpen} onClose={() => setImportOpen(false)} onCreated={refetch} />
 
       {view === 'roll-forward' ? (
         <RollForwardView />
