@@ -5,7 +5,7 @@ It is deliberately small (~5 min read) so re-grounding is cheap. It is the disti
 always-current truth. When it conflicts with the repo, **the canon wins** — fix the repo.
 Source of truth: the Project-knowledge doc set (mirrored/digested in `docs/canon/`, indexed in `00-INDEX.md`).
 
-Last reconciled: **2026-08-02 (Session 44)**.
+Last reconciled: **2026-08-02 (Session 45)**. Latest handoff: `docs/MERITBOOKS-HANDOFF-session45.md`.
 
 ---
 
@@ -111,8 +111,21 @@ ungated, spec-less work in Session 40.)
   fee from `invoice_events` meta; `PLATFORM_ORG_ID` removed.
 - **Build-complete, live-stamp pending:** GATE 3 (AI proposal layer) — owed: exercise the
   `ai:true` predict path against the live gateway once.
-- **NO-GO gate #9 (identity/RBAC) — SUBSTANTIALLY ADVANCED, STILL OPEN; residual is now
-  mostly MANUAL-for-Mike.** Done: **multi-tenant org resolution** (`resolveOrgId` claim-first),
+- **Gate #9 (identity/RBAC) — ORG RESOLUTION CLOSED LIVE (Session 45); residual is now
+  MANUAL-for-Mike + per-route money keys.** **Session 45:** multi-tenant org resolution is
+  **closed live** — tenant resolved **claim-first from the Clerk native `o.id` org claim**
+  (the custom `org_id` claim is null on the dev instance), with **auto-bind on login** and the
+  **first-org fallbacks removed** (`get_org_id` matched in migration `087`). Prior: per-event-org
+  event workers + `authorizeEventWorker`, `canApprove` → `core.memberships`, membership
+  auto-provision + lifecycle sync, report-route RLS sweep (mig 068), a **dedicated `payments`
+  money-movement permission** gating payments/payroll-release/checks-run, `/api/accounts`
+  RLS-scoped, 5 direct Anthropic key reads routed through the Core AI gateway helper. **Still
+  open:** the **MANUAL** work — stand up the **Clerk production instance for `app.meritbooks.app`
+  + `org_id` claim** (to retire the native-`o.id` fallback), set **`EVENT_WORKER_SECRET`**, rotate
+  the **Resend key**; plus (Claude-side) **split `payments` into per-route keys** so
+  `check_processor` regains check-run without payroll-release (task #56), control/`team_performance`
+  permissions, **`core.assignments`**, event-worker read/"peek" scoping, **location-scoped RLS**.
+  (Historical detail — done prior:) multi-tenant org resolution (`resolveOrgId` claim-first),
   per-event-org event workers + `authorizeEventWorker`, `canApprove` → `core.memberships`,
   membership auto-provision + lifecycle sync, report-route RLS sweep (mig 068). **Session 44:**
   a **dedicated `payments` money-movement permission** (permissions.ts) now gates
@@ -172,16 +185,34 @@ ungated, spec-less work in Session 40.)
   and **AR cash-application apply** + subledger tie-out. The **M14 learning** column is now
   **OPENED** — a vendor→GL categorization-memory engine (learns from approved history; still
   the largest column but no longer untouched). **AP doc-intake** queue built, Azure-ready (GATE 4).
+  **Session-45 builds (the month-end close / controls / tax / workflow spine; migrations 090–094):**
+  **identity gate #9 org resolution CLOSED live** (Clerk native `o.id` claim + auto-bind, fallbacks
+  removed); **FP&A dashboard** + what-if/sensitivity; **direct-method cash-flow + forecast**; **close
+  orchestration** (ordered task graph, live auto-verify, blocking hard-close gate); **AP policy
+  engine generalized** into a reusable primitive (+ expense-policy compiler); **Document Management
+  Center + polymorphic attachments** with a **private `documents` Supabase storage bucket** (mig 090),
+  AttachmentsPanel mounted on bill/invoice/lease/debt/fixed-asset/JE; **Controls / SOX command
+  center**; ranked read-only **Action Inbox**; **configurable N-step approval workflows** by doc
+  type + amount tier (mig 092, routes RLS-scoped); **recurring journal entries** propose→approve→post
+  (mig 093); **ASC 740 income-tax provision** current+deferred from book-to-tax diffs (mig 091);
+  read-only **1120-style Tax Return Package** + PDF export; and the **account-role registry COMPLETED**
+  — income-tax/lease/prepaid/intangible/disposal roles, provision+prepaid resolved by role with number
+  fallback (seed mig 094). Two legacy dup routes flagged for later cleanup (not deleted): `/recurring`
+  (→ `/recurring-journal-entries`) and `/invoices/collections` (→ `/collections`).
 - **No gate may start until its `Prereq:` gates are DONE. "Complete" is demonstrated, not asserted.**
 
-## 6. Canonical immediate priorities (Session 44 reconciliation)
+## 6. Canonical immediate priorities (Session 45 reconciliation)
 
-1. **Finish closing identity gate #9** — org resolution + the dedicated `payments` permission
-   are DONE. The residual is now mostly **MANUAL for Mike:** stand up the **Clerk production
-   instance + `org_id` claim** (drops the first-org fallbacks), set **`EVENT_WORKER_SECRET`**,
-   rotate the **Resend key**. Then (Claude-side) **split `payments` into per-route keys** (task
-   #56), add control/`team_performance` permissions, `core.assignments`, event-worker
-   read-scoping, and location-scoped RLS.
+1. **Finish closing identity gate #9** — org resolution is **CLOSED live** (Clerk native `o.id`
+   claim + auto-bind, fallbacks removed) and the dedicated `payments` permission is DONE. The
+   residual is now mostly **MANUAL for Mike:** stand up the **Clerk production instance for
+   `app.meritbooks.app` + `org_id` claim** (retires the native-`o.id` fallback), add
+   `app.meritbooks.app` to the **`meritbooks-web`** Vercel project, set **`NEXT_PUBLIC_APP_URL`**
+   + **`EVENT_WORKER_SECRET`**, rotate the **Resend key**. ⚠️ The marketing site is a SEPARATE
+   Vercel project (`meritbooks-marketing`) — apex `meritbooks.app` stays with marketing; the app
+   gets `app.` only. Then (Claude-side) **split `payments` into per-route keys** (task #56), add
+   control/`team_performance` permissions, `core.assignments`, event-worker read-scoping, and
+   location-scoped RLS.
 2. **Polish the now-deepened segments** — consolidation (11a), job-costing, fixed-assets,
    customer-mgmt, book-to-tax (077), onboarding conversion, covenant monitor (078), POs (080),
    sales-tax, collections, driver budgeting, board package, cash-application — against their
