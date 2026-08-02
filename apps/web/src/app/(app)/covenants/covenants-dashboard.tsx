@@ -8,9 +8,10 @@ import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
 import {
   Loader2, AlertCircle, ShieldCheck, ShieldAlert, ShieldX, Plus, RefreshCw,
-  FileText, Pencil, Trash2, CalendarClock, HelpCircle, X,
+  FileText, Pencil, Trash2, CalendarClock, HelpCircle, X, Sparkles,
 } from 'lucide-react';
 import { CovenantEditor, type EditorCovenant } from './covenant-editor';
+import { CovenantParseReview } from './covenant-parse-review';
 
 type Band = 'PASS' | 'WARN' | 'BREACH' | 'UNKNOWN';
 type Unit = 'RATIO' | 'CURRENCY';
@@ -117,6 +118,7 @@ function HeadroomBar({ headroomPct, band }: { headroomPct: number | null; band: 
 
 export function CovenantsDashboard() {
   const [editing, setEditing] = useState<EditorCovenant | null | 'new'>(null);
+  const [parsing, setParsing] = useState(false);
   const [running, setRunning] = useState(false);
   const [refreshKey, setRefreshKey] = useState('0');
   const [cert, setCert] = useState<{ name: string; result: CertificateResult } | null>(null);
@@ -194,6 +196,12 @@ export function CovenantsDashboard() {
         Run covenant test
       </button>
       <button
+        onClick={() => setParsing(true)}
+        className="px-3 py-1.5 text-xs font-medium bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 rounded-lg flex items-center gap-1.5"
+      >
+        <Sparkles size={13} /> Upload loan document
+      </button>
+      <button
         onClick={() => setEditing('new')}
         className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-1.5"
       >
@@ -241,13 +249,18 @@ export function CovenantsDashboard() {
           <ShieldCheck className="w-10 h-10 mx-auto text-slate-600 mb-3" />
           <p className="text-sm text-slate-300 mb-1">No covenants defined</p>
           <p className="text-xs text-slate-500 max-w-md mx-auto mb-4">
-            Add each loan covenant from your credit agreements — DSCR, FCCR, leverage, current ratio,
-            minimum liquidity, tangible net worth — and MeritBooks computes current headroom from the
-            ledger and projects the breach date off your cash forecast.
+            Drop in a credit agreement and AI extracts the covenants — DSCR, FCCR, leverage, current
+            ratio, minimum liquidity, tangible net worth — for you to review and confirm. MeritBooks then
+            computes current headroom from the ledger and projects the breach date off your cash forecast.
           </p>
-          <button onClick={() => setEditing('new')} className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg inline-flex items-center gap-1.5">
-            <Plus size={14} /> Define your first covenant
-          </button>
+          <div className="flex items-center justify-center gap-2">
+            <button onClick={() => setParsing(true)} className="px-4 py-2 text-sm font-medium bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 rounded-lg inline-flex items-center gap-1.5">
+              <Sparkles size={14} /> Upload loan document
+            </button>
+            <button onClick={() => setEditing('new')} className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg inline-flex items-center gap-1.5">
+              <Plus size={14} /> Add manually
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
@@ -339,6 +352,17 @@ export function CovenantsDashboard() {
         breach date walks the 13-week cash-forecast trajectory to the first period the ratio crosses its
         threshold. AI is used only to phrase the compliance-certificate narrative — never to compute a number.
       </p>
+
+      {parsing && (
+        <CovenantParseReview
+          onClose={() => setParsing(false)}
+          onConfirmed={() => {
+            setParsing(false);
+            setRefreshKey((k) => String(Number(k) + 1));
+            refetch();
+          }}
+        />
+      )}
 
       {editing && (
         <CovenantEditor
