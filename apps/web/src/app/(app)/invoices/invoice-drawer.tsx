@@ -8,6 +8,7 @@ import { formatMoney } from '@meritbooks/shared';
 import { StatusBadge } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
 import { InvoiceTextOverrides } from '@/components/invoice-text-overrides';
+import { AttachmentsPanel } from '@/components/documents/attachments-panel';
 
 interface InvLine {
   id?: string; lineNumber?: number; description: string;
@@ -316,6 +317,10 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
           <div className="mt-5 pt-4 border-t border-slate-800">
             <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Customer-facing text — this invoice</h3>
             <InvoiceTextOverrides scope="INVOICE" refId={data.id} />
+          </div>
+
+          <div className="mt-5">
+            <AttachmentsPanel entityType="invoice" entityId={data.id} defaultDocType="OTHER" title="Documents" />
           </div>
 
           {(() => {

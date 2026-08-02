@@ -9,6 +9,7 @@ import { clsx } from 'clsx';
 import { StatusBadge } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
+import { AttachmentsPanel } from '@/components/documents/attachments-panel';
 
 interface DetailLine {
   id: string;
@@ -302,6 +303,9 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
                   </p>
                 )}
               </div>
+
+              {/* Retained source documents for this bill */}
+              <AttachmentsPanel entityType="bill" entityId={bill.id} defaultDocType="BILL" title="Documents" />
             </div>
 
             {/* Footer actions */}

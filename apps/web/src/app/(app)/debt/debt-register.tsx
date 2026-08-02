@@ -13,6 +13,7 @@ import {
 import { DebtForm } from './debt-form';
 import { DebtParseReview } from './debt-parse-review';
 import { ResetModal, RefinanceModal, PayoffModal, type ActionInstrument } from './debt-actions';
+import { AttachmentsPanel } from '@/components/documents/attachments-panel';
 
 type Frequency = 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
 type Status = 'ACTIVE' | 'PAID_OFF' | 'CLOSED' | 'INACTIVE';
@@ -360,6 +361,10 @@ function ScheduleDrawer({ instrumentId, onClose, onPosted }: { instrumentId: str
           Posting requires the loan to have a company/location. Principal-reducing payments also require a notes-payable
           account on the loan. Each period posts at most once (source-ref guarded).
         </p>
+
+        <div className="mt-5">
+          <AttachmentsPanel entityType="debt_instrument" entityId={instrumentId} defaultDocType="LOAN" title="Loan documents" />
+        </div>
       </div>
     </div>
   );

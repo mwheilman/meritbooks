@@ -7,6 +7,7 @@ import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { StatusBadge } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
+import { AttachmentsPanel } from '@/components/documents/attachments-panel';
 
 interface JELineDetail {
   id: string; lineNumber: number; accountId: string | null;
@@ -142,6 +143,10 @@ export function JournalEntryDrawer({ entryId, onClose }: { entryId: string | nul
           </DetailTable>
           <div className={clsx('mt-3 text-xs font-medium', data.balanced ? 'text-emerald-400' : 'text-red-400')}>
             {data.balanced ? '✓ Balanced' : '✗ Out of balance'}
+          </div>
+
+          <div className="mt-5">
+            <AttachmentsPanel entityType="gl_entry" entityId={data.id} defaultDocType="OTHER" title="Supporting documents" />
           </div>
         </>
       )}

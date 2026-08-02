@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { LeaseParseReview } from './lease-parse-review';
 import { LeaseRemeasureModal, type RemeasureMode } from './lease-remeasure-modal';
+import { AttachmentsPanel } from '@/components/documents/attachments-panel';
 
 interface Lease {
   id: string;
@@ -265,6 +266,10 @@ export function LeasesDashboard() {
                         </table>
                       </div>
                     )}
+
+                    <div className="mt-4">
+                      <AttachmentsPanel entityType="lease" entityId={l.id} defaultDocType="LEASE" title="Lease documents" />
+                    </div>
                   </div>
                 )}
               </div>

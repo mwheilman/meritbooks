@@ -6,6 +6,7 @@ import { Loader2, TrendingUp, TrendingDown, Minus, Archive } from 'lucide-react'
 import { clsx } from 'clsx';
 import { StatusBadge } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField } from '@/components/detail-drawer';
+import { AttachmentsPanel } from '@/components/documents/attachments-panel';
 import { addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 
@@ -338,6 +339,10 @@ export function AssetDrawer({ asset, onClose, onChanged }: { asset: AssetLike | 
           )}
         </DetailSection>
       )}
+
+      <div className="mt-4">
+        <AttachmentsPanel entityType="fixed_asset" entityId={asset.id} defaultDocType="OTHER" title="Documents" />
+      </div>
     </DetailDrawer>
   );
 }
