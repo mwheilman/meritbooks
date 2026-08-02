@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logAction } from '@/lib/trust/action-log';
+import { hasModule } from '@/lib/services/entitlements';
 
 /**
  * POST /api/customers/merge — human-approved duplicate-customer merge.
@@ -14,12 +15,17 @@ import { logAction } from '@/lib/trust/action-log';
  * artifacts (invoices, customer payments, credit memos, recurring templates)
  * from the duplicate to the survivor and soft-deletes the duplicate master.
  *
+ * core.jobs.customer_id (ownership matrix): a Core-IDENTITY field. Books owns
+ * core.jobs only in a STANDALONE tenant (no Projects module) — there Books both
+ * authors jobs and may consolidate their customer link, so on a merge we re-point
+ * jobs.customer_id from the duplicate to the survivor. When the Projects module IS
+ * entitled, Projects authors job identity, so Books does NOT rewrite it — the
+ * references are reported (advisory) for Projects to reconcile via the seam. Either
+ * way the duplicate is only SOFT-deleted, so a not-yet-repointed FK stays valid.
+ *
  * SAFETY / RECONCILIATION (canon §3 — money must reconcile):
  *   - refuses self-merge, a missing/other-org customer, or an already-deleted side;
- *   - the duplicate is SOFT-deleted (deleted_at), never hard-deleted, so any
- *     core-owned FK that still points at it (e.g. core.jobs.customer_id, owned by
- *     the Projects module) stays valid — we never write a core business object we
- *     don't own; job references are reported as advisory, not silently rewritten;
+ *   - the duplicate is SOFT-deleted (deleted_at), never hard-deleted;
  *   - after re-pointing it VERIFIES the survivor's open-AR equals the pre-merge
  *     (survivor + duplicate) open-AR and that the duplicate retains zero open
  *     invoices. If reconciliation fails, the duplicate is NOT retired and the
@@ -29,6 +35,15 @@ import { logAction } from '@/lib/trust/action-log';
 interface MergeBody {
   survivor_id?: string;
   duplicate_id?: string;
+}
+
+/**
+ * Ownership-matrix decision for core.jobs.customer_id (a Core-identity FK). Books
+ * may re-point it only when it owns core.jobs — i.e. the tenant is standalone
+ * (Projects NOT entitled). Pure so the rule is unit-testable.
+ */
+export function shouldRepointJobs(projectsEntitled: boolean, jobsReferencing: number): boolean {
+  return !projectsEntitled && jobsReferencing > 0;
 }
 
 const OPEN_STATUSES = ['SENT', 'PARTIALLY_PAID', 'OVERDUE'];
@@ -114,8 +129,8 @@ export async function POST(req: NextRequest) {
   const expectedSurvivorOpenAr = survivorBefore.balanceCents + dupBefore.balanceCents;
   const expectedSurvivorOpenCount = survivorBefore.openCount + dupBefore.openCount;
 
-  // ── Advisory: core.jobs is owned by the Projects module; we NEVER rewrite it.
-  //    Report references so a human knows the soft-deleted master still backs them.
+  // ── core.jobs.customer_id (Core-identity FK). Count references, then re-point
+  //    ONLY when Books owns core.jobs (standalone tenant); otherwise leave advisory.
   let jobsReferencing = 0;
   try {
     const { count } = await supabase
@@ -128,6 +143,24 @@ export async function POST(req: NextRequest) {
   } catch {
     /* jobs table optional; advisory only */
   }
+
+  const projectsEntitled = await hasModule(supabase, orgId, 'projects').catch(() => false);
+  let jobsRepointed = 0;
+  if (shouldRepointJobs(projectsEntitled, jobsReferencing)) {
+    const jb = await supabase
+      .schema('core')
+      .from('jobs')
+      .update({ customer_id: survivorId, updated_at: new Date().toISOString() })
+      .eq('org_id', orgId)
+      .eq('customer_id', duplicateId)
+      .select('id');
+    if (jb.error) {
+      return NextResponse.json({ error: 'Failed to re-point jobs', detail: jb.error.message }, { status: 500 });
+    }
+    jobsRepointed = jb.data?.length ?? 0;
+  }
+  // References left for Projects to reconcile (entitled tenant) — reported, not rewritten.
+  const jobsLeftForProjects = projectsEntitled ? jobsReferencing : 0;
 
   // ── Re-point Books-owned AR artifacts (fail fast; do NOT retire dup on error) ─
   const repoint = { invoices: 0, payments: 0, creditMemos: 0, recurringTemplates: 0 };
@@ -231,8 +264,11 @@ export async function POST(req: NextRequest) {
     metadata: {
       survivor_id: survivorId,
       duplicate_id: duplicateId,
-      repoint,
+      repoint: { ...repoint, jobs: jobsRepointed },
       jobs_referencing_duplicate: jobsReferencing,
+      jobs_repointed: jobsRepointed,
+      jobs_left_for_projects: jobsLeftForProjects,
+      projects_entitled: projectsEntitled,
       merged_by_clerk_user: userId,
     },
   });
@@ -241,8 +277,10 @@ export async function POST(req: NextRequest) {
     merged: true,
     survivorId,
     duplicateId,
-    repoint,
+    repoint: { ...repoint, jobs: jobsRepointed },
     jobsReferencing,
+    jobsRepointed,
+    jobsLeftForProjects,
     reconciliation: {
       survivorOpenArCents: survivorAfter.balanceCents,
       survivorOpenInvoices: survivorAfter.openCount,

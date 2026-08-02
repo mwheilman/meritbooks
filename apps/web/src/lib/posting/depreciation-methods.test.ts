@@ -7,6 +7,8 @@ import {
   buildDepreciationSchedule,
   cumulativeThrough,
   mapBookMethod,
+  isUnitsMethod,
+  unitsProductionTarget,
   DepreciationInputError,
 } from './depreciation-methods';
 
@@ -124,12 +126,44 @@ describe('buildDepreciationSchedule dispatch + guards', () => {
 });
 
 describe('mapBookMethod', () => {
-  it('maps the book-postable enum values', () => {
+  it('maps every life-based book method (incl. the migration-079 additions)', () => {
     expect(mapBookMethod('STRAIGHT_LINE')).toEqual({ method: 'STRAIGHT_LINE' });
     expect(mapBookMethod('DOUBLE_DECLINING')).toEqual({ method: 'DECLINING_BALANCE', decliningFactor: 2.0 });
+    expect(mapBookMethod('DECLINING_150')).toEqual({ method: 'DECLINING_BALANCE', decliningFactor: 1.5 });
+    expect(mapBookMethod('SUM_OF_YEARS_DIGITS')).toEqual({ method: 'SUM_OF_YEARS_DIGITS' });
   });
-  it('returns null for tax/unsupported enum values (reported, not guessed)', () => {
+  it('returns null for units (handled by the units path) and tax/unknown values', () => {
+    expect(mapBookMethod('UNITS_OF_PRODUCTION')).toBeNull(); // driven off the units meter, not a time schedule
     expect(mapBookMethod('MACRS_5')).toBeNull();
     expect(mapBookMethod('SOMETHING_ELSE')).toBeNull();
+  });
+
+  it('each life-based method builds a full schedule that lands on the base', () => {
+    for (const enumV of ['STRAIGHT_LINE', 'DOUBLE_DECLINING', 'DECLINING_150', 'SUM_OF_YEARS_DIGITS'] as const) {
+      const m = mapBookMethod(enumV)!;
+      const s = buildDepreciationSchedule({ costCents: 1_200_000, salvageCents: 0, usefulLifeMonths: 60, method: m.method, decliningFactor: m.decliningFactor });
+      expect(s).toHaveLength(60);
+      expect(sum(s)).toBe(1_200_000);
+      expect(s.every((x) => Number.isInteger(x) && x >= 0)).toBe(true);
+    }
+  });
+});
+
+describe('isUnitsMethod / unitsProductionTarget', () => {
+  it('recognizes the units method only', () => {
+    expect(isUnitsMethod('UNITS_OF_PRODUCTION')).toBe(true);
+    expect(isUnitsMethod('STRAIGHT_LINE')).toBe(false);
+  });
+
+  it('cumulative target = base × units/total, capped at the base', () => {
+    // base 90_000, 10_000 total units, 2_500 used → 25% → 22_500.
+    expect(unitsProductionTarget(100_000, 10_000, 10_000, 2_500)).toBe(22_500);
+    // fully used lands exactly on the base; over-run never overshoots.
+    expect(unitsProductionTarget(100_000, 10_000, 10_000, 10_000)).toBe(90_000);
+    expect(unitsProductionTarget(100_000, 10_000, 10_000, 12_000)).toBe(90_000);
+    // matches the single-period pure schedule (same tested arithmetic).
+    expect(unitsProductionTarget(100_000, 10_000, 10_000, 2_500)).toBe(
+      unitsOfProductionSchedule(100_000, 10_000, 10_000, [2_500])[0],
+    );
   });
 });

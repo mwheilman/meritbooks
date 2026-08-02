@@ -15,19 +15,23 @@
  * disposal entry linked. Invalid states (already disposed, negative proceeds) are
  * refused, never posted.
  *
- * Gain (7010) / loss (8010) are resolved by account number today. REPORTED gap:
- * add GAIN_ON_DISPOSAL / LOSS_ON_DISPOSAL to the account-role registry so disposal
- * resolves by ROLE like every other posting path (see account-roles.ts).
+ * Gain / loss are resolved by ROLE (GAIN_ON_DISPOSAL / LOSS_ON_DISPOSAL) via the
+ * account-role registry — a per-tenant/location mapping wins, then the standard
+ * COA number fallback (7010 / 8010), and if neither resolves the engine refuses to
+ * post rather than guess (degrade-safe; the caller sees a clear "map the role or
+ * seed the account" error). This matches every other posting path (see
+ * account-roles.ts / migration 079).
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry, type JournalEntryLineInput } from '../services/gl-posting';
 import { PostingError } from './account-roles';
-import { resolveCashSide } from './account-roles';
+import { resolveCashSide, resolveRole } from './account-roles';
 import type { PaymentRail } from './transaction-types';
 
 type DB = SupabaseClient;
 
+/** Standard COA fallbacks — documentation only; resolution goes through the role. */
 export const GAIN_ON_DISPOSAL_NUMBER = '7010';
 export const LOSS_ON_DISPOSAL_NUMBER = '8010';
 
@@ -39,7 +43,8 @@ export interface DisposeAssetInput {
   /** Cash-side account for proceeds; or supply a rail. Ignored when proceeds = 0. */
   cashAccountId?: string;
   rail?: PaymentRail;
-  /** Override gain/loss account; defaults to 7010 (gain) / 8010 (loss) by number. */
+  /** Override gain/loss account; otherwise resolved by the GAIN_ON_DISPOSAL /
+   *  LOSS_ON_DISPOSAL role (per-tenant mapping → 7010/8010 default). */
   gainLossAccountId?: string;
 }
 
@@ -170,11 +175,6 @@ export function buildDisposalLines(input: BuildDisposalLinesInput): {
 // DB-facing preview + commit
 // ---------------------------------------------------------------------------
 
-async function acctByNumber(db: DB, orgId: string, number: string): Promise<string | null> {
-  const { data } = await db.from('accounts').select('id').eq('org_id', orgId).eq('account_number', number).eq('is_active', true).maybeSingle();
-  return (data as { id: string } | null)?.id ?? null;
-}
-
 async function loadAsset(db: DB, orgId: string, assetId: string): Promise<AssetRow> {
   const { data, error } = await db
     .from('fixed_assets')
@@ -194,13 +194,14 @@ async function resolveDisposalAccounts(db: DB, input: DisposeAssetInput, asset: 
   }
   let gainAccountId: string | undefined;
   let lossAccountId: string | undefined;
+  // Resolve gain/loss by ROLE (per-tenant mapping → 7010/8010 default → refuse).
+  // An explicit gainLossAccountId override always wins. resolveRole throws a clear
+  // PostingError when nothing resolves, so a mis-seeded tenant never posts a guess.
   if (needGain) {
-    gainAccountId = input.gainLossAccountId ?? (await acctByNumber(db, input.orgId, GAIN_ON_DISPOSAL_NUMBER)) ?? undefined;
-    if (!gainAccountId) throw new PostingError(`No gain-on-disposal account (${GAIN_ON_DISPOSAL_NUMBER}) found — map GAIN_ON_DISPOSAL or seed the account`);
+    gainAccountId = input.gainLossAccountId ?? (await resolveRole(db, input.orgId, 'GAIN_ON_DISPOSAL')).id;
   }
   if (needLoss) {
-    lossAccountId = input.gainLossAccountId ?? (await acctByNumber(db, input.orgId, LOSS_ON_DISPOSAL_NUMBER)) ?? undefined;
-    if (!lossAccountId) throw new PostingError(`No loss-on-disposal account (${LOSS_ON_DISPOSAL_NUMBER}) found — map LOSS_ON_DISPOSAL or seed the account`);
+    lossAccountId = input.gainLossAccountId ?? (await resolveRole(db, input.orgId, 'LOSS_ON_DISPOSAL')).id;
   }
   return { cashAccountId, gainAccountId, lossAccountId };
 }

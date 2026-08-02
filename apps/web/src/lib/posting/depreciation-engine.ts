@@ -11,17 +11,18 @@
  * lands exactly on the base.
  *
  * The per-period amounts come from the PURE `depreciation-methods` module, so the
- * time-based methods (STRAIGHT_LINE and DOUBLE_DECLINING → 200% declining-balance
- * with SL switchover) are computed the same way here and in the UI preview, and
- * are independently unit-tested. Enum values that can't yet be driven from the
- * current schema (MACRS_* — tax track; SYD / 150%-DB / units-of-production — need
- * new enum values) are reported as unsupported rather than approximated.
+ * life-based methods (STRAIGHT_LINE, 200%/150% declining-balance with SL
+ * switchover, sum-of-years-digits) are computed the same way here and in the UI
+ * preview, and are independently unit-tested. Units-of-production is usage-based
+ * (see the units branch below) and charges off the asset's units meter. MACRS_*
+ * belongs to the parallel TAX track and is reported as unsupported here, never
+ * approximated.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from '../services/gl-posting';
 import { PostingError } from './account-roles';
-import { buildDepreciationSchedule, mapBookMethod } from './depreciation-methods';
+import { buildDepreciationSchedule, mapBookMethod, isUnitsMethod, unitsProductionTarget } from './depreciation-methods';
 
 type DB = SupabaseClient;
 
@@ -39,6 +40,8 @@ interface AssetRow {
   accumulated_depreciation_cents: number;
   last_depreciation_date: string | null;
   status: string;
+  total_expected_units: number | string | null;
+  units_used: number | string | null;
 }
 
 function lastDayOfMonth(year: number, month1to12: number): string {
@@ -69,7 +72,7 @@ export interface DepreciationRunResult {
 export async function runDepreciation(db: DB, orgId: string, asOf: string): Promise<DepreciationRunResult> {
   const { data, error } = await db
     .from('fixed_assets')
-    .select('id, location_id, name, acquisition_date, acquisition_cost_cents, salvage_value_cents, useful_life_months, depreciation_method, depreciation_expense_account_id, accumulated_depreciation_account_id, accumulated_depreciation_cents, last_depreciation_date, status')
+    .select('id, location_id, name, acquisition_date, acquisition_cost_cents, salvage_value_cents, useful_life_months, depreciation_method, depreciation_expense_account_id, accumulated_depreciation_account_id, accumulated_depreciation_cents, last_depreciation_date, status, total_expected_units, units_used')
     .eq('org_id', orgId)
     .eq('status', 'ACTIVE');
   if (error) throw new PostingError(error.message);
@@ -80,11 +83,90 @@ export async function runDepreciation(db: DB, orgId: string, asOf: string): Prom
   for (const a of assets) {
     result.assets_processed++;
 
+    // ── Units-of-production: usage-based, driven off the units meter, not time.
+    //    The correct accumulated balance is a pure function of cumulative units
+    //    used; charge (target − already-accumulated) once for the asOf period.
+    if (isUnitsMethod(a.depreciation_method)) {
+      const total = Number(a.total_expected_units);
+      const used = Number(a.units_used ?? 0);
+      const baseU = a.acquisition_cost_cents - a.salvage_value_cents;
+      if (!(total > 0)) {
+        result.skipped.push({ asset_id: a.id, reason: 'units-of-production asset has no total_expected_units set' });
+        continue;
+      }
+      if (baseU <= 0) {
+        result.skipped.push({ asset_id: a.id, reason: 'no depreciable base' });
+        continue;
+      }
+      let target: number;
+      try {
+        target = unitsProductionTarget(a.acquisition_cost_cents, a.salvage_value_cents, total, Math.max(0, used));
+      } catch (e) {
+        result.skipped.push({ asset_id: a.id, reason: e instanceof Error ? e.message : 'units target failed' });
+        continue;
+      }
+      const amount = target - a.accumulated_depreciation_cents;
+      if (amount <= 0) {
+        result.skipped.push({ asset_id: a.id, reason: 'no new usage to depreciate' });
+        continue;
+      }
+      const at = new Date(`${asOf}T00:00:00Z`);
+      const uYear = at.getUTCFullYear();
+      const uMonth = at.getUTCMonth() + 1;
+      const { data: existingU } = await db
+        .from('depreciation_runs')
+        .select('id')
+        .eq('fixed_asset_id', a.id)
+        .eq('period_year', uYear)
+        .eq('period_month', uMonth)
+        .maybeSingle();
+      if (existingU) continue; // already posted this period's usage
+      const entryDateU = lastDayOfMonth(uYear, uMonth);
+      const jeU = await postJournalEntry(db, {
+        org_id: orgId,
+        location_id: a.location_id,
+        entry_date: entryDateU,
+        entry_type: 'ADJUSTING',
+        memo: `Depreciation (units) — ${a.name} ${uYear}-${String(uMonth).padStart(2, '0')}`,
+        source_module: 'DEPRECIATION',
+        source_id: a.id,
+        created_by: null,
+        lines: [
+          { account_id: a.depreciation_expense_account_id, debit_cents: amount, credit_cents: 0, location_id: a.location_id },
+          { account_id: a.accumulated_depreciation_account_id, debit_cents: 0, credit_cents: amount, location_id: a.location_id },
+        ],
+      });
+      if (!jeU.success) {
+        result.errors.push({ asset_id: a.id, period: `${uYear}-${uMonth}`, error: jeU.error ?? 'post failed' });
+        continue;
+      }
+      await db.from('depreciation_runs').insert({
+        org_id: orgId,
+        fixed_asset_id: a.id,
+        period_year: uYear,
+        period_month: uMonth,
+        amount_cents: amount,
+        gl_entry_id: jeU.entry_id,
+      });
+      const fullyU = target >= baseU;
+      await db
+        .from('fixed_assets')
+        .update({
+          accumulated_depreciation_cents: target,
+          last_depreciation_date: entryDateU,
+          status: fullyU ? 'FULLY_DEPRECIATED' : 'ACTIVE',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', a.id);
+      result.periods_posted++;
+      continue;
+    }
+
     const mapped = mapBookMethod(a.depreciation_method);
     if (!mapped) {
       result.skipped.push({
         asset_id: a.id,
-        reason: `method ${a.depreciation_method} not book-postable here (MACRS_* → tax engine; SYD / 150%-DB / units-of-production need a new enum value)`,
+        reason: `method ${a.depreciation_method} not book-postable here (MACRS_* → tax engine)`,
       });
       continue;
     }

@@ -14,16 +14,19 @@ export interface AssetLike {
   acquisitionDate: string; acquisitionCostCents: number; salvageValueCents: number; usefulLifeMonths: number;
   depreciationMethod: string; accumulatedDepreciationCents: number; netBookValueCents: number;
   lastDepreciationDate: string | null; status: string; physicalLocation: string | null; condition: string | null;
+  totalExpectedUnits: number | null; unitsUsed: number;
   location: { id: string; name: string; short_code: string } | null;
   assignedTo: { id: string; first_name: string; last_name: string } | null;
 }
 
-// Only STRAIGHT_LINE + DOUBLE_DECLINING are book-postable end-to-end today; the
-// MACRS_* values drive the parallel TAX track. (SYD / 150%-DB / units-of-production
-// are implemented in the pure engine but need a new enum value to be selectable.)
+// Book methods post to the GL (straight-line, 200%/150% declining balance,
+// sum-of-years-digits, units-of-production); MACRS_* drive the parallel TAX track.
 const METHOD_OPTIONS: { value: string; label: string; book: boolean }[] = [
   { value: 'STRAIGHT_LINE', label: 'Straight-line', book: true },
   { value: 'DOUBLE_DECLINING', label: 'Double-declining (200% DB)', book: true },
+  { value: 'DECLINING_150', label: '150% declining balance', book: true },
+  { value: 'SUM_OF_YEARS_DIGITS', label: 'Sum-of-years-digits', book: true },
+  { value: 'UNITS_OF_PRODUCTION', label: 'Units of production', book: true },
   { value: 'MACRS_5', label: 'MACRS 5-yr (tax)', book: false },
   { value: 'MACRS_7', label: 'MACRS 7-yr (tax)', book: false },
 ];
@@ -37,6 +40,9 @@ interface DisposalPreview {
 export function AssetDrawer({ asset, onClose, onChanged }: { asset: AssetLike | null; onClose: () => void; onChanged?: () => void }) {
   const [method, setMethod] = useState<string>('');
   const [savingMethod, setSavingMethod] = useState(false);
+  const [totalUnits, setTotalUnits] = useState('');
+  const [unitsUsedInput, setUnitsUsedInput] = useState('');
+  const [savingUnits, setSavingUnits] = useState(false);
   const [schedule, setSchedule] = useState<SchedulePeriod[] | null>(null);
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const [scheduleErr, setScheduleErr] = useState<string | null>(null);
@@ -71,6 +77,29 @@ export function AssetDrawer({ asset, onClose, onChanged }: { asset: AssetLike | 
     setSavingMethod(false);
     if (res.error) { addToast('error', res.error.error); return; }
     addToast('success', 'Depreciation method updated');
+    onChanged?.();
+    onClose();
+  };
+
+  const saveUnits = async () => {
+    const patch: Record<string, unknown> = {};
+    if (!started && totalUnits.trim() !== '') {
+      const t = Number(totalUnits);
+      if (!Number.isFinite(t) || t <= 0) { addToast('error', 'Total expected units must be a positive number'); return; }
+      patch.totalExpectedUnits = t;
+    }
+    if (unitsUsedInput.trim() !== '') {
+      const u = Number(unitsUsedInput);
+      if (!Number.isFinite(u) || u < 0) { addToast('error', 'Units used must be a non-negative number'); return; }
+      patch.unitsUsed = u;
+    }
+    if (Object.keys(patch).length === 0) { addToast('error', 'Enter a value to save'); return; }
+    setSavingUnits(true);
+    const res = await api.patch<{ ok: boolean }>('/api/fixed-assets', { id: asset.id, ...patch });
+    setSavingUnits(false);
+    if (res.error) { addToast('error', res.error.error); return; }
+    addToast('success', 'Units updated');
+    setTotalUnits(''); setUnitsUsedInput('');
     onChanged?.();
     onClose();
   };
@@ -148,6 +177,40 @@ export function AssetDrawer({ asset, onClose, onChanged }: { asset: AssetLike | 
               </button>
             </div>
             {started && <p className="text-2xs text-amber-400">Basis is locked — depreciation has already begun.</p>}
+
+            {currentMethod === 'UNITS_OF_PRODUCTION' && (
+              <div className="rounded-md bg-slate-800/40 p-3 space-y-2">
+                <p className="text-2xs uppercase text-slate-500">Units of production</p>
+                <div className="flex items-center justify-between text-2xs">
+                  <span className="text-slate-500">Total expected</span>
+                  <span className="font-mono text-slate-300">{asset.totalExpectedUnits ?? '--'}</span>
+                </div>
+                <div className="flex items-center justify-between text-2xs">
+                  <span className="text-slate-500">Used to date</span>
+                  <span className="font-mono text-slate-300">{asset.unitsUsed}</span>
+                </div>
+                {!started && (
+                  <div>
+                    <label className="block text-2xs text-slate-500 mb-1">Set total expected units</label>
+                    <input type="number" min="0" step="any" value={totalUnits} placeholder={asset.totalExpectedUnits != null ? String(asset.totalExpectedUnits) : 'e.g. 100000'}
+                      onChange={(e) => setTotalUnits(e.target.value)}
+                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono" />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-2xs text-slate-500 mb-1">Record units used to date (cumulative)</label>
+                  <input type="number" min="0" step="any" value={unitsUsedInput} placeholder={String(asset.unitsUsed)}
+                    onChange={(e) => setUnitsUsedInput(e.target.value)}
+                    className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono" />
+                </div>
+                <button onClick={saveUnits} disabled={savingUnits}
+                  className="w-full px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 rounded-lg text-xs font-medium text-white flex items-center justify-center">
+                  {savingUnits ? <Loader2 size={13} className="animate-spin" /> : 'Save units'}
+                </button>
+                <p className="text-2xs text-slate-600">The next depreciation run charges the incremental usage since the last run.</p>
+              </div>
+            )}
+
             <button onClick={() => loadSchedule(currentMethod)} className="text-2xs text-indigo-400 hover:text-indigo-300">
               Preview projected schedule
             </button>

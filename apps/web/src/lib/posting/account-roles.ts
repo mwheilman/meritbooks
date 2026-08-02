@@ -44,6 +44,9 @@ export type AccountRoleKey =
   | 'JOB_WIP'
   | 'INTERCOMPANY_AR'
   | 'INTERCOMPANY_AP'
+  // Fixed-asset disposal (gain = OTHER income, loss = OTHER expense)
+  | 'GAIN_ON_DISPOSAL'
+  | 'LOSS_ON_DISPOSAL'
   // Money movement (GATE 12)
   | 'SETTLEMENT_CLEARING'
   | 'PAYMENTS_IN_TRANSIT'
@@ -88,6 +91,9 @@ const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
   JOB_WIP: '1210',
   INTERCOMPANY_AR: '1160',
   INTERCOMPANY_AP: '2020',
+  // Fixed-asset disposal
+  GAIN_ON_DISPOSAL: '7010',
+  LOSS_ON_DISPOSAL: '8010',
   // Money movement (GATE 12)
   SETTLEMENT_CLEARING: '1095',
   PAYMENTS_IN_TRANSIT: '1096',

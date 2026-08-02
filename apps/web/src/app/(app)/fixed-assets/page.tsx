@@ -16,6 +16,7 @@ interface AssetRow {
   acquisitionDate: string; acquisitionCostCents: number;
   salvageValueCents: number; usefulLifeMonths: number;
   depreciationMethod: string;
+  totalExpectedUnits: number | null; unitsUsed: number;
   accumulatedDepreciationCents: number; netBookValueCents: number;
   lastDepreciationDate: string | null; status: string;
   physicalLocation: string | null; condition: string | null;
@@ -38,6 +39,9 @@ const STATUS_CLS: Record<string, string> = {
 const METHOD_LABELS: Record<string, string> = {
   STRAIGHT_LINE: 'SL',
   DOUBLE_DECLINING: 'DDB',
+  DECLINING_150: '150% DB',
+  SUM_OF_YEARS_DIGITS: 'SYD',
+  UNITS_OF_PRODUCTION: 'Units',
   MACRS_3: 'MACRS-3',
   MACRS_5: 'MACRS-5',
   MACRS_7: 'MACRS-7',

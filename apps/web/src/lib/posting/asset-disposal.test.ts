@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   computeDisposalGainLoss,
   buildDisposalLines,
+  previewAssetDisposal,
   type DisposalLinePlan,
 } from './asset-disposal';
 import { PostingError } from './account-roles';
@@ -94,5 +96,81 @@ describe('buildDisposalLines — balanced posting', () => {
   it('refuses proceeds with no cash account, and gain with no gain account', () => {
     expect(() => buildDisposalLines({ ...base, proceedsCents: 55_000 })).toThrow(PostingError);
     expect(() => buildDisposalLines({ ...base, proceedsCents: 55_000, cashAccountId: 'cash-acct' })).toThrow(PostingError);
+  });
+});
+
+// ── Disposal resolves gain/loss BY ROLE (migration 079) ──────────────────────
+interface StubOpts {
+  asset: Record<string, unknown>;
+  roleRows?: Record<string, { account_id: string; location_id: string | null }[]>;
+  accountsById?: Record<string, Record<string, unknown>>;
+  accountsByNumber?: Record<string, Record<string, unknown>>;
+}
+
+/** Minimal supabase stub: fixed_assets.single, account_roles (awaited list), accounts.maybeSingle. */
+function stubDb(opts: StubOpts): SupabaseClient {
+  function builder(table: string) {
+    const f: Record<string, unknown> = {};
+    const b = {
+      select: () => b,
+      eq: (k: string, v: unknown) => { f[k] = v; return b; },
+      or: () => b,
+      limit: () => b,
+      single: async () => ({ data: table === 'fixed_assets' ? opts.asset : null, error: null }),
+      maybeSingle: async () => {
+        if (table === 'accounts') {
+          if (f.id != null) return { data: opts.accountsById?.[String(f.id)] ?? null, error: null };
+          if (f.account_number != null) return { data: opts.accountsByNumber?.[String(f.account_number)] ?? null, error: null };
+        }
+        return { data: null, error: null };
+      },
+      then: (onF: (r: { data: unknown; error: null }) => unknown, onR?: (e: unknown) => unknown) => {
+        const data = table === 'account_roles' ? (opts.roleRows?.[String(f.role_key)] ?? []) : null;
+        return Promise.resolve({ data, error: null }).then(onF, onR);
+      },
+    };
+    return b as unknown as ReturnType<SupabaseClient['from']>;
+  }
+  return { from: (t: string) => builder(t) } as unknown as SupabaseClient;
+}
+
+const OTHER_INCOME = { account_type: 'OTHER', account_sub_type: 'OTHER_INCOME' };
+const OTHER_EXPENSE = { account_type: 'OTHER', account_sub_type: 'OTHER_EXPENSE' };
+
+describe('previewAssetDisposal — resolves gain/loss by ROLE', () => {
+  const gainAsset = {
+    id: 'asset-1', location_id: 'loc-1', name: 'Forklift',
+    acquisition_cost_cents: 100_000, accumulated_depreciation_cents: 100_000,
+    asset_account_id: 'fa-acct', accumulated_depreciation_account_id: 'ad-acct', status: 'ACTIVE',
+  };
+
+  it('uses the GAIN_ON_DISPOSAL role mapping (per-tenant account_roles row)', async () => {
+    const db = stubDb({
+      asset: gainAsset,
+      roleRows: { GAIN_ON_DISPOSAL: [{ account_id: 'mapped-gain', location_id: null }] },
+      accountsById: { 'mapped-gain': { id: 'mapped-gain', account_number: '7010', ...OTHER_INCOME } },
+    });
+    const res = await previewAssetDisposal(db, { orgId: 'o', assetId: 'asset-1', disposalDate: '2026-06-30', proceedsCents: 5_000, cashAccountId: 'cash' });
+    expect(res.outcome).toBe('GAIN');
+    expect(res.lines.find((l) => l.role === 'GAIN')?.accountId).toBe('mapped-gain');
+  });
+
+  it('falls back to the LOSS_ON_DISPOSAL default number when unmapped', async () => {
+    const lossAsset = { ...gainAsset, accumulated_depreciation_cents: 40_000 }; // NBV 60k
+    const db = stubDb({
+      asset: lossAsset,
+      roleRows: {}, // no explicit mapping
+      accountsByNumber: { '8010': { id: 'loss-8010', account_number: '8010', ...OTHER_EXPENSE } },
+    });
+    const res = await previewAssetDisposal(db, { orgId: 'o', assetId: 'asset-1', disposalDate: '2026-06-30', proceedsCents: 25_000, cashAccountId: 'cash' });
+    expect(res.outcome).toBe('LOSS');
+    expect(res.lines.find((l) => l.role === 'LOSS')?.accountId).toBe('loss-8010');
+  });
+
+  it('refuses to post when neither a role mapping nor the default account resolves', async () => {
+    const db = stubDb({ asset: gainAsset, roleRows: {}, accountsByNumber: {} });
+    await expect(
+      previewAssetDisposal(db, { orgId: 'o', assetId: 'asset-1', disposalDate: '2026-06-30', proceedsCents: 5_000, cashAccountId: 'cash' }),
+    ).rejects.toBeInstanceOf(PostingError);
   });
 });

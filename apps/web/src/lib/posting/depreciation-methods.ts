@@ -229,10 +229,13 @@ export function cumulativeThrough(schedule: number[], throughIdx: number): numbe
 }
 
 /**
- * Map the stored `depreciation_method_enum` value to a pure calc method for the
- * BOOK ledger. Returns null for values that cannot yet be driven end-to-end from
- * the current schema (e.g. MACRS_* which belong to the tax track, and methods
- * that would need a new enum value or a units column — reported, not guessed).
+ * Map the stored `depreciation_method_enum` value to a pure, LIFE-BASED calc method
+ * for the BOOK ledger (STRAIGHT_LINE, 200%/150% declining balance, sum-of-years-
+ * digits). Returns null for:
+ *   - UNITS_OF_PRODUCTION — usage-based, driven off the units meter, not a time
+ *     schedule; the engine/preview handle it via `unitsProductionTarget` instead.
+ *   - MACRS_* — the parallel TAX track (tax-depreciation.ts), never the book GL.
+ * Null means "not a life-based book schedule", not "unsupported" — callers branch.
  */
 export function mapBookMethod(
   enumValue: string
@@ -242,7 +245,33 @@ export function mapBookMethod(
       return { method: 'STRAIGHT_LINE' };
     case 'DOUBLE_DECLINING':
       return { method: 'DECLINING_BALANCE', decliningFactor: 2.0 };
+    case 'DECLINING_150':
+      return { method: 'DECLINING_BALANCE', decliningFactor: 1.5 };
+    case 'SUM_OF_YEARS_DIGITS':
+      return { method: 'SUM_OF_YEARS_DIGITS' };
     default:
-      return null; // MACRS_* → tax engine; SYD / 150%-DB / UoP need new enum values
+      return null; // UNITS_OF_PRODUCTION → units path; MACRS_* → tax engine
   }
+}
+
+/** True when the stored method is the usage-based units-of-production method. */
+export function isUnitsMethod(enumValue: string): boolean {
+  return enumValue === 'UNITS_OF_PRODUCTION';
+}
+
+/**
+ * Cumulative units-of-production depreciation TARGET given usage-to-date. Because
+ * units depreciation is `base × units / total`, the correct accumulated balance at
+ * any point is a pure function of cumulative units used — so the poster charges
+ * (target − already-accumulated) each period. Capped at the depreciable base;
+ * never overshoots salvage. Reuses the tested `unitsOfProductionSchedule`.
+ */
+export function unitsProductionTarget(
+  costCents: number,
+  salvageCents: number,
+  totalExpectedUnits: number,
+  cumulativeUnitsUsed: number
+): number {
+  const [target] = unitsOfProductionSchedule(costCents, salvageCents, totalExpectedUnits, [cumulativeUnitsUsed]);
+  return target;
 }

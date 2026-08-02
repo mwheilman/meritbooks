@@ -4,9 +4,10 @@ import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase, createServerSupabase } from '@/lib/supabase/server';
 import { fetchCoreMap } from '@/lib/stitch-core';
 
-/** Book depreciation methods the enum accepts (packages/supabase migration 001). */
+/** Depreciation methods the enum accepts (migration 001 + 079). The book methods
+ *  post to the GL; MACRS_* drive the parallel tax track. */
 const DEPRECIATION_METHODS = [
-  'STRAIGHT_LINE', 'DOUBLE_DECLINING',
+  'STRAIGHT_LINE', 'DOUBLE_DECLINING', 'DECLINING_150', 'SUM_OF_YEARS_DIGITS', 'UNITS_OF_PRODUCTION',
   'MACRS_3', 'MACRS_5', 'MACRS_7', 'MACRS_10', 'MACRS_15', 'MACRS_20',
 ] as const;
 
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
       id, asset_tag, name, description, serial_number, category,
       acquisition_date, acquisition_cost_cents, salvage_value_cents,
       useful_life_months, depreciation_method,
+      total_expected_units, units_used,
       accumulated_depreciation_cents, net_book_value_cents,
       last_depreciation_date, status,
       disposal_date, disposal_proceeds_cents,
@@ -64,6 +66,8 @@ export async function GET(request: Request) {
     salvageValueCents: a.salvage_value_cents,
     usefulLifeMonths: a.useful_life_months,
     depreciationMethod: a.depreciation_method,
+    totalExpectedUnits: a.total_expected_units == null ? null : Number(a.total_expected_units),
+    unitsUsed: Number(a.units_used ?? 0),
     accumulatedDepreciationCents: a.accumulated_depreciation_cents,
     netBookValueCents: a.net_book_value_cents,
     lastDepreciationDate: a.last_depreciation_date,
@@ -94,12 +98,16 @@ export async function GET(request: Request) {
 }
 
 /**
- * PATCH /api/fixed-assets  { id, depreciationMethod?, usefulLifeMonths?, salvageValueCents? }
+ * PATCH /api/fixed-assets
+ *   { id, depreciationMethod?, usefulLifeMonths?, salvageValueCents?, totalExpectedUnits?, unitsUsed? }
  *
- * Adjust an asset's depreciation basis. Method / life / salvage may only change
- * BEFORE depreciation has started (accumulated = 0) — a mid-life re-basis would
- * need an explicit prospective recompute, which we refuse to do silently.
- * RLS-scoped write (createServerSupabase).
+ * Adjust an asset's depreciation basis. Basis fields (method / life / salvage /
+ * total expected units) may only change BEFORE depreciation has started
+ * (accumulated = 0) — a mid-life re-basis would need an explicit prospective
+ * recompute, which we refuse to do silently. `unitsUsed` is the units-of-
+ * production USAGE METER (not a basis input): it accrues over the asset's life, so
+ * it may be updated any time before disposal — the next depreciation run charges
+ * the incremental usage. RLS-scoped write (createServerSupabase).
  */
 export async function PATCH(request: Request) {
   await auth().catch(() => null);
@@ -113,23 +121,43 @@ export async function PATCH(request: Request) {
   const id = typeof body.id === 'string' ? body.id : null;
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 422 });
 
+  // Basis fields (locked after depreciation begins) vs the usage meter (always OK).
   const update: Record<string, unknown> = {};
+  let basisChanged = false;
   if (body.depreciationMethod !== undefined) {
     const m = String(body.depreciationMethod);
     if (!(DEPRECIATION_METHODS as readonly string[]).includes(m)) {
       return NextResponse.json({ error: `depreciationMethod must be one of: ${DEPRECIATION_METHODS.join(', ')}` }, { status: 422 });
     }
     update.depreciation_method = m;
+    basisChanged = true;
   }
   if (body.usefulLifeMonths !== undefined) {
     const n = Number(body.usefulLifeMonths);
     if (!Number.isInteger(n) || n <= 0) return NextResponse.json({ error: 'usefulLifeMonths must be a positive integer' }, { status: 422 });
     update.useful_life_months = n;
+    basisChanged = true;
   }
   if (body.salvageValueCents !== undefined) {
     const n = Number(body.salvageValueCents);
     if (!Number.isInteger(n) || n < 0) return NextResponse.json({ error: 'salvageValueCents must be a non-negative integer' }, { status: 422 });
     update.salvage_value_cents = n;
+    basisChanged = true;
+  }
+  if (body.totalExpectedUnits !== undefined) {
+    if (body.totalExpectedUnits === null) {
+      update.total_expected_units = null;
+    } else {
+      const n = Number(body.totalExpectedUnits);
+      if (!Number.isFinite(n) || n <= 0) return NextResponse.json({ error: 'totalExpectedUnits must be a positive number' }, { status: 422 });
+      update.total_expected_units = n;
+    }
+    basisChanged = true;
+  }
+  if (body.unitsUsed !== undefined) {
+    const n = Number(body.unitsUsed);
+    if (!Number.isFinite(n) || n < 0) return NextResponse.json({ error: 'unitsUsed must be a non-negative number' }, { status: 422 });
+    update.units_used = n; // usage meter — not a basis change
   }
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'Nothing to update' }, { status: 422 });
@@ -148,9 +176,9 @@ export async function PATCH(request: Request) {
   if (row.status === 'DISPOSED') {
     return NextResponse.json({ error: 'Cannot modify a disposed asset' }, { status: 422 });
   }
-  if (Number(row.accumulated_depreciation_cents) > 0) {
+  if (basisChanged && Number(row.accumulated_depreciation_cents) > 0) {
     return NextResponse.json(
-      { error: 'Depreciation basis can only change before depreciation begins (accumulated must be 0)' },
+      { error: 'Depreciation basis can only change before depreciation begins (accumulated must be 0). The units-used meter can still be updated.' },
       { status: 422 }
     );
   }
