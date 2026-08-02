@@ -1,14 +1,23 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { requireAuth } from '@/lib/api-handler';
+import { requireAuth, requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
 
-// GET — list accounts with hierarchy from live DB
+// GET — list accounts with hierarchy, SCOPED TO THE CALLER'S ORG.
+//
+// SECURITY (identity gate #9 — cross-tenant read fix): this previously ran on the
+// admin (RLS-bypassing) client after only a best-effort `auth().catch()`, with NO
+// org filter — so any authenticated user (any tenant) could read EVERY tenant's
+// chart of accounts. It now fails closed on auth and runs on the request-scoped
+// RLS client (createAuthedSupabase via requireAuthedContext), so the database
+// returns ONLY the caller's org. The location_id/status/type params still narrow
+// within the org; they can no longer widen across orgs.
 export async function GET(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const supabase = ctx.supabase;
   const { searchParams } = new URL(request.url);
   const locationId = searchParams.get('location_id');
   const status = searchParams.get('approval_status'); // PENDING, APPROVED, REJECTED
@@ -123,7 +132,12 @@ const requestSchema = z.object({
 export async function POST(request: Request) {
   const authResult = await requireAuth();
   if (authResult instanceof NextResponse) return authResult;
-  const { userId } = authResult;
+  const { userId, orgId: claimOrgId } = authResult;
+
+  // Authorize — requesting a new GL account is the chart_of_accounts:request action.
+  const guard = await requirePermission(userId, 'chart_of_accounts', 'request');
+  if (!guard.ok) return guard.response;
+
   const supabase = createAdminSupabase();
 
   let body: z.infer<typeof requestSchema>;
@@ -142,10 +156,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body', code: 'PARSE_ERROR' }, { status: 400 });
   }
 
-  // Check for duplicate account number
+  // Resolve the caller's org CLAIM-FIRST (matches get_org_id()); the first-location
+  // lookup survives only as a transitional fallback until every JWT carries org_id.
+  let orgId: string | null = claimOrgId;
+  if (!orgId) {
+    const { data: orgRow } = await supabase
+      .schema('core').from('locations')
+      .select('org_id')
+      .limit(1)
+      .single();
+    orgId = (orgRow as { org_id: string } | null)?.org_id ?? null;
+  }
+  if (!orgId) {
+    return NextResponse.json({ error: 'No organization found', code: 'NO_ORG' }, { status: 404 });
+  }
+
+  // Check for a duplicate account number WITHIN THIS ORG (the admin client bypasses
+  // RLS, so the org filter must be explicit — account numbers are per-tenant).
   const { data: existing } = await supabase
     .from('accounts')
     .select('id')
+    .eq('org_id', orgId)
     .eq('account_number', body.account_number)
     .maybeSingle();
 
@@ -156,21 +187,10 @@ export async function POST(request: Request) {
     }, { status: 409 });
   }
 
-  // Get org_id from any location (accounts are org-level)
-  const { data: orgRow } = await supabase
-    .schema('core').from('locations')
-    .select('org_id')
-    .limit(1)
-    .single();
-
-  if (!orgRow) {
-    return NextResponse.json({ error: 'No organization found', code: 'NO_ORG' }, { status: 404 });
-  }
-
   const { data: account, error: insertError } = await supabase
     .from('accounts')
     .insert({
-      org_id: orgRow.org_id,
+      org_id: orgId,
       account_number: body.account_number,
       name: body.name,
       account_type: body.account_type,
@@ -206,7 +226,12 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const authResult = await requireAuth();
   if (authResult instanceof NextResponse) return authResult;
-  const { userId } = authResult;
+  const { userId, orgId: claimOrgId } = authResult;
+
+  // Authorize — approving/rejecting a requested account is chart_of_accounts:approve.
+  const guard = await requirePermission(userId, 'chart_of_accounts', 'approve');
+  if (!guard.ok) return guard.response;
+
   const supabase = createAdminSupabase();
 
   const body = await request.json();
@@ -216,6 +241,21 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'account_id and action (approve|reject) required', code: 'VALIDATION_ERROR' }, { status: 422 });
   }
 
+  // Resolve the caller's org CLAIM-FIRST; scope the update to it so an approver can
+  // never approve/reject another tenant's account by UUID (admin bypasses RLS).
+  let orgId: string | null = claimOrgId;
+  if (!orgId) {
+    const { data: orgRow } = await supabase
+      .schema('core').from('locations')
+      .select('org_id')
+      .limit(1)
+      .single();
+    orgId = (orgRow as { org_id: string } | null)?.org_id ?? null;
+  }
+  if (!orgId) {
+    return NextResponse.json({ error: 'No organization found', code: 'NO_ORG' }, { status: 404 });
+  }
+
   const updates: Record<string, unknown> = action === 'approve'
     ? { approval_status: 'APPROVED', approved_by: userId, approved_at: new Date().toISOString(), is_active: true }
     : { approval_status: 'REJECTED' };
@@ -223,6 +263,7 @@ export async function PATCH(request: Request) {
   const { error: updateError } = await supabase
     .from('accounts')
     .update(updates)
+    .eq('org_id', orgId)
     .eq('id', account_id);
 
   if (updateError) {

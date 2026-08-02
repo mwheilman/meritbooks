@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
-import { requirePermission } from '@/lib/rbac/require-permission';
+import { requireMoneyMovement, PAYMENTS_EXECUTE } from '@/lib/rbac/payments-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { releaseRun, InvalidRunTransitionError, RunStateError } from '@/lib/payroll/run';
 
@@ -21,7 +21,13 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
-  const guard = await requirePermission(userId, 'payroll', 'approve');
+  // THE money-movement step → dedicated `payments` execute permission (falls back
+  // to payroll:approve until the reserved catalog adopts `payments`). SoD +
+  // APPROVED-run transition guard still enforced inside releaseRun().
+  const guard = await requireMoneyMovement(userId, PAYMENTS_EXECUTE, {
+    feature: 'payroll',
+    action: 'approve',
+  });
   if (!guard.ok) return guard.response;
 
   try {

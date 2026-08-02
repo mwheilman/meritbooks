@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/api-handler';
-import { requirePermission } from '@/lib/rbac/require-permission';
+import { requireMoneyMovement, PAYMENTS_EXECUTE } from '@/lib/rbac/payments-permission';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { resolveOrgId, recordCustomerPayment } from '@/lib/posting/lifecycle';
@@ -30,10 +30,14 @@ export async function POST(request: Request) {
   const { userId, orgId: claimOrgId } = authResult;
 
   // Authorize — recording a customer payment applies cash to AR and posts to the
-  // GL, an AR write; gate on invoices:create. NOTE(NEEDS CENTRAL): there is no
-  // dedicated payments/money-movement feature in rbac/permissions.ts, so this
-  // reuses the AR-write permission as the closest fit — see the report.
-  const guard = await requirePermission(userId, 'invoices', 'create');
+  // GL: a money-movement action. Gate on the dedicated `payments` permission
+  // (execute). Until the RESERVED catalog adopts `payments`, this transparently
+  // falls back to the AR-write gate (invoices:create) so nothing breaks — see
+  // lib/rbac/payments-permission.ts and the session report.
+  const guard = await requireMoneyMovement(userId, PAYMENTS_EXECUTE, {
+    feature: 'invoices',
+    action: 'create',
+  });
   if (!guard.ok) return guard.response;
 
   try {

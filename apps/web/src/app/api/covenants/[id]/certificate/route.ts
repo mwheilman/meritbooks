@@ -5,6 +5,7 @@ import { runAiGateway } from '@meritbooks/core-ai';
 import { formatMoney } from '@meritbooks/shared';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { buildCovenantStatus, type CovenantRow, type CovenantStatus } from '@/lib/covenants/status';
 import { certificateSchema } from '@/lib/covenants/schema';
 import { BAND_LABEL } from '@/lib/covenants/compute';
@@ -124,7 +125,7 @@ export async function POST(request: Request, { params }: Params): Promise<NextRe
   const facts = buildFacts(status, asOfNote);
 
   // Try the gateway to PHRASE the facts; fall back deterministically.
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = getAnthropicApiKey();
   let narrative = deterministicCertificate(status);
   let source: 'ai' | 'deterministic' = 'deterministic';
   let model: string | null = null;

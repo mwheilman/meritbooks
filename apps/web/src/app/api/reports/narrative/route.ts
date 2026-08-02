@@ -7,6 +7,7 @@ import { runAiGateway } from '@meritbooks/core-ai';
 import { formatMoney } from '@meritbooks/shared';
 import { apiHandler, type ApiContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import {
   computeVariances,
   type VarianceLine,
@@ -686,7 +687,7 @@ export const POST = apiHandler(schema, async (body: Body, ctx: ApiContext) => {
   }
 
   // 2. Ask the gateway to PHRASE the computed facts. Fall back deterministically.
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = getAnthropicApiKey();
   if (!apiKey) {
     return NextResponse.json({
       narrative: fallbackNarrative(),

@@ -7,6 +7,7 @@ import { runAiGateway } from '@meritbooks/core-ai';
 import { formatMoney } from '@meritbooks/shared';
 import { apiQueryHandler, type ApiContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { computeEac, rollupEac, type EacInput, type EacResult, type EacMethod } from '@/lib/jobcost/eac';
 
 /**
@@ -165,7 +166,7 @@ async function explainAndFlag(
   r: EacResult,
 ): Promise<{ narrative: string; source: 'ai' | 'deterministic'; decisionId: string | null; model: string | null }> {
   const atRisk = r.projectedLoss || r.marginFade;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = getAnthropicApiKey();
 
   let narrative = deterministicNote(meta, r);
   let source: 'ai' | 'deterministic' = 'deterministic';

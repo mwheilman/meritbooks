@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { runAiGateway, type GatewayResponse } from '@meritbooks/core-ai';
 import { logAction } from '@/lib/trust/action-log';
 import {
@@ -69,7 +70,7 @@ export const POST = apiHandler(schema, async (body, ctx) => {
 
   const prompt = body.prompt;
   const context = body.context as NlContext | undefined;
-  const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
+  const apiKey = getAnthropicApiKey() ?? '';
 
   // Capture gateway meta from the injected classify closure for audit + degraded UI.
   let gateway: GatewayResponse | null = null;

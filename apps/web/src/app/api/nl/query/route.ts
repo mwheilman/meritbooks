@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { runAiGateway } from '@meritbooks/core-ai';
 import {
   buildClassifierPrompt,
@@ -62,7 +63,7 @@ export const POST = apiHandler(schema, async (body, ctx) => {
     );
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = getAnthropicApiKey();
   if (!apiKey) {
     return NextResponse.json(
       { error: 'ANTHROPIC_API_KEY is not configured.', code: 'NO_API_KEY' },
