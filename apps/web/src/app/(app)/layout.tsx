@@ -1,6 +1,7 @@
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { ToastContainer } from '@/components/ui';
+import { CommandBar } from '@/components/nl/command-bar';
 import { AppProviders } from './providers';
 
 export default function AppLayout({
@@ -19,6 +20,7 @@ export default function AppLayout({
           </main>
         </div>
         <ToastContainer />
+        <CommandBar />
       </div>
     </AppProviders>
   );
