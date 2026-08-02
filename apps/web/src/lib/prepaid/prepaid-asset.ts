@@ -3,24 +3,27 @@
  * prepaid amortization (DR Expense / CR Prepaid Asset).
  *
  * Canon §3: accounts are referenced by ROLE, never by a hard-coded number. The
- * canonical role registry (`lib/posting/account-roles.ts`) does NOT yet define a
- * PREPAID_ASSET role (see the report note); adding it there is a spine change
- * outside this module's ownership. Until it exists, this resolver degrades exactly
- * the way the registry would:
+ * PREPAID_ASSET role now lives in the canonical registry (`lib/posting/account-roles.ts`),
+ * so this resolver degrades exactly the way the registry does:
  *
  *   1. an explicit `account_roles` mapping keyed `role_key = 'PREPAID_ASSET'`
  *      (a location-specific row wins over an org-wide one), then
  *   2. an ASSET account whose name reads as a prepaid account (/prepaid/i), then
- *   3. null — the caller degrades (the setup UI asks the human to pick the account
+ *   3. the role's standard COA number (registry default) as a last resort, then
+ *   4. null — the caller degrades (the setup UI asks the human to pick the account
  *      explicitly) rather than posting a guess.
  *
  * Reads run through the RLS-scoped client, so org isolation is the database's job.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { ROLE_DEFAULT_NUMBER } from '@/lib/posting/account-roles';
 
-/** The role key this module resolves — mirror it into the registry when added. */
+/** The role key this module resolves — kept in sync with the registry key. */
 export const PREPAID_ASSET_ROLE = 'PREPAID_ASSET';
+
+/** Standard COA number fallback for the prepaid-asset role (registry default). */
+const PREPAID_ASSET_FALLBACK_NUMBER = ROLE_DEFAULT_NUMBER.PREPAID_ASSET;
 
 export interface ResolvedAccount {
   id: string;
@@ -74,10 +77,25 @@ export async function resolvePrepaidAssetAccount(
     const match = assets.find((a) => PREPAID_NAME_RE.test(a.name));
     if (match) return match;
   } catch {
+    /* fall through to the number fallback */
+  }
+
+  // 3. Standard COA number fallback (registry default), retained as a last resort
+  //    so a tenant that hasn't mapped the role still resolves.
+  try {
+    const { data } = await supabase
+      .from('accounts')
+      .select('id, name, account_number, account_type')
+      .eq('account_number', PREPAID_ASSET_FALLBACK_NUMBER)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle<ResolvedAccount>();
+    if (data) return data;
+  } catch {
     /* fall through to null */
   }
 
-  // 3. Unresolved — the human picks explicitly.
+  // 4. Unresolved — the human picks explicitly.
   return null;
 }
 

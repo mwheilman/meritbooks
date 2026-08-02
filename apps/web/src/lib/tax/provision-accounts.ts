@@ -11,25 +11,39 @@
  *   - deferred tax liability   → a name-matched "Deferred Tax Liability" LIABILITY account,
  *                                else COA 2700
  *
- * REPORTED to the lead (account-role registry gap): there are NO dedicated INCOME_TAX_EXPENSE,
- * INCOME_TAXES_PAYABLE, DEFERRED_TAX_ASSET, or DEFERRED_TAX_LIABILITY role keys in
- * `lib/posting/account-roles.ts` (a reserved-spine file). Until those roles exist we resolve by
- * name+type with the COA fallbacks above. An unresolved account is returned as `null` (not a
- * throw) so the provision can still be COMPUTED and PROPOSED; only POSTING requires the
- * accounts, and the post path raises a clear, itemized error naming exactly which to seed.
- * The engine never posts a guess.
+ * Resolution order per account (canon §2/§3): an explicit override → the account-role registry
+ * mapping (`public.account_roles`, keyed by the role in `lib/posting/account-roles.ts`) → a
+ * name+type match → the standard COA number → null. An unresolved account is returned as `null`
+ * (not a throw) so the provision can still be COMPUTED and PROPOSED; only POSTING requires the
+ * accounts, and the post path raises a clear, itemized error naming exactly which to seed. The
+ * engine never posts a guess.
+ *
+ * The four role keys (INCOME_TAX_EXPENSE, INCOME_TAXES_PAYABLE, DEFERRED_TAX_ASSET,
+ * DEFERRED_TAX_LIABILITY) now live in the registry. The registry's mapping table has to be seeded
+ * per tenant (a reserved migration — reported to the lead); until then this resolver still lands
+ * the right account by name/number, and once seeded the mapping tier wins.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getAccountRef, type AccountRef } from '@/lib/posting/account-roles';
+import {
+  getAccountRef,
+  ROLE_DEFAULT_NUMBER,
+  type AccountRef,
+  type AccountRoleKey,
+} from '@/lib/posting/account-roles';
 
 type DB = SupabaseClient;
 
-/** Standard COA fallbacks for the provision accounts (documentation + resolution fallback). */
-export const INCOME_TAX_EXPENSE_NUMBER = '8100';
-export const INCOME_TAXES_PAYABLE_NUMBER = '2260';
-export const DEFERRED_TAX_ASSET_NUMBER = '1700';
-export const DEFERRED_TAX_LIABILITY_NUMBER = '2700';
+/**
+ * Standard COA fallbacks for the provision accounts (documentation + resolution fallback).
+ * Sourced from the account-role registry so the number-fallback tier can never drift from it.
+ * NOTE: payable (2280) and DTA (1750) deliberately avoid the standard-COA collisions 2260
+ * (Accrued Wages) and 1700 (Goodwill); the seeding migration creates those accounts.
+ */
+export const INCOME_TAX_EXPENSE_NUMBER = ROLE_DEFAULT_NUMBER.INCOME_TAX_EXPENSE;
+export const INCOME_TAXES_PAYABLE_NUMBER = ROLE_DEFAULT_NUMBER.INCOME_TAXES_PAYABLE;
+export const DEFERRED_TAX_ASSET_NUMBER = ROLE_DEFAULT_NUMBER.DEFERRED_TAX_ASSET;
+export const DEFERRED_TAX_LIABILITY_NUMBER = ROLE_DEFAULT_NUMBER.DEFERRED_TAX_LIABILITY;
 
 interface AccountRow {
   id: string;
@@ -78,6 +92,28 @@ async function accountByNumber(db: DB, orgId: string, number: string): Promise<A
   return data ? toRef(data) : null;
 }
 
+/**
+ * Account-role registry mapping (`public.account_roles`) for a role key — the tenant's explicit
+ * choice, which wins over any name/number heuristic. Returns null (never throws) when the role
+ * isn't mapped, so resolution degrades to the name/number tiers.
+ */
+async function accountByRole(db: DB, orgId: string, role: AccountRoleKey): Promise<AccountRef | null> {
+  const { data } = await db
+    .from('account_roles')
+    .select('account_id')
+    .eq('org_id', orgId)
+    .eq('role_key', role)
+    .is('location_id', null)
+    .limit(1)
+    .maybeSingle<{ account_id: string }>();
+  if (!data?.account_id) return null;
+  try {
+    return await getAccountRef(db, orgId, data.account_id);
+  } catch {
+    return null;
+  }
+}
+
 export interface ProvisionAccountOverrides {
   incomeTaxExpenseAccountId?: string | null;
   incomeTaxesPayableAccountId?: string | null;
@@ -106,23 +142,27 @@ export async function resolveProvisionAccounts(
 ): Promise<ResolvedProvisionAccounts> {
   const incomeTaxExpense = overrides.incomeTaxExpenseAccountId
     ? await getAccountRef(db, orgId, overrides.incomeTaxExpenseAccountId)
-    : (await accountByName(db, orgId, '%income tax%', ['OPEX', 'OTHER'])) ??
+    : (await accountByRole(db, orgId, 'INCOME_TAX_EXPENSE')) ??
+      (await accountByName(db, orgId, '%income tax%', ['OPEX', 'OTHER'])) ??
       (await accountByNumber(db, orgId, INCOME_TAX_EXPENSE_NUMBER));
 
   const incomeTaxesPayable = overrides.incomeTaxesPayableAccountId
     ? await getAccountRef(db, orgId, overrides.incomeTaxesPayableAccountId)
-    : (await accountByName(db, orgId, '%income tax%payable%', ['LIABILITY'])) ??
+    : (await accountByRole(db, orgId, 'INCOME_TAXES_PAYABLE')) ??
+      (await accountByName(db, orgId, '%income tax%payable%', ['LIABILITY'])) ??
       (await accountByName(db, orgId, '%income taxes payable%', ['LIABILITY'])) ??
       (await accountByNumber(db, orgId, INCOME_TAXES_PAYABLE_NUMBER));
 
   const deferredTaxAsset = overrides.deferredTaxAssetAccountId
     ? await getAccountRef(db, orgId, overrides.deferredTaxAssetAccountId)
-    : (await accountByName(db, orgId, '%deferred tax asset%', ['ASSET'])) ??
+    : (await accountByRole(db, orgId, 'DEFERRED_TAX_ASSET')) ??
+      (await accountByName(db, orgId, '%deferred tax asset%', ['ASSET'])) ??
       (await accountByNumber(db, orgId, DEFERRED_TAX_ASSET_NUMBER));
 
   const deferredTaxLiability = overrides.deferredTaxLiabilityAccountId
     ? await getAccountRef(db, orgId, overrides.deferredTaxLiabilityAccountId)
-    : (await accountByName(db, orgId, '%deferred tax liab%', ['LIABILITY'])) ??
+    : (await accountByRole(db, orgId, 'DEFERRED_TAX_LIABILITY')) ??
+      (await accountByName(db, orgId, '%deferred tax liab%', ['LIABILITY'])) ??
       (await accountByNumber(db, orgId, DEFERRED_TAX_LIABILITY_NUMBER));
 
   const missing: string[] = [];

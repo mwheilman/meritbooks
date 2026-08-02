@@ -66,7 +66,20 @@ export type AccountRoleKey =
   // Employer benefit expenses (GATE 12.3 refinement)
   | 'HEALTH_INSURANCE_EXPENSE'
   | 'RETIREMENT_MATCH_EXPENSE'
-  | 'WORKERS_COMP_EXPENSE';
+  | 'WORKERS_COMP_EXPENSE'
+  // Income tax provision (ASC 740)
+  | 'INCOME_TAX_EXPENSE'
+  | 'INCOME_TAXES_PAYABLE'
+  | 'DEFERRED_TAX_ASSET'
+  | 'DEFERRED_TAX_LIABILITY'
+  // Leases (ASC 842) — also declared locally in lib/leases/lease-accounts.ts
+  | 'ROU_ASSET'
+  | 'LEASE_LIABILITY'
+  // Prepaid amortization
+  | 'PREPAID_ASSET'
+  // Intangibles + amortization — role_key names mirror lib/intangibles/accounts.ts
+  | 'INTANGIBLE_ASSET'
+  | 'ACCUMULATED_AMORTIZATION';
 
 /** Standard COA numbers per role — fallback when account_roles isn't seeded. */
 const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
@@ -114,6 +127,21 @@ const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
   HEALTH_INSURANCE_EXPENSE: '6020',
   RETIREMENT_MATCH_EXPENSE: '6030',
   WORKERS_COMP_EXPENSE: '6040',
+  // Income tax provision (ASC 740). NOTE: 2280 / 1750 are NEW numbers chosen to
+  // avoid the standard-COA collisions 2260 (Accrued Wages) and 1700 (Goodwill);
+  // the seeding migration creates these accounts (see the lead handoff).
+  INCOME_TAX_EXPENSE: '8100',
+  INCOME_TAXES_PAYABLE: '2280',
+  DEFERRED_TAX_ASSET: '1750',
+  DEFERRED_TAX_LIABILITY: '2700',
+  // Leases (ASC 842) — 1580 / 2550 seeded by migration 082.
+  ROU_ASSET: '1580',
+  LEASE_LIABILITY: '2550',
+  // Prepaid amortization — 1330 "Prepaid Other" is the general prepaid bucket.
+  PREPAID_ASSET: '1330',
+  // Intangibles + amortization — present in the standard COA.
+  INTANGIBLE_ASSET: '1710',
+  ACCUMULATED_AMORTIZATION: '1720',
 };
 
 /** A resolved account, carrying the type/sub-type the direction helper needs. */
