@@ -82,6 +82,8 @@ export const navigation: NavGroup[] = [
       { label: 'Journal Entries', href: '/journal-entries', icon: BookOpen },
       { label: 'Chart of Accounts', href: '/chart-of-accounts', icon: Calculator },
       { label: 'Reconciliation', href: '/reconciliation', icon: FileCheck },
+      { label: 'Leases', href: '/leases', icon: Landmark },
+      { label: 'Prepaids', href: '/prepaids', icon: Wallet },
       { label: 'Fiscal Periods', href: '/periods', icon: CalendarDays },
       { label: 'Revenue Recognition', href: '/rev-rec', icon: Percent },
       { label: 'Invoices', href: '/invoices', icon: DollarSign },
