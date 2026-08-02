@@ -8,6 +8,7 @@ import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { PageHeader } from '@/components/ui';
+import { RollForwardView } from './roll-forward-view';
 
 interface AssetRow {
   id: string; assetTag: string | null; name: string; description: string | null;
@@ -49,12 +50,13 @@ export default function FixedAssetsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
+  const [view, setView] = useState<'registry' | 'roll-forward'>('registry');
 
   const params: Record<string, string> = {};
   if (statusFilter) params.status = statusFilter;
   if (locationFilter) params.location_id = locationFilter;
 
-  const { data, isLoading, error } = useQuery<AssetsResponse>('/api/fixed-assets', Object.keys(params).length > 0 ? params : undefined);
+  const { data, isLoading, error, refetch } = useQuery<AssetsResponse>('/api/fixed-assets', Object.keys(params).length > 0 ? params : undefined);
   const [selectedAsset, setSelectedAsset] = useState<AssetLike | null>(null);
   const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<AssetLike>();
   const assets = data?.data ?? [];
@@ -68,13 +70,29 @@ export default function FixedAssetsPage() {
       )
     : assets;
 
-  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>;
-  if (error) return <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-red-400 text-sm">{error}</p></div>;
-
   return (
     <div className="space-y-6">
       <PageHeader title="Fixed Assets" description={`${summary?.count ?? 0} assets registered`} />
 
+      {/* View toggle */}
+      <div className="flex items-center gap-1 border-b border-slate-800">
+        {([['registry', 'Registry'], ['roll-forward', 'Roll-Forward']] as const).map(([v, label]) => (
+          <button key={v} onClick={() => setView(v)}
+            className={clsx('px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors',
+              view === v ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300')}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'roll-forward' ? (
+        <RollForwardView />
+      ) : isLoading ? (
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
+      ) : error ? (
+        <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-red-400 text-sm">{error}</p></div>
+      ) : (
+      <>
       {/* Summary metrics */}
       <div className="grid grid-cols-3 gap-4">
         <div className="card p-4">
@@ -189,7 +207,9 @@ export default function FixedAssetsPage() {
         )}
       </HoverPeekCard>
 
-      <AssetDrawer asset={selectedAsset} onClose={() => setSelectedAsset(null)} />
+      <AssetDrawer asset={selectedAsset} onClose={() => setSelectedAsset(null)} onChanged={refetch} />
+      </>
+      )}
     </div>
   );
 }

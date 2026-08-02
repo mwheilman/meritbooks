@@ -8,13 +8,20 @@
  * Idempotent: a depreciation_runs row per (asset, period) is the guard, so a
  * re-run never double-posts. Depreciation stops when accumulated reaches the
  * depreciable base (cost − salvage); the final period takes the remainder so it
- * lands exactly on the base. STRAIGHT_LINE is computed here; other methods are
- * reported as unsupported rather than approximated (no silent wrong numbers).
+ * lands exactly on the base.
+ *
+ * The per-period amounts come from the PURE `depreciation-methods` module, so the
+ * time-based methods (STRAIGHT_LINE and DOUBLE_DECLINING → 200% declining-balance
+ * with SL switchover) are computed the same way here and in the UI preview, and
+ * are independently unit-tested. Enum values that can't yet be driven from the
+ * current schema (MACRS_* — tax track; SYD / 150%-DB / units-of-production — need
+ * new enum values) are reported as unsupported rather than approximated.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from '../services/gl-posting';
 import { PostingError } from './account-roles';
+import { buildDepreciationSchedule, mapBookMethod } from './depreciation-methods';
 
 type DB = SupabaseClient;
 
@@ -73,8 +80,12 @@ export async function runDepreciation(db: DB, orgId: string, asOf: string): Prom
   for (const a of assets) {
     result.assets_processed++;
 
-    if (a.depreciation_method !== 'STRAIGHT_LINE') {
-      result.skipped.push({ asset_id: a.id, reason: `method ${a.depreciation_method} not yet supported (straight-line only)` });
+    const mapped = mapBookMethod(a.depreciation_method);
+    if (!mapped) {
+      result.skipped.push({
+        asset_id: a.id,
+        reason: `method ${a.depreciation_method} not book-postable here (MACRS_* → tax engine; SYD / 150%-DB / units-of-production need a new enum value)`,
+      });
       continue;
     }
 
@@ -84,9 +95,18 @@ export async function runDepreciation(db: DB, orgId: string, asOf: string): Prom
       continue;
     }
 
-    const monthly = Math.floor(base / a.useful_life_months);
-    if (monthly <= 0) {
-      result.skipped.push({ asset_id: a.id, reason: 'monthly amount rounds to zero' });
+    // Build the full pure schedule once; each period posts schedule[idx].
+    let schedule: number[];
+    try {
+      schedule = buildDepreciationSchedule({
+        costCents: a.acquisition_cost_cents,
+        salvageCents: a.salvage_value_cents,
+        usefulLifeMonths: a.useful_life_months,
+        method: mapped.method,
+        decliningFactor: mapped.decliningFactor,
+      });
+    } catch (e) {
+      result.skipped.push({ asset_id: a.id, reason: e instanceof Error ? e.message : 'schedule build failed' });
       continue;
     }
 
@@ -109,10 +129,12 @@ export async function runDepreciation(db: DB, orgId: string, asOf: string): Prom
         .maybeSingle();
       if (existing) continue;
 
-      // Cap the final period so accumulated lands exactly on the base.
+      // Amount for this period from the pure schedule; final period lands on base.
       const remaining = base - accumulated;
       if (remaining <= 0) break;
-      const amount = Math.min(monthly, remaining);
+      const scheduled = schedule[idx] ?? 0;
+      const amount = Math.min(scheduled, remaining);
+      if (amount <= 0) continue;
       const entryDate = lastDayOfMonth(year, month);
 
       const je = await postJournalEntry(db, {

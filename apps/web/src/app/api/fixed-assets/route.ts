@@ -1,8 +1,14 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { createAdminSupabase, createServerSupabase } from '@/lib/supabase/server';
 import { fetchCoreMap } from '@/lib/stitch-core';
+
+/** Book depreciation methods the enum accepts (packages/supabase migration 001). */
+const DEPRECIATION_METHODS = [
+  'STRAIGHT_LINE', 'DOUBLE_DECLINING',
+  'MACRS_3', 'MACRS_5', 'MACRS_7', 'MACRS_10', 'MACRS_15', 'MACRS_20',
+] as const;
 
 export async function GET(request: Request) {
   await auth().catch(() => null);
@@ -85,4 +91,73 @@ export async function GET(request: Request) {
     data: assets,
     summary: { count: assets.length, totalCostCents: totalCost, totalNBVCents: totalNBV, totalAccumDepCents: totalAccumDep, byStatus },
   });
+}
+
+/**
+ * PATCH /api/fixed-assets  { id, depreciationMethod?, usefulLifeMonths?, salvageValueCents? }
+ *
+ * Adjust an asset's depreciation basis. Method / life / salvage may only change
+ * BEFORE depreciation has started (accumulated = 0) — a mid-life re-basis would
+ * need an explicit prospective recompute, which we refuse to do silently.
+ * RLS-scoped write (createServerSupabase).
+ */
+export async function PATCH(request: Request) {
+  await auth().catch(() => null);
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const id = typeof body.id === 'string' ? body.id : null;
+  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 422 });
+
+  const update: Record<string, unknown> = {};
+  if (body.depreciationMethod !== undefined) {
+    const m = String(body.depreciationMethod);
+    if (!(DEPRECIATION_METHODS as readonly string[]).includes(m)) {
+      return NextResponse.json({ error: `depreciationMethod must be one of: ${DEPRECIATION_METHODS.join(', ')}` }, { status: 422 });
+    }
+    update.depreciation_method = m;
+  }
+  if (body.usefulLifeMonths !== undefined) {
+    const n = Number(body.usefulLifeMonths);
+    if (!Number.isInteger(n) || n <= 0) return NextResponse.json({ error: 'usefulLifeMonths must be a positive integer' }, { status: 422 });
+    update.useful_life_months = n;
+  }
+  if (body.salvageValueCents !== undefined) {
+    const n = Number(body.salvageValueCents);
+    if (!Number.isInteger(n) || n < 0) return NextResponse.json({ error: 'salvageValueCents must be a non-negative integer' }, { status: 422 });
+    update.salvage_value_cents = n;
+  }
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ error: 'Nothing to update' }, { status: 422 });
+  }
+
+  const supabase = await createServerSupabase();
+  const { data: asset, error: readErr } = await supabase
+    .from('fixed_assets')
+    .select('id, status, accumulated_depreciation_cents')
+    .eq('id', id)
+    .maybeSingle();
+  if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 });
+  if (!asset) return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
+
+  const row = asset as { id: string; status: string; accumulated_depreciation_cents: number };
+  if (row.status === 'DISPOSED') {
+    return NextResponse.json({ error: 'Cannot modify a disposed asset' }, { status: 422 });
+  }
+  if (Number(row.accumulated_depreciation_cents) > 0) {
+    return NextResponse.json(
+      { error: 'Depreciation basis can only change before depreciation begins (accumulated must be 0)' },
+      { status: 422 }
+    );
+  }
+
+  update.updated_at = new Date().toISOString();
+  const { error: updErr } = await supabase.from('fixed_assets').update(update).eq('id', id);
+  if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true, id, updated: update });
 }
