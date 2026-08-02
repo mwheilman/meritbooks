@@ -37,3 +37,36 @@ export const createLeaseSchema = z
   });
 
 export type CreateLeaseInput = z.infer<typeof createLeaseSchema>;
+
+/**
+ * Modification remeasurement (ASC 842). `confirm=false` (default) previews the numbers;
+ * `confirm=true` posts the adjusting entry + rebuilds the forward schedule. Revised terms
+ * describe the REMAINING lease from the effective (next unposted) period forward.
+ */
+export const modifyLeaseSchema = z.object({
+  confirm: z.boolean().default(false),
+  /** Revised per-period payment in integer CENTS. */
+  payment_cents: z.number().int().positive(),
+  /** Revised number of REMAINING periods (from the effective period forward). */
+  remaining_periods: z.number().int().positive().max(1200),
+  /** Revised annual discount / IBR as a decimal (0.06 = 6%). */
+  discount_rate: z.number().min(0).max(1),
+  /** Force partial-termination (scope-reduction) treatment; inferred when omitted. */
+  scope_reduction: z.boolean().optional(),
+});
+export type ModifyLeaseInput = z.infer<typeof modifyLeaseSchema>;
+
+/** CPI / index reset — only the payment changes; original rate + remaining term hold. */
+export const cpiResetSchema = z.object({
+  confirm: z.boolean().default(false),
+  /** New index-based per-period payment in integer CENTS. */
+  payment_cents: z.number().int().positive(),
+});
+export type CpiResetInput = z.infer<typeof cpiResetSchema>;
+
+/** Early termination — optional cash penalty in integer CENTS. */
+export const terminateLeaseSchema = z.object({
+  confirm: z.boolean().default(false),
+  penalty_cents: z.number().int().min(0).default(0),
+});
+export type TerminateLeaseInput = z.infer<typeof terminateLeaseSchema>;

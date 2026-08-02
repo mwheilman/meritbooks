@@ -8,9 +8,10 @@ import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
 import {
   Loader2, AlertCircle, Building2, Plus, RefreshCw, Trash2, ChevronDown, ChevronRight,
-  PlayCircle, FileText, CheckCircle2,
+  PlayCircle, FileText, CheckCircle2, Pencil, TrendingUp, XCircle,
 } from 'lucide-react';
 import { LeaseParseReview } from './lease-parse-review';
+import { LeaseRemeasureModal, type RemeasureMode } from './lease-remeasure-modal';
 
 interface Lease {
   id: string;
@@ -71,6 +72,7 @@ export function LeasesDashboard() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<Record<string, DetailResponse['data']>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [remeasure, setRemeasure] = useState<{ lease: Lease; mode: RemeasureMode } | null>(null);
 
   const leases = data?.data ?? [];
   const summary = data?.summary ?? { total: 0, active: 0, ended: 0 };
@@ -183,6 +185,30 @@ export function LeasesDashboard() {
                       {busy === l.id ? <Loader2 size={13} className="animate-spin" /> : <PlayCircle size={13} />}
                       Record this month
                     </button>
+                    <button
+                      onClick={() => setRemeasure({ lease: l, mode: 'modify' })}
+                      disabled={l.status !== 'ACTIVE'}
+                      className="p-1.5 rounded-md text-slate-500 hover:text-emerald-400 hover:bg-slate-800 disabled:opacity-40"
+                      aria-label="Modify lease" title="Modify lease"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => setRemeasure({ lease: l, mode: 'cpi' })}
+                      disabled={l.status !== 'ACTIVE'}
+                      className="p-1.5 rounded-md text-slate-500 hover:text-blue-400 hover:bg-slate-800 disabled:opacity-40"
+                      aria-label="Apply CPI or rate reset" title="Apply CPI / rate reset"
+                    >
+                      <TrendingUp size={14} />
+                    </button>
+                    <button
+                      onClick={() => setRemeasure({ lease: l, mode: 'terminate' })}
+                      disabled={l.status !== 'ACTIVE'}
+                      className="p-1.5 rounded-md text-slate-500 hover:text-amber-400 hover:bg-slate-800 disabled:opacity-40"
+                      aria-label="Terminate lease" title="Terminate lease"
+                    >
+                      <XCircle size={14} />
+                    </button>
                     <button onClick={() => remove(l.id)} className="p-1.5 rounded-md text-slate-500 hover:text-red-400 hover:bg-slate-800" aria-label="Delete lease" title="Delete">
                       <Trash2 size={14} />
                     </button>
@@ -251,6 +277,20 @@ export function LeasesDashboard() {
         <LeaseParseReview
           onClose={() => setShowUpload(false)}
           onCreated={() => { setShowUpload(false); void refetch(); }}
+        />
+      )}
+
+      {remeasure && (
+        <LeaseRemeasureModal
+          lease={remeasure.lease}
+          mode={remeasure.mode}
+          onClose={() => setRemeasure(null)}
+          onDone={async () => {
+            const id = remeasure.lease.id;
+            setRemeasure(null);
+            await refetch();
+            await loadDetail(id);
+          }}
         />
       )}
     </div>

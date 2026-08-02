@@ -212,3 +212,126 @@ export function buildLeaseSchedule(terms: LeaseTerms): LeaseSchedule {
     lines,
   };
 }
+
+/**
+ * Parameters for rebuilding the REMAINING schedule after a remeasurement
+ * (modification / CPI reset / partial termination). Unlike commencement, the ROU
+ * asset and the lease liability are NO LONGER EQUAL here — a modification adjusts
+ * them by different amounts (and a scope reduction recognizes a P&L gain/loss) — so
+ * the opening balances are supplied independently.
+ */
+export interface RemainingScheduleParams {
+  classification: LeaseClassification;
+  /** Remeasured lease-liability balance at the start of the first remaining period. */
+  openingLiabilityCents: number;
+  /** Remeasured ROU-asset balance at the start of the first remaining period. */
+  openingRouCents: number;
+  /** Revised per-period payment, integer cents, > 0. */
+  paymentCents: number;
+  frequency: LeaseFrequency;
+  /** Number of remaining periods (> 0). */
+  periods: number;
+  /** Revised annual discount / IBR as a decimal. >= 0. */
+  annualDiscountRate: number;
+  paymentTiming?: PaymentTiming;
+  /** 1-based period number to assign to the first remaining line (continues numbering). */
+  startPeriod: number;
+  /** Whole-months offset from commencement for the first remaining line. */
+  startMonthOffset: number;
+}
+
+/**
+ * Rebuild the amortization lines for the REMAINING term after a remeasurement.
+ *
+ * The generalized ASC 842 mechanics (`buildLeaseSchedule` is the ROU = liability
+ * special case of this):
+ *   - the liability amortizes from `openingLiabilityCents` — since that opening
+ *     balance is the PV of the revised remaining payments, interest accretes and
+ *     the balance clears to exactly zero on the last remaining period;
+ *   - OPERATING: total remaining lease cost = openingROU + total interest, spread
+ *     STRAIGHT-LINE; ROU amortization = lease expense − interest (the plug), so the
+ *     ROU clears to exactly zero even when it started ≠ the liability;
+ *   - FINANCE: straight-line ROU amortization off `openingRouCents`; last period
+ *     clears any rounding remainder.
+ *
+ * Pure and deterministic; integer cents; the last period absorbs rounding so every
+ * balance ties out exactly. Throws `LeaseInputError` on invalid inputs.
+ */
+export function buildRemainingSchedule(p: RemainingScheduleParams): LeaseScheduleLine[] {
+  const timing: PaymentTiming = p.paymentTiming ?? 'ARREARS';
+  if (!Number.isInteger(p.paymentCents) || p.paymentCents <= 0) {
+    throw new LeaseInputError('paymentCents must be a positive integer number of cents');
+  }
+  if (!Number.isInteger(p.periods) || p.periods <= 0) {
+    throw new LeaseInputError('periods must be a positive whole number of remaining periods');
+  }
+  if (!Number.isFinite(p.annualDiscountRate) || p.annualDiscountRate < 0) {
+    throw new LeaseInputError('annualDiscountRate must be a finite, non-negative decimal');
+  }
+  if (!Number.isInteger(p.openingLiabilityCents) || p.openingLiabilityCents < 0) {
+    throw new LeaseInputError('openingLiabilityCents must be a non-negative integer');
+  }
+  if (!Number.isInteger(p.openingRouCents) || p.openingRouCents < 0) {
+    throw new LeaseInputError('openingRouCents must be a non-negative integer');
+  }
+
+  const monthsPerPeriod = MONTHS_PER_PERIOD[p.frequency];
+  const paymentsPerYear = 12 / monthsPerPeriod;
+  const periodRate = p.annualDiscountRate / paymentsPerYear;
+  const periods = p.periods;
+
+  const totalPaymentsCents = p.paymentCents * periods;
+  // OPERATING: total remaining lease cost = ROU consumed + interest accreted.
+  const totalOperatingCost = p.openingRouCents + totalPaymentsCents - p.openingLiabilityCents;
+  const straightLineExpense = Math.round(totalOperatingCost / periods);
+  const straightLineAmort = Math.round(p.openingRouCents / periods);
+
+  const lines: LeaseScheduleLine[] = [];
+  let openLiability = p.openingLiabilityCents;
+  let openRou = p.openingRouCents;
+
+  for (let i = 1; i <= periods; i++) {
+    const isLast = i === periods;
+
+    let interestCents: number;
+    let principalCents: number;
+    if (isLast) {
+      principalCents = openLiability;
+      interestCents = p.paymentCents - principalCents;
+    } else {
+      interestCents = Math.round(openLiability * periodRate);
+      principalCents = p.paymentCents - interestCents;
+    }
+    const closeLiability = openLiability - principalCents;
+
+    let leaseExpenseCents: number;
+    let rouAmortizationCents: number;
+    if (p.classification === 'OPERATING') {
+      leaseExpenseCents = isLast
+        ? totalOperatingCost - straightLineExpense * (periods - 1)
+        : straightLineExpense;
+      rouAmortizationCents = leaseExpenseCents - interestCents;
+    } else {
+      rouAmortizationCents = isLast ? openRou : straightLineAmort;
+      leaseExpenseCents = interestCents + rouAmortizationCents;
+    }
+    const closeRou = openRou - rouAmortizationCents;
+
+    lines.push({
+      period: p.startPeriod + i - 1,
+      monthOffset: p.startMonthOffset + (i - 1) * monthsPerPeriod,
+      paymentCents: p.paymentCents,
+      interestCents,
+      principalReductionCents: principalCents,
+      liabilityBalanceCents: closeLiability,
+      rouAmortizationCents,
+      rouBalanceCents: closeRou,
+      leaseExpenseCents,
+    });
+
+    openLiability = closeLiability;
+    openRou = closeRou;
+  }
+
+  return lines;
+}
