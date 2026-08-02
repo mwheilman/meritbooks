@@ -375,11 +375,20 @@ gate, positive-pay, capex classifier, etc.):
 | Tax & Compliance | 39 | 6 | 8 | 25 |
 | **Total** | **≈ 205 distinct** | **≈ 40** | **≈ 55** | **≈ 110** |
 
-**Headline:** of ~205 distinct capabilities, **~40 are built** (functional or shipped detect-only),
-**~55 partial**, **~110 not started**. **Real remaining work ≈ 165** capabilities (partial + none); of
-those, **~110 are net-new** (nothing in the repo yet). The count is heavily front-loaded on the
-transactional core (AP/AR/Bank all >25% built) and near-empty on **FP&A (0/37 built)** and **Tax (6/39)**
-— exactly the owner-flagged planning/analytical thinness.
+**Headline (v2 segment-first pass):** of ~205 distinct capabilities, **~40 are built** (functional or
+shipped detect-only), **~55 partial**, **~110 not started**. **Real remaining work ≈ 165** capabilities
+(partial + none); of those, **~110 are net-new** (nothing in the repo yet). The count is heavily front-loaded
+on the transactional core (AP/AR/Bank all >25% built) and near-empty on **FP&A (0/37 built)** and **Tax
+(6/39)** — exactly the owner-flagged planning/analytical thinness.
+
+**TRUE superset headline (v2 + the modality-sweep ⭐NEW, Session 42 — see §6):** the segment × 14-modality
+sweep (`AI-CAPABILITY-MATRIX.md`) surfaced **98 distinct net-new capabilities** with no home in the v2 list
+above (5 platform-wide cross-cutting rows + 93 segment-specific). Folding them in:
+**≈ 303 distinct capabilities total, ~40 built, ~55 partial, ~208 none/spec → ≈ 263 remaining.** Built count
+is **unchanged** — every ⭐NEW row is spec/partial/none. The new work concentrates in the whole-column blind
+spots (M13 search, M8 NL, M7 narrative, M9 agentic, M14 learning) and the segments v2 folded away or omitted
+(Rev-Rec, Fixed Assets, Customer, Expense/Card, Procurement, Payroll, Practice, Job-Costing, Team-Performance,
+Onboarding). **This file is now the true superset; `AI-CAPABILITY-MATRIX.md` is the one-screen index over it.**
 
 **Already-built, so NOT remaining work** (the ~40): PW2 anomalous-JE, PW5 NL JE composer, PW6 decision
 log; AP B3/B5/D4/D5/F1/F5/F6; AR A4/B8/C12/C13/C22(propose)/C27/C28/C31/C32/C33; GL B1/B3/F1/H1(detect)/I1
@@ -471,5 +480,57 @@ every approval/attribution story. **Each needs an approved Rule-13 FPB before bu
 
 ---
 
-*Analysis only. Supersedes v1 for planning; v1 retained as the first-pass record. No build authorization —
-every capability above must clear its Rule-13 FPB and its `Prereq:` gate first.*
+---
+
+## §6. ⭐NEW capabilities folded in from the modality sweep (Session 42 — makes this the true superset)
+
+Surfaced by forcing all 14 AI modalities against all 24 segments (`AI-CAPABILITY-MATRIX.md`, merging the three
+`ai-modality/*.md` panels + `INTEGRATION-MAP.md`). These have **no home in §1–§2 above**. Per the dedup rule,
+the four cross-cutting modalities (M7 narrative, M8 NL, M9 agentic, M13 search) + M14 learning collapse to
+**one platform-wide row each** (they recur in ~15 segments; counting them once is the honest distinct count).
+**98 distinct: 5 platform-wide + 33 R2R + 31 P2P/O2C + 29 FP&A/Tax/Payroll/Practice.** IDs prefixed `NEW-`.
+All build-state **spec/none/partial** (nothing here is built). HITL/Tier/Effort per the matrix §3.
+
+### §6.0 Platform-wide (collapse the whole-column blind spots)
+| ID | Capability | Modality | Build |
+|---|---|---|---|
+| NEW-PW1 | Knowledge & Retrieval spine — semantic search over ledger/reports/contracts/vendors/customers/collections-history/assets/jobs + GAAP/policy Q&A | M13 | none |
+| NEW-PW2 | Universal NL command surface — transactional + analytical NL across every segment (→ `FPB-nl-copilot` intents) | M8 | partial |
+| NEW-PW3 | Per-object narrative / "explain-this-X" UX over the built decision-log infra | M7 | none |
+| NEW-PW4 | Named agentic orchestration loops — AP · vendor-onboarding · morning-cash · O2C · pay-run · expense · procure-to-pay · close-run · conversion · provision · per-client close-to-deliver | M9 | partial |
+| NEW-PW5 | Platform-wide learning/personalization memory (beyond the one built vendor-pattern loop) | M14 | partial |
+
+### §6.1 Record-to-Report (33)
+- **Rev-Rec (7):** NEW-RR1 ASC 606 contract IDP→POB/price/SSP · NEW-RR2 AI POB price allocation · NEW-RR3 billed↔recognized↔deferred waterfall tie-out · NEW-RR4 deferred-rev roll-off forecast · NEW-RR5 ASC 606/SSP memo drafting · NEW-RR6 best-fit method recommendation · NEW-RR7 milestone-due monitor.
+- **Fixed Assets (6):** NEW-FA1 capex-invoice→asset IDP · NEW-FA2 asset-class/useful-life/MACRS assignment · NEW-FA3 FA subledger→GL + physical tie-out · NEW-FA4 ghost/missed-run/neg-NBV anomaly · NEW-FA5 depreciation forecast + capex bridge · NEW-FA6 missed-run/fully-depreciated/expiry alert.
+- **Reporting intelligence (7):** NEW-RP1 external/prior-auditor financials IDP · NEW-RP2 COA→statement-line mapping · NEW-RP3 cross-report/report→GL tie-out · NEW-RP4 statement-integrity checks · NEW-RP5 footnote/MD&A/disclosure drafting · NEW-RP6 insight surfacing/which-KPI · NEW-RP7 report-freshness/KPI-breach alert.
+- **Close intelligence (4):** NEW-CL1 close-binder doc OCR · NEW-CL2 days-to-close-ready ETA · NEW-CL3 close-path/critical-path optimization · NEW-CL4 close-deadline/phase-slip alert.
+- **Reconciliation depth (4):** NEW-RC1 statement-PDF OCR + ending-balance anchor · NEW-RC2 plug/stale-item detector (canon §1.5 #12) · NEW-RC3 predicted clearing dates · NEW-RC4 reconciliation-memo drafting.
+- **GL & Consolidation (5):** NEW-GL1 duplicate-JE/reversing-pair matching · NEW-GL2 stuck/unposted-batch monitor · NEW-GL3 invest-in-sub↔equity match · NEW-GL4 elimination-completeness detector · NEW-GL5 pre-consolidation-readiness monitor.
+
+### §6.2 Procure-to-Pay / Order-to-Cash (31)
+- **Procurement front-half (7):** NEW-PO1 PO/goods-receipt OCR · NEW-PO2 PO-line commodity/cost-code coding · NEW-PO3 maverick/split-PO detect · NEW-PO4 commitment/encumbrance forecast · NEW-PO5 PO/RFQ draft generation · NEW-PO6 sourcing/contract-price-compliance optimization · NEW-PO7 encumbrance-vs-budget/receiving-overdue alert.
+- **Customer Management (6):** NEW-CU1 onboarding doc extraction (credit app/resale cert) · NEW-CU2 classification/segmentation · NEW-CU3 duplicate-customer detect & merge (vendor-dedupe mirror) · NEW-CU4 credit-abuse/fraud detect · NEW-CU5 customer comms drafting · NEW-CU6 credit re-review + master-staleness monitor.
+- **Money Movement (6):** NEW-MM1 payment-rail classification · NEW-MM2 payment-run fraud screen at release · NEW-MM3 settlement-date prediction · NEW-MM4 remittance-advice + payment-confirmation generation · NEW-MM5 rail optimization · NEW-MM6 payment-status/failed-payment monitoring.
+- **Expense & Card (5):** NEW-EX1 expense-policy/out-of-policy detect · NEW-EX2 expense accrual/spend forecast · NEW-EX3 expense-report/reimbursement drafting · NEW-EX4 missing-receipt chase + card-program optimization · NEW-EX5 uncoded-card/policy-breach aging alert.
+- **Vendor Management (3):** NEW-VN1 vendor-reliability/delivery-risk score · NEW-VN2 vendor-consolidation/preferred-vendor recommendation · NEW-VN3 continuous OFAC/watchlist re-screen.
+- **AR/Collections points (4):** NEW-AR1 pre-send billing-error detection · NEW-AR2 email/PDF remittance-advice parsing · NEW-AR3 invoice send-time/channel optimization · NEW-AR4 early-pay-discount offer optimization.
+
+### §6.3 FP&A / Tax / Payroll / Practice (29)
+- **Payroll (6):** NEW-PR1 run anomaly review · NEW-PR2 labor→job/dept/class attribution · NEW-PR3 auto-reconcile provider bank debit · NEW-PR4 employer-tax/PTO-liability run-rate forecast · NEW-PR5 pay-register/branded pay-stub drafting · NEW-PR6 payroll monitoring alerts.
+- **Job Costing/WIP (6):** NEW-JC1 cost-to-complete/EAC forecast · NEW-JC2 WIP over/under-billing schedule + true-up · NEW-JC3 margin-fade/cost-overrun detect · NEW-JC4 change-order-leakage detect · NEW-JC5 AIA/SOV progress-bill (G702/703) draft · NEW-JC6 job-cost monitoring alerts.
+- **Onboarding/Conversion (5):** NEW-ON1 bulk AI categorization of historical txns → standard COA · NEW-ON2 opening-TB tie-out gate · NEW-ON3 COA remap from prior system · NEW-ON4 conversion-quality anomaly detect · NEW-ON5 cleanup-effort/onboarding-load estimate.
+- **Practice/Multi-client (5):** NEW-PC1 cross-client exception sweep · NEW-PC2 portfolio close-slippage + capacity/peak-load prediction · NEW-PC3 staff↔client assignment optimization + key-person backup · NEW-PC4 realization/scope-creep drift detect + re-price evidence · NEW-PC5 engagement-letter/deliverable-pack drafting.
+- **Team Performance (5):** NEW-TP1 AI performance summaries (ledger-grounded) · NEW-TP2 fairness/anti-gaming sentinel · NEW-TP3 coaching-pattern detect · NEW-TP4 capacity-vs-load/time-to-clear prediction · NEW-TP5 instrumentation-health meta-metric.
+- **Forecasting framings (2):** NEW-FC1 covenant-breach-date projection (dated + continuous monitor) · NEW-FC2 cross-lens tie-out (13-wk direct ↔ monthly indirect).
+
+*(Governance note carried from the integration map: 7 route handlers — `receipts/categorize`,
+`bank-feed/categorize`, `journal-entries/compose`, `categorize`, `bills/parse`, `bills/intake`,
+`posting/predict` — read `ANTHROPIC_API_KEY` directly and bypass `@meritbooks/core-ai`; un-metered/un-budgeted
+AI, a canon §2 violation to fix before trusting per-tenant AI cost. See `AI-CAPABILITY-MATRIX.md` §5.)*
+
+---
+
+*Analysis only. Supersedes v1 for planning; v1 retained as the first-pass record. Now the true superset with
+§6 folded in. No build authorization — every capability above must clear its Rule-13 FPB and its `Prereq:`
+gate first.*

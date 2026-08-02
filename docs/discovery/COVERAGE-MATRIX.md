@@ -1,5 +1,9 @@
 # MeritBooks Discovery — COVERAGE MATRIX
 
+> **See also → `AI-CAPABILITY-MATRIX.md`** — the master one-screen segment × 14-modality map (24 segments)
+> with build-state marks, the whole-column blind spots (M13 search, M8 NL, M7 narrative, M14 learning), the
+> 98 ⭐NEW capabilities, the re-ranked BUILD-NEXT top 30, and the 7-route Core-AI-gateway governance must-fix.
+
 **Author:** Discovery auditor (read-only analysis)
 **Date:** 2026-08-01 (Session 41 canon)
 **Purpose:** An honest, owner-facing map of how deeply the panel/discovery has *engaged* each platform
