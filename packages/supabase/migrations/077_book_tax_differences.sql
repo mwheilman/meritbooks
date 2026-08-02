@@ -64,7 +64,7 @@ end $$;
 -- single account balance.
 create table if not exists public.book_tax_m_lines (
   id uuid primary key default uuid_generate_v4(),
-  org_id uuid not null references organizations(id) on delete cascade,
+  org_id uuid not null references core.organizations(id) on delete cascade,
   code text not null,                                   -- stable machine code, e.g. 'MEALS_50'
   label text not null,                                  -- human label for the M-1 line
   m1_line text,                                          -- Schedule M-1 line ref, e.g. '5c', '8a'
@@ -92,7 +92,7 @@ create index if not exists idx_book_tax_m_lines_org
 -- =============================================================
 create table if not exists public.book_tax_account_tags (
   id uuid primary key default uuid_generate_v4(),
-  org_id uuid not null references organizations(id) on delete cascade,
+  org_id uuid not null references core.organizations(id) on delete cascade,
   account_id uuid not null references accounts(id) on delete cascade,
   m_line_code text not null,                             -- FK-by-value to book_tax_m_lines.code
   difference_type text not null
@@ -130,7 +130,7 @@ create index if not exists idx_book_tax_account_tags_account
 -- audit-defensible way to record a depreciation delta or a one-off adjustment).
 create table if not exists public.book_tax_line_overrides (
   id uuid primary key default uuid_generate_v4(),
-  org_id uuid not null references organizations(id) on delete cascade,
+  org_id uuid not null references core.organizations(id) on delete cascade,
   gl_entry_line_id uuid not null references gl_entry_lines(id) on delete cascade,
   m_line_code text not null,                             -- FK-by-value to book_tax_m_lines.code
   difference_type text not null
