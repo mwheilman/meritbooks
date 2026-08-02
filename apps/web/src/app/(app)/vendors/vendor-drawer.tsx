@@ -4,7 +4,7 @@ import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { StatusBadge } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
-import { CheckCircle, AlertTriangle, FileWarning, Clock, ShieldAlert, FileText, Paperclip, UploadCloud, ShieldCheck } from 'lucide-react';
+import { CheckCircle, AlertTriangle, FileWarning, Clock, ShieldAlert, FileText, Paperclip, UploadCloud, ShieldCheck, Copy } from 'lucide-react';
 import { VendorDocIntake } from './vendor-doc-intake';
 
 type ComplianceStatus = 'valid' | 'expired' | 'pending' | 'missing';
@@ -30,6 +30,7 @@ interface VenDetail {
   openBills: Array<{ id: string; billNumber: string | null; billDate: string; dueDate: string | null; totalCents: number; balanceCents: number; status: string; daysOverdue: number }>;
   payments: Array<{ id: string; billId: string; billNumber: string | null; paymentDate: string; amountCents: number; method: string | null }>;
   recentBills: Array<{ id: string; billNumber: string | null; billDate: string; totalCents: number; balanceCents: number; status: string }>;
+  possibleDuplicates: Array<{ id: string; name: string; confidence: number; matchedFields: string[]; reason: string; amountAtRiskCents: number }>;
 }
 
 const DOC_LABEL: Record<string, string> = { W9: 'W-9', GL_COI: 'GL COI', WC_COI: 'WC COI', WC_EXEMPTION: 'WC Exempt' };
@@ -200,6 +201,42 @@ export function VendorDrawer({ vendorId, onClose }: { vendorId: string | null; o
               </DetailTable>
             )}
           </div>
+
+          {/* Possible duplicate vendors — read-only detection (no auto-merge). */}
+          {data.possibleDuplicates && data.possibleDuplicates.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <Copy size={13} className="text-amber-400" />
+                <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">
+                  Possible duplicates ({data.possibleDuplicates.length})
+                </h3>
+              </div>
+              <p className="mb-2 text-2xs text-slate-500">
+                Vendors that look like the same payee under two masters — this fragments spend, 1099
+                totals, and payment holds. Review and consolidate manually; nothing is merged
+                automatically.
+              </p>
+              <div className="space-y-2">
+                {data.possibleDuplicates.map((d) => (
+                  <div key={d.id} className="rounded-lg border border-amber-500/20 bg-amber-500/[0.05] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-slate-200 truncate">{d.name}</span>
+                      <span className="shrink-0 text-2xs font-mono text-amber-300">{Math.round(d.confidence * 100)}% match</span>
+                    </div>
+                    <p className="mt-0.5 text-2xs text-slate-500 line-clamp-2">{d.reason}</p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {d.matchedFields.map((f) => (
+                        <span key={f} className="px-1.5 py-0.5 rounded bg-slate-800 text-2xs text-slate-400">{f.replace('_', ' ')}</span>
+                      ))}
+                      {d.amountAtRiskCents > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-2xs font-mono text-slate-400">{formatMoney(d.amountAtRiskCents)} A/P</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Identity / terms */}
           <DetailSection title="Contact & terms">

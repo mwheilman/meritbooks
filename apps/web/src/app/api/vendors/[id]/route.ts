@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { pairsForVendor, type VendorDupInput } from '@/lib/vendors/dedupe';
 
 /**
  * GET /api/vendors/[id] — vendor detail + ledger rollup for the detail drawer/peek.
@@ -148,6 +150,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     totalCents: Number(b.total_cents ?? 0), balanceCents: Number(b.balance_cents ?? 0), status: b.status,
   }));
 
+  // ---- Live "possible duplicates" surface (read-only; never auto-merges).
+  const possibleDuplicates = await computePossibleDuplicates(supabase, orgId, params.id);
+
   const ven = v as Record<string, any>;
   return NextResponse.json({
     id: ven.id,
@@ -198,5 +203,88 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     openBills,
     payments,
     recentBills,
+    possibleDuplicates,
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Live read-only duplicate-vendor surface for the detail drawer. Loads the org's
+ * active vendors, quantifies each one's open A/P (sum of positive bill balances,
+ * excluding voided), scores them against this vendor with the shared vendor
+ * dedupe scorer, and returns up to the 5 strongest candidates. Pure detection —
+ * there is deliberately no vendor merge action (canon §3).
+ */
+async function computePossibleDuplicates(
+  supabase: SupabaseClient,
+  orgId: string,
+  targetId: string,
+): Promise<Array<{
+  id: string;
+  name: string;
+  confidence: number;
+  matchedFields: string[];
+  reason: string;
+  amountAtRiskCents: number;
+}>> {
+  const { data: rows } = await supabase
+    .schema('core')
+    .from('vendors')
+    .select('id, name, display_name, email, phone, address_line1, zip')
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
+    .limit(5000);
+  const venRows = (rows ?? []) as Array<{
+    id: string;
+    name: string;
+    display_name: string | null;
+    email: string | null;
+    phone: string | null;
+    address_line1: string | null;
+    zip: string | null;
+  }>;
+  if (venRows.length < 2) return [];
+
+  // open A/P per vendor (best-effort) to quantify the at-risk figure.
+  const openApByVendor = new Map<string, number>();
+  const ids = venRows.map((r) => r.id);
+  for (let i = 0; i < ids.length; i += 500) {
+    const slice = ids.slice(i, i + 500);
+    const { data: billBals } = await supabase
+      .from('bills')
+      .select('vendor_id, balance_cents, status')
+      .eq('org_id', orgId)
+      .in('vendor_id', slice)
+      .gt('balance_cents', 0)
+      .neq('status', 'VOIDED');
+    for (const b of (billBals ?? []) as Array<{ vendor_id: string; balance_cents: number | string }>) {
+      const cur = openApByVendor.get(b.vendor_id) ?? 0;
+      openApByVendor.set(b.vendor_id, cur + (Number(b.balance_cents) || 0));
+    }
+  }
+
+  const toInput = (r: (typeof venRows)[number]): VendorDupInput => ({
+    id: r.id,
+    name: r.name,
+    displayName: r.display_name,
+    email: r.email,
+    phone: r.phone,
+    addressLine1: r.address_line1,
+    zip: r.zip,
+    openApCents: openApByVendor.get(r.id) ?? 0,
+  });
+
+  const target = venRows.find((r) => r.id === targetId);
+  if (!target) return [];
+  const others = venRows.filter((r) => r.id !== targetId).map(toInput);
+  const pairs = pairsForVendor(toInput(target), others);
+  return pairs.slice(0, 5).map((p) => ({
+    id: p.b.id,
+    name: p.b.displayName || p.b.name,
+    confidence: p.signal.confidence,
+    matchedFields: p.signal.matchedFields,
+    reason: p.signal.reason,
+    amountAtRiskCents: p.amountAtRiskCents,
+  }));
 }
