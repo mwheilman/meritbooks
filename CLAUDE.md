@@ -181,19 +181,21 @@ PLAID_SECRET                         # Plaid banking (server-side only)
 
 The authoritative, always-current build state lives in the latest session handoff. **Start every session by reading the newest `docs/MERITBOOKS-HANDOFF-session[N].md`** (highest N). Handoffs follow the Rule-11 8-section format and are the ground-truth record of what works, what's broken, and what to build next.
 
-Latest handoff: **`docs/MERITBOOKS-HANDOFF-session40.md`** (2026-08-01).
+Latest handoff: **`docs/MERITBOOKS-HANDOFF-session42.md`** (2026-08-02).
 
-Snapshot as of session 40 (see the handoff for detail):
-- Live at `meritbooks-web.vercel.app`, production `main` @ `95b52b2`, Vercel state READY (so `next build` — the authoritative full-project typecheck — is green).
-- **Money-approval layer unblocked**: `canApprove()` now reads `core.employees.role` + `ROLE_DEFINITIONS` (it used to fail closed against an unbuilt `core.roles` table), so check/bill/payroll approval works for `company_admin`. Separation of duties unchanged.
-- **Three autonomous pipelines shipped via a parallel-agent wave**: Vendor Compliance risk engine (COI/W9 → tier → escalate to `/exceptions`), Reconciliation autopilot (composite matcher → tiered accept/reject), 13-Week Cash Forecast (real projection off bank + AR/AP by due date). Plus a `/api/cash` RLS-leak fix and a statement-reconciliation `NOT NULL` crash fix.
-- **Stripe "Pay Now"** end-to-end (balanced `AR_COLLECTION`), invoices/customers/hosted pay page/email; **two-layer fee model** live (`core.merchant_fee_schedules` + `lib/money/fees.ts`).
-- **Security mid-hardening**: RLS enforced across the authed API (org_isolation, Clerk token → `org_id`), auth fails closed, `require-permission` guard on `gl/post` as the reference pattern. Full RBAC rollout + identity reconciliation is the open NO-GO gate (task #9) — see the handoff backlog.
-- Eight subagents in `.claude/agents/` (builder, verifier, auditor, reviewer, designer, scribe, security, chrome-auditor). Parallel `general-purpose` builders on disjoint slices are the current execution model.
+Snapshot as of session 41 (see the handoff for detail):
+- Live at `meritbooks-web.vercel.app`, production `main` @ `5a2004e`; every session-41 wave commit through `0409a1e` is Vercel state READY (so `next build` — the authoritative full-project typecheck — is green).
+- **GATE 12.1 DONE & live**: Stripe payment→PAID→GL hardened (resume-safe idempotency; migration 064 UNIQUE indexes make the DB the double-post guarantor). The **coded platform-fee GL path is RETIRED** — Merit books its own processor income via its own bank feed; the Operator Console (`/platform`) reads realized fee from `invoice_events` meta; `PLATFORM_ORG_ID` removed.
+- **Identity/RBAC gate #9 substantially advanced (still OPEN)**: `canApprove` reconciled to `core.memberships` (+ role-normalize, inactive-employee deny), membership auto-provision on login, lifecycle sync on deactivate/role-change, `require-permission` on 12 money routes, page-level RBAC guards on 7 sensitive pages. **Still open (the blocker): real multi-tenant org resolution** (first-org fallback in require-permission/page-guard/payments/event routes), control-route RBAC, a dedicated `payments` permission (task #33).
+- **Report-route RLS sweep** (all report routes off the admin client) + migration 066 (view `security_invoker`, reproducible) — closes the cross-tenant leak class on financial reports.
+- **Financial Control Exception Library underway (detect-only)**: EC-1 duplicate-payment, EC-10 anomalous-JE, EC-4 uncategorized-leakage, EC-3 intercompany-balance detectors ride `ai_decisions → /exceptions`. Plus Bank-Rec Wave A (migration 065), AR Collections/DSO, rev-rec 2410 credit fix (manual + event-driven), onboarding all 9 rev-rec methods.
+- **Governance/docs**: AI Capability Catalog + 5 operator briefs (`docs/discovery/books/`); five FPBs (invoices, financial-reports, bank-reconciliation, payroll, financial-control-exceptions); canon mirror + CLAUDE.md §0/§0.1 re-ground protocol and **opus-4.8 binding**.
+- **Verification**: ~233 tests pass (incl. ~107 new control/detector tests); security GO on each wave (the one HIGH — report-view definer rights — fixed in `5a2004e`). Note standing pre-existing harness failures (pglite not installed; `tenant-isolation.test.ts` parse error) — NOT regressions.
+- Eight subagents in `.claude/agents/` (builder, verifier, auditor, reviewer, designer, scribe, security, chrome-auditor). Parallel `general-purpose`/builder agents on disjoint slices, all on opus 4.8, are the current execution model.
 - **Delivery workflow: committed directly to this repo; an auto-push loop on Mike's machine ships commits automatically** (no manual push gate). Migrations applied to Supabase first, then code committed.
-- **Immediate next step:** browser-verify `/vendor-compliance`, `/reconciliation` (autopilot tab), and `/forecast` with real data, then the **AP inbox pipeline** as the next parallel wave.
+- **Immediate next step:** close identity gate #9 (multi-tenant org resolution), then drive Invoices / Reports / Bank-Rec to *Complete* behind their FPBs. Open decisions for Mike: ratify the Master-Doc amendments (task #19), pick payroll provider Check vs Gusto (task #32), rotate the Resend key + set `INVOICE_FROM_EMAIL`, stand up the Clerk prod instance.
 
-Do NOT trust older "Session 7 / Bank Feed only" or "session 38" snapshots — long superseded.
+Do NOT trust older "Session 7 / Bank Feed only", "session 38", or "session 40" snapshots — superseded.
 
 ## Design System (BINDING)
 

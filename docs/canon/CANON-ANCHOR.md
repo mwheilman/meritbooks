@@ -5,7 +5,7 @@ It is deliberately small (~5 min read) so re-grounding is cheap. It is the disti
 always-current truth. When it conflicts with the repo, **the canon wins** — fix the repo.
 Source of truth: the Project-knowledge doc set (mirrored/digested in `docs/canon/`, indexed in `00-INDEX.md`).
 
-Last reconciled: **2026-08-01 (Session 40)**.
+Last reconciled: **2026-08-02 (Session 42)**.
 
 ---
 
@@ -104,30 +104,72 @@ ungated, spec-less work in Session 40.)
 
 - **DONE & verified:** GATE 0 (foundation), GATE 1 (Core AI gateway), GATE 2 (deterministic
   posting engine, 18/18), GATE 12.0 (Plaid bank feed, live).
+- **DONE & live (Session 41):** GATE 12.1 (Stripe "Pay Now") — payment→PAID→GL hardened
+  (resume-safe idempotency; migration 064 UNIQUE indexes make the DB the double-post
+  guarantor) and live. The coded platform-fee GL path is **RETIRED** — Merit books its own
+  processor income via its own bank feed; the Operator Console (`/platform`) reads realized
+  fee from `invoice_events` meta; `PLATFORM_ORG_ID` removed.
 - **Build-complete, live-stamp pending:** GATE 3 (AI proposal layer) — owed: exercise the
   `ai:true` predict path against the live gateway once.
-- **Open blocker — highest priority:** GATE 12.1 (Stripe "Pay Now") — payment→PAID→GL chain not
-  verified; suspected platform-account webhook-scope issue; run a `4242` card test.
+- **NO-GO gate #9 (identity/RBAC) — SUBSTANTIALLY ADVANCED (Session 42: the dominant blocker
+  moved), STILL OPEN.** Done: **multi-tenant org resolution fixed** — `require-permission` +
+  money/write routes resolve the caller's real org from the **verified Clerk claim** (not
+  first-org; `resolveOrgId` claim-first), event workers post **per-event org** + shared
+  `authorizeEventWorker` guard; plus (from S41) `canApprove` → `core.memberships`
+  (+ role-normalize, inactive-employee deny), membership auto-provision + lifecycle sync,
+  `require-permission` on 12 money routes, page-guards on 7 pages, report-route RLS sweep +
+  migration 068 (security_invoker). **Still open:** a dedicated **`payments` permission** +
+  first-class control/`team_performance` permissions (routes still borrow
+  `journal_entries:create`); full control-route RBAC consistency; **`core.assignments`**
+  (per-user scoping); the **event-worker read/"peek" scoping**; **location-scoped RLS**.
+- **Financial Control Exception Library — ~11 detect-only classes (Session 42)** on the
+  `ai_decisions → /exceptions` rail (migration 070 dedup guarantor): EC-1 duplicate-payment,
+  EC-2 missed-accrual, EC-3 intercompany-balance, EC-4 uncategorized-leakage, EC-6
+  revenue-not-recognized, EC-7 sales-tax-nexus, EC-10 anomalous-JE, EC-12 cutoff-error,
+  CASH_APPLICATION, BILL_ANOMALY, 1099/W-9 readiness. All **detect-only**; `scoreToTier` NOT
+  yet wired into auto-post/queue **disposition** (logging-only). EC-5/8/9/11/13 remain.
+- **Also shipped Session 42:** Payroll GATE 12.3 **Phase A** (provider-agnostic PayrollEngine,
+  Mock + Check adapter; release = only money step; balanced GL `entry_type='PAYROLL_RUN'`;
+  Phase B — releaser≠preparer + double-post guard + live Check — gated on provider pick).
+  Invoices near-complete (credit memos, void, write-off, recurring [mig 073], AR statements,
+  collections/DSO, report comparatives + PDF/CSV export). Budgets + budget-vs-actual,
+  per-entity profitability, Close Command Center, Team Performance dashboard (mig 074,
+  quality-gated KPIs), vendor ledger, onboarding all 9 rev-rec methods.
+- **Discovery deepened:** six per-segment deep-dives (~230 caps) + `docs/discovery/COVERAGE-MATRIX.md`
+  (honest depth scorecard; **thinnest = Budgeting/FP&A, Consolidation, Job Costing, Fixed Assets,
+  Customer Mgmt**). **Owner directive:** NL prompts for processing + FP&A, cross-cutting.
+- **Two Cowork workstreams share this repo** (MeritBooks + MeritProjects/Module 6): **path-scoped
+  `git add` + disjoint migration bands — Books `0xx`, Projects `1xxx`.** Note: Books sequence
+  **skips `072`**; migration `068` (report security_invoker) was renumbered off a `066` collision
+  with the Projects seam.
 - **Blocked:** GATE 4 (M365 email ingestion) — on IT returning Azure creds.
-- **Open:** GATE 5 (confidence routing/learning), 6 (job-costing depth), 7 (reporting/FP&A depth),
-  8 (remaining modules incl. AI cash application), **11a multi-entity consolidation — MANDATORY,
-  top priority**, 11b–e (PO/3-way, inventory, sales-tax, approval-workflow), 9 (AI moat), 10
-  (productization incl. Clerk dev→prod + RBAC nav enforcement + go-live key swap).
+- **Open:** GATE 5 (confidence routing/learning), 6 (job-costing depth), 7 (reporting/FP&A
+  depth — FPB written), 8 (remaining modules incl. bank-rec to Complete — FPB written — and
+  AI cash application), **11a multi-entity consolidation — MANDATORY, top priority**, 11b–e
+  (PO/3-way, inventory, sales-tax, approval-workflow), 10 (productization incl. Clerk
+  dev→prod + RBAC nav enforcement + go-live key swap).
 - **No gate may start until its `Prereq:` gates are DONE. "Complete" is demonstrated, not asserted.**
 
-## 6. Canonical immediate priorities (per Session 37 + reconciliation)
+## 6. Canonical immediate priorities (Session 42 reconciliation)
 
-1. Unblock & verify **GATE 12.1** (Stripe payment→PAID→GL: webhook scope + card test).
-2. Reconcile **`canApprove`** to the `core.memberships/roles` identity contract.
-3. Write the **Invoice FPB**, then build Invoices to *Complete* (email send is the biggest gap:
-   branded email + PDF + Pay Now button; then credit memos, recurring, dunning/late fees, AR aging/DSO).
-4. Only then resume downstream waves (7/8/9/11a) — each behind its FPB.
+1. **Finish closing identity gate #9** — org resolution is DONE; land the dedicated
+   `payments` + control/`team_performance` permissions, `core.assignments`, event-worker
+   read-scoping, and location-scoped RLS.
+2. **Deepen the thin segments the COVERAGE-MATRIX exposed** — Budgeting/FP&A, **Consolidation
+   (11a — MANDATORY)**, Job Costing, Fixed Assets, Customer Mgmt — each behind its FPB.
+3. **Payroll Phase B** once the provider is picked (releaser≠preparer, double-post guard,
+   live Check). Invoices are near-complete — finish write-off account role + `v_ar_aging`.
+4. **Wire `scoreToTier` into control-exception disposition** (auto-post/queue), not just
+   logging; extend toward the full EC-1..EC-13 set.
+5. **NL prompts for processing + FP&A** (owner directive) — author the FPB, then build.
 
-## 7. Session-40 note (honest)
+## 7. Session-40/41 note (honest)
 
-Session 40 built real, deployed, typecheck-green code (Stripe fee schedule, Check Run,
-`canApprove` fix, and a wave: Vendor Compliance risk engine, Reconciliation autopilot, 13-Week
-Cash Forecast) — but built **downstream of the gate order and without FPBs**, off a stale repo
-`CLAUDE.md`, because the Project-knowledge canon was not read. Value is salvageable but must be
-reconciled to the canon (and folded into FPBs) rather than treated as complete. See
-`PROPOSED-MASTER-DOC-AMENDMENTS.md` for the ideas from this session that should update the canon.
+Session 40 built real, deployed code **downstream of the gate order and without FPBs**, off
+a stale repo `CLAUDE.md`, because the Project-knowledge canon was not read. **Session 41
+corrected course:** it established the canon mirror + re-ground protocol (CLAUDE.md §0/§0.1,
+opus-4.8 binding), authored the AI Capability Catalog + 5 operator briefs + five FPBs
+(invoices, financial-reports, bank-reconciliation, payroll, financial-control-exceptions),
+and did the money/identity/governance work spec-first and back on the gate order. See
+`PROPOSED-MASTER-DOC-AMENDMENTS.md` (task #19, awaiting Mike's ratification) for the
+autonomous-workforce framing and canon updates still to fold in.
