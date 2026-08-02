@@ -72,6 +72,7 @@ export const navigation: NavGroup[] = [
       { label: 'AP Intake', href: '/bills/intake-queue', icon: Inbox },
       { label: 'Purchase Orders', href: '/purchase-orders', icon: ClipboardList },
       { label: 'Expenses', href: '/expenses', icon: Wallet },
+      { label: 'Expense Policy', href: '/expenses/policy', icon: ClipboardCheck },
       { label: 'Check Run', href: '/checks', icon: Banknote },
       { label: 'Flagged Items', href: '/flagged', icon: AlertTriangle },
     ],
