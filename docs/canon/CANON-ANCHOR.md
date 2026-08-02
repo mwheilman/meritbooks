@@ -5,7 +5,7 @@ It is deliberately small (~5 min read) so re-grounding is cheap. It is the disti
 always-current truth. When it conflicts with the repo, **the canon wins** — fix the repo.
 Source of truth: the Project-knowledge doc set (mirrored/digested in `docs/canon/`, indexed in `00-INDEX.md`).
 
-Last reconciled: **2026-08-02 (Session 42)**.
+Last reconciled: **2026-08-02 (Session 43)**.
 
 ---
 
@@ -126,8 +126,12 @@ ungated, spec-less work in Session 40.)
   `ai_decisions → /exceptions` rail (migration 070 dedup guarantor): EC-1 duplicate-payment,
   EC-2 missed-accrual, EC-3 intercompany-balance, EC-4 uncategorized-leakage, EC-6
   revenue-not-recognized, EC-7 sales-tax-nexus, EC-10 anomalous-JE, EC-12 cutoff-error,
-  CASH_APPLICATION, BILL_ANOMALY, 1099/W-9 readiness. All **detect-only**; `scoreToTier` NOT
-  yet wired into auto-post/queue **disposition** (logging-only). EC-5/8/9/11/13 remain.
+  CASH_APPLICATION, BILL_ANOMALY, 1099/W-9 readiness. All **detect-only**. **Session 43:** the
+  **M10 Autonomy & Kill-Switch Control Plane** is LIVE (migration 075, `/settings/autonomy`:
+  per-feature dial + global kill switch + disposition helper) and now **wired into 10 detectors** —
+  a proposal's disposition (auto/queue/hold) honors the tenant's dial and surfaces on `/exceptions`,
+  advancing the old `scoreToTier`-logging-only residual toward governed (still human-override)
+  action. EC-5/8/9/11/13 remain.
 - **Also shipped Session 42:** Payroll GATE 12.3 **Phase A** (provider-agnostic PayrollEngine,
   Mock + Check adapter; release = only money step; balanced GL `entry_type='PAYROLL_RUN'`;
   Phase B — releaser≠preparer + double-post guard + live Check — gated on provider pick).
@@ -145,23 +149,36 @@ ungated, spec-less work in Session 40.)
 - **Blocked:** GATE 4 (M365 email ingestion) — on IT returning Azure creds.
 - **Open:** GATE 5 (confidence routing/learning), 6 (job-costing depth), 7 (reporting/FP&A
   depth — FPB written), 8 (remaining modules incl. bank-rec to Complete — FPB written — and
-  AI cash application), **11a multi-entity consolidation — MANDATORY, top priority**, 11b–e
-  (PO/3-way, inventory, sales-tax, approval-workflow), 10 (productization incl. Clerk
+  AI cash application), **11a multi-entity consolidation — NOW HAS DEPTH (Session 43: migration
+  076, `/consolidation` — ownership %, NCI, intercompany eliminations); polish per task #47**,
+  11b–e (PO/3-way, inventory, sales-tax, approval-workflow), 10 (productization incl. Clerk
   dev→prod + RBAC nav enforcement + go-live key swap).
+- **Session-43 depth builds (each behind its FPB):** the pervasive **NL surface (M8)** — global ⌘K
+  command bar + FP&A Copilot (safe NL→ledger analytics on an allowlisted metric catalog, model never
+  writes SQL, abstains; NL processing lanes P2–P4 propose→approve; FPB `docs/FPB-nl-copilot.md`);
+  **M7 narrative** flux/variance on P&L/BS/CF/budget-vs-actual (deterministic drivers, model phrases
+  only); **M13 search/knowledge** (`/search`); a **payment-run fraud screen** (new-payee/BEC/unusual/
+  duplicate, detect-only); and depth in the thin segments — **job costing** (EAC + WIP over/under-
+  billing), **customer mgmt** (dedupe + credit/risk dossier), **fixed assets** (methods + disposal +
+  roll-forward). Gateway governance sweep closed the **7 direct-Anthropic seams** the AI-capability
+  matrix flagged. **Still thin / in flight:** tax book-to-tax, onboarding conversion, covenant
+  monitor, and the **M14 learning** column (untouched).
 - **No gate may start until its `Prereq:` gates are DONE. "Complete" is demonstrated, not asserted.**
 
-## 6. Canonical immediate priorities (Session 42 reconciliation)
+## 6. Canonical immediate priorities (Session 43 reconciliation)
 
 1. **Finish closing identity gate #9** — org resolution is DONE; land the dedicated
    `payments` + control/`team_performance` permissions, `core.assignments`, event-worker
    read-scoping, and location-scoped RLS.
-2. **Deepen the thin segments the COVERAGE-MATRIX exposed** — Budgeting/FP&A, **Consolidation
-   (11a — MANDATORY)**, Job Costing, Fixed Assets, Customer Mgmt — each behind its FPB.
+2. **Finish the thin-segment deepening now IN FLIGHT** — tax **book-to-tax**, **onboarding
+   conversion**, **covenant monitor** — each behind its FPB; polish the Session-43 depth builds
+   (consolidation 11a, job-costing, fixed-assets, customer-mgmt) against task #47.
 3. **Payroll Phase B** once the provider is picked (releaser≠preparer, double-post guard,
-   live Check). Invoices are near-complete — finish write-off account role + `v_ar_aging`.
-4. **Wire `scoreToTier` into control-exception disposition** (auto-post/queue), not just
-   logging; extend toward the full EC-1..EC-13 set.
-5. **NL prompts for processing + FP&A** (owner directive) — author the FPB, then build.
+   live Check). Invoices near-complete — finish write-off account role + `v_ar_aging`.
+4. **Extend the control library toward EC-1..EC-13** and let the now-live **M10 autonomy plane**
+   govern more dispositions (it currently governs 10 detectors).
+5. **Open the M14 learning/personalization column** — the last untouched AI modality the
+   14×24 matrix exposed (author the FPB first).
 
 ## 7. Session-40/41 note (honest)
 

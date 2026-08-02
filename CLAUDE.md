@@ -181,7 +181,7 @@ PLAID_SECRET                         # Plaid banking (server-side only)
 
 The authoritative, always-current build state lives in the latest session handoff. **Start every session by reading the newest `docs/MERITBOOKS-HANDOFF-session[N].md`** (highest N). Handoffs follow the Rule-11 8-section format and are the ground-truth record of what works, what's broken, and what to build next.
 
-Latest handoff: **`docs/MERITBOOKS-HANDOFF-session42.md`** (2026-08-02).
+Latest handoff: **`docs/MERITBOOKS-HANDOFF-session43.md`** (2026-08-02).
 
 Snapshot as of session 41 (see the handoff for detail):
 - Live at `meritbooks-web.vercel.app`, production `main` @ `5a2004e`; every session-41 wave commit through `0409a1e` is Vercel state READY (so `next build` — the authoritative full-project typecheck — is green).
