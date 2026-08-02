@@ -62,6 +62,8 @@ export async function POST(request: Request) {
         bill_number: body.bill_number,
         bill_date: body.bill_date,
         due_date: body.due_date,
+        // Team Performance (FPB C3 AP cycle): the bill enters the system now.
+        received_at: new Date().toISOString(),
         subtotal_cents: subtotalCents,
         tax_cents: body.tax_cents,
         total_cents: totalCents,

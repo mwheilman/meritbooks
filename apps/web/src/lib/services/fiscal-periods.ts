@@ -81,13 +81,14 @@ export async function generateYear(db: DB, orgId: string, locationId: string, ye
 export async function setPeriodStatus(db: DB, orgId: string, periodId: string, status: PeriodStatus, actor: string, reason: string | null): Promise<void> {
   const { data: current } = await db
     .from('fiscal_periods')
-    .select('status')
+    .select('status, close_started_at')
     .eq('org_id', orgId)
     .eq('id', periodId)
     .single();
   if (!current) throw new Error('Period not found');
 
-  const wasHardClosed = (current as { status: PeriodStatus }).status === 'HARD_CLOSE';
+  const cur = current as { status: PeriodStatus; close_started_at: string | null };
+  const wasHardClosed = cur.status === 'HARD_CLOSE';
   if (wasHardClosed && status !== 'HARD_CLOSE' && !reason) {
     throw new Error('Reopening a hard-closed period requires a reason');
   }
@@ -99,6 +100,11 @@ export async function setPeriodStatus(db: DB, orgId: string, periodId: string, s
   } else {
     update.closed_at = null;
     update.closed_by = null;
+  }
+  // Team Performance (FPB C4 days-to-close): stamp when the close process begins.
+  // Set once on the first SOFT_CLOSE and never overwrite (preserve the true start).
+  if (status === 'SOFT_CLOSE' && !cur.close_started_at) {
+    update.close_started_at = new Date().toISOString();
   }
   if (reason) update.close_override_reason = reason;
 

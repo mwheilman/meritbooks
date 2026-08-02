@@ -50,6 +50,7 @@ interface TxnRow {
   status: string;
   location_id: string | null;
   ai_account_id: string | null;
+  categorized_at: string | null;
 }
 
 /** Max gateway calls in flight at once. Tuned for the ~10s/call latency: 12
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
   // Resolve the working set.
   let query = supabase
     .from('bank_transactions')
-    .select('id, description, amount_cents, status, location_id, ai_account_id')
+    .select('id, description, amount_cents, status, location_id, ai_account_id, categorized_at')
     .eq('org_id', orgId);
 
   if (transaction_id) query = query.eq('id', transaction_id);
@@ -167,6 +168,12 @@ export async function POST(request: Request) {
     const nextStatus =
       tier === 'escalate' ? 'FLAGGED' : txn.status === 'PENDING' ? 'CATEGORIZED' : txn.status;
 
+    // Team Performance (FPB C1/C2 latency): stamp the CATEGORIZED transition once.
+    // Only when the row is actually entering CATEGORIZED and isn't already stamped,
+    // so upload->categorized cycle time is measured from the first coding.
+    const categorizedAt =
+      nextStatus === 'CATEGORIZED' && !txn.categorized_at ? new Date().toISOString() : undefined;
+
     const { error: upErr } = await supabase
       .from('bank_transactions')
       .update({
@@ -177,6 +184,7 @@ export async function POST(request: Request) {
         ai_reasoning: s.reasoning,
         ai_model_version: s.source === 'ai' ? CATEGORIZE_MODEL : 'vendor-pattern',
         status: nextStatus,
+        ...(categorizedAt ? { categorized_at: categorizedAt } : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', txn.id)

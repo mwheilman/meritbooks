@@ -18,6 +18,7 @@ import { api } from '@/lib/api-client';
 import { useMe } from '@/lib/hooks/use-me';
 import { PageHeader, EmptyState, TableSkeleton } from '@/components/ui';
 import { ALL_ROLES, ROLE_DEFINITIONS, type UserRole, type CompanyScope } from '@/lib/rbac/permissions';
+import { PerformancePanel } from './performance-panel';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -401,37 +402,93 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
   );
 }
 
-// ── Section tabs (leaves a clean seam for a future Performance view) ────────────
+// ── Section tabs (Access ⇄ Performance) ─────────────────────────────────────────
 
-function SectionTabs() {
+type SectionTab = 'access' | 'performance';
+
+function SectionTabs({
+  active,
+  onChange,
+  accessLabel = 'Access',
+}: {
+  active: SectionTab;
+  onChange: (t: SectionTab) => void;
+  accessLabel?: string;
+}) {
+  const tabs: { key: SectionTab; label: string }[] = [
+    { key: 'access', label: accessLabel },
+    { key: 'performance', label: 'Performance' },
+  ];
   return (
     <div className="flex items-center gap-6 border-b border-slate-800">
-      <span className="-mb-px border-b-2 border-brand-500 pb-2.5 text-sm font-medium text-white">
-        Access
-      </span>
-      <span
-        className="-mb-px flex cursor-not-allowed items-center gap-1.5 border-b-2 border-transparent pb-2.5 text-sm font-medium text-slate-600"
-        title="Team performance is coming soon"
-      >
-        Performance
-        <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-caps text-slate-500">
-          Soon
-        </span>
-      </span>
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          onClick={() => onChange(t.key)}
+          aria-current={active === t.key ? 'page' : undefined}
+          className={clsx(
+            '-mb-px border-b-2 pb-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:text-white',
+            active === t.key
+              ? 'border-brand-500 text-white'
+              : 'border-transparent text-slate-500 hover:text-slate-300'
+          )}
+        >
+          {t.label}
+        </button>
+      ))}
     </div>
   );
 }
 
 // ── Read-only roster (non-admins) ───────────────────────────────────────────────
 
-function ReadOnlyRoster() {
+function ReadOnlyRoster({ canViewTeamPerf }: { canViewTeamPerf: boolean }) {
+  const [tab, setTab] = useState<SectionTab>('access');
   const { data, isLoading, error, refetch } = useQuery<RosterResponse>('/api/team');
   const rows = data?.data ?? [];
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Team" description="Directory of your organization's team members." />
+      <PageHeader
+        title="Team"
+        description={
+          canViewTeamPerf
+            ? "Your organization's team, and how it's performing."
+            : "Directory of your organization's team members."
+        }
+      />
 
+      <SectionTabs active={tab} onChange={setTab} accessLabel="Directory" />
+
+      {tab === 'performance' ? (
+        // Managers (accounting_manager) see the full team lens; everyone else sees
+        // ONLY their own scorecard — the privacy boundary from the FPB.
+        <PerformancePanel scope={canViewTeamPerf ? 'team' : 'self'} />
+      ) : (
+        <ReadOnlyRosterBody
+          rows={rows}
+          isLoading={isLoading}
+          error={error}
+          refetch={refetch}
+        />
+      )}
+    </div>
+  );
+}
+
+function ReadOnlyRosterBody({
+  rows,
+  isLoading,
+  error,
+  refetch,
+}: {
+  rows: RosterRow[];
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => void;
+}) {
+  return (
+    <div className="space-y-6">
       <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-surface-850 px-3.5 py-2.5 text-xs text-slate-400">
         <Lock size={14} className="shrink-0 text-slate-500" />
         Managing roles and company access is restricted to administrators.
@@ -553,9 +610,16 @@ function SummaryStat({
 // ── Main page ───────────────────────────────────────────────────────────────────
 
 export function TeamClient() {
-  const { loading: meLoading, user } = useMe();
+  const { loading: meLoading, user, can } = useMe();
   const canManage = user?.canManageUsers === true;
+  // Performance manager lens = whoever can manage the Team feature: company_admin +
+  // accounting_manager (team:'all' → { manage: true }). This is the closest existing
+  // signal to the FPB's team_performance:view_all permission; the /api/team-performance
+  // route should gate identically (and enforce self-only for everyone else) — the
+  // panel trusts the server as the source of truth for which rows it returns.
+  const canViewTeamPerf = can('team', 'manage');
 
+  const [tab, setTab] = useState<SectionTab>('access');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; member: Member | null } | null>(null);
@@ -610,9 +674,9 @@ export function TeamClient() {
     );
   }
 
-  // Non-admins: read-only roster + notice
+  // Non-admins: read-only roster + notice (with its own Access ⇄ Performance tabs).
   if (!canManage) {
-    return <ReadOnlyRoster />;
+    return <ReadOnlyRoster canViewTeamPerf={canViewTeamPerf} />;
   }
 
   const STATUS_TABS: { key: StatusFilter; label: string }[] = [
@@ -627,15 +691,21 @@ export function TeamClient() {
         title="Team & Access"
         description="Manage who's on the team, their role, and the companies they can see."
         actions={
-          <button onClick={() => setModal({ mode: 'add', member: null })} className="btn-primary btn-sm gap-1.5">
-            <Plus size={14} />
-            Add member
-          </button>
+          tab === 'access' ? (
+            <button onClick={() => setModal({ mode: 'add', member: null })} className="btn-primary btn-sm gap-1.5">
+              <Plus size={14} />
+              Add member
+            </button>
+          ) : undefined
         }
       />
 
-      <SectionTabs />
+      <SectionTabs active={tab} onChange={setTab} />
 
+      {tab === 'performance' ? (
+        <PerformancePanel scope="team" />
+      ) : (
+        <>
       {/* Roster composition summary — access, not performance. */}
       {summary && (
         <div className="card flex w-fit divide-x divide-slate-800">
@@ -781,6 +851,8 @@ export function TeamClient() {
             refetch();
           }}
         />
+      )}
+        </>
       )}
     </div>
   );

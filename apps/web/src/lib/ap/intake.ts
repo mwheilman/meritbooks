@@ -186,6 +186,8 @@ export async function intakeInvoice(
       bill_number: parsed.billNumber ?? null,
       bill_date: billDate,
       due_date: dueDate,
+      // Team Performance (FPB C3 AP cycle): stamp when the invoice was ingested.
+      received_at: new Date().toISOString(),
       subtotal_cents: parsed.subtotalCents,
       tax_cents: parsed.taxCents,
       total_cents: parsed.totalCents,
