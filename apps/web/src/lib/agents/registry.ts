@@ -8,8 +8,16 @@
 
 import type { AgentRecipe } from './types';
 import { apIntakeRecipe } from './recipes/ap-intake';
+import { orderToCashRecipe } from './recipes/order-to-cash';
+import { closeRunRecipe } from './recipes/close-run';
+import { payRunRecipe } from './recipes/pay-run';
 
-export const RECIPES: readonly AgentRecipe[] = [apIntakeRecipe];
+export const RECIPES: readonly AgentRecipe[] = [
+  apIntakeRecipe,
+  orderToCashRecipe,
+  closeRunRecipe,
+  payRunRecipe,
+];
 
 const RECIPE_MAP: Readonly<Record<string, AgentRecipe>> = Object.fromEntries(
   RECIPES.map((r) => [r.key, r]),
