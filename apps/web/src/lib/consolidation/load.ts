@@ -26,6 +26,12 @@ import {
   type EntityMeta,
   type ConsolidationResult,
 } from './consolidate';
+import {
+  translateEntityTB,
+  resolveTranslationRates,
+  type FxRateRow,
+  type TranslationRates,
+} from './fx';
 
 const BALANCE_SHEET_TYPES: ReadonlySet<AccountType> = new Set<AccountType>([
   'ASSET',
@@ -54,6 +60,29 @@ export interface OwnershipRow {
   effectiveEnd: string | null;
 }
 
+/** Per-entity FX translation detail actually applied, for UI transparency. */
+export interface EntityFxInfo {
+  entityId: string;
+  functionalCurrency: string;
+  rates: TranslationRates;
+  ctaCents: number;
+  translated: boolean; // functional ≠ reporting
+  ratesResolved: { average: boolean; closing: boolean; historical: boolean };
+}
+
+export interface ConsolidationFxResult {
+  reportingCurrency: string;
+  /** True when the fx_rates table (migration 089) was readable. */
+  fxRatesAvailable: boolean;
+  /** True when core.locations.functional_currency exists (else all = reporting). */
+  functionalCurrencyColumnAvailable: boolean;
+  /** True when at least one entity's functional currency ≠ reporting currency. */
+  multiCurrency: boolean;
+  /** Sum of every foreign entity's CTA plug (reporting cents), for a summary line. */
+  ctaTotalCents: number;
+  byEntity: EntityFxInfo[];
+}
+
 export interface ConsolidationLoadResult {
   result: ConsolidationResult;
   entities: EntityRow[];
@@ -62,6 +91,7 @@ export interface ConsolidationLoadResult {
   ownershipTableAvailable: boolean;
   intercompanyRolesResolved: boolean;
   scanned: { entries: number; lines: number };
+  fx: ConsolidationFxResult;
 }
 
 const N = (v: unknown): number => Number(v ?? 0) || 0;
@@ -176,6 +206,84 @@ export interface LoadConsolidatedOptions {
   endDate: string; // P&L period end + BS as-of (inclusive)
   rootEntityId?: string | null; // scope to a subtree; default = whole org
   eliminate?: boolean;
+  /** Override the reporting currency; default = org home_currency (else USD). */
+  reportingCurrency?: string | null;
+}
+
+/**
+ * Load the tenant's FX rate rows (migration 089) + each entity's functional
+ * currency + the group reporting currency. DEGRADES SAFE: a missing table/column
+ * simply means every entity is treated as already in the reporting currency.
+ */
+async function loadFxContext(
+  supabase: SupabaseClient,
+  orgId: string,
+  reportingOverride?: string | null,
+): Promise<{
+  reportingCurrency: string;
+  fxRows: FxRateRow[];
+  fxRatesAvailable: boolean;
+  functionalByEntity: Map<string, string>;
+  functionalCurrencyColumnAvailable: boolean;
+}> {
+  // Reporting currency = explicit override, else org home_currency, else USD.
+  let reportingCurrency = (reportingOverride || '').trim();
+  if (!reportingCurrency) {
+    const { data: orgRows } = await supabase
+      .schema('core')
+      .from('organizations')
+      .select('home_currency')
+      .eq('id', orgId)
+      .limit(1);
+    reportingCurrency = (orgRows?.[0] as { home_currency?: string } | undefined)?.home_currency || 'USD';
+  }
+
+  // Per-entity functional currency (reserved-spine column; may not exist yet).
+  const functionalByEntity = new Map<string, string>();
+  let functionalCurrencyColumnAvailable = false;
+  {
+    const { data, error } = await supabase
+      .schema('core')
+      .from('locations')
+      .select('id, functional_currency')
+      .eq('org_id', orgId);
+    if (!error && data) {
+      functionalCurrencyColumnAvailable = true;
+      for (const l of data as Array<{ id: string; functional_currency: string | null }>) {
+        if (l.functional_currency) functionalByEntity.set(l.id, l.functional_currency);
+      }
+    }
+  }
+
+  // FX rate rows (migration 089). Degrade safe if the relation is absent.
+  const fxRows: FxRateRow[] = [];
+  let fxRatesAvailable = false;
+  {
+    const { data, error } = await supabase
+      .from('fx_rates')
+      .select('from_currency, to_currency, rate_date, rate, rate_type')
+      .eq('org_id', orgId);
+    if (!error) {
+      fxRatesAvailable = true;
+      for (const r of (data ?? []) as Array<Record<string, unknown>>) {
+        fxRows.push({
+          fromCurrency: String(r.from_currency),
+          toCurrency: String(r.to_currency),
+          rateDate: String(r.rate_date),
+          rate: N(r.rate),
+          rateType: (r.rate_type as FxRateRow['rateType']) ?? 'CLOSING',
+        });
+      }
+    }
+  }
+
+  return {
+    reportingCurrency,
+    fxRows,
+    fxRatesAvailable,
+    functionalByEntity,
+    functionalCurrencyColumnAvailable,
+  };
 }
 
 /**
@@ -283,9 +391,52 @@ export async function loadConsolidated(
     }
   }
 
+  // ── FX translation (additive): translate each foreign entity's TB into the ──
+  // reporting currency BEFORE consolidating, appending a CTA plug so it ties.
+  // Single-currency entities pass through unchanged, so the consolidated output is
+  // byte-for-byte identical to the pre-FX behavior when all share the currency.
+  const fxCtx = await loadFxContext(supabase, orgId, opts.reportingCurrency);
+
+  const rawBalances = Array.from(balancesByKey.values());
+  const byEntity = new Map<string, EntityAccountBalance[]>();
+  for (const b of rawBalances) {
+    const arr = byEntity.get(b.entityId) ?? [];
+    arr.push(b);
+    byEntity.set(b.entityId, arr);
+  }
+
+  const translatedBalances: EntityAccountBalance[] = [];
+  const fxByEntity: EntityFxInfo[] = [];
+  let ctaTotalCents = 0;
+  let multiCurrency = false;
+  for (const [entityId, ebals] of byEntity) {
+    const functional = fxCtx.functionalByEntity.get(entityId) ?? fxCtx.reportingCurrency;
+    const { rates, resolved } = resolveTranslationRates(
+      fxCtx.fxRows,
+      functional,
+      fxCtx.reportingCurrency,
+    );
+    const tr = translateEntityTB(ebals, {
+      functionalCurrency: functional,
+      reportingCurrency: fxCtx.reportingCurrency,
+      rates,
+    });
+    translatedBalances.push(...tr.translated);
+    ctaTotalCents += tr.ctaCents;
+    if (tr.translated_applied) multiCurrency = true;
+    fxByEntity.push({
+      entityId,
+      functionalCurrency: functional,
+      rates: tr.rates,
+      ctaCents: tr.ctaCents,
+      translated: tr.translated_applied,
+      ratesResolved: resolved,
+    });
+  }
+
   const result = consolidate({
     entities: scopedMeta,
-    balances: Array.from(balancesByKey.values()),
+    balances: translatedBalances,
     eliminate,
   });
 
@@ -296,5 +447,13 @@ export async function loadConsolidated(
     ownershipTableAvailable,
     intercompanyRolesResolved,
     scanned: { entries: entries.length, lines: lineCount },
+    fx: {
+      reportingCurrency: fxCtx.reportingCurrency,
+      fxRatesAvailable: fxCtx.fxRatesAvailable,
+      functionalCurrencyColumnAvailable: fxCtx.functionalCurrencyColumnAvailable,
+      multiCurrency,
+      ctaTotalCents,
+      byEntity: fxByEntity,
+    },
   };
 }

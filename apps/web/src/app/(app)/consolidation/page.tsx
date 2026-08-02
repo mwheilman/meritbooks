@@ -15,6 +15,7 @@
 import { useMemo, useState } from 'react';
 import {
   Combine, Layers, Loader2, AlertCircle, Plus, Trash2, Info, SlidersHorizontal, Building2,
+  Coins, GitCompareArrows, Check,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
@@ -43,6 +44,16 @@ interface Totals {
   netIncomeFullCents: number; netIncomeCents: number; netIncomeParentCents: number; netIncomeNciCents: number;
   assetsCents: number; liabilitiesCents: number; equityBookedCents: number; equitySectionCents: number; balanceCheckCents: number;
 }
+interface EntityFxInfo {
+  entityId: string; functionalCurrency: string;
+  rates: { average: number; closing: number; historical: number };
+  ctaCents: number; translated: boolean;
+  ratesResolved: { average: boolean; closing: boolean; historical: boolean };
+}
+interface FxResult {
+  reportingCurrency: string; fxRatesAvailable: boolean; functionalCurrencyColumnAvailable: boolean;
+  multiCurrency: boolean; ctaTotalCents: number; byEntity: EntityFxInfo[];
+}
 interface StatementsResp {
   period: { startDate: string; endDate: string };
   rootEntityId: string | null;
@@ -51,12 +62,42 @@ interface StatementsResp {
   ownershipTableAvailable: boolean;
   intercompanyRolesResolved: boolean;
   scanned: { entries: number; lines: number };
+  fx?: FxResult;
   accounts: AccountLine[];
   equityMethod: EquityMethodLine[];
   nci: { equityCents: number; netIncomeCents: number; byEntity: NciShare[] };
   totals: Totals;
   entitiesFull: string[]; entitiesEquityMethod: string[]; entitiesExcluded: string[];
   eliminationsApplied: boolean;
+}
+
+// FX rates tab payloads (migration 089).
+type RateType = 'SPOT' | 'AVERAGE' | 'CLOSING';
+interface FxRateRow {
+  id: string; from_currency: string; to_currency: string;
+  rate_date: string; rate: number; rate_type: RateType; notes: string | null;
+}
+interface FxRatesResp {
+  reportingCurrency: string; functionalCurrencies: string[];
+  functionalCurrencyColumnAvailable: boolean; fxRatesAvailable: boolean; rates: FxRateRow[];
+}
+
+// Intercompany-match payloads.
+type IcSide = 'AR' | 'AP' | 'REV' | 'EXP';
+interface IcMatchPair {
+  periodKey: string; leftSide: IcSide; rightSide: IcSide;
+  leftEntityId: string; leftEntityName: string; rightEntityId: string; rightEntityName: string;
+  amountCents: number; confidence: number; reason: string;
+}
+interface IcPosition { entityId: string; entityName: string; periodKey: string; side: IcSide; amountCents: number }
+interface IcMatchResult {
+  matched: IcMatchPair[]; unmatchedLeft: IcPosition[]; unmatchedRight: IcPosition[];
+  matchedCents: number; leftSide: IcSide; rightSide: IcSide;
+}
+interface MatchResp {
+  intercompanyRolesResolved: boolean;
+  scanned: { entries: number; positions: number };
+  arap: IcMatchResult; revexp: IcMatchResult;
 }
 interface OwnershipRow {
   id: string; parent_entity_id: string; child_entity_id: string;
@@ -86,12 +127,12 @@ const TYPE_LABEL: Record<AccountType, string> = {
 };
 
 export default function ConsolidationPage() {
-  const [tab, setTab] = useState<'statements' | 'ownership'>('statements');
+  const [tab, setTab] = useState<'statements' | 'ownership' | 'fx' | 'matches'>('statements');
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <PageHeader
         title="Consolidation"
-        description="Multi-entity consolidated financials — ownership %, intercompany eliminations, and non-controlling interest."
+        description="Multi-entity consolidated financials — ownership %, currency translation, intercompany eliminations, and non-controlling interest."
         actions={
           <div className="flex items-center gap-1 rounded-lg bg-surface-900 border border-slate-800 p-1">
             <TabBtn active={tab === 'statements'} onClick={() => setTab('statements')} icon={<Layers size={14} />}>
@@ -100,10 +141,19 @@ export default function ConsolidationPage() {
             <TabBtn active={tab === 'ownership'} onClick={() => setTab('ownership')} icon={<SlidersHorizontal size={14} />}>
               Ownership
             </TabBtn>
+            <TabBtn active={tab === 'fx'} onClick={() => setTab('fx')} icon={<Coins size={14} />}>
+              FX rates
+            </TabBtn>
+            <TabBtn active={tab === 'matches'} onClick={() => setTab('matches')} icon={<GitCompareArrows size={14} />}>
+              Intercompany match
+            </TabBtn>
           </div>
         }
       />
-      {tab === 'statements' ? <StatementsTab /> : <OwnershipTab />}
+      {tab === 'statements' && <StatementsTab />}
+      {tab === 'ownership' && <OwnershipTab />}
+      {tab === 'fx' && <FxRatesTab />}
+      {tab === 'matches' && <MatchesTab />}
     </div>
   );
 }
@@ -132,12 +182,22 @@ function StatementsTab() {
   const [rootId, setRootId] = useState<string>('');
   const [eliminate, setEliminate] = useState(true);
   const [showEntities, setShowEntities] = useState(false);
+  const [reportingCcy, setReportingCcy] = useState<string>('');
 
   const qs = new URLSearchParams({ start_date: startDate, end_date: endDate, eliminate: String(eliminate) });
   if (rootId) qs.set('root_entity_id', rootId);
+  if (reportingCcy) qs.set('reporting_currency', reportingCcy);
   const { data, isLoading, error } = useQuery<StatementsResp>(`/api/consolidation/statements?${qs.toString()}`, {
-    key: `${startDate}|${endDate}|${rootId}|${eliminate}`,
+    key: `${startDate}|${endDate}|${rootId}|${eliminate}|${reportingCcy}`,
   });
+
+  // Reporting-currency options = whatever currencies the group actually uses.
+  const ccyOptions = useMemo(() => {
+    const s = new Set<string>();
+    if (data?.fx?.reportingCurrency) s.add(data.fx.reportingCurrency);
+    for (const e of data?.fx?.byEntity ?? []) if (e.functionalCurrency) s.add(e.functionalCurrency);
+    return Array.from(s).sort();
+  }, [data]);
 
   const fullEntities = useMemo(
     () => (data?.entities ?? []).filter((e) => (data?.entitiesFull ?? []).includes(e.id)),
@@ -175,6 +235,14 @@ function StatementsTab() {
           <input type="checkbox" checked={showEntities} onChange={(e) => setShowEntities(e.target.checked)} className="accent-emerald-500" />
           Show per-entity columns
         </label>
+        <Field label="Reporting currency">
+          <select className="input min-w-[140px]" value={reportingCcy} onChange={(e) => setReportingCcy(e.target.value)}>
+            <option value="">
+              Home{data?.fx?.reportingCurrency ? ` (${data.fx.reportingCurrency})` : ''}
+            </option>
+            {ccyOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </Field>
       </div>
 
       {!data?.ownershipTableAvailable && !isLoading && (
@@ -187,6 +255,15 @@ function StatementsTab() {
         <Banner tone="warning">
           Intercompany positions are out of balance by {fmt(Math.abs(data.totals.eliminatingResidualCents))} — they will not
           fully eliminate. Review the intercompany-balance exceptions before relying on this consolidation.
+        </Banner>
+      )}
+      {data?.fx?.multiCurrency && (
+        <Banner tone="info">
+          Multi-currency consolidation — foreign entities were translated into <strong>{data.fx.reportingCurrency}</strong> (P&amp;L at
+          average, balance sheet at closing, equity at historical). The net translation residual is booked to a
+          <strong> Cumulative translation adjustment</strong> of {fmt(data.fx.ctaTotalCents)} in equity so the balance sheet ties.
+          {!data.fx.functionalCurrencyColumnAvailable &&
+            ' Note: entity functional currencies are not configured yet, so every entity is treated as reporting-currency.'}
         </Banner>
       )}
 
@@ -212,6 +289,9 @@ function StatementsTab() {
             <Metric label="Total eliminations" value={fmt(data.totals.eliminationsCents)} muted />
             <Metric label="Consolidated assets" value={fmt(data.totals.assetsCents)} />
             <Metric label="Non-controlling interest (equity)" value={fmt(data.nci.equityCents)} muted />
+            {data.fx?.multiCurrency && (
+              <Metric label="Cumulative translation adj. (CTA)" value={fmt(data.fx.ctaTotalCents)} muted />
+            )}
             <Metric label="Balance check" value={fmt(data.totals.balanceCheckCents)}
               tone={data.totals.balanceCheckCents === 0 ? 'ok' : 'bad'} />
           </div>
@@ -587,6 +667,293 @@ function OwnershipTab() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FX RATES TAB
+// ─────────────────────────────────────────────────────────────────────────────
+interface RateEditState {
+  id?: string; fromCurrency: string; toCurrency: string; rate: string;
+  rateType: RateType; rateDate: string; notes: string;
+}
+const RATE_TYPE_LABEL: Record<RateType, string> = {
+  CLOSING: 'Closing (period-end) — balance sheet',
+  AVERAGE: 'Average — income statement',
+  SPOT: 'Spot — historical / equity',
+};
+const RATE_TYPE_BADGE: Record<RateType, string> = {
+  CLOSING: 'badge-info', AVERAGE: 'badge-success', SPOT: 'badge-neutral',
+};
+
+function FxRatesTab() {
+  const { data, isLoading, error, refetch } = useQuery<FxRatesResp>('/api/consolidation/rates');
+  const [edit, setEdit] = useState<RateEditState | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [formErr, setFormErr] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const reporting = data?.reportingCurrency ?? 'USD';
+  const emptyEdit = (): RateEditState => ({
+    fromCurrency: '', toCurrency: reporting, rate: '', rateType: 'CLOSING', rateDate: today(), notes: '',
+  });
+
+  const save = async () => {
+    if (!edit) return;
+    setFormErr(null);
+    const rate = parseFloat(edit.rate);
+    if (edit.fromCurrency.length !== 3 || edit.toCurrency.length !== 3) return setFormErr('Currencies must be 3-letter codes.');
+    if (edit.fromCurrency.toUpperCase() === edit.toCurrency.toUpperCase()) return setFormErr('From and to currency must differ.');
+    if (!Number.isFinite(rate) || rate <= 0) return setFormErr('Rate must be a positive number.');
+    setSaving(true);
+    const res = await api.post<{ ok: boolean }>('/api/consolidation/rates', {
+      id: edit.id,
+      from_currency: edit.fromCurrency.toUpperCase(),
+      to_currency: edit.toCurrency.toUpperCase(),
+      rate,
+      rate_type: edit.rateType,
+      rate_date: edit.rateDate || undefined,
+      notes: edit.notes || undefined,
+    });
+    setSaving(false);
+    if (res.error) { setFormErr(res.error.error); return; }
+    addToast('success', 'FX rate saved');
+    setEdit(null);
+    refetch();
+  };
+
+  const remove = async (row: FxRateRow) => {
+    if (!window.confirm(`Remove ${row.from_currency}→${row.to_currency} ${row.rate_type} rate on ${row.rate_date}?`)) return;
+    setBusyId(row.id);
+    const res = await api.delete(`/api/consolidation/rates?id=${row.id}`);
+    setBusyId(null);
+    if (res.error) { addToast('error', `Delete failed: ${res.error.error}`); return; }
+    addToast('success', 'FX rate removed');
+    refetch();
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-400 max-w-2xl">
+          Record exchange rates per currency pair, date, and type. The consolidation engine uses <strong className="text-slate-300">closing</strong> for
+          the balance sheet, <strong className="text-slate-300">average</strong> for the income statement, and the earliest <strong className="text-slate-300">spot</strong> as
+          a historical proxy for equity. Reporting currency: <strong className="text-slate-300">{reporting}</strong>.
+        </p>
+        <button className="btn-primary btn-sm shrink-0" onClick={() => { setFormErr(null); setEdit(emptyEdit()); }}>
+          <Plus size={14} /> Add rate
+        </button>
+      </div>
+
+      {!isLoading && data && !data.fxRatesAvailable && (
+        <Banner tone="info">Migration 089 (fx_rates) is not applied yet — saving is unavailable until the table exists. Consolidation still runs single-currency.</Banner>
+      )}
+      {!isLoading && data && data.fxRatesAvailable && !data.functionalCurrencyColumnAvailable && (
+        <Banner tone="info">
+          Entity functional currencies are not configured (core.locations has no <span className="font-mono">functional_currency</span> column yet),
+          so every entity is treated as reporting-currency. Rates entered here take effect once that column is added.
+        </Banner>
+      )}
+
+      {isLoading ? (
+        <div className="card p-16 flex items-center justify-center text-slate-400"><Loader2 className="animate-spin mr-2" size={18} /> Loading…</div>
+      ) : error ? (
+        <div className="card p-6 flex items-center gap-2 text-red-400"><AlertCircle size={18} /> {error}</div>
+      ) : (data?.rates.length ?? 0) === 0 ? (
+        <EmptyState icon={Coins} title="No FX rates yet"
+          description="Add a currency-pair rate (closing / average / spot) to translate foreign entities into the reporting currency."
+          action={{ label: 'Add rate', onClick: () => setEdit(emptyEdit()) }} />
+      ) : (
+        <div className="card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead><tr className="text-2xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
+              <th className="text-left py-2 px-4">Pair</th><th className="text-left">Type</th>
+              <th className="text-right">Rate</th><th className="text-left px-3">Date</th><th></th>
+            </tr></thead>
+            <tbody>
+              {(data?.rates ?? []).map((r) => (
+                <tr key={r.id} className="border-b border-slate-800/50 table-row-hover">
+                  <td className="py-2 px-4 font-mono text-slate-200">{r.from_currency} → {r.to_currency}</td>
+                  <td><span className={RATE_TYPE_BADGE[r.rate_type]}>{r.rate_type}</span></td>
+                  <td className="text-right font-mono text-slate-300">{Number(r.rate).toLocaleString('en-US', { maximumFractionDigits: 8 })}</td>
+                  <td className="px-3 text-slate-400 text-xs">{r.rate_date}</td>
+                  <td className="text-right px-4">
+                    <div className="flex items-center justify-end gap-1">
+                      <button className="btn-ghost btn-sm" onClick={() => setEdit({
+                        id: r.id, fromCurrency: r.from_currency, toCurrency: r.to_currency,
+                        rate: String(r.rate), rateType: r.rate_type, rateDate: r.rate_date, notes: r.notes ?? '',
+                      })}>Edit</button>
+                      <button className="btn-ghost btn-sm text-red-400" disabled={busyId === r.id} onClick={() => remove(r)}>
+                        {busyId === r.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {edit && (
+        <div className="fixed inset-0 z-40 flex justify-end bg-black/50" onClick={() => setEdit(null)}>
+          <div className="w-full max-w-md h-full bg-surface-950 border-l border-slate-800 p-6 overflow-y-auto animate-in" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-white mb-4">{edit.id ? 'Edit' : 'Add'} FX rate</h2>
+            {formErr && <div className="mb-3 text-xs text-red-400 flex items-center gap-1"><AlertCircle size={13} /> {formErr}</div>}
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="From (functional)">
+                  <input type="text" maxLength={3} className="input font-mono uppercase" value={edit.fromCurrency} placeholder="EUR"
+                    onChange={(e) => setEdit({ ...edit, fromCurrency: e.target.value.toUpperCase() })} />
+                </Field>
+                <Field label="To (reporting)">
+                  <input type="text" maxLength={3} className="input font-mono uppercase" value={edit.toCurrency} placeholder={reporting}
+                    onChange={(e) => setEdit({ ...edit, toCurrency: e.target.value.toUpperCase() })} />
+                </Field>
+              </div>
+              <Field label="Rate type">
+                <select className="input" value={edit.rateType} onChange={(e) => setEdit({ ...edit, rateType: e.target.value as RateType })}>
+                  <option value="CLOSING">{RATE_TYPE_LABEL.CLOSING}</option>
+                  <option value="AVERAGE">{RATE_TYPE_LABEL.AVERAGE}</option>
+                  <option value="SPOT">{RATE_TYPE_LABEL.SPOT}</option>
+                </select>
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Rate (to per 1 from)">
+                  <input type="number" min={0} step="0.00000001" className="input font-mono" value={edit.rate}
+                    onChange={(e) => setEdit({ ...edit, rate: e.target.value })} />
+                </Field>
+                <Field label="Rate date">
+                  <input type="date" className="input" value={edit.rateDate} onChange={(e) => setEdit({ ...edit, rateDate: e.target.value })} />
+                </Field>
+              </div>
+              <Field label="Notes (optional)">
+                <input type="text" className="input" value={edit.notes} maxLength={500}
+                  onChange={(e) => setEdit({ ...edit, notes: e.target.value })} />
+              </Field>
+            </div>
+            <div className="flex items-center gap-2 mt-6">
+              <button className="btn-primary btn-sm" disabled={saving} onClick={save}>
+                {saving ? <Loader2 size={14} className="animate-spin" /> : null} Save
+              </button>
+              <button className="btn-ghost btn-sm" onClick={() => setEdit(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTERCOMPANY MATCH TAB
+// ─────────────────────────────────────────────────────────────────────────────
+const SIDE_LABEL: Record<IcSide, string> = {
+  AR: 'Receivable (due-from)', AP: 'Payable (due-to)', REV: 'Interdept revenue', EXP: 'Interdept cost',
+};
+
+function MatchesTab() {
+  const { data, isLoading, error } = useQuery<MatchResp>('/api/consolidation/match');
+  // Client-side "confirm" is advisory — the engine already eliminates by role/flag.
+  const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
+  const toggle = (k: string) => setConfirmed((prev) => {
+    const next = new Set(prev);
+    if (next.has(k)) next.delete(k); else next.add(k);
+    return next;
+  });
+
+  if (isLoading) {
+    return <div className="card p-16 flex items-center justify-center text-slate-400"><Loader2 className="animate-spin mr-2" size={18} /> Matching intercompany positions…</div>;
+  }
+  if (error) {
+    return <div className="card p-6 flex items-center gap-2 text-red-400"><AlertCircle size={18} /> {error}</div>;
+  }
+  if (!data) return null;
+
+  const hasAny = data.arap.matched.length + data.revexp.matched.length +
+    data.arap.unmatchedLeft.length + data.arap.unmatchedRight.length +
+    data.revexp.unmatchedLeft.length + data.revexp.unmatchedRight.length > 0;
+
+  return (
+    <div className="space-y-5">
+      <p className="text-sm text-slate-400 max-w-3xl">
+        Proposed reciprocal pairs that eliminate on consolidation — intercompany receivable ↔ payable, and interdept revenue ↔ cost.
+        These are <strong className="text-slate-300">proposals for review</strong>; the engine already eliminates by role/flag, so confirming
+        here is a reconciliation checkmark, not a posting. Anything <strong className="text-amber-300">unmatched</strong> is a residual to chase.
+      </p>
+
+      {!data.intercompanyRolesResolved && (
+        <Banner tone="info">Intercompany AR/AP roles are not mapped yet, so receivable/payable pairs cannot be proposed. Interdept revenue/cost still matches by the eliminating flag.</Banner>
+      )}
+
+      {!hasAny ? (
+        <EmptyState icon={GitCompareArrows} title="No intercompany positions"
+          description="No intercompany receivable/payable or eliminating interdept revenue/cost was found to match. Post intercompany activity, then reopen." />
+      ) : (
+        <>
+          <MatchBlock title="Intercompany receivable ↔ payable" result={data.arap} confirmed={confirmed} toggle={toggle} keyPrefix="arap" />
+          <MatchBlock title="Interdept revenue ↔ cost" result={data.revexp} confirmed={confirmed} toggle={toggle} keyPrefix="revexp" />
+          <p className="text-2xs text-slate-600 flex items-center gap-1.5">
+            <Info size={12} /> {data.scanned.positions} positions across {data.scanned.entries.toLocaleString()} posted entries scanned.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function MatchBlock({ title, result, confirmed, toggle, keyPrefix }: {
+  title: string; result: IcMatchResult; confirmed: Set<string>; toggle: (k: string) => void; keyPrefix: string;
+}) {
+  const unmatched = [...result.unmatchedLeft, ...result.unmatchedRight];
+  return (
+    <div className="card overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        <span className="text-2xs text-slate-500">{result.matched.length} matched · {result.matchedCents ? fmt(result.matchedCents) : '—'}</span>
+      </div>
+      {result.matched.length === 0 && unmatched.length === 0 ? (
+        <div className="p-6 text-sm text-slate-500">No positions of this kind.</div>
+      ) : (
+        <table className="w-full text-sm">
+          <thead><tr className="text-2xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
+            <th className="text-left py-2 px-4">Period</th><th className="text-left">Left</th><th className="text-left">Right</th>
+            <th className="text-right">Amount</th><th className="text-center px-3">Confirm</th>
+          </tr></thead>
+          <tbody>
+            {result.matched.map((m, i) => {
+              const k = `${keyPrefix}:${m.periodKey}:${m.leftEntityId}:${m.rightEntityId}:${m.amountCents}:${i}`;
+              const ok = confirmed.has(k);
+              return (
+                <tr key={k} className="border-b border-slate-800/50">
+                  <td className="py-2 px-4 text-slate-400 font-mono text-xs">{m.periodKey}</td>
+                  <td className="text-slate-200">{m.leftEntityName} <span className="text-2xs text-slate-500">{SIDE_LABEL[m.leftSide]}</span></td>
+                  <td className="text-slate-200">{m.rightEntityName} <span className="text-2xs text-slate-500">{SIDE_LABEL[m.rightSide]}</span></td>
+                  <td className="text-right font-mono text-emerald-400">{fmt(m.amountCents)}</td>
+                  <td className="text-center px-3">
+                    <button onClick={() => toggle(k)}
+                      className={clsx('inline-flex items-center gap-1 rounded-md px-2 py-1 text-2xs font-medium border',
+                        ok ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 text-slate-400 hover:text-slate-200')}>
+                      <Check size={12} /> {ok ? 'Confirmed' : 'Confirm'}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {unmatched.map((u, i) => (
+              <tr key={`${keyPrefix}:u:${u.entityId}:${u.side}:${u.amountCents}:${i}`} className="border-b border-slate-800/40 bg-amber-500/[0.03]">
+                <td className="py-2 px-4 text-slate-400 font-mono text-xs">{u.periodKey}</td>
+                <td className="text-amber-300" colSpan={2}>
+                  Unmatched · {u.entityName} <span className="text-2xs text-slate-500">{SIDE_LABEL[u.side]}</span>
+                </td>
+                <td className="text-right font-mono text-amber-300">{fmt(u.amountCents)}</td>
+                <td className="text-center px-3 text-2xs text-slate-600">residual</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );
