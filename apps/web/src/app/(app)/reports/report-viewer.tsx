@@ -19,6 +19,7 @@ import { ArAgingReport } from './ar-aging-report';
 import { JobProfitabilityReport } from './job-profitability-report';
 import { ExpenseByVendorReport } from './expense-by-vendor-report';
 import { ExportMenu } from './export-menu';
+import { NarrativePanel } from './narrative-panel';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -415,6 +416,16 @@ export function ReportViewer() {
                 </div>
               )}
             </div>
+
+            {(reportKey === 'pnl' || reportKey === 'pnl_dept' || reportKey === 'pnl_class' || reportKey === 'bs') && (
+              <NarrativePanel
+                report={reportKey === 'bs' ? 'balance_sheet' : 'pnl'}
+                sd={sd}
+                ed={ed}
+                locIds={locIdsParam}
+                basis={basis}
+              />
+            )}
 
             <ReportContent reportKey={reportKey} sd={sd} ed={ed} locIds={locIdsParam} basis={basis} viewMode={viewMode} compareMode={compareMode} onDrill={setDrill} />
           </div>
