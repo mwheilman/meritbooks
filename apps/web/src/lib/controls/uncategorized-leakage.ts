@@ -39,6 +39,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
+import {
+  loadAutonomyGovernance,
+  decideDisposition,
+  type AutonomyGovernance,
+} from '@/lib/autonomy/disposition';
 import { formatMoney } from '@meritbooks/shared';
 
 export const LEAKAGE_FEATURE = 'UNCATEGORIZED_LEAKAGE';
@@ -400,6 +405,10 @@ export async function scanUncategorizedLeakage(
     policy = { autoThreshold: 0.85, reviewThreshold: 0.7, autoMaxCents: 1_000_000 };
   }
 
+  // Autonomy Control Plane: kill-switch + per-feature dial, resolved once; the
+  // ADVISORY disposition is recorded on each queued exception (detect-only).
+  const gov: AutonomyGovernance = await loadAutonomyGovernance(supabase, orgId, LEAKAGE_FEATURE);
+
   const items: LeakageItem[] = [];
 
   // ── A. Uncoded bank/card lines: no final coding, no GL entry, not posted/void ─
@@ -543,6 +552,12 @@ export async function scanUncategorizedLeakage(
   for (const b of buckets) {
     const tier = resolveLeakageTier(b.amountAtRiskCents, b.confidence, policy);
     const confidence = toConfidence(b.confidence);
+    const { disposition } = decideDisposition({
+      killSwitchEngaged: gov.killSwitchEngaged,
+      setting: gov.setting,
+      scoreTier: tier,
+      amountCents: b.amountAtRiskCents,
+    });
     const proposedOutput = {
       control: 'EC-4',
       kind: b.kind,
@@ -552,6 +567,7 @@ export async function scanUncategorizedLeakage(
       item_count: b.count,
       max_age_days: b.maxAgeDays,
       tier,
+      disposition,
       blocks_close: true,
       subject_ids: b.subjectIds,
       reason: b.reason,

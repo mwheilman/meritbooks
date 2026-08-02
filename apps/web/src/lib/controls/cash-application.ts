@@ -41,6 +41,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
 import {
+  loadAutonomyGovernance,
+  decideDisposition,
+  type AutonomyGovernance,
+} from '@/lib/autonomy/disposition';
+import {
   compositeMatchScore,
   vendorSimilarity,
   amountSimilarity,
@@ -403,6 +408,11 @@ export async function scanCashApplication(
     policy = { autoThreshold: 0.85, reviewThreshold: 0.7, autoMaxCents: 1_000_000 };
   }
 
+  // Autonomy Control Plane: kill-switch + per-feature dial, resolved once. The
+  // ADVISORY disposition is recorded on each proposal — nothing auto-applies here
+  // (auto-post stays OFF; the human-approve step remains the only apply path).
+  const gov: AutonomyGovernance = await loadAutonomyGovernance(supabase, orgId, CASHAPP_FEATURE);
+
   // ── Load UNMATCHED deposits (money-in, not yet posted / matched to a bill/receipt) ──
   const { data: depositsRaw, error: depErr } = await supabase
     .from('bank_transactions')
@@ -514,6 +524,12 @@ export async function scanCashApplication(
 
     const tier = resolveCashAppTier(match.score.confidence, deposit.amountCents, policy);
     const confidence = toConfidence(match.score.confidence);
+    const { disposition } = decideDisposition({
+      killSwitchEngaged: gov.killSwitchEngaged,
+      setting: gov.setting,
+      scoreTier: tier,
+      amountCents: deposit.amountCents,
+    });
     const reason = cashAppReason(deposit, match, invoiceNumberById);
     const title = `Cash application: ${formatMoney(deposit.amountCents)} → ${
       match.kind === 'single' ? invoiceNumberById.get(match.invoiceIds[0]) ?? '1 invoice' : `${match.invoiceIds.length} invoices`
@@ -534,6 +550,7 @@ export async function scanCashApplication(
         deposit_amount_cents: deposit.amountCents,
         applied_amount_cents: match.matchedBalanceCents,
         tier,
+        disposition,
         breakdown: {
           amount: match.score.amountScore,
           customer: match.score.customerScore,

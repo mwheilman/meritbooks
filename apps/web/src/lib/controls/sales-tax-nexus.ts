@@ -77,6 +77,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
+import {
+  loadAutonomyGovernance,
+  decideDisposition,
+  type AutonomyGovernance,
+} from '@/lib/autonomy/disposition';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { formatMoney } from '@meritbooks/shared';
 
@@ -495,6 +500,14 @@ export async function scanSalesTaxNexus(
     policy = { autoThreshold: 0.85, reviewThreshold: 0.7, autoMaxCents: 1_000_000 };
   }
 
+  // Autonomy Control Plane: kill-switch + per-feature dial, resolved once; the
+  // ADVISORY disposition is recorded on each queued exception (detect-only).
+  const gov: AutonomyGovernance = await loadAutonomyGovernance(
+    supabase,
+    orgId,
+    SALES_TAX_NEXUS_FEATURE,
+  );
+
   // ── Load invoices in the trailing window (real sales only) ──────────────────
   let rows: InvoiceRow[] = [];
   try {
@@ -672,6 +685,12 @@ export async function scanSalesTaxNexus(
 
   for (const b of buckets) {
     const confidence = toConfidence(b.confidence);
+    const { disposition } = decideDisposition({
+      killSwitchEngaged: gov.killSwitchEngaged,
+      setting: gov.setting,
+      scoreTier: b.tier,
+      amountCents: b.salesCents,
+    });
     const proposedOutput = {
       control: 'EC-7',
       dedup_key: b.dedupKey,
@@ -685,6 +704,7 @@ export async function scanSalesTaxNexus(
       customer_fallback_share: Math.round(b.fallbackShare * 100) / 100,
       registration_status: REGISTRATION_STATUS,
       tier: b.tier,
+      disposition,
       subject_table: 'invoices',
       subject_ids: b.invoiceIds,
       remediation: {

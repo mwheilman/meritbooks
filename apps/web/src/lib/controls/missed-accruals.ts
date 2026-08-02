@@ -56,6 +56,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
+import {
+  loadAutonomyGovernance,
+  decideDisposition,
+  type AutonomyGovernance,
+} from '@/lib/autonomy/disposition';
 import { formatMoney } from '@meritbooks/shared';
 
 export const MISSED_ACCRUAL_FEATURE = 'MISSED_ACCRUAL';
@@ -551,6 +556,14 @@ export async function scanMissedAccruals(
     policy = { autoThreshold: 0.85, reviewThreshold: 0.7, autoMaxCents: 1_000_000 };
   }
 
+  // Autonomy Control Plane: kill-switch + per-feature dial, resolved once; the
+  // ADVISORY disposition is recorded on each queued exception (detect-only).
+  const gov: AutonomyGovernance = await loadAutonomyGovernance(
+    supabase,
+    orgId,
+    MISSED_ACCRUAL_FEATURE,
+  );
+
   // Chart of accounts (for role-resolving the expense + accrued-liability legs).
   const acctById = new Map<string, AccountRef>();
   let accruedLiability: AccountRef | null = null;
@@ -942,6 +955,12 @@ export async function scanMissedAccruals(
 
   for (const b of buckets) {
     const confidence = toConfidence(b.confidence);
+    const { disposition } = decideDisposition({
+      killSwitchEngaged: gov.killSwitchEngaged,
+      setting: gov.setting,
+      scoreTier: b.tier,
+      amountCents: b.amountAtRiskCents,
+    });
     const proposedOutput = {
       control: 'EC-2',
       kind: b.kind,
@@ -951,6 +970,7 @@ export async function scanMissedAccruals(
       subject_id: b.subjectId,
       amount_at_risk_cents: b.amountAtRiskCents,
       tier: b.tier,
+      disposition,
       subject_ids: b.subjectIds,
       remediation: b.remediation,
       reason: b.reason,

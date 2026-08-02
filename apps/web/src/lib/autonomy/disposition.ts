@@ -170,35 +170,26 @@ export interface ResolveParams {
 }
 
 /**
- * Read the live kill-switch + per-feature dial for an org and resolve a disposition.
- * DEGRADES SAFE: any read error (including the tables not existing before migration
- * 075 is applied) resolves as "no kill switch, no row" ⇒ the conservative PROPOSE
- * path, so this can be adopted before the migration lands without breaking anything
- * and can never auto-apply on a missing/degraded read.
- *
- * Returns the bare Disposition (per the M10 contract). Use `resolveDispositionDetailed`
- * when the caller also wants the human-readable reason + resolved mode for its log.
+ * The resolved governance context for one org + feature: the global kill-switch
+ * state and the per-feature dial. Load this ONCE per scan/batch, then feed each
+ * proposal through the PURE `decideDisposition` — avoids an RLS read per candidate
+ * when a detector queues many exceptions in a loop.
  */
-export async function resolveDisposition(params: ResolveParams): Promise<Disposition> {
-  const detailed = await resolveDispositionDetailed(params);
-  return detailed.disposition;
-}
-
-export interface DetailedDispositionResult extends DispositionDecision {
-  mode: AutonomyMode;
+export interface AutonomyGovernance {
   killSwitchEngaged: boolean;
-  materialityLimitCents: number | null;
+  setting: AutonomySetting | null;
 }
 
 /**
- * Same as `resolveDisposition` but returns the full context (disposition + reason +
- * resolved mode + kill-switch state + cap) so a caller can write a rich audit row.
+ * Read the live kill-switch + per-feature dial for an org. DEGRADES SAFE: any read
+ * error (including the tables not existing before migration 075) resolves as "no
+ * kill switch, no row" ⇒ the conservative PROPOSE path. Never throws.
  */
-export async function resolveDispositionDetailed(
-  params: ResolveParams,
-): Promise<DetailedDispositionResult> {
-  const { orgId, feature, scoreTier, amountCents, supabase } = params;
-
+export async function loadAutonomyGovernance(
+  supabase: SupabaseClient,
+  orgId: string,
+  feature: string,
+): Promise<AutonomyGovernance> {
   let killSwitchEngaged = false;
   let setting: AutonomySetting | null = null;
 
@@ -233,6 +224,41 @@ export async function resolveDispositionDetailed(
   } catch {
     setting = null;
   }
+
+  return { killSwitchEngaged, setting };
+}
+
+/**
+ * Read the live kill-switch + per-feature dial for an org and resolve a disposition.
+ * DEGRADES SAFE: any read error (including the tables not existing before migration
+ * 075 is applied) resolves as "no kill switch, no row" ⇒ the conservative PROPOSE
+ * path, so this can be adopted before the migration lands without breaking anything
+ * and can never auto-apply on a missing/degraded read.
+ *
+ * Returns the bare Disposition (per the M10 contract). Use `resolveDispositionDetailed`
+ * when the caller also wants the human-readable reason + resolved mode for its log.
+ */
+export async function resolveDisposition(params: ResolveParams): Promise<Disposition> {
+  const detailed = await resolveDispositionDetailed(params);
+  return detailed.disposition;
+}
+
+export interface DetailedDispositionResult extends DispositionDecision {
+  mode: AutonomyMode;
+  killSwitchEngaged: boolean;
+  materialityLimitCents: number | null;
+}
+
+/**
+ * Same as `resolveDisposition` but returns the full context (disposition + reason +
+ * resolved mode + kill-switch state + cap) so a caller can write a rich audit row.
+ */
+export async function resolveDispositionDetailed(
+  params: ResolveParams,
+): Promise<DetailedDispositionResult> {
+  const { orgId, feature, scoreTier, amountCents, supabase } = params;
+
+  const { killSwitchEngaged, setting } = await loadAutonomyGovernance(supabase, orgId, feature);
 
   const decision = decideDisposition({ killSwitchEngaged, setting, scoreTier, amountCents });
   return {

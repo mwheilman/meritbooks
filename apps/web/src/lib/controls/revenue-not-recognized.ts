@@ -58,6 +58,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
 import {
+  loadAutonomyGovernance,
+  decideDisposition,
+  type AutonomyGovernance,
+} from '@/lib/autonomy/disposition';
+import {
   earnedToDate,
   resolveRevRecMethod,
   type JobRevRecRow,
@@ -384,6 +389,14 @@ export async function scanRevenueNotRecognized(
   } catch {
     policy = { autoThreshold: 0.85, reviewThreshold: 0.7, autoMaxCents: 1_000_000 };
   }
+
+  // Autonomy Control Plane: kill-switch + per-feature dial, resolved once; the
+  // ADVISORY disposition is recorded on each queued exception (detect-only).
+  const gov: AutonomyGovernance = await loadAutonomyGovernance(
+    supabase,
+    orgId,
+    REVENUE_NOT_RECOGNIZED_FEATURE,
+  );
 
   const targetIdx = periodToIndex(targetPeriod);
   const py = targetIdx != null ? Math.floor(targetIdx / 12) : null;
@@ -818,6 +831,12 @@ export async function scanRevenueNotRecognized(
 
   for (const b of buckets) {
     const confidence = toConfidence(b.confidence);
+    const { disposition } = decideDisposition({
+      killSwitchEngaged: gov.killSwitchEngaged,
+      setting: gov.setting,
+      scoreTier: b.tier,
+      amountCents: b.amountAtRiskCents,
+    });
     const proposedOutput = {
       control: 'EC-6',
       kind: b.kind,
@@ -829,6 +848,7 @@ export async function scanRevenueNotRecognized(
       subject_id: b.subjectId,
       amount_at_risk_cents: b.amountAtRiskCents,
       tier: b.tier,
+      disposition,
       subject_ids: b.subjectIds,
       remediation: b.remediation,
       reason: b.reason,

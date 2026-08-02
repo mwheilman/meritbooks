@@ -51,6 +51,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
+import {
+  loadAutonomyGovernance,
+  decideDisposition,
+  type AutonomyGovernance,
+} from '@/lib/autonomy/disposition';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { formatMoney } from '@meritbooks/shared';
 
@@ -357,6 +362,10 @@ export async function scanIntercompanyBalance(
     policy = { autoThreshold: 0.85, reviewThreshold: 0.7, autoMaxCents: 1_000_000 };
   }
 
+  // Autonomy Control Plane: kill-switch + per-feature dial, resolved once; the
+  // ADVISORY disposition is recorded on each queued exception (detect-only).
+  const gov: AutonomyGovernance = await loadAutonomyGovernance(supabase, orgId, IC_FEATURE);
+
   // ── Company names (core.locations) ──────────────────────────────────────────
   const companyName = new Map<string, string>();
   {
@@ -656,6 +665,12 @@ export async function scanIntercompanyBalance(
     if (existingKeys.has(c.dedupKey)) continue;
     const tier = resolveBalanceTier(c.confidence, c.amountAtRiskCents, policy, c.blocksConsolidation);
     const confidence = toConfidence(c.confidence);
+    const { disposition } = decideDisposition({
+      killSwitchEngaged: gov.killSwitchEngaged,
+      setting: gov.setting,
+      scoreTier: tier,
+      amountCents: c.amountAtRiskCents,
+    });
 
     const { error } = await supabase.from('ai_decisions').insert({
       org_id: orgId,
@@ -668,6 +683,7 @@ export async function scanIntercompanyBalance(
         dedup_key: c.dedupKey,
         amount_at_risk_cents: c.amountAtRiskCents,
         tier,
+        disposition,
         period_key: c.periodKey,
         blocks_consolidation: c.blocksConsolidation,
         subjects: c.subjects,

@@ -33,6 +33,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
+import {
+  loadAutonomyGovernance,
+  decideDisposition,
+  type AutonomyGovernance,
+} from '@/lib/autonomy/disposition';
 
 export const ANOMALOUS_JE_FEATURE = 'ANOMALOUS_JE';
 
@@ -446,6 +451,14 @@ export async function scanAnomalousJournalEntries(
     return result;
   }
 
+  // Autonomy Control Plane: kill-switch + per-feature dial, resolved once; the
+  // ADVISORY disposition is recorded on each queued exception (detect-only).
+  const gov: AutonomyGovernance = await loadAutonomyGovernance(
+    supabase,
+    orgId,
+    ANOMALOUS_JE_FEATURE,
+  );
+
   // 1. Load the posted MANUAL entry population (the risk surface).
   let entryQuery = supabase
     .from('gl_entries')
@@ -576,6 +589,13 @@ export async function scanAnomalousJournalEntries(
 
     if (alreadyQueued.has(e.id)) continue;
 
+    const { disposition } = decideDisposition({
+      killSwitchEngaged: gov.killSwitchEngaged,
+      setting: gov.setting,
+      scoreTier: assessment.tier,
+      amountCents: assessment.amountAtRiskCents,
+    });
+
     const { error } = await supabase.from('ai_decisions').insert({
       org_id: orgId,
       feature: ANOMALOUS_JE_FEATURE,
@@ -585,6 +605,7 @@ export async function scanAnomalousJournalEntries(
         entry_number: e.entry_number,
         amount_at_risk_cents: assessment.amountAtRiskCents,
         tier: assessment.tier,
+        disposition,
         score: assessment.score,
         flags: assessment.flags,
         remediation: draftRemediation(assessment),

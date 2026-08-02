@@ -25,6 +25,8 @@ import { PageHeader } from '@/components/ui';
 
 type ExceptionSource = 'bank' | 'receipt' | 'bill' | 'ai_proposal' | 'approval' | 'cost';
 
+type Disposition = 'AUTO' | 'REVIEW' | 'ESCALATE' | 'BLOCKED';
+
 interface ExceptionItem {
   id: string;
   source: ExceptionSource;
@@ -32,6 +34,7 @@ interface ExceptionItem {
   subtitle: string | null;
   amountCents: number | null;
   confidence: number | null;
+  disposition: Disposition | null;
   companyId: string | null;
   createdAt: string;
   href: string;
@@ -39,8 +42,45 @@ interface ExceptionItem {
 
 interface ExceptionsResponse {
   data: ExceptionItem[];
-  counts: { total: number; bySource: Record<string, number> };
+  counts: {
+    total: number;
+    bySource: Record<string, number>;
+    byDisposition?: Record<Disposition, number>;
+  };
 }
+
+// ── Autonomy disposition presentation ─────────────────────────────────────────
+// The advisory verdict the tenant's per-feature dial + kill switch recorded on an
+// AI proposal: what the machine WOULD do vs what it MUST route to a human. Auto-post
+// stays OFF, so even an AUTO-eligible item still passes through the approve step.
+
+const DISPOSITION_ORDER: Disposition[] = ['AUTO', 'REVIEW', 'ESCALATE', 'BLOCKED'];
+
+const DISPOSITION_META: Record<
+  Disposition,
+  { label: string; badgeClass: string; help: string }
+> = {
+  AUTO: {
+    label: 'AUTO-eligible',
+    badgeClass: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-inset ring-emerald-500/20',
+    help: 'The dial would let the machine apply this — but auto-post is off, so it still needs your approval.',
+  },
+  REVIEW: {
+    label: 'Needs review',
+    badgeClass: 'bg-amber-500/10 text-amber-400 ring-1 ring-inset ring-amber-500/20',
+    help: 'Routine: a human should review and approve.',
+  },
+  ESCALATE: {
+    label: 'Escalate',
+    badgeClass: 'bg-red-500/10 text-red-400 ring-1 ring-inset ring-red-500/20',
+    help: 'Urgent: low confidence or high risk — a human must look.',
+  },
+  BLOCKED: {
+    label: 'Blocked',
+    badgeClass: 'bg-slate-500/15 text-slate-300 ring-1 ring-inset ring-slate-500/25',
+    help: 'The capability is off or the kill switch is engaged — suppressed from the auto lane.',
+  },
+};
 
 // ── Source presentation ─────────────────────────────────────────────────────────
 
@@ -172,6 +212,17 @@ function ExceptionRow({
                 {Math.round(item.confidence * 100)}%
               </span>
             )}
+            {item.disposition && (
+              <span
+                title={DISPOSITION_META[item.disposition].help}
+                className={clsx(
+                  'inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
+                  DISPOSITION_META[item.disposition].badgeClass
+                )}
+              >
+                {DISPOSITION_META[item.disposition].label}
+              </span>
+            )}
           </div>
           {item.subtitle && (
             <p className="mt-0.5 truncate text-xs text-slate-500">{item.subtitle}</p>
@@ -213,15 +264,35 @@ export default function ExceptionsPage() {
   const router = useRouter();
   const { data, isLoading, error, refetch } = useQuery<ExceptionsResponse>('/api/exceptions');
   const [filter, setFilter] = useState<ExceptionSource | 'all'>('all');
+  const [dispoFilter, setDispoFilter] = useState<Disposition | 'all'>('all');
   const [resolvingKey, setResolvingKey] = useState<string | null>(null);
 
   const items = useMemo(() => data?.data ?? [], [data]);
   const counts = data?.counts;
 
   const filtered = useMemo(
-    () => (filter === 'all' ? items : items.filter((i) => i.source === filter)),
-    [items, filter]
+    () =>
+      items.filter((i) => {
+        if (filter !== 'all' && i.source !== filter) return false;
+        if (dispoFilter !== 'all' && i.disposition !== dispoFilter) return false;
+        return true;
+      }),
+    [items, filter, dispoFilter]
   );
+
+  const dispoChips = useMemo(() => {
+    const byDisposition = counts?.byDisposition ?? { AUTO: 0, REVIEW: 0, ESCALATE: 0, BLOCKED: 0 };
+    const total = DISPOSITION_ORDER.reduce((sum, d) => sum + (byDisposition[d] ?? 0), 0);
+    if (total === 0) return [];
+    const list: { key: Disposition | 'all'; label: string; count: number }[] = [
+      { key: 'all', label: 'All AI', count: total },
+    ];
+    for (const d of DISPOSITION_ORDER) {
+      const c = byDisposition[d] ?? 0;
+      if (c > 0) list.push({ key: d, label: DISPOSITION_META[d].label, count: c });
+    }
+    return list;
+  }, [counts]);
 
   const chips = useMemo(() => {
     const bySource = counts?.bySource ?? {};
@@ -289,6 +360,38 @@ export default function ExceptionsPage() {
                 className={clsx(
                   'rounded px-1.5 py-0.5 font-mono text-[10px]',
                   filter === chip.key ? 'bg-emerald-500/20' : 'bg-slate-700/50 text-slate-400'
+                )}
+              >
+                {chip.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Autonomy disposition filter — what the AI WOULD do vs must route (advisory) */}
+      {!isLoading && !error && dispoChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+            <Sparkles size={12} className="text-indigo-400" />
+            AI disposition
+          </span>
+          {dispoChips.map((chip) => (
+            <button
+              key={chip.key}
+              onClick={() => setDispoFilter(chip.key)}
+              className={clsx(
+                'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                dispoFilter === chip.key
+                  ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300'
+                  : 'border-slate-800 bg-slate-800/30 text-slate-400 hover:text-slate-200'
+              )}
+            >
+              {chip.label}
+              <span
+                className={clsx(
+                  'rounded px-1.5 py-0.5 font-mono text-[10px]',
+                  dispoFilter === chip.key ? 'bg-indigo-500/20' : 'bg-slate-700/50 text-slate-400'
                 )}
               >
                 {chip.count}

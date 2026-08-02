@@ -28,6 +28,22 @@ type ExceptionSource =
   | 'approval'
   | 'cost';
 
+/**
+ * The Autonomy Control Plane disposition an AI proposal recorded at detection —
+ * what the tenant's per-feature dial + global kill switch say the machine WOULD do
+ * (advisory; auto-post stays OFF, so every proposal still routes through a human
+ * approve step). Only ai_proposal rows carry one.
+ */
+type Disposition = 'AUTO' | 'REVIEW' | 'ESCALATE' | 'BLOCKED';
+
+const DISPOSITIONS: readonly Disposition[] = ['AUTO', 'REVIEW', 'ESCALATE', 'BLOCKED'];
+
+function toDisposition(raw: unknown): Disposition | null {
+  return typeof raw === 'string' && (DISPOSITIONS as readonly string[]).includes(raw)
+    ? (raw as Disposition)
+    : null;
+}
+
 interface ExceptionItem {
   id: string;
   source: ExceptionSource;
@@ -35,6 +51,7 @@ interface ExceptionItem {
   subtitle: string | null;
   amountCents: number | null;
   confidence: number | null; // ai_proposal only (0..1)
+  disposition: Disposition | null; // ai_proposal only — advisory autonomy disposition
   companyId: string | null;
   createdAt: string;
   href: string;
@@ -83,6 +100,7 @@ interface AiRow {
   feature: string | null;
   input_summary: string | null;
   confidence: number | string | null;
+  proposed_output: { disposition?: unknown } | null;
   created_at: string;
   location_id: string | null;
 }
@@ -143,7 +161,7 @@ export async function GET(): Promise<NextResponse> {
 
   const aiQ = supabase
     .from('ai_decisions')
-    .select('id, feature, input_summary, confidence, created_at, location_id')
+    .select('id, feature, input_summary, confidence, proposed_output, created_at, location_id')
     .eq('status', 'PROPOSED')
     .order('created_at', { ascending: false })
     .limit(SOURCE_CAP);
@@ -213,6 +231,7 @@ export async function GET(): Promise<NextResponse> {
       subtitle: t.ai_reasoning ?? 'Flagged for review',
       amountCents: amt === null ? null : Math.abs(amt),
       confidence: null,
+      disposition: null,
       companyId: t.location_id,
       createdAt: t.created_at,
       href: HREF.bank,
@@ -228,6 +247,7 @@ export async function GET(): Promise<NextResponse> {
       subtitle: 'Flagged receipt — requires manual review',
       amountCents: amt === null ? null : Math.abs(amt),
       confidence: null,
+      disposition: null,
       companyId: r.location_id,
       createdAt: r.submitted_at ?? '',
       href: HREF.receipt,
@@ -244,6 +264,7 @@ export async function GET(): Promise<NextResponse> {
       subtitle: b.payment_hold_reason ?? 'Payment hold — compliance issue',
       amountCents: amt === null ? null : Math.abs(amt),
       confidence: null,
+      disposition: null,
       companyId: b.location_id,
       createdAt: b.created_at,
       href: HREF.bill,
@@ -258,6 +279,7 @@ export async function GET(): Promise<NextResponse> {
       subtitle: a.feature ?? 'Awaiting human review',
       amountCents: null,
       confidence: toNum(a.confidence),
+      disposition: toDisposition(a.proposed_output?.disposition),
       companyId: a.location_id,
       createdAt: a.created_at,
       href: HREF.ai_proposal,
@@ -273,6 +295,7 @@ export async function GET(): Promise<NextResponse> {
       subtitle: ap.subject_table ? `Pending approval — ${ap.subject_table}` : 'Pending approval',
       amountCents: amt === null ? null : Math.abs(amt),
       confidence: null,
+      disposition: null,
       companyId: null,
       createdAt: ap.created_at,
       href: HREF.approval,
@@ -289,6 +312,7 @@ export async function GET(): Promise<NextResponse> {
       subtitle: `Job cost approval — ${typeLabel}`,
       amountCents: amt === null ? null : Math.abs(amt),
       confidence: null,
+      disposition: null,
       companyId: c.location_id,
       createdAt: c.created_at,
       href: HREF.cost,
@@ -306,8 +330,15 @@ export async function GET(): Promise<NextResponse> {
     cost: costRows.length,
   };
 
+  // Advisory autonomy dispositions across the AI proposals in the queue — lets the
+  // page show a manager, at a glance, what the AI WOULD do vs what it MUST route.
+  const byDisposition: Record<Disposition, number> = { AUTO: 0, REVIEW: 0, ESCALATE: 0, BLOCKED: 0 };
+  for (const it of items) {
+    if (it.disposition) byDisposition[it.disposition] += 1;
+  }
+
   return NextResponse.json({
     data: items,
-    counts: { total: items.length, bySource },
+    counts: { total: items.length, bySource, byDisposition },
   });
 }

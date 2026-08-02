@@ -58,6 +58,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
+import {
+  loadAutonomyGovernance,
+  decideDisposition,
+  type AutonomyGovernance,
+} from '@/lib/autonomy/disposition';
 import { formatMoney } from '@meritbooks/shared';
 
 export const CUTOFF_ERROR_FEATURE = 'CUTOFF_ERROR';
@@ -486,6 +491,14 @@ export async function scanCutoffErrors(
     policy = { autoThreshold: 0.85, reviewThreshold: 0.7, autoMaxCents: 1_000_000 };
   }
 
+  // Autonomy Control Plane: kill-switch + per-feature dial, resolved once; the
+  // ADVISORY disposition is recorded on each queued exception (detect-only).
+  const gov: AutonomyGovernance = await loadAutonomyGovernance(
+    supabase,
+    orgId,
+    CUTOFF_ERROR_FEATURE,
+  );
+
   // 1. Load the recent posted-entry population (the cut-off risk surface).
   let entries: GlEntryRow[] = [];
   try {
@@ -742,6 +755,12 @@ export async function scanCutoffErrors(
 
   for (const b of buckets) {
     const confidence = toConfidence(b.confidence);
+    const { disposition } = decideDisposition({
+      killSwitchEngaged: gov.killSwitchEngaged,
+      setting: gov.setting,
+      scoreTier: b.tier,
+      amountCents: b.amountAtRiskCents,
+    });
     const proposedOutput = {
       control: 'EC-12',
       signal: b.signal,
@@ -755,6 +774,7 @@ export async function scanCutoffErrors(
       amount_at_risk_cents: b.amountAtRiskCents,
       crosses_closed_period: b.crossesClosedPeriod,
       tier: b.tier,
+      disposition,
       remediation: b.remediation,
       reason: b.reason,
     };

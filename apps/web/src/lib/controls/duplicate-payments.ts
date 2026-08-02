@@ -34,6 +34,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
+import {
+  loadAutonomyGovernance,
+  decideDisposition,
+  type AutonomyGovernance,
+} from '@/lib/autonomy/disposition';
 import { vendorSimilarity, normalizeText } from '@/lib/services/reconciliation-match';
 import { formatMoney } from '@meritbooks/shared';
 
@@ -368,6 +373,11 @@ export async function scanDuplicatePayments(
     policy = { autoThreshold: 0.85, reviewThreshold: 0.7, autoMaxCents: 1_000_000 };
   }
 
+  // Autonomy Control Plane: resolve the tenant's kill-switch + per-feature dial
+  // ONCE, then record the ADVISORY disposition (AUTO/REVIEW/ESCALATE/BLOCKED) on
+  // every proposal below. Detect-only stays detect-only — nothing auto-applies.
+  const gov: AutonomyGovernance = await loadAutonomyGovernance(supabase, orgId, DUP_FEATURE);
+
   // ── Load AP: non-void bills, POSTED payments, active-or-recent vendors ───────
   const { data: billsRaw, error: billErr } = await supabase
     .from('bills')
@@ -593,6 +603,12 @@ export async function scanDuplicatePayments(
     if (existingKeys.has(c.dedupKey)) continue;
     const tier = resolveDupTier(c.confidence, c.amountAtRiskCents, policy, c.moneyAlreadyOut);
     const confidence = toConfidence(c.confidence);
+    const { disposition } = decideDisposition({
+      killSwitchEngaged: gov.killSwitchEngaged,
+      setting: gov.setting,
+      scoreTier: tier,
+      amountCents: c.amountAtRiskCents,
+    });
 
     const { error } = await supabase.from('ai_decisions').insert({
       org_id: orgId,
@@ -605,6 +621,7 @@ export async function scanDuplicatePayments(
         dedup_key: c.dedupKey,
         amount_at_risk_cents: c.amountAtRiskCents,
         tier,
+        disposition,
         money_already_out: c.moneyAlreadyOut,
         subjects: c.subjects,
         reason: c.reason,

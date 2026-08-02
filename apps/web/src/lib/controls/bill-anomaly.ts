@@ -43,6 +43,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
+import {
+  loadAutonomyGovernance,
+  decideDisposition,
+  type AutonomyGovernance,
+} from '@/lib/autonomy/disposition';
 import { formatMoney } from '@meritbooks/shared';
 
 export const BILL_ANOMALY_FEATURE = 'BILL_ANOMALY';
@@ -368,6 +373,14 @@ export async function scanBillAnomalies(
     policy = { autoThreshold: 0.85, reviewThreshold: 0.7, autoMaxCents: 1_000_000 };
   }
 
+  // Autonomy Control Plane: kill-switch + per-feature dial, resolved once; the
+  // ADVISORY disposition is recorded on each queued exception (detect-only).
+  const gov: AutonomyGovernance = await loadAutonomyGovernance(
+    supabase,
+    orgId,
+    BILL_ANOMALY_FEATURE,
+  );
+
   // ── Load bills: all non-void bills (history + targets in one read) ───────────
   const { data: billsRaw, error: billErr } = await supabase
     .from('bills')
@@ -476,6 +489,12 @@ export async function scanBillAnomalies(
     const { assessment: a, bill, vendorName } = c;
     const tier = resolveBillAnomalyTier(a.confidence, a.amountAtRiskCents, policy);
     const confidence = toConfidence(a.confidence);
+    const { disposition } = decideDisposition({
+      killSwitchEngaged: gov.killSwitchEngaged,
+      setting: gov.setting,
+      scoreTier: tier,
+      amountCents: a.amountAtRiskCents,
+    });
     const title = `${KIND_LABEL[a.kind]}: ${vendorName} · ${formatMoney(a.amountAtRiskCents)} at risk`;
 
     const { error } = await supabase.from('ai_decisions').insert({
@@ -491,6 +510,7 @@ export async function scanBillAnomalies(
         amount_at_risk_cents: a.amountAtRiskCents,
         bill_total_cents: bill.totalCents,
         tier,
+        disposition,
         money_already_out: false, // before-post advisory
         subjects: { bill_id: bill.id, vendor_id: bill.vendorId, bill_number: bill.billNumber },
         reason: a.reason,
