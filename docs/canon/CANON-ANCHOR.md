@@ -5,7 +5,7 @@ It is deliberately small (~5 min read) so re-grounding is cheap. It is the disti
 always-current truth. When it conflicts with the repo, **the canon wins** — fix the repo.
 Source of truth: the Project-knowledge doc set (mirrored/digested in `docs/canon/`, indexed in `00-INDEX.md`).
 
-Last reconciled: **2026-08-02 (Session 45)**. Latest handoff: `docs/MERITBOOKS-HANDOFF-session45.md`.
+Last reconciled: **2026-08-02 (Session 46)**. Latest handoff: `docs/MERITBOOKS-HANDOFF-session46.md`.
 
 ---
 
@@ -199,10 +199,31 @@ ungated, spec-less work in Session 40.)
   — income-tax/lease/prepaid/intangible/disposal roles, provision+prepaid resolved by role with number
   fallback (seed mig 094). Two legacy dup routes flagged for later cleanup (not deleted): `/recurring`
   (→ `/recurring-journal-entries`) and `/invoices/collections` (→ `/collections`).
+- **Session-46 builds (opened the last two AI modalities to depth; migrations 095–098; HEAD `f056033`
+  Vercel READY):** **M9 supervised agent orchestration** — a runner (`lib/agents/runner.ts`, mig 096
+  `agent_runs`+`agent_run_steps`) with per-step **AUTO / PROPOSE / HUMAN_GATE** audit that honors the
+  M10 autonomy dial + kill switch and **never posts money/GL directly** (canon §3); **framework + ONE
+  loop (AP intake)** — order-to-cash / close-run / pay-run recipes are next. **M14 learning generalized**
+  into an org-scoped **`learned_preferences`** store (mig 097; scopes CATEGORIZATION / CLOSE_CADENCE /
+  REPORT_PREFS / TONE / METHOD_SSP) — **informs proposals only, never posts/approves**; opened broader
+  than vendor-memory but not exhaustive. **M13 `/search` upgraded to Postgres GIN tsvector full-text**
+  (mig 095, weighted, degrade-safe to `.ilike`) — strong **LEXICAL** retrieval, deliberately **NOT
+  embeddings**. **Invoices FPB deltas CLOSED** (mig 098): `v_ar_aging` excludes `WRITTEN_OFF`, and a
+  **`BAD_DEBT_EXPENSE` role** (+ acct 6670) so write-offs resolve the expense account **by role** — a
+  final FPB read-through is the remaining check. Read-only **duplicate-vendor detection** on the vendor
+  360 (+ `/api/vendors` `core.vendors` column-drift confirmed fixed). The opening build-ERROR streak had
+  a **single cause** — a missing `ROLE_DEFAULT_NUMBER` export (`76bca49`) — now fixed; Vercel `next build`
+  green at HEAD. **A Session-47 wave is IN FLIGHT** (M9 loop expansion, reconciliation Wave B,
+  explain-this-X, collections depth, AP money-out MVP).
 - **No gate may start until its `Prereq:` gates are DONE. "Complete" is demonstrated, not asserted.**
 
-## 6. Canonical immediate priorities (Session 45 reconciliation)
+## 6. Canonical immediate priorities (Session 46 reconciliation)
 
+0. **Continue the IN-FLIGHT Session-47 wave** — M9 loop expansion (order-to-cash / close-run /
+   pay-run recipes on the runner), reconciliation Wave B (line check-off/lock + plug/stale detector
+   + rec-memo), explain-this-X narrative drawer (M7 breadth), collections depth (pay-date prediction
+   + escalating dunning), and an AP money-out MVP (disbursement batch + NACHA/CSV export + human
+   release). Keep every money/GL step on the deterministic engines behind human gates.
 1. **Finish closing identity gate #9** — org resolution is **CLOSED live** (Clerk native `o.id`
    claim + auto-bind, fallbacks removed) and the dedicated `payments` permission is DONE. The
    residual is now mostly **MANUAL for Mike:** stand up the **Clerk production instance for
