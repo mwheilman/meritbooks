@@ -34,6 +34,8 @@ import {
   Inbox,
   Activity,
   Banknote,
+  Search,
+  SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -85,6 +87,7 @@ export const navigation: NavGroup[] = [
   {
     label: 'Intelligence',
     items: [
+      { label: 'Search', href: '/search', icon: Search },
       { label: 'Cash Position', href: '/cash', icon: Wallet },
       { label: '13-Week Forecast', href: '/forecast', icon: TrendingUp },
       { label: 'Reports', href: '/reports', icon: BarChart3 },
@@ -120,6 +123,7 @@ export const navigation: NavGroup[] = [
       { label: 'Compliance', href: '/compliance', icon: Shield },
       { label: 'Import Data', href: '/import', icon: Upload },
       { label: 'Sandbox', href: '/sandbox', icon: FlaskConical },
+      { label: 'AI Autonomy', href: '/settings/autonomy', icon: SlidersHorizontal },
       { label: 'Settings', href: '/settings', icon: Settings },
     ],
   },
