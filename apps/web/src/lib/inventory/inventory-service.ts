@@ -22,6 +22,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from '../services/gl-posting';
 import { debitCreditFor } from '../posting/account-direction';
+import { maybeRaiseReorderAlert } from './reorder-detector';
 import {
   resolveRole,
   getAccountRef,
@@ -111,6 +112,64 @@ async function resolveAccounts(
     ? await getAccountRef(db, orgId, item.cogs_account_id)
     : await resolveRole(db, orgId, 'INVENTORY_COGS');
   return { asset, cogs };
+}
+
+// ---------------------------------------------------------------------------
+// Movement linkage — attach an ISSUE to a job (job cost) or an invoice (COGS↔sale)
+// ---------------------------------------------------------------------------
+
+/** An optional linkage carried on a movement: a job OR an invoice (line). */
+export interface MovementLink {
+  jobId?: string | null;
+  invoiceId?: string | null;
+  invoiceLineId?: string | null;
+}
+
+/** How a linkage lands on the movement row (ref_type / ref_id / reference). */
+export interface MovementRef {
+  refType: string; // 'JOB' | 'INVOICE' | 'MANUAL'
+  refId: string | null;
+  reference: string | null;
+}
+
+/**
+ * PURE. Resolve a linkage into the movement's ref columns. A job wins over an
+ * invoice (an issue is either job-costed or matched to a sale, not both). The
+ * free-text `reference` note is preserved unless a more specific tie (the invoice
+ * line) is present.
+ */
+export function resolveMovementRef(link: MovementLink, reference?: string | null): MovementRef {
+  const note = reference ?? null;
+  if (link.jobId) return { refType: 'JOB', refId: link.jobId, reference: note };
+  if (link.invoiceId) {
+    return { refType: 'INVOICE', refId: link.invoiceId, reference: link.invoiceLineId ?? note };
+  }
+  return { refType: 'MANUAL', refId: null, reference: note };
+}
+
+/** Postgres "relation does not exist" — the linkage check degrades to a no-op. */
+function isMissingRelation(err: { code?: string; message?: string } | null | undefined): boolean {
+  return err?.code === '42P01' || /does not exist/i.test(err?.message ?? '');
+}
+
+/**
+ * Validate that a linked job / invoice / invoice line exists in THIS org (RLS
+ * enforces the tenant). DEGRADES SAFE: if the table is absent the check is skipped;
+ * a genuinely-missing row throws so a movement never attaches to a dangling ref.
+ */
+async function assertLinkExists(db: DB, orgId: string, link: MovementLink): Promise<void> {
+  const checks: Array<{ table: string; id: string; label: string }> = [];
+  if (link.jobId) checks.push({ table: 'jobs', id: link.jobId, label: 'job' });
+  if (link.invoiceId) checks.push({ table: 'invoices', id: link.invoiceId, label: 'invoice' });
+  if (link.invoiceLineId) checks.push({ table: 'invoice_lines', id: link.invoiceLineId, label: 'invoice line' });
+  for (const c of checks) {
+    const { data, error } = await db.from(c.table).select('id').eq('id', c.id).maybeSingle();
+    if (error) {
+      if (isMissingRelation(error)) continue; // feature not deployed here — skip
+      throw new PostingError(`Could not verify the linked ${c.label}: ${error.message}`);
+    }
+    if (!data) throw new PostingError(`Linked ${c.label} not found in this organization.`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -205,6 +264,10 @@ export interface ProposeMovementInput {
   reference?: string | null;
   memo?: string | null;
   createdBy?: string | null;
+  /** Optional linkage: attach the movement to a job (job cost) or an invoice line. */
+  jobId?: string | null;
+  invoiceId?: string | null;
+  invoiceLineId?: string | null;
 }
 
 /**
@@ -227,6 +290,17 @@ export async function proposeMovement(db: DB, input: ProposeMovementInput): Prom
     throw e instanceof ValuationError ? new PostingError(e.message) : e;
   }
 
+  // Resolve + validate an optional job/invoice linkage, then land it on the row.
+  const link: MovementLink = {
+    jobId: input.jobId ?? null,
+    invoiceId: input.invoiceId ?? null,
+    invoiceLineId: input.invoiceLineId ?? null,
+  };
+  if (link.jobId || link.invoiceId || link.invoiceLineId) {
+    await assertLinkExists(db, input.orgId, link);
+  }
+  const ref = resolveMovementRef(link, input.reference ?? null);
+
   const { data: mv, error } = await db
     .from('inventory_movements')
     .insert({
@@ -239,8 +313,9 @@ export async function proposeMovement(db: DB, input: ProposeMovementInput): Prom
       unit_cost_cents: preview.unit_cost_cents,
       total_cost_cents: input.type === 'ADJUST' && input.qty > 0 ? Math.round((input.unitCostCents ?? 0) * input.qty) : preview.cogs_cents,
       cogs_cents: preview.cogs_cents,
-      reference: input.reference ?? null,
-      ref_type: 'MANUAL',
+      reference: ref.reference,
+      ref_type: ref.refType,
+      ref_id: ref.refId,
       memo: input.memo ?? null,
       movement_date: input.movementDate,
       gl_entry_id: null,
@@ -272,6 +347,9 @@ interface MovementRow {
   unit_cost_cents: number;
   memo: string | null;
   movement_date: string;
+  ref_type: string | null;
+  ref_id: string | null;
+  reference: string | null;
 }
 
 /**
@@ -288,7 +366,7 @@ export async function postProposedMovement(
 ): Promise<MovementRecord> {
   const { data: mvRow, error: mvErr } = await db
     .from('inventory_movements')
-    .select('id, item_id, location_id, movement_type, status, qty, unit_cost_cents, memo, movement_date')
+    .select('id, item_id, location_id, movement_type, status, qty, unit_cost_cents, memo, movement_date, ref_type, ref_id, reference')
     .eq('org_id', orgId)
     .eq('id', movementId)
     .maybeSingle<MovementRow>();
@@ -322,6 +400,12 @@ export async function postProposedMovement(
 
   const { asset, cogs } = await resolveAccounts(db, orgId, item);
 
+  // Linkage carried on the movement: a JOB attaches COGS to a job (job cost — the
+  // dimension rides the COGS leg); an INVOICE ties the cost to a sale via source_ref.
+  // Neither changes the account resolution — COGS still posts BY ROLE.
+  const jobId = mvRow.ref_type === 'JOB' && mvRow.ref_id ? mvRow.ref_id : undefined;
+  const invoiceRef = mvRow.ref_type === 'INVOICE' && mvRow.ref_id ? mvRow.ref_id : undefined;
+
   // Derive both legs from account type + intended effect (never hard-code Dr/Cr).
   const assetEffect = writeUp ? 'increase' : 'decrease';
   const cogsEffect = writeUp ? 'decrease' : 'increase';
@@ -330,6 +414,7 @@ export async function postProposedMovement(
       account_id: cogs.id,
       ...debitCreditFor(cogs.account_type, cogsEffect, amount, cogs.account_sub_type),
       location_id: locationId,
+      ...(jobId ? { job_id: jobId } : {}),
       memo: mvRow.memo ?? (isAdjust ? 'Inventory adjustment' : 'Inventory issue (COGS)'),
     },
     {
@@ -348,6 +433,7 @@ export async function postProposedMovement(
     memo: mvRow.memo ?? (isAdjust ? 'Inventory adjustment' : 'Inventory issue'),
     source_module: 'INVENTORY',
     source_id: movementId,
+    source_ref: invoiceRef,
     created_by: null,
     lines,
   });
@@ -366,6 +452,14 @@ export async function postProposedMovement(
     .eq('org_id', orgId)
     .eq('id', movementId);
   if (updErr) throw new PostingError(`GL posted but movement update failed: ${updErr.message}`);
+
+  // On-hand just dropped — raise a detect-only reorder exception if it fell to/below
+  // the reorder point. Best-effort: a control detector must never break the post.
+  try {
+    await maybeRaiseReorderAlert(db, orgId, mvRow.item_id);
+  } catch (e) {
+    console.warn('[inventory] reorder check failed after post:', e instanceof Error ? e.message : e);
+  }
 
   return {
     movement_id: movementId,

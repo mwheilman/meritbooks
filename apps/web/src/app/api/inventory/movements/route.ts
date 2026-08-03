@@ -40,6 +40,11 @@ const bodySchema = z.discriminatedUnion('type', [
     movement_date: z.string().regex(DATE_RE).optional(),
     reference: z.string().max(200).optional(),
     memo: z.string().max(500).optional(),
+    // Optional linkage: attach the issue to a job (job cost) OR an invoice line.
+    // COGS still posts BY ROLE through the human-gated approve path.
+    job_id: z.string().uuid().optional(),
+    invoice_id: z.string().uuid().optional(),
+    invoice_line_id: z.string().uuid().optional(),
   }),
   z.object({
     type: z.literal('ADJUST'),
@@ -120,6 +125,13 @@ export async function POST(request: Request) {
       reference: body.reference ?? null,
       memo: body.memo ?? null,
       createdBy: null,
+      ...(body.type === 'ISSUE'
+        ? {
+            jobId: body.job_id ?? null,
+            invoiceId: body.invoice_id ?? null,
+            invoiceLineId: body.invoice_line_id ?? null,
+          }
+        : {}),
     });
     await logHumanAction(supabase, userId, orgId, {
       action: `inventory_movement.propose_${body.type.toLowerCase()}`,

@@ -19,6 +19,7 @@ interface Movement {
   totalCostCents: number;
   cogsCents: number;
   reference: string | null;
+  refType: string | null;
   memo: string | null;
   movementDate: string;
   glEntryId: string | null;
@@ -138,7 +139,19 @@ function MovementRow({ m, onPosted }: { m: Movement; onPosted: () => void }) {
   return (
     <tr className="border-b border-slate-800/60">
       <td className="px-4 py-2.5 text-xs font-mono text-slate-400">{m.movementDate}</td>
-      <td className={clsx('px-4 py-2.5 text-xs font-medium', TYPE_META[m.type].cls)}>{TYPE_META[m.type].label}</td>
+      <td className={clsx('px-4 py-2.5 text-xs font-medium', TYPE_META[m.type].cls)}>
+        {TYPE_META[m.type].label}
+        {(m.refType === 'JOB' || m.refType === 'INVOICE') && (
+          <span className="ml-1.5 inline-block rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-medium text-indigo-300 align-middle">
+            {m.refType === 'JOB' ? 'Job' : 'Invoice'}
+          </span>
+        )}
+        {(m.refType === 'BILL' || m.refType === 'GOODS_RECEIPT') && (
+          <span className="ml-1.5 inline-block rounded bg-slate-500/10 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 align-middle">
+            {m.refType === 'BILL' ? 'From bill' : 'From GR'}
+          </span>
+        )}
+      </td>
       <td className="px-4 py-2.5 text-right font-mono text-slate-200">{m.qty}</td>
       <td className="px-4 py-2.5 text-right font-mono text-slate-300">{m.type === 'RECEIPT' ? '—' : formatMoney(m.cogsCents)}</td>
       <td className="px-4 py-2.5">
@@ -161,6 +174,8 @@ function MovementForm({ itemId, uom, action, onDone }: { itemId: string; uom: st
   const [qty, setQty] = useState('');
   const [cost, setCost] = useState('');
   const [memo, setMemo] = useState('');
+  const [linkKind, setLinkKind] = useState<'' | 'JOB' | 'INVOICE'>('');
+  const [linkId, setLinkId] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -173,10 +188,14 @@ function MovementForm({ itemId, uom, action, onDone }: { itemId: string; uom: st
     const body: Record<string, unknown> = { type: action, item_id: itemId, qty: qtyNum, memo: memo.trim() || undefined };
     if (action === 'RECEIPT') body.total_cost_cents = Math.round(Number(cost) * 100);
     if (action === 'ADJUST' && qtyNum > 0) body.unit_cost_cents = Math.round(Number(cost) * 100);
+    if (action === 'ISSUE' && linkKind && linkId.trim()) {
+      if (linkKind === 'JOB') body.job_id = linkId.trim();
+      else body.invoice_id = linkId.trim();
+    }
     const res = await api.post('/api/inventory/movements', body);
     setSaving(false);
     if (res.error) { setErr(res.error.error); return; }
-    setQty(''); setCost(''); setMemo('');
+    setQty(''); setCost(''); setMemo(''); setLinkKind(''); setLinkId('');
     setOk(action === 'RECEIPT' ? 'Received.' : 'Proposed — approve it in the history to post COGS.');
     onDone();
   }
@@ -202,6 +221,23 @@ function MovementForm({ itemId, uom, action, onDone }: { itemId: string; uom: st
           <input value={cost} onChange={(e) => setCost(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal"
             className="w-full bg-surface-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-600" placeholder="0.00" />
         </label>
+      )}
+      {action === 'ISSUE' && (
+        <div className="space-y-2 rounded-lg border border-slate-800 bg-surface-950/50 p-2.5">
+          <span className="text-xs text-slate-500 block">Attach to (optional)</span>
+          <div className="flex gap-2">
+            <select value={linkKind} onChange={(e) => setLinkKind(e.target.value as '' | 'JOB' | 'INVOICE')}
+              className="bg-surface-950 border border-slate-800 rounded-lg px-2 py-2 text-sm text-white focus:outline-none focus:border-emerald-600">
+              <option value="">None</option>
+              <option value="JOB">Job</option>
+              <option value="INVOICE">Invoice</option>
+            </select>
+            <input value={linkId} onChange={(e) => setLinkId(e.target.value)} disabled={!linkKind}
+              className="flex-1 bg-surface-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white disabled:opacity-40 focus:outline-none focus:border-emerald-600"
+              placeholder={linkKind === 'JOB' ? 'Job ID' : linkKind === 'INVOICE' ? 'Invoice ID' : 'Select a type first'} />
+          </div>
+          <p className="text-[11px] text-slate-600">COGS still posts by role on approval; the link attaches the cost to the job or sale.</p>
+        </div>
       )}
       <label className="block">
         <span className="text-xs text-slate-500 mb-1 block">Memo (optional)</span>
