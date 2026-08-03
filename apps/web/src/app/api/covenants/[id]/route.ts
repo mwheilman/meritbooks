@@ -38,7 +38,7 @@ export async function GET(request: Request, { params }: Params): Promise<NextRes
   if (!data) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
 
   const periodEnd = new URL(request.url).searchParams.get('period_end') ?? undefined;
-  const status = await buildCovenantStatus(ctx.supabase, data as CovenantRow, periodEnd);
+  const status = await buildCovenantStatus(ctx.supabase, data as unknown as CovenantRow, periodEnd);
   return NextResponse.json({ data: status });
 }
 

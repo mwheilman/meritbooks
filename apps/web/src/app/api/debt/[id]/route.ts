@@ -75,7 +75,7 @@ export async function GET(_request: Request, { params }: Params): Promise<NextRe
 
   // Optional covenant summary (read-only link).
   let covenant: { id: string; loan_name: string; covenant_type: string } | null = null;
-  const linkId = (instrument as { loan_covenant_id: string | null }).loan_covenant_id;
+  const linkId = (instrument as unknown as { loan_covenant_id: string | null }).loan_covenant_id;
   if (linkId) {
     const { data: cov } = await supabase
       .from('loan_covenants')

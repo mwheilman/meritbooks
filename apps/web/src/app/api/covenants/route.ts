@@ -37,7 +37,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'Failed to load covenants', code: 'INTERNAL_ERROR' }, { status: 500 });
   }
 
-  const rows = (data ?? []) as CovenantRow[];
+  // The generated Database type omits loan_covenants, so `data` is typed
+  // GenericStringError[]; restore type-safety against the local CovenantRow.
+  const rows = (data ?? []) as unknown as CovenantRow[];
 
   // Compute status per covenant. Each is independent; one failure must not sink
   // the list, so failures degrade to a null status the UI renders as UNKNOWN.

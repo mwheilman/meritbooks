@@ -62,7 +62,9 @@ export async function POST(): Promise<NextResponse> {
   if (error) {
     return NextResponse.json({ error: 'Failed to load covenants', code: 'INTERNAL_ERROR' }, { status: 500 });
   }
-  const rows = (data ?? []) as CovenantRow[];
+  // The generated Database type omits loan_covenants, so `data` is typed
+  // GenericStringError[]; restore type-safety against the local CovenantRow.
+  const rows = (data ?? []) as unknown as CovenantRow[];
 
   let measured = 0;
   let alerted = 0;

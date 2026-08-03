@@ -26,7 +26,7 @@ export const measurementSchema = z
   })
   .strict();
 
-export const createCovenantSchema = z.object({
+const covenantShape = z.object({
   loan_name: z.string().min(1).max(200),
   facility: z.string().max(200).optional(),
   lender_name: z.string().max(200).optional(),
@@ -43,12 +43,26 @@ export const createCovenantSchema = z.object({
   notes: z.string().max(2000).optional(),
 });
 
-export const updateCovenantSchema = createCovenantSchema.partial();
+/** The fully-parsed covenant create payload (defaults applied). */
+export type CreateCovenantInput = z.infer<typeof covenantShape>;
+
+/**
+ * apiHandler<T> constrains its schema to ZodSchema<T> — i.e. ZodType<T, _, T>,
+ * where the parse INPUT equals the parse OUTPUT. Because this schema has
+ * `.default()` fields, its input type (those fields optional) differs from its
+ * output type (those fields present), so the raw ZodObject isn't assignable to
+ * ZodSchema<CreateCovenantInput>. Re-type the export to its Output shape — the
+ * runtime schema is untouched, so defaults still apply on parse; this only tells
+ * the type system "callers receive CreateCovenantInput," which is exactly true.
+ */
+export const createCovenantSchema =
+  covenantShape as unknown as z.ZodType<CreateCovenantInput>;
+
+export const updateCovenantSchema = covenantShape.partial();
 
 export const certificateSchema = z.object({
   period_end: ISO_DATE.optional(),
   as_of_note: z.string().max(500).optional(),
 });
 
-export type CreateCovenantInput = z.infer<typeof createCovenantSchema>;
 export type UpdateCovenantInput = z.infer<typeof updateCovenantSchema>;

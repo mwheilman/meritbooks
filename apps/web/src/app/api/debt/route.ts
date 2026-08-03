@@ -57,7 +57,9 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ error: 'Failed to load debt instruments', code: 'INTERNAL_ERROR' }, { status: 500 });
   }
 
-  const rows = (instruments ?? []) as InstrumentRow[];
+  // The generated Database type omits debt_instruments, so `instruments` is typed
+  // GenericStringError[]; restore type-safety against the local InstrumentRow.
+  const rows = (instruments ?? []) as unknown as InstrumentRow[];
   const ids = rows.map((r) => r.id);
 
   // Pull schedule lines for all instruments in one query, then derive per-instrument.

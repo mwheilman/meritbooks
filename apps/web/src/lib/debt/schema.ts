@@ -13,7 +13,7 @@ const dateStr = z
 
 const FREQUENCY = z.enum(['MONTHLY', 'QUARTERLY', 'SEMIANNUAL', 'ANNUAL']);
 
-export const createDebtSchema = z
+const debtShape = z
   .object({
     loan_name: z.string().min(1, 'Loan name is required').max(200),
     lender: z.string().max(200).nullish(),
@@ -46,4 +46,17 @@ export const createDebtSchema = z
     path: ['term_periods'],
   });
 
-export type CreateDebtInput = z.infer<typeof createDebtSchema>;
+/** The fully-parsed debt create payload (defaults applied). */
+export type CreateDebtInput = z.infer<typeof debtShape>;
+
+/**
+ * apiHandler<T> constrains its schema to ZodSchema<T> — i.e. ZodType<T, _, T>,
+ * where the parse INPUT equals the parse OUTPUT. Because this schema has
+ * `.default()` fields, its input type (those fields optional) differs from its
+ * output type (those fields present), so the raw schema isn't assignable to
+ * ZodSchema<CreateDebtInput>. Re-type the export to its Output shape — the
+ * runtime schema is untouched, so defaults + refinements still run on parse;
+ * this only tells the type system "callers receive CreateDebtInput," which is
+ * exactly true.
+ */
+export const createDebtSchema = debtShape as unknown as z.ZodType<CreateDebtInput>;

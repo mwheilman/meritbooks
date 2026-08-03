@@ -227,6 +227,26 @@ export interface PostProvisionResult {
 }
 
 /**
+ * The `tax_provision` columns this poster reads. Declared locally because the
+ * generated Supabase `Database` type is stale and omits this table, so the query
+ * result would otherwise be typed `GenericStringError`. The `.select()` below is
+ * cast to this shape (through `unknown`) after the error check.
+ */
+interface ProvisionPostRow {
+  id: string;
+  location_id: string | null;
+  period: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+  total_provision_cents: number;
+  current_tax_cents: number;
+  dta_change_cents: number;
+  dtl_change_cents: number;
+  gl_entry_id: string | null;
+}
+
+/**
  * Post the balanced provision JE for a proposed provision. Resolves the four accounts BY ROLE
  * (refusing to guess), guards against a double post via source_ref, and stamps the row POSTED.
  */
@@ -236,7 +256,7 @@ export async function postProvision(
   provisionId: string,
   userId: string | null,
 ): Promise<PostProvisionResult> {
-  const { data: prov, error } = await db
+  const { data: provData, error } = await db
     .from('tax_provision')
     .select(
       'id, location_id, period, start_date, end_date, status, ' +
@@ -246,7 +266,10 @@ export async function postProvision(
     .eq('id', provisionId)
     .maybeSingle();
   if (error) throw new Error(`Provision lookup failed: ${error.message}`);
-  if (!prov) throw new Error('Provision not found');
+  if (!provData) throw new Error('Provision not found');
+  // The generated Database type omits tax_provision, so the row comes back typed
+  // GenericStringError; restore type-safety against the local declared shape.
+  const prov = provData as unknown as ProvisionPostRow;
   if (prov.status === 'POSTED') {
     return {
       provisionId,

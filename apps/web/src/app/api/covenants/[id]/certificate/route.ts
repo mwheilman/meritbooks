@@ -121,7 +121,7 @@ export async function POST(request: Request, { params }: Params): Promise<NextRe
   if (error) return NextResponse.json({ error: error.message, code: 'INTERNAL_ERROR' }, { status: 500 });
   if (!data) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
 
-  const status = await buildCovenantStatus(supabase, data as CovenantRow, periodEnd);
+  const status = await buildCovenantStatus(supabase, data as unknown as CovenantRow, periodEnd);
   const facts = buildFacts(status, asOfNote);
 
   // Try the gateway to PHRASE the facts; fall back deterministically.
@@ -172,12 +172,12 @@ export async function POST(request: Request, { params }: Params): Promise<NextRe
       .from('ai_decisions')
       .insert({
         org_id: orgId,
-        location_id: (data as CovenantRow).location_id,
+        location_id: (data as unknown as CovenantRow).location_id,
         feature: FEATURE,
         model_requested: source === 'ai' ? MODEL : null,
         model_used: model,
         correlation_id: correlationId,
-        input_summary: `Compliance certificate — ${(data as CovenantRow).loan_name} ${(data as CovenantRow).covenant_type} as of ${status.periodEnd}`.slice(0, 2000),
+        input_summary: `Compliance certificate — ${(data as unknown as CovenantRow).loan_name} ${(data as unknown as CovenantRow).covenant_type} as of ${status.periodEnd}`.slice(0, 2000),
         proposed_output: {
           kind: 'compliance_certificate',
           covenant_id: params.id,
