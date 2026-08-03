@@ -5,7 +5,20 @@ import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
-import { runAiGateway, type GatewayResponse } from '@meritbooks/core-ai';
+import { runAiGateway } from '@meritbooks/core-ai';
+
+/** Concrete shape of the gateway meta this route reads. Declared locally because the
+ * core-ai package's response type does not resolve to a usable shape in this build
+ * graph (it collapses to `never`), which silently poisoned every field read below. */
+interface GatewayMeta {
+  status: string;
+  result: unknown;
+  message?: string | null;
+  correlation_id?: string | null;
+  model_used?: string | null;
+  cost_cents?: number | null;
+  budget?: { state?: string | null } | null;
+}
 import { logAction } from '@/lib/trust/action-log';
 import {
   classifyAndRoute,
@@ -73,7 +86,7 @@ export const POST = apiHandler(schema, async (body, ctx) => {
   const apiKey = getAnthropicApiKey() ?? '';
 
   // Capture gateway meta from the injected classify closure for audit + degraded UI.
-  let gateway: GatewayResponse | null = null;
+  let gateway: GatewayMeta | null = null;
 
   const classify = async (p: string, c?: NlContext): Promise<Classification> => {
     if (!apiKey) {
@@ -93,7 +106,7 @@ export const POST = apiHandler(schema, async (body, ctx) => {
         max_tokens: 500,
       },
     );
-    gateway = gw;
+    gateway = gw as unknown as GatewayMeta;
     if (gw.status === 'blocked' || gw.result == null) {
       throw new Error(gw.message ?? 'AI request was blocked');
     }
@@ -105,7 +118,7 @@ export const POST = apiHandler(schema, async (body, ctx) => {
   const { result } = await classifyAndRoute(prompt, context, classify);
 
   // Trust rail: every classification is an AI action → append-only core.action_log.
-  const gw: GatewayResponse | null = gateway;
+  const gw = gateway;
   await logAction(supabase, {
     orgId,
     actorType: 'AI',
