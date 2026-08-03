@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   X,
   Loader2,
@@ -21,6 +21,8 @@ import {
   FileText,
   Clock,
   ShieldAlert,
+  UploadCloud,
+  Wand2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
@@ -140,6 +142,49 @@ interface SuggestResponse {
   proposals: AdjustmentProposalDto[];
 }
 
+// ── Statement-import (drop-and-parse → anchor + auto-check-off) ─────────────────
+interface StatementMatchPairDto {
+  statementId: string;
+  statementDescription: string;
+  statementAmountCents: number;
+  statementDate: string;
+  bookLineId: string;
+  bookDescription: string;
+  bookAmountCents: number;
+  bookDate: string;
+  score: number;
+  confidence: number;
+  explanation: string;
+}
+interface StatementUnmatchedDto {
+  statementId: string;
+  description: string;
+  amountCents: number;
+  transactionDate: string;
+  bestScore: number | null;
+}
+interface StatementImportResponse {
+  ok: boolean;
+  reconciliationId: string;
+  anchored: boolean;
+  statementEndingBalanceCents: number | null;
+  period: { start: string | null; end: string | null };
+  documentNote: string | null;
+  autoCleared: StatementMatchPairDto[];
+  autoClearedCount: number;
+  needsReview: StatementMatchPairDto[];
+  unmatchedStatement: StatementUnmatchedDto[];
+  unmatchedBookLineIds: string[];
+  counts: {
+    statementLines: number;
+    autoCleared: number;
+    needsReview: number;
+    unmatchedStatement: number;
+    unmatchedBook: number;
+  };
+  meta: { fileName: string; model: string; decisionId: string | null; extractionMs: number };
+}
+
 const CATEGORY_LABEL: Record<AdjustmentProposalDto['category'], string> = {
   bank_fee: 'Bank fee',
   interest: 'Interest income',
@@ -197,6 +242,11 @@ export function ReconciliationWorkspace({
   const [statement, setStatement] = useState('');
   const [statementDirty, setStatementDirty] = useState(false);
   const [busy, setBusy] = useState<null | 'start' | 'finalize' | 'unreconcile' | string>(null);
+
+  // ── Statement import (drop-and-parse → anchor + auto-check-off) ────────────────
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<StatementImportResponse | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const { data: periodData } = useQuery<PeriodResponse>('/api/periods', { year: String(year) });
   const availablePeriods = useMemo(() => {
@@ -355,6 +405,77 @@ export function ReconciliationWorkspace({
   // Reflect the server statement balance unless the user is mid-edit.
   const statementValue =
     statementDirty || rec == null ? statement : (rec.statementEndingBalanceCents / 100).toFixed(2);
+
+  async function acceptSuggestion(pair: StatementMatchPairDto) {
+    if (!rec || finalized) return;
+    setBusy(`review:${pair.bookLineId}`);
+    const result = await api.post<{ ok: boolean }>('/api/reconciliation/session', {
+      action: 'toggle_line',
+      reconciliation_id: rec.id,
+      transaction_id: pair.bookLineId,
+      cleared: true,
+    });
+    setBusy(null);
+    if (result.error) {
+      addToast('error', result.error.error || 'Could not clear the suggested line');
+      return;
+    }
+    addToast('success', 'Suggested match cleared');
+    setImportResult((prev) =>
+      prev
+        ? {
+            ...prev,
+            needsReview: prev.needsReview.filter((p) => p.bookLineId !== pair.bookLineId),
+            autoClearedCount: prev.autoClearedCount + 1,
+          }
+        : prev,
+    );
+    await refetch();
+    await refetchSuggest();
+    onChanged();
+  }
+
+  async function onImportFile(file: File) {
+    if (!periodId || finalized) return;
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowed.includes(file.type)) {
+      addToast('error', 'Upload a PDF, JPEG, PNG, or WebP.');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      addToast('error', 'File too large. Maximum 15MB.');
+      return;
+    }
+    setImporting(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('bank_account_id', account.id);
+    fd.append('fiscal_period_id', periodId);
+    try {
+      const res = await fetch('/api/reconciliation/import-statement', { method: 'POST', body: fd });
+      const body = (await res.json()) as StatementImportResponse | { error?: string };
+      if (!res.ok || 'error' in body) {
+        addToast('error', ('error' in body && body.error) || 'Failed to import statement');
+        return;
+      }
+      const result = body as StatementImportResponse;
+      setImportResult(result);
+      setStatementDirty(false);
+      addToast(
+        'success',
+        result.anchored
+          ? `Statement anchored — auto-cleared ${result.autoClearedCount} line${result.autoClearedCount === 1 ? '' : 's'}`
+          : `Auto-cleared ${result.autoClearedCount} line${result.autoClearedCount === 1 ? '' : 's'} — set the ending balance manually`,
+      );
+      await refetch();
+      await refetchSuggest();
+      onChanged();
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Network error');
+    } finally {
+      setImporting(false);
+    }
+  }
 
   async function startOrUpdate() {
     if (!periodId) return;
@@ -572,6 +693,33 @@ export function ReconciliationWorkspace({
               {busy === 'start' ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
               {rec ? 'Update' : 'Start'}
             </button>
+
+            {/* Drop-and-parse: anchor the ending balance + auto-check-off from a statement */}
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".pdf,image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void onImportFile(f);
+                e.target.value = '';
+              }}
+            />
+            <button
+              onClick={() => importInputRef.current?.click()}
+              disabled={!periodId || finalized || importing}
+              title="Drop a bank/credit-card statement to anchor the ending balance and auto-clear matching lines"
+              className={clsx(
+                'inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium',
+                periodId && !finalized
+                  ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/20'
+                  : 'cursor-not-allowed border-slate-800 bg-slate-800 text-slate-600',
+              )}
+            >
+              {importing ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />}
+              Import statement
+            </button>
           </div>
           {availablePeriods.length === 0 && (
             <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-400">
@@ -604,6 +752,137 @@ export function ReconciliationWorkspace({
             </div>
           ) : data ? (
             <>
+              {/* Statement import result — anchored balance + auto-cleared vs needs-review split */}
+              {importResult && (
+                <div className="mb-4 rounded-lg border border-indigo-500/25 bg-indigo-500/[0.06] p-4">
+                  <div className="mb-3 flex items-center gap-1.5 text-sm font-medium text-white">
+                    <Wand2 size={14} className="text-indigo-400" />
+                    Statement imported
+                    <span className="ml-1 truncate text-2xs font-normal text-slate-500">{importResult.meta.fileName}</span>
+                    <button
+                      onClick={() => setImportResult(null)}
+                      className="ml-auto rounded p-1 text-slate-500 hover:bg-white/[0.04] hover:text-slate-300"
+                      aria-label="Dismiss import summary"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+
+                  <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <div className="rounded-md bg-slate-800/50 px-3 py-2">
+                      <p className="text-2xs uppercase tracking-wider text-slate-500">Ending balance</p>
+                      <p className="mt-0.5 font-mono text-sm text-white">
+                        {importResult.anchored && importResult.statementEndingBalanceCents != null
+                          ? formatMoney(importResult.statementEndingBalanceCents)
+                          : '—'}
+                      </p>
+                    </div>
+                    <div className="rounded-md bg-slate-800/50 px-3 py-2">
+                      <p className="text-2xs uppercase tracking-wider text-slate-500">Auto-cleared</p>
+                      <p className="mt-0.5 font-mono text-sm text-emerald-400">{importResult.autoClearedCount}</p>
+                    </div>
+                    <div className="rounded-md bg-slate-800/50 px-3 py-2">
+                      <p className="text-2xs uppercase tracking-wider text-slate-500">To review</p>
+                      <p className="mt-0.5 font-mono text-sm text-amber-400">{importResult.needsReview.length}</p>
+                    </div>
+                    <div className="rounded-md bg-slate-800/50 px-3 py-2">
+                      <p className="text-2xs uppercase tracking-wider text-slate-500">No book entry</p>
+                      <p className="mt-0.5 font-mono text-sm text-slate-300">{importResult.unmatchedStatement.length}</p>
+                    </div>
+                  </div>
+
+                  {!importResult.anchored && (
+                    <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2 text-2xs text-amber-200">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+                      The statement did not state a closing balance — set the ending balance above manually, then finalize.
+                    </div>
+                  )}
+
+                  {importResult.documentNote && (
+                    <p className="mb-3 text-2xs leading-relaxed text-slate-500">{importResult.documentNote}</p>
+                  )}
+
+                  {/* Suggested (mid-confidence) matches — human accepts, never auto-cleared */}
+                  {importResult.needsReview.length > 0 && (
+                    <div className="mb-2">
+                      <p className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-amber-300/80">
+                        Suggested matches — confirm to clear
+                      </p>
+                      <ul className="space-y-1.5">
+                        {importResult.needsReview.map((p) => (
+                          <li
+                            key={p.bookLineId}
+                            className="flex items-center justify-between gap-3 rounded-md border border-slate-700/60 bg-slate-900/50 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="truncate text-xs text-slate-200">{p.statementDescription}</span>
+                                <span className="font-mono text-2xs text-slate-500">{p.statementDate}</span>
+                                <span
+                                  className={clsx(
+                                    'font-mono text-xs tabular-nums',
+                                    p.statementAmountCents < 0 ? 'text-red-400' : 'text-emerald-400',
+                                  )}
+                                >
+                                  {formatMoney(p.statementAmountCents)}
+                                </span>
+                              </div>
+                              <p className="mt-0.5 truncate text-2xs text-slate-500">
+                                ≈ book: {p.bookDescription || 'Bank transaction'} · {p.bookDate} ·{' '}
+                                {Math.round(p.score * 100)}% match
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => acceptSuggestion(p)}
+                              disabled={busy === `review:${p.bookLineId}`}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                            >
+                              {busy === `review:${p.bookLineId}` ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : (
+                                <Check size={12} />
+                              )}
+                              Clear
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* On the statement, no matching book entry — investigate */}
+                  {importResult.unmatchedStatement.length > 0 && (
+                    <div className="mt-2">
+                      <p className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-slate-500">
+                        On the statement, no book entry
+                      </p>
+                      <ul className="divide-y divide-slate-800/60 rounded-md border border-slate-800">
+                        {importResult.unmatchedStatement.slice(0, 12).map((s) => (
+                          <li key={s.statementId} className="flex items-center justify-between gap-3 px-3 py-1.5">
+                            <span className="truncate text-2xs text-slate-300">{s.description}</span>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <span className="font-mono text-2xs text-slate-500">{s.transactionDate}</span>
+                              <span
+                                className={clsx(
+                                  'font-mono text-2xs tabular-nums',
+                                  s.amountCents < 0 ? 'text-red-400' : 'text-emerald-400',
+                                )}
+                              >
+                                {formatMoney(s.amountCents)}
+                              </span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-1 text-2xs text-slate-600">
+                        These lines are on the statement but not in the book — investigate or add them via the bank feed.
+                        Nothing here is posted or finalized automatically.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Running tie-out */}
               <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <Stat label="Beginning" value={formatMoney(data.summary.beginningBalanceCents)} />
