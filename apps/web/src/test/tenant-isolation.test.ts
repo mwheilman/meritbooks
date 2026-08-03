@@ -45,7 +45,7 @@
  * PROGRESS (2026-07-29, batch 2): the bulk conversion is done — ~40 raw routes
  * moved onto requireAuthedContext() (user-scoped, RLS-enforced). The remaining
  * matches are: `setup` (tenant bootstrap — runs before a membership exists),
- * three `events/*/process` routes (session-less internal workers that must
+ * three `events/<id>/process` routes (session-less internal workers that must
  * resolve the org per-event, a separate fix, NOT the user claim), and `me`
  * (already converted — its match is an unrelated `.limit(1)` on a different
  * query, a false positive of this file-level heuristic). Driving below 5 means

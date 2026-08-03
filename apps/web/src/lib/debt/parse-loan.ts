@@ -74,10 +74,13 @@ const LOW_CONFIDENCE = 0.6;
 export function mapFrequency(raw: unknown): PaymentFrequency {
   if (typeof raw !== 'string') return 'MONTHLY';
   const s = raw.trim().toUpperCase();
-  if (s.startsWith('MONTH')) return 'MONTHLY';
-  if (s.startsWith('QUART') || s.includes('QTR')) return 'QUARTERLY';
-  if (s.startsWith('SEMI') || s.includes('SEMIANNUAL') || s.includes('SEMI-ANNUAL') || s.includes('BIANNUAL')) return 'SEMIANNUAL';
-  if (s.startsWith('ANNUAL') || s.startsWith('YEAR') || s.includes('ANNUM')) return 'ANNUAL';
+  // Substring (not prefix) matching so free-form cadences like "per quarter",
+  // "paid monthly", or "due each year" map correctly. SEMI is tested before
+  // ANNUAL so "semi-annual" isn't captured as ANNUAL.
+  if (s.includes('MONTH')) return 'MONTHLY';
+  if (s.includes('QUART') || s.includes('QTR')) return 'QUARTERLY';
+  if (s.includes('SEMI') || s.includes('BIANNUAL')) return 'SEMIANNUAL';
+  if (s.includes('ANNUAL') || s.includes('YEAR') || s.includes('ANNUM')) return 'ANNUAL';
   if (FREQUENCIES.has(s as PaymentFrequency)) return s as PaymentFrequency;
   return 'MONTHLY';
 }

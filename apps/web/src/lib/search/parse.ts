@@ -56,6 +56,18 @@ const RELATIVE_DATE_WORDS = new Set([
   'today', 'yesterday', 'ytd', 'mtd', 'qtd',
 ]);
 
+/**
+ * Connector words that only ever appear as part of a relative-date phrase
+ * (e.g. "last month", "this year", "q3 2026"). They carry no retrieval signal on
+ * their own, and the date itself is captured by `parseDates`, so they must not
+ * leak into free-text terms.
+ */
+const DATE_PHRASE_WORDS = new Set([
+  'last', 'next', 'month', 'months', 'year', 'years',
+  'quarter', 'quarters', 'week', 'weeks',
+  'q1', 'q2', 'q3', 'q4',
+]);
+
 function pad(n: number): string {
   return n < 10 ? `0${n}` : String(n);
 }
@@ -244,6 +256,7 @@ export function parseTerms(raw: string): string[] {
     if (tok.length < 2) continue;
     if (STOPWORDS.has(tok)) continue;
     if (RELATIVE_DATE_WORDS.has(tok)) continue;
+    if (DATE_PHRASE_WORDS.has(tok)) continue;
     if (tok in MONTHS) continue;
     if (/^\d+$/.test(tok)) continue; // pure numbers → handled as amounts/number tokens
     if (/^\d{4}$/.test(tok)) continue;

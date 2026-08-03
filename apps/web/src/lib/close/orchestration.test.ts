@@ -73,8 +73,18 @@ describe('evaluateCloseGraph — auto verification', () => {
     expect(ev.completedTasks).toBe(ev.totalTasks);
   });
 
-  it('a failing FOUNDATION auto task blocks it and leaves dependents pending (dependency ordering)', () => {
-    const signals: CloseSignals = { ...CLEAN_SIGNALS, uncodedBankCents: 500_00 };
+  it('a failing FOUNDATION auto task blocks it and leaves not-yet-tied dependents pending (dependency ordering)', () => {
+    // Bank feeds are not coded (foundation fails). The downstream ties have ALSO
+    // not been achieved (reconciliation carries a blocker, AR shows a variance),
+    // so they are genuinely not the operator's turn. (An independently-tied task
+    // would pass regardless of upstream — that "satisfied wins" case is covered
+    // by the next test.)
+    const signals: CloseSignals = {
+      ...CLEAN_SIGNALS,
+      uncodedBankCents: 500_00,
+      reconciliationBlockers: 1,
+      arVarianceCents: 250_00,
+    };
     const ev = evaluateCloseGraph(signals, ALL_MANUAL);
 
     // bank feeds is actionable (no deps) and failing ⇒ blocked, with the driving $.
@@ -83,8 +93,8 @@ describe('evaluateCloseGraph — auto verification', () => {
     expect(bank.driverValue).toBe(500_00);
     expect(bank.reason).toMatch(/not yet coded/i);
 
-    // reconciliations depend on bank feeds ⇒ not the operator's turn ⇒ pending
-    // (even though the reconciliation signal itself ties).
+    // reconciliations depend on bank feeds and do not tie ⇒ not the operator's
+    // turn ⇒ pending. AR depends on reconciliations and likewise stays pending.
     expect(statusOf(ev, 'reconciliations_tied')).toBe('pending');
     expect(statusOf(ev, 'ar_subledger_tie')).toBe('pending');
     expect(ev.readyToHardClose).toBe(false);
