@@ -40,6 +40,8 @@ import {
   ShieldCheck,
   ClipboardList,
   Bot,
+  LayoutGrid,
+  Package,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -134,6 +136,7 @@ export const navigation: NavGroup[] = [
       { label: 'Job WIP Schedule', href: '/jobs/wip', icon: ClipboardCheck },
       { label: 'Vendors', href: '/vendors', icon: Building2 },
       { label: 'Customers', href: '/customers', icon: Contact },
+      { label: 'Inventory', href: '/inventory', icon: Package },
       { label: 'Retainage', href: '/retainage', icon: PiggyBank },
       { label: 'Vendor Compliance', href: '/vendor-compliance', icon: Shield },
       { label: '1099 Readiness', href: '/compliance-1099', icon: FileCheck },
@@ -150,6 +153,7 @@ export const navigation: NavGroup[] = [
   {
     label: 'Practice',
     items: [
+      { label: 'Portfolio', href: '/portfolio', icon: LayoutGrid },
       { label: 'Team & Access', href: '/team', icon: Users },
       { label: 'Audit Trail', href: '/audit', icon: History },
       { label: 'Operations', href: '/operations', icon: Activity },
