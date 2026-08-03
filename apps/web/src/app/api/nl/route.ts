@@ -118,7 +118,7 @@ export const POST = apiHandler(schema, async (body, ctx) => {
   const { result } = await classifyAndRoute(prompt, context, classify);
 
   // Trust rail: every classification is an AI action → append-only core.action_log.
-  const gw = gateway;
+  const gw: GatewayMeta | null = gateway;
   await logAction(supabase, {
     orgId,
     actorType: 'AI',
