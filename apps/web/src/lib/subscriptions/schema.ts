@@ -30,18 +30,18 @@ export const createSubscriptionSchema = z.object({
   vendor_name: z.string().min(1).max(200),
   product: z.string().max(200).nullable().optional(),
   category: z.string().max(120).nullable().optional(),
-  amount_cents: CENTS.default(0),
-  billing_cadence: z.enum(BILLING_CADENCES).default('MONTHLY'),
+  amount_cents: CENTS.optional(),
+  billing_cadence: z.enum(BILLING_CADENCES).optional(),
   first_seen_date: ISO_DATE.nullable().optional(),
   last_charged_date: ISO_DATE.nullable().optional(),
   next_renewal_date: ISO_DATE.nullable().optional(),
-  status: z.enum(SUBSCRIPTION_STATUSES).default('ACTIVE'),
-  auto_renews: z.boolean().default(true),
+  status: z.enum(SUBSCRIPTION_STATUSES).optional(),
+  auto_renews: z.boolean().optional(),
   notice_period_days: z.number().int().min(0).max(3650).nullable().optional(),
   cancellation_terms: z.string().max(4000).nullable().optional(),
   cancellation_method: z.string().max(200).nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
-  source: z.enum(SUBSCRIPTION_SOURCES).default('MANUAL'),
+  source: z.enum(SUBSCRIPTION_SOURCES).optional(),
 });
 
 export const updateSubscriptionSchema = createSubscriptionSchema.partial();

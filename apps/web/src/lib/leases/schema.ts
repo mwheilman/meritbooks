@@ -17,13 +17,13 @@ export const createLeaseSchema = z
     lessor: z.string().min(1).max(200),
     description: z.string().max(500).optional(),
     location_id: z.string().uuid(),
-    classification: z.enum(LEASE_CLASSIFICATIONS).default('OPERATING'),
+    classification: z.enum(LEASE_CLASSIFICATIONS).optional(),
     commencement_date: ISO_DATE,
     end_date: ISO_DATE,
     /** Per-period payment in integer CENTS. */
     payment_cents: z.number().int().positive(),
-    payment_frequency: z.enum(LEASE_FREQUENCIES).default('MONTHLY'),
-    payment_timing: z.enum(LEASE_TIMINGS).default('ARREARS'),
+    payment_frequency: z.enum(LEASE_FREQUENCIES).optional(),
+    payment_timing: z.enum(LEASE_TIMINGS).optional(),
     /** Whole-month term; must be a multiple of the payment-period length (checked in the engine). */
     term_months: z.number().int().positive().max(1200),
     /** Discount / incremental borrowing rate as a decimal (0.06 = 6%). */

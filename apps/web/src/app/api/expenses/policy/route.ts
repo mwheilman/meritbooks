@@ -41,7 +41,7 @@ export async function GET() {
     .limit(100);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
   const active = rows.find((r) => r.status === 'ACTIVE') ?? null;
   return NextResponse.json({ data: rows, active });
 }

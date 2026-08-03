@@ -35,7 +35,7 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ error: 'Failed to load leases', code: 'INTERNAL_ERROR' }, { status: 500 });
   }
 
-  const rows = (data ?? []) as { term_months: number; periods_posted: number; status: string }[];
+  const rows = (data ?? []) as unknown as { term_months: number; periods_posted: number; status: string }[];
   const summary = {
     total: rows.length,
     active: rows.filter((r) => r.status === 'ACTIVE').length,
@@ -54,12 +54,12 @@ export const POST = apiHandler(
         lessor: body.lessor,
         description: body.description ?? null,
         locationId: body.location_id,
-        classification: body.classification,
+        classification: body.classification ?? 'OPERATING',
         commencementDate: body.commencement_date,
         endDate: body.end_date,
         paymentCents: body.payment_cents,
-        frequency: body.payment_frequency,
-        paymentTiming: body.payment_timing,
+        frequency: body.payment_frequency ?? 'MONTHLY',
+        paymentTiming: body.payment_timing ?? 'ARREARS',
         termMonths: body.term_months,
         discountRate: body.discount_rate,
         aiDecisionId: body.ai_decision_id ?? null,

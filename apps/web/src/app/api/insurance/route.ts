@@ -47,7 +47,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'Failed to load policies', code: 'INTERNAL_ERROR' }, { status: 500 });
   }
 
-  const rows = (data ?? []) as (RenewablePolicy & Record<string, unknown>)[];
+  const rows = (data ?? []) as unknown as (RenewablePolicy & Record<string, unknown>)[];
   const renewals = dueRenewals(rows, asOf, windowDays);
 
   const totalAnnualPremiumCents = rows.reduce((sum, p) => {
@@ -87,14 +87,14 @@ export const POST = apiHandler(
         location_id: body.location_id ?? null,
         carrier: body.carrier ?? null,
         policy_number: body.policy_number ?? null,
-        coverage_type: body.coverage_type,
+        coverage_type: body.coverage_type ?? 'OTHER',
         coverage_limit_cents: body.coverage_limit_cents ?? null,
         deductible_cents: body.deductible_cents ?? null,
         premium_cents: body.premium_cents ?? null,
-        premium_frequency: body.premium_frequency,
+        premium_frequency: body.premium_frequency ?? 'ANNUAL',
         effective_date: body.effective_date ?? null,
         expiration_date: body.expiration_date ?? null,
-        status: body.status,
+        status: body.status ?? 'ACTIVE',
         broker: body.broker ?? null,
         notes: body.notes ?? null,
         created_by_user: ctx.userId,

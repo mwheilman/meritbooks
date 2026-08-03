@@ -53,7 +53,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'Failed to load subscriptions', code: 'INTERNAL_ERROR' }, { status: 500 });
   }
 
-  const rows = (data ?? []) as SubscriptionRow[];
+  const rows = (data ?? []) as unknown as SubscriptionRow[];
   const renewals = dueRenewals(rows, asOf, windowDays);
 
   const summary = {
@@ -88,20 +88,23 @@ export const POST = apiHandler(
         vendor_name: body.vendor_name,
         product: body.product ?? null,
         category: body.category ?? null,
-        amount_cents: body.amount_cents,
-        billing_cadence: body.billing_cadence,
+        amount_cents: body.amount_cents ?? 0,
+        billing_cadence: body.billing_cadence ?? 'MONTHLY',
         first_seen_date: body.first_seen_date ?? null,
         last_charged_date: body.last_charged_date ?? null,
         next_renewal_date: body.next_renewal_date ?? null,
-        status: body.status,
-        auto_renews: body.auto_renews,
+        status: body.status ?? 'ACTIVE',
+        auto_renews: body.auto_renews ?? true,
         notice_period_days: body.notice_period_days ?? null,
         cancellation_terms: body.cancellation_terms ?? null,
         cancellation_method: body.cancellation_method ?? null,
         notes: body.notes ?? null,
-        source: body.source,
+        source: body.source ?? 'MANUAL',
         // A manual entry keeps its own idempotency lane keyed on vendor+cadence.
-        dedup_key: body.source === 'MANUAL' ? subscriptionDedupKey(body.vendor_name, body.billing_cadence) : null,
+        dedup_key:
+          (body.source ?? 'MANUAL') === 'MANUAL'
+            ? subscriptionDedupKey(body.vendor_name, body.billing_cadence ?? 'MONTHLY')
+            : null,
         created_by_user: ctx.userId,
       })
       .select('id')

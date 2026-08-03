@@ -21,7 +21,8 @@ type CoreTable =
   | 'departments'
   | 'classes'
   | 'jobs'
-  | 'customers';
+  | 'customers'
+  | 'employees';
 
 /**
  * Fetch a Map<id, row> from a `core` table for the given set of ids.

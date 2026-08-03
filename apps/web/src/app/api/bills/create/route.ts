@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     const policy = await evaluateProposedBill(supabase, orgId, {
       vendorId: body.vendor_id,
       vendorName,
-      billNumber: body.bill_number,
+      billNumber: body.bill_number ?? null,
       totalCents: totalCents,
       lines: body.lines.map((l) => ({
         accountId: l.account_id,

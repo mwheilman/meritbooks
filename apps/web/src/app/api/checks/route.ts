@@ -78,7 +78,7 @@ export async function GET() {
     vendor: { name: string | null; display_name: string | null } | null;
   };
   const billById = new Map<string, BillJoin>(
-    ((bills ?? []) as BillJoin[]).map((b) => [b.id, b]),
+    ((bills ?? []) as unknown as BillJoin[]).map((b) => [b.id, b]),
   );
 
   const data: CheckRow[] = rows.map((r) => {
