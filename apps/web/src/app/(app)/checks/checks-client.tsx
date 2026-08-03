@@ -71,6 +71,7 @@ interface ReleaseResponse {
   released: number;
   failed: number;
   blocked: number;
+  skipped?: number;
   totalReleasedCents: number;
   error?: string;
 }
@@ -333,6 +334,13 @@ function DisbursementBatchPanel({
       a.click();
       a.remove();
       URL.revokeObjectURL(href);
+      // Record the EXPORTED audit marker via POST — the GET download is
+      // side-effect-free, so the write is a separate, explicit call (best-effort).
+      void fetch('/api/ap/disbursements/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format }),
+      }).catch(() => {});
       addToast('success', `Exported ${format === 'csv' ? 'bill-pay CSV' : 'ACH file'}`);
       if (warnings) addToast('error', warnings.slice(0, 180));
     } catch {
@@ -365,6 +373,7 @@ function DisbursementBatchPanel({
       const parts = [`Released ${result.released}`];
       if (result.failed > 0) parts.push(`${result.failed} failed`);
       if (result.blocked > 0) parts.push(`${result.blocked} blocked (SoD)`);
+      if (result.skipped && result.skipped > 0) parts.push(`${result.skipped} already released`);
       addToast(result.failed > 0 ? 'info' : 'success', parts.join(', '));
       await onReleased();
     } catch {

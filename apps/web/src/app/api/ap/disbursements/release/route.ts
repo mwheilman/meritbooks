@@ -6,7 +6,7 @@ import { requireMoneyMovement, PAYMENTS_EXECUTE } from '@/lib/rbac/payments-perm
 import { logHumanAction } from '@/lib/trust/action-log';
 import { recordBillPayment } from '@/lib/posting/lifecycle';
 import { PostingError } from '@/lib/posting/account-roles';
-import { markReleased } from '@/lib/money/approvals';
+import { claimApprovalForRelease, finalizeReleaseClaim, revertReleaseClaim } from '@/lib/money/approvals';
 import { assembleApprovedBatch } from '@/lib/ap/assemble-batch';
 import { buildDisbursementBatch } from '@/lib/ap/disbursement-batch';
 
@@ -29,6 +29,11 @@ import { buildDisbursementBatch } from '@/lib/ap/disbursement-batch';
  *   - Duplicate-payment guard: a batch with a CRITICAL intra-batch duplicate is
  *     BLOCKED unless the caller explicitly overrides.
  *   - Vendor-compliance gate: recordBillPayment re-checks W-9/COI at pay time.
+ *   - Concurrent-release double-pay guard (task #110): before posting, each line
+ *     is atomically CLAIMED (APPROVED -> RELEASED compare-and-set). Two racing
+ *     release calls serialize on the row lock and exactly one wins the claim — the
+ *     loser skips, so the same line can never post twice. The claim is finalized
+ *     only after the payment posts; a failed post reverts the claim for retry.
  *
  * RLS scopes every read/write to the caller's org (same RLS-scoped client the
  * approve + bank-feed settlement paths already post through).
@@ -108,6 +113,7 @@ export async function POST(request: Request) {
   const released: Array<{ approvalId: string; billId: string; paymentId: string; amountCents: number }> = [];
   const failed: Array<{ approvalId: string; billId: string; error: string }> = [];
   const blocked: Array<{ approvalId: string; billId: string; reason: string }> = [];
+  const skipped: Array<{ approvalId: string; billId: string; reason: string }> = [];
   let totalReleasedCents = 0;
 
   for (const group of batch.groups) {
@@ -121,6 +127,28 @@ export async function POST(request: Request) {
         });
         continue;
       }
+
+      // Concurrency guard: atomically CLAIM the approval BEFORE posting. The DB is
+      // the guarantor (APPROVED -> RELEASED compare-and-set under a row lock), so a
+      // concurrent release that loses the claim skips instead of double-posting.
+      let claim;
+      try {
+        claim = await claimApprovalForRelease(supabase, orgId, item.approvalId, userId);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Claim failed';
+        failed.push({ approvalId: item.approvalId, billId: item.billId, error: msg });
+        continue;
+      }
+      if (claim !== 'CLAIMED') {
+        // Another release already claimed/released this line — do NOT post again.
+        skipped.push({
+          approvalId: item.approvalId,
+          billId: item.billId,
+          reason: 'Already released by a concurrent release run.',
+        });
+        continue;
+      }
+
       try {
         const pay = await recordBillPayment(supabase, {
           orgId,
@@ -131,10 +159,15 @@ export async function POST(request: Request) {
           cashAccountId,
           createdBy: null,
         });
-        await markReleased(supabase, orgId, item.approvalId, userId, `bill_payment:${pay.payment_id}`);
+        // Finalize the claim only after money posted (stamps correlation id + the
+        // immutable RELEASED audit step).
+        await finalizeReleaseClaim(supabase, orgId, item.approvalId, userId, `bill_payment:${pay.payment_id}`);
         released.push({ approvalId: item.approvalId, billId: item.billId, paymentId: pay.payment_id, amountCents: item.amountCents });
         totalReleasedCents += item.amountCents;
       } catch (e) {
+        // Post failed AFTER the claim — nothing posted, no money moved. Revert the
+        // claim so the line returns to APPROVED and can be retried.
+        await revertReleaseClaim(supabase, orgId, item.approvalId).catch(() => {});
         const msg = e instanceof PostingError ? e.message : e instanceof Error ? e.message : 'Release failed';
         failed.push({ approvalId: item.approvalId, billId: item.billId, error: msg });
       }
@@ -144,11 +177,12 @@ export async function POST(request: Request) {
   await logHumanAction(supabase, userId, orgId, {
     action: 'ap.disbursements.release',
     subjectTable: 'approvals',
-    summary: `Released ${released.length} disbursement(s) (${(totalReleasedCents / 100).toFixed(2)}); ${failed.length} failed, ${blocked.length} blocked (SoD)`,
+    summary: `Released ${released.length} disbursement(s) (${(totalReleasedCents / 100).toFixed(2)}); ${failed.length} failed, ${blocked.length} blocked (SoD), ${skipped.length} skipped (already released)`,
     metadata: {
       released: released.length,
       failed: failed.length,
       blocked: blocked.length,
+      skipped: skipped.length,
       totalReleasedCents,
       overrideDuplicates: !!body.overrideDuplicates,
     },
@@ -158,7 +192,8 @@ export async function POST(request: Request) {
     released: released.length,
     failed: failed.length,
     blocked: blocked.length,
+    skipped: skipped.length,
     totalReleasedCents,
-    results: { released, failed, blocked },
+    results: { released, failed, blocked, skipped },
   });
 }

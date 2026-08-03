@@ -299,6 +299,91 @@ export async function markReleased(adminDb: SupabaseClient, orgId: string, appro
   return { ...a, status: 'RELEASED', releasedBy: actor, providerCorrelationId };
 }
 
+export type ReleaseClaimResult = 'CLAIMED' | 'ALREADY_CLAIMED';
+
+/**
+ * Atomically CLAIM an APPROVED approval for release — the concurrency guarantor
+ * for the money-out path (task #110, security audit).
+ *
+ * The double-pay race: two simultaneous /ap/disbursements/release calls could
+ * each assemble the same APPROVED line and both reach recordBillPayment before
+ * markReleased flipped it to RELEASED (markReleased read-then-writes via
+ * assertTransition — not atomic under concurrency).
+ *
+ * This closes it with a single conditional compare-and-set: flip APPROVED ->
+ * RELEASED with an UPDATE that only matches WHILE status is still APPROVED. Under
+ * READ COMMITTED, two concurrent releasers serialize on the row lock and Postgres
+ * re-evaluates the `status = 'APPROVED'` predicate against the winner's committed
+ * row, so EXACTLY ONE update matches. The DB — not an app-level check — is the
+ * guarantor; the loser gets ALREADY_CLAIMED and MUST NOT post.
+ *
+ * Deliberately does NOT route through markReleased/assertTransition (that is a
+ * racy read-then-write). It uses ONLY existing columns/enum values, so it needs
+ * no migration and cannot regress. released_by is stamped now;
+ * provider_correlation_id and the immutable RELEASED audit step are written by
+ * finalizeReleaseClaim() AFTER the payment posts. If posting fails, the caller
+ * MUST revertReleaseClaim() so the (un-posted) line returns to APPROVED for retry.
+ */
+export async function claimApprovalForRelease(
+  db: SupabaseClient,
+  orgId: string,
+  approvalId: string,
+  actor: string,
+): Promise<ReleaseClaimResult> {
+  const { data, error } = await db
+    .from('approvals')
+    .update({ status: 'RELEASED', released_by: actor })
+    .eq('org_id', orgId)
+    .eq('id', approvalId)
+    .eq('status', 'APPROVED') // compare-and-set: only the row still APPROVED matches
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? 'CLAIMED' : 'ALREADY_CLAIMED';
+}
+
+/**
+ * Finalize a claimed release AFTER the payment posted: stamp the provider
+ * correlation id and append the immutable RELEASED audit step (the step is only
+ * written once money has actually posted, so the trail never shows a release that
+ * did not happen).
+ */
+export async function finalizeReleaseClaim(
+  db: SupabaseClient,
+  orgId: string,
+  approvalId: string,
+  actor: string,
+  providerCorrelationId: string,
+): Promise<void> {
+  const { error } = await db
+    .from('approvals')
+    .update({ provider_correlation_id: providerCorrelationId })
+    .eq('org_id', orgId)
+    .eq('id', approvalId);
+  if (error) throw new Error(error.message);
+  await logStep(db, orgId, approvalId, 'RELEASED', actor, 'APPROVED', 'RELEASED', { providerCorrelationId });
+}
+
+/**
+ * Roll back a claim whose payment FAILED to post — returns the line to APPROVED so
+ * it can be retried. Conditional on the row still being the un-finalized claim
+ * (status RELEASED, no provider_correlation_id) so it can never clobber a
+ * legitimately completed release. No audit step is written: nothing was released.
+ */
+export async function revertReleaseClaim(
+  db: SupabaseClient,
+  orgId: string,
+  approvalId: string,
+): Promise<void> {
+  await db
+    .from('approvals')
+    .update({ status: 'APPROVED', released_by: null, provider_correlation_id: null })
+    .eq('org_id', orgId)
+    .eq('id', approvalId)
+    .eq('status', 'RELEASED')
+    .is('provider_correlation_id', null);
+}
+
 export async function markSettled(adminDb: SupabaseClient, orgId: string, approvalId: string, actor: string): Promise<Approval> {
   const a = await getApproval(adminDb, orgId, approvalId);
   assertTransition(a.status, 'SETTLED');

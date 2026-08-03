@@ -16,9 +16,12 @@ import {
  * GET /api/ap/disbursements/export?format=csv|nacha — download the payment FILE.
  *
  * This is the ONLY "payment" output of the money-out MVP: a FILE the human
- * uploads to their bank. It NEVER moves money, NEVER posts to the GL, and NEVER
- * contacts a bank or payment API — it serializes the approved batch and returns
- * it as a download. RLS scopes the read to the caller's org.
+ * uploads to their bank. It NEVER moves money, NEVER posts to the GL, NEVER
+ * contacts a bank or payment API, and — as of task #110 — NEVER writes anything:
+ * a GET is a pure, side-effect-free read that serializes the approved batch and
+ * returns it as a download. RLS scopes the read to the caller's org. The EXPORTED
+ * audit marker is recorded by the explicit POST below, so downloads (which browsers
+ * may prefetch/retry) can never mutate the audit trail.
  *
  * NACHA note: MeritBooks stores only MASKED bank details, so the ACH file is a
  * standards-shaped TEMPLATE with placeholder routing/account fields (surfaced via
@@ -27,7 +30,7 @@ import {
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId, userId } = ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const url = new URL(request.url);
@@ -49,19 +52,9 @@ export async function GET(request: Request) {
   const batch = buildDisbursementBatch(assembled.items);
   const stamp = new Date().toISOString().slice(0, 10);
 
-  // EXPORTED marker (batch-level status is DRAFT→EXPORTED→RELEASED once the
-  // disbursement_batches table lands; until then the audit log records it).
-  await logHumanAction(supabase, userId, orgId, {
-    action: 'ap.disbursements.export',
-    subjectTable: 'approvals',
-    summary: `Exported ${format.toUpperCase()} disbursement file: ${batch.controls.itemCount} payment(s), ${(batch.controls.totalCents / 100).toFixed(2)} total`,
-    metadata: {
-      format,
-      itemCount: batch.controls.itemCount,
-      totalCents: batch.controls.totalCents,
-      vendorCount: batch.controls.vendorCount,
-    },
-  }).catch(() => {});
+  // NOTE: the EXPORTED audit marker is NOT written here — a GET must be
+  // side-effect-free. The client records it via POST /api/ap/disbursements/export
+  // after the download succeeds.
 
   if (format === 'csv') {
     const csv = toBillPayCsv(batch, assembled.remittance);
@@ -98,5 +91,63 @@ export async function GET(request: Request) {
       'Cache-Control': 'no-store',
       'X-Export-Warnings': nacha.warnings.join(' | ').slice(0, 900),
     },
+  });
+}
+
+/**
+ * POST /api/ap/disbursements/export — record the EXPORTED audit marker.
+ *
+ * The write half of export, split out of GET so downloading a file (a read a
+ * browser may prefetch or retry) never mutates the audit trail. The client calls
+ * this once, after a successful download, to log that the batch's bank file was
+ * exported. It NEVER moves money or posts to the GL. RLS scopes every read/write
+ * to the caller's org.
+ *
+ * (Batch-level status is DRAFT→EXPORTED→RELEASED once the disbursement_batches
+ * table lands; until then this human-action log records the EXPORTED step.)
+ */
+export async function POST(request: Request) {
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, userId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  let format = 'csv';
+  try {
+    const body = (await request.json()) as { format?: string };
+    if (body.format === 'nacha' || body.format === 'csv') format = body.format;
+  } catch {
+    /* empty body -> default csv */
+  }
+
+  // Re-assemble (read-only, RLS-scoped) so the marker's counts are server-computed,
+  // not client-supplied.
+  let assembled;
+  try {
+    assembled = await assembleApprovedBatch(supabase);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Assembly failed' }, { status: 500 });
+  }
+  if (assembled.items.length === 0) {
+    return NextResponse.json({ error: 'No approved disbursements to mark exported' }, { status: 409 });
+  }
+  const batch = buildDisbursementBatch(assembled.items);
+
+  await logHumanAction(supabase, userId, orgId, {
+    action: 'ap.disbursements.export',
+    subjectTable: 'approvals',
+    summary: `Exported ${format.toUpperCase()} disbursement file: ${batch.controls.itemCount} payment(s), ${(batch.controls.totalCents / 100).toFixed(2)} total`,
+    metadata: {
+      format,
+      itemCount: batch.controls.itemCount,
+      totalCents: batch.controls.totalCents,
+      vendorCount: batch.controls.vendorCount,
+    },
+  }).catch(() => {});
+
+  return NextResponse.json({
+    ok: true,
+    itemCount: batch.controls.itemCount,
+    totalCents: batch.controls.totalCents,
   });
 }
