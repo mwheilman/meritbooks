@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle, XCircle, X } from 'lucide-react';
+import { CheckCircle, XCircle, Info, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useToast, type Toast } from '@/hooks/use-toast';
 
@@ -12,10 +12,13 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
         'animate-in slide-in-from-right-full fade-in duration-300',
         toast.type === 'success' && 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300',
         toast.type === 'error' && 'bg-red-500/10 border-red-500/20 text-red-300',
+        toast.type === 'info' && 'bg-blue-500/10 border-blue-500/20 text-blue-300',
       )}
     >
       {toast.type === 'success' ? (
         <CheckCircle size={16} className="shrink-0 text-emerald-400" />
+      ) : toast.type === 'info' ? (
+        <Info size={16} className="shrink-0 text-blue-400" />
       ) : (
         <XCircle size={16} className="shrink-0 text-red-400" />
       )}

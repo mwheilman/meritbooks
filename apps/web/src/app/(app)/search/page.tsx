@@ -21,6 +21,7 @@ import {
   Search, Loader2, X, Sparkles, ArrowRight, Receipt, FileText, Landmark,
   BookOpen, Truck, Users, Wallet,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 type SearchType =
   | 'journal_entry' | 'bank_transaction' | 'invoice' | 'bill'
@@ -54,7 +55,7 @@ interface SearchResponse {
   aiAssisted: boolean;
 }
 
-const TYPE_ICON: Record<SearchType, React.ComponentType<{ size?: number; className?: string }>> = {
+const TYPE_ICON: Record<SearchType, LucideIcon> = {
   journal_entry: BookOpen,
   bank_transaction: Landmark,
   invoice: FileText,

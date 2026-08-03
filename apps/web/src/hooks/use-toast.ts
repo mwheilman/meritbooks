@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 export interface Toast {
   id: string;
-  type: 'success' | 'error';
+  type: 'success' | 'error' | 'info';
   message: string;
 }
 
@@ -24,7 +24,7 @@ export function addToast(type: Toast['type'], message: string, duration?: number
   toasts = [...toasts, { id, type, message }];
   emit();
 
-  const ms = duration ?? (type === 'success' ? 4000 : 8000);
+  const ms = duration ?? (type === 'error' ? 8000 : 4000);
   setTimeout(() => {
     toasts = toasts.filter((t) => t.id !== id);
     emit();

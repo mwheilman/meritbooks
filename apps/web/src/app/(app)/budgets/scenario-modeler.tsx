@@ -353,21 +353,29 @@ export function ScenarioModeler({
         <div className="card p-4">
           <div className="text-xs font-semibold uppercase text-slate-500 mb-2">Saved scenarios ({savedList.length})</div>
           <div className="space-y-1.5">
-            {savedList.map((s) => (
-              <button key={s.id} onClick={() => loadSaved(s)}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-800/30 hover:bg-slate-800/60 text-left transition-colors">
-                <Sparkles size={13} className="text-indigo-400 shrink-0" />
-                <span className="text-xs text-slate-200 font-medium">{s.name}</span>
-                {s.result && (
+            {savedList.map((s) => {
+              // The saved record stores only the scenario definition; recompute the
+              // three-case result from it (pure) so the row can preview net income.
+              const result = buildThreeCase({
+                name: s.name,
+                baseDrivers: s.definition.baseDrivers,
+                beginningCashCents: s.definition.beginningCashCents,
+                cases: s.definition.cases,
+              });
+              return (
+                <button key={s.id} onClick={() => loadSaved(s)}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-800/30 hover:bg-slate-800/60 text-left transition-colors">
+                  <Sparkles size={13} className="text-indigo-400 shrink-0" />
+                  <span className="text-xs text-slate-200 font-medium">{s.name}</span>
                   <span className="ml-auto flex items-center gap-3 font-mono text-2xs">
-                    <span className="text-red-300">{formatMoney(s.result.worst.summary.netIncomeCents, { compact: true })}</span>
-                    <span className="text-slate-400">{formatMoney(s.result.base.summary.netIncomeCents, { compact: true })}</span>
-                    <span className="text-emerald-300">{formatMoney(s.result.best.summary.netIncomeCents, { compact: true })}</span>
+                    <span className="text-red-300">{formatMoney(result.worst.summary.netIncomeCents, { compact: true })}</span>
+                    <span className="text-slate-400">{formatMoney(result.base.summary.netIncomeCents, { compact: true })}</span>
+                    <span className="text-emerald-300">{formatMoney(result.best.summary.netIncomeCents, { compact: true })}</span>
                   </span>
-                )}
-                <span className="text-2xs text-slate-600 shrink-0">{new Date(s.savedAt).toLocaleDateString()}</span>
-              </button>
-            ))}
+                  <span className="text-2xs text-slate-600 shrink-0">{new Date(s.savedAt).toLocaleDateString()}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

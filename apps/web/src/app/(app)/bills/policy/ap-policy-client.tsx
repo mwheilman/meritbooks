@@ -114,7 +114,7 @@ export function ApPolicyClient() {
 
   async function activateExisting(id: string) {
     const res = await api.post(`/api/bills/policy/${id}/activate`, {});
-    if (res.error) { addToast('error', res.error); return; }
+    if (res.error) { addToast('error', res.error.error); return; }
     addToast('success', 'Policy activated');
     refetch();
   }
@@ -393,7 +393,7 @@ function PolicyEditor({
       activate,
     });
     setSaving(null);
-    if (res.error) { addToast('error', res.error); return; }
+    if (res.error) { addToast('error', res.error.error); return; }
     addToast('success', activate ? 'Policy activated' : 'Draft saved');
     onSaved();
   }

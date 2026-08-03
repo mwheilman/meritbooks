@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { GitBranch } from 'lucide-react';
 import { formatMoney } from '@meritbooks/shared';
 import { addToast } from '@/hooks/use-toast';
 import { EmptyState, StatusBadge } from '@/components/ui';
@@ -272,7 +273,7 @@ export function ApprovalWorkflowsClient() {
         ) : error ? (
           <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-xs text-red-300">{error}</div>
         ) : workflows.length === 0 ? (
-          <EmptyState title="No workflows yet" description="Documents fall back to single-approver behavior until you define a chain above." />
+          <EmptyState icon={GitBranch} title="No workflows yet" description="Documents fall back to single-approver behavior until you define a chain above." />
         ) : (
           <div className="space-y-3">
             {workflows.map((wf) => (

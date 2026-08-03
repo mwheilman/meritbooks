@@ -33,6 +33,7 @@ import {
   Gauge,
   Layers,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { EmptyState, TableSkeleton } from '@/components/ui';
@@ -206,7 +207,7 @@ function RollupCard({
   label: string;
   value: string;
   sub?: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: LucideIcon;
   accent?: string;
 }) {
   return (
