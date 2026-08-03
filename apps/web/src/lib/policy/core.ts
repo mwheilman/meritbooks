@@ -41,8 +41,10 @@ export interface PolicyDomainConfig<TRuleset> {
   domain: string;
   /** The `public` table holding the versioned compiled rulesets. */
   table: string;
-  /** The fixed Zod schema the compiled ruleset MUST validate against. */
-  schema: z.ZodType<TRuleset>;
+  /** The fixed Zod schema the compiled ruleset MUST validate against. The Input
+   * generic is `unknown` so schemas whose `.default()`s make some inputs optional
+   * (optional-in / required-out) still satisfy the required output ruleset. */
+  schema: z.ZodType<TRuleset, z.ZodTypeDef, unknown>;
   /** Conservative, fully non-blocking ruleset used when nothing is active. */
   defaultRuleset: TRuleset;
   /** Core-AI gateway feature id (metered) for the drop-and-compile call. */
@@ -61,7 +63,7 @@ export interface PolicyDomainConfig<TRuleset> {
  * malformed/hand-tampered `compiled_rules` blob can NEVER reach enforcement.
  */
 export function parsePolicyRuleset<TRuleset>(
-  schema: z.ZodType<TRuleset>,
+  schema: z.ZodType<TRuleset, z.ZodTypeDef, unknown>,
   input: unknown
 ): { ok: true; ruleset: TRuleset } | { ok: false; errors: string[] } {
   const res = schema.safeParse(input);

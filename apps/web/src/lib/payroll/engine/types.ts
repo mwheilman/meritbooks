@@ -40,6 +40,10 @@ export interface EmployeePayResult {
   employerTaxCents: number;
   deductionsCents: number;
   benefitsCents: number;
+  /** Hours paid (echoed back from the input so the run row can persist it). Amounts only — not PII. */
+  hours?: number;
+  /** Earning lines (echoed back from the input for persistence). Amounts only — not PII. */
+  earnings?: PayrollEarning[];
   /** Opaque provider line reference (e.g. Check payroll-item id). Optional for the mock. */
   providerRef?: string;
 }

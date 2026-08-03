@@ -78,6 +78,8 @@ export type GenerateBody = z.infer<typeof generateSchema>;
 
 export const approveSchema = z.object({
   run_id: z.string().uuid(),
-  action: z.enum(['approve', 'reject']).default('approve'),
+  // Optional (not `.default`) so the schema's Zod input matches its output, which
+  // apiHandler's ZodSchema<T> requires. Omitted / any non-'reject' value = approve.
+  action: z.enum(['approve', 'reject']).optional(),
 });
 export type ApproveBody = z.infer<typeof approveSchema>;

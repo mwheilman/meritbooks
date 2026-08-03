@@ -34,10 +34,7 @@ const querySchema = z.object({
   job_id: z.string().uuid().optional(),
   method: z.enum(['COST_TO_COST', 'COMMITMENTS', 'PROGRESS']).optional(),
   location_ids: z.string().max(2000).optional(),
-  explain: z
-    .string()
-    .optional()
-    .transform((v) => v === '1' || v === 'true'),
+  explain: z.string().optional(),
   fade_bps: z.coerce.number().int().min(0).max(10000).optional(),
 });
 type Query = z.infer<typeof querySchema>;
@@ -270,7 +267,7 @@ export const GET = apiQueryHandler(querySchema, async (q: Query, ctx: ApiContext
     const result = computeEac(toEacInput(j, committed.get(j.id) ?? 0), opts);
     const meta = jobMeta(j);
 
-    if (q.explain) {
+    if (q.explain === '1' || q.explain === 'true') {
       const explained = await explainAndFlag(ctx, meta, result);
       return NextResponse.json({ job: meta, method, eac: result, ...explained });
     }

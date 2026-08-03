@@ -27,6 +27,9 @@ const searchSchema = z.object({
 type SearchInput = z.infer<typeof searchSchema>;
 
 export const POST = apiHandler(searchSchema, async (body: SearchInput, ctx) => {
+  if (!ctx.orgId) {
+    return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+  }
   const response = await runSearch({
     supabase: ctx.supabase,
     orgId: ctx.orgId,

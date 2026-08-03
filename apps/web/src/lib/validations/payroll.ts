@@ -24,8 +24,10 @@ export const employeePayInputSchema = z.object({
   employeeId: uuid,
   hours: z.number().nonnegative().optional(),
   // Earnings breakdown (hourly/salary/bonus/reimbursement...) — amounts in cents,
-  // opaque to the run workflow, consumed by the PayrollEngine.
-  earnings: z.array(z.record(z.unknown())).optional(),
+  // consumed by the PayrollEngine. Shape matches the engine's PayrollEarning.
+  earnings: z
+    .array(z.object({ type: z.string(), amountCents: z.number() }))
+    .default([]),
   // Cost dimensions that make the eventual GL post job-costed (FPB §11).
   departmentId: uuid.nullish(),
   jobId: uuid.nullish(),

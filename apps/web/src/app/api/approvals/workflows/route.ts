@@ -61,10 +61,12 @@ export const POST = apiHandler(createSchema, async (body, ctx) => {
       active: body.active,
       steps: body.steps.map((s) => ({
         stepOrder: s.stepOrder,
-        minAmountCents: s.minAmountCents,
-        maxAmountCents: s.maxAmountCents,
+        // Zod fills these via `.default()` at parse time; the `??` only satisfies the
+        // types (apiHandler infers the schema's optional-in shape) and never fires.
+        minAmountCents: s.minAmountCents ?? 0,
+        maxAmountCents: s.maxAmountCents ?? null,
         approverRole: s.approverRole as (typeof ALL_ROLES)[number],
-        requireDistinct: s.requireDistinct,
+        requireDistinct: s.requireDistinct ?? true,
       })),
       createdByUser: ctx.userId,
     });

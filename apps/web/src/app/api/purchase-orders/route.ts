@@ -142,7 +142,7 @@ export async function POST(request: Request) {
     0,
   );
   const totalCents = subtotalCents + body.tax_cents;
-  const poNumber = await mintPoNumber(supabase as unknown as Supa, orgId, orderDate);
+  const poNumber = await mintPoNumber(supabase as unknown as SupabaseClient, orgId, orderDate);
 
   const { data: po, error: poErr } = await supabase
     .from('purchase_orders')

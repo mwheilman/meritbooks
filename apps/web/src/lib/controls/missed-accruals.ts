@@ -618,7 +618,11 @@ export async function scanMissedAccruals(
         if (!b.vendor_id) continue;
         const period = periodOf(b.bill_date);
         if (!period) continue;
-        const g = byVendor.get(b.vendor_id) ?? { bills: [], ids: [], locCount: new Map() };
+        const g = byVendor.get(b.vendor_id) ?? {
+          bills: [] as VendorBill[],
+          ids: [] as string[],
+          locCount: new Map<string, number>(),
+        };
         g.bills.push({ period, amountCents: Number(b.total_cents) || 0 });
         g.ids.push(b.id);
         if (b.location_id) g.locCount.set(b.location_id, (g.locCount.get(b.location_id) ?? 0) + 1);

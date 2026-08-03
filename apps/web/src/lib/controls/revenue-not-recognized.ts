@@ -583,7 +583,7 @@ export async function scanRevenueNotRecognized(
     if (error) {
       console.warn('[controls/revrec] jobs load failed:', error.message);
     } else {
-      const jobs = (jobsRaw ?? []) as Array<
+      const jobs = (jobsRaw ?? []) as unknown as Array<
         JobRevRecRow & { id: string; job_number: string | null; name: string | null }
       >;
       summary.scanned.jobs = jobs.length;

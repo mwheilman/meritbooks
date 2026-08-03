@@ -27,11 +27,7 @@ import { createAdminSupabase } from '@/lib/supabase/server';
 
 const querySchema = z.object({
   /** Days ahead an obligation counts as an inbox alert (overdue always). 1..180, default 30. */
-  alert_horizon: z
-    .string()
-    .regex(/^\d+$/)
-    .optional()
-    .transform((v) => (v ? Math.min(Math.max(parseInt(v, 10), 1), 180) : 30)),
+  alert_horizon: z.coerce.number().int().optional(),
   /** Override "today" (yyyy-mm-dd) — testing/hypotheticals. Defaults to server date. */
   as_of: z
     .string()
@@ -45,6 +41,9 @@ function todayIso(): string {
 
 export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
   const asOf = params.as_of ?? todayIso();
+  // Default 30 days, clamped to 1..180 (previously done in the schema transform).
+  const alertHorizonDays =
+    params.alert_horizon != null ? Math.min(Math.max(params.alert_horizon, 1), 180) : 30;
 
   // Resolve money-movement approval authority once, on the identity spine. Read-only;
   // fails closed to "cannot approve" so nothing is over-elevated on a lookup error.
@@ -60,7 +59,7 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
   const { items, groups, counts, degraded } = await collectInbox(ctx.supabase, {
     asOf,
     canApproveMoney,
-    alertHorizonDays: params.alert_horizon,
+    alertHorizonDays,
   });
 
   return NextResponse.json({

@@ -317,7 +317,7 @@ export function assessCutoff(
 
   const base =
     input.evidence === 'document' ? thresholds.documentBaseConfidence : thresholds.memoBaseConfidence;
-  let confidence = base;
+  let confidence: number = base;
   if (daysFromCut <= thresholds.tightWindowDays) confidence += 0.1;
   if (input.evidence === 'document') confidence += 0.04;
   confidence = Math.max(thresholds.confidenceFloor, Math.min(thresholds.confidenceCeil, confidence));
@@ -875,7 +875,7 @@ async function loadDocDates(
       .from(table)
       .select(`id, gl_entry_id, ${dateCol}`)
       .in('gl_entry_id', entryIds.slice(0, 5000));
-    for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    for (const row of (data ?? []) as unknown as Array<Record<string, unknown>>) {
       const glId = row.gl_entry_id as string | null;
       const dt = row[dateCol] as string | null;
       const id = row.id as string;

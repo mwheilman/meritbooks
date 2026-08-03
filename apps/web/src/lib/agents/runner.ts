@@ -285,7 +285,7 @@ async function recordStepAudit(
 
 // ── Core drive loop ───────────────────────────────────────────────────────────
 
-function applyResult(rs: RunState, s: StepRuntime, def: AgentStepDef, r: StepExecuteResult): void {
+function applyResult(rs: RunState, s: StepRuntime, def: AgentStepDef, r: StepExecuteResult): AgentStepStatus {
   s.summary = r.summary;
   if (r.output) s.output = r.output;
   if (r.disposition !== undefined) s.disposition = r.disposition ?? null;
@@ -309,6 +309,7 @@ function applyResult(rs: RunState, s: StepRuntime, def: AgentStepDef, r: StepExe
     s.status = 'FAILED';
     s.endedAt = nowIso();
   }
+  return s.status;
 }
 
 /**
@@ -362,16 +363,16 @@ async function drive(ctx: AgentRunContext, rs: RunState, human?: HumanAdvance): 
       }
     }
 
-    applyResult(rs, s, def, result);
+    const finalStatus = applyResult(rs, s, def, result);
     rs.updatedAt = nowIso();
     await recordStepAudit(ctx, rs, s, actorType);
     await persistStep(ctx, rs, s);
 
-    if (s.status === 'DONE') {
+    if (finalStatus === 'DONE') {
       rs.currentStepIndex += 1;
       continue;
     }
-    if (s.status === 'WAITING') {
+    if (finalStatus === 'WAITING') {
       rs.status = 'PAUSED';
       rs.pausedReason = s.gatePrompt;
       await persistRun(ctx, rs);

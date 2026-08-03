@@ -107,4 +107,4 @@ export class AzureDocIntelligenceProvider implements DocIntelligenceProvider {
 }
 
 // Re-export the error type name so consumers can `import type` it from here too.
-export type { _NotConfigured };
+export type { DocProviderNotConfiguredError };

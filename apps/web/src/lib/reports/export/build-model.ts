@@ -65,12 +65,12 @@ export function buildIncomeStatement(data: ISData, meta: ExportMeta): StatementM
   emitSection(sectionByType('REVENUE'));
   emitSection(sectionByType('COGS'));
   rows.push({ kind: 'subtotal', label: 'Gross Profit', values: [data.summary.grossProfitCents] });
-  rows.push({ kind: 'spacer', values: [null] });
+  rows.push({ kind: 'spacer', label: '', values: [null] });
   emitSection(sectionByType('OPEX'));
   rows.push({ kind: 'subtotal', label: 'Operating Income', values: [data.summary.ebitdaCents] });
   const other = sectionByType('OTHER');
   if (other && other.groups.some((g) => g.accounts.length)) {
-    rows.push({ kind: 'spacer', values: [null] });
+    rows.push({ kind: 'spacer', label: '', values: [null] });
     emitSection(other);
   }
   rows.push({ kind: 'total', label: 'Net Income', values: [data.summary.netIncomeCents] });
@@ -110,7 +110,7 @@ export function buildBalanceSheet(data: BSData, meta: ExportMeta): StatementMode
 
   emit(sec('ASSET'));
   rows.push({ kind: 'total', label: 'Total Assets', values: [data.summary.totalAssetsCents] });
-  rows.push({ kind: 'spacer', values: [null] });
+  rows.push({ kind: 'spacer', label: '', values: [null] });
   emit(sec('LIABILITY'));
   emit(sec('EQUITY'));
   rows.push({ kind: 'total', label: 'Total Liabilities & Equity', values: [data.summary.liabilitiesPlusEquityCents] });
@@ -143,17 +143,17 @@ export function buildCashFlow(data: CFData, meta: ExportMeta): StatementModel {
   for (const a of data.operating.adjustments) rows.push({ kind: 'account', label: a.label, values: [a.amountCents], indent: 1 });
   for (const a of data.operating.changesInWorkingCapital) rows.push({ kind: 'account', label: a.label, values: [a.amountCents], indent: 1 });
   rows.push({ kind: 'subtotal', label: 'Net Cash from Operating Activities', values: [data.operating.totalCents] });
-  rows.push({ kind: 'spacer', values: [null] });
+  rows.push({ kind: 'spacer', label: '', values: [null] });
 
   rows.push({ kind: 'section', label: 'Investing Activities', values: [null] });
   for (const a of data.investing.items) rows.push({ kind: 'account', label: a.label, values: [a.amountCents], indent: 1 });
   rows.push({ kind: 'subtotal', label: 'Net Cash from Investing Activities', values: [data.investing.totalCents] });
-  rows.push({ kind: 'spacer', values: [null] });
+  rows.push({ kind: 'spacer', label: '', values: [null] });
 
   rows.push({ kind: 'section', label: 'Financing Activities', values: [null] });
   for (const a of data.financing.items) rows.push({ kind: 'account', label: a.label, values: [a.amountCents], indent: 1 });
   rows.push({ kind: 'subtotal', label: 'Net Cash from Financing Activities', values: [data.financing.totalCents] });
-  rows.push({ kind: 'spacer', values: [null] });
+  rows.push({ kind: 'spacer', label: '', values: [null] });
 
   rows.push({ kind: 'total', label: 'Net Change in Cash', values: [data.netChangeCents] });
   rows.push({ kind: 'account', label: 'Beginning Cash', values: [data.beginningCashCents] });
@@ -182,7 +182,7 @@ export function buildCashFlowDirect(data: CFDirectData, meta: ExportMeta): State
     rows.push({ kind: 'section', label, values: [null] });
     for (const l of s.lines) rows.push({ kind: 'account', label: l.label, values: [l.amountCents], indent: 1 });
     rows.push({ kind: 'subtotal', label: totalLabel, values: [s.totalCents] });
-    rows.push({ kind: 'spacer', values: [null] });
+    rows.push({ kind: 'spacer', label: '', values: [null] });
   };
   section('Operating Activities', data.operating, 'Net Cash from Operating Activities');
   section('Investing Activities', data.investing, 'Net Cash from Investing Activities');

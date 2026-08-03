@@ -37,11 +37,7 @@ const OBLIGATION_TYPES: readonly ObligationType[] = [
 
 const querySchema = z.object({
   /** Days to look ahead (overdue items are always included). 1..730, default 90. */
-  horizon: z
-    .string()
-    .regex(/^\d+$/)
-    .optional()
-    .transform((v) => (v ? Math.min(Math.max(parseInt(v, 10), 1), 730) : 90)),
+  horizon: z.coerce.number().int().optional(),
   /** Optional CSV of obligation types to include. Unknown values are ignored. */
   type: z.string().max(300).optional(),
   /** Override "today" (yyyy-mm-dd) — testing/hypotheticals. Defaults to server date. */
@@ -57,6 +53,9 @@ function todayIso(): string {
 
 export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
   const asOf = params.as_of ?? todayIso();
+  // Default 90 days, clamped to 1..730 (previously done in the schema transform).
+  const horizonDays =
+    params.horizon != null ? Math.min(Math.max(params.horizon, 1), 730) : 90;
 
   const typeFilter = (params.type ?? '')
     .split(',')
@@ -65,7 +64,7 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
 
   const { obligations, degraded } = await collectObligations(ctx.supabase, {
     asOf,
-    horizonDays: params.horizon,
+    horizonDays,
     types: typeFilter.length > 0 ? typeFilter : undefined,
   });
 
@@ -82,7 +81,7 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
 
   return NextResponse.json({
     asOf,
-    horizonDays: params.horizon,
+    horizonDays,
     obligations,
     buckets,
     summary,
