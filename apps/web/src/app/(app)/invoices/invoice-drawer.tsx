@@ -21,6 +21,7 @@ interface InvDetail {
   status: string; memo: string | null; isProgressBill: boolean; publicToken: string;
   customerId?: string; locationId?: string;
   subtotalCents: number; taxCents: number; totalCents: number;
+  taxRatePct?: number | null; taxJurisdiction?: string | null;
   amountPaidCents: number; balanceCents: number;
   customerName: string; customerEmail: string | null;
   locationName: string; locationCode: string; jobLabel: string | null;
@@ -280,7 +281,17 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
 
           <DetailSection title="">
             <DetailField label="Subtotal" value={formatMoney(data.subtotalCents)} mono />
-            <DetailField label="Tax" value={formatMoney(data.taxCents)} mono />
+            <DetailField
+              label={
+                data.taxJurisdiction === 'EXEMPT'
+                  ? 'Tax (exempt)'
+                  : data.taxRatePct
+                    ? `Tax · ${data.taxJurisdiction ? `${data.taxJurisdiction} ` : ''}${data.taxRatePct}%`
+                    : 'Tax'
+              }
+              value={formatMoney(data.taxCents)}
+              mono
+            />
             <DetailField label="Total" value={formatMoney(data.totalCents)} mono />
             <DetailField label="Paid" value={formatMoney(data.amountPaidCents)} mono />
             <DetailField label="Balance" value={formatMoney(data.balanceCents)} mono />

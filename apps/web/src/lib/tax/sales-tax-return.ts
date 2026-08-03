@@ -533,6 +533,35 @@ async function loadJobTaxMap(
 }
 
 /**
+ * Best-effort per-invoice resolved rate/jurisdiction (GATE 11d). Tax charged at
+ * creation stamps `invoices.tax_rate_pct` / `tax_jurisdiction`; those give the
+ * rate reconciliation an expected rate even for ad-hoc (no-job) invoices. The
+ * columns are a RESERVED-migration addition, so a failed lookup degrades to "no
+ * invoice-level rate" (the job/nothing fallback still applies). Read-only.
+ */
+async function loadInvoiceTaxMap(
+  supabase: SupabaseClient,
+  invoiceIds: string[],
+): Promise<Map<string, { tax_rate_pct: number | null; tax_jurisdiction: string | null }>> {
+  const out = new Map<string, { tax_rate_pct: number | null; tax_jurisdiction: string | null }>();
+  const unique = Array.from(new Set(invoiceIds.filter((x): x is string => typeof x === 'string' && x.length > 0)));
+  if (unique.length === 0) return out;
+  try {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('id, tax_rate_pct, tax_jurisdiction')
+      .in('id', unique);
+    if (error || !data) return out;
+    for (const row of data as Array<{ id: string; tax_rate_pct: number | null; tax_jurisdiction: string | null }>) {
+      if (row?.id) out.set(row.id, { tax_rate_pct: row.tax_rate_pct, tax_jurisdiction: row.tax_jurisdiction });
+    }
+  } catch {
+    /* columns not present yet — degrade to no invoice-level rate. */
+  }
+  return out;
+}
+
+/**
  * Assemble the sales-tax return worksheet + GL tie-out + nexus cross-reference
  * for the caller's org over [startDate, endDate]. Read-only: never registers,
  * files, posts, or moves money. Never throws — a data gap degrades the affected
@@ -575,6 +604,7 @@ export async function buildSalesTaxReturn(
     rows.map((r) => r.customer_id),
   );
   const jobMap = await loadJobTaxMap(supabase, rows.map((r) => r.job_id ?? ''));
+  const invTaxMap = await loadInvoiceTaxMap(supabase, rows.map((r) => r.id));
 
   // ── 3. Reduce each invoice to a ReturnInvoice (destination + taxability) ─────
   let attributed = 0;
@@ -596,17 +626,24 @@ export async function buildSalesTaxReturn(
     if (state) attributed += 1;
 
     const job = r.job_id ? jobMap.get(r.job_id) : undefined;
-    const expectedRatePct =
+    // Prefer the rate resolved AT invoice creation (GATE 11d); fall back to the job's
+    // configured rate. Either gives the rate reconciliation an expected rate to check.
+    const invTax = invTaxMap.get(r.id);
+    const invRate = invTax && invTax.tax_rate_pct != null && Number(invTax.tax_rate_pct) > 0 ? Number(invTax.tax_rate_pct) : null;
+    const jobRate =
       job && job.is_taxable !== false && job.tax_rate_pct != null && Number(job.tax_rate_pct) > 0
         ? Number(job.tax_rate_pct)
         : null;
+    const expectedRatePct = invRate ?? jobRate;
+    const invJurisdiction =
+      invTax && invTax.tax_jurisdiction && invTax.tax_jurisdiction !== 'EXEMPT' ? invTax.tax_jurisdiction : null;
 
     return {
       invoiceId: r.id,
       invoiceNumber: r.invoice_number,
       state,
       source,
-      localJurisdiction: job?.tax_jurisdiction ?? null,
+      localJurisdiction: invJurisdiction ?? job?.tax_jurisdiction ?? null,
       grossSalesCents: salesBasisCents(r),
       taxCents: Math.max(0, Number(r.tax_cents) || 0),
       customerExempt: r.customer_id ? custMap.get(r.customer_id)?.tax_exempt === true : false,

@@ -331,6 +331,12 @@ function CreateInvoiceForm({
   const [dueDate, setDueDate] = useState('');
   const [memo, setMemo] = useState('');
   const [taxCents, setTaxCents] = useState(0);
+  // Auto sales-tax (GATE 11d): compute tax from the tenant's configured rate rows +
+  // the customer's jurisdiction. Toggle off to key tax by hand. Degrade-safe.
+  const [autoTax, setAutoTax] = useState(true);
+  const [taxInfo, setTaxInfo] = useState<
+    { ratePct: number; jurisdictionLabel: string | null; exempt: boolean; rateResolved: boolean } | null
+  >(null);
   const [lines, setLines] = useState<InvoiceLine[]>([{ description: '', account_id: '', quantity: 1, unit_price_cents: 0 }]);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
@@ -359,6 +365,45 @@ function CreateInvoiceForm({
 
   const subtotal = lines.reduce((s, l) => s + Math.round(l.quantity * l.unit_price_cents), 0);
   const total = subtotal + taxCents;
+
+  // Live sales-tax resolution (GATE 11d). Debounced: when auto-tax is on and we have a
+  // customer + taxable subtotal, ask the server for the jurisdiction rate and set the
+  // accrual. No configured rate / exempt customer → tax 0 (behaves as before).
+  useEffect(() => {
+    if (!autoTax) { setTaxInfo(null); return; }
+    if (!customerId || subtotal <= 0 || !invoiceDate) {
+      setTaxCents(0);
+      setTaxInfo(null);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/tax/resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customer_id: customerId,
+            invoice_date: invoiceDate,
+            line_amounts_cents: [subtotal],
+          }),
+        });
+        if (!res.ok) return;
+        const j = await res.json();
+        if (cancelled) return;
+        setTaxCents(Number(j.taxCents) || 0);
+        setTaxInfo({
+          ratePct: Number(j.ratePct) || 0,
+          jurisdictionLabel: j.jurisdictionLabel ?? null,
+          exempt: !!j.exempt,
+          rateResolved: !!j.rateResolved,
+        });
+      } catch {
+        /* leave prior tax; degrade-safe */
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [autoTax, customerId, invoiceDate, subtotal]);
 
   const addLine = () => setLines([...lines, { description: '', account_id: '', quantity: 1, unit_price_cents: 0 }]);
   const removeLine = (i: number) => { if (lines.length > 1) setLines(lines.filter((_, j) => j !== i)); };
@@ -389,6 +434,7 @@ function CreateInvoiceForm({
           due_date: dueDate,
           memo: memo || undefined,
           tax_cents: taxCents,
+          auto_tax: autoTax,
           lines: lines.map((l) => ({
             description: l.description,
             account_id: l.account_id,
@@ -515,12 +561,34 @@ function CreateInvoiceForm({
               <span className="font-mono text-white">{formatMoney(subtotal)}</span>
             </div>
             <div className="flex justify-between text-sm items-center">
-              <span className="text-gray-400">Tax</span>
-              <input type="number" value={(taxCents / 100).toFixed(2)} min={0} step={0.01}
-                onChange={(e) => setTaxCents(Math.round(parseFloat(e.target.value) * 100) || 0)}
-                className="w-24 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono"
-              />
+              <span className="flex items-center gap-2 text-gray-400">
+                Tax
+                <label className="flex items-center gap-1 text-[11px] text-gray-500 cursor-pointer select-none">
+                  <input type="checkbox" checked={autoTax} onChange={(e) => setAutoTax(e.target.checked)}
+                    className="accent-emerald-500" />
+                  Auto
+                </label>
+              </span>
+              {autoTax ? (
+                <span className="font-mono text-white text-sm tabular-nums">{formatMoney(taxCents)}</span>
+              ) : (
+                <input type="number" value={(taxCents / 100).toFixed(2)} min={0} step={0.01}
+                  onChange={(e) => setTaxCents(Math.round(parseFloat(e.target.value) * 100) || 0)}
+                  className="w-24 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono"
+                />
+              )}
             </div>
+            {autoTax && (
+              <div className="text-[11px] text-gray-500 text-right -mt-1">
+                {taxInfo?.exempt
+                  ? 'Customer is tax-exempt — no tax'
+                  : taxInfo?.rateResolved
+                    ? `${taxInfo.jurisdictionLabel ?? 'Jurisdiction'} · ${taxInfo.ratePct}%`
+                    : customerId
+                      ? 'No sales-tax rate configured for this jurisdiction'
+                      : 'Select a customer to resolve tax'}
+              </div>
+            )}
             <div className="flex justify-between text-base font-semibold border-t border-gray-700/50 pt-2">
               <span className="text-white">Total</span>
               <span className="font-mono text-emerald-400">{formatMoney(total)}</span>

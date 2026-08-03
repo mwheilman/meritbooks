@@ -11,6 +11,7 @@ import { CostRouting } from './cost-routing';
 import { RevRecConfig } from './rev-rec-config';
 import { InvoiceBranding } from './invoice-branding';
 import { LearnedPreferences } from './learned-preferences';
+import { SalesTaxRates } from './sales-tax-rates';
 
 interface OrgSettings {
   id: string;
@@ -49,7 +50,7 @@ interface SettingsResponse {
   locations: LocationRow[];
 }
 
-type TabKey = 'organization' | 'chase' | 'ai' | 'routing' | 'revrec' | 'branding' | 'learned' | 'companies';
+type TabKey = 'organization' | 'chase' | 'ai' | 'routing' | 'revrec' | 'salestax' | 'branding' | 'learned' | 'companies';
 
 const TABS: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'organization', label: 'Organization', icon: Globe },
@@ -57,6 +58,7 @@ const TABS: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'ai', label: 'AI Thresholds', icon: Brain },
   { key: 'routing', label: 'Cost Routing', icon: Route },
   { key: 'revrec', label: 'Revenue Recognition', icon: Percent },
+  { key: 'salestax', label: 'Sales Tax Rates', icon: Receipt },
   { key: 'branding', label: 'Invoice Display', icon: Receipt },
   { key: 'learned', label: 'Learned Preferences', icon: Sparkles },
   { key: 'companies', label: 'Companies', icon: Building2 },
@@ -239,6 +241,7 @@ export default function SettingsPage() {
 
           {activeTab === 'routing' && <CostRouting />}
           {activeTab === 'revrec' && <RevRecConfig />}
+          {activeTab === 'salestax' && <SalesTaxRates />}
 
           {activeTab === 'branding' && <InvoiceBranding />}
           {activeTab === 'learned' && <LearnedPreferences />}

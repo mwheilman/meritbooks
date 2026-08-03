@@ -22,6 +22,7 @@ import { postJournalEntry } from '@/lib/services/gl-posting';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
 import { resolveInvoiceCreditAccounts } from '@/lib/invoices/rev-rec-credit';
 import { resolveRole } from '@/lib/posting/account-roles';
+import { resolveInvoiceTax } from '@/lib/tax/resolve-invoice-tax';
 
 export interface CreateInvoiceLineInput {
   description: string;
@@ -40,6 +41,14 @@ export interface CreateInvoiceInput {
   due_date: string;
   memo?: string | null;
   tax_cents?: number;
+  /**
+   * When true, compute sales tax deterministically from the tenant's configured
+   * rate rows + the customer's jurisdiction (GATE 11d), overriding `tax_cents`.
+   * Degrade-safe: no rate configured / exempt customer → tax = 0 (behaves as before).
+   */
+  auto_tax?: boolean;
+  /** optional ship-to snapshot ({ state, city }) — wins over customer HQ for tax. */
+  ship_to?: Record<string, unknown> | null;
   retainage_pct?: number;
   is_progress_bill?: boolean;
   /** When true, immediately post the AR journal entry and flip status → SENT. */
@@ -69,7 +78,6 @@ export async function createInvoice(
   args: { orgId: string; actor: string | null; input: CreateInvoiceInput },
 ): Promise<CreateInvoiceOutcome> {
   const { orgId, actor, input } = args;
-  const taxCents = input.tax_cents ?? 0;
 
   // Mint the Books-owned invoice number: INV-{YYYYMMDD}-{seq} (per-org sequence).
   const dateStr = input.invoice_date.replace(/-/g, '');
@@ -88,6 +96,30 @@ export async function createInvoice(
     amount_cents: Math.round((l.quantity ?? 1) * l.unit_price_cents),
   }));
   const subtotalCents = lines.reduce((s, l) => s + l.amount_cents, 0);
+
+  // Sales tax (GATE 11d). When `auto_tax`, compute the accrual deterministically from
+  // the tenant's configured rate rows + the customer's jurisdiction; the resolved rate
+  // is authoritative and overrides any passed `tax_cents`. Degrade-safe: no configured
+  // rate or an exempt customer yields tax = 0, so the invoice behaves exactly as before.
+  let taxCents = input.tax_cents ?? 0;
+  let resolvedTaxRatePct: number | null = null;
+  let resolvedTaxJurisdiction: string | null = null;
+  if (input.auto_tax) {
+    const resolved = await resolveInvoiceTax(supabase, {
+      orgId,
+      customerId: input.customer_id,
+      onDate: input.invoice_date,
+      lineAmountsCents: lines.map((l) => l.amount_cents),
+      shipTo: input.ship_to ?? null,
+    });
+    taxCents = resolved.taxCents;
+    if (resolved.rateResolved) {
+      resolvedTaxRatePct = resolved.ratePct;
+      resolvedTaxJurisdiction = resolved.jurisdictionLabel;
+    } else if (resolved.exempt) {
+      resolvedTaxJurisdiction = 'EXEMPT';
+    }
+  }
 
   // Retainage is conditional: only customers/jobs that opted in withhold it.
   // Resolve job → customer; if neither enabled, no retainage regardless of pct.
@@ -150,9 +182,29 @@ export async function createInvoice(
     return { ok: false, status: 500, error: linesErr.message };
   }
 
+  // Persist the resolved rate/jurisdiction for the return-prep rate reconciliation
+  // and the invoice UI. Best-effort: the columns are a RESERVED-migration addition,
+  // so if they aren't present yet this no-ops and creation is unaffected.
+  if (resolvedTaxRatePct != null || resolvedTaxJurisdiction != null) {
+    try {
+      await supabase
+        .from('invoices')
+        .update({ tax_rate_pct: resolvedTaxRatePct, tax_jurisdiction: resolvedTaxJurisdiction })
+        .eq('id', invoice.id);
+    } catch {
+      /* columns not present yet — the collected tax still flows via tax_cents. */
+    }
+  }
+
   await recordInvoiceEvent(supabase, {
     orgId, invoiceId: invoice.id, type: 'CREATED', actor,
-    meta: { invoice_number: invoiceNumber, total_cents: totalCents },
+    meta: {
+      invoice_number: invoiceNumber,
+      total_cents: totalCents,
+      tax_cents: taxCents,
+      ...(resolvedTaxRatePct != null ? { tax_rate_pct: resolvedTaxRatePct } : {}),
+      ...(resolvedTaxJurisdiction != null ? { tax_jurisdiction: resolvedTaxJurisdiction } : {}),
+    },
   });
 
   let posted = false;

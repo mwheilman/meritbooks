@@ -29,6 +29,27 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   if (error || !inv) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
 
+  // Resolved sales-tax rate/jurisdiction (GATE 11d). Fetched separately + best-effort:
+  // these columns are a RESERVED-migration addition, so a not-yet-applied schema
+  // degrades to null rather than 500-ing the whole drawer.
+  let taxRatePct: number | null = null;
+  let taxJurisdiction: string | null = null;
+  try {
+    const { data: taxMeta } = await supabase
+      .from('invoices')
+      .select('tax_rate_pct, tax_jurisdiction')
+      .eq('org_id', orgId)
+      .eq('id', params.id)
+      .maybeSingle();
+    const tm = taxMeta as { tax_rate_pct: number | string | null; tax_jurisdiction: string | null } | null;
+    if (tm) {
+      taxRatePct = tm.tax_rate_pct != null ? Number(tm.tax_rate_pct) : null;
+      taxJurisdiction = tm.tax_jurisdiction ?? null;
+    }
+  } catch {
+    /* columns not present yet — omit resolved-rate display. */
+  }
+
   const { data: lineRows } = await supabase
     .from('invoice_lines')
     .select(`
@@ -139,6 +160,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     locationId: inv.location_id,
     subtotalCents: Number(inv.subtotal_cents ?? 0),
     taxCents: Number(inv.tax_cents ?? 0),
+    taxRatePct,
+    taxJurisdiction,
     totalCents: Number(inv.total_cents ?? 0),
     amountPaidCents: Number(inv.amount_paid_cents ?? 0),
     balanceCents: Number(inv.balance_cents ?? 0),
