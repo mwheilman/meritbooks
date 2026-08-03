@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { ConfidenceBar } from '@/components/ui';
+import { ExplainPanel } from '@/components/explain-panel';
 import type { BankFeedRow, JobSearchResult } from '@meritbooks/shared';
 import type { ApproveBankTransactionInput } from '@/lib/validations/transactions';
 
@@ -385,6 +386,9 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
               </div>
             </div>
           )}
+
+          {/* Ledger-grounded "why was this categorized/posted this way" */}
+          <ExplainPanel kind="BANK_TRANSACTION" id={transaction.id} />
 
           {/* Vendor name */}
           <div>

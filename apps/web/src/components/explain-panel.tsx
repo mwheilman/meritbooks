@@ -35,6 +35,8 @@ interface ExplainPanelProps {
 const KIND_NOUN: Record<ExplainKind, string> = {
   JOURNAL_ENTRY: 'entry',
   BILL: 'bill',
+  BANK_TRANSACTION: 'transaction',
+  PAYMENT: 'payment',
 };
 
 export function ExplainPanel({ kind, id, title, className }: ExplainPanelProps) {

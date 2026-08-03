@@ -81,7 +81,13 @@ export type AccountRoleKey =
   | 'PREPAID_ASSET'
   // Intangibles + amortization — role_key names mirror lib/intangibles/accounts.ts
   | 'INTANGIBLE_ASSET'
-  | 'ACCUMULATED_AMORTIZATION';
+  | 'ACCUMULATED_AMORTIZATION'
+  // Inventory (GATE 11c) — the asset carried on hand and the COGS it flows into on
+  // ISSUE. Both default to existing standard-COA accounts (1200 / 5100); an item may
+  // override either with an explicit account. Registered in the vocabulary by
+  // migration 101 (see the inventory build report).
+  | 'INVENTORY_ASSET'
+  | 'INVENTORY_COGS';
 
 /** Standard COA numbers per role — fallback when account_roles isn't seeded. */
 export const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
@@ -149,6 +155,11 @@ export const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
   // Intangibles + amortization — present in the standard COA.
   INTANGIBLE_ASSET: '1710',
   ACCUMULATED_AMORTIZATION: '1720',
+  // Inventory (GATE 11c). 1200 "Inventory - Raw Materials" (current asset) and 5100
+  // "Materials" (COGS) both already exist in the standard COA — no new accounts, only
+  // the two role keys the seeder maps.
+  INVENTORY_ASSET: '1200',
+  INVENTORY_COGS: '5100',
 };
 
 /** A resolved account, carrying the type/sub-type the direction helper needs. */

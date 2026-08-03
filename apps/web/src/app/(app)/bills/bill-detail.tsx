@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
 import { AttachmentsPanel } from '@/components/documents/attachments-panel';
+import { ExplainPanel } from '@/components/explain-panel';
 
 interface DetailLine {
   id: string;
@@ -303,6 +304,9 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
                   </p>
                 )}
               </div>
+
+              {/* Ledger-grounded "why this bill posted the way it did" */}
+              <ExplainPanel kind="BILL" id={bill.id} />
 
               {/* Retained source documents for this bill */}
               <AttachmentsPanel entityType="bill" entityId={bill.id} defaultDocType="BILL" title="Documents" />

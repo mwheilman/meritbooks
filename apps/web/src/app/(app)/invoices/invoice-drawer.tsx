@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
 import { InvoiceTextOverrides } from '@/components/invoice-text-overrides';
 import { AttachmentsPanel } from '@/components/documents/attachments-panel';
+import { ExplainPanel } from '@/components/explain-panel';
 
 interface InvLine {
   id?: string; lineNumber?: number; description: string;
@@ -29,6 +30,10 @@ interface InvDetail {
     deliveredAt: string | null; viewCount: number;
     lastViewedAt: string | null; lastReminderAt: string | null;
   } | null;
+  payments?: Array<{
+    id: string; paymentDate: string; amountCents: number; appliedCents: number;
+    method: string | null; referenceNumber: string | null;
+  }>;
 }
 interface AccountOption { id: string; account_number: string; name: string; account_type?: string }
 
@@ -280,6 +285,35 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
             <DetailField label="Paid" value={formatMoney(data.amountPaidCents)} mono />
             <DetailField label="Balance" value={formatMoney(data.balanceCents)} mono />
           </DetailSection>
+
+          {data.payments && data.payments.length > 0 && (
+            <div className="mt-5">
+              <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
+                Payments received ({data.payments.length})
+              </h3>
+              <div className="space-y-3">
+                {data.payments.map((p) => (
+                  <div key={p.id} className="space-y-2">
+                    <div className="flex items-center justify-between rounded-lg bg-slate-800/40 px-3 py-2">
+                      <div className="min-w-0">
+                        <div className="text-sm text-slate-200">
+                          {formatMoney(p.appliedCents)} applied
+                          {p.appliedCents !== p.amountCents && (
+                            <span className="text-slate-500"> of {formatMoney(p.amountCents)}</span>
+                          )}
+                        </div>
+                        <div className="text-2xs text-slate-500 font-mono">
+                          {p.paymentDate}{p.method ? ` · ${p.method}` : ''}{p.referenceNumber ? ` · ${p.referenceNumber}` : ''}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Ledger-grounded "explain this payment" — DR cash / CR AR, applied invoices */}
+                    <ExplainPanel kind="PAYMENT" id={p.id} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <DetailSection title="Delivery">
             {data.delivery?.sentAt ? (

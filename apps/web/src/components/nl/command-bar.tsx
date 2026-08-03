@@ -15,9 +15,10 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Command, Loader2, Search, X, Sparkles, CornerDownLeft } from 'lucide-react';
+import { Command, Loader2, Search, X, Sparkles, CornerDownLeft, Star, Trash2, BarChart3 } from 'lucide-react';
 import { ResultPanel } from './result-panel';
 import type { NlRouteResult } from './intent';
+import { ANALYTICAL_EXAMPLES } from '@/lib/nl/analytical-examples';
 
 const SUGGESTIONS: string[] = [
   'Accrue $4,200 of rent for July',
@@ -28,6 +29,13 @@ const SUGGESTIONS: string[] = [
   'What is cash on hand right now?',
   'Open the bank feed',
 ];
+
+interface SavedQuestion {
+  id: string;
+  prompt: string;
+  label: string;
+  createdAt: string;
+}
 
 type Phase =
   | { kind: 'idle' }
@@ -40,6 +48,8 @@ export function CommandBar() {
   const [prompt, setPrompt] = useState('');
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [activeIdx, setActiveIdx] = useState(-1);
+  const [saved, setSaved] = useState<SavedQuestion[]>([]);
+  const [saving, setSaving] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -91,6 +101,54 @@ export function CommandBar() {
       return () => clearTimeout(t);
     }
   }, [open]);
+
+  // Load the user's saved/pinned questions each time the bar opens. Degrades to
+  // an empty list on any failure — pinning is a convenience, never a blocker.
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/nl/saved', { method: 'GET' });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (alive && data && Array.isArray(data.questions)) setSaved(data.questions as SavedQuestion[]);
+      } catch {
+        /* non-fatal */
+      }
+    })();
+    return () => { alive = false; };
+  }, [open]);
+
+  const savePrompt = useCallback(async (text: string) => {
+    const q = text.trim();
+    if (q.length < 2 || saving) return;
+    // Optimistic de-dupe: don't pin the same prompt twice.
+    if (saved.some((s) => s.prompt.toLowerCase() === q.toLowerCase())) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/nl/saved', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: q }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.question) setSaved((prev) => [data.question as SavedQuestion, ...prev]);
+    } catch {
+      /* non-fatal */
+    } finally {
+      setSaving(false);
+    }
+  }, [saving, saved]);
+
+  const unpin = useCallback(async (id: string) => {
+    setSaved((prev) => prev.filter((s) => s.id !== id)); // optimistic
+    try {
+      await fetch(`/api/nl/saved?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch {
+      /* non-fatal — list refreshes on next open */
+    }
+  }, []);
 
   const run = useCallback(async (text: string) => {
     const q = text.trim();
@@ -181,6 +239,15 @@ export function CommandBar() {
             className="flex-1 bg-transparent text-[15px] text-white placeholder:text-slate-500 focus:outline-none"
           />
           <button
+            onClick={() => savePrompt(prompt)}
+            disabled={prompt.trim().length < 2 || saving}
+            title="Pin this question to re-run later"
+            aria-label="Pin this question"
+            className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-xs font-medium text-slate-300 hover:border-amber-500/50 hover:text-amber-300 disabled:opacity-40 transition-colors"
+          >
+            <Star size={12} /> Pin
+          </button>
+          <button
             onClick={() => run(prompt)}
             disabled={prompt.trim().length < 2 || phase.kind === 'loading'}
             className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-40 transition-colors"
@@ -193,25 +260,73 @@ export function CommandBar() {
         {/* Body */}
         <div className="max-h-[55vh] overflow-y-auto px-4 py-4">
           {phase.kind === 'idle' && (
-            <div>
-              <p className="mb-2 flex items-center gap-1.5 text-2xs uppercase tracking-wider text-slate-500">
-                <Sparkles size={12} className="text-emerald-400" /> Try
-              </p>
-              <ul className="space-y-1">
-                {SUGGESTIONS.map((s, i) => (
-                  <li key={s}>
+            <div className="space-y-4">
+              {saved.length > 0 && (
+                <div>
+                  <p className="mb-2 flex items-center gap-1.5 text-2xs uppercase tracking-wider text-slate-500">
+                    <Star size={12} className="text-amber-400" /> Saved
+                  </p>
+                  <ul className="space-y-1">
+                    {saved.map((s) => (
+                      <li key={s.id} className="group flex items-center gap-1">
+                        <button
+                          onClick={() => { setPrompt(s.prompt); run(s.prompt); }}
+                          className="flex-1 truncate rounded-lg px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-800/60 transition-colors"
+                          title={s.prompt}
+                        >
+                          {s.label}
+                        </button>
+                        <button
+                          onClick={() => unpin(s.id)}
+                          aria-label="Unpin question"
+                          title="Unpin"
+                          className="rounded-md p-1.5 text-slate-600 opacity-0 group-hover:opacity-100 hover:text-rose-400 transition"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div>
+                <p className="mb-2 flex items-center gap-1.5 text-2xs uppercase tracking-wider text-slate-500">
+                  <Sparkles size={12} className="text-emerald-400" /> Try
+                </p>
+                <ul className="space-y-1">
+                  {SUGGESTIONS.map((s, i) => (
+                    <li key={s}>
+                      <button
+                        onMouseEnter={() => setActiveIdx(i)}
+                        onClick={() => { setPrompt(s); run(s); }}
+                        className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                          i === activeIdx ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800/60'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <p className="mb-2 flex items-center gap-1.5 text-2xs uppercase tracking-wider text-slate-500">
+                  <BarChart3 size={12} className="text-indigo-400" /> FP&amp;A metrics · read-only
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ANALYTICAL_EXAMPLES.map((ex) => (
                     <button
-                      onMouseEnter={() => setActiveIdx(i)}
-                      onClick={() => { setPrompt(s); run(s); }}
-                      className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                        i === activeIdx ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800/60'
-                      }`}
+                      key={ex.metric}
+                      onClick={() => { setPrompt(ex.prompt); run(ex.prompt); }}
+                      className="rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-xs text-slate-300 hover:border-indigo-500/50 hover:text-white transition-colors"
                     >
-                      {s}
+                      {ex.prompt}
                     </button>
-                  </li>
-                ))}
-              </ul>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 

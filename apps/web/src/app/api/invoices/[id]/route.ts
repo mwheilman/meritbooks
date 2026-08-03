@@ -80,6 +80,38 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     lastReminderAt: lastAt('REMINDER_SENT'),
   };
 
+  // Customer payments applied to this invoice (the "cash-application detail" the
+  // drawer surfaces, each with its own ledger-grounded Explain). payment_applications
+  // + customer_payments are `public` and RLS-scoped, so this stays org-isolated.
+  const { data: appRows } = await supabase
+    .from('payment_applications')
+    .select('payment_id, amount_cents')
+    .eq('invoice_id', params.id);
+  const appliedByPayment = new Map<string, number>();
+  for (const a of (appRows ?? []) as Array<{ payment_id: string; amount_cents: number }>) {
+    appliedByPayment.set(a.payment_id, (appliedByPayment.get(a.payment_id) ?? 0) + Number(a.amount_cents));
+  }
+  const paymentIds = Array.from(appliedByPayment.keys());
+  let payments: Array<{
+    id: string; paymentDate: string; amountCents: number; appliedCents: number;
+    method: string | null; referenceNumber: string | null;
+  }> = [];
+  if (paymentIds.length > 0) {
+    const { data: payRows } = await supabase
+      .from('customer_payments')
+      .select('id, payment_date, amount_cents, payment_method, reference_number')
+      .in('id', paymentIds)
+      .order('payment_date', { ascending: false });
+    payments = ((payRows ?? []) as Array<Record<string, any>>).map((p) => ({
+      id: p.id as string,
+      paymentDate: p.payment_date as string,
+      amountCents: Number(p.amount_cents ?? 0),
+      appliedCents: appliedByPayment.get(p.id as string) ?? 0,
+      method: (p.payment_method as string | null) ?? null,
+      referenceNumber: (p.reference_number as string | null) ?? null,
+    }));
+  }
+
   const lines = (lineRows ?? []).map((l: Record<string, any>) => {
     const acct = Array.isArray(l.account) ? l.account[0] : l.account;
     return {
@@ -117,6 +149,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     jobLabel: job ? `${job.job_number} · ${job.name}` : null,
     lines,
     delivery,
+    payments,
   });
 }
 

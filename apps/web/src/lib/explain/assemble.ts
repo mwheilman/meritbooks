@@ -10,6 +10,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { formatMoney } from '@meritbooks/shared';
+import { fetchCoreMap } from '@/lib/stitch-core';
 import type {
   ExplainKind,
   Explanation,
@@ -146,6 +147,52 @@ async function gatherAiDecisions(
   }));
 }
 
+/**
+ * Gather the posting lines for a GL entry, with each line's debit/credit
+ * DIRECTION derived from the touched account's normal balance. Shared by the
+ * JOURNAL_ENTRY, BANK_TRANSACTION, and PAYMENT gatherers so the "why it posted
+ * this way" breakdown is identical everywhere. `accounts` is a `public` table,
+ * so the nested embed resolves without a cross-schema stitch.
+ */
+async function gatherGlLines(supabase: SupabaseClient, glEntryId: string): Promise<ExplainLineFact[]> {
+  const { data: lineRows, error } = await supabase
+    .from('gl_entry_lines')
+    .select(
+      `line_number, debit_cents, credit_cents, memo,
+       accounts!inner(
+         account_number, name, account_type,
+         account_groups!inner(account_sub_types!inner(account_types!inner(normal_balance)))
+       )`,
+    )
+    .eq('gl_entry_id', glEntryId)
+    .order('line_number', { ascending: true });
+  if (error) throw new Error(error.message);
+  const lines: ExplainLineFact[] = [];
+  for (const row of (lineRows ?? []) as unknown as JeLineRow[]) {
+    const acct = one(row.accounts);
+    if (!acct) continue;
+    lines.push(lineFactFrom(acct, Number(row.debit_cents ?? 0), Number(row.credit_cents ?? 0), row.memo));
+  }
+  return lines;
+}
+
+/** Minimal GL entry header used to describe a downstream record's posting. */
+interface GlHeaderLite {
+  entry_number: string;
+  status: string;
+  posted_at: string | null;
+  posted_by: string | null;
+}
+
+async function gatherGlHeader(supabase: SupabaseClient, glEntryId: string): Promise<GlHeaderLite | null> {
+  const { data } = await supabase
+    .from('gl_entries')
+    .select('entry_number, status, posted_at, posted_by')
+    .eq('id', glEntryId)
+    .maybeSingle();
+  return (data as GlHeaderLite | null) ?? null;
+}
+
 async function gatherJournalEntry(
   supabase: SupabaseClient,
   id: string,
@@ -163,25 +210,7 @@ async function gatherJournalEntry(
   if (!header) throw new ExplainNotFoundError('JOURNAL_ENTRY', id);
   const h = header as unknown as JeHeaderRow;
 
-  const { data: lineRows, error: lineErr } = await supabase
-    .from('gl_entry_lines')
-    .select(
-      `line_number, debit_cents, credit_cents, memo,
-       accounts!inner(
-         account_number, name, account_type,
-         account_groups!inner(account_sub_types!inner(account_types!inner(normal_balance)))
-       )`,
-    )
-    .eq('gl_entry_id', id)
-    .order('line_number', { ascending: true });
-  if (lineErr) throw new Error(lineErr.message);
-
-  const lines: ExplainLineFact[] = [];
-  for (const row of (lineRows ?? []) as unknown as JeLineRow[]) {
-    const acct = one(row.accounts);
-    if (!acct) continue;
-    lines.push(lineFactFrom(acct, Number(row.debit_cents ?? 0), Number(row.credit_cents ?? 0), row.memo));
-  }
+  const lines = await gatherGlLines(supabase, id);
 
   const totalDebits = lines.filter((l) => l.side === 'debit').reduce((s, l) => s + l.amountCents, 0);
   const totalCredits = lines.filter((l) => l.side === 'credit').reduce((s, l) => s + l.amountCents, 0);
@@ -365,6 +394,334 @@ async function gatherBill(supabase: SupabaseClient, id: string): Promise<Explana
   };
 }
 
+// ── BANK_TRANSACTION ────────────────────────────────────────────────────────
+
+interface BankTxnRow {
+  id: string;
+  description: string;
+  amount_cents: number;
+  transaction_date: string;
+  posted_date: string | null;
+  status: string;
+  category: string | null;
+  ai_account_id: string | null;
+  final_account_id: string | null;
+  ai_vendor_id: string | null;
+  final_vendor_id: string | null;
+  ai_confidence: number | null;
+  ai_reasoning: string | null;
+  ai_model_version: string | null;
+  match_type: string | null;
+  match_confidence: number | null;
+  matched_bill_id: string | null;
+  matched_receipt_id: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  gl_entry_id: string | null;
+  location_id: string | null;
+  bank_account_id: string | null;
+}
+
+interface AccountLite {
+  id: string;
+  account_number: string;
+  name: string;
+  account_type: string;
+}
+
+function pct(v: number | null | undefined): string {
+  return v == null ? '--' : `${Math.round(Number(v) * 100)}%`;
+}
+
+/** Human phrasing of a bank-feed match type. */
+function matchLabel(type: string): string {
+  switch (type) {
+    case 'VENDOR_PATTERN': return 'a known vendor pattern';
+    case 'BILL_PAYMENT': return 'a vendor bill';
+    case 'RECEIPT': return 'a receipt';
+    default: return type.toLowerCase().replace(/_/g, ' ');
+  }
+}
+
+async function gatherBankTransaction(supabase: SupabaseClient, id: string): Promise<Explanation> {
+  const { data: header, error: headerErr } = await supabase
+    .from('bank_transactions')
+    .select(
+      `id, description, amount_cents, transaction_date, posted_date, status, category,
+       ai_account_id, final_account_id, ai_vendor_id, final_vendor_id,
+       ai_confidence, ai_reasoning, ai_model_version,
+       match_type, match_confidence, matched_bill_id, matched_receipt_id,
+       approved_by, approved_at, gl_entry_id, location_id, bank_account_id`,
+    )
+    .eq('id', id)
+    .maybeSingle();
+  if (headerErr) throw new Error(headerErr.message);
+  if (!header) throw new ExplainNotFoundError('BANK_TRANSACTION', id);
+  const h = header as unknown as BankTxnRow;
+
+  // The account the txn is coded to: a human override wins over the AI suggestion.
+  const codedAccountId = h.final_account_id ?? h.ai_account_id;
+  const wasOverridden = h.final_account_id != null && h.final_account_id !== h.ai_account_id;
+  let codedAccount: AccountLite | null = null;
+  if (codedAccountId) {
+    const { data: acct } = await supabase
+      .from('accounts')
+      .select('id, account_number, name, account_type')
+      .eq('id', codedAccountId)
+      .maybeSingle();
+    codedAccount = (acct as AccountLite | null) ?? null;
+  }
+
+  // Vendor + company live in `core` — stitch, never embed across the schema line.
+  const vendorId = h.final_vendor_id ?? h.ai_vendor_id;
+  const vendorMap = await fetchCoreMap<{ id: string; name: string; display_name: string | null }>(
+    supabase, 'vendors', 'id, name, display_name', [vendorId],
+  );
+  const vendor = vendorId ? vendorMap.get(vendorId) ?? null : null;
+  const vendorName = vendor?.display_name || vendor?.name || null;
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code', [h.location_id],
+  );
+  const loc = h.location_id ? locMap.get(h.location_id) ?? null : null;
+
+  // Source bank account (public).
+  let bankAccountName: string | null = null;
+  if (h.bank_account_id) {
+    const { data: ba } = await supabase
+      .from('bank_accounts')
+      .select('institution_name, account_name, account_mask')
+      .eq('id', h.bank_account_id)
+      .maybeSingle();
+    const b = ba as { institution_name: string; account_name: string; account_mask: string | null } | null;
+    if (b) bankAccountName = `${b.institution_name} · ${b.account_name}${b.account_mask ? ` ••${b.account_mask}` : ''}`;
+  }
+
+  // Matched bill / receipt (both public).
+  let matchedBill: { bill_number: string | null; total_cents: number } | null = null;
+  if (h.matched_bill_id) {
+    const { data: b } = await supabase
+      .from('bills')
+      .select('bill_number, total_cents')
+      .eq('id', h.matched_bill_id)
+      .maybeSingle();
+    matchedBill = (b as { bill_number: string | null; total_cents: number } | null) ?? null;
+  }
+  let matchedReceipt: { vendor_name: string | null; amount_cents: number | null } | null = null;
+  if (h.matched_receipt_id) {
+    const { data: r } = await supabase
+      .from('receipts')
+      .select('vendor_name, amount_cents')
+      .eq('id', h.matched_receipt_id)
+      .maybeSingle();
+    matchedReceipt = (r as { vendor_name: string | null; amount_cents: number | null } | null) ?? null;
+  }
+
+  // The posted GL entry (only exists after approval).
+  const lines = h.gl_entry_id ? await gatherGlLines(supabase, h.gl_entry_id) : [];
+  const glHeader = h.gl_entry_id ? await gatherGlHeader(supabase, h.gl_entry_id) : null;
+  const aiDecisions = await gatherAiDecisions(supabase, h.gl_entry_id);
+
+  const moneyIn = h.amount_cents >= 0; // positive = credit (money in)
+  const absCents = Math.abs(h.amount_cents);
+  const totalDebits = lines.filter((l) => l.side === 'debit').reduce((s, l) => s + l.amountCents, 0);
+  const totalCredits = lines.filter((l) => l.side === 'credit').reduce((s, l) => s + l.amountCents, 0);
+
+  const matchClause = h.match_type && h.match_type !== 'NONE'
+    ? ` It was matched to ${matchLabel(h.match_type)}${h.match_confidence != null ? ` at ${pct(h.match_confidence)} match confidence` : ''}.`
+    : '';
+  const whyParts: string[] = [];
+  if (codedAccount) {
+    whyParts.push(
+      `The AI categorized this ${moneyIn ? 'deposit' : 'withdrawal'} to ${codedAccount.account_number} ${codedAccount.name}${h.ai_confidence != null ? ` at ${pct(h.ai_confidence)} confidence` : ''}${wasOverridden ? ' (a human overrode the original AI suggestion)' : ''}.${matchClause}`,
+    );
+  } else {
+    whyParts.push(`This ${moneyIn ? 'deposit' : 'withdrawal'} has not been categorized to a GL account yet.${matchClause}`);
+  }
+  if (lines.length) {
+    const dr = lines.filter((l) => l.side === 'debit').map((l) => `${l.accountName} (${money(l.amountCents)})`).join(', ');
+    const cr = lines.filter((l) => l.side === 'credit').map((l) => `${l.accountName} (${money(l.amountCents)})`).join(', ');
+    whyParts.push(`On approval it posted — Debits: ${dr}. Credits: ${cr}.`);
+  }
+  const whyPosted = whyParts.join(' ');
+
+  const proposedBy: ExplainActor = {
+    label: codedAccount ? 'AI bank-feed categorizer' : 'Awaiting categorization',
+    detail: h.ai_model_version
+      ? `${h.ai_model_version}${h.ai_confidence != null ? ` · ${pct(h.ai_confidence)} confidence` : ''}`
+      : (h.ai_confidence != null ? `${pct(h.ai_confidence)} confidence` : null),
+  };
+  const approvedBy: ExplainActor | null = h.approved_at
+    ? {
+        label: 'Approved & posted to the general ledger',
+        detail: `${new Date(h.approved_at).toISOString().slice(0, 10)}${h.approved_by ? ` · by ${h.approved_by}` : ''}${glHeader ? ` · ${glHeader.entry_number}` : ''}`,
+      }
+    : { label: `Not yet approved (status ${h.status})`, detail: null };
+
+  const facts: ExplainFact[] = [
+    { label: 'Date', value: h.transaction_date, mono: true },
+    { label: 'Description', value: h.description },
+    { label: moneyIn ? 'Amount received' : 'Amount paid', value: money(absCents), mono: true },
+    { label: 'Direction', value: moneyIn ? 'Money in (credit)' : 'Money out (debit)' },
+    { label: 'Bank account', value: bankAccountName ?? '--' },
+    { label: 'Company', value: loc?.name ?? '--' },
+    { label: 'Vendor', value: vendorName ?? '--' },
+    { label: 'Coded to', value: codedAccount ? `${codedAccount.account_number} · ${codedAccount.name}` : 'Uncategorized' },
+    { label: 'AI confidence', value: pct(h.ai_confidence) },
+    { label: 'Bank category', value: h.category ?? '--' },
+    { label: 'Match', value: h.match_type && h.match_type !== 'NONE' ? `${matchLabel(h.match_type)}${h.match_confidence != null ? ` (${pct(h.match_confidence)})` : ''}` : 'Unmatched' },
+    { label: 'Status', value: h.status },
+  ];
+  if (matchedBill) facts.push({ label: 'Matched bill', value: `${matchedBill.bill_number ?? '--'} · ${money(Number(matchedBill.total_cents))}` });
+  if (matchedReceipt) facts.push({ label: 'Matched receipt', value: `${matchedReceipt.vendor_name ?? 'Receipt'}${matchedReceipt.amount_cents != null ? ` · ${money(Number(matchedReceipt.amount_cents))}` : ''}` });
+
+  const links: ExplainLink[] = [{ label: 'Bank feed', href: '/bank-feed', kind: 'bank_transaction' }];
+  if (h.gl_entry_id) links.push({ label: glHeader ? `Journal entry ${glHeader.entry_number}` : 'Posted journal entry', href: '/journal-entries', kind: 'gl_entry' });
+  if (h.matched_bill_id) links.push({ label: 'Matched bill', href: '/bills', kind: 'bill' });
+  if (aiDecisions.length) links.push({ label: 'AI decision log', href: '/exceptions', kind: 'source' });
+
+  return {
+    kind: 'BANK_TRANSACTION',
+    id,
+    title: `Bank transaction — ${money(absCents)} ${moneyIn ? 'in' : 'out'}`,
+    whatItIs: `A bank-feed ${moneyIn ? 'deposit' : 'withdrawal'} of ${money(absCents)} dated ${h.transaction_date}${vendorName ? ` involving ${vendorName}` : ''}${loc?.name ? ` for ${loc.name}` : ''} — "${h.description}".`,
+    whyPosted,
+    status: h.status,
+    totalCents: absCents,
+    balanced: lines.length ? totalDebits === totalCredits : null,
+    lines,
+    proposedBy,
+    approvedBy,
+    aiDecisions,
+    facts,
+    links,
+  };
+}
+
+// ── PAYMENT (customer cash receipt) ─────────────────────────────────────────
+
+interface CustomerPaymentRow {
+  id: string;
+  customer_id: string | null;
+  payment_date: string;
+  amount_cents: number;
+  payment_method: string | null;
+  reference_number: string | null;
+  bank_account_id: string | null;
+  gl_entry_id: string | null;
+  created_at: string;
+}
+
+/** Human phrasing of a payment rail. */
+function methodLabel(m: string | null): string {
+  switch (m) {
+    case 'CHECK': return 'check';
+    case 'ACH': return 'ACH';
+    case 'WIRE': return 'wire';
+    case 'CREDIT_CARD': return 'credit-card';
+    case 'CASH': return 'cash';
+    default: return m ? m.toLowerCase() : 'customer';
+  }
+}
+
+async function gatherPayment(supabase: SupabaseClient, id: string): Promise<Explanation> {
+  const { data: header, error: headerErr } = await supabase
+    .from('customer_payments')
+    .select('id, customer_id, payment_date, amount_cents, payment_method, reference_number, bank_account_id, gl_entry_id, created_at')
+    .eq('id', id)
+    .maybeSingle();
+  if (headerErr) throw new Error(headerErr.message);
+  if (!header) throw new ExplainNotFoundError('PAYMENT', id);
+  const h = header as unknown as CustomerPaymentRow;
+
+  const custMap = await fetchCoreMap<{ id: string; name: string }>(
+    supabase, 'customers', 'id, name', [h.customer_id],
+  );
+  const customerName = (h.customer_id ? custMap.get(h.customer_id)?.name : null) ?? 'Customer';
+
+  // Applications: which invoices this receipt cleared (public tables).
+  const { data: appRows } = await supabase
+    .from('payment_applications')
+    .select('invoice_id, amount_cents')
+    .eq('payment_id', id);
+  const apps = (appRows ?? []) as Array<{ invoice_id: string; amount_cents: number }>;
+  const invoiceIds = apps.map((a) => a.invoice_id);
+  const invMap = new Map<string, { invoice_number: string; total_cents: number; balance_cents: number }>();
+  if (invoiceIds.length) {
+    const { data: invRows } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, total_cents, balance_cents')
+      .in('id', invoiceIds);
+    for (const r of (invRows ?? []) as Array<{ id: string; invoice_number: string; total_cents: number; balance_cents: number }>) {
+      invMap.set(r.id, { invoice_number: r.invoice_number, total_cents: Number(r.total_cents), balance_cents: Number(r.balance_cents) });
+    }
+  }
+
+  // DR cash / CR AR posting lines (direction derived from account normal balance).
+  const lines = h.gl_entry_id ? await gatherGlLines(supabase, h.gl_entry_id) : [];
+  const glHeader = h.gl_entry_id ? await gatherGlHeader(supabase, h.gl_entry_id) : null;
+  const aiDecisions = await gatherAiDecisions(supabase, h.gl_entry_id);
+
+  const debitLine = lines.find((l) => l.side === 'debit') ?? null; // cash side
+  const creditLine = lines.find((l) => l.side === 'credit') ?? null; // AR side
+  const totalDebits = lines.filter((l) => l.side === 'debit').reduce((s, l) => s + l.amountCents, 0);
+  const totalCredits = lines.filter((l) => l.side === 'credit').reduce((s, l) => s + l.amountCents, 0);
+
+  const appList = apps
+    .map((a) => {
+      const inv = invMap.get(a.invoice_id);
+      return inv ? `${inv.invoice_number} (${money(Number(a.amount_cents))})` : money(Number(a.amount_cents));
+    })
+    .join(', ');
+
+  const whyParts: string[] = [];
+  if (debitLine && creditLine) {
+    whyParts.push(
+      `The ${methodLabel(h.payment_method)} receipt debits ${debitLine.accountName} (increasing cash by ${money(debitLine.amountCents)}) and credits ${creditLine.accountName} (reducing accounts receivable by ${money(creditLine.amountCents)}).`,
+    );
+  }
+  if (appList) whyParts.push(`It was applied to ${apps.length === 1 ? 'invoice' : 'invoices'} ${appList}.`);
+  const whyPosted = whyParts.join(' ') || `A ${money(Number(h.amount_cents))} customer receipt from ${customerName}.`;
+
+  const proposedBy: ExplainActor = {
+    label: `Customer payment recorded (${methodLabel(h.payment_method)})`,
+    detail: h.reference_number ? `Ref ${h.reference_number}` : null,
+  };
+  const approvedBy: ExplainActor | null = glHeader?.posted_at
+    ? { label: 'Posted to the general ledger', detail: `${new Date(glHeader.posted_at).toISOString().slice(0, 10)}${glHeader.entry_number ? ` · ${glHeader.entry_number}` : ''}` }
+    : { label: 'Recorded (not linked to a posted GL entry)', detail: null };
+
+  const facts: ExplainFact[] = [
+    { label: 'Customer', value: customerName },
+    { label: 'Payment date', value: h.payment_date, mono: true },
+    { label: 'Amount', value: money(Number(h.amount_cents)), mono: true },
+    { label: 'Method', value: methodLabel(h.payment_method) },
+    { label: 'Reference', value: h.reference_number ?? '--' },
+    { label: 'Cash account', value: debitLine ? `${debitLine.accountNumber} · ${debitLine.accountName}` : '--' },
+    { label: 'Applied to', value: apps.length ? `${apps.length} invoice(s)` : 'On account' },
+  ];
+
+  const links: ExplainLink[] = [];
+  if (h.gl_entry_id) links.push({ label: glHeader ? `Journal entry ${glHeader.entry_number}` : 'Posted journal entry', href: '/journal-entries', kind: 'gl_entry' });
+  links.push({ label: 'Cash application', href: '/cash-application', kind: 'invoice' });
+
+  return {
+    kind: 'PAYMENT',
+    id,
+    title: `Payment — ${customerName} · ${money(Number(h.amount_cents))}`,
+    whatItIs: `A ${methodLabel(h.payment_method)} customer receipt of ${money(Number(h.amount_cents))} from ${customerName}, dated ${h.payment_date}, applied to ${apps.length || 'no'} open invoice(s).`,
+    whyPosted,
+    status: glHeader?.status ?? 'RECORDED',
+    totalCents: Number(h.amount_cents),
+    balanced: lines.length ? totalDebits === totalCredits : null,
+    lines,
+    proposedBy,
+    approvedBy,
+    aiDecisions,
+    facts,
+    links,
+  };
+}
+
 // ── Dispatch ────────────────────────────────────────────────────────────────
 
 export async function gatherExplanation(
@@ -375,6 +732,8 @@ export async function gatherExplanation(
   switch (kind) {
     case 'JOURNAL_ENTRY': return gatherJournalEntry(supabase, id);
     case 'BILL': return gatherBill(supabase, id);
+    case 'BANK_TRANSACTION': return gatherBankTransaction(supabase, id);
+    case 'PAYMENT': return gatherPayment(supabase, id);
     default: {
       // Exhaustiveness guard.
       const never: never = kind;
