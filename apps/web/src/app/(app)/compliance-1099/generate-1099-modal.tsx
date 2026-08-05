@@ -9,9 +9,11 @@ import {
   ShieldAlert,
   FileSpreadsheet,
   FileText,
+  FileCode2,
   Users,
   DollarSign,
   Wrench,
+  Landmark,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
@@ -61,6 +63,15 @@ interface GenResponse {
   summary: GenSummary;
   records: GenRecord[];
   exclusions: GenExclusion[];
+}
+
+/** IRS FIRE e-file readiness (from /api/tax/1099/efile?format=summary). */
+interface FireInfo {
+  readyCount: number;
+  hasPlaceholders: boolean;
+  warnings: string[];
+  recordCount: number;
+  payeeCount: number;
 }
 
 interface PayerForm {
@@ -123,6 +134,7 @@ function Field({
 export function Generate1099Modal({ year, onClose }: { year: number; onClose: () => void }) {
   const [payer, setPayer] = useState<PayerForm>(EMPTY_PAYER);
   const [data, setData] = useState<GenResponse | null>(null);
+  const [fire, setFire] = useState<FireInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -131,16 +143,25 @@ export function Generate1099Modal({ year, onClose }: { year: number; onClose: ()
   const review = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const res = await api.get<GenResponse>('/api/compliance/1099/generate', {
-      ...queryParams(year, payer),
-      format: 'summary',
-    });
+    // Assemble the batch (records + exclusions) and, in parallel, the FIRE e-file
+    // readiness (config warnings: TCC / transmitter TIN placeholders).
+    const [res, fireRes] = await Promise.all([
+      api.get<GenResponse>('/api/compliance/1099/generate', {
+        ...queryParams(year, payer),
+        format: 'summary',
+      }),
+      api.get<FireInfo>('/api/tax/1099/efile', {
+        ...queryParams(year, payer),
+        format: 'summary',
+      }),
+    ]);
     setLoading(false);
     if (res.error) {
       setError(res.error.error || 'Could not assemble 1099 batch');
       return;
     }
     setData(res.data ?? null);
+    setFire(fireRes.error ? null : fireRes.data ?? null);
   }, [year, payer]);
 
   // Initial review on open so the operator immediately sees the population.
@@ -161,6 +182,25 @@ export function Generate1099Modal({ year, onClose }: { year: number; onClose: ()
     const qs = new URLSearchParams({ ...queryParams(year, payer), format }).toString();
     window.open(`/api/compliance/1099/generate?${qs}`, '_blank');
     addToast('success', format === 'csv' ? 'E-file downloading' : 'Recipient copies downloading');
+  }
+
+  function downloadFire() {
+    if (!data || data.summary.readyCount === 0) {
+      addToast('error', 'No filable records — resolve blockers first');
+      return;
+    }
+    if (data.summary.payerTinMissing) {
+      addToast('error', 'Enter the payer EIN before downloading the IRS e-file');
+      return;
+    }
+    const qs = new URLSearchParams({ ...queryParams(year, payer), format: 'fire' }).toString();
+    window.open(`/api/tax/1099/efile?${qs}`, '_blank');
+    addToast(
+      fire?.hasPlaceholders ? 'error' : 'success',
+      fire?.hasPlaceholders
+        ? 'IRS FIRE file downloading — NOT transmittable until TCC / TIN gaps are cleared'
+        : 'IRS FIRE file downloading',
+    );
   }
 
   const summary = data?.summary;
@@ -238,6 +278,35 @@ export function Generate1099Modal({ year, onClose }: { year: number; onClose: ()
                 <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400">
                   Enter the payer EIN above — it's required on every 1099 and blocks the e-file until set.
                 </div>
+              )}
+
+              {/* IRS FIRE e-file readiness — config gaps (TCC / transmitter TIN) */}
+              {fire && (fire.hasPlaceholders || fire.warnings.length > 0) && (
+                <section className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 px-3 py-2.5">
+                  <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-300">
+                    <Landmark size={13} /> IRS FIRE e-file{' '}
+                    {fire.hasPlaceholders ? (
+                      <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+                        config incomplete
+                      </span>
+                    ) : (
+                      <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">
+                        ready
+                      </span>
+                    )}
+                  </h3>
+                  <ul className="space-y-1 text-[11px] leading-relaxed text-slate-400">
+                    {fire.warnings.map((w, i) => (
+                      <li key={i} className="flex gap-1.5">
+                        <span className="mt-0.5 text-indigo-400">•</span>
+                        <span>{w}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1.5 text-[10px] text-slate-600">
+                    Nothing is transmitted — this produces a file you upload to the IRS FIRE system yourself.
+                  </p>
+                </section>
               )}
 
               {/* Fix-first blockers */}
@@ -318,9 +387,17 @@ export function Generate1099Modal({ year, onClose }: { year: number; onClose: ()
           <button
             onClick={() => download('csv')}
             disabled={!summary || summary.readyCount === 0 || summary.payerTinMissing}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-emerald-500/40 hover:text-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <FileSpreadsheet size={14} /> Filing-service CSV
+          </button>
+          <button
+            onClick={downloadFire}
+            disabled={!summary || summary.readyCount === 0 || summary.payerTinMissing}
+            title="IRS FIRE fixed-width e-file (Pub. 1220). File only — you upload it to FIRE yourself."
             className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <FileSpreadsheet size={14} /> Download e-file
+            <FileCode2 size={14} /> IRS e-file (FIRE)
           </button>
         </div>
       </div>
