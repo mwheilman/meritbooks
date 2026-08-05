@@ -297,6 +297,11 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
             <DetailField label="Balance" value={formatMoney(data.balanceCents)} mono />
           </DetailSection>
 
+          {/* Ledger-grounded "explain this invoice" — DR AR / CR revenue, tax, status */}
+          <div className="mt-5">
+            <ExplainPanel kind="INVOICE" id={data.id} />
+          </div>
+
           {data.payments && data.payments.length > 0 && (
             <div className="mt-5">
               <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">

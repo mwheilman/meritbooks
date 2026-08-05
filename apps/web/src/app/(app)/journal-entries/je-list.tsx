@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Inbox, AlertCircle, Search, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatusBadge, EmptyState, TableSkeleton } from '@/components/ui';
@@ -68,6 +68,20 @@ export function JournalEntryList() {
   const [locationId, setLocationId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<JERow>();
+
+  // Deep-link: open the drawer from ?id=<uuid> on load (e.g. an Explain "based on"
+  // link), and keep the URL in sync so the record is shareable and refresh-safe.
+  // A bad/missing id degrades to the list, as before.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('id');
+    if (id) setSelectedId(id);
+  }, []);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (selectedId) url.searchParams.set('id', selectedId);
+    else url.searchParams.delete('id');
+    window.history.replaceState(null, '', url.toString());
+  }, [selectedId]);
 
   const params: Record<string, string> = {};
   if (activeTab !== 'all') params.status = activeTab;

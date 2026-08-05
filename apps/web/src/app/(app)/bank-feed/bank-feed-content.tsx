@@ -68,6 +68,10 @@ export function BankFeedContent() {
   const [sortField, setSortField] = useState<SortField>('confidence');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [editingTxn, setEditingTxn] = useState<BankFeedRow | null>(null);
+  // Deep-link: ?id=<uuid> opens the edit panel for that transaction once the feed
+  // loads it (e.g. an Explain "based on" link). Held pending until the row is in
+  // the loaded set; a bad/missing id simply leaves the list, as before.
+  const [pendingExplainId, setPendingExplainId] = useState<string | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [flaggingTxn, setFlaggingTxn] = useState<BankFeedRow | null>(null);
   const [isCategorizing, setIsCategorizing] = useState(false);
@@ -89,6 +93,28 @@ export function BankFeedContent() {
     () => sortTransactions(data?.data ?? [], sortField, sortDir),
     [data?.data, sortField, sortDir]
   );
+
+  // Deep-link (?id=<uuid>): capture on load, then open the edit panel once the
+  // feed has loaded that transaction. Keep the URL in sync while a panel is open
+  // so the record is shareable. A bad/missing id just leaves the list.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('id');
+    if (id) setPendingExplainId(id);
+  }, []);
+  useEffect(() => {
+    if (!pendingExplainId) return;
+    const match = (data?.data ?? []).find((t) => t.id === pendingExplainId);
+    if (match) {
+      setEditingTxn(match);
+      setPendingExplainId(null);
+    }
+  }, [pendingExplainId, data]);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (editingTxn) url.searchParams.set('id', editingTxn.id);
+    else url.searchParams.delete('id');
+    window.history.replaceState(null, '', url.toString());
+  }, [editingTxn]);
 
   // Sort handler
   const handleSort = useCallback((field: SortField) => {

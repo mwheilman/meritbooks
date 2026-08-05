@@ -253,8 +253,9 @@ async function gatherJournalEntry(
   ];
   if (h.is_reversing) facts.push({ label: 'Reversing entry', value: 'Yes' });
 
-  const links: ExplainLink[] = [{ label: `Journal entry ${h.entry_number}`, href: '/journal-entries', kind: 'gl_entry' }];
-  if (h.source_module === 'BILL' && h.source_id) links.push({ label: 'Source bill', href: '/bills', kind: 'bill' });
+  const links: ExplainLink[] = [{ label: `Journal entry ${h.entry_number}`, href: `/journal-entries?id=${id}`, kind: 'gl_entry' }];
+  if (h.source_module === 'BILL' && h.source_id) links.push({ label: 'Source bill', href: `/bills?id=${h.source_id}`, kind: 'bill' });
+  if (h.source_module === 'AR' && h.source_id) links.push({ label: 'Source invoice', href: `/invoices?invoice=${h.source_id}`, kind: 'invoice' });
   if (aiDecisions.length) links.push({ label: 'AI decision log', href: '/exceptions', kind: 'source' });
 
   return {
@@ -372,8 +373,8 @@ async function gatherBill(supabase: SupabaseClient, id: string): Promise<Explana
     { label: 'AI-extracted', value: h.ai_extracted ? 'Yes' : 'No' },
   ];
 
-  const links: ExplainLink[] = [{ label: `Bill ${h.bill_number ?? ''}`.trim(), href: '/bills', kind: 'bill' }];
-  if (h.gl_entry_id) links.push({ label: 'Posted journal entry', href: '/journal-entries', kind: 'gl_entry' });
+  const links: ExplainLink[] = [{ label: `Bill ${h.bill_number ?? ''}`.trim(), href: `/bills?id=${id}`, kind: 'bill' }];
+  if (h.gl_entry_id) links.push({ label: 'Posted journal entry', href: `/journal-entries?id=${h.gl_entry_id}`, kind: 'gl_entry' });
   if (h.source_file_url) links.push({ label: 'Source document', href: h.source_file_url, kind: 'document' });
 
   return {
@@ -574,9 +575,9 @@ async function gatherBankTransaction(supabase: SupabaseClient, id: string): Prom
   if (matchedBill) facts.push({ label: 'Matched bill', value: `${matchedBill.bill_number ?? '--'} · ${money(Number(matchedBill.total_cents))}` });
   if (matchedReceipt) facts.push({ label: 'Matched receipt', value: `${matchedReceipt.vendor_name ?? 'Receipt'}${matchedReceipt.amount_cents != null ? ` · ${money(Number(matchedReceipt.amount_cents))}` : ''}` });
 
-  const links: ExplainLink[] = [{ label: 'Bank feed', href: '/bank-feed', kind: 'bank_transaction' }];
-  if (h.gl_entry_id) links.push({ label: glHeader ? `Journal entry ${glHeader.entry_number}` : 'Posted journal entry', href: '/journal-entries', kind: 'gl_entry' });
-  if (h.matched_bill_id) links.push({ label: 'Matched bill', href: '/bills', kind: 'bill' });
+  const links: ExplainLink[] = [{ label: 'Bank feed', href: `/bank-feed?id=${id}`, kind: 'bank_transaction' }];
+  if (h.gl_entry_id) links.push({ label: glHeader ? `Journal entry ${glHeader.entry_number}` : 'Posted journal entry', href: `/journal-entries?id=${h.gl_entry_id}`, kind: 'gl_entry' });
+  if (h.matched_bill_id) links.push({ label: 'Matched bill', href: `/bills?id=${h.matched_bill_id}`, kind: 'bill' });
   if (aiDecisions.length) links.push({ label: 'AI decision log', href: '/exceptions', kind: 'source' });
 
   return {
@@ -701,7 +702,13 @@ async function gatherPayment(supabase: SupabaseClient, id: string): Promise<Expl
   ];
 
   const links: ExplainLink[] = [];
-  if (h.gl_entry_id) links.push({ label: glHeader ? `Journal entry ${glHeader.entry_number}` : 'Posted journal entry', href: '/journal-entries', kind: 'gl_entry' });
+  if (h.gl_entry_id) links.push({ label: glHeader ? `Journal entry ${glHeader.entry_number}` : 'Posted journal entry', href: `/journal-entries?id=${h.gl_entry_id}`, kind: 'gl_entry' });
+  // Deep-link each invoice this receipt cleared, so the "based on" trail lands on
+  // the exact record rather than the AR list.
+  for (const a of apps) {
+    const inv = invMap.get(a.invoice_id);
+    links.push({ label: inv ? `Invoice ${inv.invoice_number}` : 'Applied invoice', href: `/invoices?invoice=${a.invoice_id}`, kind: 'invoice' });
+  }
   links.push({ label: 'Cash application', href: '/cash-application', kind: 'invoice' });
 
   return {
@@ -713,6 +720,146 @@ async function gatherPayment(supabase: SupabaseClient, id: string): Promise<Expl
     status: glHeader?.status ?? 'RECORDED',
     totalCents: Number(h.amount_cents),
     balanced: lines.length ? totalDebits === totalCredits : null,
+    lines,
+    proposedBy,
+    approvedBy,
+    aiDecisions,
+    facts,
+    links,
+  };
+}
+
+// ── INVOICE (customer AR invoice) ───────────────────────────────────────────
+
+interface InvoiceHeaderRow {
+  id: string;
+  invoice_number: string;
+  invoice_date: string;
+  due_date: string;
+  subtotal_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  amount_paid_cents: number;
+  balance_cents: number;
+  status: string;
+  is_progress_bill: boolean;
+  customer_id: string | null;
+  location_id: string | null;
+  gl_entry_id: string | null;
+  sent_at: string | null;
+  memo: string | null;
+}
+
+interface InvoiceLineRow {
+  line_number: number;
+  description: string | null;
+  amount_cents: number;
+  accounts: JoinedAccount | JoinedAccount[] | null;
+}
+
+async function gatherInvoice(supabase: SupabaseClient, id: string): Promise<Explanation> {
+  const { data: header, error: headerErr } = await supabase
+    .from('invoices')
+    .select(
+      `id, invoice_number, invoice_date, due_date, subtotal_cents, tax_cents, total_cents,
+       amount_paid_cents, balance_cents, status, is_progress_bill,
+       customer_id, location_id, gl_entry_id, sent_at, memo`,
+    )
+    .eq('id', id)
+    .maybeSingle();
+  if (headerErr) throw new Error(headerErr.message);
+  if (!header) throw new ExplainNotFoundError('INVOICE', id);
+  const h = header as unknown as InvoiceHeaderRow;
+
+  // Customer + company live in `core` — stitch, never embed across the schema line.
+  const custMap = await fetchCoreMap<{ id: string; name: string }>(
+    supabase, 'customers', 'id, name', [h.customer_id],
+  );
+  const customerName = (h.customer_id ? custMap.get(h.customer_id)?.name : null) ?? 'Customer';
+  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
+    supabase, 'locations', 'id, name, short_code', [h.location_id],
+  );
+  const loc = h.location_id ? locMap.get(h.location_id) ?? null : null;
+
+  // Posting lines: prefer the authoritative posted GL entry (DR AR / CR revenue,
+  // plus any tax liability). For a DRAFT not yet posted there is no GL entry, so
+  // synthesize the revenue-credit distribution from the invoice lines — every
+  // distribution line credits its revenue account; direction is derived from the
+  // account's normal balance, same as everywhere else.
+  let lines: ExplainLineFact[];
+  if (h.gl_entry_id) {
+    lines = await gatherGlLines(supabase, h.gl_entry_id);
+  } else {
+    const { data: lineRows, error: lineErr } = await supabase
+      .from('invoice_lines')
+      .select(
+        `line_number, description, amount_cents,
+         accounts!inner(
+           account_number, name, account_type,
+           account_groups!inner(account_sub_types!inner(account_types!inner(normal_balance)))
+         )`,
+      )
+      .eq('invoice_id', id)
+      .order('line_number', { ascending: true });
+    if (lineErr) throw new Error(lineErr.message);
+    lines = [];
+    for (const row of (lineRows ?? []) as unknown as InvoiceLineRow[]) {
+      const acct = one(row.accounts);
+      if (!acct) continue;
+      lines.push(lineFactFrom(acct, 0, Number(row.amount_cents ?? 0), row.description));
+    }
+  }
+
+  const glHeader = h.gl_entry_id ? await gatherGlHeader(supabase, h.gl_entry_id) : null;
+  const aiDecisions = await gatherAiDecisions(supabase, h.gl_entry_id);
+
+  const totalDebits = lines.filter((l) => l.side === 'debit').reduce((s, l) => s + l.amountCents, 0);
+  const totalCredits = lines.filter((l) => l.side === 'credit').reduce((s, l) => s + l.amountCents, 0);
+
+  const revenueLines = lines.filter((l) => l.side === 'credit');
+  const whyRevenue = revenueLines.map((l) => `${l.accountName} (${money(l.amountCents)})`).join(', ');
+  const whyPosted = lines.length
+    ? `The invoice debits Accounts Receivable for the ${money(h.total_cents)} owed by ${customerName} and credits ${whyRevenue || 'revenue'}${h.tax_cents ? `, including ${money(h.tax_cents)} sales tax` : ''}.`
+    : `The invoice bills ${money(h.total_cents)} to ${customerName} but has no distribution lines yet.`;
+
+  const proposedBy: ExplainActor = {
+    label: h.is_progress_bill ? 'Progress (AIA) invoice issued' : 'Customer invoice issued',
+    detail: h.sent_at ? `Sent ${new Date(h.sent_at).toISOString().slice(0, 10)}` : null,
+  };
+  const approvedBy: ExplainActor | null = glHeader?.posted_at
+    ? { label: 'Issued & posted to the general ledger', detail: `${new Date(glHeader.posted_at).toISOString().slice(0, 10)}${glHeader.entry_number ? ` · ${glHeader.entry_number}` : ''}` }
+    : { label: `Not yet posted (status ${h.status})`, detail: null };
+
+  const facts: ExplainFact[] = [
+    { label: 'Invoice number', value: h.invoice_number, mono: true },
+    { label: 'Customer', value: customerName },
+    { label: 'Company', value: loc?.name ?? '--' },
+    { label: 'Invoice date', value: h.invoice_date, mono: true },
+    { label: 'Due date', value: h.due_date, mono: true },
+    { label: 'Subtotal', value: money(h.subtotal_cents), mono: true },
+    { label: 'Tax', value: money(h.tax_cents), mono: true },
+    { label: 'Total', value: money(h.total_cents), mono: true },
+    { label: 'Paid', value: money(h.amount_paid_cents), mono: true },
+    { label: 'Balance', value: money(h.balance_cents), mono: true },
+    { label: 'Status', value: h.status },
+  ];
+  if (h.is_progress_bill) facts.push({ label: 'Progress bill', value: 'AIA G702/G703' });
+
+  const links: ExplainLink[] = [{ label: `Invoice ${h.invoice_number}`, href: `/invoices?invoice=${id}`, kind: 'invoice' }];
+  if (h.gl_entry_id) links.push({ label: glHeader ? `Journal entry ${glHeader.entry_number}` : 'Posted journal entry', href: `/journal-entries?id=${h.gl_entry_id}`, kind: 'gl_entry' });
+  if (aiDecisions.length) links.push({ label: 'AI decision log', href: '/exceptions', kind: 'source' });
+
+  return {
+    kind: 'INVOICE',
+    id,
+    title: `Invoice ${h.invoice_number} — ${customerName}`,
+    whatItIs: `A customer invoice for ${money(h.total_cents)} billed to ${customerName}, dated ${h.invoice_date} and due ${h.due_date}${loc?.name ? ` from ${loc.name}` : ''}.`,
+    whyPosted,
+    status: h.status,
+    totalCents: h.total_cents,
+    // A DRAFT has only synthesized revenue credits (no AR debit yet) so balance is
+    // not meaningful; only assert balance once a real GL entry exists.
+    balanced: h.gl_entry_id && lines.length ? totalDebits === totalCredits : null,
     lines,
     proposedBy,
     approvedBy,
@@ -734,6 +881,7 @@ export async function gatherExplanation(
     case 'BILL': return gatherBill(supabase, id);
     case 'BANK_TRANSACTION': return gatherBankTransaction(supabase, id);
     case 'PAYMENT': return gatherPayment(supabase, id);
+    case 'INVOICE': return gatherInvoice(supabase, id);
     default: {
       // Exhaustiveness guard.
       const never: never = kind;

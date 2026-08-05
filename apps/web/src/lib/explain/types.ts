@@ -11,9 +11,9 @@
  */
 
 /** The object kinds Explain currently understands. Extend as new consumers mount. */
-export type ExplainKind = 'JOURNAL_ENTRY' | 'BILL' | 'BANK_TRANSACTION' | 'PAYMENT';
+export type ExplainKind = 'JOURNAL_ENTRY' | 'BILL' | 'BANK_TRANSACTION' | 'PAYMENT' | 'INVOICE';
 
-export const EXPLAIN_KINDS: ExplainKind[] = ['JOURNAL_ENTRY', 'BILL', 'BANK_TRANSACTION', 'PAYMENT'];
+export const EXPLAIN_KINDS: ExplainKind[] = ['JOURNAL_ENTRY', 'BILL', 'BANK_TRANSACTION', 'PAYMENT', 'INVOICE'];
 
 /** A single "based on" fact — a labeled, human-readable datum drawn from the record. */
 export interface ExplainFact {

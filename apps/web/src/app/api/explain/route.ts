@@ -36,7 +36,7 @@ export const EXPLAIN_MODEL = 'claude-sonnet-4-20250514';
 export const EXPLAIN_FEATURE = 'OBJECT_EXPLAIN';
 
 const schema = z.object({
-  kind: z.enum(['JOURNAL_ENTRY', 'BILL', 'BANK_TRANSACTION', 'PAYMENT']),
+  kind: z.enum(['JOURNAL_ENTRY', 'BILL', 'BANK_TRANSACTION', 'PAYMENT', 'INVOICE']),
   id: z.string().uuid(),
 });
 

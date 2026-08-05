@@ -748,7 +748,8 @@ export function InvoiceManager() {
   // Deep-link: open the panel from ?invoice=<id> on load, and keep the URL in
   // sync so a refresh re-opens it and the link is shareable.
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get('invoice');
+    const q = new URLSearchParams(window.location.search);
+    const id = q.get('invoice') ?? q.get('id');
     if (id) setDetailId(id);
   }, []);
   useEffect(() => {

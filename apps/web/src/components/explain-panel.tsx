@@ -37,6 +37,7 @@ const KIND_NOUN: Record<ExplainKind, string> = {
   BILL: 'bill',
   BANK_TRANSACTION: 'transaction',
   PAYMENT: 'payment',
+  INVOICE: 'invoice',
 };
 
 export function ExplainPanel({ kind, id, title, className }: ExplainPanelProps) {
