@@ -550,7 +550,12 @@ function BoardTable({ entities }: { entities: PortfolioEntity[] }) {
           {entities.map((e) => (
             <tr key={e.locationId} className="border-b border-slate-800/60 transition-colors last:border-0 hover:bg-slate-800/30">
               <td className="px-4 py-3">
-                <div className="font-medium text-white">{e.name}</div>
+                <Link
+                  href={`/portfolio/${e.locationId}`}
+                  className="font-medium text-white transition-colors hover:text-brand-300"
+                >
+                  {e.name}
+                </Link>
                 <div className="font-mono text-2xs text-slate-500">{e.shortCode}</div>
                 {e.concerns.length > 0 && (
                   <div className="mt-0.5 text-2xs text-slate-500">{e.concerns.join(' · ')}</div>
