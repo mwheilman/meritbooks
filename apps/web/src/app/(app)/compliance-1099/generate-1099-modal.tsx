@@ -170,6 +170,13 @@ export function Generate1099Modal({ year, onClose }: { year: number; onClose: ()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Escape closes the modal (no backdrop-click close on this heavy form).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   function download(format: 'csv' | 'pdf') {
     if (!data || data.summary.readyCount === 0) {
       addToast('error', 'No filable records — resolve blockers first');
@@ -209,7 +216,7 @@ export function Generate1099Modal({ year, onClose }: { year: number; onClose: ()
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
-      <div className="my-6 w-full max-w-3xl rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-label={`Generate ${year} 1099-NEC`} className="my-6 w-full max-w-3xl rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
           <div>

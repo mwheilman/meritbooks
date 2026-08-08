@@ -65,7 +65,15 @@ export default function InventoryItemPage() {
       {isLoading ? (
         <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
       ) : error || !item ? (
-        <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-red-400 text-sm">{error ?? 'Item not found'}</p></div>
+        <div className="p-8 text-center">
+          <AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" />
+          <p className="text-red-400 text-sm">{error ?? 'Item not found'}</p>
+          {error && (
+            <button onClick={() => refetch()} className="mt-3 rounded-lg bg-slate-800 px-3.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700">
+              Try again
+            </button>
+          )}
+        </div>
       ) : (
         <>
           <PageHeader title={item.name} description={`${item.sku} · ${item.valuationMethod === 'FIFO' ? 'FIFO' : 'Weighted average'}`} />
@@ -97,7 +105,8 @@ export default function InventoryItemPage() {
               {item.movements.length === 0 ? (
                 <div className="p-8 text-center text-sm text-slate-500">No movements yet.</div>
               ) : (
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[560px]">
                   <thead>
                     <tr className="border-b border-slate-800 text-left text-xs uppercase text-slate-500">
                       <th className="px-4 py-2 font-medium">Date</th>
@@ -114,6 +123,7 @@ export default function InventoryItemPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </div>

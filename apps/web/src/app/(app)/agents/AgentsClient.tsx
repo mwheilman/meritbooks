@@ -210,8 +210,11 @@ export function AgentsClient() {
           {isLoading ? (
             <div className="flex items-center gap-2 text-sm text-slate-500 p-4"><Loader2 className="h-4 w-4 animate-spin" /> Loading runs…</div>
           ) : error ? (
-            <div className="flex items-center gap-2 text-sm text-red-400 p-4 rounded-lg border border-red-500/30 bg-red-500/5">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-red-400 p-4 rounded-lg border border-red-500/30 bg-red-500/5">
               <AlertTriangle className="h-4 w-4" /> Could not load runs.
+              <button onClick={() => refetch()} className="ml-auto rounded-lg bg-slate-800 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700">
+                Try again
+              </button>
             </div>
           ) : runs.length === 0 ? (
             <div className="text-sm text-slate-500 p-4 rounded-lg border border-slate-800 bg-surface-900">

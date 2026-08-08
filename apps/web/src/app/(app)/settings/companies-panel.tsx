@@ -83,7 +83,15 @@ export function CompaniesPanel() {
   const selectCls = 'px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500/50';
 
   if (isLoading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 text-emerald-400 animate-spin" /></div>;
-  if (error) return <div className="p-6 text-center"><AlertCircle className="w-6 h-6 mx-auto text-red-400 mb-2" /><p className="text-red-400 text-sm">{error}</p></div>;
+  if (error) return (
+    <div className="p-6 text-center">
+      <AlertCircle className="w-6 h-6 mx-auto text-red-400 mb-2" />
+      <p className="text-red-400 text-sm">{error}</p>
+      <button onClick={() => refetch()} className="mt-3 rounded-lg bg-slate-800 px-3.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700">
+        Try again
+      </button>
+    </div>
+  );
 
   return (
     <div className="card p-6 space-y-5">

@@ -66,7 +66,13 @@ export default function InventoryPage() {
       {isLoading ? (
         <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
       ) : error ? (
-        <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-red-400 text-sm">{error}</p></div>
+        <div className="p-8 text-center">
+          <AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" />
+          <p className="text-red-400 text-sm">{error}</p>
+          <button onClick={() => refetch()} className="mt-3 rounded-lg bg-slate-800 px-3.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700">
+            Try again
+          </button>
+        </div>
       ) : (
         <>
           <div className="grid grid-cols-3 gap-4">
@@ -103,8 +109,8 @@ export default function InventoryPage() {
               )}
             </div>
           ) : (
-            <div className="card overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="card overflow-x-auto">
+              <table className="w-full text-sm min-w-[640px]">
                 <thead>
                   <tr className="border-b border-slate-800 text-left text-xs uppercase text-slate-500">
                     <th className="px-4 py-2.5 font-medium">SKU</th>

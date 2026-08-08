@@ -121,7 +121,12 @@ export default function SalesTaxCalendarPage() {
         <div className="flex items-center justify-center py-20 text-slate-500"><Loader2 className="animate-spin" size={20} /></div>
       )}
       {error && !isLoading && (
-        <div className="card p-4 flex items-center gap-2 text-red-400 text-sm"><AlertCircle size={16} /> {error}</div>
+        <div className="card p-4 flex items-center gap-2 text-red-400 text-sm">
+          <AlertCircle size={16} /> {error}
+          <button onClick={() => refetch()} className="ml-2 rounded-lg bg-slate-800 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700">
+            Try again
+          </button>
+        </div>
       )}
 
       {!isLoading && !error && report && (
