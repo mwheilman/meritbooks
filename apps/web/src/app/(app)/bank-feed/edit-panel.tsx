@@ -51,6 +51,43 @@ interface VendorMemoryResponse {
   top: VendorMemorySuggestion | null;
 }
 
+/** Auto-match insight (from /api/bank-feed/[id]/insight). */
+interface AutoApproveInsight {
+  eligible: boolean;
+  tier: 'auto' | 'review' | 'escalate';
+  reason: string;
+  confidence: number | null;
+  amountCents: number;
+  autoThreshold: number;
+  autoMaxCents: number | null;
+  trustedVendor: boolean | null;
+  checks: { confidenceOk: boolean; amountOk: boolean; vendorTrusted: boolean };
+}
+interface MatchBreakdownInsight {
+  breakdown: {
+    score: number;
+    vendorScore: number;
+    amountScore: number;
+    dateScore: number;
+    explanation: string;
+  } | null;
+  candidateLabel: string | null;
+  matchType: string | null;
+  matchConfidence: number | null;
+}
+interface InsightResponse {
+  autoApprove: AutoApproveInsight;
+  match: MatchBreakdownInsight;
+  topAccounts: Array<{
+    accountId: string;
+    accountNumber: string | null;
+    accountName: string | null;
+    count: number;
+    total: number;
+    share: number;
+  }>;
+}
+
 interface DeptOption {
   id: string;
   name: string;
@@ -195,6 +232,14 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
   // Only surface a hint once there is enough history to be worth trusting (>=2).
   const memoryTop =
     vendorMemory?.top && vendorMemory.top.count >= 2 ? vendorMemory.top : null;
+  // Top-N (up to 3) accounts this vendor is usually coded to.
+  const topAccounts = (vendorMemory?.suggestions ?? []).filter((s) => s.count >= 1).slice(0, 3);
+
+  // Auto-match insight: the "why did/didn't this auto-approve" + composite match
+  // breakdown, computed server-side against the org's real policy. Read-only.
+  const { data: insight } = useQuery<InsightResponse>(
+    `/api/bank-feed/${transaction.id}/insight`,
+  );
 
   const applyMemory = useCallback((s: VendorMemorySuggestion) => {
     setSelectedAccount({
@@ -374,6 +419,79 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
             )}
           </div>
 
+          {/* Auto-approve eligibility — confidence ≥ threshold AND amount ≤ cap AND trusted vendor */}
+          {insight?.autoApprove && (
+            <div
+              className={clsx(
+                'rounded-lg border p-3',
+                insight.autoApprove.eligible
+                  ? 'border-emerald-500/20 bg-emerald-500/[0.05]'
+                  : 'border-slate-700 bg-slate-800/40'
+              )}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Zap size={13} className={insight.autoApprove.eligible ? 'text-emerald-400' : 'text-slate-500'} />
+                <span className="text-2xs uppercase tracking-wider font-semibold text-slate-400">
+                  Auto-approve
+                </span>
+                <span
+                  className={clsx(
+                    'ml-auto text-2xs font-medium px-2 py-0.5 rounded-full',
+                    insight.autoApprove.eligible
+                      ? 'text-emerald-400 bg-emerald-500/10'
+                      : 'text-amber-400 bg-amber-500/10'
+                  )}
+                >
+                  {insight.autoApprove.eligible ? 'Eligible' : 'Needs review'}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <AutoCheck
+                  ok={insight.autoApprove.checks.confidenceOk}
+                  label={`Confidence ${insight.autoApprove.confidence == null ? '—' : `${Math.round(insight.autoApprove.confidence * 100)}%`} ≥ ${Math.round(insight.autoApprove.autoThreshold * 100)}%`}
+                />
+                <AutoCheck
+                  ok={insight.autoApprove.checks.amountOk}
+                  label={`Amount ${formatMoney(insight.autoApprove.amountCents)} ≤ ${insight.autoApprove.autoMaxCents == null ? 'no cap' : formatMoney(insight.autoApprove.autoMaxCents)}`}
+                />
+                <AutoCheck
+                  ok={insight.autoApprove.checks.vendorTrusted}
+                  label={
+                    insight.autoApprove.trustedVendor == null
+                      ? 'Trusted vendor (no vendor identified)'
+                      : insight.autoApprove.trustedVendor
+                        ? 'Trusted vendor'
+                        : 'Trusted vendor (not marked trusted)'
+                  }
+                />
+              </div>
+              <p className="text-2xs text-slate-500 mt-2 leading-relaxed">{insight.autoApprove.reason}</p>
+            </div>
+          )}
+
+          {/* Composite match breakdown — Vendor 40% + Amount 40% + Date 20% */}
+          {insight?.match?.breakdown && (
+            <div className="rounded-lg border border-blue-500/15 bg-blue-500/[0.04] p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles size={13} className="text-blue-400" />
+                <span className="text-2xs uppercase tracking-wider font-semibold text-slate-400">
+                  Match score
+                </span>
+                {insight.match.candidateLabel && (
+                  <span className="text-2xs text-slate-500">vs {insight.match.candidateLabel}</span>
+                )}
+                <span className="ml-auto text-sm font-mono tabular-nums text-blue-300 font-semibold">
+                  {Math.round(insight.match.breakdown.score * 100)}%
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                <ScoreBar label="Vendor" weight="40%" value={insight.match.breakdown.vendorScore} />
+                <ScoreBar label="Amount" weight="40%" value={insight.match.breakdown.amountScore} />
+                <ScoreBar label="Date" weight="20%" value={insight.match.breakdown.dateScore} />
+              </div>
+            </div>
+          )}
+
           {/* AI Reasoning */}
           {transaction.ai_reasoning && (
             <div>
@@ -449,6 +567,32 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
                       </button>
                     )}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Top-N GL accounts this vendor is usually coded to (quick-pick chips). */}
+            {topAccounts.length > 1 && (
+              <div className="mb-2">
+                <p className="text-2xs text-slate-500 mb-1.5">Most-used accounts for this vendor</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {topAccounts.map((s) => (
+                    <button
+                      key={s.accountId}
+                      onClick={() => applyMemory(s)}
+                      className={clsx(
+                        'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-2xs font-medium transition-colors',
+                        selectedAccount?.id === s.accountId
+                          ? 'bg-brand-500/15 text-brand-300 ring-1 ring-brand-500/30'
+                          : 'bg-slate-800/70 text-slate-300 hover:bg-slate-700/70'
+                      )}
+                      title={`${s.count} of ${s.total} past codings`}
+                    >
+                      <span className="font-mono text-slate-400">{s.accountNumber}</span>
+                      <span className="truncate max-w-[120px]">{s.accountName}</span>
+                      <span className="text-slate-500">{Math.round(s.share * 100)}%</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
@@ -692,6 +836,42 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
         </div>
       </div>
     </>
+  );
+}
+
+/** One line in the auto-approve checklist: a green check or an amber alert. */
+function AutoCheck({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      {ok ? (
+        <Check size={12} className="text-emerald-400 shrink-0" />
+      ) : (
+        <AlertCircle size={12} className="text-amber-400 shrink-0" />
+      )}
+      <span className={ok ? 'text-slate-300' : 'text-slate-400'}>{label}</span>
+    </div>
+  );
+}
+
+/** A weighted sub-score bar for the composite match breakdown. */
+function ScoreBar({ label, weight, value }: { label: string; weight: string; value: number }) {
+  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-2xs text-slate-500 w-14 shrink-0">
+        {label} <span className="text-slate-600">{weight}</span>
+      </span>
+      <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+        <div
+          className={clsx(
+            'h-full rounded-full',
+            pct >= 90 ? 'bg-emerald-500' : pct >= 70 ? 'bg-blue-500' : 'bg-amber-500'
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="text-2xs font-mono tabular-nums text-slate-400 w-8 text-right">{pct}%</span>
+    </div>
   );
 }
 

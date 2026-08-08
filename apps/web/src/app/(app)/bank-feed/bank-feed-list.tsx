@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { Check, Flag, Pencil, Receipt, FileText, Link2, HelpCircle, Inbox, AlertCircle, Loader2, ArrowUp, ArrowDown, Sparkles, Search, X, Briefcase, Clock } from 'lucide-react';
+import { Check, Flag, Pencil, Receipt, FileText, Link2, HelpCircle, Inbox, AlertCircle, Loader2, ArrowUp, ArrowDown, Sparkles, Search, X, Briefcase, Clock, Copy, Zap } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatusBadge, ConfidenceBar, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
@@ -29,7 +29,15 @@ interface BankFeedListProps {
   sortDir: SortDir;
   onSort: (field: SortField) => void;
   selectedLocationId: string | null;
+  /** Ids flagged as likely duplicates (detect-only) — surfaces a review badge. */
+  duplicateIds?: Set<string>;
 }
+
+/** Documented auto-approve ceiling ($10,000) + AI confidence bar (85%). The
+ *  vendor-trust leg is confirmed server-side at approve; this is the row-level
+ *  "meets the AI bar" hint, deliberately honest about that. */
+const AUTO_MAX_CENTS = 1_000_000;
+const AUTO_CONF = 0.85;
 
 // --- Match Badge ---
 
@@ -345,6 +353,7 @@ export function BankFeedList({
   sortDir,
   onSort,
   selectedLocationId,
+  duplicateIds,
 }: BankFeedListProps) {
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [editingAccountTxnId, setEditingAccountTxnId] = useState<string | null>(null);
@@ -463,6 +472,14 @@ export function BankFeedList({
               const job = txn.final_job;
               const isCogs = account?.account_type === 'COGS' || (account?.account_number?.startsWith('5'));
               const isPosted = txn.status === 'POSTED' || txn.status === 'APPROVED';
+              const isDuplicate = !isPosted && !!duplicateIds?.has(txn.id);
+              // Row-level "meets the AI bar" hint: confidence + amount only. The
+              // trusted-vendor leg is confirmed server-side at approve time.
+              const autoEligible =
+                !isPosted &&
+                (txn.ai_confidence ?? 0) >= AUTO_CONF &&
+                Math.abs(txn.amount_cents) <= AUTO_MAX_CENTS &&
+                !!account;
 
               return (
                 <tr
@@ -507,6 +524,15 @@ export function BankFeedList({
                           </button>
                         )}
                         <MatchBadge txn={txn} />
+                        {isDuplicate && (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium text-amber-400 bg-amber-500/10"
+                            title="Same description and amount as another recent transaction — review before approving"
+                          >
+                            <Copy size={10} />
+                            Possible duplicate
+                          </span>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -590,11 +616,21 @@ export function BankFeedList({
 
                   {/* Confidence */}
                   <td className="px-3 py-2.5">
-                    {txn.ai_confidence != null ? (
-                      <ConfidenceBar value={txn.ai_confidence} />
-                    ) : (
-                      <span className="text-2xs text-slate-600">—</span>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {txn.ai_confidence != null ? (
+                        <ConfidenceBar value={txn.ai_confidence} />
+                      ) : (
+                        <span className="text-2xs text-slate-600">—</span>
+                      )}
+                      {autoEligible && (
+                        <span
+                          className="inline-flex items-center text-emerald-400"
+                          title="Meets the AI auto-approve bar (confidence ≥ 85% and amount ≤ $10,000). Vendor trust is confirmed on approve."
+                        >
+                          <Zap size={11} />
+                        </span>
+                      )}
+                    </div>
                   </td>
 
                   {/* Amount */}

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
-import type { BankFeedResponse, BankFeedRow } from '@meritbooks/shared';
+import { formatMoney, type BankFeedResponse, type BankFeedRow } from '@meritbooks/shared';
 import type { ApproveBankTransactionInput, FlagTransactionInput } from '@/lib/validations/transactions';
 import { BankFeedFilters } from './bank-feed-filters';
 import { BankFeedList } from './bank-feed-list';
@@ -10,7 +10,7 @@ import { BankFeedMetricsStrip } from './bank-feed-metrics';
 import { EditPanel } from './edit-panel';
 import { CompanySelector } from './company-selector';
 import { StatementImport } from './statement-import';
-import { FileUp } from 'lucide-react';
+import { FileUp, RefreshCw, Copy, X } from 'lucide-react';
 
 interface ApproveResult {
   success: boolean;
@@ -28,6 +28,40 @@ interface InlineUpdateResult {
   success: boolean;
   transaction: unknown;
   changed: string[];
+}
+
+interface PlaidStatusResponse {
+  ok: boolean;
+  items: Array<{ id: string; institution_name: string | null; status: string; status_detail: string | null; last_synced_at: string | null }>;
+  accountCount: number;
+  connected: boolean;
+}
+
+interface SyncSummary {
+  itemsSynced: number;
+  transactionsAdded: number;
+  transactionsModified: number;
+  transactionsRemoved: number;
+  balancesRefreshed: number;
+  reauthNeeded: Array<{ plaidItemId: string; institutionName: string | null }>;
+  errors: Array<{ plaidItemId: string; message: string }>;
+}
+
+interface DuplicateGroup {
+  key: string;
+  amountCents: number;
+  sampleDescription: string;
+  transactionIds: string[];
+  dates: string[];
+  count: number;
+  hasOpen: boolean;
+}
+
+interface DuplicatesResponse {
+  groups: DuplicateGroup[];
+  duplicate_ids: string[];
+  total_flagged: number;
+  group_count: number;
 }
 
 export type SortField = 'date' | 'amount' | 'confidence' | 'vendor' | 'company';
@@ -76,6 +110,8 @@ export function BankFeedContent() {
   const [flaggingTxn, setFlaggingTxn] = useState<BankFeedRow | null>(null);
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [showStatementImport, setShowStatementImport] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [dupBannerDismissed, setDupBannerDismissed] = useState(false);
 
   // Build query params
   const params: Record<string, string> = {};
@@ -93,6 +129,40 @@ export function BankFeedContent() {
     () => sortTransactions(data?.data ?? [], sortField, sortDir),
     [data?.data, sortField, sortDir]
   );
+
+  // Plaid connection status (drives the Refresh button's enabled/last-synced state).
+  const { data: plaidStatus, refetch: refetchStatus } = useQuery<PlaidStatusResponse>(
+    '/api/integrations/plaid/sync',
+  );
+  const lastSyncedLabel = useMemo(() => {
+    const times = (plaidStatus?.items ?? [])
+      .map((i) => i.last_synced_at)
+      .filter((t): t is string => !!t)
+      .map((t) => new Date(t).getTime())
+      .filter((n) => Number.isFinite(n));
+    if (times.length === 0) return null;
+    const mins = Math.round((Date.now() - Math.max(...times)) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.round(hrs / 24)}d ago`;
+  }, [plaidStatus?.items]);
+
+  // Duplicate detection (detect-only): flag likely double-imported transactions.
+  const dupParams: Record<string, string> = {};
+  if (selectedLocationId) dupParams.location_id = selectedLocationId;
+  const { data: duplicates, refetch: refetchDuplicates } = useQuery<DuplicatesResponse>(
+    '/api/bank-feed/duplicates',
+    Object.keys(dupParams).length > 0 ? dupParams : undefined,
+  );
+  const duplicateIds = useMemo(
+    () => new Set(duplicates?.duplicate_ids ?? []),
+    [duplicates?.duplicate_ids],
+  );
+  useEffect(() => {
+    setDupBannerDismissed(false);
+  }, [selectedLocationId]);
 
   // Deep-link (?id=<uuid>): capture on load, then open the edit panel once the
   // feed has loaded that transaction. Keep the URL in sync while a panel is open
@@ -200,6 +270,56 @@ export function BankFeedContent() {
       setIsCategorizing(false);
     }
   }, [selectedLocationId, refetch]);
+
+  // Refresh / sync: pull the latest transactions via the existing Plaid sync path.
+  // Degrade-safe — never duplicates already-imported rows (the sync service dedupes
+  // on plaid_transaction_id) and reports clearly when no bank is connected.
+  const handleSync = useCallback(async () => {
+    if (isSyncing) return;
+    if (plaidStatus && plaidStatus.connected === false) {
+      addToast('error', 'No bank connected yet — link an account under Integrations to sync.');
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/integrations/plaid/sync', { method: 'POST' });
+      const result = await res.json().catch(() => ({}));
+      if (res.ok && result?.ok) {
+        const s = result.summary as SyncSummary;
+        if (!s || s.itemsSynced === 0) {
+          addToast('error', 'No bank connected yet — link an account under Integrations to sync.');
+        } else {
+          const added = s.transactionsAdded ?? 0;
+          const modified = s.transactionsModified ?? 0;
+          if (added === 0 && modified === 0) {
+            addToast('success', 'Up to date — no new transactions.');
+          } else {
+            addToast(
+              'success',
+              `Synced ${added} new${modified ? `, ${modified} updated` : ''} transaction${added === 1 && !modified ? '' : 's'}.`,
+            );
+          }
+          if (s.reauthNeeded?.length) {
+            addToast('error', `Reconnect needed: ${s.reauthNeeded.map((r) => r.institutionName ?? 'a bank').join(', ')}.`);
+          }
+          if (s.errors?.length) {
+            addToast('error', `${s.errors.length} connection${s.errors.length > 1 ? 's' : ''} could not sync.`);
+          }
+        }
+        refetch();
+        refetchStatus();
+        refetchDuplicates();
+      } else if (res.status === 401) {
+        addToast('error', 'Please sign in again to sync.');
+      } else {
+        addToast('error', result?.error ?? 'Sync failed.');
+      }
+    } catch {
+      addToast('error', 'Network error during sync.');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isSyncing, plaidStatus, refetch, refetchStatus, refetchDuplicates]);
 
   // Flag handler
   const handleFlag = useCallback((txn: BankFeedRow) => {
@@ -414,6 +534,21 @@ export function BankFeedContent() {
         <CompanySelector selectedId={selectedLocationId} onChange={setSelectedLocationId} />
         <div className="flex items-center gap-2">
           <button
+            onClick={handleSync}
+            disabled={isSyncing}
+            className="btn-secondary btn-sm whitespace-nowrap flex items-center gap-1.5"
+            title={
+              plaidStatus?.connected === false
+                ? 'No bank connected yet — link an account under Integrations'
+                : lastSyncedLabel
+                  ? `Pull the latest transactions from your bank (last synced ${lastSyncedLabel})`
+                  : 'Pull the latest transactions from your bank'
+            }
+          >
+            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : undefined} />
+            {isSyncing ? 'Syncing…' : 'Refresh'}
+          </button>
+          <button
             onClick={() => setShowStatementImport(true)}
             className="btn-secondary btn-sm whitespace-nowrap flex items-center gap-1.5"
             title="Import a bank/credit-card statement PDF for a manual (non-Plaid) account"
@@ -446,6 +581,34 @@ export function BankFeedContent() {
         onSearchChange={setSearch}
         counts={data?.counts ?? null}
       />
+      {duplicates && duplicates.group_count > 0 && !dupBannerDismissed && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3">
+          <Copy size={16} className="text-amber-400 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-amber-200 font-medium">
+              {duplicates.total_flagged} possible duplicate transaction{duplicates.total_flagged === 1 ? '' : 's'} across{' '}
+              {duplicates.group_count} group{duplicates.group_count === 1 ? '' : 's'}
+            </p>
+            <p className="text-xs text-amber-200/70 mt-0.5">
+              Same description and amount within a few days. Flagged for review — nothing is deleted. Look for the
+              {' '}
+              <span className="font-medium">Possible duplicate</span> badge below and flag or skip before approving.
+            </p>
+            {duplicates.groups.slice(0, 3).map((g) => (
+              <p key={g.key} className="text-2xs text-amber-200/60 mt-1 font-mono truncate">
+                {formatMoney(g.amountCents)} · {g.sampleDescription} · ×{g.count} ({g.dates.join(', ')})
+              </p>
+            ))}
+          </div>
+          <button
+            onClick={() => setDupBannerDismissed(true)}
+            className="p-1 rounded-md text-amber-300/70 hover:text-amber-200 hover:bg-amber-500/10 transition-colors shrink-0"
+            aria-label="Dismiss duplicate warning"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
       <BankFeedMetricsStrip metrics={data?.metrics ?? null} isLoading={isLoading} />
       <BankFeedList
         transactions={transactions}
@@ -467,6 +630,7 @@ export function BankFeedContent() {
         sortDir={sortDir}
         onSort={handleSort}
         selectedLocationId={selectedLocationId}
+        duplicateIds={duplicateIds}
       />
       {editingTxn && (
         <EditPanel
