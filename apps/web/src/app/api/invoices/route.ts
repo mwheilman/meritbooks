@@ -6,6 +6,7 @@ import { requireAuth } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
 import { createInvoice } from '@/lib/invoices/create-invoice';
+import { getHomeCurrency, normalizeCurrency } from '@/lib/currency';
 
 // ─── GET: List invoices ───────────────────────────────────────────────
 const querySchema = z.object({
@@ -41,7 +42,7 @@ export async function GET(request: Request) {
       id, invoice_number, invoice_date, due_date, subtotal_cents, tax_cents,
       retainage_cents, total_cents, amount_paid_cents, balance_cents,
       status, is_progress_bill, application_number, memo, sent_at, created_at,
-      customer_id, location_id, job_id
+      currency, customer_id, location_id, job_id
     `, { count: 'exact' })
     .order('invoice_date', { ascending: false })
     .range(from, to);
@@ -123,6 +124,7 @@ export async function GET(request: Request) {
       invoiceNumber: inv.invoice_number,
       invoiceDate: inv.invoice_date,
       dueDate: inv.due_date,
+      currency: normalizeCurrency(inv.currency),
       subtotalCents: Number(inv.subtotal_cents),
       taxCents: Number(inv.tax_cents),
       retainageCents: Number(inv.retainage_cents),
@@ -141,9 +143,13 @@ export async function GET(request: Request) {
     };
   });
 
+  // Group reporting (home) currency, so the client can flag foreign-currency rows.
+  const homeCurrency = authResult.orgId ? await getHomeCurrency(supabase, authResult.orgId) : 'USD';
+
   return NextResponse.json({
     data: invoices,
     counts,
+    homeCurrency,
     pagination: { page, per_page: perPage, total: count ?? 0, total_pages: Math.ceil((count ?? 0) / perPage) },
   });
 }

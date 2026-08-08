@@ -6,7 +6,7 @@ import {
   DollarSign, Ban, AlertCircle,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { StatusBadge } from '@/components/ui';
+import { StatusBadge, CurrencyTag } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
 import { AttachmentsPanel } from '@/components/documents/attachments-panel';
@@ -44,6 +44,8 @@ interface BillDetailData {
     total_cents: number;
     amount_paid_cents: number;
     balance_cents: number;
+    currency: string | null;
+    fx_rate: number | null;
     status: string;
     payment_hold_reason: string | null;
     scheduled_payment_date: string | null;
@@ -61,6 +63,7 @@ interface BillDetailData {
     blocked: boolean;
     violations: { rule_id: string; severity: 'WARN' | 'BLOCK'; message: string }[];
   } | null;
+  homeCurrency?: string;
 }
 
 const APPROVER_LABEL: Record<string, string> = {
@@ -121,6 +124,9 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
 
   const bill = data?.bill;
   const balance = bill ? bill.total_cents - bill.amount_paid_cents : 0;
+  const billCcy = (bill?.currency ?? 'USD').toUpperCase();
+  const homeCcy = (data?.homeCurrency ?? 'USD').toUpperCase();
+  const isForeignBill = billCcy !== homeCcy;
 
   return (
     <>
@@ -157,12 +163,21 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
                 </div>
                 <div className="flex items-center justify-between pt-1">
                   <span className="text-2xs text-slate-500 uppercase tracking-wider">Total</span>
-                  <span className="text-lg font-mono font-semibold text-white">{formatMoney(bill.total_cents)}</span>
+                  <span className="inline-flex items-center gap-2">
+                    <CurrencyTag code={billCcy} homeCurrency={homeCcy} onlyForeign />
+                    <span className="text-lg font-mono font-semibold text-white">{formatMoney(bill.total_cents, { currency: billCcy })}</span>
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500">Paid {formatMoney(bill.amount_paid_cents)}</span>
-                  <span className={clsx('font-mono', balance > 0 ? 'text-amber-400' : 'text-emerald-400')}>Balance {formatMoney(balance)}</span>
+                  <span className="text-slate-500">Paid {formatMoney(bill.amount_paid_cents, { currency: billCcy })}</span>
+                  <span className={clsx('font-mono', balance > 0 ? 'text-amber-400' : 'text-emerald-400')}>Balance {formatMoney(balance, { currency: billCcy })}</span>
                 </div>
+                {isForeignBill && (
+                  <div className="text-2xs text-slate-500 pt-0.5">
+                    Amounts in {billCcy} · reported in {homeCcy}
+                    {bill.fx_rate ? ` at rate ${bill.fx_rate}` : ''}
+                  </div>
+                )}
               </div>
 
               {bill.status === 'ON_HOLD' && (
@@ -292,7 +307,7 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
                               </span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-right text-sm font-mono text-slate-200 whitespace-nowrap">{formatMoney(l.amount_cents)}</td>
+                          <td className="px-3 py-2 text-right text-sm font-mono text-slate-200 whitespace-nowrap">{formatMoney(l.amount_cents, { currency: billCcy })}</td>
                         </tr>
                       ))}
                     </tbody>

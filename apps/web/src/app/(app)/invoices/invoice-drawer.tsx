@@ -5,7 +5,7 @@ import { clsx } from 'clsx';
 import { Pencil, Plus, Trash2, Loader2, ShieldAlert, Download, Link2, Send, Receipt, Ban, FileX } from 'lucide-react';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
-import { StatusBadge } from '@/components/ui';
+import { StatusBadge, CurrencyTag } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
 import { InvoiceTextOverrides } from '@/components/invoice-text-overrides';
 import { AttachmentsPanel } from '@/components/documents/attachments-panel';
@@ -21,6 +21,7 @@ interface InvDetail {
   status: string; memo: string | null; isProgressBill: boolean; publicToken: string;
   customerId?: string; locationId?: string;
   subtotalCents: number; taxCents: number; totalCents: number;
+  currency?: string; fxRate?: number | null; homeCurrency?: string;
   taxRatePct?: number | null; taxJurisdiction?: string | null;
   amountPaidCents: number; balanceCents: number;
   customerName: string; customerEmail: string | null;
@@ -57,6 +58,12 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
   const { data, isLoading, error, refetch } = useQuery<InvDetail>(
     invoiceId ? `/api/invoices/${invoiceId}` : '', undefined, { enabled: !!invoiceId }
   );
+
+  // Currency the record's amounts are denominated in (stored in this currency's
+  // minor unit) vs the tenant reporting currency — so foreign records read clearly.
+  const ccy = (data?.currency ?? 'USD').toUpperCase();
+  const homeCcy = (data?.homeCurrency ?? 'USD').toUpperCase();
+  const isForeign = ccy !== homeCcy;
 
   const [editing, setEditing] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
@@ -273,14 +280,30 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
                   <div className="text-2xs text-slate-500 mt-0.5 font-mono">{l.accountNumber} · {l.accountName}</div>
                 </td>
                 <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-400">{l.quantity}</td>
-                <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-400">{formatMoney(l.unitPriceCents)}</td>
-                <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-200">{formatMoney(l.amountCents)}</td>
+                <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-400">{formatMoney(l.unitPriceCents, { currency: ccy })}</td>
+                <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-200">{formatMoney(l.amountCents, { currency: ccy })}</td>
               </tr>
             ))}
           </DetailTable>
 
           <DetailSection title="">
-            <DetailField label="Subtotal" value={formatMoney(data.subtotalCents)} mono />
+            {(isForeign || ccy !== 'USD') && (
+              <DetailField
+                label="Currency"
+                value={
+                  <span className="inline-flex items-center gap-2">
+                    <CurrencyTag code={ccy} homeCurrency={homeCcy} />
+                    {isForeign && (
+                      <span className="text-2xs text-slate-500">
+                        reported in {homeCcy}
+                        {data.fxRate ? ` · rate ${data.fxRate}` : ''}
+                      </span>
+                    )}
+                  </span>
+                }
+              />
+            )}
+            <DetailField label="Subtotal" value={formatMoney(data.subtotalCents, { currency: ccy })} mono />
             <DetailField
               label={
                 data.taxJurisdiction === 'EXEMPT'
@@ -289,12 +312,12 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
                     ? `Tax · ${data.taxJurisdiction ? `${data.taxJurisdiction} ` : ''}${data.taxRatePct}%`
                     : 'Tax'
               }
-              value={formatMoney(data.taxCents)}
+              value={formatMoney(data.taxCents, { currency: ccy })}
               mono
             />
-            <DetailField label="Total" value={formatMoney(data.totalCents)} mono />
-            <DetailField label="Paid" value={formatMoney(data.amountPaidCents)} mono />
-            <DetailField label="Balance" value={formatMoney(data.balanceCents)} mono />
+            <DetailField label="Total" value={formatMoney(data.totalCents, { currency: ccy })} mono />
+            <DetailField label="Paid" value={formatMoney(data.amountPaidCents, { currency: ccy })} mono />
+            <DetailField label="Balance" value={formatMoney(data.balanceCents, { currency: ccy })} mono />
           </DetailSection>
 
           {/* Ledger-grounded "explain this invoice" — DR AR / CR revenue, tax, status */}

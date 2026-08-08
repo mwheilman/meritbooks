@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { fetchCoreMap } from '@/lib/stitch-core';
+import { getHomeCurrency, normalizeCurrency } from '@/lib/currency';
 
 /**
  * GET /api/invoices/[id]
@@ -21,6 +22,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .select(`
       id, invoice_number, invoice_date, due_date, status, memo,
       subtotal_cents, tax_cents, total_cents, amount_paid_cents, balance_cents,
+      currency, fx_rate,
       is_progress_bill, customer_id, location_id, job_id, gl_entry_id, created_at, public_token
     `)
     .eq('org_id', orgId)
@@ -147,6 +149,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     };
   });
 
+  const homeCurrency = await getHomeCurrency(supabase, orgId);
+
   return NextResponse.json({
     id: inv.id,
     invoiceNumber: inv.invoice_number,
@@ -154,6 +158,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     dueDate: inv.due_date,
     status: inv.status,
     memo: inv.memo,
+    currency: normalizeCurrency((inv as { currency?: string }).currency),
+    fxRate: (inv as { fx_rate?: number | string | null }).fx_rate != null ? Number((inv as { fx_rate?: number | string | null }).fx_rate) : null,
+    homeCurrency,
     isProgressBill: inv.is_progress_bill,
     publicToken: inv.public_token,
     customerId: inv.customer_id,

@@ -7,6 +7,7 @@ import { billTransitionSchema } from '@/lib/validations/transactions';
 import { approveBill, scheduleBill, payBill, voidBill } from '@/lib/services/bill-ap';
 import { logHumanAction, logAction } from '@/lib/trust/action-log';
 import { evaluateBillById } from '@/lib/policy/ap-enforce';
+import { getHomeCurrency } from '@/lib/currency';
 
 // GET /api/bills/[id] — full bill detail for the AP panel.
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
@@ -20,6 +21,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .select(`
       id, bill_number, bill_date, due_date, received_date,
       subtotal_cents, tax_cents, total_cents, amount_paid_cents, balance_cents,
+      currency, fx_rate,
       status, payment_hold_reason, scheduled_payment_date, payment_method, paid_at,
       approver_type, approver_ref, approved_by_user, approved_at, void_reason,
       gl_entry_id, location_id, vendor_id
@@ -98,12 +100,15 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     policy = null;
   }
 
+  const homeCurrency = await getHomeCurrency(supabase, orgId);
+
   return NextResponse.json({
     bill,
     lines: enrichedLines,
     attributions: attributions ?? [],
     approver: { type: (bill as { approver_type: string | null }).approver_type, ref, name: approverName },
     policy,
+    homeCurrency,
   });
 }
 

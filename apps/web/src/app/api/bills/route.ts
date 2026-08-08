@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 import { fetchCoreMap } from '@/lib/stitch-core';
+import { getHomeCurrency } from '@/lib/currency';
 
 const billQuerySchema = z.object({
   status: z.enum(['all', 'PENDING', 'APPROVED', 'SCHEDULED', 'PARTIALLY_PAID', 'PAID', 'ON_HOLD']).optional(),
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
       total_cents, amount_paid_cents, balance_cents,
       status, ai_extracted, ai_confidence, payment_hold_reason,
       approver_type, approver_ref, scheduled_payment_date,
-      location_id, vendor_id
+      currency, location_id, vendor_id
     `, { count: 'exact' })
     .eq('org_id', orgId);
 
@@ -145,9 +146,12 @@ export async function GET(request: Request) {
   }
   statusCounts['all'] = { count: totalCount, amount_cents: totalAmount };
 
+  const homeCurrency = await getHomeCurrency(supabase, orgId);
+
   return NextResponse.json({
     data: enrichedData,
     counts: statusCounts,
+    homeCurrency,
     pagination: { page, per_page: perPage, total: count ?? 0, total_pages: Math.ceil((count ?? 0) / perPage) },
   });
 }

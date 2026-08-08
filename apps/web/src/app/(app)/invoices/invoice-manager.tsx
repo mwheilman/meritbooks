@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@/hooks/use-query';
 import { formatMoney } from '@meritbooks/shared';
+import { CurrencyTag } from '@/components/ui';
 import { InvoiceDrawer } from './invoice-drawer';
 import { CreditMemosPanel, type CreditMemoPrefill } from './credit-memos-panel';
 import { RecurringPanel } from './recurring-panel';
@@ -21,6 +22,7 @@ interface InvoiceRow {
   invoiceNumber: string;
   invoiceDate: string;
   dueDate: string;
+  currency: string;
   totalCents: number;
   amountPaidCents: number;
   balanceCents: number;
@@ -82,7 +84,9 @@ function InvoiceList({
   const { data, isLoading, error } = useQuery<{
     data: InvoiceRow[];
     counts: StatusCounts;
+    homeCurrency?: string;
   }>(`/api/invoices?${params}`);
+  const homeCurrency = data?.homeCurrency ?? 'USD';
 
   const { data: locData } = useQuery<{ data: LocationOption[] }>('/api/locations');
   const locations = locData?.data ?? [];
@@ -259,9 +263,14 @@ function InvoiceList({
                       <span className="ml-1 text-[10px] text-red-400">{inv.daysOverdue}d late</span>
                     )}
                   </td>
-                  <td className="py-3 pr-4 text-right font-mono text-white">{formatMoney(inv.totalCents)}</td>
-                  <td className="py-3 pr-4 text-right font-mono text-gray-400">{formatMoney(inv.amountPaidCents)}</td>
-                  <td className="py-3 pr-4 text-right font-mono text-white font-medium">{formatMoney(inv.balanceCents)}</td>
+                  <td className="py-3 pr-4 text-right font-mono text-white">
+                    <span className="inline-flex items-center justify-end gap-1.5">
+                      <CurrencyTag code={inv.currency} homeCurrency={homeCurrency} onlyForeign />
+                      {formatMoney(inv.totalCents, { currency: inv.currency })}
+                    </span>
+                  </td>
+                  <td className="py-3 pr-4 text-right font-mono text-gray-400">{formatMoney(inv.amountPaidCents, { currency: inv.currency })}</td>
+                  <td className="py-3 pr-4 text-right font-mono text-white font-medium">{formatMoney(inv.balanceCents, { currency: inv.currency })}</td>
                   <td className="py-3 pr-4">
                     <StatusBadge status={inv.status} />
                   </td>

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Inbox, AlertCircle, Search, ShieldAlert, Clock, Briefcase, UserCheck, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
-import { StatusBadge, EmptyState, TableSkeleton } from '@/components/ui';
+import { StatusBadge, EmptyState, TableSkeleton, CurrencyTag } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useDebounce } from '@/hooks';
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
@@ -16,6 +16,7 @@ interface BillRow {
   bill_number: string | null;
   bill_date: string;
   due_date: string;
+  currency: string | null;
   total_cents: number;
   amount_paid_cents: number;
   balance_cents: number;
@@ -36,6 +37,7 @@ interface BillRow {
 interface BillResponse {
   data: BillRow[];
   counts: Record<string, { count: number; amount_cents: number }>;
+  homeCurrency?: string;
   pagination: { page: number; per_page: number; total: number; total_pages: number };
 }
 
@@ -88,6 +90,7 @@ export function BillList() {
 
   const bills = data?.data ?? [];
   const counts = data?.counts ?? null;
+  const homeCurrency = data?.homeCurrency ?? 'USD';
 
   return (
     <div className="space-y-4">
@@ -230,14 +233,17 @@ export function BillList() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-mono tabular-nums text-slate-200">
-                      {formatMoney(bill.total_cents)}
+                      <span className="inline-flex items-center justify-end gap-1.5">
+                        <CurrencyTag code={bill.currency} homeCurrency={homeCurrency} onlyForeign />
+                        {formatMoney(bill.total_cents, { currency: bill.currency ?? homeCurrency })}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className={clsx(
                         'text-sm font-mono tabular-nums font-medium',
                         bill.balance_cents > 0 ? 'text-slate-200' : 'text-emerald-400'
                       )}>
-                        {formatMoney(bill.balance_cents)}
+                        {formatMoney(bill.balance_cents, { currency: bill.currency ?? homeCurrency })}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
