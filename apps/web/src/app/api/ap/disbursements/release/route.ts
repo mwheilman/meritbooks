@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
-import { requireMoneyMovement, PAYMENTS_EXECUTE } from '@/lib/rbac/payments-permission';
+import { requireMoneyMovement, PAYMENTS_EXECUTE, AP_DISBURSEMENT_RELEASE_FEATURE } from '@/lib/rbac/payments-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { recordBillPayment } from '@/lib/posting/lifecycle';
 import { PostingError } from '@/lib/posting/account-roles';
@@ -55,13 +55,18 @@ export async function POST(request: Request) {
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
-  // Authorize — releasing a batch posts to the GL: a money-movement action. Gate
-  // on the dedicated `payments` execute permission (falls back to checks:create
-  // until the reserved catalog adopts `payments`). Fails closed.
-  const guard = await requireMoneyMovement(userId, PAYMENTS_EXECUTE, {
-    feature: 'checks',
-    action: 'create',
-  });
+  // Authorize — releasing a batch posts to the GL: a money-movement action. Gate on
+  // the GRANULAR `ap_disbursement_release` key (SoD: the RELEASER authority, distinct
+  // from the `check_run` PREPARER key and from payroll_release), so releasing AP is
+  // its own grant. Degrades to the coarse `payments` superset, then to checks:create
+  // — never looser than today. Fails closed. (Per-line preparer != releaser SoD is
+  // additionally enforced below.)
+  const guard = await requireMoneyMovement(
+    userId,
+    PAYMENTS_EXECUTE,
+    { feature: 'checks', action: 'create' },
+    AP_DISBURSEMENT_RELEASE_FEATURE,
+  );
   if (!guard.ok) return guard.response;
 
   let body: ReleaseBody = {};

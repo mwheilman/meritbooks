@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 
 /**
@@ -50,6 +51,15 @@ export async function POST(request: Request): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, userId, orgId } = ctx;
+
+  // Authorize — this dismisses items out of their exception state (clears a bill
+  // payment hold, rejects an AI proposal, un-flags a bank txn/receipt). Previously
+  // this mutation was auth-only with no RBAC; gate it on `flagged:resolve` — the
+  // "may work the Needs-Attention queue" authority. Held by
+  // controller/asst-CFO/accounting-manager/-specialist + company-admin; DENIED to
+  // general_admin, business_user, check_processor, and view-only CFO. Fails closed.
+  const guard = await requirePermission(userId, 'flagged', 'resolve');
+  if (!guard.ok) return guard.response;
 
   // Parse + validate body
   let raw: unknown;

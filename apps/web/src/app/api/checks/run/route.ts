@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
-import { requireMoneyMovement, PAYMENTS_EXECUTE } from '@/lib/rbac/payments-permission';
+import { requireMoneyMovement, PAYMENTS_EXECUTE, CHECK_RUN_FEATURE } from '@/lib/rbac/payments-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import {
   createApproval,
@@ -46,13 +46,17 @@ export async function POST(request: Request) {
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   // Authorize — the check run QUEUES disbursement approvals (the front of the
-  // money-movement chain); gate on the dedicated `payments` execute permission,
-  // falling back to checks:create until the reserved catalog adopts `payments`.
-  // Defense-in-depth on top of RLS + the approvals SoD.
-  const guard = await requireMoneyMovement(userId, PAYMENTS_EXECUTE, {
-    feature: 'checks',
-    action: 'create',
-  });
+  // money-movement chain); gate on the GRANULAR `check_run` key (SoD: separate from
+  // payroll_release / ap_disbursement_release so a check-runner can hold this WITHOUT
+  // holding payroll release). Degrades to the coarse `payments` superset, then to
+  // checks:create — never looser than today. Defense-in-depth on top of RLS + the
+  // approvals SoD.
+  const guard = await requireMoneyMovement(
+    userId,
+    PAYMENTS_EXECUTE,
+    { feature: 'checks', action: 'create' },
+    CHECK_RUN_FEATURE,
+  );
   if (!guard.ok) return guard.response;
 
   let body: RunBody = {};

@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/api-handler';
-import { requireMoneyMovement, PAYMENTS_EXECUTE } from '@/lib/rbac/payments-permission';
+import { requireMoneyMovement, PAYMENTS_EXECUTE, PAYMENTS_EXECUTE_FEATURE } from '@/lib/rbac/payments-permission';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { resolveOrgId, recordCustomerPayment } from '@/lib/posting/lifecycle';
@@ -30,14 +30,17 @@ export async function POST(request: Request) {
   const { userId, orgId: claimOrgId } = authResult;
 
   // Authorize — recording a customer payment applies cash to AR and posts to the
-  // GL: a money-movement action. Gate on the dedicated `payments` permission
-  // (execute). Until the RESERVED catalog adopts `payments`, this transparently
-  // falls back to the AR-write gate (invoices:create) so nothing breaks — see
-  // lib/rbac/payments-permission.ts and the session report.
-  const guard = await requireMoneyMovement(userId, PAYMENTS_EXECUTE, {
-    feature: 'invoices',
-    action: 'create',
-  });
+  // GL: a money-movement action. Gate on the GRANULAR `payments_execute` key (SoD:
+  // distinct from payroll_release / check_run / ap_disbursement_release) the moment
+  // the RESERVED catalog carries it; until then it degrades to the coarse `payments`
+  // superset, and finally to the AR-write gate (invoices:create) — never looser than
+  // today. See lib/rbac/payments-permission.ts and the session report.
+  const guard = await requireMoneyMovement(
+    userId,
+    PAYMENTS_EXECUTE,
+    { feature: 'invoices', action: 'create' },
+    PAYMENTS_EXECUTE_FEATURE,
+  );
   if (!guard.ok) return guard.response;
 
   try {

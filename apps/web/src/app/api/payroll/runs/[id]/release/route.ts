@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
-import { requireMoneyMovement, PAYMENTS_EXECUTE } from '@/lib/rbac/payments-permission';
+import { requireMoneyMovement, PAYMENTS_EXECUTE, PAYROLL_RELEASE_FEATURE } from '@/lib/rbac/payments-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { releaseRun, InvalidRunTransitionError, RunStateError } from '@/lib/payroll/run';
 
@@ -21,13 +21,17 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
-  // THE money-movement step → dedicated `payments` execute permission (falls back
-  // to payroll:approve until the reserved catalog adopts `payments`). SoD +
+  // THE money-movement step → GRANULAR `payroll_release` key (distinct from
+  // check_run / ap_disbursement_release / payments_execute so releasing payroll is
+  // its OWN authority, not shared with check running). Degrades to the coarse
+  // `payments` superset, then to payroll:approve — never looser than today. SoD +
   // APPROVED-run transition guard still enforced inside releaseRun().
-  const guard = await requireMoneyMovement(userId, PAYMENTS_EXECUTE, {
-    feature: 'payroll',
-    action: 'approve',
-  });
+  const guard = await requireMoneyMovement(
+    userId,
+    PAYMENTS_EXECUTE,
+    { feature: 'payroll', action: 'approve' },
+    PAYROLL_RELEASE_FEATURE,
+  );
   if (!guard.ok) return guard.response;
 
   try {

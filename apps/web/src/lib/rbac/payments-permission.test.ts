@@ -15,6 +15,11 @@ import {
   PAYMENTS_VIEW,
   PAYMENTS_EXECUTE,
   paymentsFeatureInCatalog,
+  featureInCatalog,
+  PAYMENTS_EXECUTE_FEATURE,
+  CHECK_RUN_FEATURE,
+  AP_DISBURSEMENT_RELEASE_FEATURE,
+  PAYROLL_RELEASE_FEATURE,
 } from './payments-permission';
 
 describe('payments permission — constants', () => {
@@ -52,6 +57,47 @@ describe('money-movement gate — privileged approvers keep access (legacy gate)
   it('allows accounting_manager and company_admin to move money', () => {
     expect(permissionDenied('accounting_manager', 'invoices', 'create')).toBeNull();
     expect(permissionDenied('company_admin', 'invoices', 'create')).toBeNull();
+  });
+});
+
+describe('per-route SoD keys (task #56) — distinct, granular, degrade-safe', () => {
+  it('exposes four distinct per-route money-movement feature keys', () => {
+    const keys = [
+      PAYMENTS_EXECUTE_FEATURE,
+      CHECK_RUN_FEATURE,
+      AP_DISBURSEMENT_RELEASE_FEATURE,
+      PAYROLL_RELEASE_FEATURE,
+    ];
+    expect(keys).toEqual([
+      'payments_execute',
+      'check_run',
+      'ap_disbursement_release',
+      'payroll_release',
+    ]);
+    // All distinct — a role can hold one without holding the others (real SoD).
+    expect(new Set(keys).size).toBe(4);
+  });
+
+  it('every granular key fails CLOSED for every role until the RESERVED catalog adopts it', () => {
+    // Until lib/rbac/permissions.ts registers these keys, hasPermission returns false
+    // for EVERY role — which is exactly why requireMoneyMovement() degrades to the
+    // coarse `payments` superset (never looser than today) rather than gating on an
+    // uncatalogued key. This proves the split can ship before the catalog change.
+    for (const key of [
+      PAYMENTS_EXECUTE_FEATURE,
+      CHECK_RUN_FEATURE,
+      AP_DISBURSEMENT_RELEASE_FEATURE,
+      PAYROLL_RELEASE_FEATURE,
+    ]) {
+      if (!featureInCatalog(key)) {
+        expect(permissionDenied('company_admin', key, PAYMENTS_EXECUTE)).not.toBeNull();
+        expect(permissionDenied('business_user', key, PAYMENTS_EXECUTE)).not.toBeNull();
+      } else {
+        // Once catalogued (per the report's role map): admin executes, external denied.
+        expect(permissionDenied('company_admin', key, PAYMENTS_EXECUTE)).toBeNull();
+        expect(permissionDenied('business_user', key, PAYMENTS_EXECUTE)).not.toBeNull();
+      }
+    }
   });
 });
 
