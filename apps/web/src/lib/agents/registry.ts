@@ -12,6 +12,7 @@ import { orderToCashRecipe } from './recipes/order-to-cash';
 import { closeRunRecipe } from './recipes/close-run';
 import { payRunRecipe } from './recipes/pay-run';
 import { procureToPayRecipe } from './recipes/procure-to-pay';
+import { collectionsAutopilotRecipe } from './recipes/collections-autopilot';
 
 export const RECIPES: readonly AgentRecipe[] = [
   apIntakeRecipe,
@@ -19,6 +20,7 @@ export const RECIPES: readonly AgentRecipe[] = [
   closeRunRecipe,
   payRunRecipe,
   procureToPayRecipe,
+  collectionsAutopilotRecipe,
 ];
 
 const RECIPE_MAP: Readonly<Record<string, AgentRecipe>> = Object.fromEntries(
