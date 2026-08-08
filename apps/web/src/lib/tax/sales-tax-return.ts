@@ -561,20 +561,28 @@ async function loadInvoiceTaxMap(
   return out;
 }
 
+export interface LoadedReturnInvoices {
+  invoices: ReturnInvoice[];
+  /** invoices scanned (real sales in the window). */
+  scanned: number;
+  /** invoices that resolved to a taxing jurisdiction. */
+  attributed: number;
+}
+
 /**
- * Assemble the sales-tax return worksheet + GL tie-out + nexus cross-reference
- * for the caller's org over [startDate, endDate]. Read-only: never registers,
- * files, posts, or moves money. Never throws — a data gap degrades the affected
- * section rather than failing the report.
+ * Load + reduce real-sale invoices in [startDate, endDate] to `ReturnInvoice`s
+ * (destination state + taxability + expected rate), stitching customer exempt/HQ,
+ * job rate, and the invoice-level rate resolved at creation. Shared by the return
+ * worksheet AND the sales-tax filing calendar so the two tax surfaces attribute the
+ * same sale to the same jurisdiction/period identically. Read-only; never throws —
+ * a data gap degrades to fewer attributed invoices rather than failing.
  */
-export async function buildSalesTaxReturn(
+export async function loadReturnInvoices(
   supabase: SupabaseClient,
-  orgId: string,
-  opts: SalesTaxReturnOptions,
-): Promise<SalesTaxReturnReport> {
+  opts: { startDate: string; endDate: string; locationId?: string | null },
+): Promise<LoadedReturnInvoices> {
   const { startDate, endDate } = opts;
   const locationId = opts.locationId && opts.locationId !== 'all' ? opts.locationId : null;
-  const jurisdiction = opts.jurisdiction && opts.jurisdiction !== 'all' ? opts.jurisdiction : null;
 
   // ── 1. Invoices in the window (real sales only) ──────────────────────────────
   let invQuery = supabase
@@ -652,6 +660,31 @@ export async function buildSalesTaxReturn(
     };
   });
 
+  return { invoices: returnInvoices, scanned: rows.length, attributed };
+}
+
+/**
+ * Assemble the sales-tax return worksheet + GL tie-out + nexus cross-reference
+ * for the caller's org over [startDate, endDate]. Read-only: never registers,
+ * files, posts, or moves money. Never throws — a data gap degrades the affected
+ * section rather than failing the report.
+ */
+export async function buildSalesTaxReturn(
+  supabase: SupabaseClient,
+  orgId: string,
+  opts: SalesTaxReturnOptions,
+): Promise<SalesTaxReturnReport> {
+  const { startDate, endDate } = opts;
+  const locationId = opts.locationId && opts.locationId !== 'all' ? opts.locationId : null;
+  const jurisdiction = opts.jurisdiction && opts.jurisdiction !== 'all' ? opts.jurisdiction : null;
+
+  // ── 1-3. Load + reduce invoices to ReturnInvoices (shared with the calendar). ─
+  const { invoices: returnInvoices, scanned, attributed } = await loadReturnInvoices(supabase, {
+    startDate,
+    endDate,
+    locationId,
+  });
+
   // Full (unfiltered) worksheet drives the GL tie-out; filtered drives display.
   const full = buildWorksheet(returnInvoices);
   const display = jurisdiction ? buildWorksheet(returnInvoices, { jurisdiction }) : full;
@@ -680,9 +713,9 @@ export async function buildSalesTaxReturn(
     glTieOut,
     nexusAlerts,
     meta: {
-      invoicesScanned: rows.length,
+      invoicesScanned: scanned,
       invoicesAttributed: attributed,
-      invoicesUnattributed: rows.length - attributed,
+      invoicesUnattributed: scanned - attributed,
       fallbackShare: Math.round(fallbackShare * 10000) / 10000,
       generatedAt: new Date().toISOString(),
     },
