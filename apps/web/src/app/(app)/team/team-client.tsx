@@ -11,6 +11,10 @@ import {
   Building2,
   X,
   ShieldCheck,
+  Mail,
+  Send,
+  RotateCw,
+  Clock,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
@@ -62,6 +66,23 @@ interface RosterRow {
 interface RosterResponse {
   data: RosterRow[];
   summary: { total: number; active: number };
+}
+
+// Pending invitation (mirrors /api/team/invitations PendingInvitation shape).
+interface PendingInvite {
+  id: string;
+  email: string;
+  role: UserRole;
+  roleLabel: string;
+  firstName: string | null;
+  lastName: string | null;
+  invitedAt: string;
+  expiresAt: string;
+  isExpired: boolean;
+}
+interface InvitationsResponse {
+  data: PendingInvite[];
+  available: boolean;
 }
 
 type StatusFilter = 'all' | 'active' | 'inactive';
@@ -212,26 +233,52 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
   async function handleSubmit() {
     setFormError('');
     if (mode === 'add' && !email.trim()) {
-      setFormError('Enter an email so this person can claim their seat.');
+      setFormError('Enter an email so we can send their invitation.');
       return;
     }
     setSubmitting(true);
 
     const effectiveCompanyIds = allScope ? [] : companyIds;
 
-    const result =
-      mode === 'add'
-        ? await api.post('/api/team/members', {
-            email: email.trim(),
-            firstName: firstName.trim() || undefined,
-            lastName: lastName.trim() || undefined,
-            role,
-            companyIds: effectiveCompanyIds,
-          })
-        : await api.patch(`/api/team/members/${member!.id}`, {
-            role,
-            companyIds: effectiveCompanyIds,
-          });
+    if (mode === 'add') {
+      // Inviting IS adding: create a pending invitation and email a sign-up link.
+      // The seat materializes with this role on the invitee's first login.
+      const result = await api.post<{ emailSent?: boolean; emailError?: string; acceptUrl?: string }>(
+        '/api/team/invitations',
+        {
+          email: email.trim(),
+          firstName: firstName.trim() || undefined,
+          lastName: lastName.trim() || undefined,
+          role,
+          companyIds: effectiveCompanyIds,
+        }
+      );
+
+      setSubmitting(false);
+
+      if (result.error) {
+        setFormError(result.error.error || 'Something went wrong.');
+        return;
+      }
+
+      // Honest delivery status — never a silent "sent" when it wasn't.
+      if (result.data?.emailSent === false) {
+        addToast(
+          'info',
+          result.data.emailError || 'Invitation created, but the email could not be sent. Share the link manually.'
+        );
+      } else {
+        addToast('success', 'Invitation sent');
+      }
+      onSaved();
+      return;
+    }
+
+    // Edit mode: change role / company access on the existing member.
+    const result = await api.patch(`/api/team/members/${member!.id}`, {
+      role,
+      companyIds: effectiveCompanyIds,
+    });
 
     setSubmitting(false);
 
@@ -240,7 +287,7 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
       return;
     }
 
-    addToast('success', mode === 'add' ? 'Member added' : 'Member updated');
+    addToast('success', 'Member updated');
     onSaved();
   }
 
@@ -251,7 +298,7 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
           <div className="min-w-0">
             <h2 className="text-subheading font-semibold text-white">
-              {mode === 'add' ? 'Add team member' : 'Edit member access'}
+              {mode === 'add' ? 'Invite team member' : 'Edit member access'}
             </h2>
             {mode === 'edit' && member && (
               <p className="truncate text-body-sm text-slate-500">
@@ -394,7 +441,7 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
           </button>
           <button onClick={handleSubmit} disabled={submitting} className="btn-primary btn-sm gap-1.5">
             {submitting && <Loader2 size={13} className="animate-spin" />}
-            {mode === 'add' ? 'Add member' : 'Save changes'}
+            {mode === 'add' ? 'Send invitation' : 'Save changes'}
           </button>
         </div>
       </div>
@@ -607,6 +654,164 @@ function SummaryStat({
   );
 }
 
+// ── Pending invitations ─────────────────────────────────────────────────────────
+
+function relativeDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function PendingInvitations({
+  invites,
+  available,
+  isLoading,
+  error,
+  refetch,
+}: {
+  invites: PendingInvite[];
+  available: boolean;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => void;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function revoke(inv: PendingInvite) {
+    setBusyId(inv.id);
+    const result = await api.post(`/api/team/invitations/${inv.id}/revoke`, {});
+    setBusyId(null);
+    if (result.error) {
+      addToast('error', result.error.error || 'Could not revoke invitation');
+      return;
+    }
+    addToast('success', 'Invitation revoked');
+    refetch();
+  }
+
+  async function resend(inv: PendingInvite) {
+    setBusyId(inv.id);
+    const result = await api.post<{ emailSent?: boolean; emailError?: string }>(
+      `/api/team/invitations/${inv.id}/resend`,
+      {}
+    );
+    setBusyId(null);
+    if (result.error) {
+      addToast('error', result.error.error || 'Could not resend invitation');
+      return;
+    }
+    if (result.data?.emailSent === false) {
+      addToast('info', result.data.emailError || 'Invitation refreshed, but the email could not be sent.');
+    } else {
+      addToast('success', 'Invitation resent');
+    }
+    refetch();
+  }
+
+  // Feature not migrated yet — degrade gracefully instead of erroring.
+  if (!isLoading && !error && !available) {
+    return (
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold text-slate-200">Pending invitations</h3>
+        <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-surface-850 px-3.5 py-2.5 text-xs text-slate-400">
+          <Clock size={14} className="shrink-0 text-slate-500" />
+          Invitations become available once the latest database migration is applied.
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-slate-200">Pending invitations</h3>
+        {invites.length > 0 && (
+          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-2xs font-medium text-amber-400">
+            {invites.length}
+          </span>
+        )}
+      </div>
+
+      {isLoading ? (
+        <TableSkeleton rows={2} cols={3} />
+      ) : error ? (
+        <ErrorState message={error} onRetry={refetch} />
+      ) : invites.length === 0 ? (
+        <div className="flex items-center gap-2 rounded-lg border border-dashed border-slate-800 bg-surface-950/40 px-3.5 py-3 text-xs text-slate-500">
+          <Mail size={14} className="shrink-0 text-slate-600" />
+          No outstanding invitations. Invited people appear here until they accept.
+        </div>
+      ) : (
+        <div className="card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-800">
+                <Th>Invitee</Th>
+                <Th>Role</Th>
+                <Th align="center">Invited</Th>
+                <Th align="center">Expires</Th>
+                <Th align="right">Actions</Th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/50">
+              {invites.map((inv) => {
+                const name =
+                  inv.firstName || inv.lastName ? `${inv.firstName ?? ''} ${inv.lastName ?? ''}`.trim() : null;
+                return (
+                  <tr key={inv.id} className="table-row-hover">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-300">
+                          <Mail size={14} />
+                        </div>
+                        <div className="min-w-0">
+                          {name && <p className="truncate text-sm font-medium text-white">{name}</p>}
+                          <p className="truncate text-xs text-slate-400">{inv.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <RoleChip label={inv.roleLabel} />
+                    </td>
+                    <td className="px-4 py-3 text-center text-xs text-slate-400">{relativeDate(inv.invitedAt)}</td>
+                    <td className="px-4 py-3 text-center">
+                      {inv.isExpired ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-2xs font-medium text-red-400">
+                          Expired
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">{relativeDate(inv.expiresAt)}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => resend(inv)}
+                          disabled={busyId === inv.id}
+                          className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:opacity-60"
+                        >
+                          {busyId === inv.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCw size={12} />}
+                          Resend
+                        </button>
+                        <button
+                          onClick={() => revoke(inv)}
+                          disabled={busyId === inv.id}
+                          className="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 disabled:opacity-60"
+                        >
+                          Revoke
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Main page ───────────────────────────────────────────────────────────────────
 
 export function TeamClient() {
@@ -630,6 +835,15 @@ export function TeamClient() {
   );
   const { data: locData } = useQuery<LocationOption[]>(canManage ? '/api/locations' : null);
   const locations = locData ?? [];
+
+  const {
+    data: inviteData,
+    isLoading: invitesLoading,
+    error: invitesError,
+    refetch: refetchInvites,
+  } = useQuery<InvitationsResponse>(canManage ? '/api/team/invitations' : null);
+  const invites = inviteData?.data ?? [];
+  const invitesAvailable = inviteData?.available !== false;
 
   const members = useMemo(() => data?.data ?? [], [data]);
   const summary = data?.summary;
@@ -694,7 +908,7 @@ export function TeamClient() {
           tab === 'access' ? (
             <button onClick={() => setModal({ mode: 'add', member: null })} className="btn-primary btn-sm gap-1.5">
               <Plus size={14} />
-              Add member
+              Invite member
             </button>
           ) : undefined
         }
@@ -768,8 +982,8 @@ export function TeamClient() {
             <EmptyState
               icon={ShieldCheck}
               title="No team members yet"
-              description="Add your first member to grant access to the books."
-              action={{ label: 'Add member', onClick: () => setModal({ mode: 'add', member: null }) }}
+              description="Invite your first teammate to grant access to the books."
+              action={{ label: 'Invite member', onClick: () => setModal({ mode: 'add', member: null }) }}
             />
           )}
         </div>
@@ -840,6 +1054,15 @@ export function TeamClient() {
         </div>
       )}
 
+      {/* Outstanding invitations — revocable pending seats, separate from members. */}
+      <PendingInvitations
+        invites={invites}
+        available={invitesAvailable}
+        isLoading={invitesLoading}
+        error={invitesError}
+        refetch={refetchInvites}
+      />
+
       {modal && (
         <MemberModal
           mode={modal.mode}
@@ -849,6 +1072,7 @@ export function TeamClient() {
           onSaved={() => {
             setModal(null);
             refetch();
+            refetchInvites();
           }}
         />
       )}

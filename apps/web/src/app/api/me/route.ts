@@ -3,6 +3,8 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { ROLE_DEFINITIONS, getVisibleFeatures, getSidebarGrouped, type UserRole } from '@/lib/rbac/permissions';
 import { provisionMembershipOnLogin } from '@/lib/identity/provision-membership';
+import { claimInvitationOnLogin } from '@/lib/identity/claim-invitation';
+import { markInvitationsAcceptedByEmail } from '@/lib/team/invitations';
 import { bindClerkOrgOnLogin } from '@/lib/rbac/resolve-tenant';
 import { createAdminSupabase } from '@/lib/supabase/server';
 
@@ -62,10 +64,15 @@ export async function GET(_req: NextRequest) {
 
     let employee = employees?.[0] ?? null;
 
-    // 2b. Invite-claim: an admin may have pre-added this person as an employee
-    //     row (clerk_user_id IS NULL) keyed to their email. On their first
-    //     sign-in we link that row to the real Clerk login instead of creating a
-    //     new one. Match on the Clerk-verified primary email, case-insensitive.
+    // 2b. Invite-claim: match on the Clerk-verified primary email (case-insensitive).
+    //     Two ordered paths, both keyed to that verified email so a stolen/forwarded
+    //     link can never claim a seat for a different address:
+    //       (i)  legacy: an admin pre-added this person as an unclaimed employee row
+    //            (clerk_user_id IS NULL) — link it to the real Clerk login.
+    //       (ii) invitation: a pending core.membership_invitations row — materialize
+    //            the seat with its ASSIGNED role (lib/identity/claim-invitation.ts).
+    //     Invitation-claim runs BEFORE the auto-admin default below, so an invited
+    //     user gets their assigned role rather than falling into company_admin.
     if (!employee) {
       const clerkUser = await currentUser().catch(() => null);
       const primaryEmail =
@@ -92,6 +99,19 @@ export async function GET(_req: NextRequest) {
             .select('id, org_id, clerk_user_id, first_name, last_name, email, role, department_id, is_active, created_at')
             .single();
           employee = linked ?? target;
+          // Tie off any matching pending invitation so it clears from the list.
+          await markInvitationsAcceptedByEmail(createAdminSupabase(), org.id, primaryEmail, userId);
+        } else {
+          // (ii) No pre-added row — honor a pending invitation, if any. Degrade-safe:
+          //      returns null when the feature isn't migrated or there is no invite.
+          const claimed = await claimInvitationOnLogin({
+            rls: supabase,
+            admin: createAdminSupabase(),
+            orgId: org.id,
+            clerkUserId: userId,
+            primaryEmail,
+          });
+          if (claimed) employee = claimed;
         }
       }
     }
