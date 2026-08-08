@@ -144,6 +144,7 @@ export const navigation: NavGroup[] = [
       { label: 'Tax Provision (ASC 740)', href: '/tax-provision', icon: Percent },
       { label: 'Tax Return Package', href: '/tax-package', icon: FileText },
       { label: 'Sales Tax Return', href: '/sales-tax-return', icon: Landmark },
+      { label: 'Sales Tax Calendar', href: '/sales-tax-calendar', icon: CalendarDays },
       { label: 'Tax Depreciation', href: '/tax-depreciation', icon: Calculator },
       { label: 'Close Management', href: '/close', icon: ClipboardCheck },
       { label: 'Close Command Center', href: '/close-status', icon: Activity },

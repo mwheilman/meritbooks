@@ -31,6 +31,7 @@ import {
   type ExportMeta,
 } from '@/lib/reports/export/build-model';
 import type { StatementModel, StmtRow } from '@/lib/reports/export/statement-model';
+import { fetchCashIncomeStatement } from '@/lib/reports/income-statement-cash';
 import { REPORT_CATALOG, type ReportType, type ResolvedPack, type ResolvedPeriod, type ResolvedSpec } from './spec';
 
 const ACCENT = '#10b981';
@@ -244,12 +245,18 @@ async function buildSection(
   let model: StatementModel;
   switch (spec.report) {
     case 'INCOME_STATEMENT': {
-      const payload = await fetchIncomeStatement(supabase, {
-        startDate: period.startDate,
-        endDate: period.endDate,
-        locationIds,
-        basis: wantCash ? 'cash' : 'accrual',
-      });
+      const payload = wantCash
+        ? await fetchCashIncomeStatement(supabase, orgId, {
+            startDate: period.startDate,
+            endDate: period.endDate,
+            locationIds,
+          })
+        : await fetchIncomeStatement(supabase, {
+            startDate: period.startDate,
+            endDate: period.endDate,
+            locationIds,
+            basis: 'accrual',
+          });
       model = finalize(buildIncomeStatement(payload, meta), entityLabel, period.label, basisLabel);
       break;
     }

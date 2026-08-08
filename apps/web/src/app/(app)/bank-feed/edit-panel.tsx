@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { X, Search, Check, Loader2, Bot, ChevronRight, Briefcase, AlertCircle, Layers, Building2, Sparkles } from 'lucide-react';
+import { X, Search, Check, Loader2, Bot, ChevronRight, Briefcase, AlertCircle, Layers, Building2, Sparkles, Zap } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
