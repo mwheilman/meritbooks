@@ -163,6 +163,7 @@ export const navigation: NavGroup[] = [
       { label: 'Controls / SOX', href: '/controls', icon: ShieldCheck },
       { label: 'Approval Workflows', href: '/settings/approvals', icon: ClipboardCheck },
       { label: 'Documents', href: '/documents', icon: FileText },
+      { label: 'Get Started', href: '/onboarding', icon: Sparkles },
       { label: 'Import Data', href: '/import', icon: Upload },
       { label: 'Historical Conversion', href: '/onboarding/conversion', icon: Upload },
       { label: 'Sandbox', href: '/sandbox', icon: FlaskConical },
