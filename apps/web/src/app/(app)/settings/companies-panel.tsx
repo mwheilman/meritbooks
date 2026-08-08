@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
-import { Loader2, AlertCircle, Plus, Check, Building2 } from 'lucide-react';
+import { Loader2, AlertCircle, Plus, Check, Building2, Sparkles, ArrowRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 
@@ -94,6 +94,22 @@ export function CompaniesPanel() {
   );
 
   return (
+    <div className="space-y-4">
+    {/* Re-enter the guided first-run onboarding wizard at any time. */}
+    <Link
+      href="/onboarding"
+      className="card p-4 flex items-center gap-3 hover:border-brand-500/40 transition-colors group"
+    >
+      <div className="h-9 w-9 rounded-lg bg-brand-500/10 flex items-center justify-center shrink-0">
+        <Sparkles size={16} className="text-brand-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-white">Guided setup wizard</p>
+        <p className="text-xs text-slate-500">Walk through company, chart of accounts, opening balances, bank feed, and team invites.</p>
+      </div>
+      <ArrowRight size={16} className="text-slate-500 group-hover:text-brand-400 transition-colors shrink-0" />
+    </Link>
+
     <div className="card p-6 space-y-5">
       <div className="flex items-start justify-between">
         <div>
@@ -153,6 +169,7 @@ export function CompaniesPanel() {
           })}
         </div>
       )}
+    </div>
     </div>
   );
 }
