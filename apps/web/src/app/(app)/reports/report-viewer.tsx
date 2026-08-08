@@ -22,6 +22,7 @@ import { ExpenseByVendorReport } from './expense-by-vendor-report';
 import { ExportMenu } from './export-menu';
 import { NarrativePanel } from './narrative-panel';
 import { ReportCompiler } from './report-compiler';
+import { SavedPacks } from './saved-packs';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -392,6 +393,7 @@ export function ReportViewer() {
       {/* ─── Content ─── */}
       <div className="flex-1 overflow-y-auto">
         <ReportCompiler entityLabel={entityLabel} locationIds={selectedLocs} />
+        <SavedPacks />
         {!reportKey ? (
           <div>
             <h1 className="text-2xl font-semibold text-white mb-2">{currentCat?.label ?? 'Reports'}</h1>

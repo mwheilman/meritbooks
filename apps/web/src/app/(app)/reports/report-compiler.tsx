@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Sparkles, Loader2, FileText, Download, AlertTriangle, ChevronRight, X, Wand2 } from 'lucide-react';
+import { Sparkles, Loader2, FileText, Download, AlertTriangle, ChevronRight, X, Wand2, Save } from 'lucide-react';
 import { clsx } from 'clsx';
 import { addToast } from '@/hooks';
-import type { ResolvedSpec } from '@/lib/reports/compiler/spec';
+import type { ResolvedSpec, ReportSpec } from '@/lib/reports/compiler/spec';
+
+/** Fired after a pack is saved so the Saved-packs list refreshes. */
+export const PACKS_CHANGED_EVENT = 'meritbooks:packs-changed';
 
 /**
  * NL Report Compiler UI — the "Describe a report pack" box on /reports.
@@ -27,6 +30,7 @@ interface CompileResponse {
   message?: string;
   supported?: string[];
   pack?: { entityLabel: string; locationIds: string[]; specs: ResolvedSpec[] };
+  descriptors?: ReportSpec[];
   summary?: ParseSummary[];
   totalSections?: number;
 }
@@ -45,10 +49,13 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<CompileResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saveName, setSaveName] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const reset = useCallback(() => {
     setResult(null);
     setError(null);
+    setSaveName('');
   }, []);
 
   const parse = useCallback(async () => {
@@ -103,6 +110,34 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
       setGenerating(false);
     }
   }, [result, generating]);
+
+  const savePack = useCallback(async () => {
+    const name = saveName.trim();
+    const descriptors = result?.descriptors;
+    if (!name || !descriptors || descriptors.length === 0 || saving) return;
+    setSaving(true);
+    try {
+      const resp = await fetch('/api/reports/packs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          specs: descriptors,
+          entity_label: result?.pack?.entityLabel,
+          location_ids: result?.pack?.locationIds ?? [],
+        }),
+      });
+      const j = (await resp.json()) as { error?: string };
+      if (!resp.ok) throw new Error(j.error ?? 'Could not save the pack.');
+      setSaveName('');
+      addToast('success', `Saved “${name}”. Set a delivery schedule under Saved packs.`);
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(PACKS_CHANGED_EVENT));
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Save failed.');
+    } finally {
+      setSaving(false);
+    }
+  }, [saveName, result, saving]);
 
   const totalSections = result?.totalSections ?? 0;
 
@@ -232,6 +267,27 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
                   {generating ? 'Building PDF…' : 'Generate PDF'}
                 </button>
               </div>
+              {/* Save as a reusable pack — re-resolves to current dates on every future run. */}
+              {result.descriptors && result.descriptors.length > 0 && (
+                <div className="px-4 py-3 border-t border-slate-800 bg-slate-900/20 flex items-center gap-2">
+                  <input
+                    value={saveName}
+                    onChange={(e) => setSaveName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); savePack(); } }}
+                    maxLength={120}
+                    placeholder="Name this pack to save & reuse (e.g. Monthly board pack)…"
+                    className="flex-1 px-3 py-1.5 bg-slate-900/60 border border-slate-800 rounded-lg text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50"
+                  />
+                  <button
+                    onClick={savePack}
+                    disabled={saveName.trim().length === 0 || saving}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+                  >
+                    {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                    {saving ? 'Saving…' : 'Save pack'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

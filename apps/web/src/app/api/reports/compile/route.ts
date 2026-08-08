@@ -165,6 +165,9 @@ export const POST = apiHandler(schema, async (body, ctx: ApiContext) => {
   return NextResponse.json({
     abstained: false,
     pack: { entityLabel, locationIds, specs },
+    // The RELATIVE descriptors (pre-expansion) so the client can SAVE a pack that
+    // re-resolves to current dates on every future run — never frozen dates.
+    descriptors: validated.parse.reports,
     summary: specs.map((s) => ({
       report: REPORT_CATALOG[s.report].title,
       basis: s.basis === 'CASH' && !s.cashWarning ? 'Cash' : 'Accrual',
