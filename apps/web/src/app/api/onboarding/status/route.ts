@@ -59,6 +59,13 @@ export async function PATCH(req: NextRequest) {
   const guard = await requirePermission(userId, 'settings_acct', 'edit');
   if (!guard.ok) return guard.response;
 
+  // Running onboarding is a PREPARER responsibility (defense in depth for the page
+  // guard). A MANAGEMENT-only admin is denied; fail-open on any absence/error so no
+  // one is locked out before the admin_scope migration lands.
+  const { preparerRouteDenied } = await import('@/lib/team/admin-scope-guard');
+  const preparerDenied = await preparerRouteDenied(orgId, userId);
+  if (preparerDenied) return preparerDenied;
+
   let body: PatchBody;
   try {
     body = (await req.json()) as PatchBody;

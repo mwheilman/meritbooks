@@ -33,6 +33,7 @@
 
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { normalizeMembershipRole } from '@/lib/rbac/role-normalize';
+import { isMissingScopeColumn, parseAdminScope } from '@/lib/team/admin-scope';
 
 interface ProvisionParams {
   /** Clerk `user_xxx` id of the signed-in caller. */
@@ -76,16 +77,46 @@ export async function provisionMembershipOnLogin(params: ProvisionParams): Promi
       .maybeSingle();
     if (userErr || !user?.id) return; // no identity row -> nothing to attach a membership to
 
+    // Mirror the employee's delegated-admin capability set onto the membership so the
+    // canonical spine carries the responsibility (MANAGEMENT / PREPARER) the invite
+    // assigned. Best-effort + degrade-safe: if core.employees.admin_scope isn't
+    // migrated we read nothing and provision exactly as before.
+    let adminScope: string[] | null = null;
+    if (employeeId) {
+      const { data: emp, error: scopeErr } = await admin
+        .schema('core').from('employees')
+        .select('admin_scope')
+        .eq('id', employeeId)
+        .eq('org_id', orgId)
+        .maybeSingle();
+      if (!scopeErr) adminScope = parseAdminScope((emp as { admin_scope?: unknown } | null)?.admin_scope);
+    }
+
     // Insert-if-absent. ON CONFLICT (user_id, org_id) DO NOTHING via
     // ignoreDuplicates: idempotent, never duplicates, and — critically — never
     // overwrites an existing membership (a hand-elevated role, or a deliberately
     // 'suspended'/'invited' status stays untouched; we do NOT silently reactivate).
-    const { error: upsertErr } = await admin
-      .schema('core').from('memberships')
-      .upsert(
-        { user_id: user.id, org_id: orgId, role, status: 'active' },
-        { onConflict: 'user_id,org_id', ignoreDuplicates: true },
-      );
+    const membershipRow = { user_id: user.id, org_id: orgId, role, status: 'active' as const };
+    let upsertErr: { code?: string; message?: string } | null = null;
+    if (adminScope) {
+      // Degrade-safe: retry without admin_scope if the column isn't migrated yet, so
+      // membership provisioning (which money-approval authz depends on) never breaks.
+      ({ error: upsertErr } = await admin
+        .schema('core').from('memberships')
+        .upsert(
+          { ...membershipRow, admin_scope: adminScope },
+          { onConflict: 'user_id,org_id', ignoreDuplicates: true },
+        ));
+      if (upsertErr && isMissingScopeColumn(upsertErr)) {
+        ({ error: upsertErr } = await admin
+          .schema('core').from('memberships')
+          .upsert(membershipRow, { onConflict: 'user_id,org_id', ignoreDuplicates: true }));
+      }
+    } else {
+      ({ error: upsertErr } = await admin
+        .schema('core').from('memberships')
+        .upsert(membershipRow, { onConflict: 'user_id,org_id', ignoreDuplicates: true }));
+    }
     if (upsertErr) {
       console.error('[provisionMembershipOnLogin] membership upsert failed:', upsertErr.message);
       return;

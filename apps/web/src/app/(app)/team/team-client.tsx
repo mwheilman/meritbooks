@@ -22,6 +22,11 @@ import { api } from '@/lib/api-client';
 import { useMe } from '@/lib/hooks/use-me';
 import { PageHeader, EmptyState, TableSkeleton } from '@/components/ui';
 import { ALL_ROLES, ROLE_DEFINITIONS, type UserRole, type CompanyScope } from '@/lib/rbac/permissions';
+import {
+  isAdminLevelRole,
+  adminScopeSummary,
+  type AdminCapability,
+} from '@/lib/team/admin-scope';
 import { PerformancePanel } from './performance-panel';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -42,6 +47,7 @@ interface Member {
   clerkLinked: boolean;
   companyScope: CompanyScope;
   companies: MemberCompany[];
+  adminScope: AdminCapability[] | null;
 }
 
 interface MembersResponse {
@@ -79,6 +85,7 @@ interface PendingInvite {
   invitedAt: string;
   expiresAt: string;
   isExpired: boolean;
+  adminScope: AdminCapability[] | null;
 }
 interface InvitationsResponse {
   data: PendingInvite[];
@@ -202,6 +209,37 @@ function RoleChip({ label }: { label: string }) {
   );
 }
 
+// Delegated-admin responsibility tag. Shown only when an admin is EXPLICITLY narrowed
+// (Management-only or Preparer-only); a full admin (null / both) shows nothing, so the
+// roster stays quiet and the tag reads as a meaningful exception.
+function ResponsibilityTag({
+  role,
+  scope,
+}: {
+  role: UserRole;
+  scope: AdminCapability[] | null | undefined;
+}) {
+  if (!isAdminLevelRole(role)) return null;
+  if (!scope || scope.length === 0) return null;
+  if (scope.includes('MANAGEMENT') && scope.includes('PREPARER')) return null;
+  const isMgmt = scope.includes('MANAGEMENT');
+  return (
+    <span
+      className={clsx(
+        'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-2xs font-medium',
+        isMgmt ? 'bg-indigo-500/10 text-indigo-300' : 'bg-blue-500/10 text-blue-300'
+      )}
+      title={
+        isMgmt
+          ? 'Management only — invites & oversees, delegates the books'
+          : 'Preparer — runs onboarding & does the books'
+      }
+    >
+      {adminScopeSummary(scope)}
+    </span>
+  );
+}
+
 // ── Member add/edit modal ──────────────────────────────────────────────────────
 
 interface MemberModalProps {
@@ -220,11 +258,15 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
   const [companyIds, setCompanyIds] = useState<string[]>(
     member && !isAllScope(member.role) ? member.companies.map((c) => c.id) : []
   );
+  // Delegated-admin responsibility (only meaningful for admin-level roles). Default
+  // 'full' = today's behavior (an admin can do everything).
+  const [responsibility, setResponsibility] = useState<'full' | 'management' | 'preparer'>('full');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
   const allScope = isAllScope(role);
   const roleDef = ROLE_DEFINITIONS[role];
+  const showResponsibility = mode === 'add' && isAdminLevelRole(role);
 
   function toggleCompany(id: string) {
     setCompanyIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
@@ -243,6 +285,13 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
     if (mode === 'add') {
       // Inviting IS adding: create a pending invitation and email a sign-up link.
       // The seat materializes with this role on the invitee's first login.
+      // Delegated-admin responsibility — only sent for admin-level roles. 'full'
+      // sends nothing (unrestricted, today's behavior); a single choice restricts.
+      const adminScope =
+        showResponsibility && responsibility !== 'full'
+          ? [responsibility === 'management' ? 'MANAGEMENT' : 'PREPARER']
+          : undefined;
+
       const result = await api.post<{ emailSent?: boolean; emailError?: string; acceptUrl?: string }>(
         '/api/team/invitations',
         {
@@ -251,6 +300,7 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
           lastName: lastName.trim() || undefined,
           role,
           companyIds: effectiveCompanyIds,
+          ...(adminScope ? { adminScope } : {}),
         }
       );
 
@@ -383,6 +433,60 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
               <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">{roleDef.description}</p>
             )}
           </div>
+
+          {showResponsibility && (
+            <div>
+              <label className="mb-1.5 block text-label text-slate-400">Admin responsibility</label>
+              <div className="space-y-1.5">
+                {([
+                  {
+                    key: 'full' as const,
+                    title: 'Full admin',
+                    desc: 'Manages users AND runs onboarding / does the books.',
+                  },
+                  {
+                    key: 'management' as const,
+                    title: 'Management only',
+                    desc: 'Invites and oversees the team, but delegates onboarding & data entry to preparers.',
+                  },
+                  {
+                    key: 'preparer' as const,
+                    title: 'Preparer',
+                    desc: 'Runs the onboarding wizard and does the books.',
+                  },
+                ]).map((opt) => {
+                  const checked = responsibility === opt.key;
+                  return (
+                    <label
+                      key={opt.key}
+                      className={clsx(
+                        'flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2 transition-colors',
+                        checked
+                          ? 'border-brand-500/40 bg-brand-500/5'
+                          : 'border-slate-800 hover:border-slate-700 hover:bg-slate-800/40'
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="responsibility"
+                        checked={checked}
+                        onChange={() => setResponsibility(opt.key)}
+                        className="mt-0.5 h-3.5 w-3.5 accent-emerald-500"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-slate-200">{opt.title}</span>
+                        <span className="block text-[11px] leading-relaxed text-slate-500">{opt.desc}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-[11px] text-slate-500">
+                Delegation only — it never changes what this role can see, just whether they do the
+                data entry themselves.
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="mb-1.5 block text-label text-slate-400">Company access</label>
@@ -770,7 +874,10 @@ function PendingInvitations({
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <RoleChip label={inv.roleLabel} />
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <RoleChip label={inv.roleLabel} />
+                        <ResponsibilityTag role={inv.role} scope={inv.adminScope} />
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center text-xs text-slate-400">{relativeDate(inv.invitedAt)}</td>
                     <td className="px-4 py-3 text-center">
@@ -1015,7 +1122,10 @@ export function TeamClient() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <RoleChip label={m.roleLabel} />
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <RoleChip label={m.roleLabel} />
+                        <ResponsibilityTag role={m.role} scope={m.adminScope} />
+                      </div>
                     </td>
                     <td className="max-w-xs px-4 py-3">
                       <CompanyAccess role={m.role} companies={m.companies} />

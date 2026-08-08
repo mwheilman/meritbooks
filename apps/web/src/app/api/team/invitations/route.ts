@@ -20,9 +20,16 @@ import {
   mapPending,
   type InvitationRow,
 } from '@/lib/team/invitations';
+import {
+  isAdminLevelRole,
+  isMissingScopeColumn,
+  normalizeAdminScopeForStorage,
+} from '@/lib/team/admin-scope';
 
 const SELECT_COLS =
   'id, org_id, email, role, first_name, last_name, location_ids, token, status, invited_by_clerk, expires_at, accepted_at, revoked_at, created_at';
+/** Same, plus the delegated-admin capability column (used when it exists). */
+const SELECT_COLS_WITH_SCOPE = `${SELECT_COLS}, admin_scope`;
 
 /**
  * GET /api/team/invitations
@@ -39,13 +46,28 @@ export async function GET(_req: NextRequest) {
   if (grant instanceof NextResponse) return grant;
 
   const admin = createAdminSupabase();
-  const { data, error } = await admin
-    .schema(INVITATIONS_SCHEMA)
-    .from(INVITATIONS_TABLE)
-    .select(SELECT_COLS)
-    .eq('org_id', orgId!)
-    .eq('status', 'pending')
-    .order('created_at', { ascending: false });
+  // Prefer the scope-bearing select; degrade to the base columns if the admin_scope
+  // column isn't migrated yet (mapPending then reports adminScope: null = full admin).
+  const listPending = (cols: string) =>
+    admin
+      .schema(INVITATIONS_SCHEMA)
+      .from(INVITATIONS_TABLE)
+      .select(cols)
+      .eq('org_id', orgId!)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+  let rows: InvitationRow[] = [];
+  let error: { code?: string; message?: string } | null = null;
+  const withScope = await listPending(SELECT_COLS_WITH_SCOPE);
+  if (withScope.error && isMissingScopeColumn(withScope.error)) {
+    const base = await listPending(SELECT_COLS);
+    error = base.error;
+    rows = (base.data ?? []) as unknown as InvitationRow[];
+  } else {
+    error = withScope.error;
+    rows = (withScope.data ?? []) as unknown as InvitationRow[];
+  }
 
   if (error) {
     if (isMissingInvitationsTable(error)) {
@@ -55,7 +77,7 @@ export async function GET(_req: NextRequest) {
   }
 
   return NextResponse.json({
-    data: (data ?? []).map((r) => mapPending(r as InvitationRow)),
+    data: rows.map(mapPending),
     available: true,
   });
 }
@@ -91,9 +113,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { email, firstName, lastName, role, companyIds } = parsed.data;
+  const { email, firstName, lastName, role, companyIds, adminScope } = parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
   const admin = createAdminSupabase();
+
+  // Delegated-admin responsibility only applies to admin-level roles (those that can
+  // manage users). For every other role we ignore any submitted scope — their access
+  // is governed by their RBAC role. null == unrestricted (full admin) == today.
+  const effectiveScope = isAdminLevelRole(role) ? normalizeAdminScopeForStorage(adminScope) : null;
 
   // Don't invite someone who already has a seat in this org (case-insensitive).
   const { data: existingEmp } = await supabase
@@ -114,23 +141,37 @@ export async function POST(req: NextRequest) {
   const token = generateInviteToken();
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data: created, error: insErr } = await admin
-    .schema(INVITATIONS_SCHEMA)
-    .from(INVITATIONS_TABLE)
-    .insert({
-      org_id: orgId!,
-      email: normalizedEmail,
-      role,
-      first_name: firstName?.trim() || null,
-      last_name: lastName?.trim() || null,
-      location_ids: locationIds,
-      token,
-      status: 'pending',
-      invited_by_clerk: userId,
-      expires_at: expiresAt,
-    })
-    .select(SELECT_COLS)
-    .single();
+  const baseRow = {
+    org_id: orgId!,
+    email: normalizedEmail,
+    role,
+    first_name: firstName?.trim() || null,
+    last_name: lastName?.trim() || null,
+    location_ids: locationIds,
+    token,
+    status: 'pending' as const,
+    invited_by_clerk: userId,
+    expires_at: expiresAt,
+  };
+
+  // Persist the capability set when we have one. Degrade-safe: if the admin_scope
+  // column isn't migrated yet, retry the insert WITHOUT it so invites still work
+  // (the delegation distinction simply isn't stored until the migration lands).
+  const insertInvite = (withScope: boolean) =>
+    admin
+      .schema(INVITATIONS_SCHEMA)
+      .from(INVITATIONS_TABLE)
+      .insert(withScope ? { ...baseRow, admin_scope: effectiveScope } : baseRow)
+      .select(withScope ? SELECT_COLS_WITH_SCOPE : SELECT_COLS)
+      .single();
+
+  let insertRes = await insertInvite(Boolean(effectiveScope));
+  if (effectiveScope && insertRes.error && isMissingScopeColumn(insertRes.error)) {
+    insertRes = await insertInvite(false);
+  }
+  // The runtime-ternary select confuses the row-type parser; the shape is known.
+  const created = insertRes.data as unknown as InvitationRow | null;
+  const insErr = insertRes.error;
 
   if (insErr || !created) {
     if (isMissingInvitationsTable(insErr)) {
@@ -193,8 +234,10 @@ export async function POST(req: NextRequest) {
     action: 'team.invitation.create',
     subjectTable: 'membership_invitations',
     subjectId: created.id as string,
-    summary: `Invited ${normalizedEmail} as ${roleLabel}${emailSent ? '' : ' (email not sent)'}`,
-    metadata: { role, companyIds: locationIds, emailSent },
+    summary: `Invited ${normalizedEmail} as ${roleLabel}${
+      effectiveScope ? ` (${effectiveScope.join('+').toLowerCase()})` : ''
+    }${emailSent ? '' : ' (email not sent)'}`,
+    metadata: { role, companyIds: locationIds, adminScope: effectiveScope, emailSent },
   });
 
   return NextResponse.json(

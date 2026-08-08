@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, createContext, useContext, type ReactNode } from 'react';
 import type { UserRole, FeatureAction, PayrollVisibility, CompanyScope, SidebarItem } from '@/lib/rbac/permissions';
+import type { AdminCapability } from '@/lib/team/admin-scope';
 
 export interface MeUser {
   clerkId: string;
@@ -21,6 +22,12 @@ export interface MeUser {
   canEditAccountingSettings: boolean;
   canEditSystemSettings: boolean;
   isPlatformStaff: boolean;
+  /** Delegated-admin responsibility (null = full admin). See lib/team/admin-scope.ts. */
+  adminScope: AdminCapability[] | null;
+  /** Can this admin run the onboarding wizard / data-entry surfaces? Fail-open. */
+  canPrepare: boolean;
+  /** Can this admin invite/manage users (delegated capability, on top of the role)? */
+  canManageUsersDelegated: boolean;
 }
 
 export interface MeContextValue {

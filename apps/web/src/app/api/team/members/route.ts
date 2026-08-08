@@ -6,6 +6,7 @@ import { requireManageUsers } from '@/lib/team/guard';
 import { createMemberSchema } from '@/lib/validations/team';
 import { ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { parseAdminScope, type AdminCapability } from '@/lib/team/admin-scope';
 
 interface MemberCompany {
   id: string;
@@ -78,6 +79,23 @@ export async function GET(_req: NextRequest) {
     assignedByEmployee.set(a.employee_id, list);
   }
 
+  // Best-effort delegated-admin capability lookup. Kept as its OWN query so a missing
+  // admin_scope column (not migrated yet) degrades to "no scope shown" instead of
+  // breaking the whole roster — the primary select above never references it.
+  const scopeByEmployee = new Map<string, AdminCapability[] | null>();
+  {
+    const { data: scopes, error: scopeErr } = await supabase
+      .schema('core')
+      .from('employees')
+      .select('id, admin_scope')
+      .eq('org_id', orgId!);
+    if (!scopeErr) {
+      for (const s of (scopes ?? []) as Array<{ id: string; admin_scope?: unknown }>) {
+        scopeByEmployee.set(s.id, parseAdminScope(s.admin_scope));
+      }
+    }
+  }
+
   const members = (employees ?? []).map((e: Record<string, unknown>) => {
     const role = (e.role ?? 'accounting_specialist') as UserRole;
     const roleDef = ROLE_DEFINITIONS[role];
@@ -104,6 +122,9 @@ export async function GET(_req: NextRequest) {
       clerkLinked: e.clerk_user_id != null,
       companyScope,
       companies,
+      // Delegated-admin responsibility (null = full admin). Only meaningful for
+      // admin-level roles; other roles carry null and the UI shows nothing special.
+      adminScope: scopeByEmployee.get(e.id as string) ?? null,
     };
   });
 

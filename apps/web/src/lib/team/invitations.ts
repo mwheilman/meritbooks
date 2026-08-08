@@ -17,6 +17,7 @@
 
 import type { SupabaseClient, PostgrestError } from '@supabase/supabase-js';
 import { ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
+import { parseAdminScope, type AdminCapability } from '@/lib/team/admin-scope';
 
 /** core.membership_invitations — reserved migration 106 (REPORTED to the lead). */
 export const INVITATIONS_SCHEMA = 'core' as const;
@@ -43,6 +44,9 @@ export interface InvitationRow {
   accepted_at: string | null;
   revoked_at: string | null;
   created_at: string;
+  /** Delegated-admin capability set. Absent (undefined) when the admin_scope column
+   *  isn't migrated / wasn't selected; null or absent both mean "full admin". */
+  admin_scope?: string[] | null;
 }
 
 /** API-facing pending-invite shape for the Team surface. */
@@ -56,6 +60,8 @@ export interface PendingInvitation {
   invitedAt: string;
   expiresAt: string;
   isExpired: boolean;
+  /** Delegated-admin capability set (null = full admin). */
+  adminScope: AdminCapability[] | null;
 }
 
 /**
@@ -107,6 +113,7 @@ export function mapPending(row: InvitationRow): PendingInvitation {
     invitedAt: row.created_at,
     expiresAt: row.expires_at,
     isExpired: new Date(row.expires_at).getTime() < Date.now(),
+    adminScope: parseAdminScope(row.admin_scope),
   };
 }
 

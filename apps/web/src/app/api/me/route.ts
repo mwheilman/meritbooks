@@ -7,6 +7,7 @@ import { claimInvitationOnLogin } from '@/lib/identity/claim-invitation';
 import { markInvitationsAcceptedByEmail } from '@/lib/team/invitations';
 import { bindClerkOrgOnLogin } from '@/lib/rbac/resolve-tenant';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { parseAdminScope, hasPreparerCapability, hasManagementCapability, type AdminCapability } from '@/lib/team/admin-scope';
 
 export async function GET(_req: NextRequest) {
   try {
@@ -253,6 +254,23 @@ export async function GET(_req: NextRequest) {
       .maybeSingle();
     const isPlatformStaff = identity?.is_platform_staff ?? false;
 
+    // Delegated-admin responsibility (MANAGEMENT / PREPARER). Best-effort + degrade-
+    // safe: a missing admin_scope column (not migrated) or any error -> null -> full
+    // access (canPrepare/canManageUsersDelegated both true). This only ever ADDS a
+    // restriction for an admin explicitly marked without a capability; it never
+    // loosens access or locks anyone out.
+    let adminScope: AdminCapability[] | null = null;
+    {
+      const { data: scopeRow, error: scopeErr } = await supabase
+        .schema('core').from('employees')
+        .select('admin_scope')
+        .eq('id', employee.id)
+        .maybeSingle();
+      if (!scopeErr) adminScope = parseAdminScope((scopeRow as { admin_scope?: unknown } | null)?.admin_scope);
+    }
+    const canPrepare = hasPreparerCapability(adminScope);
+    const canManageUsersDelegated = hasManagementCapability(adminScope);
+
     return NextResponse.json({
       authenticated: true,
       hasOrg: true,
@@ -277,6 +295,10 @@ export async function GET(_req: NextRequest) {
         canEditAccountingSettings: roleDef?.canEditAccountingSettings ?? false,
         canEditSystemSettings: roleDef?.canEditSystemSettings ?? false,
         isPlatformStaff,
+        // Delegated-admin responsibility. adminScope null = full admin (both).
+        adminScope,
+        canPrepare,
+        canManageUsersDelegated,
       },
       permissions: {
         visibleFeatures,

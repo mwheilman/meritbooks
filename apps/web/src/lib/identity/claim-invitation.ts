@@ -35,6 +35,7 @@ import {
   isAllCompaniesScope,
   type InvitationRow,
 } from '@/lib/team/invitations';
+import { isMissingScopeColumn, parseAdminScope } from '@/lib/team/admin-scope';
 import { normalizeMembershipRole } from '@/lib/rbac/role-normalize';
 import type { UserRole } from '@/lib/rbac/permissions';
 
@@ -75,18 +76,33 @@ export async function claimInvitationOnLogin(params: {
 
   try {
     // 1. Find a pending, non-expired invitation for this org + verified email.
-    const { data: invite, error: findErr } = await admin
-      .schema(INVITATIONS_SCHEMA)
-      .from(INVITATIONS_TABLE)
-      .select(
-        'id, org_id, email, role, first_name, last_name, location_ids, token, status, invited_by_clerk, expires_at, accepted_at, revoked_at, created_at',
-      )
-      .eq('org_id', orgId)
-      .eq('status', 'pending')
-      .ilike('email', primaryEmail)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    //    Prefer the scope-bearing select; degrade to the base columns if the
+    //    admin_scope column isn't migrated yet (scope then resolves to null = full).
+    const BASE_INVITE_COLS =
+      'id, org_id, email, role, first_name, last_name, location_ids, token, status, invited_by_clerk, expires_at, accepted_at, revoked_at, created_at';
+    const findPending = (cols: string) =>
+      admin
+        .schema(INVITATIONS_SCHEMA)
+        .from(INVITATIONS_TABLE)
+        .select(cols)
+        .eq('org_id', orgId)
+        .eq('status', 'pending')
+        .ilike('email', primaryEmail)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    let invite: InvitationRow | null = null;
+    let findErr: { code?: string; message?: string } | null = null;
+    const withScope = await findPending(`${BASE_INVITE_COLS}, admin_scope`);
+    if (withScope.error && isMissingScopeColumn(withScope.error)) {
+      const base = await findPending(BASE_INVITE_COLS);
+      invite = base.data as unknown as InvitationRow | null;
+      findErr = base.error;
+    } else {
+      invite = withScope.data as unknown as InvitationRow | null;
+      findErr = withScope.error;
+    }
 
     if (findErr) {
       if (isMissingInvitationsTable(findErr)) return null; // not migrated yet
@@ -95,7 +111,7 @@ export async function claimInvitationOnLogin(params: {
     }
     if (!invite) return null;
 
-    const row = invite as InvitationRow;
+    const row = invite;
 
     // Expired -> mark expired, do not claim.
     if (new Date(row.expires_at).getTime() < Date.now()) {
@@ -116,20 +132,35 @@ export async function claimInvitationOnLogin(params: {
     }
 
     // 2. Create the employee seat with the ASSIGNED role, linked to this Clerk user.
-    const { data: created, error: insErr } = await rls
-      .schema('core')
-      .from('employees')
-      .insert({
-        org_id: orgId,
-        clerk_user_id: clerkUserId,
-        first_name: row.first_name || '',
-        last_name: row.last_name || '',
-        email: (row.email || primaryEmail).toLowerCase(),
-        role,
-        is_active: true,
-      })
-      .select(EMPLOYEE_COLS)
-      .single();
+    //    Carry the invitation's delegated-admin capability set onto the seat so the
+    //    membership provisioning path can mirror it onto core.memberships.admin_scope.
+    const empBase = {
+      org_id: orgId,
+      clerk_user_id: clerkUserId,
+      first_name: row.first_name || '',
+      last_name: row.last_name || '',
+      email: (row.email || primaryEmail).toLowerCase(),
+      role,
+      is_active: true,
+    };
+    const invitedScope = parseAdminScope(row.admin_scope);
+
+    // Degrade-safe: if core.employees.admin_scope isn't migrated yet, retry without
+    // it — the seat is still created, the scope simply isn't stored until migration.
+    const insertEmployee = (withScope: boolean) =>
+      rls
+        .schema('core')
+        .from('employees')
+        .insert(withScope ? { ...empBase, admin_scope: invitedScope } : empBase)
+        .select(EMPLOYEE_COLS)
+        .single();
+
+    let empRes = await insertEmployee(Boolean(invitedScope));
+    if (invitedScope && empRes.error && isMissingScopeColumn(empRes.error)) {
+      empRes = await insertEmployee(false);
+    }
+    const created = empRes.data;
+    const insErr = empRes.error;
 
     if (insErr || !created) {
       console.error('[claimInvitation] employee insert failed:', insErr?.message);
