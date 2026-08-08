@@ -12,6 +12,7 @@ import { RevRecConfig } from './rev-rec-config';
 import { InvoiceBranding } from './invoice-branding';
 import { LearnedPreferences } from './learned-preferences';
 import { SalesTaxRates } from './sales-tax-rates';
+import { CompaniesPanel } from './companies-panel';
 
 interface OrgSettings {
   id: string;
@@ -72,7 +73,6 @@ export default function SettingsPage() {
 
   const { data, isLoading, error, refetch } = useQuery<SettingsResponse>('/api/settings');
   const org = data?.org;
-  const locations = data?.locations ?? [];
 
   const [orgName, setOrgName] = useState('');
   const [contactName, setContactName] = useState('');
@@ -245,26 +245,7 @@ export default function SettingsPage() {
 
           {activeTab === 'branding' && <InvoiceBranding />}
           {activeTab === 'learned' && <LearnedPreferences />}
-          {activeTab === 'companies' && (
-            <div className="card p-6 space-y-5">
-              <h2 className="text-lg font-semibold text-white">Companies</h2>
-              <p className="text-xs text-slate-500">{locations.length} entities across {new Set(locations.map((l) => l.industry).filter(Boolean)).size} industries</p>
-              <div className="space-y-2">
-                {locations.map((loc) => (
-                  <div key={loc.id} className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-800/30 border border-slate-800">
-                    <span className="w-10 h-10 rounded-lg bg-slate-700 text-[10px] font-mono text-slate-300 flex items-center justify-center shrink-0">{loc.short_code}</span>
-                    <div className="flex-1">
-                      <p className="text-sm text-white font-medium">{loc.name}</p>
-                      <p className="text-xs text-slate-500">{loc.industry ?? 'Uncategorized'}</p>
-                    </div>
-                    <span className={clsx('px-2 py-0.5 rounded text-[10px] font-medium', loc.is_active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-500/10 text-slate-500')}>
-                      {loc.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {activeTab === 'companies' && <CompaniesPanel />}
 
           {showSaveBar && (
             <div className="flex items-center justify-between mt-6">
