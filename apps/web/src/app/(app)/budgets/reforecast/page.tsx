@@ -1,14 +1,7 @@
-import { PageHeader } from '@/components/ui';
-import { ReforecastView } from './reforecast-view';
+import { redirect } from 'next/navigation';
 
+// Retired standalone route. The Rolling Reforecast is now a tab of Budgets.
+// Keep the URL working by redirecting into its new tab home.
 export default function ReforecastPage() {
-  return (
-    <>
-      <PageHeader
-        title="Rolling Reforecast"
-        description="Blend closed-month actuals with a forward projection into a live full-year latest estimate, measured against the original budget."
-      />
-      <ReforecastView />
-    </>
-  );
+  redirect('/budgets?tab=reforecast');
 }

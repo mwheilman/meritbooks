@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
-import { CollectionsWorkflow } from './collections-workflow';
+import { CollectionsTabs } from './collections-tabs';
 
-export default function CollectionsWorkflowPage() {
-  return <CollectionsWorkflow />;
+export default function CollectionsPage() {
+  return <CollectionsTabs />;
 }

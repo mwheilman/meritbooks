@@ -16,6 +16,7 @@ import {
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
+import { BillsTabs } from '../bills-tabs';
 
 // ── Shapes mirrored from lib/ap/doc-intelligence ──────────────
 interface ExtractedLine {
@@ -151,6 +152,10 @@ export function IntakeQueueClient() {
         >
           <Upload size={16} /> Upload document
         </button>
+      </div>
+
+      <div className="mb-6">
+        <BillsTabs />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">

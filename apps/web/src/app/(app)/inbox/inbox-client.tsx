@@ -23,7 +23,7 @@ import {
 // ── Types (mirror /api/inbox) ──────────────────────────────────────────────────
 
 type InboxItemType = 'APPROVAL' | 'POLICY_BLOCK' | 'ALERT' | 'EXCEPTION' | 'DRAFT';
-type InboxGroupKey = 'APPROVALS' | 'POLICY_BLOCKS' | 'ALERTS' | 'EXCEPTIONS' | 'DRAFTS';
+export type InboxGroupKey = 'APPROVALS' | 'POLICY_BLOCKS' | 'ALERTS' | 'EXCEPTIONS' | 'DRAFTS';
 type InboxSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
 interface InboxItem {
@@ -163,7 +163,7 @@ function Metric({ label, value, tone }: { label: string; value: string; tone?: s
 
 // ── Screen ─────────────────────────────────────────────────────────────────────
 
-export function InboxClient() {
+export function InboxClient({ only }: { only?: InboxGroupKey[] } = {}) {
   const [horizon, setHorizon] = useState(30);
 
   const params = useMemo<Record<string, string>>(() => ({ alert_horizon: String(horizon) }), [horizon]);
@@ -195,6 +195,14 @@ export function InboxClient() {
   const counts = data?.counts;
   const groups = data?.groups ?? [];
   const byType = counts?.byType;
+
+  // When mounted inside a tabbed shell, restrict which groups render to the
+  // active tab's groups. Absent `only`, show everything (standalone behavior).
+  const orderToShow = only ? GROUP_ORDER.filter((k) => only.includes(k)) : GROUP_ORDER;
+  const visibleItemCount = orderToShow.reduce((n, key) => {
+    const g = groups.find((gr) => gr.key === key);
+    return n + (g?.items.length ?? 0);
+  }, 0);
 
   return (
     <div className="space-y-6">
@@ -273,9 +281,17 @@ export function InboxClient() {
             drafts will land here — ranked by what&apos;s most urgent.
           </p>
         </div>
+      ) : only && visibleItemCount === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-slate-800 bg-surface-900 py-16 text-center">
+          <CheckCircle2 size={22} className="mb-2 text-emerald-400" />
+          <p className="text-sm text-slate-300">Nothing in this tab right now.</p>
+          <p className="mt-1 text-xs text-slate-500">
+            You still have items in other tabs — the counts above show the full picture.
+          </p>
+        </div>
       ) : (
         <div className="space-y-8">
-          {GROUP_ORDER.map((key) => {
+          {orderToShow.map((key) => {
             const group = groups.find((g) => g.key === key);
             if (!group || group.items.length === 0) return null;
             const meta = GROUP_META[key];

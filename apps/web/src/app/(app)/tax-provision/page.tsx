@@ -8,6 +8,7 @@ import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { PageHeader, EmptyState } from '@/components/ui';
+import { HubTabs } from '../_components/hub-tabs';
 
 // ── Types mirrored from /api/tax/provision ─────────────────────────────────────
 interface ProvisionResult {
@@ -121,6 +122,8 @@ export default function TaxProvisionPage() {
         title="Income Tax Provision (ASC 740)"
         description="Current + deferred tax from the book-to-tax differences. The ledger computes the numbers from book net income and the Schedule M-1 permanent/temporary split; a human approves and posts the balanced provision entry."
       />
+
+      <HubTabs section="tax" />
 
       {/* Controls */}
       <div className="flex flex-wrap items-end gap-3 mb-5">

@@ -21,6 +21,7 @@ import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { PageHeader } from '@/components/ui';
 import { Generate1099Modal } from './generate-1099-modal';
+import { VendorComplianceTabs } from '../vendor-compliance/vendor-compliance-tabs';
 
 // ── Types (mirror /api/compliance/1099) ─────────────────────────────────────────
 
@@ -140,6 +141,10 @@ export function Compliance1099Client() {
         title="1099-NEC Readiness"
         description={`Vendors paid $600 or more by check / ACH / wire in ${year} — card payments excluded (those are 1099-K). Flag gaps to queue a W-9 chase, then generate the 1099s.`}
       />
+
+      <div className="mb-6">
+        <VendorComplianceTabs />
+      </div>
 
       {/* Tax-year selector + generate */}
       <div className="flex flex-wrap items-center justify-between gap-2">

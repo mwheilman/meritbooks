@@ -751,7 +751,7 @@ export function InvoiceManager() {
   const [showImport, setShowImport] = useState(false);
   const [paymentInvoice, setPaymentInvoice] = useState<InvoiceRow | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [view, setView] = useState<'invoices' | 'credit-memos' | 'recurring'>('invoices');
+  const [view, setView] = useState<'invoices' | 'credit-memos' | 'recurring' | 'unapplied'>('invoices');
   const [creditPrefill, setCreditPrefill] = useState<CreditMemoPrefill | null>(null);
 
   // Deep-link: open the panel from ?invoice=<id> on load, and keep the URL in
@@ -780,7 +780,7 @@ export function InvoiceManager() {
     <div className="p-6" key={refreshKey}>
       {/* View switcher: customer invoices ⇄ credit memos (both live in the AR area). */}
       <div className="inline-flex items-center gap-1 mb-5 p-1 rounded-lg bg-gray-800/60 border border-gray-700/50">
-        {(['invoices', 'recurring', 'credit-memos'] as const).map((v) => (
+        {(['invoices', 'recurring', 'credit-memos', 'unapplied'] as const).map((v) => (
           <button
             key={v}
             onClick={() => setView(v)}
@@ -788,7 +788,13 @@ export function InvoiceManager() {
               view === v ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-white'
             }`}
           >
-            {v === 'invoices' ? 'Invoices' : v === 'recurring' ? 'Recurring' : 'Credit memos'}
+            {v === 'invoices'
+              ? 'Invoices'
+              : v === 'recurring'
+                ? 'Recurring'
+                : v === 'credit-memos'
+                  ? 'Credit memos'
+                  : 'Unapplied payments'}
           </button>
         ))}
       </div>
@@ -816,8 +822,32 @@ export function InvoiceManager() {
         </>
       ) : view === 'recurring' ? (
         <RecurringPanel />
-      ) : (
+      ) : view === 'credit-memos' ? (
         <CreditMemosPanel prefill={creditPrefill} onConsumePrefill={() => setCreditPrefill(null)} />
+      ) : (
+        // TODO(cash-application): another builder owns the real Cash Application
+        // "Unapplied payments" embed (Bank Feed / Cash-App slice). This is a stub
+        // tab that reserves the spot and links out to /cash-application for now.
+        // When that panel lands, replace this block with the embedded component;
+        // do NOT change the `unapplied` tab key or the pill above.
+        <div className="max-w-2xl rounded-xl border border-gray-800 bg-gray-900/40 p-8 text-center">
+          <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-500/10">
+            <CreditCard className="h-5 w-5 text-emerald-400" />
+          </div>
+          <h3 className="text-base font-semibold text-white">Cash application — unapplied payments</h3>
+          <p className="mx-auto mt-2 max-w-md text-sm text-gray-400">
+            Received payments that aren&apos;t yet matched to an open invoice show up here. Apply them
+            to clear customer balances and keep AR tied out. The full workspace lives on the Cash
+            Application screen.
+          </p>
+          <Link
+            href="/cash-application"
+            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
+          >
+            Open Cash Application
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        </div>
       )}
     </div>
   );

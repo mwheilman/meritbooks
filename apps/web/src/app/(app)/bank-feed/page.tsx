@@ -1,14 +1,12 @@
-import { PageHeader } from '@/components/ui';
-import { BankFeedContent } from './bank-feed-content';
+import { Suspense } from 'react';
+import { BankFeedTabs } from './bank-feed-tabs';
 
 export default function BankFeedPage() {
+  // Suspense wraps the client tab shell because it reads the initial tab from `?tab=`
+  // via useSearchParams (Next 14 requirement).
   return (
-    <>
-      <PageHeader
-        title="Bank Feed"
-        description="AI-categorized transactions awaiting review"
-      />
-      <BankFeedContent />
-    </>
+    <Suspense fallback={null}>
+      <BankFeedTabs />
+    </Suspense>
   );
 }

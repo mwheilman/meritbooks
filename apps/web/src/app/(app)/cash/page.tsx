@@ -1,18 +1,12 @@
-import { PageHeader } from '@/components/ui';
-import { CashDashboard } from './cash-dashboard';
-import { CashForecast } from './cash-forecast';
+import { Suspense } from 'react';
+import { CashTabs } from './cash-tabs';
 
 export default function CashPage() {
+  // Suspense wraps the client tab shell because it reads the initial tab from `?tab=`
+  // via useSearchParams (Next 14 requirement).
   return (
-    <>
-      <PageHeader
-        title="Cash Position"
-        description="Real-time cash across all entities with AI intelligence"
-      />
-      <CashDashboard />
-      <div className="mt-8">
-        <CashForecast />
-      </div>
-    </>
+    <Suspense fallback={null}>
+      <CashTabs />
+    </Suspense>
   );
 }

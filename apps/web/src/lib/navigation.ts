@@ -4,7 +4,6 @@ import {
   CreditCard,
   Receipt,
   FileText,
-  AlertTriangle,
   BookOpen,
   Calculator,
   DollarSign,
@@ -25,11 +24,8 @@ import {
   Upload,
   CalendarDays,
   Percent,
-  PiggyBank,
-  Lock,
   Sparkles,
   Wand2,
-  FlaskConical,
   History,
   Inbox,
   Activity,
@@ -57,118 +53,121 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+/**
+ * Consolidated information architecture (session 47 redesign).
+ *
+ * The sidebar was reorganized from ~85 scattered entries across 7 loosely-named
+ * groups into a smaller set of workflow-oriented groups that follow how an
+ * accountant works a book of record: capture -> payables/receivables -> banking
+ * -> ledger/close -> report -> govern -> set up.
+ *
+ * Many former top-level entries are now TABS inside a parent page or REDIRECT
+ * into one, so they intentionally no longer appear here (their routes stay live):
+ *   - Inbox absorbs Needs Attention (/exceptions) + Flagged (/flagged).
+ *   - Bills hosts Intake, Retainage, AP Policy as tabs.
+ *   - Vendor Compliance hosts 1099 Readiness. Expenses hosts Expense Policy.
+ *   - Bank Feed hosts Credit Cards + Apply Deposits (cash application);
+ *     Reconciliation hosts the AR/GL tie-out.
+ *   - Cash Position hosts the 13-Week Forecast; Debt hosts Covenants.
+ *   - Journal Entries hosts Recurring; Close merges Status + Year-End.
+ *   - Assets & Schedules (/assets) hosts Fixed Assets/Leases/Prepaids/Insurance/
+ *     Intangibles/Tax Depreciation. Tax (/tax) hosts Book-to-Tax/Provision/
+ *     Sales Tax (return+calendar)/Tax Package. Consolidation hosts Intercompany.
+ *   - Budgets hosts Driver Builder + Reforecast. Compliance hosts Controls/SOX.
+ */
 export const navigation: NavGroup[] = [
   {
-    label: 'Overview',
+    label: 'Home',
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+      { label: 'Inbox', href: '/inbox', icon: Inbox },
     ],
   },
   {
-    label: 'Process',
+    label: 'Payables',
     items: [
-      { label: 'Action Inbox', href: '/inbox', icon: Inbox },
-      { label: 'Needs Attention', href: '/exceptions', icon: Inbox },
-      { label: 'Bank Feed', href: '/bank-feed', icon: Landmark },
-      { label: 'Credit Cards', href: '/credit-cards', icon: CreditCard },
-      { label: 'Receipts', href: '/receipts', icon: Receipt },
       { label: 'Bills', href: '/bills', icon: FileText },
-      { label: 'AP Intake', href: '/bills/intake-queue', icon: Inbox },
-      { label: 'Purchase Orders', href: '/purchase-orders', icon: ClipboardList },
       { label: 'Expenses', href: '/expenses', icon: Wallet },
-      { label: 'Expense Policy', href: '/expenses/policy', icon: ClipboardCheck },
-      { label: 'AP Policy', href: '/bills/policy', icon: ClipboardCheck },
-      { label: 'Check Run', href: '/checks', icon: Banknote },
-      { label: 'Flagged Items', href: '/flagged', icon: AlertTriangle },
+      { label: 'Receipts', href: '/receipts', icon: Receipt },
+      { label: 'Purchase Orders', href: '/purchase-orders', icon: ClipboardList },
+      { label: 'Pay Runs', href: '/checks', icon: Banknote },
+      { label: 'Payroll', href: '/payroll', icon: Users },
+      { label: 'Vendors', href: '/vendors', icon: Building2 },
+      { label: 'Vendor Compliance', href: '/vendor-compliance', icon: Shield },
     ],
   },
   {
-    label: 'Financial',
+    label: 'Receivables',
+    items: [
+      { label: 'Invoices', href: '/invoices', icon: DollarSign },
+      { label: 'Collections', href: '/collections', icon: Contact },
+      { label: 'Customers', href: '/customers', icon: Contact },
+      { label: 'Revenue Recognition', href: '/rev-rec', icon: Percent },
+    ],
+  },
+  {
+    label: 'Banking & Cash',
+    items: [
+      { label: 'Bank Feed', href: '/bank-feed', icon: Landmark },
+      { label: 'Reconciliation', href: '/reconciliation', icon: FileCheck },
+      { label: 'Cash Position', href: '/cash', icon: Wallet },
+      { label: 'Debt & Loans', href: '/debt', icon: Landmark },
+      { label: 'Renewals & Obligations', href: '/obligations', icon: CalendarDays },
+      { label: 'Subscriptions', href: '/subscriptions', icon: CreditCard },
+    ],
+  },
+  {
+    label: 'Accounting',
     items: [
       { label: 'Journal Entries', href: '/journal-entries', icon: BookOpen },
-      { label: 'Recurring Entries', href: '/recurring-journal-entries', icon: History },
       { label: 'Chart of Accounts', href: '/chart-of-accounts', icon: Calculator },
-      { label: 'Reconciliation', href: '/reconciliation', icon: FileCheck },
-      { label: 'Leases', href: '/leases', icon: Landmark },
-      { label: 'Prepaids', href: '/prepaids', icon: Wallet },
-      { label: 'Insurance', href: '/insurance', icon: ShieldCheck },
-      { label: 'Intangibles', href: '/intangibles', icon: Calculator },
-      { label: 'Fixed Assets', href: '/fixed-assets', icon: Building2 },
+      { label: 'Assets & Schedules', href: '/assets', icon: Building2 },
       { label: 'Fiscal Periods', href: '/periods', icon: CalendarDays },
-      { label: 'Revenue Recognition', href: '/rev-rec', icon: Percent },
-      { label: 'Invoices', href: '/invoices', icon: DollarSign },
-      { label: 'Cash Application', href: '/cash-application', icon: Banknote },
-      { label: 'Collections', href: '/collections', icon: Contact },
-      { label: 'Payments', href: '/settings/payments', icon: CreditCard },
-      { label: 'Payroll', href: '/payroll', icon: Wallet },
-      { label: 'Budgets', href: '/budgets', icon: BarChart3 },
-      { label: 'Driver Budget', href: '/budgets/drivers', icon: TrendingUp },
-      { label: 'Reforecast', href: '/budgets/reforecast', icon: TrendingUp },
+      { label: 'Close', href: '/close', icon: ClipboardCheck },
     ],
   },
   {
-    label: 'Intelligence',
+    label: 'Reporting & Analytics',
     items: [
-      { label: 'Search', href: '/search', icon: Search },
-      { label: 'Cash Position', href: '/cash', icon: Wallet },
-      { label: '13-Week Forecast', href: '/forecast', icon: TrendingUp },
-      { label: 'Covenant Monitor', href: '/covenants', icon: ShieldCheck },
-      { label: 'Debt & Loans', href: '/debt', icon: Landmark },
-      { label: 'Subscriptions', href: '/subscriptions', icon: CreditCard },
-      { label: 'Renewals & Obligations', href: '/obligations', icon: CalendarDays },
       { label: 'Reports', href: '/reports', icon: BarChart3 },
       { label: 'FP&A Dashboard', href: '/fpna', icon: BarChart3 },
-      { label: 'Board Package', href: '/board-package', icon: FileText },
+      { label: 'Budgets', href: '/budgets', icon: TrendingUp },
       { label: 'Profitability', href: '/profitability', icon: TrendingUp },
+      { label: 'Consolidation', href: '/consolidation', icon: Combine },
+      { label: 'Board Package', href: '/board-package', icon: FileText },
+      { label: 'Search', href: '/search', icon: Search },
       { label: 'AI Decision Log', href: '/ai-decisions', icon: Sparkles },
       { label: 'AI Categorizer', href: '/categorize', icon: Wand2 },
       { label: 'Agents', href: '/agents', icon: Bot },
     ],
   },
   {
-    label: 'Operations',
+    label: 'Firm & Governance',
     items: [
-      { label: 'Departments', href: '/departments', icon: Network },
-      { label: 'Internal Invoices', href: '/internal-invoices', icon: ArrowLeftRight },
-      { label: 'Intercompany', href: '/intercompany', icon: Combine },
-      { label: 'Consolidation', href: '/consolidation', icon: Building2 },
+      { label: 'Portfolio', href: '/portfolio', icon: LayoutGrid },
       { label: 'Jobs & Projects', href: '/jobs', icon: Briefcase },
       { label: 'Job WIP Schedule', href: '/jobs/wip', icon: ClipboardCheck },
-      { label: 'Vendors', href: '/vendors', icon: Building2 },
-      { label: 'Customers', href: '/customers', icon: Contact },
       { label: 'Inventory', href: '/inventory', icon: Package },
-      { label: 'Retainage', href: '/retainage', icon: PiggyBank },
-      { label: 'Vendor Compliance', href: '/vendor-compliance', icon: Shield },
-      { label: '1099 Readiness', href: '/compliance-1099', icon: FileCheck },
-      { label: 'Book-to-Tax (M-1)', href: '/book-to-tax', icon: Scale },
-      { label: 'Tax Provision (ASC 740)', href: '/tax-provision', icon: Percent },
-      { label: 'Tax Return Package', href: '/tax-package', icon: FileText },
-      { label: 'Sales Tax Return', href: '/sales-tax-return', icon: Landmark },
-      { label: 'Sales Tax Calendar', href: '/sales-tax-calendar', icon: CalendarDays },
-      { label: 'Tax Depreciation', href: '/tax-depreciation', icon: Calculator },
-      { label: 'Close Management', href: '/close', icon: ClipboardCheck },
-      { label: 'Close Command Center', href: '/close-status', icon: Activity },
-      { label: 'Year-End Close', href: '/year-end-close', icon: Lock },
+      { label: 'Internal Invoices', href: '/internal-invoices', icon: ArrowLeftRight },
+      { label: 'Departments', href: '/departments', icon: Network },
+      { label: 'Tax', href: '/tax', icon: Scale },
+      { label: 'Compliance & Controls', href: '/compliance', icon: ShieldCheck },
+      { label: 'Audit Trail', href: '/audit', icon: History },
+      { label: 'Documents', href: '/documents', icon: FileText },
+      { label: 'Team & Access', href: '/team', icon: Users },
     ],
   },
   {
-    label: 'Practice',
+    label: 'Settings & Admin',
     items: [
-      { label: 'Portfolio', href: '/portfolio', icon: LayoutGrid },
-      { label: 'Team & Access', href: '/team', icon: Users },
-      { label: 'Audit Trail', href: '/audit', icon: History },
-      { label: 'Operations', href: '/operations', icon: Activity },
-      { label: 'Companies', href: '/settings', icon: Building2 },
-      { label: 'Compliance', href: '/compliance', icon: Shield },
-      { label: 'Controls / SOX', href: '/controls', icon: ShieldCheck },
-      { label: 'Approval Workflows', href: '/settings/approvals', icon: ClipboardCheck },
-      { label: 'Documents', href: '/documents', icon: FileText },
       { label: 'Get Started', href: '/onboarding', icon: Sparkles },
+      { label: 'Payments', href: '/settings/payments', icon: CreditCard },
+      { label: 'Approval Workflows', href: '/settings/approvals', icon: ClipboardCheck },
+      { label: 'AI Autonomy', href: '/settings/autonomy', icon: SlidersHorizontal },
       { label: 'Integrations', href: '/integrations/erp', icon: Network },
       { label: 'Import Data', href: '/import', icon: Upload },
       { label: 'Historical Conversion', href: '/onboarding/conversion', icon: Upload },
-      { label: 'Sandbox', href: '/sandbox', icon: FlaskConical },
-      { label: 'AI Autonomy', href: '/settings/autonomy', icon: SlidersHorizontal },
+      { label: 'Operations', href: '/operations', icon: Activity },
       { label: 'Settings', href: '/settings', icon: Settings },
     ],
   },

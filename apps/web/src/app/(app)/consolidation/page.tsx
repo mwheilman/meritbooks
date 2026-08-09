@@ -12,7 +12,7 @@
  * The engine is pure and lives in lib/consolidation; this screen only renders it.
  */
 
-import { useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import {
   Combine, Layers, Loader2, AlertCircle, Plus, Trash2, Info, SlidersHorizontal, Building2,
   Coins, GitCompareArrows, Check,
@@ -21,6 +21,8 @@ import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { PageHeader, EmptyState } from '@/components/ui';
+import { useSectionTab } from '../_components/section-tabs';
+import { IntercompanyWorkspace } from '../intercompany/intercompany-workspace';
 
 // ── Types mirroring the API payloads ─────────────────────────────────────────
 type Method = 'FULL' | 'EQUITY' | 'NONE';
@@ -126,17 +128,32 @@ const TYPE_LABEL: Record<AccountType, string> = {
   ASSET: 'Assets', LIABILITY: 'Liabilities', EQUITY: 'Equity',
 };
 
+const CONSOL_TABS = ['statements', 'ownership', 'fx', 'matches', 'intercompany'] as const;
+
 export default function ConsolidationPage() {
-  const [tab, setTab] = useState<'statements' | 'ownership' | 'fx' | 'matches'>('statements');
+  // useSectionTab reads `?tab=` (the /intercompany route redirects here with
+  // ?tab=intercompany), so it must render inside a Suspense boundary in Next 14.
+  return (
+    <Suspense fallback={null}>
+      <ConsolidationInner />
+    </Suspense>
+  );
+}
+
+function ConsolidationInner() {
+  const [tab, setTab] = useSectionTab(CONSOL_TABS, 'statements');
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <PageHeader
         title="Consolidation"
-        description="Multi-entity consolidated financials — ownership %, currency translation, intercompany eliminations, and non-controlling interest."
+        description="Multi-entity consolidated financials — intercompany transactions, ownership %, currency translation, eliminations, and non-controlling interest."
         actions={
-          <div className="flex items-center gap-1 rounded-lg bg-surface-900 border border-slate-800 p-1">
+          <div className="flex flex-wrap items-center gap-1 rounded-lg bg-surface-900 border border-slate-800 p-1">
             <TabBtn active={tab === 'statements'} onClick={() => setTab('statements')} icon={<Layers size={14} />}>
               Statements
+            </TabBtn>
+            <TabBtn active={tab === 'intercompany'} onClick={() => setTab('intercompany')} icon={<Combine size={14} />}>
+              Intercompany
             </TabBtn>
             <TabBtn active={tab === 'ownership'} onClick={() => setTab('ownership')} icon={<SlidersHorizontal size={14} />}>
               Ownership
@@ -151,6 +168,7 @@ export default function ConsolidationPage() {
         }
       />
       {tab === 'statements' && <StatementsTab />}
+      {tab === 'intercompany' && <IntercompanyWorkspace />}
       {tab === 'ownership' && <OwnershipTab />}
       {tab === 'fx' && <FxRatesTab />}
       {tab === 'matches' && <MatchesTab />}

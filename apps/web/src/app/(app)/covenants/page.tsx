@@ -1,18 +1,7 @@
-import { PageHeader } from '@/components/ui';
-import { CovenantsDashboard } from './covenants-dashboard';
+import { redirect } from 'next/navigation';
 
-export const metadata = {
-  title: 'Covenant Monitor',
-};
-
+// Retired standalone route. Covenant monitoring is now a tab of Debt & Loans.
+// Keep the URL working by redirecting into its new tab home.
 export default function CovenantsPage() {
-  return (
-    <>
-      <PageHeader
-        title="Covenant Monitor"
-        description="Track loan covenants against the live ledger — current headroom, trend, and the projected breach date off your cash forecast"
-      />
-      <CovenantsDashboard />
-    </>
-  );
+  redirect('/debt?tab=covenants');
 }

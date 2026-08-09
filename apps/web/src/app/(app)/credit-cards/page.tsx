@@ -1,14 +1,7 @@
-import { PageHeader } from '@/components/ui';
-import { CreditCardFeed } from './credit-card-feed';
+import { redirect } from 'next/navigation';
 
+// Retired standalone route. Credit-card matching is now the "Credit Cards" tab of the
+// Bank Feed. Keep the URL working by redirecting into its new tab home.
 export default function CreditCardsPage() {
-  return (
-    <>
-      <PageHeader
-        title="Credit Cards"
-        description="Transaction matching with receipt chase tracking"
-      />
-      <CreditCardFeed />
-    </>
-  );
+  redirect('/bank-feed?tab=credit-cards');
 }

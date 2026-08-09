@@ -1,15 +1,9 @@
-import { PageHeader } from '@/components/ui';
-import { FlaggedQueue } from './flagged-queue';
+import { redirect } from 'next/navigation';
 
-export default function FlaggedPage() {
-  return (
-    <>
-      <PageHeader
-        title="Flagged Items"
-        description="Transactions requiring manager judgment — AI or human flagged"
-        actions={<button className="btn-primary btn-sm">Resolve All</button>}
-      />
-      <FlaggedQueue />
-    </>
-  );
+// RETIRED — "Flagged Items" was a strict subset of the Inbox with a dead "Resolve
+// All" action. Merged into the unified Inbox (flagged bank/receipt/bill items now
+// live on the Inbox → Exceptions tab, which can resolve them inline). Kept as a
+// redirect so existing links keep working.
+export default function FlaggedRedirect() {
+  redirect('/inbox');
 }

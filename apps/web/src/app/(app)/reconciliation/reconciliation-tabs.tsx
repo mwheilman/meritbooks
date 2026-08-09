@@ -2,18 +2,21 @@
 
 import { useState, type ReactNode } from 'react';
 import { clsx } from 'clsx';
-import { Sparkles, ClipboardCheck } from 'lucide-react';
+import { Sparkles, ClipboardCheck, Scale } from 'lucide-react';
 import { ReconciliationAutopilot } from './reconciliation-autopilot';
 import { ReconciliationView } from './reconciliation-view';
+import { TieOutCard } from '../cash-application/cash-application-parts';
 
 /**
- * Two views of the same domain:
+ * Three views of the same domain:
  *   • Autopilot — clear individual statement lines against the book (GL) and open
  *     bills, one AI-scored proposal at a time.
  *   • Statement — the period-level statement-vs-GL reconciliation form + history.
+ *   • AR ↔ GL tie-out — the AR subledger vs GL control tie-out (moved off the retired
+ *     standalone cash-application page onto Reconciliation, where a controller lives).
  */
 export function ReconciliationTabs() {
-  const [tab, setTab] = useState<'autopilot' | 'statement'>('autopilot');
+  const [tab, setTab] = useState<'autopilot' | 'statement' | 'tie-out'>('autopilot');
 
   return (
     <div className="space-y-6">
@@ -30,9 +33,17 @@ export function ReconciliationTabs() {
           icon={<ClipboardCheck className="h-3.5 w-3.5" />}
           label="Statement Reconciliation"
         />
+        <TabButton
+          active={tab === 'tie-out'}
+          onClick={() => setTab('tie-out')}
+          icon={<Scale className="h-3.5 w-3.5" />}
+          label="AR ↔ GL Tie-Out"
+        />
       </div>
 
-      {tab === 'autopilot' ? <ReconciliationAutopilot /> : <ReconciliationView />}
+      {tab === 'autopilot' && <ReconciliationAutopilot />}
+      {tab === 'statement' && <ReconciliationView />}
+      {tab === 'tie-out' && <TieOutCard />}
     </div>
   );
 }

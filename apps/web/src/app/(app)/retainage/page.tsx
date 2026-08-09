@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { PageHeader, EmptyState } from '@/components/ui';
+import { BillsTabs } from '../bills/bills-tabs';
 
 interface Row {
   billId: string;
@@ -38,6 +39,10 @@ export default function RetainagePage() {
         title="Retainage Payable"
         description="Retainage withheld from subcontractor bills, held until the work is accepted, then released and paid."
       />
+
+      <div className="mb-6">
+        <BillsTabs />
+      </div>
 
       {isLoading && (
         <div className="flex items-center justify-center py-20 text-slate-500">

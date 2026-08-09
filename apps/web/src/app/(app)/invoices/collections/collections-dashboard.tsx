@@ -89,7 +89,7 @@ function sortWorklist(rows: WorklistItem[], key: SortKey, dir: 1 | -1): Worklist
 
 // ─── Main ──────────────────────────────────────────────────────────────────
 
-export function CollectionsDashboard() {
+export function CollectionsDashboard({ embedded = false }: { embedded?: boolean } = {}) {
   const today = new Date().toISOString().slice(0, 10);
   const [locationId, setLocationId] = useState('');
   const [asOf, setAsOf] = useState(today);
@@ -142,17 +142,19 @@ export function CollectionsDashboard() {
   }
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <Link href="/invoices" className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 mb-1">
-            <ArrowLeft className="w-3.5 h-3.5" /> Invoices &amp; AR
-          </Link>
-          <h1 className="text-2xl font-semibold text-white">Collections &amp; DSO</h1>
-          <p className="text-sm text-slate-400 mt-1">Aging, days sales outstanding, and the overdue worklist</p>
+    <div className={embedded ? '' : 'p-6'}>
+      {/* Header — hidden when embedded in the Collections tab shell (which owns the page chrome). */}
+      {!embedded && (
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <Link href="/invoices" className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 mb-1">
+              <ArrowLeft className="w-3.5 h-3.5" /> Invoices &amp; AR
+            </Link>
+            <h1 className="text-2xl font-semibold text-white">Collections &amp; DSO</h1>
+            <p className="text-sm text-slate-400 mt-1">Aging, days sales outstanding, and the overdue worklist</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-6">

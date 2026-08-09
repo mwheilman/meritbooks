@@ -1,18 +1,16 @@
-import { PageHeader } from '@/components/ui';
-import { DebtRegister } from './debt-register';
+import { Suspense } from 'react';
+import { DebtTabs } from './debt-tabs';
 
 export const metadata = {
   title: 'Debt & Loans',
 };
 
 export default function DebtPage() {
+  // Suspense wraps the client tab shell because it reads the initial tab from `?tab=`
+  // via useSearchParams (Next 14 requirement).
   return (
-    <>
-      <PageHeader
-        title="Debt & Loans"
-        description="Drop a loan document — AI extracts the terms, you confirm, and MeritBooks builds the amortization schedule and posts the interest accrual to the ledger"
-      />
-      <DebtRegister />
-    </>
+    <Suspense fallback={null}>
+      <DebtTabs />
+    </Suspense>
   );
 }

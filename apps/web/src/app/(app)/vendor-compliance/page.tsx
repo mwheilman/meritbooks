@@ -10,6 +10,7 @@ import { formatMoney } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { PageHeader, EmptyState } from '@/components/ui';
+import { VendorComplianceTabs } from './vendor-compliance-tabs';
 
 type DocState = 'valid' | 'expiring' | 'expired' | 'missing' | 'pending';
 type OverrideType = 'ONE_TIME' | 'TEMPORARY' | 'PERMANENT';
@@ -147,6 +148,10 @@ export default function VendorCompliancePage() {
           </button>
         }
       />
+
+      <div className="mb-6">
+        <VendorComplianceTabs />
+      </div>
 
       {isLoading && <div className="flex items-center justify-center py-20 text-slate-500"><Loader2 className="animate-spin" size={20} /></div>}
       {error && !isLoading && (

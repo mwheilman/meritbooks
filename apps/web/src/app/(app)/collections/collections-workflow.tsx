@@ -112,7 +112,7 @@ interface PromiseModalState { account: WlAccount; invoiceId: string | null; amou
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-export function CollectionsWorkflow() {
+export function CollectionsWorkflow({ embedded = false }: { embedded?: boolean } = {}) {
   const today = new Date().toISOString().slice(0, 10);
   const [locationId, setLocationId] = useState('');
   const [asOf, setAsOf] = useState(today);
@@ -196,15 +196,17 @@ export function CollectionsWorkflow() {
   }
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <Link href="/invoices" className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 mb-1">
-          <ArrowLeft className="w-3.5 h-3.5" /> Invoices &amp; AR
-        </Link>
-        <h1 className="text-2xl font-semibold text-white">Collections workflow</h1>
-        <p className="text-sm text-slate-400 mt-1">Prioritized worklist, dunning cadence, and promise-to-pay tracking. AI drafts; you approve every send.</p>
-      </div>
+    <div className={embedded ? '' : 'p-6'}>
+      {/* Header — hidden when embedded in the Collections tab shell (which owns the page chrome). */}
+      {!embedded && (
+        <div className="mb-6">
+          <Link href="/invoices" className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 mb-1">
+            <ArrowLeft className="w-3.5 h-3.5" /> Invoices &amp; AR
+          </Link>
+          <h1 className="text-2xl font-semibold text-white">Collections workflow</h1>
+          <p className="text-sm text-slate-400 mt-1">Prioritized worklist, dunning cadence, and promise-to-pay tracking. AI drafts; you approve every send.</p>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -222,9 +224,11 @@ export function CollectionsWorkflow() {
           <input type="date" value={asOf} max={today} onChange={(e) => setAsOf(e.target.value)}
             className="px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white" />
         </label>
-        <Link href="/invoices/collections" className="text-xs text-slate-400 hover:text-emerald-300 ml-auto inline-flex items-center gap-1.5">
-          View aging &amp; DSO <ChevronRight className="w-3.5 h-3.5" />
-        </Link>
+        {!embedded && (
+          <Link href="/collections?tab=aging" className="text-xs text-slate-400 hover:text-emerald-300 ml-auto inline-flex items-center gap-1.5">
+            View aging &amp; DSO <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        )}
       </div>
 
       {error && (

@@ -8,6 +8,7 @@ import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { PageHeader, EmptyState } from '@/components/ui';
+import { HubTabs } from '../_components/hub-tabs';
 
 // ── Types mirrored from the API responses ───────────────────────────────────────
 type DifferenceType = 'PERMANENT' | 'TEMPORARY';
@@ -98,6 +99,8 @@ export default function BookToTaxPage() {
         title="Book-to-Tax (Schedule M-1)"
         description="Bridge book net income to taxable income. Every difference is classified permanent vs temporary on its labeled M-1 line — the AI proposes the tag, the ledger computes the number."
       />
+
+      <HubTabs section="tax" />
 
       <div className="flex items-center gap-1 mb-5 border-b border-slate-800">
         <TabButton active={tab === 'schedule'} onClick={() => setTab('schedule')} icon={Scale} label="Schedule M-1 / M-3" />

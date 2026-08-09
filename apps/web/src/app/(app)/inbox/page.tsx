@@ -1,32 +1,22 @@
-import { PageHeader } from '@/components/ui';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
-import { InboxClient } from './inbox-client';
+import { InboxTabs } from './inbox-tabs';
 
 export const metadata = {
-  title: 'Action Inbox',
+  title: 'Inbox',
 };
 
 /**
- * ACTION INBOX — one ranked "Needs you" screen of everything waiting on the caller:
- * money-movement approvals, submitted expense reports, bills held by AP policy,
- * expense-policy-flagged drafts, open AI proposals, overdue/near-term obligations,
- * and unposted manual journal-entry drafts. Read-only aggregate; every item deep-links
- * to the record's own approve / review / post surface.
+ * INBOX — the single "Needs you" screen. Consolidates the former Action Inbox
+ * (/inbox), Needs Attention (/exceptions), and Flagged Items (/flagged) surfaces
+ * into one tabbed shell: Approvals / Exceptions / Alerts / Drafts. The Exceptions
+ * tab preserves the safe inline-resolve behavior from the old /exceptions screen.
  *
- * Page-level RBAC: gated on the existing `reports:view` permission (fails closed — an
- * unauthorized role is redirected before any client JS ships), matching the sibling
- * read-only aggregate screens (Renewals & Obligations, Needs Attention).
+ * Page-level RBAC: gated on the existing `reports:view` permission (fails closed —
+ * an unauthorized role is redirected before any client JS ships), matching the
+ * sibling read-only aggregate screens.
  */
 export default async function InboxPage() {
   await requirePagePermission('reports', 'view');
 
-  return (
-    <>
-      <PageHeader
-        title="Action Inbox"
-        description="Everything that needs you, ranked — approvals and policy blocks first, then time-sensitive alerts, AI proposals, and drafts. Each item links straight to where you act on it."
-      />
-      <InboxClient />
-    </>
-  );
+  return <InboxTabs />;
 }

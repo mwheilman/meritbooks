@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/ui';
 import { BillList } from './bill-list';
 import { BillForm } from './bill-form';
 import { AutoFileModal } from './auto-file-modal';
+import { BillsTabs } from './bills-tabs';
 
 export function BillsClient() {
   const [showCreate, setShowCreate] = useState(false);
@@ -46,6 +47,8 @@ export function BillsClient() {
           ) : undefined
         }
       />
+
+      <BillsTabs />
 
       {showAutoFile && (
         <AutoFileModal onClose={() => setShowAutoFile(false)} onFiled={handleFiled} />

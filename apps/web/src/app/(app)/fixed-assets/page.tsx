@@ -8,6 +8,7 @@ import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { PageHeader } from '@/components/ui';
+import { HubTabs } from '../_components/hub-tabs';
 import { RollForwardView } from './roll-forward-view';
 import { ImportFromInvoice } from './import-from-invoice';
 
@@ -85,6 +86,8 @@ export default function FixedAssetsPage() {
           <UploadCloud size={14} /> Add from invoice
         </button>
       </div>
+
+      <HubTabs section="assets" />
 
       {/* View toggle */}
       <div className="flex items-center gap-1 border-b border-slate-800">

@@ -1,6 +1,7 @@
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { PageHeader } from '@/components/ui';
 import { ExpensePolicyClient } from './policy-client';
+import { ExpensesTabs } from '../expenses-tabs';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,9 @@ export default async function ExpensePolicyPage() {
         title="Expense Policy"
         description="Drop your written expense policy — AI compiles it into a structured, versioned ruleset you review and activate. A deterministic engine then enforces it on every expense."
       />
+      <div className="mb-6">
+        <ExpensesTabs />
+      </div>
       <ExpensePolicyClient />
     </>
   );

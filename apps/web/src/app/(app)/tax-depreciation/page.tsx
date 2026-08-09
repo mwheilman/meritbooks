@@ -9,6 +9,7 @@ import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { PageHeader, EmptyState } from '@/components/ui';
+import { HubTabs } from '../_components/hub-tabs';
 
 // ── Types mirrored from /api/tax/depreciation ────────────────────────────────
 interface ScheduleYear {
@@ -96,6 +97,8 @@ export default function TaxDepreciationPage() {
         title="Tax Depreciation (MACRS)"
         description="The parallel tax book — MACRS / §179 / bonus by class — and its reconciliation to posted book depreciation. The book-vs-tax delta is proposed as a temporary Schedule M-1 difference the ledger only records once you confirm it."
       />
+
+      <HubTabs section="assets" />
 
       <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
         <div>

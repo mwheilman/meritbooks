@@ -1,14 +1,7 @@
-import { PageHeader } from '@/components/ui';
-import { DriverBuilder } from './driver-builder';
+import { redirect } from 'next/navigation';
 
+// Retired standalone route. The Driver-Based Budget Builder is now a tab of Budgets.
+// Keep the URL working by redirecting into its new tab home.
 export default function DriverBudgetPage() {
-  return (
-    <>
-      <PageHeader
-        title="Driver-Based Budget Builder"
-        description="Build a full-year budget from driver assumptions — units × price, a cost as % of revenue, a fixed amount, or a growth curve — and save the expanded monthly lines as the plan of record."
-      />
-      <DriverBuilder />
-    </>
-  );
+  redirect('/budgets?tab=drivers');
 }

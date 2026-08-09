@@ -1,14 +1,7 @@
-import { PageHeader } from '@/components/ui';
-import { ForecastGrid } from './forecast-grid';
+import { redirect } from 'next/navigation';
 
+// Retired standalone route. The 13-week cash forecast is now a tab of Cash Position.
+// Keep the URL working by redirecting into its new tab home.
 export default function ForecastPage() {
-  return (
-    <>
-      <PageHeader
-        title="13-Week Cash Forecast"
-        description="Direct cash projection from bank balances, open AR, and open AP by due date"
-      />
-      <ForecastGrid />
-    </>
-  );
+  redirect('/cash?tab=forecast');
 }
