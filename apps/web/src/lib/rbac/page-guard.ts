@@ -24,8 +24,18 @@
  *
  * ORG RESOLUTION (identity gate #9): the org is resolved from the verified `org_id`
  * token claim via resolveTenantOrgId() (a Books uuid passes through; a Clerk org id
- * maps through core.organizations.clerk_org_id). There is NO first-org fallback — an
- * unresolved claim yields null and the page fails closed (redirect).
+ * maps through core.organizations.clerk_org_id).
+ *
+ * SINGLE-TENANT FALLBACK: when the Clerk session carries no `org_id` claim (personal-
+ * account session, or the claim not yet minted), the claim resolves to null. Rather
+ * than fail every guarded page closed for a legitimate single-tenant user — whose data
+ * APIs already scope fine off the identity spine — we resolve the org from the caller's
+ * core.memberships when, and ONLY when, they have EXACTLY ONE active membership. This
+ * mirrors how the data layer resolves the caller (core.users -> core.memberships, the
+ * same spine canApprove and provisionMembershipOnLogin use) and never weakens tenant
+ * isolation: a caller with ZERO or MORE THAN ONE active membership is AMBIGUOUS and
+ * stays fail-closed (null -> redirect). It is NOT a "first org" fallback — it never
+ * picks arbitrarily among multiple orgs.
  */
 
 import { redirect } from 'next/navigation';
@@ -46,10 +56,52 @@ const SIGN_IN_REDIRECT = '/sign-in';
 async function resolveOrgId(
   admin: SupabaseClient,
   claimOrgId: string | null,
+  clerkUserId: string,
 ): Promise<string | null> {
-  // Resolve the claim to the real Books tenant (uuid passthrough OR Clerk-id mapping).
-  // No first-org fallback: unresolved -> null -> fail closed.
-  return resolveTenantOrgId(claimOrgId, admin);
+  // 1. Primary: resolve the verified claim to the real Books tenant (uuid passthrough
+  //    OR Clerk-id mapping). This is the authoritative source when a claim is present.
+  const claimed = await resolveTenantOrgId(claimOrgId, admin);
+  if (claimed) return claimed;
+
+  // 2. Single-tenant fallback: the claim is absent/unresolved. Resolve the caller's
+  //    org from the identity spine ONLY when it is unambiguous (exactly one active
+  //    membership). Ambiguous (0 or >1) stays fail-closed. See file docblock.
+  return resolveSingleActiveMembershipOrg(admin, clerkUserId);
+}
+
+/**
+ * Resolve the caller's org from core.memberships when — and only when — it is
+ * unambiguous. Returns the org uuid iff the caller has EXACTLY ONE active membership;
+ * null on no identity, zero memberships, MORE THAN ONE membership, or any lookup error
+ * (fail closed). Never picks arbitrarily among multiple orgs, so multi-tenant isolation
+ * is preserved. Uses the canonical spine (core.users -> core.memberships), matching how
+ * the data layer resolves the caller.
+ */
+async function resolveSingleActiveMembershipOrg(
+  admin: SupabaseClient,
+  clerkUserId: string,
+): Promise<string | null> {
+  const { data: user, error: userErr } = await admin
+    .schema('core')
+    .from('users')
+    .select('id')
+    .eq('clerk_user_id', clerkUserId)
+    .maybeSingle();
+  if (userErr || !user?.id) return null; // no identity row -> fail closed
+
+  // Fetch up to 2 active memberships: exactly one is unambiguous; anything else stays
+  // ambiguous and fails closed. Capping at 2 is enough to distinguish "one" from "many".
+  const { data: memberships, error: memErr } = await admin
+    .schema('core')
+    .from('memberships')
+    .select('org_id')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .limit(2);
+  if (memErr || !memberships || memberships.length !== 1) return null;
+
+  const orgId = (memberships[0] as { org_id?: unknown }).org_id;
+  return typeof orgId === 'string' && orgId.length > 0 ? orgId : null;
 }
 
 /**
@@ -133,7 +185,7 @@ export async function requirePagePermission(
       const claims = (a?.sessionClaims ?? null) as Record<string, unknown> | null;
       const claimOrgId = typeof claims?.org_id === 'string' ? claims.org_id : null;
 
-      const orgId = await resolveOrgId(admin, claimOrgId);
+      const orgId = await resolveOrgId(admin, claimOrgId, clerkUserId);
       if (orgId) {
         const role = await resolvePageRole(admin, orgId, clerkUserId);
         if (role && hasPermission(role, featureId, action)) {
