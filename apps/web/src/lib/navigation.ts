@@ -164,6 +164,7 @@ export const navigation: NavGroup[] = [
       { label: 'Approval Workflows', href: '/settings/approvals', icon: ClipboardCheck },
       { label: 'Documents', href: '/documents', icon: FileText },
       { label: 'Get Started', href: '/onboarding', icon: Sparkles },
+      { label: 'Integrations', href: '/integrations/erp', icon: Network },
       { label: 'Import Data', href: '/import', icon: Upload },
       { label: 'Historical Conversion', href: '/onboarding/conversion', icon: Upload },
       { label: 'Sandbox', href: '/sandbox', icon: FlaskConical },
