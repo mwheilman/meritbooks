@@ -270,3 +270,13 @@ Prod is parked on dev-Clerk on purpose (crossed pk/sk sank the cutover); the app
 company-scoped with a 9-group IA and working upload grants (mig 110) + a white-label
 management-company flag (mig 111) — next: verify the operator flow in Chrome, fund the
 Anthropic account to unblock document AI, and prep a clean prod-Supabase + prod-Clerk cutover.
+
+---
+
+## Autonomous run log
+
+- **2026-08-09 (autonomous):** Help-content reconcile to the S47 IA redesign. Added the missing
+  `/compliance` (merged Compliance & Controls shell) help entry, and enriched `/bank-feed`
+  (Credit Cards + Apply Deposits tabs) and `/tax/sales-tax` (Filing Calendar + Return Worksheet
+  tabs) so the merged parent pages describe the functionality folded into them. Data-file only
+  (`lib/help/help-content.ts`), no runtime logic. Typecheck clean on the touched file.

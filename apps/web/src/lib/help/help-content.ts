@@ -72,10 +72,12 @@ export const HELP_CONTENT: Record<string, HelpContent> = {
       'Composite match score = vendor 40% + amount 40% + date 20%; auto-categorize at ≥90%',
       'Smart batch selection ("select all ≥90%") and click-a-vendor to select every transaction from them',
       'Edit slide-out with inline GL account search, vendor recents, and the AI reasoning behind each suggestion',
+      'Credit-card statement reconciliation and Apply Deposits (cash application) live as tabs alongside the feed',
     ],
     tips: [
       'Keyboard shortcuts: j/k to move, a to approve, f to flag, Space to select, Esc to close.',
       'Refresh pulls new transactions and re-runs duplicate detection.',
+      'The old /credit-cards and /cash-application URLs now redirect into the Credit Cards and Apply Deposits tabs here.',
     ],
   },
 
@@ -492,6 +494,20 @@ export const HELP_CONTENT: Record<string, HelpContent> = {
     ],
   },
 
+  '/compliance': {
+    title: 'Compliance & Controls',
+    whatItDoes:
+      'One shell for regulatory filings and the financial-control command center. The Filings tab tracks obligations and their due dates; the Controls tab is a read-only view of every control — exceptions, segregation of duties, AI autonomy, and the audit trail.',
+    keyFeatures: [
+      'Regulatory-filing tracker with obligations, owners, and due dates',
+      'Live exception library (duplicate pay, anomalous JE, uncategorized leakage, intercompany imbalance)',
+      'Segregation-of-duties posture, AI autonomy state, and the full audit trail',
+    ],
+    tips: [
+      'Jump straight to controls at /compliance?tab=controls — the old /controls URL redirects here.',
+    ],
+  },
+
   '/controls': {
     title: 'Controls & Compliance',
     whatItDoes:
@@ -656,6 +672,10 @@ export const HELP_CONTENT: Record<string, HelpContent> = {
       'Tax calculated at invoice by jurisdiction',
       'Collected-vs-remitted and net-owed by period',
       'GL tie-out to Sales Tax Payable',
+      'Filing Calendar of upcoming returns and a Return Worksheet to prep each filing, both as tabs here',
+    ],
+    tips: [
+      'The old /sales-tax-calendar and /sales-tax-return URLs now redirect into the Calendar and Worksheet tabs.',
     ],
   },
 
