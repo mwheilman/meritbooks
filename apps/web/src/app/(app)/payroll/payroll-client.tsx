@@ -13,6 +13,7 @@ import {
   CalendarClock,
   EyeOff,
   UploadCloud,
+  FileSpreadsheet,
   Info,
   FlaskConical,
   PlugZap,
@@ -26,6 +27,7 @@ import { RunStatusBadge } from './run-status';
 import { RunWizard } from './run-wizard';
 import { RunDetailDrawer } from './run-detail-drawer';
 import { ImportRegister } from './register-import';
+import { ImportRegisterCsv } from './register-csv-import';
 
 type SortKey = 'periodEnd' | 'payDate' | 'status' | 'grossCents' | 'netCents' | 'employeeCount';
 type SortDir = 'asc' | 'desc';
@@ -55,6 +57,7 @@ export function PayrollClient() {
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'payDate', dir: 'desc' });
 
@@ -106,6 +109,13 @@ export function PayrollClient() {
                 title="Drop the processor's payroll register (PDF or image) and post a balanced payroll entry to the ledger"
               >
                 <UploadCloud size={14} /> Import payroll register
+              </button>
+              <button
+                onClick={() => setCsvImportOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-slate-700 text-slate-200 hover:bg-slate-800 transition-colors"
+                title="Import a CSV or Excel payroll register — no AI. Map the columns, save the mapping, and post a balanced payroll entry."
+              >
+                <FileSpreadsheet size={14} /> Import from spreadsheet
               </button>
               <button
                 onClick={() => setWizardOpen(true)}
@@ -257,6 +267,14 @@ export function PayrollClient() {
         <ImportRegister
           open={importOpen}
           onClose={() => setImportOpen(false)}
+          onPosted={() => refetch()}
+        />
+      )}
+
+      {csvImportOpen && (
+        <ImportRegisterCsv
+          open={csvImportOpen}
+          onClose={() => setCsvImportOpen(false)}
           onPosted={() => refetch()}
         />
       )}
