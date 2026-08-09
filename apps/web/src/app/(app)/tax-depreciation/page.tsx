@@ -117,7 +117,7 @@ export default function TaxDepreciationPage() {
       )}
 
       {!isLoading && !error && data && (
-        data.assets.length === 0 ? (
+        (data.assets?.length ?? 0) === 0 ? (
           <EmptyState icon={Calculator} title="No fixed assets" description="Add depreciable assets on the Fixed Assets page to compute a MACRS tax schedule and the book-vs-tax reconciliation." />
         ) : (
           <div className="space-y-5">
@@ -143,7 +143,7 @@ export default function TaxDepreciationPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.assets.map((a) => (
+                  {(data.assets ?? []).map((a) => (
                     <AssetRows key={a.assetId} asset={a} taxYear={data.taxYear} expanded={expanded === a.assetId} onToggle={() => setExpanded(expanded === a.assetId ? null : a.assetId)} />
                   ))}
                 </tbody>

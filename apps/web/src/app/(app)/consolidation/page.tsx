@@ -187,7 +187,11 @@ function StatementsTab() {
   const qs = new URLSearchParams({ start_date: startDate, end_date: endDate, eliminate: String(eliminate) });
   if (rootId) qs.set('root_entity_id', rootId);
   if (reportingCcy) qs.set('reporting_currency', reportingCcy);
-  const { data, isLoading, error } = useQuery<StatementsResp>(`/api/consolidation/statements?${qs.toString()}`, {
+  // NOTE: the filters live in the URL query string above, so the cache-buster `key`
+  // must go in the THIRD (options) arg. Passing it as the 2nd (params) arg appended a
+  // second `?key=…` to the URL, corrupting `eliminate=true` into `eliminate=true?key=…`
+  // and 422-ing the whole Statements tab.
+  const { data, isLoading, error } = useQuery<StatementsResp>(`/api/consolidation/statements?${qs.toString()}`, undefined, {
     key: `${startDate}|${endDate}|${rootId}|${eliminate}|${reportingCcy}`,
   });
 
@@ -251,7 +255,7 @@ function StatementsTab() {
           <strong> Full at 100%</strong>. Add structure in the Ownership tab to model NCI and equity-method affiliates.
         </Banner>
       )}
-      {data && data.totals.eliminatingResidualCents !== 0 && (
+      {data?.totals && data.totals.eliminatingResidualCents !== 0 && (
         <Banner tone="warning">
           Intercompany positions are out of balance by {fmt(Math.abs(data.totals.eliminatingResidualCents))} — they will not
           fully eliminate. Review the intercompany-balance exceptions before relying on this consolidation.
@@ -275,7 +279,7 @@ function StatementsTab() {
         <div className="card p-6 flex items-center gap-2 text-red-400">
           <AlertCircle size={18} /> {error}
         </div>
-      ) : !data || data.accounts.length === 0 ? (
+      ) : !data || !data.totals || (data.accounts?.length ?? 0) === 0 ? (
         <EmptyState icon={Combine} title="Nothing to consolidate yet"
           description="No posted activity in this period for the selected group. Post journal entries, then reopen this report." />
       ) : (

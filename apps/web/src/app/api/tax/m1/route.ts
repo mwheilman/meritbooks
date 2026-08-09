@@ -41,5 +41,6 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
   else if (params.location_id && params.location_id !== 'all') locationIds.push(params.location_id);
 
   const report = await buildM1Report(ctx.supabase, { startDate, endDate, locationIds });
-  return NextResponse.json({ data: report });
+  // Bare body (not { data }) — the client reads `data.additions` directly.
+  return NextResponse.json(report);
 });

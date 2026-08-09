@@ -202,23 +202,23 @@ function ScheduleTab(props: {
               <tbody>
                 <LadderRow label="Net income per books" amountCents={data.bookNetIncomeCents} bold />
 
-                {data.additions.length > 0 && (
+                {(data.additions?.length ?? 0) > 0 && (
                   <tr className="border-t border-slate-800/60">
                     <td colSpan={3} className="px-4 pt-3 pb-1 text-2xs uppercase tracking-wide text-emerald-400/80">
                       Additions (taxable income above book)
                     </td>
                   </tr>
                 )}
-                {data.additions.map((l) => <DiffRow key={l.code} line={l} />)}
+                {(data.additions ?? []).map((l) => <DiffRow key={l.code} line={l} />)}
 
-                {data.subtractions.length > 0 && (
+                {(data.subtractions?.length ?? 0) > 0 && (
                   <tr className="border-t border-slate-800/60">
                     <td colSpan={3} className="px-4 pt-3 pb-1 text-2xs uppercase tracking-wide text-red-400/80">
                       Subtractions (taxable income below book)
                     </td>
                   </tr>
                 )}
-                {data.subtractions.map((l) => <DiffRow key={l.code} line={l} negative />)}
+                {(data.subtractions ?? []).map((l) => <DiffRow key={l.code} line={l} negative />)}
 
                 <tr className="border-t-2 border-slate-700 bg-slate-900/40">
                   <td className="px-4 py-3 font-semibold text-white" colSpan={2}>Taxable income (before NOL / special deductions)</td>

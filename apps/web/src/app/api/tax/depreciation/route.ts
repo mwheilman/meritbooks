@@ -65,19 +65,22 @@ export async function GET(request: Request): Promise<NextResponse> {
     overrideExists = ((existingOverride ?? []) as unknown[]).length > 0;
   }
 
+  // NOTE: return the payload BARE (not wrapped in { data }). The client page reads
+  // `data.assets` / `data.difference` directly via useQuery, and the app-wide
+  // convention for these feature endpoints (see /api/consolidation/statements) is a
+  // bare body. Wrapping it double-nested the payload and crashed the page on
+  // `data.assets.length`.
   return NextResponse.json({
-    data: {
-      ...recon,
-      openProposal: openProposal
-        ? {
-            id: openProposal.id,
-            code: openProposal.proposed_output?.code ?? null,
-            amountCents: Number(openProposal.proposed_output?.amount_cents ?? 0),
-            targetLineFound: Boolean(openProposal.proposed_output?.target_gl_entry_line_id),
-          }
-        : null,
-      overrideExists,
-    },
+    ...recon,
+    openProposal: openProposal
+      ? {
+          id: openProposal.id,
+          code: openProposal.proposed_output?.code ?? null,
+          amountCents: Number(openProposal.proposed_output?.amount_cents ?? 0),
+          targetLineFound: Boolean(openProposal.proposed_output?.target_gl_entry_line_id),
+        }
+      : null,
+    overrideExists,
   });
 }
 
@@ -111,7 +114,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (parsed.data.action === 'propose') {
       const taxYear = parsed.data.tax_year ?? currentYear();
       const summary = await proposeDepreciationDifference(supabase, { orgId, userId, taxYear });
-      return NextResponse.json({ data: summary });
+      return NextResponse.json(summary);
     }
     // confirm
     if (!parsed.data.decision_id) {
@@ -121,7 +124,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (!result.ok) {
       return NextResponse.json({ error: result.error ?? 'Confirm failed', code: 'CONFIRM_ERROR' }, { status: 422 });
     }
-    return NextResponse.json({ data: { ok: true } });
+    return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Server error', code: 'SERVER_ERROR' }, { status: 500 });
   }

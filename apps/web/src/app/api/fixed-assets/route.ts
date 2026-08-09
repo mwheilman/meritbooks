@@ -30,8 +30,7 @@ export async function GET(request: Request) {
       last_depreciation_date, status,
       disposal_date, disposal_proceeds_cents,
       physical_location, condition, barcode, last_inspection_date,
-      location_id,
-      assigned_to_employee:employees!fixed_assets_assigned_to_fkey(id, first_name, last_name),
+      location_id, assigned_to,
       asset_account:accounts!fixed_assets_asset_account_id_fkey(account_number, name),
       depreciation_account:accounts!fixed_assets_depreciation_expense_account_id_fkey(account_number, name),
       accum_dep_account:accounts!fixed_assets_accumulated_depreciation_account_id_fkey(account_number, name)
@@ -53,6 +52,13 @@ export async function GET(request: Request) {
   const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
     supabase, 'locations', 'id, name, short_code', rows.map((r) => r.location_id));
   for (const r of rows) r.location = r.location_id ? locMap.get(r.location_id) ?? null : null;
+
+  // `assigned_to` FKs core.employees. PostgREST cannot embed across the core↔public
+  // schema boundary (PGRST200), so — exactly like `location` above — stitch the
+  // employee in via a batched core lookup instead of a `!fk(...)` embed.
+  const empMap = await fetchCoreMap<{ id: string; first_name: string; last_name: string }>(
+    supabase, 'employees', 'id, first_name, last_name', rows.map((r) => r.assigned_to));
+  for (const r of rows) r.assigned_to_employee = r.assigned_to ? empMap.get(r.assigned_to) ?? null : null;
 
   const assets = rows.map((a: Record<string, unknown>) => ({
     id: a.id,

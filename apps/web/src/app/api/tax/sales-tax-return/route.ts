@@ -51,5 +51,6 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
     locationId: params.location_id ?? null,
   });
 
-  return NextResponse.json({ data: report });
+  // Bare body (not { data }) — the client reads `data.worksheet.totals` directly.
+  return NextResponse.json(report);
 });

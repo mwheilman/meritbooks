@@ -105,8 +105,8 @@ export default function SalesTaxReturnPage() {
 
   const { data, isLoading, error } = useQuery<ReturnReport>('/api/tax/sales-tax-return', params);
 
-  const totals = data?.worksheet.totals;
-  const lines = data?.worksheet.lines ?? [];
+  const totals = data?.worksheet?.totals;
+  const lines = data?.worksheet?.lines ?? [];
   const gl = data?.glTieOut;
 
   const setQuarter = (q: number) => {
@@ -127,7 +127,7 @@ export default function SalesTaxReturnPage() {
       'Expected Tax', 'Rate Variance', 'Flagged', 'Transactions',
     ];
     const money = (c: number) => (c / 100).toFixed(2);
-    const rows = data.worksheet.lines.map((l) => [
+    const rows = (data.worksheet?.lines ?? []).map((l) => [
       l.jurisdiction, money(l.grossSalesCents), money(l.taxableSalesCents), money(l.exemptSalesCents),
       money(l.nonTaxableSalesCents), money(l.deductionsCents), money(l.taxCollectedCents),
       String(l.effectiveRatePct), l.expectedRatePct == null ? '' : String(l.expectedRatePct),
@@ -170,7 +170,7 @@ export default function SalesTaxReturnPage() {
           <label className="text-xs text-slate-400">Jurisdiction</label>
           <select className="input mt-1 min-w-[8rem]" value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)}>
             <option value="all">All states</option>
-            {data?.allJurisdictionTotals && data.worksheet.lines.length > 0 &&
+            {data?.allJurisdictionTotals && (data.worksheet?.lines?.length ?? 0) > 0 &&
               [...new Set([jurisdiction !== 'all' ? jurisdiction : '', ...lines.map((l) => l.jurisdiction)].filter(Boolean))]
                 .sort()
                 .map((s) => <option key={s} value={s}>{s}</option>)}
