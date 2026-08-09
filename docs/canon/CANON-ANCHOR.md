@@ -5,7 +5,7 @@ It is deliberately small (~5 min read) so re-grounding is cheap. It is the disti
 always-current truth. When it conflicts with the repo, **the canon wins** — fix the repo.
 Source of truth: the Project-knowledge doc set (mirrored/digested in `docs/canon/`, indexed in `00-INDEX.md`).
 
-Last reconciled: **2026-08-09 (Session 47)**. Latest handoff: `docs/MERITBOOKS-HANDOFF-session47.md`.
+Last reconciled: **2026-08-09 (Session 48)**. Latest handoff: `docs/MERITBOOKS-HANDOFF-session48.md`.
 
 ---
 
@@ -241,20 +241,53 @@ ungated, spec-less work in Session 40.)
   Anthropic **"This organization has been disabled"** — the `ANTHROPIC_API_KEY` account is
   **disabled (billing/credits)**; and the standing Stripe/pglite/nl-route tsc/test-harness
   failures are **pre-existing, not regressions.** Next Books migration: **112**.
+- **Session-48 (practice-plane / white-label productization; migrations 112,113,120,121,130–133,135;
+  HEAD `2c480e4`):** turned the usable app into a **multi-company practice product**. **(a)
+  Company-scope rollout finished** — budgets/reports/profitability/consolidation/board-package + a
+  dozen create forms default to the header active company; 5 redundant in-page selectors removed;
+  dashboard rebuilt as a per-company work board. **(b) Multi-company practice** (mig 121) — add-company
+  dialog (COA seed), member assignment + per-company **"Owns onboarding"** designation; **Roles/admin
+  moved to the Practice plane only.** **(c) Customizable permissions** (mig 130) — `core.custom_roles` +
+  `core.role_permission_overrides`, a `resolve-permissions` merge layer, `/settings/roles` UI;
+  **enforcement WIRED** into require-permission + page-guard via `effectivePermission()`,
+  **degrade-safe** to system defaults (never a lock-out). **(d) Operator Console real metrics** (tenants/
+  seats/AI cost/storage) + a **per-company pricing model** (mig 131; $99 first 5 + $59 after, Firm $499 +
+  wholesale) with **computed list-price MRR — live charging NOT wired.** **(e) Honesty while AI is dark**
+  — graceful AI-down everywhere (calm "AI temporarily paused"), FP&A NL made real with a heuristic parser
+  that works WITHOUT live AI; **insurance now actually posts** (mig 132, prepaid→amortization, closes the
+  overclaim); **consolidation FX/ASC-830 activated** (mig 133, `core.locations.functional_currency`);
+  EC-14 out-of-policy detector; **payroll honesty** (register-import = primary; mock run labeled estimate).
+  **(f) Launch polish** — report **`.xlsx` export**, **AP inbound email-to-bill** webhook (mig 135,
+  `org.inbound_ap_address`), **money-movement SoD completion** (4 granular keys, effective access
+  UNCHANGED). **(g)** source-doc retention (mig 112, store file before AI step) + money-out dup-payment
+  UNIQUE index (mig 113); `PATCH /api/ai/decisions` gated `flagged:resolve`. Shared-spine: mig 120
+  (`get_org_id` single-active-seat fallback, Projects-authored). Next Books migration: **136** (134 skipped).
+  ⚠️ **KNOWN-OPEN launch blockers:** (1) **Anthropic org disabled/unfunded → ALL AI operationally down**
+  (app degrades gracefully — not a code bug); (2) prod intentionally on **dev Clerk** (do NOT re-cut until
+  a separate prod Supabase + prod-Clerk trust + funded Anthropic + live-billing decision are ready
+  together; watch pk/sk pairing); (3) **live tenant Stripe charging NOT wired** (Operator MRR is list-price
+  computed only); (4) **Stripe TEST + Plaid SANDBOX**; (5) payroll provider unpicked (mock = estimate);
+  (6) marketing-honesty items (semantic search is FTS not vector; 1099 IRIS not built; insurance-posts now
+  FIXED); (7) the paused hourly autonomous build task; (8) standing tsc/pglite harness failures are NOT
+  regressions.
 - **No gate may start until its `Prereq:` gates are DONE. "Complete" is demonstrated, not asserted.**
 
-## 6. Canonical immediate priorities (Session 47 reconciliation)
+## 6. Canonical immediate priorities (Session 48 reconciliation)
 
-0. **Make the operator flow real, then prep a clean prod cutover.** (a) **Verify in Chrome** on
-   the deployed (dev-Clerk) app: company picker → scoped processing pages → `CompanyScopeGuard`
-   behavior → consolidated dashboard → reports admin-gate → no page reverts to dashboard.
-   (b) **Fund/re-enable the Anthropic account** to unblock document AI (the disabled-account error
-   is NOT a code bug; migration 110 fixed the Postgres-permission half). (c) **Prepare — do NOT
-   execute — the production cutover:** stand up a dedicated **prod Supabase project**, repoint
-   **prod-Clerk Third-Party-Auth trust**, and script the env swap with a **pk/sk pairing check** so
-   the crossed-key failure cannot recur. Keep every money/GL step on the deterministic engines
-   behind human gates. (The S46 in-flight wave — M9 loop expansion, reconciliation Wave B,
-   explain-this-X, collections depth, AP money-out MVP — has LANDED, migrations 099–109.)
+0. **Clear the launch blockers, then prep a clean prod cutover.** (a) **Fund/re-enable the
+   Anthropic account** — the org is disabled/unfunded so ALL AI is operationally down (the app
+   degrades gracefully; this is NOT a code bug). Re-verify a full drop-and-parse round-trip + the
+   NL/FP&A paths against live AI once funded. (b) **Make a live-billing decision**, then (if go)
+   wire real Stripe subscription charging so the Operator Console MRR is realized, not list-price
+   computed. (c) **Prepare — do NOT execute — the production cutover:** stand up a dedicated
+   **prod Supabase project**, repoint **prod-Clerk Third-Party-Auth trust**, ensure a **funded
+   Anthropic key**, and script the env swap with a **pk/sk pairing check** so the crossed-key
+   failure cannot recur. (d) **Verify the practice operator flow in Chrome** on the deployed
+   (dev-Clerk) app: new company → assign member + onboarding owner → per-company scoped processing
+   → custom-role enforcement → Operator Console metrics → tenant billing page. (e) **Reconcile the
+   marketing site to shipped reality** (semantic search is FTS not vector; 1099 IRIS not built;
+   insurance-posts now FIXED). Keep every money/GL step on the deterministic engines behind human
+   gates. Note: Stripe is TEST mode + Plaid SANDBOX; payroll provider still unpicked (mock = estimate).
 1. **Finish closing identity gate #9** — org resolution is **CLOSED live** (Clerk native `o.id`
    claim + auto-bind, fallbacks removed) and the dedicated `payments` permission is DONE. The
    residual is now mostly **MANUAL for Mike:** stand up the **Clerk production instance for
