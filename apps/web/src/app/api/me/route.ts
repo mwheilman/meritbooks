@@ -185,15 +185,20 @@ export async function GET(_req: NextRequest) {
     if (roleDef?.companyScope === 'all' || roleDef?.companyScope === 'portcos_and_3rdparty') {
       const { data: allLocs } = await supabase
         .schema('core').from('locations')
-        .select('id, name, code:short_code')
+        .select('id, name, code:short_code, is_management_company')
         .eq('org_id', org.id)
         .order('name');
-      locations = allLocs ?? [];
+      const allRows = (allLocs ?? []) as Array<{ id: string; name: string; code: string; is_management_company: boolean | null }>;
 
       if (roleDef.companyScope === 'portcos_and_3rdparty') {
-        locations = locations.filter(
-          (l) => !l.name.toLowerCase().includes('merit management') && !l.code.toLowerCase().includes('merit-mgmt')
-        );
+        // Exclude the tenant's parent/management entity via a real data flag
+        // (core.locations.is_management_company) rather than a hardcoded name
+        // match — white-label safe for any tenant, not just Merit.
+        locations = allRows
+          .filter((l) => !l.is_management_company)
+          .map(({ id, name, code }) => ({ id, name, code }));
+      } else {
+        locations = allRows.map(({ id, name, code }) => ({ id, name, code }));
       }
     } else {
       const { data: assignedLocs } = await supabase

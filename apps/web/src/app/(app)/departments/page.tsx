@@ -8,6 +8,7 @@ import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { addToast } from '@/hooks';
 import { PageHeader, EmptyState } from '@/components/ui';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 
 type ChargeMethod = 'inherit' | 'revenue' | 'cost_transfer';
 
@@ -68,6 +69,16 @@ const EMPTY_FORM: FormState = {
 };
 
 export default function DepartmentsPage() {
+  // COMPANY-SCOPE CONTROL: departments and inter-department charge setup belong to
+  // one company's structure.
+  return (
+    <CompanyScopeGuard>
+      <DepartmentsPageInner />
+    </CompanyScopeGuard>
+  );
+}
+
+function DepartmentsPageInner() {
   const { data, isLoading, error, refetch } = useQuery<DepartmentsResponse>('/api/departments');
   const [selected, setSelected] = useState<{ dept: DeptLike; companyName: string } | null>(null);
   const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<{ dept: DeptLike; companyName: string }>();

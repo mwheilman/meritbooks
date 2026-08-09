@@ -3,10 +3,20 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/ui';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { JobList } from './job-list';
 import { JobCreateForm } from './job-create-form';
 
 export default function JobsPage() {
+  // COMPANY-SCOPE CONTROL: jobs/projects and their costing belong to one company.
+  return (
+    <CompanyScopeGuard>
+      <JobsPageInner />
+    </CompanyScopeGuard>
+  );
+}
+
+function JobsPageInner() {
   const [showCreate, setShowCreate] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 

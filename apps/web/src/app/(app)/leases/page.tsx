@@ -1,4 +1,5 @@
 import { PageHeader } from '@/components/ui';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { HubTabs } from '../_components/hub-tabs';
 import { LeasesDashboard } from './leases-dashboard';
 
@@ -14,7 +15,9 @@ export default function LeasesPage() {
         description="ASC 842 — drop a lease agreement, confirm the extracted terms, and MeritBooks sets up the right-of-use asset, the lease liability, and the amortization schedule, then posts each period on demand"
       />
       <HubTabs section="assets" />
-      <LeasesDashboard />
+      <CompanyScopeGuard>
+        <LeasesDashboard />
+      </CompanyScopeGuard>
     </>
   );
 }

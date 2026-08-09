@@ -367,7 +367,7 @@ export default function PortfolioPage() {
   return (
     <div className="pb-12">
       <PageHeader
-        title="Portfolio"
+        title="Entities"
         description="Every company on one screen — close, cash, exceptions and overdue balances, with a red/amber/green roll-up."
         actions={
           <div className="flex items-center gap-2">
@@ -509,7 +509,7 @@ export default function PortfolioPage() {
           </div>
           <h3 className="mb-1 text-sm font-medium text-slate-300">No companies yet</h3>
           <p className="max-w-sm text-sm text-slate-500">
-            Add entities under Companies and the portfolio board will light up with their live health.
+            Add entities under Companies and the board will light up with their live health.
           </p>
         </div>
       ) : tab === 'ownership' ? (

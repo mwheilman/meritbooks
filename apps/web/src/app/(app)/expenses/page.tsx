@@ -1,5 +1,6 @@
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { PageHeader } from '@/components/ui';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { ExpensesClient } from './expenses-client';
 import { ExpensesTabs } from './expenses-tabs';
 
@@ -20,7 +21,9 @@ export default async function ExpensesPage() {
       <div className="mb-6">
         <ExpensesTabs />
       </div>
-      <ExpensesClient />
+      <CompanyScopeGuard>
+        <ExpensesClient />
+      </CompanyScopeGuard>
     </>
   );
 }

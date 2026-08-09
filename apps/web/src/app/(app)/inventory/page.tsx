@@ -8,6 +8,7 @@ import { useQuery } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { formatMoney } from '@meritbooks/shared';
 import { PageHeader } from '@/components/ui';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 
 interface ItemRow {
   id: string;
@@ -31,6 +32,15 @@ interface ItemsResponse {
 const METHOD_LABEL: Record<string, string> = { WEIGHTED_AVG: 'Wtd Avg', FIFO: 'FIFO' };
 
 export default function InventoryPage() {
+  // COMPANY-SCOPE CONTROL: inventory items and valuation are per company.
+  return (
+    <CompanyScopeGuard>
+      <InventoryPageInner />
+    </CompanyScopeGuard>
+  );
+}
+
+function InventoryPageInner() {
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const { data, isLoading, error, refetch } = useQuery<ItemsResponse>('/api/inventory/items');

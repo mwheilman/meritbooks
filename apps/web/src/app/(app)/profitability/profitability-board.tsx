@@ -345,10 +345,10 @@ export function ProfitabilityBoard() {
         </div>
       ) : (
         <>
-          {/* Portfolio roll-up */}
+          {/* Consolidated roll-up */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatTile
-              label="Portfolio revenue"
+              label="Consolidated revenue"
               value={formatMoney(rollup.revenueCents, { compact: true })}
               hint={`${rollup.activeCount} of ${rollup.entityCount} entities active`}
               icon={Wallet}
@@ -438,10 +438,10 @@ export function ProfitabilityBoard() {
                     </tr>
                   ))}
                 </tbody>
-                {/* Portfolio total row */}
+                {/* Consolidated total row */}
                 <tfoot>
                   <tr className="border-t border-slate-700/60 bg-surface-950/50 text-slate-200">
-                    <td className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Portfolio</td>
+                    <td className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Consolidated</td>
                     <td className="px-3 py-3 text-right font-mono tabular-nums">{formatMoney(rollup.revenueCents)}</td>
                     <td className="px-3 py-3 text-right font-mono tabular-nums text-slate-400">{formatMoney(rollup.cogsCents)}</td>
                     <td className={clsx('px-3 py-3 text-right font-mono tabular-nums', moneyTone(rollup.grossProfitCents))}>{formatMoney(rollup.grossProfitCents)}</td>
@@ -459,7 +459,7 @@ export function ProfitabilityBoard() {
           <p className="text-[11px] leading-relaxed text-slate-600">
             Each row is that entity&apos;s income statement for the selected month, resolved by account
             type (Revenue − COGS = Gross Profit − OpEx − Other = Net Income), read live from posted GL
-            entries. The Portfolio total is a straight sum; it does not apply intercompany eliminations —
+            entries. The Consolidated total is a straight sum; it does not apply intercompany eliminations —
             the Consolidated statement in Reports does. &ldquo;Statements&rdquo; opens that entity&apos;s full reports.
           </p>
         </>

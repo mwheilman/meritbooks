@@ -4,6 +4,7 @@ import { Repeat, Loader2, AlertCircle, Clock, Check, Pause, Calendar } from 'luc
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { PageHeader } from '@/components/ui';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 
 interface RecurringRow {
   id: string; name: string; description: string | null;
@@ -21,6 +22,15 @@ interface RecurringResponse {
 const FREQ_LABELS: Record<string, string> = { MONTHLY: 'Monthly', QUARTERLY: 'Quarterly', ANNUALLY: 'Annually' };
 
 export default function RecurringPage() {
+  // COMPANY-SCOPE CONTROL: recurring-entry templates generate entries for one company.
+  return (
+    <CompanyScopeGuard>
+      <RecurringPageInner />
+    </CompanyScopeGuard>
+  );
+}
+
+function RecurringPageInner() {
   const { data, isLoading, error } = useQuery<RecurringResponse>('/api/recurring');
   const templates = data?.data ?? [];
   const summary = data?.summary;

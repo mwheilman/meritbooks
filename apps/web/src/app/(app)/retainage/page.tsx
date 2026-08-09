@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { PageHeader, EmptyState } from '@/components/ui';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { BillsTabs } from '../bills/bills-tabs';
 
 interface Row {
@@ -27,6 +28,15 @@ const fmt = (c: number) => (c / 100).toLocaleString('en-US', { style: 'currency'
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function RetainagePage() {
+  // COMPANY-SCOPE CONTROL: retainage withholding/release acts on one company's AP.
+  return (
+    <CompanyScopeGuard>
+      <RetainagePageInner />
+    </CompanyScopeGuard>
+  );
+}
+
+function RetainagePageInner() {
   const { data, isLoading, error, refetch } = useQuery<Overview>('/api/retainage');
   const [release, setRelease] = useState<Row | null>(null);
 

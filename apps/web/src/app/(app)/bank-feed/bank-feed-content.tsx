@@ -4,11 +4,12 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
 import { formatMoney, type BankFeedResponse, type BankFeedRow } from '@meritbooks/shared';
 import type { ApproveBankTransactionInput, FlagTransactionInput } from '@/lib/validations/transactions';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 import { BankFeedFilters } from './bank-feed-filters';
 import { BankFeedList } from './bank-feed-list';
 import { BankFeedMetricsStrip } from './bank-feed-metrics';
 import { EditPanel } from './edit-panel';
-import { CompanySelector } from './company-selector';
 import { StatementImport } from './statement-import';
 import { FileUp, RefreshCw, Copy, X } from 'lucide-react';
 
@@ -106,7 +107,12 @@ export function BankFeedContent() {
   // loads it (e.g. an Explain "based on" link). Held pending until the row is in
   // the loaded set; a bad/missing id simply leaves the list, as before.
   const [pendingExplainId, setPendingExplainId] = useState<string | null>(null);
-  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  // Company scope is now owned by the header + active-company context (the page is
+  // behind <CompanyScopeGuard>, so a specific company is always active here). The
+  // former in-page CompanySelector is retired; we derive the location from the
+  // shared active company. useQuery also auto-attaches this as `location_id`.
+  const { activeCompanyId } = useActiveCompany();
+  const selectedLocationId = isSpecificCompany(activeCompanyId) ? activeCompanyId : null;
   const [flaggingTxn, setFlaggingTxn] = useState<BankFeedRow | null>(null);
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [showStatementImport, setShowStatementImport] = useState(false);
@@ -530,8 +536,7 @@ export function BankFeedContent() {
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <CompanySelector selectedId={selectedLocationId} onChange={setSelectedLocationId} />
+      <div className="mb-4 flex items-center justify-end gap-3">
         <div className="flex items-center gap-2">
           <button
             onClick={handleSync}

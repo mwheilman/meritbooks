@@ -1,13 +1,15 @@
 'use client';
 
 import { UserButton } from '@clerk/nextjs';
-import { Search, Bell, ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import { Search, ChevronDown } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { clsx } from 'clsx';
 import { usePlane } from '@/lib/hooks/use-plane';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { ALL_COMPANIES } from '@/lib/company-scope';
 import { PlaneSwitcher } from '@/components/layout/plane-switcher';
+import { SearchPalette } from '@/components/layout/search-palette';
+import { NotificationsBell } from '@/components/layout/notifications-bell';
 
 interface CompanyOption {
   id: string;
@@ -27,9 +29,25 @@ export function Header() {
   ];
 
   const [companyOpen, setCompanyOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const selectedCompany =
     companies.find((c) => c.id === activeCompanyId) ?? companies[0];
   const { plane } = usePlane();
+
+  // Global shortcut: ⌘/ (primary, matches the button hint) and ⌘K (both open the
+  // search palette). Ignore when a modifier-free keystroke lands in an input so we
+  // never hijack typing; the palette itself owns Esc-to-close.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && (e.key === '/' || e.key.toLowerCase() === 'k')) {
+        e.preventDefault();
+        setSearchOpen((o) => !o);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
     <header className="flex h-[var(--header-height)] items-center justify-between border-b border-slate-800 bg-surface-950 px-6">
@@ -94,18 +112,18 @@ export function Header() {
 
       {/* Right side */}
       <div className="flex items-center gap-3">
-        {/* Search */}
-        <button className="flex items-center gap-2 rounded-lg border border-slate-800 bg-surface-900 px-3 py-1.5 text-sm text-slate-500 hover:border-slate-700 transition-colors w-64">
+        {/* Search — opens the global command palette (⌘/ or ⌘K) */}
+        <button
+          onClick={() => setSearchOpen(true)}
+          className="flex items-center gap-2 rounded-lg border border-slate-800 bg-surface-900 px-3 py-1.5 text-sm text-slate-500 hover:border-slate-700 transition-colors w-64"
+        >
           <Search size={14} />
-          <span>Search transactions...</span>
+          <span>Search everything...</span>
           <kbd className="ml-auto text-2xs text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">⌘/</kbd>
         </button>
 
-        {/* Notifications */}
-        <button className="relative p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.03] transition-colors">
-          <Bell size={18} />
-          <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-500" />
-        </button>
+        {/* Notifications — real Action Inbox feed with a live count badge */}
+        <NotificationsBell />
 
         {/* User */}
         <UserButton
@@ -116,6 +134,9 @@ export function Header() {
           }}
         />
       </div>
+
+      {/* Global search palette overlay (portal-free — fixed-positioned) */}
+      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
   );
 }

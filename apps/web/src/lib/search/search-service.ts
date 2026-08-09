@@ -40,6 +40,14 @@ export interface RunSearchArgs {
   query: string;
   /** Optional caller-supplied type restriction. */
   types?: SearchType[];
+  /**
+   * Optional company (entity) sub-filter — a `core.locations` id. When set, the
+   * transactional retrievers (bank txns, invoices, bills, JEs) are narrowed to
+   * that company via their `location_id` column. Org-level masters (vendors,
+   * customers, GL accounts) are NOT location-scoped. Always a sub-filter WITHIN
+   * the tenant RLS already isolates — never a replacement for it.
+   */
+  locationId?: string | null;
   limit?: number;
   /** When present, ambiguous queries may be enriched via the Core AI gateway. */
   anthropicApiKey?: string | null;
@@ -201,6 +209,7 @@ async function searchBankTransactions(a: RunSearchArgs, parsed: ParsedQuery, now
       .from('bank_transactions')
       .select('id, transaction_date, description, amount_cents, category, final_vendor_id, ai_vendor_id')
       .limit(FETCH_PER_TYPE);
+    if (a.locationId) q = q.eq('location_id', a.locationId);
     q = applyText(q, mode, tsq, textOr);
     if (amtOr) q = q.or(amtOr);
     q = applyDate(q, 'transaction_date', parsed);
@@ -249,6 +258,7 @@ async function searchInvoices(a: RunSearchArgs, parsed: ParsedQuery, nowMs: numb
       .from('invoices')
       .select('id, invoice_number, invoice_date, total_cents, balance_cents, status, memo, customer_id')
       .limit(FETCH_PER_TYPE);
+    if (a.locationId) q = q.eq('location_id', a.locationId);
     q = applyText(q, mode, tsq, textOr);
     if (amtOr) q = q.or(amtOr);
     q = applyDate(q, 'invoice_date', parsed);
@@ -296,6 +306,7 @@ async function searchBills(a: RunSearchArgs, parsed: ParsedQuery, nowMs: number)
       .from('bills')
       .select('id, bill_number, bill_date, total_cents, balance_cents, status, vendor_id')
       .limit(FETCH_PER_TYPE);
+    if (a.locationId) q = q.eq('location_id', a.locationId);
     q = applyText(q, mode, tsq, textOr);
     if (amtOr) q = q.or(amtOr);
     q = applyDate(q, 'bill_date', parsed);
@@ -343,6 +354,7 @@ async function searchJournalEntries(a: RunSearchArgs, parsed: ParsedQuery, nowMs
         .from('gl_entries')
         .select('id, entry_number, entry_date, memo, source_module, status')
         .limit(FETCH_PER_TYPE);
+      if (a.locationId) q = q.eq('location_id', a.locationId);
       q = applyText(q, mode, tsq, textOr);
       q = applyDate(q, 'entry_date', parsed);
       return q;
@@ -357,6 +369,7 @@ async function searchJournalEntries(a: RunSearchArgs, parsed: ParsedQuery, nowMs
       ...parsed.amounts.exact.map((c) => `credit_cents.eq.${c}`),
     ].join(',');
     let lq = a.supabase.from('gl_entry_lines').select('gl_entry_id').limit(FETCH_PER_TYPE);
+    if (a.locationId) lq = lq.eq('location_id', a.locationId);
     lq = lq.or(amtOr);
     const { data } = await lq;
     for (const r of (data ?? []) as Array<{ gl_entry_id: string }>) entryIds.add(r.gl_entry_id);

@@ -8,6 +8,7 @@ import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { PageHeader } from '@/components/ui';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { HubTabs } from '../_components/hub-tabs';
 import { RollForwardView } from './roll-forward-view';
 import { ImportFromInvoice } from './import-from-invoice';
@@ -53,6 +54,15 @@ const METHOD_LABELS: Record<string, string> = {
 };
 
 export default function FixedAssetsPage() {
+  // COMPANY-SCOPE CONTROL: the fixed-asset register + depreciation are per company.
+  return (
+    <CompanyScopeGuard>
+      <FixedAssetsPageInner />
+    </CompanyScopeGuard>
+  );
+}
+
+function FixedAssetsPageInner() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');

@@ -1,4 +1,5 @@
 import { PageHeader } from '@/components/ui';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { HubTabs } from '../_components/hub-tabs';
 import { InsuranceDashboard } from './insurance-dashboard';
 
@@ -14,7 +15,9 @@ export default function InsurancePage() {
         description="Drop your own insurance policies — AI extracts carrier, coverage, limits, deductible, and premium for you to confirm. MeritBooks then tracks coverage and flags renewals before they lapse."
       />
       <HubTabs section="assets" />
-      <InsuranceDashboard />
+      <CompanyScopeGuard>
+        <InsuranceDashboard />
+      </CompanyScopeGuard>
     </>
   );
 }

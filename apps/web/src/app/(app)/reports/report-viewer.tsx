@@ -10,6 +10,9 @@ import {
   Landmark, PieChart, Filter
 } from 'lucide-react';
 import { useQuery } from '@/hooks';
+import { useMe } from '@/lib/hooks/use-me';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { canConsolidate, isSpecificCompany } from '@/lib/company-scope';
 import { formatMoney } from '@meritbooks/shared';
 import type { Location } from '@meritbooks/shared';
 import { CashFlowReport } from './cash-flow-report';
@@ -247,6 +250,26 @@ export function ReportViewer() {
   const { data: rawLocs } = useQuery<LocationEx[]>('/api/locations');
   const locations = rawLocs ?? [];
 
+  // ── CONSOLIDATION GATE ──────────────────────────────────────────────
+  // A consolidated / all-entities view is reserved for tenant leadership
+  // (canConsolidate). Everyone else is pinned to a single company — defaulted to
+  // the header's active company — and never sees an "All Companies" option, so a
+  // bookkeeper can't accidentally read across entities.
+  const { user } = useMe();
+  const mayConsolidate = canConsolidate(user);
+  const { activeCompanyId, companies: myCompanies } = useActiveCompany();
+
+  useEffect(() => {
+    if (mayConsolidate) return;
+    const forced = isSpecificCompany(activeCompanyId)
+      ? activeCompanyId
+      : (myCompanies[0]?.id ?? '');
+    setSelectedIndustries([]);
+    setSelectedLocs((prev) =>
+      prev.length === 1 && prev[0] === forced ? prev : forced ? [forced] : [],
+    );
+  }, [mayConsolidate, activeCompanyId, myCompanies]);
+
   const industries = useMemo(() => {
     const set = new Set(locations.map((l) => l.industry).filter(Boolean) as string[]);
     return Array.from(set).sort();
@@ -457,9 +480,28 @@ export function ReportViewer() {
                 </div>
               )}
 
-              <MultiSelect label="Companies" icon={Building2} options={companyOptions} selected={selectedLocs} onChange={setSelectedLocs} allLabel="All Companies" />
-              {industries.length > 0 && (
-                <MultiSelect label="Industries" icon={Briefcase} options={industryOptions} selected={selectedIndustries} onChange={setSelectedIndustries} allLabel="All Industries" />
+              {mayConsolidate ? (
+                <>
+                  <MultiSelect label="Companies" icon={Building2} options={companyOptions} selected={selectedLocs} onChange={setSelectedLocs} allLabel="All Companies" />
+                  {industries.length > 0 && (
+                    <MultiSelect label="Industries" icon={Briefcase} options={industryOptions} selected={selectedIndustries} onChange={setSelectedIndustries} allLabel="All Industries" />
+                  )}
+                </>
+              ) : (
+                // Non-admins: single-company selector, no consolidated ("All") option.
+                <div className="flex items-center gap-1.5">
+                  <Building2 size={13} className="text-slate-500" />
+                  <select
+                    value={selectedLocs[0] ?? ''}
+                    onChange={(e) => setSelectedLocs(e.target.value ? [e.target.value] : [])}
+                    className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"
+                    aria-label="Company"
+                  >
+                    {myCompanies.map((c) => (
+                      <option key={c.id} value={c.id}>{c.shortCode} · {c.name}</option>
+                    ))}
+                  </select>
+                </div>
               )}
 
               {reportDef?.hasBasis && (

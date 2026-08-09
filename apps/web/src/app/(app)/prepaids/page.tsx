@@ -1,4 +1,5 @@
 import { PageHeader } from '@/components/ui';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { HubTabs } from '../_components/hub-tabs';
 import { PrepaidsDashboard } from './prepaids-dashboard';
 
@@ -14,7 +15,9 @@ export default function PrepaidsPage() {
         description="Amortize prepaid costs — insurance, subscriptions, retainers — straight-line from the prepaid asset into expense, and post each month's amortization on schedule"
       />
       <HubTabs section="assets" />
-      <PrepaidsDashboard />
+      <CompanyScopeGuard>
+        <PrepaidsDashboard />
+      </CompanyScopeGuard>
     </>
   );
 }

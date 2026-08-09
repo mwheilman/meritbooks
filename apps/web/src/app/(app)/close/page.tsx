@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { CloseTabs } from './close-tabs';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 
 export const dynamic = 'force-dynamic';
@@ -11,8 +12,10 @@ export default async function ClosePage() {
   // Suspense wraps the client tab shell because it reads the initial tab from `?tab=`
   // via useSearchParams (Next 14 requirement).
   return (
-    <Suspense fallback={null}>
-      <CloseTabs />
-    </Suspense>
+    <CompanyScopeGuard>
+      <Suspense fallback={null}>
+        <CloseTabs />
+      </Suspense>
+    </CompanyScopeGuard>
   );
 }

@@ -1,4 +1,5 @@
 import { requirePagePermission } from '@/lib/rbac/page-guard';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { PoClient } from './po-client';
 
 export const dynamic = 'force-dynamic';
@@ -8,5 +9,10 @@ export default async function PurchaseOrdersPage() {
   // they gate behind the same `bills` (AP) permission as the Bills screen. Route
   // handlers re-enforce create/receive/match independently. Fails closed.
   await requirePagePermission('bills', 'view');
-  return <PoClient />;
+  // COMPANY-SCOPE CONTROL: POs are raised against one company's books.
+  return (
+    <CompanyScopeGuard>
+      <PoClient />
+    </CompanyScopeGuard>
+  );
 }

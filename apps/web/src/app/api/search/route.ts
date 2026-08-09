@@ -21,6 +21,12 @@ import { ALL_SEARCH_TYPES, type SearchType } from '@/lib/search/types';
 const searchSchema = z.object({
   query: z.string().trim().min(2).max(500),
   types: z.array(z.enum(ALL_SEARCH_TYPES as unknown as [SearchType, ...SearchType[]])).optional(),
+  /**
+   * Optional active-company (entity) sub-filter — a `core.locations` uuid. When
+   * present, transactional results are narrowed to that company. A SUB-filter
+   * within the tenant RLS already isolates; masters stay org-wide.
+   */
+  location_id: z.string().uuid().optional(),
   limit: z.number().int().min(1).max(100).optional(),
 });
 
@@ -36,6 +42,7 @@ export const POST = apiHandler(searchSchema, async (body: SearchInput, ctx) => {
     userId: ctx.userId,
     query: body.query,
     types: body.types,
+    locationId: body.location_id ?? null,
     limit: body.limit,
     anthropicApiKey: getAnthropicApiKey(),
   });

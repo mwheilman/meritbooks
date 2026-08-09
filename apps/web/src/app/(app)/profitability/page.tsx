@@ -18,7 +18,7 @@ export default async function ProfitabilityPage() {
   return (
     <>
       <PageHeader
-        title="Portfolio Profitability"
+        title="Entity Profitability"
         description="Per-entity P&L and margin for the period — ranked, and derived from the books, not asserted."
       />
       <ProfitabilityBoard />

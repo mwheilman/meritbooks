@@ -166,7 +166,7 @@ export default function EntitySnapshotPage() {
         href="/portfolio"
         className="mb-3 inline-flex items-center gap-1.5 text-xs text-slate-400 transition-colors hover:text-slate-200"
       >
-        <ArrowLeft size={14} /> Portfolio
+        <ArrowLeft size={14} /> Entities
       </Link>
 
       <PageHeader

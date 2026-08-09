@@ -10,6 +10,7 @@ import { formatMoney } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { PageHeader, EmptyState } from '@/components/ui';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { VendorComplianceTabs } from './vendor-compliance-tabs';
 
 type DocState = 'valid' | 'expiring' | 'expired' | 'missing' | 'pending';
@@ -68,6 +69,16 @@ const fmtDate = (d: string | null) =>
   d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : null;
 
 export default function VendorCompliancePage() {
+  // COMPANY-SCOPE CONTROL: vendor-compliance holds/chases are worked for one
+  // company's books, so processing is pinned to a single company.
+  return (
+    <CompanyScopeGuard>
+      <VendorCompliancePageInner />
+    </CompanyScopeGuard>
+  );
+}
+
+function VendorCompliancePageInner() {
   const { data, isLoading, error, refetch } = useQuery<Overview>('/api/vendor-compliance');
   const [grantFor, setGrantFor] = useState<Row | null>(null);
   const [busy, setBusy] = useState<string | null>(null);

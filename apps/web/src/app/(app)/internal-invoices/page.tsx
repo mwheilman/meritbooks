@@ -7,6 +7,7 @@ import { Loader2, AlertCircle, Plus, ArrowLeftRight, Trash2, X, Check, Ban, Send
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { PageHeader, EmptyState } from '@/components/ui';
+import { CompanyScopeGuard } from '@/components/company-scope-guard';
 
 type Status = 'draft' | 'sent' | 'approved' | 'rejected' | 'booked' | 'void';
 type ChargeMethod = 'inherit' | 'revenue' | 'cost_transfer';
@@ -76,6 +77,16 @@ const FILTERS: Array<{ key: string; label: string }> = [
 ];
 
 export default function InternalInvoicesPage() {
+  // COMPANY-SCOPE CONTROL: inter-department internal invoices post within one
+  // company's books.
+  return (
+    <CompanyScopeGuard>
+      <InternalInvoicesPageInner />
+    </CompanyScopeGuard>
+  );
+}
+
+function InternalInvoicesPageInner() {
   const [filter, setFilter] = useState('all');
   const { data, isLoading, error, refetch } = useQuery<ListResponse>(
     `/api/internal-invoices${filter !== 'all' ? `?status=${filter}` : ''}`,

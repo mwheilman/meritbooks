@@ -8,13 +8,23 @@ import { clsx } from 'clsx';
 import { navigation } from '@/lib/navigation';
 import { usePlane } from '@/lib/hooks/use-plane';
 import { PLANES } from '@/lib/planes';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
 
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const { plane } = usePlane();
+  const { isAll } = useActiveCompany();
+  // Control: in the Book-of-Record plane the processing nav stays hidden until a
+  // specific company is selected, so a bookkeeper can never start working (or land
+  // on a page) without first choosing the account. Only Home (the consolidated
+  // dashboard) shows; general account settings live in the header user menu. Admin
+  // planes (practice/platform) are cross-company by design and are not gated.
+  const mustSelectCompany = plane === 'books' && isAll;
   const activeGroups = PLANES[plane].groups;
-  const visibleNav = navigation.filter((g) => activeGroups.includes(g.label));
+  const visibleNav = navigation
+    .filter((g) => activeGroups.includes(g.label))
+    .filter((g) => !mustSelectCompany || g.label === 'Home');
   const PlaneIcon = PLANES[plane].icon;
 
   return (
@@ -105,6 +115,15 @@ export function Sidebar() {
             </ul>
           </div>
         ))}
+        {mustSelectCompany && !collapsed && (
+          <div className="mx-2 mt-2 rounded-lg border border-brand-500/20 bg-brand-500/5 px-3 py-3">
+            <p className="text-xs font-semibold text-brand-300">Select a company</p>
+            <p className="mt-1 text-2xs leading-snug text-slate-500">
+              Choose a company in the top bar to open its workspace. Processing is
+              scoped to one company at a time so nothing posts to the wrong account.
+            </p>
+          </div>
+        )}
       </nav>
 
       {/* CPA Desk trigger */}
