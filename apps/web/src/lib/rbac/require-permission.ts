@@ -86,10 +86,26 @@ export async function requirePermission(
     .limit(1);
 
   const rawRole = (employees?.[0]?.role ?? null) as string | null;
-  const role = rawRole ? normalizeMembershipRole(rawRole) : null;
 
-  const denied = permissionDenied(role, featureId, action);
-  if (denied) return { ok: false, response: denied };
+  // Custom-role-aware authorization: merge the system default for the (base) role
+  // with this org's stored overrides (migration 130). For a system role with no
+  // overrides this exactly equals hasPermission(normalized role); an overrides-read
+  // failure degrades to the system default (fetchOverrides returns {} on error), so
+  // a transient DB issue can never LOCK OUT a user who is allowed by default. Only an
+  // unknown/absent role denies.
+  const { effectivePermission } = await import('@/lib/rbac/resolve-permissions');
+  const allowed = rawRole
+    ? await effectivePermission(supabase, orgId, rawRole, featureId, action)
+    : false;
+  if (!allowed) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: 'Forbidden', code: 'FORBIDDEN' }, { status: 403 }),
+    };
+  }
 
-  return { ok: true, role: role as UserRole, orgId };
+  // Informational only (authorization already decided above). A custom role has no
+  // UserRole; fall back to the least-privileged role so no consumer mis-reads it as elevated.
+  const role = (rawRole ? normalizeMembershipRole(rawRole) : null) ?? ('business_user' as UserRole);
+  return { ok: true, role, orgId };
 }

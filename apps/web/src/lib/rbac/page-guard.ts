@@ -41,8 +41,7 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { hasPermission, type FeatureAction, type UserRole } from '@/lib/rbac/permissions';
-import { normalizeMembershipRole } from '@/lib/rbac/role-normalize';
+import { type FeatureAction } from '@/lib/rbac/permissions';
 import { resolveTenantOrgId } from '@/lib/rbac/resolve-tenant';
 
 /** Where an unauthorized (but authenticated) user is bounced. Their own book of
@@ -112,7 +111,7 @@ async function resolvePageRole(
   admin: SupabaseClient,
   orgId: string,
   clerkUserId: string,
-): Promise<UserRole | null> {
+): Promise<string | null> {
   // 1. Canonical identity spine: core.users -> core.memberships (active).
   const { data: user, error: userErr } = await admin
     .schema('core')
@@ -133,9 +132,10 @@ async function resolvePageRole(
       .maybeSingle();
     if (memErr) return null; // fail closed on lookup error
     if (membership?.role) {
-      // Authoritative: honor the membership decision, do NOT fall back.
-      // normalizeMembershipRole returns null for unrecognized roles → fail closed.
-      return normalizeMembershipRole(membership.role as string);
+      // Authoritative: honor the membership decision, do NOT fall back. Return the RAW
+      // role string; effectivePermission() resolves it (system OR custom) and fails
+      // closed on anything it can't recognize.
+      return membership.role as string;
     }
     // user exists but no active membership in this org -> transitional fallback.
   }
@@ -150,7 +150,7 @@ async function resolvePageRole(
     .eq('is_active', true)
     .maybeSingle();
   if (empErr || !emp?.role) return null; // no active role -> fail closed
-  return normalizeMembershipRole(emp.role as string);
+  return emp.role as string;
 }
 
 /**
@@ -187,9 +187,13 @@ export async function requirePagePermission(
 
       const orgId = await resolveOrgId(admin, claimOrgId, clerkUserId);
       if (orgId) {
-        const role = await resolvePageRole(admin, orgId, clerkUserId);
-        if (role && hasPermission(role, featureId, action)) {
-          allowed = true;
+        const rawRole = await resolvePageRole(admin, orgId, clerkUserId);
+        if (rawRole) {
+          // Custom-role-aware, degrade-safe: system default merged with org overrides.
+          const { effectivePermission } = await import('@/lib/rbac/resolve-permissions');
+          if (await effectivePermission(admin, orgId, rawRole, featureId, action)) {
+            allowed = true;
+          }
         }
       }
     }

@@ -1,17 +1,17 @@
 import { redirect } from 'next/navigation';
-import { KeyRound, ToggleRight, Building2 } from 'lucide-react';
+import { ToggleRight, Receipt } from 'lucide-react';
 import { PageHeader } from '@/components/ui';
 import { resolvePlatformStaff } from '@/app/api/platform/_lib/platform-auth';
+import { OperatorDashboard } from './_components/operator-dashboard';
 import { FeeRevenueReport } from './_components/fee-revenue-report';
 
 export const dynamic = 'force-dynamic';
 
 // Remaining operator-console surfaces still to be built (shown below the live
-// fee-revenue report so the plane's roadmap stays visible).
+// business dashboard so the plane's roadmap stays visible).
 const SECTIONS = [
-  { icon: Building2, title: 'Tenants', desc: 'Provision and manage merchant/customer organizations.' },
-  { icon: KeyRound, title: 'Licensing & Seats', desc: 'Plans, seat counts, and term per tenant.' },
   { icon: ToggleRight, title: 'Entitlements', desc: 'Toggle features (bank feed, consolidation, analytics) per tenant.' },
+  { icon: Receipt, title: 'Billing & Plans', desc: 'Connect tenant billing to populate subscription MRR and invoices.' },
 ];
 
 export default async function PlatformPage() {
@@ -26,16 +26,27 @@ export default async function PlatformPage() {
     <>
       <PageHeader
         title="Operator Console"
-        description="MeritBooks platform administration — cross-tenant fee revenue and oversight."
+        description="MeritBooks platform business — tenants, revenue, and the cost to run them, across every tenant."
       />
 
-      {/* Live: cross-tenant application-fee revenue the platform operator earned. */}
-      <FeeRevenueReport />
+      {/* Live: the cross-tenant operator business dashboard (tenants, revenue, costs). */}
+      <OperatorDashboard />
+
+      {/* Revenue deep-dive: realized processor-fee revenue, by rail / tenant / month. */}
+      <div className="mt-10">
+        <div className="mb-4">
+          <h2 className="text-base font-semibold text-white">Processor fee revenue — detail</h2>
+          <p className="text-sm text-slate-500">
+            The application fee earned on card and ACH collections, broken out by rail, tenant, and month.
+          </p>
+        </div>
+        <FeeRevenueReport />
+      </div>
 
       {/* Roadmap: the rest of the operator plane. */}
-      <div className="mt-8">
+      <div className="mt-10">
         <p className="text-2xs uppercase tracking-wider text-slate-500 mb-3">More operator tools</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {SECTIONS.map((s) => {
             const Icon = s.icon;
             return (
