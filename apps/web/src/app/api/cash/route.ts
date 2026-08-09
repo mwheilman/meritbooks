@@ -40,6 +40,8 @@ interface CashAccount {
   availableCents: number;
   status: string;
   updatedAt: string | null;
+  /** No feed activity in STALE_DAYS (or never updated) — the balance may be out of date. */
+  stale: boolean;
 }
 interface CashLocation {
   locationId: string;
@@ -48,7 +50,12 @@ interface CashLocation {
   accounts: CashAccount[];
   totalCashCents: number;
   cashStatus: string;
+  staleCount: number;
 }
+
+// A balance not refreshed within this many days is flagged stale (bank feeds
+// normally update daily; a few days' grace covers weekends/holidays).
+const STALE_DAYS = 4;
 
 // Same banding as the v_cash_position view, applied to the location total.
 function cashStatus(totalCents: number, minimumCents: number): string {
@@ -91,9 +98,15 @@ export async function GET(request: Request) {
     for (const l of (locs ?? []) as LocationRow[]) locMap.set(l.id, l);
   }
 
+  const staleBefore = Date.now() - STALE_DAYS * 86_400_000;
+  let asOfDate: string | null = null;
+
   const byLoc = new Map<string, CashLocation>();
   for (const row of accounts) {
     const loc = locMap.get(row.location_id);
+    const updatedAt = row.balance_updated_at;
+    const stale = !updatedAt || new Date(updatedAt).getTime() < staleBefore;
+    if (updatedAt && (!asOfDate || updatedAt > asOfDate)) asOfDate = updatedAt;
     const account: CashAccount = {
       id: row.id,
       name: row.account_name ?? row.institution_name ?? 'Unknown',
@@ -102,12 +115,14 @@ export async function GET(request: Request) {
       balanceCents: Number(row.current_balance_cents ?? 0),
       availableCents: Number(row.available_balance_cents ?? row.current_balance_cents ?? 0),
       status: 'ADEQUATE',
-      updatedAt: row.balance_updated_at,
+      updatedAt,
+      stale,
     };
     const existing = byLoc.get(row.location_id);
     if (existing) {
       existing.accounts.push(account);
       existing.totalCashCents += account.balanceCents;
+      if (stale) existing.staleCount += 1;
     } else {
       byLoc.set(row.location_id, {
         locationId: row.location_id,
@@ -116,6 +131,7 @@ export async function GET(request: Request) {
         accounts: [account],
         totalCashCents: account.balanceCents,
         cashStatus: 'ADEQUATE',
+        staleCount: stale ? 1 : 0,
       });
     }
   }
@@ -128,6 +144,7 @@ export async function GET(request: Request) {
   const criticalCount = locations.filter((l) => l.cashStatus === 'CRITICAL').length;
   const nearMinCount = locations.filter((l) => l.cashStatus === 'NEAR_MINIMUM').length;
   const totalAccounts = locations.reduce((s, l) => s + l.accounts.length, 0);
+  const staleCount = locations.reduce((s, l) => s + l.staleCount, 0);
 
   return NextResponse.json({
     locations,
@@ -137,6 +154,8 @@ export async function GET(request: Request) {
       accountCount: totalAccounts,
       criticalCount,
       nearMinCount,
+      staleCount,
+      asOfDate,
     },
   });
 }

@@ -44,10 +44,14 @@ import { formatMoney } from '@meritbooks/shared';
 
 export type CloseTaskKey =
   | 'bank_feeds_imported'
+  | 'journal_drafts_posted'
   | 'reconciliations_tied'
   | 'ar_subledger_tie'
   | 'ap_subledger_tie'
   | 'uncategorized_cleared'
+  | 'bills_on_hold_cleared'
+  | 'unapplied_payments_cleared'
+  | 'pending_approvals_cleared'
   | 'exceptions_cleared'
   | 'accruals_posted'
   | 'prepaids_posted'
@@ -75,6 +79,8 @@ export interface CloseTaskDef {
   order: number;
   /** Target close day (close_checklists.due_day): INITIAL 3 · MID 7 · FINAL 10. */
   dueDay: number;
+  /** Where the operator goes to clear this open item (in-app deep link). */
+  deepLinkHref?: string;
 }
 
 /**
@@ -95,6 +101,21 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
     unit: 'cents',
     order: 1,
     dueDay: 3,
+    deepLinkHref: '/bank-feed',
+  },
+  {
+    key: 'journal_drafts_posted',
+    label: 'Draft journal entries posted',
+    description:
+      'No unposted (draft) journal entries are dated in this period. A draft that is not posted is not in the ledger, so the period P&L and balance sheet are incomplete until it is posted or discarded.',
+    kind: 'AUTO',
+    blocking: true,
+    dependsOn: [],
+    phase: 'INITIAL',
+    unit: 'count',
+    order: 2,
+    dueDay: 3,
+    deepLinkHref: '/journal-entries',
   },
   {
     key: 'reconciliations_tied',
@@ -106,8 +127,9 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
     dependsOn: ['bank_feeds_imported'],
     phase: 'MID_CLOSE',
     unit: 'count',
-    order: 2,
+    order: 3,
     dueDay: 7,
+    deepLinkHref: '/reconciliation',
   },
   {
     key: 'ar_subledger_tie',
@@ -119,8 +141,9 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
     dependsOn: ['reconciliations_tied'],
     phase: 'MID_CLOSE',
     unit: 'cents',
-    order: 3,
+    order: 4,
     dueDay: 7,
+    deepLinkHref: '/collections',
   },
   {
     key: 'ap_subledger_tie',
@@ -132,8 +155,9 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
     dependsOn: ['reconciliations_tied'],
     phase: 'MID_CLOSE',
     unit: 'cents',
-    order: 4,
+    order: 5,
     dueDay: 7,
+    deepLinkHref: '/bills',
   },
   {
     key: 'uncategorized_cleared',
@@ -145,8 +169,51 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
     dependsOn: ['bank_feeds_imported'],
     phase: 'MID_CLOSE',
     unit: 'cents',
-    order: 5,
+    order: 6,
     dueDay: 7,
+    deepLinkHref: '/bank-feed',
+  },
+  {
+    key: 'bills_on_hold_cleared',
+    label: 'Bills on hold cleared',
+    description:
+      'No vendor bills are sitting in an on-hold state for this entity. An on-hold bill can hide an unrecorded liability or a dispute that belongs to the period — resolve or release each one before closing.',
+    kind: 'AUTO',
+    blocking: false,
+    dependsOn: ['bank_feeds_imported'],
+    phase: 'MID_CLOSE',
+    unit: 'count',
+    order: 7,
+    dueDay: 7,
+    deepLinkHref: '/bills',
+  },
+  {
+    key: 'unapplied_payments_cleared',
+    label: 'Customer payments applied',
+    description:
+      'Every customer payment received is applied to an invoice — no cash is left sitting unapplied. Unapplied receipts overstate open AR and distort the receivable subledger tie.',
+    kind: 'AUTO',
+    blocking: false,
+    dependsOn: ['bank_feeds_imported'],
+    phase: 'MID_CLOSE',
+    unit: 'cents',
+    order: 8,
+    dueDay: 7,
+    deepLinkHref: '/cash-application',
+  },
+  {
+    key: 'pending_approvals_cleared',
+    label: 'Pending approvals resolved',
+    description:
+      'No period-dated bill or journal entry is still waiting in an approval chain. A document pending approval is not yet posted, so the period is incomplete until each one is approved (and posted) or withdrawn.',
+    kind: 'AUTO',
+    blocking: true,
+    dependsOn: ['bank_feeds_imported'],
+    phase: 'MID_CLOSE',
+    unit: 'count',
+    order: 9,
+    dueDay: 7,
+    deepLinkHref: '/inbox',
   },
   {
     key: 'exceptions_cleared',
@@ -158,8 +225,9 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
     dependsOn: ['bank_feeds_imported'],
     phase: 'MID_CLOSE',
     unit: 'count',
-    order: 6,
+    order: 10,
     dueDay: 7,
+    deepLinkHref: '/exceptions',
   },
   {
     key: 'accruals_posted',
@@ -171,7 +239,7 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
     dependsOn: ['ar_subledger_tie', 'ap_subledger_tie'],
     phase: 'FINAL',
     unit: 'none',
-    order: 7,
+    order: 11,
     dueDay: 10,
   },
   {
@@ -184,7 +252,7 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
     dependsOn: ['ar_subledger_tie', 'ap_subledger_tie'],
     phase: 'FINAL',
     unit: 'none',
-    order: 8,
+    order: 12,
     dueDay: 10,
   },
   {
@@ -197,7 +265,7 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
     dependsOn: ['ar_subledger_tie', 'ap_subledger_tie'],
     phase: 'FINAL',
     unit: 'none',
-    order: 9,
+    order: 13,
     dueDay: 10,
   },
   {
@@ -208,17 +276,19 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
     kind: 'MANUAL',
     blocking: true,
     dependsOn: [
+      'journal_drafts_posted',
       'reconciliations_tied',
       'ar_subledger_tie',
       'ap_subledger_tie',
       'uncategorized_cleared',
+      'pending_approvals_cleared',
       'accruals_posted',
       'prepaids_posted',
       'depreciation_posted',
     ],
     phase: 'FINAL',
     unit: 'none',
-    order: 10,
+    order: 14,
     dueDay: 10,
   },
 ] as const;
@@ -262,6 +332,16 @@ export interface CloseSignals {
   leakageItems: number;
   /** Open review-queue exceptions (ai_decisions PROPOSED). Clear when 0. */
   openExceptions: number;
+  /** Unposted (draft) journal entries dated in the period. Clear when 0. */
+  unpostedDraftCount: number;
+  /** Vendor bills sitting ON_HOLD for the entity (as of period end). Clear when 0. */
+  billsOnHoldCount: number;
+  /** Customer payments with cash still unapplied to an invoice. Clear when 0. */
+  unappliedPaymentCount: number;
+  /** Dollar amount of that unapplied customer cash (display context). */
+  unappliedPaymentCents: number;
+  /** Period-relevant bills/JEs still awaiting an approval decision. Clear when 0. */
+  pendingApprovalCount: number;
 }
 
 /** Set of MANUAL task keys a human has checked off for an entity + period. */
@@ -394,6 +474,47 @@ function evaluateAuto(key: CloseTaskKey, s: CloseSignals): AutoCheck {
         driverValue: v,
         driverLabel: ok ? 'Queue clear' : `${v} open exception(s)`,
         reason: ok ? null : `${v} proposal(s) await human review in the exception queue`,
+      };
+    }
+    case 'journal_drafts_posted': {
+      const v = s.unpostedDraftCount;
+      const ok = v === 0;
+      return {
+        satisfied: ok,
+        driverValue: v,
+        driverLabel: ok ? 'All entries posted' : `${v} draft(s) unposted`,
+        reason: ok ? null : `${v} journal ${v === 1 ? 'entry is' : 'entries are'} still in draft and not posted to this period`,
+      };
+    }
+    case 'bills_on_hold_cleared': {
+      const v = s.billsOnHoldCount;
+      const ok = v === 0;
+      return {
+        satisfied: ok,
+        driverValue: v,
+        driverLabel: ok ? 'None on hold' : `${v} bill(s) on hold`,
+        reason: ok ? null : `${v} vendor bill(s) are on hold and may represent an unrecorded liability or unresolved dispute`,
+      };
+    }
+    case 'unapplied_payments_cleared': {
+      const v = s.unappliedPaymentCents;
+      const ok = v === 0;
+      const n = s.unappliedPaymentCount;
+      return {
+        satisfied: ok,
+        driverValue: v,
+        driverLabel: ok ? 'All applied' : `${formatMoney(v)} unapplied`,
+        reason: ok ? null : `${formatMoney(v)} across ${n} customer payment(s) is received but not applied to an invoice`,
+      };
+    }
+    case 'pending_approvals_cleared': {
+      const v = s.pendingApprovalCount;
+      const ok = v === 0;
+      return {
+        satisfied: ok,
+        driverValue: v,
+        driverLabel: ok ? 'None pending' : `${v} awaiting approval`,
+        reason: ok ? null : `${v} period-dated bill(s)/journal entr${v === 1 ? 'y is' : 'ies are'} still awaiting an approval decision`,
       };
     }
     default:

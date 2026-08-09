@@ -71,8 +71,18 @@ export async function POST(req: NextRequest) {
   const company = loc as { id: string; short_code: string; name: string };
 
   // Coerce uploaded rows to SourceLine (balances come straight from the file).
+  //
+  // Messy-CSV robustness (no silent drops): blank lines are already dropped by the
+  // parser. Here we additionally (a) support a single SIGNED balance column when the
+  // file has no separate debit/credit columns, and (b) EXCLUDE — and report, never
+  // silently — subtotal/total rows (a line carrying BOTH a debit and a credit is not a
+  // real account balance) and rows with no account code. Zero-balance rows are noted.
   const sourceLines: SourceLine[] = [];
   const rowErrors: { row: number; message: string }[] = [];
+  const excluded: { row: number; reason: string }[] = [];
+  let zeroRows = 0;
+  const hasAmountColumn = !!body.mapping?.amount_cents;
+
   body.rows.forEach((raw, i) => {
     const rowNum = i + 2;
     const rec: Record<string, string | number | boolean | null> = {};
@@ -85,11 +95,33 @@ export async function POST(req: NextRequest) {
       rec[field.key] = res.value;
     }
     if (!ok) return;
-    const debit = Number(rec.debit_cents ?? 0);
-    const credit = Number(rec.credit_cents ?? 0);
-    if (debit < 0 || credit < 0) { rowErrors.push({ row: rowNum, message: 'Amounts cannot be negative' }); return; }
+
+    const account = String(rec.source_account ?? '').trim();
+    if (!account) { excluded.push({ row: rowNum, reason: 'No account code — excluded (looks like a blank or section row).' }); return; }
+
+    let debit = Number(rec.debit_cents ?? 0);
+    let credit = Number(rec.credit_cents ?? 0);
+    const amount = Number(rec.amount_cents ?? 0);
+
+    // Single signed-balance column → split by sign (positive = debit, negative = credit).
+    if (hasAmountColumn && debit === 0 && credit === 0 && amount !== 0) {
+      if (amount > 0) debit = amount; else credit = -amount;
+    }
+
+    // Tolerate the signed-amount convention (a credit shown as a negative debit, or
+    // vice versa) that QuickBooks/Sage/Xero exports commonly use — fold it, never error.
+    if (debit < 0) { credit += -debit; debit = 0; }
+    if (credit < 0) { debit += -credit; credit = 0; }
+
+    if (debit > 0 && credit > 0) {
+      // A real trial-balance line is a debit XOR a credit; both filled ⇒ a totals row.
+      excluded.push({ row: rowNum, reason: `Row has both a debit and a credit (account ${account}) — excluded as a subtotal/total row.` });
+      return;
+    }
+    if (debit === 0 && credit === 0) { zeroRows++; return; } // zero balance — nothing to post
+
     sourceLines.push({
-      sourceAccount: String(rec.source_account ?? '').trim(),
+      sourceAccount: account,
       sourceName: rec.source_name ? String(rec.source_name) : null,
       debitCents: debit,
       creditCents: credit,
@@ -97,10 +129,15 @@ export async function POST(req: NextRequest) {
   });
 
   if (rowErrors.length > 0) {
-    return NextResponse.json({ error: 'The file has invalid rows', errors: rowErrors.slice(0, 200) }, { status: 422 });
+    return NextResponse.json({ error: 'The file has invalid rows', errors: rowErrors.slice(0, 200), excluded: excluded.slice(0, 200) }, { status: 422 });
   }
   if (sourceLines.length === 0) {
-    return NextResponse.json({ error: 'No usable rows in the file' }, { status: 422 });
+    return NextResponse.json({
+      error: excluded.length > 0
+        ? 'No usable account rows — every row was excluded as a total/summary or blank line. Check that Debit/Credit (or Signed Balance) columns are mapped.'
+        : 'No usable rows in the file',
+      excluded: excluded.slice(0, 200),
+    }, { status: 422 });
   }
 
   // Load COA targets and propose the mapping (AI never sees a balance).
@@ -129,9 +166,11 @@ export async function POST(req: NextRequest) {
     mapping,
     openingBalances: assembled.openingBalances,
     balance: assembled.balance,
+    balanceSheet: assembled.balanceSheet,
     unmapped: assembled.unmapped,
     unknownTargets: assembled.unknownTargets,
     sourceTotals: assembled.sourceTotals,
+    plAcknowledged: false,
     tiedOut: false,
     tiedOutBy: null,
     tiedOutAt: null,
@@ -165,6 +204,11 @@ export async function POST(req: NextRequest) {
     sourceCount: sources.length,
     aiUsed,
     aiError,
+    plAcknowledged: false,
+    // Non-silent report of what the parser set aside, so nothing disappears quietly.
+    excluded: excluded.slice(0, 200),
+    excludedCount: excluded.length,
+    zeroRows,
     ...assembled,
   });
 }

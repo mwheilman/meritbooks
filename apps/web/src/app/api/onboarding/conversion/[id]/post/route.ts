@@ -42,10 +42,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const blockers = tieOutBlockers({
     openingBalances: data.openingBalances,
     balance: data.balance,
+    balanceSheet: data.balanceSheet,
     unmapped: data.unmapped,
     unknownTargets: data.unknownTargets,
     sourceTotals: data.sourceTotals,
-  });
+  }, { plAcknowledged: data.plAcknowledged });
   if (blockers.length > 0) {
     return NextResponse.json({ error: 'Blocked: the opening trial balance is no longer ready to post.', blockers }, { status: 409 });
   }

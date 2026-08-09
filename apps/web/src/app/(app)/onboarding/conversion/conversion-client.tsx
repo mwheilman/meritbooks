@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   Upload, ArrowRight, ArrowLeft, Check, AlertTriangle, Loader2, FileSpreadsheet,
-  CircleCheck, Sparkles, ShieldCheck, Scale, ListChecks, Lock,
+  CircleCheck, Sparkles, ShieldCheck, Scale, ListChecks, Lock, FileText, Filter,
 } from 'lucide-react';
 import { formatMoney } from '@meritbooks/shared';
 import { parseCsv, autoMap, type ParsedCsv } from '@/lib/import/csv';
@@ -13,6 +13,7 @@ import {
   type MappingTable,
   type OpeningBalanceLine,
   type BalanceCheck,
+  type BalanceSheetCheck,
   type MappingSource,
 } from '@/lib/onboarding/conversion';
 
@@ -31,14 +32,19 @@ interface Session {
   mapping: MappingTable;
   openingBalances: OpeningBalanceLine[];
   balance: BalanceCheck;
+  balanceSheet?: BalanceSheetCheck;
   unmapped: string[];
   unknownTargets: string[];
   sourceTotals: { debitCents: number; creditCents: number };
+  plAcknowledged?: boolean;
   tiedOut: boolean;
   tiedOutBy: string | null;
   tiedOutAt: string | null;
   aiUsed?: boolean;
   aiError?: string | null;
+  excluded?: { row: number; reason: string }[];
+  excludedCount?: number;
+  zeroRows?: number;
 }
 
 interface PostResult { ok: boolean; glEntryId?: string; entryNumber?: string; lineCount?: number; totalDebitCents?: number; alreadyPosted?: boolean }
@@ -162,6 +168,24 @@ export default function ConversionClient() {
     } finally { setBusy(false); }
   };
 
+  // Acknowledge a mid-year go-live (open income-statement balances are intended).
+  const ackPl = async (acknowledgePl: boolean) => {
+    if (!session) return;
+    setBusy(true); setError('');
+    try {
+      const res = await fetch(`/api/onboarding/conversion/${session.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acknowledgePl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Could not update acknowledgment');
+      setSession(data as Session);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Update failed');
+    } finally { setBusy(false); }
+  };
+
   const goLive = async () => {
     if (!session) return;
     setBusy(true); setError('');
@@ -203,7 +227,7 @@ export default function ConversionClient() {
       {step === 'review' && session && (
         <ReviewStep
           session={session} coa={coa} busy={busy}
-          onBack={() => setStep('map')} onRemap={remap} onTieOut={toggleTieOut} onPost={goLive}
+          onBack={() => setStep('map')} onRemap={remap} onTieOut={toggleTieOut} onPost={goLive} onAckPl={ackPl}
         />
       )}
 
@@ -312,11 +336,11 @@ function MapStep({
 interface SourceRow { sourceAccount: string; sourceName: string | null; debitCents: number; creditCents: number }
 
 function ReviewStep({
-  session, coa, busy, onBack, onRemap, onTieOut, onPost,
+  session, coa, busy, onBack, onRemap, onTieOut, onPost, onAckPl,
 }: {
   session: Session; coa: CoaAccount[]; busy: boolean;
   onBack: () => void; onRemap: (src: string, target: string) => void;
-  onTieOut: (v: boolean) => void; onPost: () => void;
+  onTieOut: (v: boolean) => void; onPost: () => void; onAckPl: (v: boolean) => void;
 }) {
   // Aggregate source lines per source account (client-side, for the mapping table).
   const sourceRows: SourceRow[] = useMemo(() => {
@@ -362,6 +386,30 @@ function ReviewStep({
         </div>
       </div>
 
+      {/* Excluded rows (non-silent): totals / subtotal / blank rows the parser set aside */}
+      {(session.excludedCount ?? 0) > 0 && (
+        <div className="mt-3 rounded-xl border border-slate-800 bg-surface-900/60 px-4 py-3">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Filter size={14} className="text-slate-400" />
+            <p className="text-2xs font-semibold uppercase tracking-wider text-slate-500">
+              {session.excludedCount} row{session.excludedCount === 1 ? '' : 's'} excluded as totals/summary
+              {session.zeroRows ? ` · ${session.zeroRows} zero-balance row${session.zeroRows === 1 ? '' : 's'} skipped` : ''}
+            </p>
+          </div>
+          <ul className="space-y-0.5 max-h-28 overflow-y-auto">
+            {(session.excluded ?? []).slice(0, 20).map((e, i) => (
+              <li key={i} className="text-2xs text-slate-500">
+                <span className="font-mono text-slate-600">Row {e.row}</span> — {e.reason}
+              </li>
+            ))}
+          </ul>
+          <p className="text-2xs text-slate-600 mt-1.5">Nothing was dropped silently. If a real account was excluded, add a Debit/Credit (or Signed Balance) value for it and re-upload.</p>
+        </div>
+      )}
+
+      {/* Balance-sheet identity — Assets = Liabilities + Equity */}
+      {session.balanceSheet && <BalanceSheetPanel bs={session.balanceSheet} />}
+
       {/* What's left to tie out */}
       <div className="mt-4 rounded-xl border border-slate-800 bg-surface-900 px-4 py-3">
         <div className="flex items-center gap-2 mb-2">
@@ -381,9 +429,16 @@ function ReviewStep({
         )}
       </div>
 
-      {/* AI mapping notice */}
+      {/* AI mapping notice — degrade-safe: mapping is always completable by hand */}
       {session.aiError && (
-        <p className="mt-3 text-2xs text-amber-400">{session.aiError}</p>
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-slate-700 bg-surface-900/60 px-4 py-2.5 text-xs text-slate-300">
+          <Sparkles size={14} className="mt-0.5 shrink-0 text-slate-500" />
+          <span>
+            {session.aiError} Accounts matched by number/name are set automatically; use the
+            &ldquo;Maps to&rdquo; dropdown on each remaining row to map it yourself. AI is a convenience, not a
+            requirement — you can complete the entire mapping manually.
+          </span>
+        </div>
       )}
 
       {/* Mapping table */}
@@ -434,6 +489,27 @@ function ReviewStep({
           </tbody>
         </table>
       </div>
+
+      {/* Opening journal-entry preview — the EXACT balanced entry that will post */}
+      <OpeningEntryPreview lines={session.openingBalances} bal={bal} companyShortCode={session.companyShortCode} asOfDate={session.asOfDate} />
+
+      {/* Mid-year go-live acknowledgment — only when the balance sheet doesn't stand alone */}
+      {session.balanceSheet && !session.balanceSheet.standalone && session.balanceSheet.plNetCents !== 0 && (
+        <label className="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 cursor-pointer">
+          <input
+            type="checkbox"
+            className="mt-0.5 accent-amber-500"
+            checked={!!session.plAcknowledged}
+            disabled={busy || session.posted}
+            onChange={(e) => onAckPl(e.target.checked)}
+          />
+          <span className="text-xs text-amber-200/90">
+            I understand this is a <span className="font-medium">mid-year go-live</span> — income-statement accounts carry{' '}
+            <span className="font-mono">{formatMoney(Math.abs(session.balanceSheet.plNetCents))}</span> of open balances that
+            will post as current-year activity (normally the prior year&apos;s P&amp;L is closed into retained earnings).
+          </span>
+        </label>
+      )}
 
       {/* Tie-out + go-live gate */}
       <div className="mt-6 rounded-xl border border-slate-800 bg-surface-900 p-4">
@@ -534,6 +610,87 @@ function BalanceBanner({ balance }: { balance: BalanceCheck }) {
     <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
       <AlertTriangle size={16} className="mt-0.5 shrink-0" />
       <span>Out of balance by <span className="font-mono font-semibold">{formatMoney(diff)}</span> — {side}. This blocks go-live until it&apos;s resolved.</span>
+    </div>
+  );
+}
+
+function BalanceSheetPanel({ bs }: { bs: BalanceSheetCheck }) {
+  const le = bs.liabilitiesCents + bs.equityCents;
+  const ties = bs.standalone;
+  return (
+    <div className={`mt-3 rounded-xl border px-4 py-3 ${ties ? 'border-slate-800 bg-surface-900' : 'border-amber-500/30 bg-amber-500/5'}`}>
+      <div className="flex items-center gap-2 mb-2">
+        <Scale size={14} className={ties ? 'text-brand-400' : 'text-amber-400'} />
+        <p className="text-2xs font-semibold uppercase tracking-wider text-slate-500">Balance sheet identity — assets = liabilities + equity</p>
+      </div>
+      <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+        <ReconLine label="Total assets" value={bs.assetsCents} />
+        <ReconLine label="Liabilities + equity" value={le} />
+      </div>
+      {ties ? (
+        <p className="mt-2 text-2xs text-emerald-300 flex items-center gap-1.5"><Check size={12} /> The balance sheet ties on its own — no open income-statement balances.</p>
+      ) : (
+        <p className="mt-2 text-2xs text-amber-300/90 flex items-start gap-1.5">
+          <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+          <span>
+            Income-statement accounts carry <span className="font-mono">{formatMoney(Math.abs(bs.plNetCents))}</span> of open balances
+            (a mid-year go-live). A year-end opening balance normally has none. Acknowledge below to proceed.
+          </span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function OpeningEntryPreview({
+  lines, bal, companyShortCode, asOfDate,
+}: {
+  lines: OpeningBalanceLine[]; bal: BalanceCheck; companyShortCode: string; asOfDate: string;
+}) {
+  if (lines.length === 0) return null;
+  return (
+    <div className="mt-6">
+      <div className="flex items-center gap-2 mb-2">
+        <FileText size={15} className="text-brand-400" />
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Opening entry preview
+          <span className="text-slate-600 normal-case font-normal"> — the exact balanced journal entry that will post</span>
+        </p>
+      </div>
+      <div className="rounded-xl border border-slate-800 overflow-hidden">
+        <div className="flex items-center justify-between bg-surface-950 px-3 py-2 text-2xs text-slate-500">
+          <span>Opening balance (historical conversion) — <span className="font-mono text-slate-400">{companyShortCode}</span> as of <span className="font-mono text-slate-400">{asOfDate}</span></span>
+          <span>{lines.length} line{lines.length === 1 ? '' : 's'}</span>
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-surface-950 text-2xs uppercase tracking-wider text-slate-500">
+              <th className="text-left font-medium px-3 py-2">Account</th>
+              <th className="text-right font-medium px-3 py-2">Debit</th>
+              <th className="text-right font-medium px-3 py-2">Credit</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800">
+            {lines.map((l) => (
+              <tr key={l.targetAccountNumber} className="bg-surface-900">
+                <td className="px-3 py-1.5">
+                  <span className="font-mono text-slate-200">{l.targetAccountNumber}</span>
+                  {l.targetName && <span className="text-slate-400"> — {l.targetName}</span>}
+                </td>
+                <td className="px-3 py-1.5 text-right font-mono text-emerald-300">{l.debitCents ? formatMoney(l.debitCents) : <span className="text-slate-700">—</span>}</td>
+                <td className="px-3 py-1.5 text-right font-mono text-rose-300">{l.creditCents ? formatMoney(l.creditCents) : <span className="text-slate-700">—</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-surface-950 border-t border-slate-700 text-sm font-semibold">
+              <td className="px-3 py-2 text-slate-300">Total</td>
+              <td className="px-3 py-2 text-right font-mono text-emerald-300">{formatMoney(bal.totalDebitCents)}</td>
+              <td className="px-3 py-2 text-right font-mono text-rose-300">{formatMoney(bal.totalCreditCents)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
   );
 }

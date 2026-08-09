@@ -14,6 +14,7 @@ import { DebtForm } from './debt-form';
 import { DebtParseReview } from './debt-parse-review';
 import { ResetModal, RefinanceModal, PayoffModal, type ActionInstrument } from './debt-actions';
 import { AttachmentsPanel } from '@/components/documents/attachments-panel';
+import { DebtSummary } from './debt-summary';
 
 type Frequency = 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
 type Status = 'ACTIVE' | 'PAID_OFF' | 'CLOSED' | 'INACTIVE';
@@ -76,7 +77,7 @@ function fmtDate(iso: string | null): string {
   return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
-export function DebtRegister() {
+export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void } = {}) {
   const [mode, setMode] = useState<null | 'parse' | 'manual'>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState('0');
@@ -125,6 +126,9 @@ export function DebtRegister() {
 
   return (
     <div className="space-y-5">
+      {/* At-a-glance posture — current/non-current, next payment, 12mo service, covenant headroom */}
+      <DebtSummary key={`sum-${refreshKey}`} onViewCovenants={onViewCovenants} />
+
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-4 text-xs">
           <span className="text-slate-500">{instruments.length} loan{instruments.length === 1 ? '' : 's'}</span>

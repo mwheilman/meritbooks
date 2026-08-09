@@ -24,6 +24,8 @@ interface PatchBody {
   mappingUpdates?: Record<string, string | null>;
   /** true to tie out (go-live enabling), false to reopen. */
   tieOut?: boolean;
+  /** Acknowledge a mid-year go-live (open income-statement balances are intended). */
+  acknowledgePl?: boolean;
 }
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -43,10 +45,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     blockers: tieOutBlockers({
       openingBalances: session.data.openingBalances,
       balance: session.data.balance,
+      balanceSheet: session.data.balanceSheet,
       unmapped: session.data.unmapped,
       unknownTargets: session.data.unknownTargets,
       sourceTotals: session.data.sourceTotals,
-    }),
+    }, { plAcknowledged: session.data.plAcknowledged }),
     ...session.data,
   });
 }
@@ -90,13 +93,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     data.mapping = mapping;
     data.openingBalances = assembled.openingBalances;
     data.balance = assembled.balance;
+    data.balanceSheet = assembled.balanceSheet;
     data.unmapped = assembled.unmapped;
     data.unknownTargets = assembled.unknownTargets;
     data.sourceTotals = assembled.sourceTotals;
-    // A changed TB must be re-tied-out.
+    // A changed TB must be re-tied-out and re-acknowledged.
+    data.plAcknowledged = false;
     data.tiedOut = false;
     data.tiedOutBy = null;
     data.tiedOutAt = null;
+  }
+
+  // ── Mid-year go-live acknowledgment (unblocks the balance-sheet identity gate) ──
+  if (typeof body.acknowledgePl === 'boolean') {
+    data.plAcknowledged = body.acknowledgePl;
   }
 
   // ── Tie-out toggle (the blocking gate) ───────────────────────────────────────
@@ -104,10 +114,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const blockers = tieOutBlockers({
       openingBalances: data.openingBalances,
       balance: data.balance,
+      balanceSheet: data.balanceSheet,
       unmapped: data.unmapped,
       unknownTargets: data.unknownTargets,
       sourceTotals: data.sourceTotals,
-    });
+    }, { plAcknowledged: data.plAcknowledged });
     if (blockers.length > 0) {
       return NextResponse.json({ error: 'Opening trial balance is not ready to tie out', blockers }, { status: 422 });
     }
@@ -129,10 +140,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     blockers: tieOutBlockers({
       openingBalances: data.openingBalances,
       balance: data.balance,
+      balanceSheet: data.balanceSheet,
       unmapped: data.unmapped,
       unknownTargets: data.unknownTargets,
       sourceTotals: data.sourceTotals,
-    }),
+    }, { plAcknowledged: data.plAcknowledged }),
     ...data,
   });
 }

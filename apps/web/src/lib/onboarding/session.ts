@@ -32,7 +32,7 @@ export async function loadTargetAccounts(
 ): Promise<TargetAccount[]> {
   const { data, error } = await supabase
     .from('accounts')
-    .select('account_number, name')
+    .select('account_number, name, account_type')
     .eq('org_id', orgId)
     .eq('is_active', true)
     .order('account_number');
@@ -40,6 +40,7 @@ export async function loadTargetAccounts(
   return (data ?? []).map((a) => ({
     accountNumber: String((a as { account_number: string }).account_number),
     name: String((a as { name: string }).name),
+    accountType: (a as { account_type: string | null }).account_type ?? null,
   }));
 }
 

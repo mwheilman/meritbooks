@@ -9,6 +9,7 @@ import { PostingError } from '@/lib/posting/account-roles';
 import { claimApprovalForRelease, finalizeReleaseClaim, revertReleaseClaim } from '@/lib/money/approvals';
 import { assembleApprovedBatch } from '@/lib/ap/assemble-batch';
 import { buildDisbursementBatch } from '@/lib/ap/disbursement-batch';
+import { loadCheckNumbers } from '@/lib/ap/vendor-payment-details';
 
 /**
  * POST /api/ap/disbursements/release — the explicit human RELEASE of a batch.
@@ -90,6 +91,14 @@ export async function POST(request: Request) {
 
   const batch = buildDisbursementBatch(assembled.items);
 
+  // Assigned check numbers (reference only — captured for CHECK-method lines the
+  // human wrote by hand instead of exporting a bank file). Recorded in the audit
+  // trail alongside the posted payment; never touches the GL. Degrades safe.
+  const checkNumbers = await loadCheckNumbers(
+    supabase,
+    batch.groups.flatMap((g) => g.items.map((i) => i.approvalId)),
+  );
+
   // Duplicate guard — block a batch with a critical intra-batch duplicate unless
   // the human explicitly overrides after reviewing the warnings.
   if (batch.controls.hasBlockingDuplicates && !body.overrideDuplicates) {
@@ -115,7 +124,7 @@ export async function POST(request: Request) {
   }
 
   const paymentDate = today();
-  const released: Array<{ approvalId: string; billId: string; paymentId: string; amountCents: number }> = [];
+  const released: Array<{ approvalId: string; billId: string; paymentId: string; amountCents: number; checkNumber: string | null }> = [];
   const failed: Array<{ approvalId: string; billId: string; error: string }> = [];
   const blocked: Array<{ approvalId: string; billId: string; reason: string }> = [];
   const skipped: Array<{ approvalId: string; billId: string; reason: string }> = [];
@@ -166,8 +175,10 @@ export async function POST(request: Request) {
         });
         // Finalize the claim only after money posted (stamps correlation id + the
         // immutable RELEASED audit step).
-        await finalizeReleaseClaim(supabase, orgId, item.approvalId, userId, `bill_payment:${pay.payment_id}`);
-        released.push({ approvalId: item.approvalId, billId: item.billId, paymentId: pay.payment_id, amountCents: item.amountCents });
+        const checkNumber = checkNumbers.get(item.approvalId) ?? null;
+        const correlation = checkNumber ? `bill_payment:${pay.payment_id}|check:${checkNumber}` : `bill_payment:${pay.payment_id}`;
+        await finalizeReleaseClaim(supabase, orgId, item.approvalId, userId, correlation);
+        released.push({ approvalId: item.approvalId, billId: item.billId, paymentId: pay.payment_id, amountCents: item.amountCents, checkNumber });
         totalReleasedCents += item.amountCents;
       } catch (e) {
         // Post failed AFTER the claim — nothing posted, no money moved. Revert the

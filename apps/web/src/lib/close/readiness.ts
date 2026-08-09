@@ -29,6 +29,7 @@ import { gatherReconciliationCloseStatus } from '@/lib/services/reconciliation-c
 import { getLearnedPreference } from '@/lib/learning/preferences';
 import { scanUncategorizedLeakage } from '@/lib/controls/uncategorized-leakage';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
+import { gatherOpenItemsByLocation, gatherEntityOpenItems, emptyOpenItems } from './open-items';
 import {
   evaluateCloseGraph,
   evaluateHardCloseGate,
@@ -208,6 +209,7 @@ interface PeriodRow {
   location_id: string;
   status: BoardPeriodStatus;
   closed_at: string | null;
+  end_date: string | null;
 }
 
 /**
@@ -235,7 +237,7 @@ export async function gatherCloseOrchestration(
 
   const { data: periodData } = await supabase
     .from('fiscal_periods')
-    .select('id, location_id, status, closed_at')
+    .select('id, location_id, status, closed_at, end_date')
     .eq('period_year', year)
     .eq('period_month', month);
   const periods = (periodData ?? []) as PeriodRow[];
@@ -243,12 +245,20 @@ export async function gatherCloseOrchestration(
   for (const p of periods) periodByLoc.set(p.location_id, p);
   const periodIds = periods.map((p) => p.id);
 
+  // Per-entity close context for the batched open-items scan (drafts / bills-on-hold
+  // / unapplied payments / pending approvals), scoped to each entity's period.
+  const openItemsContexts = locations.map((loc) => {
+    const p = periodByLoc.get(loc.id) ?? null;
+    return { locationId: loc.id, periodId: p?.id ?? null, periodEndISO: p?.end_date ?? null };
+  });
+
   // Shared, run-once reads.
-  const [subledger, leakage, aiRes, checkoffsByLoc] = await Promise.all([
+  const [subledger, leakage, aiRes, checkoffsByLoc, openItemsByLoc] = await Promise.all([
     loadSubledgerVariance(supabase, orgId),
     scanUncategorizedLeakage(supabase, orgId, { dryRun: true, asOfISO: now.toISOString() }),
     supabase.from('ai_decisions').select('location_id').eq('status', 'PROPOSED').limit(ROW_CAP),
     loadManualCheckoffs(supabase, periodIds),
+    gatherOpenItemsByLocation(supabase, openItemsContexts).catch(() => new Map<string, ReturnType<typeof emptyOpenItems>>()),
   ]);
 
   // Per-entity leakage roll-up (across all aged periods — how a controller reasons).
@@ -286,6 +296,7 @@ export async function gatherCloseOrchestration(
 
   const entities: EntityCloseOrchestration[] = locations.map((loc) => {
     const period = periodByLoc.get(loc.id) ?? null;
+    const oi = openItemsByLoc.get(loc.id) ?? emptyOpenItems();
     const signals: CloseSignals = {
       uncodedBankCents: leakUncodedBank.get(loc.id) ?? 0,
       reconciliationBlockers: reconByLoc.get(loc.id) ?? 0,
@@ -294,6 +305,11 @@ export async function gatherCloseOrchestration(
       blockingLeakageCents: leakBlocking.get(loc.id) ?? 0,
       leakageItems: leakItems.get(loc.id) ?? 0,
       openExceptions: openExc.get(loc.id) ?? 0,
+      unpostedDraftCount: oi.unpostedDraftCount,
+      billsOnHoldCount: oi.billsOnHoldCount,
+      unappliedPaymentCount: oi.unappliedPaymentCount,
+      unappliedPaymentCents: oi.unappliedPaymentCents,
+      pendingApprovalCount: oi.pendingApprovalCount,
     };
     const checkoffs = checkoffsByLoc.get(loc.id) ?? new Set<CloseTaskKey>();
     const evaluation = evaluateCloseGraph(signals, checkoffs);
@@ -357,11 +373,24 @@ export async function gatherCloseSignals(
   orgId: string,
   args: { locationId: string; fiscalPeriodId: string },
 ): Promise<CloseSignals> {
-  const [subledger, leakage, recon, aiRes] = await Promise.all([
+  // The period's end date bounds bill-date scoping in the open-items scan.
+  const { data: periodRow } = await supabase
+    .from('fiscal_periods')
+    .select('end_date')
+    .eq('id', args.fiscalPeriodId)
+    .maybeSingle();
+  const periodEndISO = (periodRow as { end_date: string | null } | null)?.end_date ?? null;
+
+  const [subledger, leakage, recon, aiRes, openItems] = await Promise.all([
     loadSubledgerVariance(supabase, orgId),
     scanUncategorizedLeakage(supabase, orgId, { dryRun: true }),
     gatherReconciliationCloseStatus(supabase, args).catch(() => null),
     supabase.from('ai_decisions').select('location_id').eq('status', 'PROPOSED').eq('location_id', args.locationId).limit(ROW_CAP),
+    gatherEntityOpenItems(supabase, {
+      locationId: args.locationId,
+      periodId: args.fiscalPeriodId,
+      periodEndISO,
+    }).catch(() => emptyOpenItems()),
   ]);
 
   let uncodedBankCents = 0;
@@ -383,6 +412,11 @@ export async function gatherCloseSignals(
     blockingLeakageCents,
     leakageItems,
     openExceptions: (aiRes.data ?? []).length,
+    unpostedDraftCount: openItems.unpostedDraftCount,
+    billsOnHoldCount: openItems.billsOnHoldCount,
+    unappliedPaymentCount: openItems.unappliedPaymentCount,
+    unappliedPaymentCents: openItems.unappliedPaymentCents,
+    pendingApprovalCount: openItems.pendingApprovalCount,
   };
 }
 

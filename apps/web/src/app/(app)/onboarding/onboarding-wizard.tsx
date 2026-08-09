@@ -12,6 +12,7 @@ import { useQuery, addToast } from '@/hooks';
 import { PlaidLinkButton } from '@/components/integrations/plaid-link-button';
 import { ConnectErpStep } from '@/components/integrations/connect-erp-step';
 import ConversionClient from './conversion/conversion-client';
+import { ReadinessChecklist } from './readiness-checklist';
 import { ACTIVE_COMPANY_COOKIE } from '@/lib/company-scope';
 import type { OnboardingStepKey, OnboardingStatus } from '@/lib/onboarding/status';
 
@@ -206,6 +207,9 @@ export function OnboardingWizard() {
           <CircleCheck size={15} /> This tenant is already live. You can revisit any step to add companies, balances, banks, or teammates.
         </div>
       )}
+
+      {/* First-run readiness checklist — live status + deep-links to what's left */}
+      <ReadinessChecklist onJump={goTo} compact />
 
       {/* Progress */}
       <Stepper step={step} stepIndex={stepIndex} onJump={(k, i) => { if (i <= stepIndex) goTo(k); }} />

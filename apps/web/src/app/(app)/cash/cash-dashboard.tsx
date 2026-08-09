@@ -7,10 +7,12 @@ import { isSpecificCompany } from '@/lib/company-scope';
 import { formatMoney } from '@meritbooks/shared';
 import {
   DollarSign, AlertTriangle, TrendingDown, Building2, Loader2, AlertCircle,
-  ChevronDown, ChevronRight, Wallet, RefreshCw, Landmark
+  ChevronDown, ChevronRight, Wallet, RefreshCw, Landmark, Clock
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlaidLinkButton } from '@/components/integrations/plaid-link-button';
+import { CashTrend } from './cash-trend';
+import { CashObligations } from './cash-obligations';
 
 interface CashAccount {
   id: string;
@@ -21,6 +23,7 @@ interface CashAccount {
   availableCents: number;
   status: string;
   updatedAt: string | null;
+  stale: boolean;
 }
 
 interface CashLocation {
@@ -30,6 +33,7 @@ interface CashLocation {
   accounts: CashAccount[];
   totalCashCents: number;
   cashStatus: string;
+  staleCount: number;
 }
 
 interface CashResponse {
@@ -40,6 +44,8 @@ interface CashResponse {
     accountCount: number;
     criticalCount: number;
     nearMinCount: number;
+    staleCount: number;
+    asOfDate: string | null;
   };
 }
 
@@ -99,6 +105,11 @@ export function CashDashboard() {
           <p className="text-2xl font-mono font-semibold text-white">
             {formatMoney(summary?.totalCashCents ?? 0, { compact: true })}
           </p>
+          {summary?.asOfDate && (
+            <p className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
+              <Clock size={9} /> as of {new Date(summary.asOfDate).toLocaleDateString()}
+            </p>
+          )}
         </div>
         <div className="card p-4">
           <div className="flex items-center gap-2 mb-1">
@@ -126,6 +137,22 @@ export function CashDashboard() {
             {summary?.nearMinCount ?? 0}
           </p>
         </div>
+      </div>
+
+      {/* Stale-feed advisory */}
+      {(summary?.staleCount ?? 0) > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border bg-amber-500/[0.06] border-amber-500/20 text-amber-300 text-xs">
+          <Clock size={14} />
+          <span>
+            {summary?.staleCount} account{(summary?.staleCount ?? 0) === 1 ? '' : 's'} {(summary?.staleCount ?? 0) === 1 ? 'has' : 'have'} no recent feed activity — {(summary?.staleCount ?? 0) === 1 ? 'its' : 'their'} balance may be out of date. Refresh the connection to bring it current.
+          </span>
+        </div>
+      )}
+
+      {/* Trend + upcoming obligations — the treasurer's near-term view */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <CashTrend locationId={filterLoc || undefined} />
+        <CashObligations locationId={filterLoc || undefined} />
       </div>
 
       {/* Company filter + refresh + bank connection */}
@@ -213,10 +240,19 @@ export function CashDashboard() {
                             <Landmark size={14} className="text-slate-400" />
                           </div>
                           <div>
-                            <p className="text-sm text-slate-300">{acct.name}</p>
+                            <p className="text-sm text-slate-300 flex items-center gap-1.5">
+                              {acct.name}
+                              {acct.stale && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium text-amber-400 bg-amber-500/10">
+                                  <Clock size={9} /> Stale
+                                </span>
+                              )}
+                            </p>
                             <p className="text-[10px] text-slate-600 font-mono">
                               ····{acct.mask} · {acct.type}
-                              {acct.updatedAt && <> · Updated {new Date(acct.updatedAt).toLocaleDateString()}</>}
+                              {acct.updatedAt
+                                ? <> · Updated {new Date(acct.updatedAt).toLocaleDateString()}</>
+                                : <> · Never updated</>}
                             </p>
                           </div>
                         </div>

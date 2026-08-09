@@ -20,6 +20,11 @@ const CLEAN_SIGNALS: CloseSignals = {
   blockingLeakageCents: 0,
   leakageItems: 0,
   openExceptions: 0,
+  unpostedDraftCount: 0,
+  billsOnHoldCount: 0,
+  unappliedPaymentCount: 0,
+  unappliedPaymentCents: 0,
+  pendingApprovalCount: 0,
 };
 
 const ALL_MANUAL = new Set<CloseTaskKey>(MANUAL_TASK_KEYS);
@@ -154,6 +159,68 @@ describe('evaluateCloseGraph — auto verification', () => {
     const ev = evaluateCloseGraph(signals, ALL_MANUAL);
     expect(statusOf(ev, 'uncategorized_cleared')).toBe('blocked');
     expect(ev.blockers.map((b) => b.key)).toContain('uncategorized_cleared');
+  });
+});
+
+describe('evaluateCloseGraph — open-item close-readiness tasks', () => {
+  it('unposted draft journal entries BLOCK the close', () => {
+    const signals: CloseSignals = { ...CLEAN_SIGNALS, unpostedDraftCount: 3 };
+    const ev = evaluateCloseGraph(signals, ALL_MANUAL);
+    expect(statusOf(ev, 'journal_drafts_posted')).toBe('blocked');
+    expect(ev.blockers.map((b) => b.key)).toContain('journal_drafts_posted');
+    expect(ev.readyToHardClose).toBe(false);
+    const t = ev.tasks.find((x) => x.key === 'journal_drafts_posted')!;
+    expect(t.driverValue).toBe(3);
+    expect(t.reason).toMatch(/draft/i);
+  });
+
+  it('pending period-dated approvals BLOCK the close', () => {
+    const signals: CloseSignals = { ...CLEAN_SIGNALS, pendingApprovalCount: 2 };
+    const ev = evaluateCloseGraph(signals, ALL_MANUAL);
+    expect(statusOf(ev, 'pending_approvals_cleared')).toBe('blocked');
+    expect(ev.blockers.map((b) => b.key)).toContain('pending_approvals_cleared');
+    expect(ev.readyToHardClose).toBe(false);
+  });
+
+  it('bills on hold are a NON-blocking warning (surfaced, not gating)', () => {
+    const signals: CloseSignals = { ...CLEAN_SIGNALS, billsOnHoldCount: 4 };
+    const ev = evaluateCloseGraph(signals, ALL_MANUAL);
+    expect(statusOf(ev, 'bills_on_hold_cleared')).toBe('blocked');
+    expect(ev.warnings.map((w) => w.key)).toContain('bills_on_hold_cleared');
+    expect(ev.blockers.map((b) => b.key)).not.toContain('bills_on_hold_cleared');
+    expect(ev.readyToHardClose).toBe(true);
+  });
+
+  it('unapplied customer payments are a NON-blocking warning with the $ driver', () => {
+    const signals: CloseSignals = { ...CLEAN_SIGNALS, unappliedPaymentCount: 2, unappliedPaymentCents: 1_250_00 };
+    const ev = evaluateCloseGraph(signals, ALL_MANUAL);
+    expect(statusOf(ev, 'unapplied_payments_cleared')).toBe('blocked');
+    expect(ev.warnings.map((w) => w.key)).toContain('unapplied_payments_cleared');
+    expect(ev.readyToHardClose).toBe(true);
+    const t = ev.tasks.find((x) => x.key === 'unapplied_payments_cleared')!;
+    expect(t.driverValue).toBe(1_250_00);
+  });
+
+  it('every open-item task carries an in-app deep link', () => {
+    const ev = evaluateCloseGraph(CLEAN_SIGNALS, ALL_MANUAL);
+    for (const key of ['journal_drafts_posted', 'bills_on_hold_cleared', 'unapplied_payments_cleared', 'pending_approvals_cleared'] as const) {
+      const t = ev.tasks.find((x) => x.key === key)!;
+      expect(typeof t.deepLinkHref).toBe('string');
+      expect(t.deepLinkHref!.startsWith('/')).toBe(true);
+    }
+  });
+
+  it('the hard-close gate blocks on the new BLOCKING open-item tasks and can be overridden', () => {
+    const signals: CloseSignals = { ...CLEAN_SIGNALS, unpostedDraftCount: 1, pendingApprovalCount: 1 };
+    const ev = evaluateCloseGraph(signals, ALL_MANUAL);
+    const blocked = evaluateHardCloseGate(ev, null);
+    expect(blocked.pass).toBe(false);
+    expect(blocked.blockers.map((b) => b.key)).toEqual(
+      expect.arrayContaining(['journal_drafts_posted', 'pending_approvals_cleared']),
+    );
+    const overridden = evaluateHardCloseGate(ev, 'Drafts reviewed; approvals cleared out-of-band and audited');
+    expect(overridden.pass).toBe(true);
+    expect(overridden.overridden).toBe(true);
   });
 });
 

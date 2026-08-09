@@ -60,6 +60,15 @@ export const CONVERSION_SOURCE_FIELDS: ImportFieldDef[] = [
     type: 'money',
     aliases: ['credit', 'cr', 'credits', 'credit balance'],
   },
+  {
+    key: 'amount_cents',
+    label: 'Signed Balance',
+    type: 'money',
+    aliases: ['ending balance', 'net balance', 'signed balance'],
+    help:
+      'Optional — only if your file has ONE signed balance column instead of separate ' +
+      'Debit / Credit columns. Positive = debit, negative = credit.',
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -98,6 +107,8 @@ export type MappingTable = Record<string, AccountMapping>;
 export interface OpeningBalanceLine {
   targetAccountNumber: string;
   targetName: string | null;
+  /** Target account type (ASSET/LIABILITY/EQUITY/REVENUE/COGS/OPEX/OTHER), when known. */
+  targetType?: string | null;
   debitCents: number;
   creditCents: number;
   /** Source account codes that rolled up into this target account. */
@@ -113,10 +124,36 @@ export interface BalanceCheck {
   differenceCents: number;
 }
 
+/**
+ * The balance-sheet identity check (Assets = Liabilities + Equity). A correct
+ * go-live opening balance contains ONLY balance-sheet accounts — the prior year's
+ * P&L is already closed into retained earnings, so income-statement accounts should
+ * be zero. When `standalone` is false the balance sheet does not stand on its own:
+ * income-statement accounts carry balances (`plNetCents`, a mid-year go-live) that
+ * must be consciously acknowledged before posting. All figures are cents, expressed
+ * in each section's NORMAL balance (assets debit-positive; liabilities/equity/net
+ * income credit-positive).
+ */
+export interface BalanceSheetCheck {
+  assetsCents: number;
+  liabilitiesCents: number;
+  equityCents: number;
+  /** Net income sitting in income-statement accounts (revenue − expenses). */
+  plNetCents: number;
+  /** Assets − (Liabilities + Equity); equals plNetCents when debits == credits. */
+  identityDiffCents: number;
+  /** True when the balance sheet ties on its own (no open income-statement balances). */
+  standalone: boolean;
+  /** Target accounts whose type could not be classified (defensive; normally empty). */
+  untyped: string[];
+}
+
 /** Everything the mapping step produced, ready to review. */
 export interface AssembledOpeningTb {
   openingBalances: OpeningBalanceLine[];
   balance: BalanceCheck;
+  /** The balance-sheet identity (Assets = Liabilities + Equity) breakdown. */
+  balanceSheet: BalanceSheetCheck;
   /** Source accounts with a non-zero balance that are not mapped to a target. */
   unmapped: string[];
   /** Mapped target numbers that do not exist in the tenant chart of accounts. */
@@ -129,6 +166,8 @@ export interface AssembledOpeningTb {
 export interface TargetAccount {
   accountNumber: string;
   name: string;
+  /** account_type_enum value (ASSET/LIABILITY/EQUITY/REVENUE/COGS/OPEX/OTHER). */
+  accountType?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -203,6 +242,7 @@ export function applyMapping(
     openingBalances.push({
       targetAccountNumber,
       targetName: targetByNumber.get(targetAccountNumber)?.name ?? null,
+      targetType: targetByNumber.get(targetAccountNumber)?.accountType ?? null,
       debitCents: net > 0 ? net : 0,
       creditCents: net < 0 ? -net : 0,
       sourceAccounts: [...agg.sources].sort(),
@@ -213,10 +253,54 @@ export function applyMapping(
   return {
     openingBalances,
     balance: validateOpeningBalance(openingBalances),
+    balanceSheet: validateBalanceSheet(openingBalances),
     unmapped: [...unmapped].sort(),
     unknownTargets: [...unknownTargets].sort(),
     sourceTotals: sourceTotals(lines),
   };
+}
+
+/**
+ * The balance-sheet identity check. Classifies each opening line by account type and
+ * confirms whether the balance sheet ties on its own (Assets = Liabilities + Equity).
+ * A residual means income-statement accounts carry balances — a mid-year go-live that
+ * must be acknowledged before posting. Pure and total.
+ */
+export function validateBalanceSheet(lines: OpeningBalanceLine[]): BalanceSheetCheck {
+  let assetsCents = 0;
+  let liabilitiesCents = 0;
+  let equityCents = 0;
+  let plNetCents = 0;
+  const untyped: string[] = [];
+  for (const l of lines) {
+    const net = (l.debitCents || 0) - (l.creditCents || 0); // debit-positive
+    switch ((l.targetType ?? '').toUpperCase()) {
+      case 'ASSET':
+        assetsCents += net;
+        break;
+      case 'LIABILITY':
+        liabilitiesCents += -net; // credit-positive
+        break;
+      case 'EQUITY':
+        equityCents += -net; // credit-positive
+        break;
+      case 'REVENUE':
+      case 'COGS':
+      case 'OPEX':
+      case 'OTHER':
+        plNetCents += -net; // credit-positive → net income
+        break;
+      default:
+        untyped.push(l.targetAccountNumber);
+        // Unknown type: fold into the P&L residual so the identity math is complete.
+        plNetCents += -net;
+        break;
+    }
+  }
+  const identityDiffCents = assetsCents - (liabilitiesCents + equityCents);
+  // The balance sheet ties on its own only when there is no open income-statement net.
+  const standalone = plNetCents === 0 && untyped.length === 0;
+  return { assetsCents, liabilitiesCents, equityCents, plNetCents, identityDiffCents, standalone, untyped };
 }
 
 /**
@@ -238,8 +322,19 @@ export function validateOpeningBalance(lines: OpeningBalanceLine[]): BalanceChec
 // Gate predicates
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Reasons the opening TB cannot yet be tied out / posted. Empty ⇒ ready. */
-export function tieOutBlockers(tb: AssembledOpeningTb): string[] {
+/**
+ * Reasons the opening TB cannot yet be tied out / posted. Empty ⇒ ready.
+ *
+ * Two balance gates apply: (1) debits == credits — the hard posting requirement; and
+ * (2) the balance-sheet identity (Assets = Liabilities + Equity). The identity gate
+ * fires only when income-statement accounts carry balances and the user has NOT
+ * acknowledged a mid-year go-live (`plAcknowledged`) — so a clean year-end opening TB
+ * passes with no extra step, while a mid-year one forces a conscious confirmation.
+ */
+export function tieOutBlockers(
+  tb: Omit<AssembledOpeningTb, 'balanceSheet'> & { balanceSheet?: BalanceSheetCheck },
+  opts?: { plAcknowledged?: boolean },
+): string[] {
   const blockers: string[] = [];
   if (tb.openingBalances.length < 2) {
     blockers.push('An opening entry needs at least two accounts with balances.');
@@ -254,6 +349,22 @@ export function tieOutBlockers(tb: AssembledOpeningTb): string[] {
   }
   if (tb.unknownTargets.length > 0) {
     blockers.push(`${tb.unknownTargets.length} mapped account(s) do not exist in this chart of accounts: ${tb.unknownTargets.slice(0, 8).join(', ')}${tb.unknownTargets.length > 8 ? '…' : ''}.`);
+  }
+  // Balance-sheet identity gate: assets must equal liabilities + equity. When the
+  // difference is exactly the open income-statement net, it's a mid-year go-live the
+  // user can acknowledge; anything else is a genuine imbalance and always blocks.
+  const bs = tb.balanceSheet;
+  if (bs && tb.balance.balanced && !bs.standalone) {
+    if (bs.untyped.length > 0) {
+      blockers.push(`${bs.untyped.length} account(s) could not be classified by type — check the chart of accounts: ${bs.untyped.slice(0, 8).join(', ')}${bs.untyped.length > 8 ? '…' : ''}.`);
+    }
+    if (bs.plNetCents !== 0 && !opts?.plAcknowledged) {
+      blockers.push(
+        `Balance sheet does not stand alone — income-statement accounts carry ${centsAbs(bs.plNetCents)} (cents) of open balances. ` +
+        'A year-end opening balance normally has none (prior P&L is closed to retained earnings). ' +
+        'Confirm this is an intended mid-year go-live to proceed.',
+      );
+    }
   }
   return blockers;
 }
@@ -279,9 +390,13 @@ export interface ConversionSessionData {
   mapping: MappingTable;
   openingBalances: OpeningBalanceLine[];
   balance: BalanceCheck;
+  /** Balance-sheet identity breakdown (optional for sessions staged before this shipped). */
+  balanceSheet?: BalanceSheetCheck;
   unmapped: string[];
   unknownTargets: string[];
   sourceTotals: { debitCents: number; creditCents: number };
+  /** The user confirmed a mid-year go-live (open income-statement balances are intended). */
+  plAcknowledged?: boolean;
   tiedOut: boolean;
   tiedOutBy: string | null;
   tiedOutAt: string | null;

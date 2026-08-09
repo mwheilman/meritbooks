@@ -51,6 +51,10 @@ export interface OnboardingCounts {
   accounts: number;
   teamMembers: number;
   glEntries: number;
+  /** Active bank accounts linked (Plaid or manual) — the "bank connected" signal. */
+  bankAccounts: number;
+  /** Bank-feed transactions that have been categorized/approved — "first transaction categorized". */
+  categorizedTransactions: number;
 }
 
 /** The (best-effort) durable progress flag stored on the org. */
@@ -150,7 +154,7 @@ export async function loadOnboardingStatus(
   admin: SupabaseClient,
   orgId: string,
 ): Promise<OnboardingStatus> {
-  const [entities, accounts, teamMembers, glEntries, openingCount] = await Promise.all([
+  const [entities, accounts, teamMembers, glEntries, openingCount, bankAccounts, categorizedTransactions] = await Promise.all([
     safeCount(
       supabase.schema('core').from('locations').select('id', { count: 'exact', head: true }).eq('is_active', true),
     ),
@@ -160,9 +164,17 @@ export async function loadOnboardingStatus(
     safeCount(
       supabase.from('gl_entries').select('id', { count: 'exact', head: true }).eq('source_module', 'OPENING_BALANCE'),
     ),
+    safeCount(
+      supabase.from('bank_accounts').select('id', { count: 'exact', head: true }).eq('is_active', true),
+    ),
+    // A transaction the customer (or AI, once approved) has categorized: status has
+    // advanced past PENDING (CATEGORIZED/APPROVED/POSTED are all "handled").
+    safeCount(
+      supabase.from('bank_transactions').select('id', { count: 'exact', head: true }).neq('status', 'PENDING'),
+    ),
   ]);
 
-  const counts: OnboardingCounts = { entities, accounts, teamMembers, glEntries };
+  const counts: OnboardingCounts = { entities, accounts, teamMembers, glEntries, bankAccounts, categorizedTransactions };
   const hasOpeningEntry = openingCount > 0;
 
   const { setupComplete, flag, statePersisted } = await readOrgOnboarding(admin, orgId);

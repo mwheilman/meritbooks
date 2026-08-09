@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import {
   Loader2,
@@ -13,11 +13,16 @@ import {
   Download,
   Send,
   AlertTriangle,
+  CreditCard,
+  FileText,
+  Hash,
+  ChevronRight,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PageHeader, EmptyState } from '@/components/ui';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
+import { VendorPaymentDetailsModal, type VendorPaymentProfileView } from './vendor-payment-details';
 
 interface CheckRow {
   id: string;
@@ -62,9 +67,29 @@ interface DuplicateWarning {
   severity: 'warn' | 'critical';
   reason: string;
 }
+interface BatchItem {
+  approvalId: string;
+  billId: string;
+  vendorId: string;
+  vendorName: string;
+  invoiceRef: string | null;
+  amountCents: number;
+  paymentDate: string;
+  method: 'ACH' | 'CHECK';
+}
+interface VendorGroup {
+  vendorId: string;
+  vendorName: string;
+  itemCount: number;
+  subtotalCents: number;
+  items: BatchItem[];
+}
 interface BatchResponse {
+  groups: VendorGroup[];
   controls: BatchControls;
   duplicateWarnings: DuplicateWarning[];
+  profiles: VendorPaymentProfileView[];
+  checkNumbers: Record<string, string>;
   unresolved: string[];
 }
 interface ReleaseResponse {
@@ -295,12 +320,43 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: 'br
   );
 }
 
+// ── Pay-run workflow ─────────────────────────────────────────────────────────
+
+const STEPS = ['Queue bills', 'Capture details', 'Review', 'Export / mark checks', 'Release'] as const;
+
+function WorkflowStepper({ current }: { current: number }) {
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {STEPS.map((label, i) => (
+        <div key={label} className="flex items-center gap-1">
+          <span
+            className={clsx(
+              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-medium',
+              i < current
+                ? 'bg-emerald-600/15 text-emerald-300'
+                : i === current
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-surface-950 text-slate-500 border border-slate-800',
+            )}
+          >
+            <span className="font-mono">{i + 1}</span> {label}
+          </span>
+          {i < STEPS.length - 1 && <ChevronRight size={12} className="text-slate-700" />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
- * Disbursement batch — the APPROVED, ready-to-release payment run. Exports the
- * bank file (bill-pay CSV or ACH template) and, on an explicit human release,
- * posts each payment (DR A/P / CR Cash) through the gated payment path. Nothing
- * here contacts a bank; releasing is the only step that touches the GL, and it
- * enforces releaser != preparer + a duplicate-payment block server-side.
+ * Disbursement batch — the APPROVED, ready-to-release payment run. Presents the
+ * pay-run as an explicit workflow: capture per-vendor payment method + MASKED bank
+ * details, review per-vendor totals (with the duplicate-pay guard), export the
+ * bank file (bill-pay CSV / ACH template) OR mark hand-written check numbers, then
+ * release. Releasing is the ONLY step that touches the GL (DR A/P / CR Cash via the
+ * gated payment path); it never contacts a bank, and enforces releaser != preparer
+ * + a duplicate-payment block server-side. A remittance-advice PDF is available per
+ * vendor (which invoices the payment covers).
  */
 function DisbursementBatchPanel({
   batch,
@@ -312,8 +368,41 @@ function DisbursementBatchPanel({
   const [exporting, setExporting] = useState<'csv' | 'nacha' | null>(null);
   const [releasing, setReleasing] = useState(false);
   const [override, setOverride] = useState(false);
-  const { controls, duplicateWarnings } = batch;
+  const [editVendor, setEditVendor] = useState<{ vendorId: string; vendorName: string } | null>(null);
+  const [checkDrafts, setCheckDrafts] = useState<Record<string, string>>(() => ({ ...batch.checkNumbers }));
+  const [savingChecks, setSavingChecks] = useState(false);
+  const { controls, duplicateWarnings, groups } = batch;
   const criticalDupes = duplicateWarnings.filter((w) => w.severity === 'critical');
+
+  const profileByVendor = useMemo(() => {
+    const m = new Map<string, VendorPaymentProfileView>();
+    for (const p of batch.profiles) m.set(p.vendorId, p);
+    return m;
+  }, [batch.profiles]);
+
+  // Vendors that will be paid by ACH but have no bank detail on file yet — the
+  // review gate surfaces these before an export/release.
+  const missingAch = useMemo(
+    () =>
+      groups.filter((g) => {
+        const p = profileByVendor.get(g.vendorId);
+        const method = p?.paymentMethod ?? g.items[0]?.method ?? 'ACH';
+        return method === 'ACH' && !(p?.hasBankDetails ?? false);
+      }),
+    [groups, profileByVendor],
+  );
+
+  const checkItems = useMemo(
+    () =>
+      groups.flatMap((g) =>
+        g.items
+          .filter((it) => (profileByVendor.get(g.vendorId)?.paymentMethod ?? it.method) === 'CHECK')
+          .map((it) => ({ ...it })),
+      ),
+    [groups, profileByVendor],
+  );
+
+  const currentStep = releasing ? 4 : missingAch.length > 0 ? 1 : 3;
 
   const download = useCallback(async (format: 'csv' | 'nacha') => {
     setExporting(format);
@@ -350,10 +439,37 @@ function DisbursementBatchPanel({
     }
   }, []);
 
+  const remittance = useCallback((vendorId: string) => {
+    window.open(`/api/ap/disbursements/remittance?vendorId=${encodeURIComponent(vendorId)}`, '_blank', 'noopener');
+  }, []);
+
+  const saveCheckNumbers = useCallback(async () => {
+    const entries = checkItems.map((it) => ({ approvalId: it.approvalId, checkNumber: checkDrafts[it.approvalId] ?? '' }));
+    setSavingChecks(true);
+    try {
+      const res = await fetch('/api/ap/disbursements/check-numbers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries }),
+      });
+      const result = (await res.json()) as { count?: number; error?: string };
+      if (!res.ok) {
+        addToast('error', result.error ?? 'Failed to save check numbers');
+        return;
+      }
+      addToast('success', `Saved ${result.count ?? 0} check number(s)`);
+      await onReleased();
+    } catch {
+      addToast('error', 'Network error');
+    } finally {
+      setSavingChecks(false);
+    }
+  }, [checkItems, checkDrafts, onReleased]);
+
   const release = useCallback(async () => {
     if (
       !window.confirm(
-        `Release ${controls.itemCount} payment(s) totaling ${formatMoney(controls.totalCents)}? This posts each payment to the general ledger (DR A/P / CR Cash). It does NOT send money to any bank — you still upload the exported file to your bank to move funds.`,
+        `Release ${controls.itemCount} payment(s) totaling ${formatMoney(controls.totalCents)}? This posts each payment to the general ledger (DR A/P / CR Cash). It does NOT send money to any bank — you still upload the exported file to your bank (or mail the checks) to move funds.`,
       )
     ) {
       return;
@@ -388,11 +504,13 @@ function DisbursementBatchPanel({
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-            <Banknote size={15} className="text-emerald-400" /> Disbursement batch — ready to release
+            <Banknote size={15} className="text-emerald-400" /> Pay run — {controls.itemCount} payment(s) to{' '}
+            {controls.vendorCount} vendor(s)
           </h2>
-          <p className="text-2xs text-slate-500 mt-0.5">
-            {controls.itemCount} approved payment(s) to {controls.vendorCount} vendor(s). Export the bank file, then
-            release to post to the GL. Releasing never sends money — you upload the file to your bank.
+          <p className="text-2xs text-slate-500 mt-0.5 max-w-2xl">
+            Confirm how each vendor is paid, review the run, then export the bank file (or mark check numbers) and
+            release. Releasing posts to the GL — it never sends money. You upload the file to your bank or mail the
+            checks to move funds.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -420,12 +538,26 @@ function DisbursementBatchPanel({
         </div>
       </div>
 
+      <WorkflowStepper current={currentStep} />
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Total to release" value={formatMoney(controls.totalCents)} tone="brand" />
         <Stat label="Payments" value={String(controls.itemCount)} />
         <Stat label="ACH" value={`${controls.byMethod.ACH.count} · ${formatMoney(controls.byMethod.ACH.totalCents)}`} />
         <Stat label="Check" value={`${controls.byMethod.CHECK.count} · ${formatMoney(controls.byMethod.CHECK.totalCents)}`} />
       </div>
+
+      {missingAch.length > 0 && (
+        <div className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-3">
+          <p className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+            <AlertTriangle size={13} /> {missingAch.length} vendor(s) set to ACH have no bank details on file
+          </p>
+          <p className="text-2xs text-amber-200/70 mt-1">
+            Add masked bank details below, or switch the vendor to Check. The bill-pay CSV still works (your bank holds
+            the payee record); the NACHA file will carry placeholders for these.
+          </p>
+        </div>
+      )}
 
       {criticalDupes.length > 0 && (
         <div className="rounded-lg border border-red-900/50 bg-red-950/30 p-3 space-y-2">
@@ -443,6 +575,119 @@ function DisbursementBatchPanel({
           </label>
         </div>
       )}
+
+      {/* Per-vendor review */}
+      <div className="rounded-lg border border-slate-800 overflow-hidden">
+        <div className="px-3 py-2 border-b border-slate-800 bg-surface-950">
+          <p className="text-2xs font-semibold uppercase tracking-wider text-slate-500">Vendors in this run</p>
+        </div>
+        <div className="divide-y divide-slate-800/40">
+          {groups.map((g) => {
+            const p = profileByVendor.get(g.vendorId);
+            const method = p?.paymentMethod ?? g.items[0]?.method ?? 'ACH';
+            const ready = method === 'CHECK' ? true : !!p?.hasBankDetails;
+            return (
+              <div key={g.vendorId} className="px-3 py-2.5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-100 truncate max-w-[220px]">{g.vendorName}</span>
+                    <MethodBadge method={method} />
+                  </div>
+                  <p className="text-2xs text-slate-500 mt-0.5">
+                    {g.itemCount} invoice(s)
+                    {p?.accountMask ? ` · acct ${p.accountMask}` : ''}
+                    {p?.bankName ? ` · ${p.bankName}` : ''}
+                    {!ready ? ' · no bank details' : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-sm font-mono text-slate-200">{formatMoney(g.subtotalCents)}</span>
+                  <button
+                    onClick={() => setEditVendor({ vendorId: g.vendorId, vendorName: g.vendorName })}
+                    className={clsx(
+                      'inline-flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-medium transition-colors',
+                      ready
+                        ? 'bg-surface-950 border border-slate-800 text-slate-300 hover:bg-slate-800'
+                        : 'bg-amber-600/15 border border-amber-700/50 text-amber-300 hover:bg-amber-600/25',
+                    )}
+                    title="Capture payment method + masked bank details"
+                  >
+                    <CreditCard size={11} /> {p ? 'Edit' : 'Add'} details
+                  </button>
+                  <button
+                    onClick={() => remittance(g.vendorId)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-medium bg-surface-950 border border-slate-800 text-slate-300 hover:bg-slate-800 transition-colors"
+                    title="Remittance advice PDF (which invoices this payment covers)"
+                  >
+                    <FileText size={11} /> Remittance
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Mark check numbers — the alternative to a bank file for hand-written checks */}
+      {checkItems.length > 0 && (
+        <div className="rounded-lg border border-slate-800 overflow-hidden">
+          <div className="px-3 py-2 border-b border-slate-800 bg-surface-950 flex items-center justify-between">
+            <p className="text-2xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <Hash size={12} /> Mark check numbers ({checkItems.length})
+            </p>
+            <button
+              onClick={saveCheckNumbers}
+              disabled={savingChecks}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-2xs font-medium bg-slate-800 text-slate-100 hover:bg-slate-700 disabled:opacity-40 transition-colors"
+            >
+              {savingChecks ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle2 size={11} />} Save check #s
+            </button>
+          </div>
+          <div className="divide-y divide-slate-800/40">
+            {checkItems.map((it) => (
+              <div key={it.approvalId} className="px-3 py-2 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="text-xs text-slate-200 truncate max-w-[200px] inline-block align-middle">{it.vendorName}</span>
+                  <span className="text-2xs text-slate-500 ml-2">{it.invoiceRef ?? '—'}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-mono text-slate-300">{formatMoney(it.amountCents)}</span>
+                  <input
+                    value={checkDrafts[it.approvalId] ?? ''}
+                    onChange={(e) => setCheckDrafts((d) => ({ ...d, [it.approvalId]: e.target.value }))}
+                    placeholder="Check #"
+                    inputMode="numeric"
+                    className="w-24 px-2 py-1 rounded-md bg-surface-950 border border-slate-800 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {editVendor && (
+        <VendorPaymentDetailsModal
+          vendorId={editVendor.vendorId}
+          vendorName={editVendor.vendorName}
+          existing={profileByVendor.get(editVendor.vendorId) ?? null}
+          onClose={() => setEditVendor(null)}
+          onSaved={() => void onReleased()}
+        />
+      )}
     </div>
+  );
+}
+
+function MethodBadge({ method }: { method: 'ACH' | 'CHECK' }) {
+  return (
+    <span
+      className={clsx(
+        'inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-semibold uppercase tracking-wide',
+        method === 'ACH' ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-600/25 text-slate-300',
+      )}
+    >
+      {method}
+    </span>
   );
 }

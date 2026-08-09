@@ -35,7 +35,7 @@ export function DebtTabs() {
         }
       />
 
-      {tab === 'register' && <DebtRegister />}
+      {tab === 'register' && <DebtRegister onViewCovenants={() => setTab('covenants')} />}
       {tab === 'covenants' && <CovenantsDashboard />}
     </>
   );

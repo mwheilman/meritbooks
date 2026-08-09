@@ -327,6 +327,7 @@ async function importTrialBalance(
   const lines: { account_id: string; debit_cents: number; credit_cents: number }[] = [];
   let totalDebit = 0;
   let totalCredit = 0;
+  let zeroSkipped = 0;
 
   body.rows.forEach((raw, i) => {
     const rowNum = i + 2;
@@ -335,11 +336,9 @@ async function importTrialBalance(
     const acctNum = String(rec.account_number ?? '');
     const acctId = accountMap.get(acctNum);
     if (!acctId) { errors.push({ row: rowNum, message: `Account "${acctNum}" not found in the chart of accounts` }); return; }
-    const debit = Number(rec.debit_cents ?? 0);
-    const credit = Number(rec.credit_cents ?? 0);
-    if (debit < 0 || credit < 0) { errors.push({ row: rowNum, message: 'Amounts cannot be negative' }); return; }
-    if (debit > 0 && credit > 0) { errors.push({ row: rowNum, message: 'A line cannot have both a debit and a credit' }); return; }
-    if (debit === 0 && credit === 0) return; // skip zero lines
+    const { debit, credit, error: normErr } = normalizeDrCr(Number(rec.debit_cents ?? 0), Number(rec.credit_cents ?? 0), acctNum);
+    if (normErr) { errors.push({ row: rowNum, message: normErr }); return; }
+    if (debit === 0 && credit === 0) { zeroSkipped++; return; } // skip zero lines (noted, not silent)
     lines.push({ account_id: acctId, debit_cents: debit, credit_cents: credit });
     totalDebit += debit;
     totalCredit += credit;
@@ -355,7 +354,7 @@ async function importTrialBalance(
       ok: errors.length === 0,
       dryRun: dryRun || undefined,
       willInsert: errors.length === 0 ? lines.length : 0,
-      skipped: 0,
+      skipped: zeroSkipped,
       errors: errors.slice(0, 200),
       destination: dest,
       balanced: totalDebit === totalCredit,
@@ -434,9 +433,8 @@ async function importGlHistory(
     const acctNum = String(rec.account_number ?? '');
     const acctId = accountMap.get(acctNum);
     if (!acctId) { errors.push({ row: rowNum, message: `Account "${acctNum}" not found` }); return; }
-    const debit = Number(rec.debit_cents ?? 0);
-    const credit = Number(rec.credit_cents ?? 0);
-    if (debit > 0 && credit > 0) { errors.push({ row: rowNum, message: 'A line cannot have both a debit and a credit' }); return; }
+    const { debit, credit, error: normErr } = normalizeDrCr(Number(rec.debit_cents ?? 0), Number(rec.credit_cents ?? 0), acctNum);
+    if (normErr) { errors.push({ row: rowNum, message: normErr }); return; }
     if (debit === 0 && credit === 0) return;
 
     let g = groups.get(ref);
@@ -514,6 +512,29 @@ async function importGlHistory(
 }
 
 // ── shared helpers ──────────────────────────────────────────────────────
+
+/**
+ * Normalize a debit/credit pair for a ledger line, tolerating the SIGNED-amount
+ * convention common in QuickBooks / Sage / Xero exports (a credit shown as a
+ * negative debit, or vice versa). A negative in one column folds into the other as
+ * a positive. A row still carrying BOTH a positive debit and a positive credit is a
+ * subtotal/total row and is rejected with a clear message (no silent corruption).
+ */
+function normalizeDrCr(
+  rawDebit: number,
+  rawCredit: number,
+  acctNum: string,
+): { debit: number; credit: number; error?: string } {
+  let debit = rawDebit;
+  let credit = rawCredit;
+  if (debit < 0) { credit += -debit; debit = 0; }
+  if (credit < 0) { debit += -credit; credit = 0; }
+  if (debit > 0 && credit > 0) {
+    return { debit: 0, credit: 0, error: `Account "${acctNum}" has both a debit and a credit — a line must be one or the other (this looks like a subtotal/total row).` };
+  }
+  return { debit, credit };
+}
+
 async function buildAccountMap(supabase: SupabaseClient, orgId: string) {
   const { data } = await supabase.from('accounts').select('id, account_number').eq('org_id', orgId);
   return new Map((data ?? []).map((a) => [String((a as { account_number: string }).account_number), (a as { id: string }).id]));

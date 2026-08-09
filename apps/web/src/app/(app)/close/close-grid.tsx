@@ -4,7 +4,9 @@ import { useState, useCallback } from 'react';
 import {
   CheckCircle2, Circle, AlertTriangle, Lock, AlertCircle, Loader2, Zap, Hand,
   ChevronDown, ChevronRight, ChevronLeft, ShieldAlert, ShieldCheck, Clock, Sparkles,
+  ExternalLink, FileSpreadsheet,
 } from 'lucide-react';
+import Link from 'next/link';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
@@ -33,6 +35,7 @@ interface EvaluatedTask {
   driverLabel: string;
   actionable: boolean;
   reason: string | null;
+  deepLinkHref?: string;
 }
 interface GraphEvaluation {
   tasks: EvaluatedTask[];
@@ -282,6 +285,22 @@ export function CloseOrchestration() {
                       </p>
                     ) : (
                       <>
+                        {/* Close package export (period binder: TB, recon, JE listing, open items) */}
+                        <div className="flex items-center justify-between gap-3 -mt-1">
+                          <p className="text-[11px] text-slate-500">
+                            Close readiness auto-verified from the live books. Deep-link into any blocking item to clear it.
+                          </p>
+                          {ent.periodId && (
+                            <a
+                              href={`/api/close/package?year=${year}&month=${month}&location_id=${ent.locationId}&format=xlsx`}
+                              className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-700/60 text-slate-200 hover:bg-slate-700 hover:text-white"
+                              title="Download the close package (Trial Balance, Reconciliation Status, JE Listing, Open Items) as Excel"
+                            >
+                              <FileSpreadsheet size={13} /> Close package
+                            </a>
+                          )}
+                        </div>
+
                         {PHASE_ORDER.map((phase) => {
                           const phaseTasks = ev.tasks.filter((t) => t.phase === phase).sort((a, b) => a.order - b.order);
                           if (phaseTasks.length === 0) return null;
@@ -400,6 +419,14 @@ function TaskRow({ task, busy, onToggle }: { task: EvaluatedTask; busy: boolean;
         </div>
         {task.status === 'blocked' && task.reason && (
           <p className="text-[11px] text-slate-500 mt-0.5">{task.reason}</p>
+        )}
+        {task.status === 'blocked' && task.deepLinkHref && (
+          <Link
+            href={task.deepLinkHref}
+            className="inline-flex items-center gap-1 text-[11px] text-emerald-400/90 hover:text-emerald-300 mt-0.5 underline underline-offset-2"
+          >
+            Go clear this <ExternalLink size={10} />
+          </Link>
         )}
         {task.status === 'pending' && (
           <p className="text-[11px] text-slate-600 mt-0.5">Waiting on prerequisite tasks</p>

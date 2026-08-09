@@ -40,7 +40,7 @@ export function GlDrillDown({
   accountName,
   startDate,
   endDate,
-  locationId,
+  locationIds,
   onClose,
 }: {
   accountId?: string;
@@ -48,13 +48,19 @@ export function GlDrillDown({
   accountName: string;
   startDate: string;
   endDate: string;
-  locationId: string;
+  // The full consolidation scope of the statement that was clicked: [] = all
+  // companies (consolidated), one id = single company, many ids = a chosen subset.
+  // Drilling honors exactly that scope so a consolidated line ties to every entity
+  // behind it — not just the first company.
+  locationIds: string[];
   onClose: () => void;
 }) {
   const [data, setData] = useState<GlDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
+
+  const locKey = locationIds.join(',');
 
   useEffect(() => {
     setLoading(true);
@@ -63,7 +69,8 @@ export function GlDrillDown({
     if (accountId) params.set('account_id', accountId);
     params.set('start_date', startDate);
     params.set('end_date', endDate);
-    if (locationId && locationId !== 'all') params.set('location_id', locationId);
+    if (locationIds.length === 1) params.set('location_id', locationIds[0]);
+    else if (locationIds.length > 1) params.set('location_ids', locKey);
     params.set('page', String(page));
     params.set('per_page', '50');
 
@@ -71,7 +78,8 @@ export function GlDrillDown({
       .then((r) => r.json())
       .then((d) => { setData(d); setLoading(false); })
       .catch((e) => { setError(e.message); setLoading(false); });
-  }, [accountId, startDate, endDate, locationId, page]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, startDate, endDate, locKey, page]);
 
   const txns = data?.data ?? [];
   const summary = data?.summary;

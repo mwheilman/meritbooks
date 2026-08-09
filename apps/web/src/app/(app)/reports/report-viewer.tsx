@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import React from 'react';
 import { clsx } from 'clsx';
 import {
@@ -26,6 +26,7 @@ import { ExportMenu } from './export-menu';
 import { NarrativePanel } from './narrative-panel';
 import { ReportCompiler } from './report-compiler';
 import { SavedPacks } from './saved-packs';
+import { SavedViews, type SavedView, type ViewConfig } from './saved-views';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -369,6 +370,33 @@ export function ReportViewer() {
   const currentCat = CATALOG.find((c) => c.key === catKey);
   const locIdsParam = selectedLocs.length > 0 ? selectedLocs.join(',') : '';
 
+  // ── SAVED VIEWS ─────────────────────────────────────────────────────────────
+  // Capture the live selector combo so a user can name and re-run it later, and
+  // re-apply a saved combo to the selectors (re-runs against today's ledger; the
+  // consolidation gate + RLS still police scope, so a saved 'All Companies' view
+  // stays single-company for a bookkeeper).
+  const currentConfig: ViewConfig = useMemo(
+    () => ({ periodKey, customS, customE, selectedLocs, selectedIndustries, basis, viewMode, compareMode }),
+    [periodKey, customS, customE, selectedLocs, selectedIndustries, basis, viewMode, compareMode],
+  );
+  const reportLabelFor = useCallback((key: string) => {
+    for (const cat of CATALOG) { const r = cat.reports.find((rp) => rp.key === key); if (r) return r.label; }
+    return key;
+  }, []);
+  const applyView = useCallback((view: SavedView) => {
+    const c = view.config ?? {};
+    for (const cat of CATALOG) { if (cat.reports.some((rp) => rp.key === view.report_key)) { setCatKey(cat.key); break; } }
+    setReportKey(view.report_key);
+    if (c.periodKey) setPeriodKey(c.periodKey);
+    if (typeof c.customS === 'string') setCustomS(c.customS);
+    if (typeof c.customE === 'string') setCustomE(c.customE);
+    if (Array.isArray(c.selectedIndustries)) setSelectedIndustries(c.selectedIndustries);
+    if (Array.isArray(c.selectedLocs)) setSelectedLocs(c.selectedLocs);
+    if (c.basis === 'accrual' || c.basis === 'cash') setBasis(c.basis);
+    if (c.viewMode === 'summary' || c.viewMode === 'detail') setViewMode(c.viewMode);
+    if (c.compareMode) setCompareMode(c.compareMode as CompareMode);
+  }, []);
+
   // ── Export labels (entity / period / basis) for the currently-viewed statement ──
   const entityLabel = useMemo(() => {
     if (selectedLocs.length === 0) return 'All Companies (Consolidated)';
@@ -433,6 +461,9 @@ export function ReportViewer() {
 
       {/* ─── Content ─── */}
       <div className="flex-1 overflow-y-auto">
+        <div className="flex justify-end mb-3">
+          <SavedViews currentReportKey={reportKey} currentConfig={currentConfig} reportLabelFor={reportLabelFor} onApply={applyView} />
+        </div>
         <ReportCompiler entityLabel={entityLabel} locationIds={selectedLocs} />
         <SavedPacks />
         {!reportKey ? (
@@ -565,7 +596,7 @@ export function ReportViewer() {
         )}
       </div>
 
-      {drill && <GlDrillDown accountId={drill.accountId} accountNumber={drill.accountNumber} accountName={drill.accountName} startDate={sd} endDate={ed} locationId={selectedLocs[0] ?? 'all'} onClose={() => setDrill(null)} />}
+      {drill && <GlDrillDown accountId={drill.accountId} accountNumber={drill.accountNumber} accountName={drill.accountName} startDate={sd} endDate={ed} locationIds={selectedLocs} onClose={() => setDrill(null)} />}
     </div>
   );
 }

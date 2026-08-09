@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import {
   applyMapping,
   validateOpeningBalance,
+  validateBalanceSheet,
   buildOpeningEntryLines,
   tieOutBlockers,
   distinctSourceAccounts,
@@ -22,11 +23,11 @@ import {
 } from './conversion';
 
 const targets: TargetAccount[] = [
-  { accountNumber: '1000', name: 'Operating Bank' },
-  { accountNumber: '1100', name: 'Accounts Receivable' },
-  { accountNumber: '2000', name: 'Accounts Payable' },
-  { accountNumber: '3000', name: 'Owners Capital' },
-  { accountNumber: '4000', name: 'Revenue' },
+  { accountNumber: '1000', name: 'Operating Bank', accountType: 'ASSET' },
+  { accountNumber: '1100', name: 'Accounts Receivable', accountType: 'ASSET' },
+  { accountNumber: '2000', name: 'Accounts Payable', accountType: 'LIABILITY' },
+  { accountNumber: '3000', name: 'Owners Capital', accountType: 'EQUITY' },
+  { accountNumber: '4000', name: 'Revenue', accountType: 'REVENUE' },
 ];
 
 // A balanced source TB: cash 100 + AR 50 (debits) = AP 30 + equity 120 (credits).
@@ -150,10 +151,45 @@ describe('applyMapping', () => {
   });
 });
 
+describe('validateBalanceSheet', () => {
+  it('ties on its own when only balance-sheet accounts carry balances', () => {
+    const tb = applyMapping(balancedSource, fullMapping, targets);
+    const bs = tb.balanceSheet;
+    expect(bs.assetsCents).toBe(15_000); // cash 10,000 + AR 5,000
+    expect(bs.liabilitiesCents).toBe(3_000);
+    expect(bs.equityCents).toBe(12_000);
+    expect(bs.plNetCents).toBe(0);
+    expect(bs.standalone).toBe(true);
+    expect(bs.untyped).toEqual([]);
+  });
+
+  it('does NOT stand alone when an income-statement account carries a balance', () => {
+    // Mid-year: revenue 4,000 CR sits open; equity absorbs less so the TB still balances.
+    const src: SourceLine[] = [
+      { sourceAccount: 'CASH', sourceName: 'Cash', debitCents: 12_000, creditCents: 0 },
+      { sourceAccount: 'EQ', sourceName: 'Capital', debitCents: 0, creditCents: 8_000 },
+      { sourceAccount: 'REV', sourceName: 'Sales', debitCents: 0, creditCents: 4_000 },
+    ];
+    const map: MappingTable = {
+      CASH: { targetAccountNumber: '1000', confidence: 1, source: 'human' },
+      EQ: { targetAccountNumber: '3000', confidence: 1, source: 'human' },
+      REV: { targetAccountNumber: '4000', confidence: 1, source: 'human' },
+    };
+    const tb = applyMapping(src, map, targets);
+    expect(tb.balance.balanced).toBe(true); // debits == credits
+    expect(tb.balanceSheet.plNetCents).toBe(4_000); // open revenue
+    expect(tb.balanceSheet.standalone).toBe(false);
+    // Blocks tie-out until acknowledged; passes once the user confirms mid-year go-live.
+    expect(tieOutBlockers(tb).some((b) => b.toLowerCase().includes('balance sheet'))).toBe(true);
+    expect(tieOutBlockers(tb, { plAcknowledged: true })).toEqual([]);
+  });
+});
+
 describe('tieOutBlockers', () => {
-  it('is empty for a balanced, fully-mapped, ≥2-line TB', () => {
+  it('is empty for a balanced, fully-mapped, ≥2-line TB (clean year-end)', () => {
     const tb = applyMapping(balancedSource, fullMapping, targets);
     expect(tieOutBlockers(tb)).toEqual([]);
+    expect(validateBalanceSheet(tb.openingBalances).standalone).toBe(true);
   });
 
   it('blocks a single-line TB even if it were "balanced"', () => {

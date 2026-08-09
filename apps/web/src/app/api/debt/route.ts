@@ -43,15 +43,21 @@ interface InstrumentRow {
   [k: string]: unknown;
 }
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: Request): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
   const { supabase } = ctx;
 
-  const { data: instruments, error } = await supabase
+  // Company scope: when the header active company attaches `location_id`, narrow
+  // to that entity's loans (consolidated when absent). RLS still isolates the org.
+  const locationId = new URL(request.url).searchParams.get('location_id');
+
+  let listQ = supabase
     .from('debt_instruments')
     .select(INSTRUMENT_COLS)
     .order('created_at', { ascending: false });
+  if (locationId) listQ = listQ.eq('location_id', locationId);
+  const { data: instruments, error } = await listQ;
   if (error) {
     console.error('[debt] list failed:', error.message);
     return NextResponse.json({ error: 'Failed to load debt instruments', code: 'INTERNAL_ERROR' }, { status: 500 });
