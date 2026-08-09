@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 import {
   Sparkles,
@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { formatMoney, dollarsToCents } from '@meritbooks/shared';
 import { useQuery, useMutation, useToast, addToast } from '@/hooks';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 import { MetricCard, EmptyState, ToastContainer } from '@/components/ui';
 import {
   INTANGIBLE_CATEGORIES,
@@ -318,6 +320,13 @@ function CreateIntangiblePanel({ onClose, onCreated }: { onClose: () => void; on
   const create = useMutation<Record<string, unknown>, { ok: boolean; assetId?: string }>('/api/intangibles');
 
   const [locationId, setLocationId] = useState('');
+  // Default the company/location to the active company so a fresh company's
+  // "New intangible" form is immediately usable.
+  const { activeCompanyId } = useActiveCompany();
+  useEffect(() => {
+    if (!locationId && isSpecificCompany(activeCompanyId)) setLocationId(activeCompanyId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCompanyId]);
   const [name, setName] = useState('');
   const [category, setCategory] = useState<IntangibleCategory>('INTANGIBLE_SOFTWARE');
   const [cost, setCost] = useState('');

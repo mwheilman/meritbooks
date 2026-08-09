@@ -7,6 +7,8 @@ import { Loader2, AlertCircle, Plus, Network, Pencil, Power, X, ChevronRight } f
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { addToast } from '@/hooks';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 import { PageHeader, EmptyState } from '@/components/ui';
 import { CompanyScopeGuard } from '@/components/company-scope-guard';
 
@@ -79,6 +81,7 @@ export default function DepartmentsPage() {
 }
 
 function DepartmentsPageInner() {
+  const { activeCompanyId } = useActiveCompany();
   const { data, isLoading, error, refetch } = useQuery<DepartmentsResponse>('/api/departments');
   const [selected, setSelected] = useState<{ dept: DeptLike; companyName: string } | null>(null);
   const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<{ dept: DeptLike; companyName: string }>();
@@ -131,7 +134,12 @@ function DepartmentsPageInner() {
 
   const openCreate = () => {
     setFormError(null);
-    setForm({ ...EMPTY_FORM, locationId: locationList[0]?.id ?? '' });
+    // Prefer the header's active company; fall back to the first available company
+    // so a fresh single-company tenant lands with the picker pre-filled.
+    const preferred = isSpecificCompany(activeCompanyId) && locationList.some((l) => l.id === activeCompanyId)
+      ? activeCompanyId
+      : locationList[0]?.id;
+    setForm({ ...EMPTY_FORM, locationId: preferred ?? '' });
   };
 
   const openEdit = (d: DepartmentRow) => {

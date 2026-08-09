@@ -6,6 +6,8 @@ import { useState, useMemo } from 'react';
 import { Loader2, AlertCircle, Plus, ArrowLeftRight, Trash2, X, Check, Ban, Send, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 import { PageHeader, EmptyState } from '@/components/ui';
 import { CompanyScopeGuard } from '@/components/company-scope-guard';
 
@@ -87,6 +89,7 @@ export default function InternalInvoicesPage() {
 }
 
 function InternalInvoicesPageInner() {
+  const { activeCompanyId } = useActiveCompany();
   const [filter, setFilter] = useState('all');
   const { data, isLoading, error, refetch } = useQuery<ListResponse>(
     `/api/internal-invoices${filter !== 'all' ? `?status=${filter}` : ''}`,
@@ -186,7 +189,15 @@ function InternalInvoicesPageInner() {
         description="Inter-department charges. The providing department invoices the receiver; on approval it books to the GL and nets to zero at the company roll-up."
         actions={
           <button
-            onClick={() => setForm({ ...EMPTY_FORM, lines: [{ description: '', amount: '' }] })}
+            onClick={() => setForm({
+              ...EMPTY_FORM,
+              // Pre-select the header's active company so a single-company tenant
+              // skips the redundant picker; falls back to blank for consolidated.
+              locationId: isSpecificCompany(activeCompanyId) && locs.some((l) => l.id === activeCompanyId)
+                ? activeCompanyId
+                : '',
+              lines: [{ description: '', amount: '' }],
+            })}
             disabled={locs.length === 0}
             className="btn-primary btn-sm inline-flex items-center gap-1.5 disabled:opacity-50"
           >

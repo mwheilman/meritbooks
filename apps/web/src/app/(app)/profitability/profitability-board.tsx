@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   Loader2,
@@ -14,10 +14,13 @@ import {
   TrendingDown,
   Wallet,
   Building2,
+  Layers,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 
 // ── Types (mirror /api/profitability) ───────────────────────────────────────────
 
@@ -115,7 +118,7 @@ function StatTile({
 
 // ── Diverging net-income bar chart (inline SVG) ──────────────────────────────────
 
-function NetIncomeChart({ entities }: { entities: EntityRow[] }) {
+function NetIncomeChart({ entities, highlightId }: { entities: EntityRow[]; highlightId?: string | null }) {
   const rows = entities.filter((e) => e.hasActivity);
   if (rows.length === 0) return null;
 
@@ -161,6 +164,8 @@ function NetIncomeChart({ entities }: { entities: EntityRow[] }) {
             const positive = ni >= 0;
             const barX = positive ? zeroX : zeroX - len;
             const fill = ni > 0 ? '#10b981' : ni < 0 ? '#ef4444' : '#475569';
+            const isFocus = highlightId != null && e.locationId === highlightId;
+            const dim = highlightId != null && !isFocus;
             return (
               <g key={e.locationId}>
                 <text
@@ -169,7 +174,9 @@ function NetIncomeChart({ entities }: { entities: EntityRow[] }) {
                   textAnchor="end"
                   dominantBaseline="central"
                   fontSize={12}
-                  fill="#cbd5e1"
+                  fontWeight={isFocus ? 600 : 400}
+                  fill={isFocus ? '#ffffff' : '#cbd5e1'}
+                  opacity={dim ? 0.5 : 1}
                 >
                   {clip(e.name, 30)}
                 </text>
@@ -180,7 +187,7 @@ function NetIncomeChart({ entities }: { entities: EntityRow[] }) {
                   height={rowH - 10}
                   rx={2}
                   fill={fill}
-                  opacity={0.9}
+                  opacity={dim ? 0.3 : 0.9}
                 />
                 <text
                   x={W - 8}
@@ -190,6 +197,7 @@ function NetIncomeChart({ entities }: { entities: EntityRow[] }) {
                   fontSize={11}
                   fontFamily="'JetBrains Mono', monospace"
                   fill={ni >= 0 ? '#6ee7b7' : '#fca5a5'}
+                  opacity={dim ? 0.4 : 1}
                 >
                   {formatMoney(ni, { compact: true })}
                 </text>
@@ -229,13 +237,32 @@ export function ProfitabilityBoard() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [, forceTick] = useState(0);
 
+  // The header already knows the active company; this ranking board is inherently
+  // cross-entity, so we DON'T scope the fetch (scope:false — always pull every
+  // entity for the ranking) but we DO default the on-page view to the active
+  // company: a specific company starts "focused" on itself (with its rank among
+  // peers); "All" starts on the full consolidated board. A toggle switches views.
+  const { activeCompanyId, activeCompany, isAll } = useActiveCompany();
+  const [focusMode, setFocusMode] = useState<'focused' | 'all'>(
+    () => (isSpecificCompany(activeCompanyId) ? 'focused' : 'all'),
+  );
+  const userPickedFocus = useRef(false);
+  useEffect(() => {
+    if (userPickedFocus.current) return; // in-page choice wins once made
+    setFocusMode(!isAll && isSpecificCompany(activeCompanyId) ? 'focused' : 'all');
+  }, [activeCompanyId, isAll]);
+  const pickFocus = useCallback((m: 'focused' | 'all') => {
+    userPickedFocus.current = true;
+    setFocusMode(m);
+  }, []);
+
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDate = new Date(year, month, 0).toISOString().split('T')[0]; // last day of month
 
   const { data, isLoading, error, refetch } = useQuery<ProfitabilityResponse>(
     '/api/profitability',
     { start_date: startDate, end_date: endDate },
-    { key: String(refreshKey), refetchInterval: 120_000 },
+    { key: String(refreshKey), refetchInterval: 120_000, scope: false },
   );
 
   // Keep the "updated Xs ago" label honest between fetches.
@@ -283,29 +310,72 @@ export function ProfitabilityBoard() {
   const rollup = data?.rollup;
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
 
+  // Focused-entity view: the active company's own row + where it ranks by net
+  // income among entities that actually posted activity this period.
+  const focusActive = focusMode === 'focused' && isSpecificCompany(activeCompanyId);
+  const focusedEntity = useMemo(
+    () => (focusActive ? (data?.entities ?? []).find((e) => e.locationId === activeCompanyId) ?? null : null),
+    [focusActive, data?.entities, activeCompanyId],
+  );
+  const focusedRank = useMemo(() => {
+    if (!focusedEntity || !focusedEntity.hasActivity) return 0;
+    const ranked = (data?.entities ?? [])
+      .filter((e) => e.hasActivity)
+      .sort((a, b) => b.netIncomeCents - a.netIncomeCents);
+    return ranked.findIndex((e) => e.locationId === focusedEntity.locationId) + 1;
+  }, [focusedEntity, data?.entities]);
+
   return (
     <div className="space-y-5">
-      {/* Period selector + refresh */}
+      {/* Period selector + focus toggle + refresh */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-surface-900 p-1">
-          <button
-            onClick={() => stepMonth(-1)}
-            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
-            aria-label="Previous month"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="min-w-[9.5rem] px-2 text-center text-sm font-medium text-white">
-            {data?.period.label ?? new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })}
-          </span>
-          <button
-            onClick={() => stepMonth(1)}
-            disabled={isCurrentMonth}
-            className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-white disabled:opacity-30"
-            aria-label="Next month"
-          >
-            <ChevronRight size={16} />
-          </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-surface-900 p-1">
+            <button
+              onClick={() => stepMonth(-1)}
+              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+              aria-label="Previous month"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="min-w-[9.5rem] px-2 text-center text-sm font-medium text-white">
+              {data?.period.label ?? new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+            </span>
+            <button
+              onClick={() => stepMonth(1)}
+              disabled={isCurrentMonth}
+              className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-white disabled:opacity-30"
+              aria-label="Next month"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          {/* Focus toggle — only when a specific company is active in the header. */}
+          {isSpecificCompany(activeCompanyId) && activeCompany && (
+            <div className="inline-flex items-center rounded-lg border border-slate-800 bg-surface-900 p-1 text-xs" role="group" aria-label="Scope">
+              <button
+                onClick={() => pickFocus('focused')}
+                className={clsx(
+                  'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors',
+                  focusMode === 'focused' ? 'bg-brand-500 text-white' : 'text-slate-400 hover:text-slate-200',
+                )}
+              >
+                <Building2 size={13} />
+                <span className="max-w-[10rem] truncate">{activeCompany.name}</span>
+              </button>
+              <button
+                onClick={() => pickFocus('all')}
+                className={clsx(
+                  'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors',
+                  focusMode === 'all' ? 'bg-brand-500 text-white' : 'text-slate-400 hover:text-slate-200',
+                )}
+              >
+                <Layers size={13} />
+                All entities
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -343,41 +413,105 @@ export function ProfitabilityBoard() {
             No active companies were found. Create entities and post activity to light up the board.
           </p>
         </div>
+      ) : focusActive && focusedEntity && !focusedEntity.hasActivity ? (
+        // Fresh / sandbox company: entity exists but posted nothing this period.
+        <div className="card p-12 text-center">
+          <Building2 className="mx-auto mb-3 h-8 w-8 text-slate-600" />
+          <p className="text-sm font-medium text-slate-300">
+            No posted activity for {focusedEntity.name}
+          </p>
+          <p className="mx-auto mt-1 max-w-md text-xs text-slate-500">
+            This company has no revenue or expenses posted in{' '}
+            {data?.period.label ?? 'this period'}. Post journal entries, or switch to
+            the full portfolio to see how the other entities are performing.
+          </p>
+          <button
+            onClick={() => pickFocus('all')}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <Layers size={13} /> View all entities
+          </button>
+        </div>
       ) : (
         <>
-          {/* Consolidated roll-up */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatTile
-              label="Consolidated revenue"
-              value={formatMoney(rollup.revenueCents, { compact: true })}
-              hint={`${rollup.activeCount} of ${rollup.entityCount} entities active`}
-              icon={Wallet}
-            />
-            <StatTile
-              label="Gross profit"
-              value={formatMoney(rollup.grossProfitCents, { compact: true })}
-              hint={`${fmtPct(rollup.grossMarginPct)} gross margin`}
-              icon={TrendingUp}
-              tone={rollup.grossProfitCents >= 0 ? 'good' : 'danger'}
-            />
-            <StatTile
-              label="Net income"
-              value={formatMoney(rollup.netIncomeCents, { compact: true })}
-              hint={`${fmtPct(rollup.netMarginPct)} net margin (weighted)`}
-              icon={rollup.netIncomeCents >= 0 ? TrendingUp : TrendingDown}
-              tone={rollup.netIncomeCents >= 0 ? 'good' : 'danger'}
-            />
-            <StatTile
-              label="Profitable entities"
-              value={`${rollup.profitableCount}/${rollup.activeCount}`}
-              hint={rollup.unprofitableCount > 0 ? `${rollup.unprofitableCount} losing money` : 'none in the red'}
-              icon={Building2}
-              tone={rollup.unprofitableCount > 0 ? 'warn' : 'good'}
-            />
-          </div>
+          {focusActive && focusedEntity ? (
+            // ── Focused on the active company: its own P&L + portfolio rank ──
+            <>
+              <p className="flex items-center gap-1.5 text-xs text-slate-500">
+                <Building2 size={13} className="text-brand-400" />
+                Showing <span className="font-medium text-slate-300">{focusedEntity.name}</span> — its
+                standalone P&amp;L and where it ranks in the portfolio.
+              </p>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <StatTile
+                  label="Revenue"
+                  value={formatMoney(focusedEntity.revenueCents, { compact: true })}
+                  hint={`${fmtPct(focusedEntity.grossMarginPct)} gross margin`}
+                  icon={Wallet}
+                />
+                <StatTile
+                  label="Gross profit"
+                  value={formatMoney(focusedEntity.grossProfitCents, { compact: true })}
+                  hint={`${fmtPct(focusedEntity.grossMarginPct)} gross margin`}
+                  icon={TrendingUp}
+                  tone={focusedEntity.grossProfitCents >= 0 ? 'good' : 'danger'}
+                />
+                <StatTile
+                  label="Net income"
+                  value={formatMoney(focusedEntity.netIncomeCents, { compact: true })}
+                  hint={`${fmtPct(focusedEntity.netMarginPct)} net margin`}
+                  icon={focusedEntity.netIncomeCents >= 0 ? TrendingUp : TrendingDown}
+                  tone={focusedEntity.netIncomeCents >= 0 ? 'good' : 'danger'}
+                />
+                <StatTile
+                  label="Portfolio rank"
+                  value={focusedRank > 0 ? `#${focusedRank} of ${rollup.activeCount}` : '—'}
+                  hint="by net income"
+                  icon={Building2}
+                  tone={
+                    focusedRank > 0 && focusedRank <= Math.ceil(rollup.activeCount / 2) ? 'good' : 'default'
+                  }
+                />
+              </div>
+            </>
+          ) : (
+            // ── Consolidated roll-up (All entities) ──
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <StatTile
+                label="Consolidated revenue"
+                value={formatMoney(rollup.revenueCents, { compact: true })}
+                hint={`${rollup.activeCount} of ${rollup.entityCount} entities active`}
+                icon={Wallet}
+              />
+              <StatTile
+                label="Gross profit"
+                value={formatMoney(rollup.grossProfitCents, { compact: true })}
+                hint={`${fmtPct(rollup.grossMarginPct)} gross margin`}
+                icon={TrendingUp}
+                tone={rollup.grossProfitCents >= 0 ? 'good' : 'danger'}
+              />
+              <StatTile
+                label="Net income"
+                value={formatMoney(rollup.netIncomeCents, { compact: true })}
+                hint={`${fmtPct(rollup.netMarginPct)} net margin (weighted)`}
+                icon={rollup.netIncomeCents >= 0 ? TrendingUp : TrendingDown}
+                tone={rollup.netIncomeCents >= 0 ? 'good' : 'danger'}
+              />
+              <StatTile
+                label="Profitable entities"
+                value={`${rollup.profitableCount}/${rollup.activeCount}`}
+                hint={rollup.unprofitableCount > 0 ? `${rollup.unprofitableCount} losing money` : 'none in the red'}
+                icon={Building2}
+                tone={rollup.unprofitableCount > 0 ? 'warn' : 'good'}
+              />
+            </div>
+          )}
 
-          {/* Net-income visual */}
-          <NetIncomeChart entities={data?.entities ?? []} />
+          {/* Net-income visual — the focused entity's bar is emphasized. */}
+          <NetIncomeChart
+            entities={data?.entities ?? []}
+            highlightId={focusActive && focusedEntity ? focusedEntity.locationId : null}
+          />
 
           {/* Per-entity P&L table */}
           <div className="card overflow-hidden">
@@ -410,7 +544,14 @@ export function ProfitabilityBoard() {
                 </thead>
                 <tbody className="divide-y divide-slate-800/40">
                   {entities.map((e) => (
-                    <tr key={e.locationId} className={clsx('text-slate-300 transition-colors hover:bg-slate-800/30', !e.hasActivity && 'opacity-55')}>
+                    <tr
+                      key={e.locationId}
+                      className={clsx(
+                        'text-slate-300 transition-colors hover:bg-slate-800/30',
+                        !e.hasActivity && 'opacity-55',
+                        focusActive && e.locationId === activeCompanyId && 'bg-brand-500/[0.07] ring-1 ring-inset ring-brand-500/30',
+                      )}
+                    >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-slate-700/70 font-mono text-[9px] text-slate-300">

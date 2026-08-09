@@ -1,9 +1,11 @@
 'use client';
 
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 import { Loader2, AlertCircle, Building2, Calendar, TrendingUp, Info } from 'lucide-react';
 import { useQuery } from '@/hooks';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 import { formatMoney } from '@meritbooks/shared';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -29,8 +31,21 @@ interface ReforecastResp {
 }
 
 export function ReforecastView() {
-  const [locationId, setLocationId] = useState('');
+  // Seed from the header's active company so the reforecast opens on the right
+  // entity; the dropdown remains switchable (incl. All-Companies consolidated).
+  const { activeCompanyId } = useActiveCompany();
+  const [locationId, setLocationId] = useState(() =>
+    isSpecificCompany(activeCompanyId) ? activeCompanyId : '',
+  );
+  const [companyTouched, setCompanyTouched] = useState(false);
   const [fiscalYear, setFiscalYear] = useState(CURRENT_YEAR);
+
+  useEffect(() => {
+    if (companyTouched) return;
+    if (isSpecificCompany(activeCompanyId) && locationId !== activeCompanyId) {
+      setLocationId(activeCompanyId);
+    }
+  }, [activeCompanyId, companyTouched, locationId]);
   const [method, setMethod] = useState<'budget_remaining' | 'run_rate'>('budget_remaining');
   const [closedThrough, setClosedThrough] = useState<number | null>(null); // null => server default
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -55,7 +70,7 @@ export function ReforecastView() {
       <div className="flex items-center gap-2 mb-5 p-3 rounded-xl bg-slate-800/20 border border-slate-800 flex-wrap">
         <div className="flex items-center gap-1.5">
           <Building2 size={13} className="text-slate-500" />
-          <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white max-w-[240px]">
+          <select value={locationId} onChange={(e) => { setCompanyTouched(true); setLocationId(e.target.value); }} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white max-w-[240px]">
             <option value="">All Companies (Consolidated)</option>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.short_code} · {l.name}</option>)}
           </select>

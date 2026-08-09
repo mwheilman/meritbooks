@@ -257,7 +257,7 @@ export function ReportViewer() {
   // bookkeeper can't accidentally read across entities.
   const { user } = useMe();
   const mayConsolidate = canConsolidate(user);
-  const { activeCompanyId, companies: myCompanies } = useActiveCompany();
+  const { activeCompanyId, companies: myCompanies, ready: companyScopeReady } = useActiveCompany();
 
   useEffect(() => {
     if (mayConsolidate) return;
@@ -269,6 +269,24 @@ export function ReportViewer() {
       prev.length === 1 && prev[0] === forced ? prev : forced ? [forced] : [],
     );
   }, [mayConsolidate, activeCompanyId, myCompanies]);
+
+  // ── ACTIVE-COMPANY DEFAULT (admins) ─────────────────────────────────────────
+  // Admins keep the consolidated "All Companies" option, but when they're actively
+  // working inside ONE company (header selector), default the reports scope to that
+  // company so they see its statements immediately — no forced empty re-pick. This
+  // is a ONE-TIME initial default (tracked by a ref) so it never fights an admin who
+  // subsequently chooses All Companies or a different entity. When scope is already
+  // consolidated ('all'), we leave selectedLocs empty (= All Companies).
+  const appliedActiveDefault = useRef(false);
+  useEffect(() => {
+    if (!mayConsolidate) return;               // non-admins handled above
+    if (appliedActiveDefault.current) return;  // only seed the initial default once
+    if (!companyScopeReady) return;            // wait for /api/me to resolve scope
+    appliedActiveDefault.current = true;
+    if (isSpecificCompany(activeCompanyId)) {
+      setSelectedLocs((prev) => (prev.length === 0 ? [activeCompanyId] : prev));
+    }
+  }, [mayConsolidate, companyScopeReady, activeCompanyId]);
 
   const industries = useMemo(() => {
     const set = new Set(locations.map((l) => l.industry).filter(Boolean) as string[]);

@@ -61,10 +61,14 @@ export function CashForecast({ locationId }: { locationId?: string }) {
   if (error) return <div className="card p-8 text-center"><AlertCircle size={24} className="mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{String(error)}</p></div>;
   if (!data) return <div className="card p-8 text-center text-sm text-slate-500">No forecast data available.</div>;
 
-  const noDrivers = data.drivers.openInvoiceCount === 0 && data.drivers.openBillCount === 0 && data.drivers.recurringFlowCount === 0;
+  // Defensive: a partial/empty response (e.g. a brand-new company with no ledger)
+  // should render the empty state, never crash on an absent array.
+  const weeks = Array.isArray(data.weeks) ? data.weeks : [];
+  const drivers = data.drivers ?? { openInvoiceCount: 0, openBillCount: 0, recurringFlowCount: 0 } as DriverForecastResponse['drivers'];
+  const noDrivers = drivers.openInvoiceCount === 0 && drivers.openBillCount === 0 && drivers.recurringFlowCount === 0;
 
   // Waterfall scaling: max of collections / disbursements across weeks.
-  const maxFlow = Math.max(1, ...data.weeks.map((w) => Math.max(w.collectionsCents, w.disbursementsCents)));
+  const maxFlow = Math.max(1, ...weeks.map((w) => Math.max(w.collectionsCents, w.disbursementsCents)));
 
   return (
     <div className="space-y-5">

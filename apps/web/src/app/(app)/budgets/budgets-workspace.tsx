@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, type ElementType } from 'react';
 import { clsx } from 'clsx';
 import { Building2, Calendar, LayoutGrid, GitCompare, Layers, SlidersHorizontal } from 'lucide-react';
 import { useQuery } from '@/hooks';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 import { BudgetEntryGrid } from './budget-entry-grid';
 import { BudgetVsActual } from './budget-vs-actual';
 import { ScenarioModeler } from './scenario-modeler';
@@ -30,8 +32,23 @@ export function BudgetsWorkspace() {
     const fyNum = fy ? parseInt(fy, 10) : NaN;
     if (Number.isFinite(fyNum) && FISCAL_YEARS.includes(fyNum)) setFiscalYear(fyNum);
   }, []);
-  const [locationId, setLocationId] = useState<string>(''); // '' = All companies
+  // Default the company selector to the header's active company so the page works
+  // immediately (no forced re-selection). The dropdown stays interactive so an
+  // admin can switch to another company or All-Companies for planning; once they
+  // pick in-page, we stop mirroring the header.
+  const { activeCompanyId } = useActiveCompany();
+  const [locationId, setLocationId] = useState<string>(() =>
+    isSpecificCompany(activeCompanyId) ? activeCompanyId : '',
+  ); // '' = All companies
+  const [companyTouched, setCompanyTouched] = useState(false);
   const [departmentId, setDepartmentId] = useState<string>(''); // '' = company-level (no dept)
+
+  useEffect(() => {
+    if (companyTouched) return;
+    if (isSpecificCompany(activeCompanyId) && locationId !== activeCompanyId) {
+      setLocationId(activeCompanyId);
+    }
+  }, [activeCompanyId, companyTouched, locationId]);
 
   const { data: rawLocs } = useQuery<LocationLite[]>('/api/locations');
   const locations = useMemo(() => rawLocs ?? [], [rawLocs]);
@@ -58,7 +75,7 @@ export function BudgetsWorkspace() {
           <Building2 size={13} className="text-slate-500" />
           <select
             value={locationId}
-            onChange={(e) => { setLocationId(e.target.value); setDepartmentId(''); }}
+            onChange={(e) => { setCompanyTouched(true); setLocationId(e.target.value); setDepartmentId(''); }}
             className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white max-w-[240px]"
           >
             <option value="">All Companies{tab === 'variance' ? ' (Consolidated)' : ''}</option>

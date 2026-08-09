@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { useQuery, addToast } from '@/hooks';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 import { formatMoney, dollarsToCents, centsToDollars } from '@meritbooks/shared';
 import {
   expandDrivers, MONTHS_IN_YEAR,
@@ -88,10 +90,23 @@ function toDrivers(rows: DriftRow[], accountType: (id: string) => AccountType | 
 }
 
 export function DriverBuilder() {
-  const [locationId, setLocationId] = useState('');
+  // Seed the company from the header's active company so planning starts on the
+  // right entity; the dropdown stays switchable and stops mirroring once used.
+  const { activeCompanyId } = useActiveCompany();
+  const [locationId, setLocationId] = useState(() =>
+    isSpecificCompany(activeCompanyId) ? activeCompanyId : '',
+  );
+  const [companyTouched, setCompanyTouched] = useState(false);
   const [fiscalYear, setFiscalYear] = useState(CURRENT_YEAR + 1);
   const [rows, setRows] = useState<DriftRow[]>([]);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (companyTouched) return;
+    if (isSpecificCompany(activeCompanyId) && locationId !== activeCompanyId) {
+      setLocationId(activeCompanyId);
+    }
+  }, [activeCompanyId, companyTouched, locationId]);
 
   const { data: locData, isLoading: locLoading } = useQuery<LocationLite[]>('/api/locations');
   const locations = useMemo(() => locData ?? [], [locData]);
@@ -172,7 +187,7 @@ export function DriverBuilder() {
         <Building2 size={13} className="text-slate-500" />
         <select
           value={locationId}
-          onChange={(e) => setLocationId(e.target.value)}
+          onChange={(e) => { setCompanyTouched(true); setLocationId(e.target.value); }}
           className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white max-w-[260px]"
         >
           <option value="">Select a company…</option>

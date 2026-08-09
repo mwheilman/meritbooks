@@ -1,9 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
 import { Loader2, X, Sparkles, AlertTriangle } from 'lucide-react';
@@ -71,6 +73,13 @@ export function PrepaidSetup({
   const [months, setMonths] = useState<string>(prefill?.term_months != null ? String(prefill.term_months) : '12');
   const [startDate, setStartDate] = useState(prefill?.start_date ?? todayISO());
   const [locationId, setLocationId] = useState(prefill?.location_id ?? '');
+  // Default the company/location to the active company (this modal lives inside a
+  // company-scoped page) so a fresh company's form is usable without re-picking.
+  const { activeCompanyId } = useActiveCompany();
+  useEffect(() => {
+    if (!locationId && isSpecificCompany(activeCompanyId)) setLocationId(activeCompanyId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCompanyId]);
   const [expenseAccountId, setExpenseAccountId] = useState(prefill?.expense_account_id ?? '');
   const [prepaidAccountId, setPrepaidAccountId] = useState(prefill?.prepaid_account_id ?? '');
   const [saving, setSaving] = useState(false);

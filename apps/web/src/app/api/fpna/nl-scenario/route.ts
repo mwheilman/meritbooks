@@ -207,41 +207,108 @@ function leversToOverrides(
 }
 
 // ── Deterministic fallback heuristic (no AI) ─────────────────────────────────
-// A deliberately conservative keyword parser so the feature degrades honestly.
+// A clause-aware keyword parser so the feature degrades HONESTLY when the AI
+// provider is unavailable. It handles BOTH natural orderings — "raise revenue 8%"
+// (verb→noun) and "revenue up 8%" (noun→verb) — plus multi-clause inputs
+// ("raise revenue 8% and cut costs 12%"), headcount moves ("hire 3 people"), and
+// unquantified downside ("what if we lose our biggest customer").
+
+/** Default revenue hit assumed when a lost customer/contract is described with
+ *  no percentage — surfaced as an explicit, adjustable assumption. */
+const DEF_CUSTOMER_LOSS_PCT = 15;
+
+const HEUR_DOWN = /\b(cut|cuts|reduc\w*|decreas\w*|declin\w*|lower\w*|trim\w*|drop\w*|down|slash\w*|shrink\w*|fall\w*|lose|lost|los\w*|attrition|churn|fewer|less)\b/;
+const HEUR_UP = /\b(rais\w*|increas\w*|grow\w*|grew|boost\w*|expand\w*|gain\w*|jump\w*|bump\w*|higher|more|up|add\w*)\b/;
+const HEUR_COST = /\b(cost|costs|expens\w*|opex|spend\w*|overhead|payroll|salar\w*|wage\w*|burn)\b/;
+const HEUR_REV = /\b(revenue|sales|top.?line|price|pricing|volume|booking\w*|turnover)\b/;
+const HEUR_HEAD_NOUN = '(?:head|heads|headcount|employee|employees|person|people|staff|worker|workers|hire|hires|fte|ftes|role|roles|position|positions|job|jobs)';
+const HEUR_HIRE = new RegExp(`\\b(?:hir\\w*|add\\w*|onboard\\w*)\\s+(\\d+)\\s+${HEUR_HEAD_NOUN}`);
+const HEUR_FIRE = new RegExp(`\\b(?:lay\\s?off|layoff\\w*|cut\\w*|reduc\\w*|remov\\w*|eliminat\\w*|los\\w*|lost)\\s+(\\d+)\\s+${HEUR_HEAD_NOUN}`);
+const HEUR_ADVERSE = /\b(lose|lost|los\w*|recession|downturn|attrition|churn|worst|risk|declin\w*|slow\w*|headwind|shortfall)\b/;
+const HEUR_UPSIDE = /\b(price\s+increase|new\s+(?:contract|customer|deal|logo)|upside|best\s+case|expansion|tailwind)\b/;
+
 function heuristicParse(text: string): ParsedScenario {
   const t = text.toLowerCase();
-  const pct = (re: RegExp): number | null => {
-    const m = t.match(re);
-    return m ? Number(m[1]) : null;
-  };
-  const revUp = pct(/(?:revenue|sales|top.?line|price).{0,24}?(?:up|increase|grow|rais\w*|\+)\D{0,6}(\d+(?:\.\d+)?)\s*%/);
-  const revDown = pct(/(?:revenue|sales|top.?line).{0,24}?(?:down|drop|declin\w*|cut|lose|lost|fall\w*|-)\D{0,6}(\d+(?:\.\d+)?)\s*%/);
-  const costUp = pct(/(?:cost|expense|opex|spend).{0,24}?(?:up|increase|grow|rais\w*|\+)\D{0,6}(\d+(?:\.\d+)?)\s*%/);
-  const costDown = pct(/(?:cost|expense|opex|spend|headcount|payroll).{0,24}?(?:down|cut|reduc\w*|decreas\w*|trim|-)\D{0,6}(\d+(?:\.\d+)?)\s*%/);
-  const heads = t.match(/(hir\w*|add\w*)\s+(\d+)\s+(?:head|employee|hire|fte)/);
-  const cuts = t.match(/(lay\s?off|cut|reduc\w*|remove)\s+(\d+)\s+(?:head|employee|role|fte)/);
+  // Split into clauses on connectives + punctuation so each move ("cut costs
+  // 12%") is scored against its OWN subject/direction, not the whole sentence.
+  const clauses = t
+    .split(/\s+and\s+|\s+with\s+|\s+plus\s+|\s+while\s+|\s+but\s+|[,;.]/)
+    .map((c) => c.trim())
+    .filter(Boolean);
+  const units = clauses.length > 0 ? clauses : [t];
+
+  let revenuePct = 0;
+  let costPct = 0;
+  let headcount = 0;
+  const flagged: string[] = [];
+
+  for (const c of units) {
+    // Headcount moves carry a bare integer (+ a headcount noun), not a %.
+    const hire = c.match(HEUR_HIRE);
+    if (hire) headcount += Number(hire[1]);
+    const fire = c.match(HEUR_FIRE);
+    if (fire) headcount -= Number(fire[1]);
+
+    // A percentage move in this clause → attribute to cost vs revenue by the
+    // clause's own keywords; direction from the clause's own verbs.
+    const pm = c.match(/(\d+(?:\.\d+)?)\s*%/);
+    if (pm) {
+      const val = Number(pm[1]);
+      const down = HEUR_DOWN.test(c) && !HEUR_UP.test(c);
+      const signed = down ? -val : val;
+      const isCost = HEUR_COST.test(c);
+      const isRev = HEUR_REV.test(c);
+      if (isCost && !isRev) costPct += signed;
+      else if (isRev) revenuePct += signed; // revenue wins ties (price/volume language)
+      else if (isCost) costPct += signed;
+      // neither keyword present → cannot attribute; skip rather than guess.
+    } else if (
+      /\b(los\w*|lost|lose|leav\w*|drop\w*)\b/.test(c) &&
+      /\b(customer|client|account|contract|deal|logo)\b/.test(c)
+    ) {
+      // Unquantified downside (a named customer/contract the ledger can't resolve).
+      revenuePct -= DEF_CUSTOMER_LOSS_PCT;
+      flagged.push(
+        `Assumed ~${DEF_CUSTOMER_LOSS_PCT}% revenue loss from a lost customer/contract — no percentage was given; adjust to that account's actual share.`,
+      );
+    }
+  }
 
   const levers: ParsedCaseLevers = {
-    revenueGrowthPct: clampPct((revUp ?? 0) - (revDown ?? 0)),
-    costChangePct: clampPct((costUp ?? 0) - (costDown ?? 0)),
-    headcountDelta: clampHeads((heads ? Number(heads[2]) : 0) - (cuts ? Number(cuts[2]) : 0)),
+    revenueGrowthPct: clampPct(revenuePct),
+    costChangePct: clampPct(costPct),
+    headcountDelta: clampHeads(headcount),
   };
-  const adverse = /(lose|lost|recession|downturn|attrition|churn|worst|risk|decline)/.test(t);
-  const upside = /(price increase|new contract|upside|best case|win|expansion|grow)/.test(t);
-  const target: CaseKey = adverse && !upside ? 'worst' : upside && !adverse ? 'best' : 'base';
+
+  // Assign the modeled change to best / base / worst by sentiment, falling back
+  // to the net favorability of the parsed levers (revenue up / cost down = good).
+  const adverse = HEUR_ADVERSE.test(t);
+  const upside = HEUR_UPSIDE.test(t);
+  const favorable = levers.revenueGrowthPct > 0 || levers.costChangePct < 0;
+  const unfavorable = levers.revenueGrowthPct < 0 || levers.costChangePct > 0;
+  let target: CaseKey;
+  if (adverse && !upside) target = 'worst';
+  else if (upside && !adverse) target = 'best';
+  else if (unfavorable && !favorable) target = 'worst';
+  else if (favorable && !unfavorable) target = 'best';
+  else target = 'base';
+
   const cases: Record<CaseKey, ParsedCaseLevers> = {
     best: { ...EMPTY_LEVERS }, base: { ...EMPTY_LEVERS }, worst: { ...EMPTY_LEVERS },
   };
   cases[target] = levers;
+
   const assumptions: string[] = [];
-  if (levers.revenueGrowthPct) assumptions.push(`Revenue ${levers.revenueGrowthPct > 0 ? '+' : ''}${levers.revenueGrowthPct}% (all revenue drivers)`);
-  if (levers.costChangePct) assumptions.push(`Costs ${levers.costChangePct > 0 ? '+' : ''}${levers.costChangePct}% (COGS + OPEX)`);
-  if (levers.headcountDelta) assumptions.push(`Headcount ${levers.headcountDelta > 0 ? '+' : ''}${levers.headcountDelta}`);
+  if (levers.revenueGrowthPct) assumptions.push(`Revenue ${levers.revenueGrowthPct > 0 ? '+' : ''}${levers.revenueGrowthPct}% (applied to all revenue drivers)`);
+  if (levers.costChangePct) assumptions.push(`Costs ${levers.costChangePct > 0 ? '+' : ''}${levers.costChangePct}% (across COGS + OPEX)`);
+  if (levers.headcountDelta) assumptions.push(`Headcount ${levers.headcountDelta > 0 ? '+' : ''}${levers.headcountDelta} (each at the assumed monthly cost / head)`);
+  assumptions.push(...flagged);
+
   return {
     scenarioName: text.slice(0, 60),
     cases,
+    notes: 'AI unavailable — modeled with a keyword parser. Review and tweak the levers before applying.',
     assumptions,
-    notes: 'Parsed by keyword heuristic (AI unavailable). Review and tweak the levers before applying.',
     confidence: assumptions.length > 0 ? 0.4 : 0.15,
   };
 }

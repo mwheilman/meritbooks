@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@/hooks';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 import { formatMoney } from '@meritbooks/shared';
 import {
   DollarSign, AlertTriangle, TrendingDown, Building2, Loader2, AlertCircle,
@@ -49,7 +51,17 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: typeof A
 
 export function CashDashboard() {
   const [expandedLoc, setExpandedLoc] = useState<string | null>(null);
-  const [filterLoc, setFilterLoc] = useState('');
+  // Default the in-page company filter to the header's active company (this page
+  // is company-scoped) so a fresh session lands on the scoped view instead of a
+  // misleading "All companies" label. Re-sync whenever the header company changes;
+  // an explicit in-page pick still sticks (activeCompanyId doesn't change then).
+  const { activeCompanyId } = useActiveCompany();
+  const [filterLoc, setFilterLoc] = useState(() =>
+    isSpecificCompany(activeCompanyId) ? activeCompanyId : '',
+  );
+  useEffect(() => {
+    setFilterLoc(isSpecificCompany(activeCompanyId) ? activeCompanyId : '');
+  }, [activeCompanyId]);
   const cashParams = filterLoc ? { location_id: filterLoc } : undefined;
   const { data, isLoading, error, refetch } = useQuery<CashResponse>('/api/cash', cashParams);
   const { data: entitiesData } = useQuery<Array<{ id: string; name: string }>>('/api/locations');

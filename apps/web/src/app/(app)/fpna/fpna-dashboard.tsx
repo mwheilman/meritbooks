@@ -20,12 +20,11 @@ import {
   Scale,
   BarChart3,
   ArrowRight,
-  Sparkles,
-  Wand2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
+import { FpnaNlScenario } from './fpna-nl-scenario';
 
 // ── Response types (mirror /api/fpna/dashboard) ──────────────────────────────
 
@@ -578,24 +577,10 @@ export function FpnaDashboard() {
             </div>
           )}
 
-          {/* AI what-if — natural-language scenario modeling (indigo = AI) */}
-          <Link
-            href={`/budgets?tab=scenarios&fiscal_year=${data.period.fiscalYear}`}
-            className="group flex items-center gap-3 rounded-xl border border-indigo-500/30 bg-indigo-500/[0.06] px-4 py-3 transition-colors hover:border-indigo-500/50 hover:bg-indigo-500/10"
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15">
-              <Sparkles size={16} className="text-indigo-300" />
-            </div>
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-sm font-medium text-white">
-                <Wand2 size={13} className="text-indigo-300" /> Model a what-if in plain English
-              </p>
-              <p className="truncate text-[11px] text-slate-400">
-                “Raise revenue 8% and cut headcount cost 12% starting Q3” — AI turns it into a modeled scenario on your driver budget.
-              </p>
-            </div>
-            <ArrowRight size={15} className="ml-auto shrink-0 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-300" />
-          </Link>
+          {/* AI what-if — REAL natural-language scenario modeling on the active
+              company's driver budget (indigo = AI). Heuristic-backed when the AI
+              provider is unavailable, so it always returns a modeled result. */}
+          <FpnaNlScenario fiscalYear={data.period.fiscalYear} />
 
           {/* Trends */}
           <TrendChart trend={data.trend} throughMonth={data.period.asOfMonth} />

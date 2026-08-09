@@ -1,8 +1,10 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
 import { dollarsToCents } from '@meritbooks/shared';
@@ -88,6 +90,13 @@ export function LeaseParseReview({
   const { data: locData } = useQuery<LocationOption[]>('/api/locations');
   const locations = locData ?? [];
   const [locationId, setLocationId] = useState<string>('');
+  // Default the company to the active company (this modal lives inside a
+  // company-scoped page) so the lease lands on the right entity by default.
+  const { activeCompanyId } = useActiveCompany();
+  useEffect(() => {
+    if (!locationId && isSpecificCompany(activeCompanyId)) setLocationId(activeCompanyId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCompanyId]);
 
   const parse = useCallback(async (file: File) => {
     setError(null);

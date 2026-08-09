@@ -12,7 +12,7 @@
  * The engine is pure and lives in lib/consolidation; this screen only renders it.
  */
 
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Combine, Layers, Loader2, AlertCircle, Plus, Trash2, Info, SlidersHorizontal, Building2,
   Coins, GitCompareArrows, Check,
@@ -23,6 +23,8 @@ import { api } from '@/lib/api-client';
 import { PageHeader, EmptyState } from '@/components/ui';
 import { useSectionTab } from '../_components/section-tabs';
 import { IntercompanyWorkspace } from '../intercompany/intercompany-workspace';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 
 // ── Types mirroring the API payloads ─────────────────────────────────────────
 type Method = 'FULL' | 'EQUITY' | 'NONE';
@@ -197,10 +199,30 @@ function TabBtn({ active, onClick, icon, children }: { active: boolean; onClick:
 function StatementsTab() {
   const [startDate, setStartDate] = useState(yearStart());
   const [endDate, setEndDate] = useState(today());
-  const [rootId, setRootId] = useState<string>('');
   const [eliminate, setEliminate] = useState(true);
   const [showEntities, setShowEntities] = useState(false);
   const [reportingCcy, setReportingCcy] = useState<string>('');
+
+  // The header already knows the active company; this consolidated view is
+  // legitimately multi-entity, so we DON'T force a re-pick: a specific active
+  // company defaults the "Entity group" to itself (its own subtree), while "All"
+  // defaults to the full consolidated group. The in-page selector still lets the
+  // user widen to "All entities" or drill into any subtree, and once they pick,
+  // their choice sticks even if the header changes.
+  const { activeCompanyId, isAll } = useActiveCompany();
+  const [rootId, setRootId] = useState<string>(() =>
+    isSpecificCompany(activeCompanyId) ? activeCompanyId : '',
+  );
+  const rootPickedRef = useRef(false);
+  useEffect(() => {
+    if (rootPickedRef.current) return; // in-page selection wins once made
+    const next = !isAll && isSpecificCompany(activeCompanyId) ? activeCompanyId : '';
+    setRootId((cur) => (cur === next ? cur : next));
+  }, [activeCompanyId, isAll]);
+  const onPickRoot = (id: string) => {
+    rootPickedRef.current = true;
+    setRootId(id);
+  };
 
   const qs = new URLSearchParams({ start_date: startDate, end_date: endDate, eliminate: String(eliminate) });
   if (rootId) qs.set('root_entity_id', rootId);
@@ -208,9 +230,13 @@ function StatementsTab() {
   // NOTE: the filters live in the URL query string above, so the cache-buster `key`
   // must go in the THIRD (options) arg. Passing it as the 2nd (params) arg appended a
   // second `?key=…` to the URL, corrupting `eliminate=true` into `eliminate=true?key=…`
-  // and 422-ing the whole Statements tab.
+  // and 422-ing the whole Statements tab. For the SAME reason we set `scope:false`:
+  // this endpoint scopes by `root_entity_id`, not `location_id`, and letting the
+  // shared hook auto-append `?location_id=…` to a URL that already has a query string
+  // would re-introduce that double-`?` corruption whenever a specific company is active.
   const { data, isLoading, error } = useQuery<StatementsResp>(`/api/consolidation/statements?${qs.toString()}`, undefined, {
     key: `${startDate}|${endDate}|${rootId}|${eliminate}|${reportingCcy}`,
+    scope: false,
   });
 
   // Reporting-currency options = whatever currencies the group actually uses.
@@ -236,8 +262,8 @@ function StatementsTab() {
       {/* Controls */}
       <div className="card p-4 flex flex-wrap items-end gap-4">
         <Field label="Entity group">
-          <select className="input min-w-[200px]" value={rootId} onChange={(e) => setRootId(e.target.value)}>
-            <option value="">All entities</option>
+          <select className="input min-w-[200px]" value={rootId} onChange={(e) => onPickRoot(e.target.value)}>
+            <option value="">All entities (consolidated)</option>
             {(data?.entities ?? []).map((e) => (
               <option key={e.id} value={e.id}>{e.name}{e.shortCode ? ` (${e.shortCode})` : ''}</option>
             ))}
@@ -533,7 +559,7 @@ const EMPTY_EDIT: EditState = {
 };
 
 function OwnershipTab() {
-  const { data, isLoading, error, refetch } = useQuery<OwnershipResp>('/api/consolidation/ownership');
+  const { data, isLoading, error, refetch } = useQuery<OwnershipResp>('/api/consolidation/ownership', undefined, { scope: false });
   const [edit, setEdit] = useState<EditState | null>(null);
   const [saving, setSaving] = useState(false);
   const [formErr, setFormErr] = useState<string | null>(null);
@@ -711,7 +737,7 @@ const RATE_TYPE_BADGE: Record<RateType, string> = {
 };
 
 function FxRatesTab() {
-  const { data, isLoading, error, refetch } = useQuery<FxRatesResp>('/api/consolidation/rates');
+  const { data, isLoading, error, refetch } = useQuery<FxRatesResp>('/api/consolidation/rates', undefined, { scope: false });
   const [edit, setEdit] = useState<RateEditState | null>(null);
   const [saving, setSaving] = useState(false);
   const [formErr, setFormErr] = useState<string | null>(null);
@@ -877,7 +903,7 @@ const SIDE_LABEL: Record<IcSide, string> = {
 };
 
 function MatchesTab() {
-  const { data, isLoading, error } = useQuery<MatchResp>('/api/consolidation/match');
+  const { data, isLoading, error } = useQuery<MatchResp>('/api/consolidation/match', undefined, { scope: false });
   // Client-side "confirm" is advisory — the engine already eliminates by role/flag.
   const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
   const toggle = (k: string) => setConfirmed((prev) => {

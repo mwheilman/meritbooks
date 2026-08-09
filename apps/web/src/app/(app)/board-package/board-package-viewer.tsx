@@ -9,6 +9,9 @@ import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import type { Location } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
+import { useMe } from '@/lib/hooks/use-me';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { canConsolidate, isSpecificCompany } from '@/lib/company-scope';
 import type { BoardPackage } from '@/lib/reports/board-package';
 
 interface BoardPackageResponse extends BoardPackage {
@@ -42,6 +45,41 @@ export function BoardPackageViewer() {
   const { data: rawLocs } = useQuery<LocationEx[]>('/api/locations');
   const locations = rawLocs ?? [];
 
+  // ── CONSOLIDATION GATE + ACTIVE-COMPANY DEFAULT ─────────────────────────────
+  // Mirror the Financial Reports scoping contract: a consolidated ("All Companies")
+  // board package is reserved for tenant leadership (canConsolidate); everyone else
+  // is pinned to a single company. Regardless of role, when the viewer is actively
+  // working inside ONE company (header selector), default the package scope to that
+  // company so they get its package immediately — no forced empty re-pick. Admins
+  // keep the consolidated option and can switch to it; the default is applied ONCE
+  // (ref-tracked) so it never fights a later choice.
+  const { user } = useMe();
+  const mayConsolidate = canConsolidate(user);
+  const { activeCompanyId, companies: myCompanies, ready: companyScopeReady } = useActiveCompany();
+
+  // Non-admins: hard-pin to the active company (or their first assigned company).
+  useEffect(() => {
+    if (mayConsolidate) return;
+    const forced = isSpecificCompany(activeCompanyId)
+      ? activeCompanyId
+      : (myCompanies[0]?.id ?? '');
+    setSelectedLocs((prev) =>
+      prev.length === 1 && prev[0] === forced ? prev : forced ? [forced] : [],
+    );
+  }, [mayConsolidate, activeCompanyId, myCompanies]);
+
+  // Admins: seed the initial default to the active company, once.
+  const appliedActiveDefault = useRef(false);
+  useEffect(() => {
+    if (!mayConsolidate) return;
+    if (appliedActiveDefault.current) return;
+    if (!companyScopeReady) return;
+    appliedActiveDefault.current = true;
+    if (isSpecificCompany(activeCompanyId)) {
+      setSelectedLocs((prev) => (prev.length === 0 ? [activeCompanyId] : prev));
+    }
+  }, [mayConsolidate, companyScopeReady, activeCompanyId]);
+
   const { s: sd, e: ed } = useMemo(() => {
     if (periodKey === 'custom') return { s: customS, e: customE };
     return PERIODS.find((p) => p.key === periodKey)?.get() ?? { s: '', e: '' };
@@ -53,7 +91,9 @@ export function BoardPackageViewer() {
     return `${selectedLocs.length} Companies (Consolidated)`;
   }, [selectedLocs, locations]);
 
-  const ready = !!sd && !!ed;
+  // Non-admins must never fire a consolidated (cross-entity) fetch: hold until their
+  // single company is pinned. Admins may run consolidated (empty selectedLocs = All).
+  const ready = !!sd && !!ed && (mayConsolidate || selectedLocs.length > 0);
 
   const params = useMemo(() => {
     const p: Record<string, string> = { start_date: sd, end_date: ed, as_of_date: ed, entity_label: entityLabel };
@@ -128,7 +168,24 @@ export function BoardPackageViewer() {
           )}
         </div>
 
-        <CompanyMultiSelect options={locations.map((l) => ({ value: l.id, label: `${l.short_code} · ${l.name}`, group: l.industry ?? 'Other' }))} selected={selectedLocs} onChange={setSelectedLocs} />
+        {mayConsolidate ? (
+          <CompanyMultiSelect options={locations.map((l) => ({ value: l.id, label: `${l.short_code} · ${l.name}`, group: l.industry ?? 'Other' }))} selected={selectedLocs} onChange={setSelectedLocs} />
+        ) : (
+          // Non-admins: single-company selector, no consolidated ("All") option.
+          <div className="flex items-center gap-1.5">
+            <Building2 size={13} className="text-slate-500" />
+            <select
+              value={selectedLocs[0] ?? ''}
+              onChange={(e) => setSelectedLocs(e.target.value ? [e.target.value] : [])}
+              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"
+              aria-label="Company"
+            >
+              {myCompanies.map((c) => (
+                <option key={c.id} value={c.id}>{c.shortCode} · {c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="ml-auto">
           <button
@@ -171,8 +228,32 @@ function BoardPackagePreview({ data, entityLabel, onGenerateAi }: { data: BoardP
   const bs = data.statements.balanceSheet.summary;
   const cf = data.statements.cashFlow;
 
+  // Fresh / sandbox company: the ledger has no posted activity yet. Every figure is
+  // a real (zero) computation, so the package still renders — we just surface a
+  // clear note instead of presenting an all-zero package as if it were meaningful.
+  const hasActivity =
+    is.revenueCents !== 0 ||
+    is.netIncomeCents !== 0 ||
+    bs.totalAssetsCents !== 0 ||
+    bs.totalLiabilitiesCents !== 0 ||
+    bs.totalEquityCents !== 0;
+
   return (
     <div className="space-y-5">
+      {!hasActivity && (
+        <div className="card p-4 border-l-4 border-l-amber-500 flex items-start gap-2.5">
+          <AlertCircle size={16} className="text-amber-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-white">No posted activity for this scope yet</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              The package below is fully computed but every figure is zero — this company has no ledger
+              activity in the selected period. It will populate as transactions are posted. You can still
+              export it as a template.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Cover */}
       <div className="card p-5 border-l-4 border-l-emerald-500">
         <p className="text-[10px] uppercase tracking-widest text-slate-500">Confidential · Prepared for the Board</p>
