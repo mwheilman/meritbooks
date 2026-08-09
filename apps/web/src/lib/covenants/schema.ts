@@ -41,6 +41,8 @@ const covenantShape = z.object({
   effective_date: ISO_DATE.nullable().optional(),
   maturity_date: ISO_DATE.nullable().optional(),
   notes: z.string().max(2000).optional(),
+  /** Retained drop-and-parse source doc to link to this covenant (task #71). */
+  source_document_id: z.string().uuid().nullable().optional(),
 });
 
 /** The fully-parsed covenant create payload (defaults applied). */

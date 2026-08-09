@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { parseCovenantDocument, COVENANT_EXTRACT_FEATURE } from '@/lib/covenants/parse-document';
+import { storeSourceDocument } from '@/lib/documents/store-source';
 
 /**
  * POST /api/covenants/parse — DROP-AND-PARSE covenant extraction.
@@ -24,9 +25,10 @@ import { parseCovenantDocument, COVENANT_EXTRACT_FEATURE } from '@/lib/covenants
  * today (see report note). RLS enforces tenant isolation on both the gateway metering
  * and the audit write.
  *
- * Storage: the document is TRANSIENT — decoded to base64 and extracted in-request,
- * never persisted. No storage bucket exists for loan documents; standing one up (to
- * retain the source PDF alongside each covenant) is reported as a follow-up, not built.
+ * Storage: the source document IS RETAINED. It is uploaded to the private `documents`
+ * bucket BEFORE the AI runs (so it's kept even when AI is disabled or a parse fails),
+ * tagged entity_type='covenant', and its id is returned as `meta.sourceDocumentId`. The
+ * create path (`POST /api/covenants`) links it to the covenant it produces.
  */
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -38,19 +40,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
 
-  // Anthropic key — obtained solely to inject into the Core AI gateway (canon §2).
-  const apiKey = getAnthropicApiKey();
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: 'AI is not configured (Anthropic key missing).', code: 'NO_API_KEY' },
-      { status: 503 },
-    );
-  }
-
-  // ── Read the uploaded file (transient; never stored) ─────────────────────────
+  // ── Read the uploaded file FIRST (before any AI gate) ────────────────────────
   let base64Data: string;
   let mediaType: string;
   let fileName: string;
+  let sourceFile: File;
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
@@ -67,10 +61,28 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (file.size > MAX_BYTES) {
       return NextResponse.json({ error: 'File too large. Maximum 10MB.', code: 'FILE_TOO_LARGE' }, { status: 400 });
     }
+    sourceFile = file;
     const buffer = await file.arrayBuffer();
     base64Data = Buffer.from(buffer).toString('base64');
   } catch {
     return NextResponse.json({ error: 'Failed to read uploaded file', code: 'UPLOAD_ERROR' }, { status: 400 });
+  }
+
+  // ── Retain the SOURCE document regardless of the parse (task #71) ────────────
+  // Stored as an unfiled 'covenant' document; the create path links it to the
+  // covenant it produces. Best-effort — never blocks the flow.
+  const stored = await storeSourceDocument({
+    supabase, orgId, userId, file: sourceFile, docType: 'LOAN', entityType: 'covenant',
+  });
+  const sourceDocumentId = stored?.documentId ?? null;
+
+  // Anthropic key — obtained solely to inject into the Core AI gateway (canon §2).
+  const apiKey = getAnthropicApiKey();
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: 'AI is not configured (Anthropic key missing).', code: 'NO_API_KEY', sourceDocumentId },
+      { status: 503 },
+    );
   }
 
   // ── Extract through the metered gateway ──────────────────────────────────────
@@ -81,7 +93,10 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   if (!result.ok) {
     const status = result.budgetBlocked ? 429 : 422;
-    return NextResponse.json({ error: result.error, code: result.budgetBlocked ? 'BUDGET_BLOCKED' : 'PARSE_FAILED' }, { status });
+    return NextResponse.json(
+      { error: result.error, code: result.budgetBlocked ? 'BUDGET_BLOCKED' : 'PARSE_FAILED', sourceDocumentId },
+      { status },
+    );
   }
 
   // ── Log the proposal to the AI decision rail (PROPOSED) for traceability ──────
@@ -122,6 +137,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       fileName,
       model: result.model,
       decisionId,
+      sourceDocumentId,
       documentNote: result.documentNote,
       extractionMs: result.extractionMs,
       covenantCount: result.covenants.length,

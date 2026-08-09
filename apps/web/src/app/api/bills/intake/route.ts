@@ -4,6 +4,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { intakeInvoice } from '@/lib/ap/intake';
+import { storeSourceDocument, linkSourceDocument } from '@/lib/documents/store-source';
 
 /**
  * POST /api/bills/intake — autonomous AP intake.
@@ -24,23 +25,12 @@ export async function POST(request: Request) {
   const guard = await requirePermission(userId, 'bills', 'create');
   if (!guard.ok) return guard.response;
 
-  // Anthropic key — obtained solely to inject into the Core AI gateway.
-  const apiKey = getAnthropicApiKey();
-  if (!apiKey) {
-    return NextResponse.json(
-      {
-        error: 'AI is not configured (Anthropic key missing). Add it to your environment variables.',
-        code: 'NO_API_KEY',
-      },
-      { status: 500 },
-    );
-  }
-
-  // ── Parse multipart form data ─────────────────────────────
+  // ── Parse multipart form data FIRST (before any AI gate) ──
   let base64: string;
   let mediaType: string;
   let fileName: string;
   let locationId: string;
+  let sourceFile: File;
 
   try {
     const formData = await request.formData();
@@ -78,12 +68,33 @@ export async function POST(request: Request) {
       );
     }
 
+    sourceFile = file;
     const buffer = await file.arrayBuffer();
     base64 = Buffer.from(buffer).toString('base64');
   } catch {
     return NextResponse.json(
       { error: 'Failed to read uploaded file', code: 'UPLOAD_ERROR' },
       { status: 400 },
+    );
+  }
+
+  // ── Retain the SOURCE invoice regardless of the parse (task #71) ──
+  // Stored as an unfiled 'bill' document up front; linked to the created bill below.
+  // Even with AI disabled, the source invoice is retained in the Documents center.
+  const stored = await storeSourceDocument({
+    supabase, orgId, userId, file: sourceFile, docType: 'BILL', entityType: 'bill',
+  });
+
+  // ── Anthropic key — obtained solely to inject into the Core AI gateway ──
+  const apiKey = getAnthropicApiKey();
+  if (!apiKey) {
+    return NextResponse.json(
+      {
+        error: 'AI is not configured (Anthropic key missing). Add it to your environment variables.',
+        code: 'NO_API_KEY',
+        sourceDocumentId: stored?.documentId ?? null,
+      },
+      { status: 500 },
     );
   }
 
@@ -99,7 +110,16 @@ export async function POST(request: Request) {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ error: result.error, code: 'INTAKE_FAILED' }, { status: 422 });
+    return NextResponse.json(
+      { error: result.error, code: 'INTAKE_FAILED', sourceDocumentId: stored?.documentId ?? null },
+      { status: 422 },
+    );
+  }
+
+  // Link the retained source invoice to the bill it produced, so it shows on the
+  // bill's Documents panel. Best-effort — never fails the intake.
+  if (stored?.documentId && result.billId) {
+    await linkSourceDocument(supabase, stored.documentId, 'bill', result.billId);
   }
 
   return NextResponse.json(
@@ -111,6 +131,7 @@ export async function POST(request: Request) {
       status: result.status,
       confidence: result.confidence,
       lines_created: result.linesCreated,
+      source_document_id: stored?.documentId ?? null,
     },
     { status: 201 },
   );

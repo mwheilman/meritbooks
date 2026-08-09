@@ -29,6 +29,8 @@ export const createLeaseSchema = z
     /** Discount / incremental borrowing rate as a decimal (0.06 = 6%). */
     discount_rate: z.number().min(0).max(1),
     ai_decision_id: z.string().uuid().nullable().optional(),
+    /** Retained drop-and-parse source doc to link to this lease (task #71). */
+    source_document_id: z.string().uuid().nullable().optional(),
     notes: z.string().max(2000).optional(),
   })
   .refine((v) => v.end_date > v.commencement_date, {

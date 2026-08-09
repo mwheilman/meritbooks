@@ -30,7 +30,7 @@ interface ProposedCovenant {
 
 interface ParseResponse {
   covenants: ProposedCovenant[];
-  meta: { fileName: string; model: string; documentNote: string | null; covenantCount: number };
+  meta: { fileName: string; model: string; documentNote: string | null; covenantCount: number; sourceDocumentId: string | null };
 }
 
 /** A review row = one proposed covenant with a local id + resolved (non-null) frequency. */
@@ -144,6 +144,9 @@ export function CovenantParseReview({
     setPhase('confirming');
     let ok = 0;
     let failed = 0;
+    // The retained source document links to the FIRST covenant successfully created
+    // from this agreement (a single PDF backs the whole set).
+    let sourceLinked = false;
     for (const r of rows) {
       const payload = {
         loan_name: r.loan_name.trim(),
@@ -160,10 +163,14 @@ export function CovenantParseReview({
         maturity_date: r.maturity_date || null,
         notes: r.notes?.trim() || undefined,
         measurement: r.measurement ?? {},
+        source_document_id: !sourceLinked ? meta?.sourceDocumentId ?? undefined : undefined,
       };
       const res = await api.post('/api/covenants', payload);
       if (res.error) failed += 1;
-      else ok += 1;
+      else {
+        ok += 1;
+        if (payload.source_document_id) sourceLinked = true;
+      }
     }
     if (failed > 0) {
       addToast('error', `${ok} covenant(s) added · ${failed} failed`);

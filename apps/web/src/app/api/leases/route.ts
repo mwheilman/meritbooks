@@ -6,6 +6,7 @@ import { createLeaseSchema, type CreateLeaseInput } from '@/lib/leases/schema';
 import { persistLeaseWithSchedule } from '@/lib/leases/lease-posting';
 import { PostingError } from '@/lib/posting/account-roles';
 import { LeaseInputError } from '@/lib/leases/schedule';
+import { linkSourceDocument } from '@/lib/documents/store-source';
 
 /**
  * /api/leases
@@ -65,6 +66,13 @@ export const POST = apiHandler(
         aiDecisionId: body.ai_decision_id ?? null,
         notes: body.notes ?? null,
       });
+
+      // Link the retained drop-and-parse source lease doc (if any) so it surfaces on
+      // the lease record's Documents panel. Best-effort — never fails the create.
+      if (body.source_document_id) {
+        await linkSourceDocument(ctx.supabase, body.source_document_id, 'lease', leaseId);
+      }
+
       return NextResponse.json(
         {
           id: leaseId,

@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
 
 // ─── GET: recent AI decisions (the explainability log) ────────────────────────
@@ -63,6 +64,12 @@ export async function PATCH(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
+
+  // RBAC: dispositioning an AI proposal is a control-plane action — same grant the
+  // exception-library resolve path requires (flagged:resolve). Auth alone is not
+  // enough to reject/act on a proposed AI decision.
+  const guard = await requirePermission(userId, 'flagged', 'resolve');
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try { raw = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }

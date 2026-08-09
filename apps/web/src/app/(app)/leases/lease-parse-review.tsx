@@ -27,7 +27,7 @@ interface ProposedLease {
 
 interface ParseResponse {
   lease: ProposedLease;
-  meta: { fileName: string; model: string; documentNote: string | null; decisionId: string | null };
+  meta: { fileName: string; model: string; documentNote: string | null; decisionId: string | null; sourceDocumentId: string | null };
 }
 
 interface LocationOption {
@@ -160,6 +160,7 @@ export function LeaseParseReview({
       term_months: term,
       discount_rate: rate,
       ai_decision_id: decisionId,
+      source_document_id: meta?.sourceDocumentId ?? undefined,
       notes: form.notes.trim() || undefined,
     });
     if (res.error) {

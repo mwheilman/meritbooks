@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext, apiHandler, type ApiContext } from '@/lib/api-handler';
 import { buildCovenantStatus, type CovenantRow } from '@/lib/covenants/status';
 import { createCovenantSchema, type CreateCovenantInput } from '@/lib/covenants/schema';
+import { linkSourceDocument } from '@/lib/documents/store-source';
 
 /**
  * /api/covenants
@@ -105,6 +106,14 @@ export const POST = apiHandler(
       console.error('[covenants] create failed:', error.message);
       return NextResponse.json({ error: error.message, code: 'CREATE_FAILED' }, { status: 500 });
     }
-    return NextResponse.json({ id: (data as { id: string }).id }, { status: 201 });
+    const covenantId = (data as { id: string }).id;
+
+    // Link the retained drop-and-parse source doc (if any) so it surfaces on the
+    // covenant record. Best-effort — never fails the create.
+    if (body.source_document_id) {
+      await linkSourceDocument(ctx.supabase, body.source_document_id, 'covenant', covenantId);
+    }
+
+    return NextResponse.json({ id: covenantId }, { status: 201 });
   },
 );

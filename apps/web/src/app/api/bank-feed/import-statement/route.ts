@@ -10,6 +10,7 @@ import {
   STATEMENT_EXTRACT_FEATURE,
   type StatementAccountType,
 } from '@/lib/bank/statement-parse';
+import { storeSourceDocument } from '@/lib/documents/store-source';
 
 /**
  * Bank statement PDF import — DROP-AND-PARSE for accounts WITHOUT a Plaid connection.
@@ -34,8 +35,10 @@ import {
  * Access: gated on the existing `bank_feed` permission ('edit'). RLS enforces tenant
  * isolation on the account lookup, gateway metering, and the audit write.
  *
- * Storage: the statement PDF is TRANSIENT — decoded to base64 and extracted in-request,
- * never persisted (no loan/statement bucket exists; see report note).
+ * Storage: the statement PDF IS RETAINED. It is uploaded to the private `documents`
+ * bucket BEFORE the AI runs and linked to the bank account (entity_type='bank_account'),
+ * so the source is kept even when AI is disabled or a parse fails. Its id is returned as
+ * `meta.sourceDocumentId`.
  */
 
 const MAX_BYTES = 15 * 1024 * 1024;
@@ -100,19 +103,12 @@ export async function POST(request: Request): Promise<NextResponse> {
   const guard = await requirePermission(userId, 'bank_feed', 'edit');
   if (!guard.ok) return guard.response;
 
-  const apiKey = getAnthropicApiKey();
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: 'AI is not configured (Anthropic key missing).', code: 'NO_API_KEY' },
-      { status: 503 },
-    );
-  }
-
-  // ── Read the uploaded file + target account (transient; PDF never stored) ─────
+  // ── Read the uploaded file + target account FIRST (before any AI gate) ────────
   let base64Data: string;
   let mediaType: string;
   let fileName: string;
   let bankAccountId: string;
+  let sourceFile: File;
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
@@ -132,6 +128,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (file.size > MAX_BYTES) {
       return NextResponse.json({ error: 'File too large. Maximum 15MB.', code: 'FILE_TOO_LARGE' }, { status: 400 });
     }
+    sourceFile = file;
     const buffer = await file.arrayBuffer();
     base64Data = Buffer.from(buffer).toString('base64');
   } catch {
@@ -163,6 +160,25 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
+  // ── Retain the SOURCE statement regardless of the parse (task #71) ───────────
+  // Linked to the bank account immediately (the account is known + RLS-validated
+  // here); surfaces in the Documents center as a STATEMENT for this account. Kept
+  // even when AI is disabled or the parse fails.
+  const stored = await storeSourceDocument({
+    supabase, orgId, userId, file: sourceFile, docType: 'STATEMENT',
+    entityType: 'bank_account', entityId: account.id,
+  });
+  const sourceDocumentId = stored?.documentId ?? null;
+
+  // ── Anthropic key — obtained solely to inject into the Core AI gateway ───────
+  const apiKey = getAnthropicApiKey();
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: 'AI is not configured (Anthropic key missing).', code: 'NO_API_KEY', sourceDocumentId },
+      { status: 503 },
+    );
+  }
+
   // ── Extract through the metered gateway (authoritative account type) ─────────
   const result = await parseBankStatement(
     { supabase, anthropicApiKey: apiKey },
@@ -171,7 +187,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!result.ok) {
     const status = result.budgetBlocked ? 429 : 422;
     return NextResponse.json(
-      { error: result.error, code: result.budgetBlocked ? 'BUDGET_BLOCKED' : 'PARSE_FAILED' },
+      { error: result.error, code: result.budgetBlocked ? 'BUDGET_BLOCKED' : 'PARSE_FAILED', sourceDocumentId },
       { status },
     );
   }
@@ -272,6 +288,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       fileName,
       model: result.model,
       decisionId,
+      sourceDocumentId,
       extractionMs: result.extractionMs,
       lineCount: transactions.length,
       duplicateCount,
