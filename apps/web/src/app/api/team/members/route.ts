@@ -79,6 +79,25 @@ export async function GET(_req: NextRequest) {
     assignedByEmployee.set(a.employee_id, list);
   }
 
+  // Per-employee onboarding ownership (core.practice_assignments, function='onboarding').
+  // Its OWN query so an absent table / function (not migrated) degrades to "none owned"
+  // instead of breaking the roster — the primary selects never reference it.
+  const onboardingByEmployee = new Map<string, string[]>();
+  {
+    const { data: owners } = await supabase
+      .schema('core')
+      .from('practice_assignments')
+      .select('assignee_employee_id, location_id, function')
+      .eq('org_id', orgId!)
+      .eq('function', 'onboarding');
+    for (const o of (owners ?? []) as Array<{ assignee_employee_id: string | null; location_id: string }>) {
+      if (!o.assignee_employee_id || !o.location_id) continue;
+      const list = onboardingByEmployee.get(o.assignee_employee_id) ?? [];
+      list.push(o.location_id);
+      onboardingByEmployee.set(o.assignee_employee_id, list);
+    }
+  }
+
   // Best-effort delegated-admin capability lookup. Kept as its OWN query so a missing
   // admin_scope column (not migrated yet) degrades to "no scope shown" instead of
   // breaking the whole roster — the primary select above never references it.
@@ -122,6 +141,8 @@ export async function GET(_req: NextRequest) {
       clerkLinked: e.clerk_user_id != null,
       companyScope,
       companies,
+      // Companies this member OWNS the onboarding for (subset of `companies`).
+      onboardingCompanyIds: onboardingByEmployee.get(e.id as string) ?? [],
       // Delegated-admin responsibility (null = full admin). Only meaningful for
       // admin-level roles; other roles carry null and the UI shows nothing special.
       adminScope: scopeByEmployee.get(e.id as string) ?? null,

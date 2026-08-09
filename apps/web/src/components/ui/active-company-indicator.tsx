@@ -2,6 +2,7 @@
 
 import { Building2 } from 'lucide-react';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { usePlane } from '@/lib/hooks/use-plane';
 
 /**
  * A compact, always-visible chip that tells a processor exactly which company
@@ -15,7 +16,12 @@ import { useActiveCompany } from '@/lib/hooks/use-active-company';
  */
 export function ActiveCompanyIndicator() {
   const { activeCompany, isAll, ready } = useActiveCompany();
+  const { plane } = usePlane();
 
+  // Company scope only means something in the Book-of-Record plane. In the
+  // Practice and Platform (Operator Console) planes the user is not working
+  // inside a single company, so the chip must not appear.
+  if (plane !== 'books') return null;
   if (!ready || isAll || !activeCompany) return null;
 
   return (

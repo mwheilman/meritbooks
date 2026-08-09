@@ -7,6 +7,10 @@ import { updateMemberSchema } from '@/lib/validations/team';
 import { ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { syncMembershipRole } from '@/lib/identity/sync-membership';
+import {
+  setEmployeeOnboardingCompanies,
+  ensurePreparerCapability,
+} from '@/lib/team/onboarding-ownership';
 
 function isAllCompaniesScope(role: UserRole): boolean {
   const scope = ROLE_DEFINITIONS[role]?.companyScope;
@@ -56,7 +60,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'Member not found', code: 'NOT_FOUND' }, { status: 404 });
   }
 
-  const { role, companyIds } = parsed.data;
+  const { role, companyIds, onboardingCompanyIds } = parsed.data;
   const effectiveRole = (role ?? target.role) as UserRole;
 
   if (role !== undefined) {
@@ -105,6 +109,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
   }
 
+  // Onboarding ownership — who prepares each client company's books. Recorded as
+  // core.practice_assignments(function='onboarding'); replaced wholesale for this
+  // member. Owning any onboarding also merges the PREPARER capability onto their
+  // admin_scope. DEGRADE-SAFE: a missing table/column no-ops rather than 500s.
+  if (onboardingCompanyIds !== undefined) {
+    const scoped = onboardingCompanyIds.filter((id) => !companyIds || companyIds.includes(id));
+    await setEmployeeOnboardingCompanies(supabase, orgId!, memberId, scoped);
+    if (scoped.length > 0) {
+      await ensurePreparerCapability(supabase, orgId!, memberId);
+    }
+  }
+
   // Trust-layer attribution (best-effort; never throws, never gates the action).
   const changes: string[] = [];
   if (role !== undefined) {
@@ -113,6 +129,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (companyIds !== undefined) {
     changes.push(
       `company access (${companyIds.length} ${companyIds.length === 1 ? 'company' : 'companies'})`
+    );
+  }
+  if (onboardingCompanyIds !== undefined) {
+    changes.push(
+      `onboarding ownership (${onboardingCompanyIds.length} ${
+        onboardingCompanyIds.length === 1 ? 'company' : 'companies'
+      })`
     );
   }
   await logHumanAction(supabase, userId, orgId!, {

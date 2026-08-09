@@ -15,6 +15,7 @@ import {
   Send,
   RotateCw,
   Clock,
+  GraduationCap,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
@@ -28,6 +29,7 @@ import {
   type AdminCapability,
 } from '@/lib/team/admin-scope';
 import { PerformancePanel } from './performance-panel';
+import { CreateCompanyDialog } from './create-company-dialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,8 @@ interface Member {
   clerkLinked: boolean;
   companyScope: CompanyScope;
   companies: MemberCompany[];
+  /** Companies this member OWNS the onboarding for (subset of `companies`). */
+  onboardingCompanyIds: string[];
   adminScope: AdminCapability[] | null;
 }
 
@@ -59,6 +63,11 @@ interface LocationOption {
   id: string;
   name: string;
   short_code: string;
+}
+
+interface EntitiesMeta {
+  baseCurrency: string;
+  orgFiscalYearStartMonth: number;
 }
 
 // Non-admin read-only roster (existing /api/team shape).
@@ -258,6 +267,11 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
   const [companyIds, setCompanyIds] = useState<string[]>(
     member && !isAllScope(member.role) ? member.companies.map((c) => c.id) : []
   );
+  // Companies this member OWNS the onboarding for (the PREPARER responsible for
+  // bringing that client onto the books). Always a subset of companyIds.
+  const [onboardingIds, setOnboardingIds] = useState<string[]>(
+    member ? member.onboardingCompanyIds ?? [] : []
+  );
   // Delegated-admin responsibility (only meaningful for admin-level roles). Default
   // 'full' = today's behavior (an admin can do everything).
   const [responsibility, setResponsibility] = useState<'full' | 'management' | 'preparer'>('full');
@@ -269,7 +283,18 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
   const showResponsibility = mode === 'add' && isAdminLevelRole(role);
 
   function toggleCompany(id: string) {
-    setCompanyIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
+    setCompanyIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id];
+      // Removing access to a company also drops any onboarding ownership of it.
+      if (!next.includes(id)) setOnboardingIds((o) => o.filter((c) => c !== id));
+      return next;
+    });
+  }
+
+  function toggleOnboarding(id: string) {
+    // Only meaningful for a company this member can access.
+    if (!companyIds.includes(id)) return;
+    setOnboardingIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
   }
 
   async function handleSubmit() {
@@ -281,6 +306,11 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
     setSubmitting(true);
 
     const effectiveCompanyIds = allScope ? [] : companyIds;
+    // Onboarding ownership is only meaningful for per-company (scoped) roles, and only
+    // for companies this member can actually access.
+    const effectiveOnboardingIds = allScope
+      ? []
+      : onboardingIds.filter((id) => effectiveCompanyIds.includes(id));
 
     if (mode === 'add') {
       // Inviting IS adding: create a pending invitation and email a sign-up link.
@@ -300,6 +330,7 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
           lastName: lastName.trim() || undefined,
           role,
           companyIds: effectiveCompanyIds,
+          onboardingCompanyIds: effectiveOnboardingIds,
           ...(adminScope ? { adminScope } : {}),
         }
       );
@@ -328,6 +359,7 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
     const result = await api.patch(`/api/team/members/${member!.id}`, {
       role,
       companyIds: effectiveCompanyIds,
+      onboardingCompanyIds: effectiveOnboardingIds,
     });
 
     setSubmitting(false);
@@ -498,35 +530,65 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
             ) : locations.length === 0 ? (
               <p className="text-xs text-slate-500">No companies available.</p>
             ) : (
-              <div className="max-h-44 space-y-0.5 overflow-y-auto rounded-lg border border-slate-800 bg-surface-950/40 p-1.5">
+              <div className="max-h-52 space-y-0.5 overflow-y-auto rounded-lg border border-slate-800 bg-surface-950/40 p-1.5">
                 {locations.map((loc) => {
                   const checked = companyIds.includes(loc.id);
+                  const ownsOnboarding = onboardingIds.includes(loc.id);
                   return (
-                    <label
+                    <div
                       key={loc.id}
                       className={clsx(
-                        'flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors',
+                        'flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors',
                         checked ? 'bg-slate-800/60' : 'hover:bg-slate-800/40'
                       )}
                     >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleCompany(loc.id)}
-                        className="h-3.5 w-3.5 accent-emerald-500"
-                      />
-                      <span className="text-sm text-slate-200">{loc.name}</span>
-                      <span className="ml-auto font-mono text-[10px] tabular-nums text-slate-500">
+                      <label className="flex flex-1 cursor-pointer items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleCompany(loc.id)}
+                          className="h-3.5 w-3.5 accent-emerald-500"
+                        />
+                        <span className="text-sm text-slate-200">{loc.name}</span>
+                      </label>
+                      {checked ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleOnboarding(loc.id)}
+                          aria-pressed={ownsOnboarding}
+                          title={
+                            ownsOnboarding
+                              ? 'Owns onboarding — this member prepares this company. Click to unset.'
+                              : 'Set this member as the onboarding owner (preparer) for this company.'
+                          }
+                          className={clsx(
+                            'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40',
+                            ownsOnboarding
+                              ? 'bg-indigo-500/15 text-indigo-300'
+                              : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'
+                          )}
+                        >
+                          <GraduationCap size={12} />
+                          {ownsOnboarding ? 'Onboarding' : 'Owns onboarding'}
+                        </button>
+                      ) : null}
+                      <span className="font-mono text-[10px] tabular-nums text-slate-500">
                         {loc.short_code}
                       </span>
-                    </label>
+                    </div>
                   );
                 })}
               </div>
             )}
             {!allScope && locations.length > 0 && (
-              <p className="mt-1.5 font-mono text-[11px] tabular-nums text-slate-500">
-                {companyIds.length} selected
+              <p className="mt-1.5 flex items-center gap-2 font-mono text-[11px] tabular-nums text-slate-500">
+                <span>{companyIds.length} selected</span>
+                {onboardingIds.length > 0 && (
+                  <span className="inline-flex items-center gap-1 text-indigo-300">
+                    <GraduationCap size={11} />
+                    {onboardingIds.length} onboarding
+                  </span>
+                )}
               </p>
             )}
           </div>
@@ -935,13 +997,19 @@ export function TeamClient() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; member: Member | null } | null>(null);
+  const [showCreateCompany, setShowCreateCompany] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const { data, isLoading, error, refetch } = useQuery<MembersResponse>(
     canManage ? '/api/team/members' : null
   );
-  const { data: locData } = useQuery<LocationOption[]>(canManage ? '/api/locations' : null);
+  const { data: locData, refetch: refetchLocations } = useQuery<LocationOption[]>(
+    canManage ? '/api/locations' : null
+  );
   const locations = locData ?? [];
+  const { data: entitiesMeta, refetch: refetchEntities } = useQuery<EntitiesMeta>(
+    canManage ? '/api/settings/entities' : null
+  );
 
   const {
     data: inviteData,
@@ -1013,10 +1081,22 @@ export function TeamClient() {
         description="Manage who's on the team, their role, and the companies they can see."
         actions={
           tab === 'access' ? (
-            <button onClick={() => setModal({ mode: 'add', member: null })} className="btn-primary btn-sm gap-1.5">
-              <Plus size={14} />
-              Invite member
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowCreateCompany(true)}
+                className="btn-secondary btn-sm gap-1.5"
+              >
+                <Building2 size={14} />
+                New company
+              </button>
+              <button
+                onClick={() => setModal({ mode: 'add', member: null })}
+                className="btn-primary btn-sm gap-1.5"
+              >
+                <Plus size={14} />
+                Invite member
+              </button>
+            </div>
           ) : undefined
         }
       />
@@ -1183,6 +1263,21 @@ export function TeamClient() {
             setModal(null);
             refetch();
             refetchInvites();
+          }}
+        />
+      )}
+
+      {showCreateCompany && (
+        <CreateCompanyDialog
+          existingCodes={locations.map((l) => l.short_code)}
+          baseCurrency={entitiesMeta?.baseCurrency}
+          defaultFiscalMonth={entitiesMeta?.orgFiscalYearStartMonth}
+          onClose={() => setShowCreateCompany(false)}
+          onCreated={() => {
+            setShowCreateCompany(false);
+            // The new company appears in the access list + header picker on refresh.
+            refetchLocations();
+            refetchEntities();
           }}
         />
       )}

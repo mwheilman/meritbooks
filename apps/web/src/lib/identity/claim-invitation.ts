@@ -183,6 +183,49 @@ export async function claimInvitationOnLogin(params: {
       }
     }
 
+    // 3b. Materialize onboarding ownership (migration 121). Kept as a SEPARATE read so
+    //     the new onboarding_location_ids column never couples to the main invite
+    //     select — a pre-migration env simply skips this. Best-effort + non-fatal.
+    try {
+      const { data: ob } = await admin
+        .schema(INVITATIONS_SCHEMA)
+        .from(INVITATIONS_TABLE)
+        .select('onboarding_location_ids')
+        .eq('id', row.id)
+        .maybeSingle();
+      const obIds: string[] = Array.isArray((ob as { onboarding_location_ids?: unknown } | null)?.onboarding_location_ids)
+        ? ((ob as { onboarding_location_ids: string[] }).onboarding_location_ids)
+        : [];
+      // Only companies the seat can access (all-scope roles get onboarding set from the
+      // Entities board instead, so we don't infer a company list for them here).
+      const scopedOb = isAllCompaniesScope(role as UserRole)
+        ? []
+        : obIds.filter((id) => locationIds.includes(id));
+      if (scopedOb.length > 0) {
+        await rls
+          .schema('core')
+          .from('practice_assignments')
+          .upsert(
+            scopedOb.map((location_id) => ({
+              org_id: orgId,
+              location_id,
+              function: 'onboarding',
+              assignee_employee_id: created.id as string,
+            })),
+            { onConflict: 'org_id,location_id,function' },
+          );
+        await rls
+          .schema('core')
+          .from('locations')
+          .update({ onboarding_status: 'in_progress' })
+          .eq('org_id', orgId)
+          .in('id', scopedOb)
+          .eq('onboarding_status', 'not_started');
+      }
+    } catch {
+      // onboarding column / practice_assignments table absent — non-fatal.
+    }
+
     // 4. Mark the invitation accepted (best-effort).
     await admin
       .schema(INVITATIONS_SCHEMA)

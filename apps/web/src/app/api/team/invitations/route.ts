@@ -31,6 +31,15 @@ const SELECT_COLS =
 /** Same, plus the delegated-admin capability column (used when it exists). */
 const SELECT_COLS_WITH_SCOPE = `${SELECT_COLS}, admin_scope`;
 
+/** True when the error is a missing onboarding_location_ids column (pre-migration 121). */
+function isMissingOnboardingColumn(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  const code = 'code' in error ? error.code : undefined;
+  if (code === '42703' || code === 'PGRST204') return true;
+  const msg = ('message' in error ? error.message : '') ?? '';
+  return /onboarding_location_ids/i.test(msg) && /could not find|does not exist|schema cache/i.test(msg);
+}
+
 /**
  * GET /api/team/invitations
  * Admin-only list of PENDING invitations for the org. Degrade-safe: if the backing
@@ -113,14 +122,27 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { email, firstName, lastName, role, companyIds, adminScope } = parsed.data;
+  const { email, firstName, lastName, role, companyIds, adminScope, onboardingCompanyIds } =
+    parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
   const admin = createAdminSupabase();
+
+  // Companies this invitee will OWN onboarding for — constrained to companies they can
+  // actually access. Ignored for "all"/"portcos" scopes (they see everything, and the
+  // per-company owner is set from the Entities board instead).
+  const onboardingLocationIds = isAllCompaniesScope(role)
+    ? []
+    : onboardingCompanyIds.filter((id) => companyIds.includes(id));
 
   // Delegated-admin responsibility only applies to admin-level roles (those that can
   // manage users). For every other role we ignore any submitted scope — their access
   // is governed by their RBAC role. null == unrestricted (full admin) == today.
-  const effectiveScope = isAdminLevelRole(role) ? normalizeAdminScopeForStorage(adminScope) : null;
+  let effectiveScope = isAdminLevelRole(role) ? normalizeAdminScopeForStorage(adminScope) : null;
+  // Being named an onboarding owner ⇒ the PREPARER capability (they do the data entry).
+  // Merge it in without dropping an existing MANAGEMENT capability.
+  if (onboardingLocationIds.length > 0) {
+    effectiveScope = normalizeAdminScopeForStorage([...(effectiveScope ?? []), 'PREPARER']);
+  }
 
   // Don't invite someone who already has a seat in this org (case-insensitive).
   const { data: existingEmp } = await supabase
@@ -154,20 +176,31 @@ export async function POST(req: NextRequest) {
     expires_at: expiresAt,
   };
 
-  // Persist the capability set when we have one. Degrade-safe: if the admin_scope
-  // column isn't migrated yet, retry the insert WITHOUT it so invites still work
-  // (the delegation distinction simply isn't stored until the migration lands).
-  const insertInvite = (withScope: boolean) =>
-    admin
+  // Persist the optional columns when we have values. Degrade-safe: if the admin_scope
+  // or onboarding_location_ids column isn't migrated yet, retry the insert WITHOUT the
+  // missing column so invites still work (the distinction simply isn't stored yet).
+  const attemptInsert = (withScope: boolean, withOnboarding: boolean) => {
+    const payload: Record<string, unknown> = { ...baseRow };
+    if (withScope) payload.admin_scope = effectiveScope;
+    if (withOnboarding) payload.onboarding_location_ids = onboardingLocationIds;
+    return admin
       .schema(INVITATIONS_SCHEMA)
       .from(INVITATIONS_TABLE)
-      .insert(withScope ? { ...baseRow, admin_scope: effectiveScope } : baseRow)
+      .insert(payload)
       .select(withScope ? SELECT_COLS_WITH_SCOPE : SELECT_COLS)
       .single();
+  };
 
-  let insertRes = await insertInvite(Boolean(effectiveScope));
-  if (effectiveScope && insertRes.error && isMissingScopeColumn(insertRes.error)) {
-    insertRes = await insertInvite(false);
+  let withScope = Boolean(effectiveScope);
+  let withOnboarding = onboardingLocationIds.length > 0;
+  let insertRes = await attemptInsert(withScope, withOnboarding);
+  if (insertRes.error && withScope && isMissingScopeColumn(insertRes.error)) {
+    withScope = false;
+    insertRes = await attemptInsert(withScope, withOnboarding);
+  }
+  if (insertRes.error && withOnboarding && isMissingOnboardingColumn(insertRes.error)) {
+    withOnboarding = false;
+    insertRes = await attemptInsert(withScope, withOnboarding);
   }
   // The runtime-ternary select confuses the row-type parser; the shape is known.
   const created = insertRes.data as unknown as InvitationRow | null;
@@ -237,7 +270,13 @@ export async function POST(req: NextRequest) {
     summary: `Invited ${normalizedEmail} as ${roleLabel}${
       effectiveScope ? ` (${effectiveScope.join('+').toLowerCase()})` : ''
     }${emailSent ? '' : ' (email not sent)'}`,
-    metadata: { role, companyIds: locationIds, adminScope: effectiveScope, emailSent },
+    metadata: {
+      role,
+      companyIds: locationIds,
+      onboardingCompanyIds: onboardingLocationIds,
+      adminScope: effectiveScope,
+      emailSent,
+    },
   });
 
   return NextResponse.json(

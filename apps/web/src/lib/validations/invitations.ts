@@ -18,6 +18,10 @@ export const createInvitationSchema = z.object({
   /** Per-company grants, applied to the employee record when the invite is accepted.
    *  Ignored for "all"/"portcos" scopes (they see every company without rows). */
   companyIds: z.array(z.string().uuid()).default([]),
+  /** Companies this invitee will OWN the onboarding for. Stashed on the invitation and
+   *  materialized as core.practice_assignments(function='onboarding') when the seat is
+   *  claimed on first login. A subset of companyIds. */
+  onboardingCompanyIds: z.array(z.string().uuid()).default([]),
   /** Delegated-admin responsibility (only meaningful for admin-level roles). Omitted
    *  / empty / both-selected => full admin (today's behavior). A single capability
    *  restricts: MANAGEMENT (delegates the books) or PREPARER (does the books). */

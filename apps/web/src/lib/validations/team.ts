@@ -31,10 +31,15 @@ export const updateMemberSchema = z
   .object({
     role: memberRoleSchema.optional(),
     companyIds: z.array(z.string().uuid()).optional(),
+    /** Companies this member OWNS the onboarding for. A subset of the companies they
+     *  can access; recorded as core.practice_assignments(function='onboarding'). When
+     *  present it replaces this member's onboarding ownership wholesale. */
+    onboardingCompanyIds: z.array(z.string().uuid()).optional(),
   })
-  .refine((v) => v.role !== undefined || v.companyIds !== undefined, {
-    message: 'Provide at least one of role or companyIds',
-  });
+  .refine(
+    (v) => v.role !== undefined || v.companyIds !== undefined || v.onboardingCompanyIds !== undefined,
+    { message: 'Provide at least one of role, companyIds, or onboardingCompanyIds' },
+  );
 
 export type CreateMemberInput = z.infer<typeof createMemberSchema>;
 export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;

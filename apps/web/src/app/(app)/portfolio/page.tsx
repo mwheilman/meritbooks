@@ -18,6 +18,7 @@ import {
   LayoutGrid,
   Users,
   CheckCircle2,
+  GraduationCap,
 } from 'lucide-react';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
@@ -81,6 +82,43 @@ interface AssignmentsResponse {
   available: boolean;
   roster: { employeeId: string; name: string }[];
   assignments: { locationId: string; function: PortfolioFunction; employeeId: string }[];
+}
+
+// ── Onboarding ownership + lifecycle (mirror /api/portfolio/onboarding) ─────────
+
+type OnboardingStatus = 'not_started' | 'in_progress' | 'complete';
+
+interface OnboardingApiRow {
+  locationId: string;
+  name: string;
+  shortCode: string;
+  status: OnboardingStatus;
+  ownerEmployeeId: string | null;
+  ownerName: string | null;
+  completedAt: string | null;
+}
+
+interface OnboardingResponse {
+  available: boolean;
+  roster: { employeeId: string; name: string }[];
+  rows: OnboardingApiRow[];
+}
+
+const ONBOARDING_META: Record<OnboardingStatus, { label: string; cls: string }> = {
+  not_started: { label: 'Not started', cls: 'border-slate-600/30 bg-slate-700/20 text-slate-500' },
+  in_progress: { label: 'Onboarding', cls: 'border-amber-500/20 bg-amber-500/10 text-amber-400' },
+  complete: { label: 'Onboarded', cls: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' },
+};
+
+const ONBOARDING_STATUSES: OnboardingStatus[] = ['not_started', 'in_progress', 'complete'];
+
+function OnboardingBadge({ status }: { status: OnboardingStatus }) {
+  const m = ONBOARDING_META[status];
+  return (
+    <span className={clsx('inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium', m.cls)}>
+      {m.label}
+    </span>
+  );
 }
 
 // ── Small display helpers ─────────────────────────────────────────────────────
@@ -190,10 +228,53 @@ function OwnershipGrid({
   onChanged: () => void;
 }) {
   const { data, isLoading, error, refetch } = useQuery<AssignmentsResponse>('/api/portfolio/assignments');
+  const { data: obData, refetch: refetchOb } = useQuery<OnboardingResponse>('/api/portfolio/onboarding');
   const [saving, setSaving] = useState<string | null>(null);
 
   const roster = data?.roster ?? [];
   const available = data?.available ?? false;
+
+  // Onboarding owner + status per company (degrade-safe).
+  const obByLoc = useMemo(() => {
+    const m = new Map<string, OnboardingApiRow>();
+    for (const r of obData?.rows ?? []) m.set(r.locationId, r);
+    return m;
+  }, [obData]);
+  const obAvailable = obData?.available ?? false;
+
+  async function setOnboardingOwner(locationId: string, employeeId: string | null) {
+    const cell = `${locationId}:ob-owner`;
+    setSaving(cell);
+    const res = await api.put<{ applied: boolean; reason?: string }>('/api/portfolio/onboarding', {
+      locationId,
+      assigneeEmployeeId: employeeId,
+    });
+    setSaving(null);
+    if (res.error || (res.data && res.data.applied === false)) {
+      addToast('error', res.error?.error || res.data?.reason || 'Could not save onboarding owner');
+      return;
+    }
+    addToast('success', 'Onboarding owner updated');
+    await refetchOb();
+    onChanged();
+  }
+
+  async function setOnboardingStatus(locationId: string, status: OnboardingStatus) {
+    const cell = `${locationId}:ob-status`;
+    setSaving(cell);
+    const res = await api.put<{ applied: boolean; reason?: string }>('/api/portfolio/onboarding', {
+      locationId,
+      status,
+    });
+    setSaving(null);
+    if (res.error || (res.data && res.data.applied === false)) {
+      addToast('error', res.error?.error || res.data?.reason || 'Could not update onboarding status');
+      return;
+    }
+    addToast('success', 'Onboarding status updated');
+    await refetchOb();
+    onChanged();
+  }
 
   // Map for current owner lookup: `${locationId}:${fn}` → employeeId
   const ownerOf = useMemo(() => {
@@ -257,6 +338,12 @@ function OwnershipGrid({
                   {f.label}
                 </th>
               ))}
+              <th className="px-4 py-3 font-medium">
+                <span className="inline-flex items-center gap-1">
+                  <GraduationCap size={12} className="text-indigo-400/80" /> Onboarding owner
+                </span>
+              </th>
+              <th className="px-4 py-3 font-medium">Onboarding status</th>
             </tr>
           </thead>
           <tbody>
@@ -290,6 +377,50 @@ function OwnershipGrid({
                     </td>
                   );
                 })}
+                {(() => {
+                  const ob = obByLoc.get(e.locationId);
+                  const ownerCell = `${e.locationId}:ob-owner`;
+                  const statusCell = `${e.locationId}:ob-status`;
+                  return (
+                    <>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={ob?.ownerEmployeeId ?? ''}
+                            disabled={!obAvailable || saving === ownerCell}
+                            onChange={(ev) => setOnboardingOwner(e.locationId, ev.target.value || null)}
+                            className="w-full max-w-[11rem] rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 focus:border-brand-500 focus:outline-none disabled:opacity-50"
+                          >
+                            <option value="">Unassigned</option>
+                            {roster.map((m) => (
+                              <option key={m.employeeId} value={m.employeeId}>
+                                {m.name}
+                              </option>
+                            ))}
+                          </select>
+                          {saving === ownerCell && <Loader2 size={13} className="animate-spin text-slate-500" />}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={ob?.status ?? 'not_started'}
+                            disabled={!obAvailable || saving === statusCell}
+                            onChange={(ev) => setOnboardingStatus(e.locationId, ev.target.value as OnboardingStatus)}
+                            className="w-full max-w-[10rem] rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 focus:border-brand-500 focus:outline-none disabled:opacity-50"
+                          >
+                            {ONBOARDING_STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {ONBOARDING_META[s].label}
+                              </option>
+                            ))}
+                          </select>
+                          {saving === statusCell && <Loader2 size={13} className="animate-spin text-slate-500" />}
+                        </div>
+                      </td>
+                    </>
+                  );
+                })()}
               </tr>
             ))}
           </tbody>
@@ -319,6 +450,16 @@ export default function PortfolioPage() {
     { year: String(year), month: String(month) },
     { key: `${year}-${month}-${refreshKey}` },
   );
+
+  // Onboarding owner + lifecycle per company (degrade-safe; independent of the board).
+  const { data: onboardingData } = useQuery<OnboardingResponse>('/api/portfolio/onboarding', undefined, {
+    key: `onboarding-${refreshKey}`,
+  });
+  const onboardingByLoc = useMemo(() => {
+    const m = new Map<string, OnboardingApiRow>();
+    for (const r of onboardingData?.rows ?? []) m.set(r.locationId, r);
+    return m;
+  }, [onboardingData]);
 
   function shiftPeriod(delta: number) {
     let m = month + delta;
@@ -515,7 +656,7 @@ export default function PortfolioPage() {
       ) : tab === 'ownership' ? (
         <OwnershipGrid entities={data.entities} onChanged={() => setRefreshKey((k) => k + 1)} />
       ) : (
-        <BoardTable entities={filtered} />
+        <BoardTable entities={filtered} onboarding={onboardingByLoc} />
       )}
     </div>
   );
@@ -523,7 +664,13 @@ export default function PortfolioPage() {
 
 // ── Board table ───────────────────────────────────────────────────────────────
 
-function BoardTable({ entities }: { entities: PortfolioEntity[] }) {
+function BoardTable({
+  entities,
+  onboarding,
+}: {
+  entities: PortfolioEntity[];
+  onboarding: Map<string, OnboardingApiRow>;
+}) {
   if (entities.length === 0) {
     return (
       <div className="card py-12 text-center text-sm text-slate-500">
@@ -543,6 +690,7 @@ function BoardTable({ entities }: { entities: PortfolioEntity[] }) {
             <th className="px-4 py-3 text-right font-medium">Exceptions</th>
             <th className="px-4 py-3 text-right font-medium">Overdue AR</th>
             <th className="px-4 py-3 text-right font-medium">Overdue AP</th>
+            <th className="px-4 py-3 font-medium">Onboarding</th>
             <th className="px-4 py-3 font-medium">Owners</th>
           </tr>
         </thead>
@@ -602,12 +750,34 @@ function BoardTable({ entities }: { entities: PortfolioEntity[] }) {
                 )}
               </td>
               <td className="px-4 py-3">
+                <OnboardingInline row={onboarding.get(e.locationId)} />
+              </td>
+              <td className="px-4 py-3">
                 <OwnersInline assignments={e.assignments} />
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function OnboardingInline({ row }: { row: OnboardingApiRow | undefined }) {
+  if (!row) {
+    return <span className="text-2xs text-slate-600">—</span>;
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <OnboardingBadge status={row.status} />
+      {row.ownerName ? (
+        <span className="inline-flex items-center gap-1 text-2xs text-slate-400" title={`Onboarding owner: ${row.ownerName}`}>
+          <GraduationCap size={11} className="text-indigo-400/80" />
+          {row.ownerName.split(' ')[0]}
+        </span>
+      ) : (
+        <span className="text-2xs text-slate-600">Unassigned</span>
+      )}
     </div>
   );
 }

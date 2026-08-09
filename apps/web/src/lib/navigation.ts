@@ -163,6 +163,7 @@ export const navigation: NavGroup[] = [
       { label: 'Get Started', href: '/onboarding', icon: Sparkles },
       { label: 'Payments', href: '/settings/payments', icon: CreditCard },
       { label: 'Approval Workflows', href: '/settings/approvals', icon: ClipboardCheck },
+      { label: 'Roles & Permissions', href: '/settings/roles', icon: ShieldCheck },
       { label: 'AI Autonomy', href: '/settings/autonomy', icon: SlidersHorizontal },
       { label: 'Integrations', href: '/integrations/erp', icon: Network },
       { label: 'Import Data', href: '/import', icon: Upload },
