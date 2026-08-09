@@ -88,6 +88,17 @@ export const listDocumentsQuery = z.object({
   entity_id: z.string().uuid().optional(),
   doc_type: z.enum(DOC_TYPES).optional(),
   search: z.string().trim().max(200).optional(),
+  /**
+   * Link state filter for the center's "Unfiled" view:
+   *   'unfiled' → only rows NOT yet linked to a record (entity_type IS NULL)
+   *   'linked'  → only rows linked to some record
+   *   'all'     → no link filter (default)
+   */
+  linked: z.enum(['all', 'linked', 'unfiled']).optional(),
+  /** Inclusive created_at lower bound (YYYY-MM-DD or ISO). */
+  date_from: z.string().trim().min(1).max(40).optional(),
+  /** Inclusive created_at upper bound (YYYY-MM-DD or ISO). */
+  date_to: z.string().trim().min(1).max(40).optional(),
 });
 export type ListDocumentsQuery = z.infer<typeof listDocumentsQuery>;
 
@@ -103,6 +114,11 @@ export type UploadMeta = z.infer<typeof uploadMetaSchema>;
 // ---- Zod: signed-url request ----
 export const signedUrlQuery = z.object({
   expires_in: z.coerce.number().int().min(30).max(3600).default(300),
+  /**
+   * '1' (default) forces a download (Content-Disposition: attachment); '0' streams the
+   * object inline so PDFs/images can be VIEWED in a browser tab instead of downloaded.
+   */
+  download: z.enum(['0', '1']).default('1'),
 });
 
 // =============================================================================
@@ -233,4 +249,106 @@ export function formatBytes(bytes: number | null | undefined): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// =============================================================================
+// LINKED-RECORD RESOLUTION — trace a document back to the record it supports.
+// =============================================================================
+
+/**
+ * The polymorphic `entity_type` values written across the app (AttachmentsPanel props,
+ * store-source / attachDocument calls). Kept as a single source of truth so the center
+ * can label a document's link and route a click-through to the source record. Additive
+ * only — an unknown value degrades to a Title-cased label with no link.
+ */
+export const ENTITY_TYPE_LABEL: Record<string, string> = {
+  bill: 'Bill',
+  invoice: 'Invoice',
+  gl_entry: 'Journal Entry',
+  fixed_asset: 'Fixed Asset',
+  debt_instrument: 'Debt Instrument',
+  loan: 'Loan',
+  lease: 'Lease',
+  covenant: 'Covenant',
+  bank_account: 'Bank Account',
+  customer: 'Customer',
+  vendor: 'Vendor',
+  prepaid: 'Prepaid',
+  receipt: 'Receipt',
+  policy: 'Insurance Policy',
+};
+
+/** The record types that can appear in the "Linked record" filter, in menu order. */
+export const LINKABLE_ENTITY_TYPES: string[] = [
+  'bill',
+  'invoice',
+  'gl_entry',
+  'fixed_asset',
+  'debt_instrument',
+  'lease',
+  'covenant',
+  'customer',
+  'vendor',
+  'prepaid',
+  'receipt',
+  'policy',
+];
+
+/** Human label for an `entity_type` link (or "Unfiled" when the doc isn't linked yet). */
+export function entityTypeLabel(entityType: string | null | undefined): string {
+  if (!entityType || !entityType.trim()) return 'Unfiled';
+  const et = entityType.trim().toLowerCase();
+  if (ENTITY_TYPE_LABEL[et]) return ENTITY_TYPE_LABEL[et];
+  // Fallback: title-case an unknown snake_case type so it still reads cleanly.
+  return et
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/**
+ * Resolve the in-app route for the record a document is linked to, so the center can
+ * offer a click-through to its source (the bill/lease/covenant/etc.). Where a list page
+ * supports deep-link open (`?id=` / `?invoice=`) the id is carried; otherwise it lands
+ * on the record's page. Returns null when the type is unknown or nothing is linked.
+ */
+export function entityRecordHref(
+  entityType: string | null | undefined,
+  entityId: string | null | undefined,
+): string | null {
+  if (!entityType || !entityType.trim()) return null;
+  const et = entityType.trim().toLowerCase();
+  const id = entityId && entityId.trim() ? encodeURIComponent(entityId.trim()) : '';
+  switch (et) {
+    case 'bill':
+      return id ? `/bills?id=${id}` : '/bills';
+    case 'invoice':
+      return id ? `/invoices?invoice=${id}` : '/invoices';
+    case 'gl_entry':
+      return id ? `/journal-entries?id=${id}` : '/journal-entries';
+    case 'fixed_asset':
+      return '/fixed-assets';
+    case 'debt_instrument':
+    case 'loan':
+      return '/debt';
+    case 'lease':
+      return '/leases';
+    case 'covenant':
+      return '/covenants';
+    case 'bank_account':
+      return '/reconciliation';
+    case 'customer':
+      return '/customers';
+    case 'vendor':
+      return '/vendors';
+    case 'prepaid':
+      return '/prepaids';
+    case 'receipt':
+      return '/receipts';
+    case 'policy':
+      return '/insurance';
+    default:
+      return null;
+  }
 }

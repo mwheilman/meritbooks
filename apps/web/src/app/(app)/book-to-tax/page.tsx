@@ -213,6 +213,9 @@ function ScheduleTab(props: {
                   </tr>
                 )}
                 {(data.additions ?? []).map((l) => <DiffRow key={l.code} line={l} />)}
+                {(data.additions?.length ?? 0) > 0 && (
+                  <SubtotalRow label="Total additions" amountCents={data.totalAdditionsCents} tone="add" />
+                )}
 
                 {(data.subtractions?.length ?? 0) > 0 && (
                   <tr className="border-t border-slate-800/60">
@@ -222,6 +225,9 @@ function ScheduleTab(props: {
                   </tr>
                 )}
                 {(data.subtractions ?? []).map((l) => <DiffRow key={l.code} line={l} negative />)}
+                {(data.subtractions?.length ?? 0) > 0 && (
+                  <SubtotalRow label="Total subtractions" amountCents={data.totalSubtractionsCents} tone="sub" />
+                )}
 
                 <tr className="border-t-2 border-slate-700 bg-slate-900/40">
                   <td className="px-4 py-3 font-semibold text-white" colSpan={2}>Taxable income (before NOL / special deductions)</td>
@@ -280,6 +286,18 @@ function LadderRow(props: { label: string; amountCents: number; bold?: boolean }
     <tr>
       <td className={clsx('px-4 py-3', props.bold ? 'font-semibold text-white' : 'text-slate-300')} colSpan={2}>{props.label}</td>
       <td className={clsx('px-4 py-3 text-right font-mono', props.bold ? 'font-semibold text-white' : 'text-slate-200')}>{fmt(props.amountCents)}</td>
+    </tr>
+  );
+}
+
+function SubtotalRow(props: { label: string; amountCents: number; tone: 'add' | 'sub' }) {
+  const { label, amountCents, tone } = props;
+  return (
+    <tr className="border-t border-slate-800 bg-slate-900/20">
+      <td className="px-4 py-2 pl-8 text-slate-200 font-medium" colSpan={2}>{label}</td>
+      <td className={clsx('px-4 py-2 text-right font-mono font-medium', tone === 'add' ? 'text-emerald-300' : 'text-red-300')}>
+        {tone === 'add' ? '+' : '−'}{fmt(amountCents)}
+      </td>
     </tr>
   );
 }

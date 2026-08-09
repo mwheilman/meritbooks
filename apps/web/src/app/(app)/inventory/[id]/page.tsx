@@ -189,11 +189,12 @@ function MovementForm({ itemId, uom, action, onDone }: { itemId: string; uom: st
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [cogsPreview, setCogsPreview] = useState<number | null>(null);
 
   const needsCost = action === 'RECEIPT' || (action === 'ADJUST' && Number(qty) > 0);
 
   async function submit() {
-    setSaving(true); setErr(null); setOk(null);
+    setSaving(true); setErr(null); setOk(null); setCogsPreview(null);
     const qtyNum = Number(qty);
     const body: Record<string, unknown> = { type: action, item_id: itemId, qty: qtyNum, memo: memo.trim() || undefined };
     if (action === 'RECEIPT') body.total_cost_cents = Math.round(Number(cost) * 100);
@@ -202,11 +203,14 @@ function MovementForm({ itemId, uom, action, onDone }: { itemId: string; uom: st
       if (linkKind === 'JOB') body.job_id = linkId.trim();
       else body.invoice_id = linkId.trim();
     }
-    const res = await api.post('/api/inventory/movements', body);
+    const res = await api.post<{ cogs_cents?: number }>('/api/inventory/movements', body);
     setSaving(false);
     if (res.error) { setErr(res.error.error); return; }
+    const cogs = Number(res.data?.cogs_cents ?? 0);
+    // Surface the computed COGS impact of an issue / shrinkage before it is posted.
+    if (action !== 'RECEIPT' && cogs > 0) setCogsPreview(cogs);
     setQty(''); setCost(''); setMemo(''); setLinkKind(''); setLinkId('');
-    setOk(action === 'RECEIPT' ? 'Received.' : 'Proposed — approve it in the history to post COGS.');
+    setOk(action === 'RECEIPT' ? 'Received.' : 'Proposed — approve it in the history to post the entry.');
     onDone();
   }
 
@@ -254,6 +258,15 @@ function MovementForm({ itemId, uom, action, onDone }: { itemId: string; uom: st
         <input value={memo} onChange={(e) => setMemo(e.target.value)}
           className="w-full bg-surface-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-600" placeholder="Reference / note" />
       </label>
+      {cogsPreview != null && (
+        <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2">
+          <p className="text-[11px] uppercase tracking-wide text-indigo-300">Computed COGS impact</p>
+          <p className="font-mono text-sm font-semibold text-white">{formatMoney(cogsPreview)}</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            Will post DR Cost of goods sold / CR Inventory on hand when you approve it.
+          </p>
+        </div>
+      )}
       {err && <p className="text-red-400 text-xs">{err}</p>}
       {ok && <p className="text-emerald-400 text-xs">{ok}</p>}
       <button onClick={submit} disabled={!valid || saving}

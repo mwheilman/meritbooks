@@ -43,6 +43,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       entityId: parsed.data.entity_id ?? null,
       docType: parsed.data.doc_type ?? null,
       search: parsed.data.search ?? null,
+      linked: parsed.data.linked ?? null,
+      dateFrom: parsed.data.date_from ?? null,
+      dateTo: parsed.data.date_to ?? null,
     });
     return NextResponse.json({ data: documents });
   } catch (err) {

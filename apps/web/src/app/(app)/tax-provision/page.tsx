@@ -39,6 +39,16 @@ interface DeferredItem {
   deferredTaxCents: number;
   category: 'DTA' | 'DTL';
 }
+interface Rollforward {
+  beginningDtaCents: number;
+  beginningDtlCents: number;
+  dtaChangeCents: number;
+  dtlChangeCents: number;
+  endingDtaCents: number;
+  endingDtlCents: number;
+  endingNetDtaCents: number;
+  hasPriorHistory: boolean;
+}
 interface SavedProvision {
   id: string;
   status: string;
@@ -52,6 +62,7 @@ interface Computation {
   result: ProvisionResult;
   m1: M1Summary;
   deferredItems: DeferredItem[];
+  rollforward: Rollforward;
   missingAccounts: string[];
   saved: SavedProvision | null;
 }
@@ -223,14 +234,45 @@ export default function TaxProvisionPage() {
               </table>
             </section>
 
-            {/* DTA / DTL roll */}
+            {/* DTA / DTL rollforward + roll */}
             <section className="card overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-800">
-                <h2 className="text-sm font-semibold text-white">Deferred tax roll — DTA / DTL</h2>
-                <p className="text-2xs text-slate-500 mt-0.5">Temporary differences × {r.statutoryRatePct}% build the deferred balances.</p>
+                <h2 className="text-sm font-semibold text-white">Deferred tax rollforward — DTA / DTL</h2>
+                <p className="text-2xs text-slate-500 mt-0.5">
+                  {comp.rollforward?.hasPriorHistory
+                    ? 'Beginning balances carried from prior filed provisions for this entity.'
+                    : 'No prior provisions on file — beginning balances are zero.'}
+                </p>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="text-2xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
+                  <tr>
+                    <th className="text-left font-medium px-4 py-2.5">Deferred balance</th>
+                    <th className="text-right font-medium px-4 py-2.5">DTA</th>
+                    <th className="text-right font-medium px-4 py-2.5">DTL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <RollRow label="Beginning balance" dta={comp.rollforward?.beginningDtaCents ?? 0} dtl={comp.rollforward?.beginningDtlCents ?? 0} />
+                  <RollRow label="Change this period" dta={comp.rollforward?.dtaChangeCents ?? r.dtaChangeCents} dtl={comp.rollforward?.dtlChangeCents ?? r.dtlChangeCents} />
+                  <tr className="border-t border-slate-700 bg-slate-900/40">
+                    <td className="px-4 py-2.5 font-semibold text-white">Ending balance</td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-emerald-300">{fmt(comp.rollforward?.endingDtaCents ?? r.dtaChangeCents)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-red-300">{fmt(comp.rollforward?.endingDtlCents ?? r.dtlChangeCents)}</td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-2 text-xs text-slate-400">Net deferred tax asset (liability)</td>
+                    <td colSpan={2} className={clsx('px-4 py-2 text-right font-mono', (comp.rollforward?.endingNetDtaCents ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+                      {signed(comp.rollforward?.endingNetDtaCents ?? (r.dtaChangeCents - r.dtlChangeCents))}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div className="px-4 pt-3 pb-1 border-t border-slate-800 text-2xs uppercase tracking-wide text-slate-500">
+                Temporary difference detail — this period (× {r.statutoryRatePct}%)
               </div>
               {comp.deferredItems.length === 0 ? (
-                <div className="px-4 py-6 text-sm text-slate-500">No temporary differences this period.</div>
+                <div className="px-4 py-4 text-sm text-slate-500">No temporary differences this period.</div>
               ) : (
                 <table className="w-full text-sm">
                   <thead className="text-2xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
@@ -351,6 +393,16 @@ function JeRow(props: { label: string; debit: number; credit: number }) {
       <td className="px-4 py-2 text-slate-300">{props.label}</td>
       <td className="px-4 py-2 text-right font-mono text-emerald-400">{props.debit ? fmt(props.debit) : ''}</td>
       <td className="px-4 py-2 text-right font-mono text-red-400">{props.credit ? fmt(props.credit) : ''}</td>
+    </tr>
+  );
+}
+
+function RollRow(props: { label: string; dta: number; dtl: number }) {
+  return (
+    <tr className="border-b border-slate-800/40">
+      <td className="px-4 py-2 text-slate-300">{props.label}</td>
+      <td className="px-4 py-2 text-right font-mono text-slate-200">{signed(props.dta)}</td>
+      <td className="px-4 py-2 text-right font-mono text-slate-200">{signed(props.dtl)}</td>
     </tr>
   );
 }

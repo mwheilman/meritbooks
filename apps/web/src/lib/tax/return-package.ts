@@ -163,45 +163,6 @@ export interface TaxReturnPackage {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Rollforward helper (reads persisted deferred_tax_items on PRIOR provisions)
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function readBeginningDeferredBalances(
-  supabase: SupabaseClient,
-  orgId: string,
-  locationId: string | null,
-  startDate: string,
-): Promise<{ dtaCents: number; dtlCents: number; hasPriorHistory: boolean }> {
-  // Prior provisions for this entity that ended before the current period start.
-  let provQuery = supabase
-    .from('tax_provision')
-    .select('id')
-    .eq('org_id', orgId)
-    .lt('end_date', startDate);
-  provQuery = locationId ? provQuery.eq('location_id', locationId) : provQuery.is('location_id', null);
-  const { data: priorProvs, error: provErr } = await provQuery;
-  if (provErr) throw new Error(provErr.message);
-
-  const ids = ((priorProvs ?? []) as Array<{ id: string }>).map((p) => p.id);
-  if (ids.length === 0) return { dtaCents: 0, dtlCents: 0, hasPriorHistory: false };
-
-  const { data: items, error: itemErr } = await supabase
-    .from('deferred_tax_items')
-    .select('category, deferred_tax_cents')
-    .in('provision_id', ids);
-  if (itemErr) throw new Error(itemErr.message);
-
-  let dtaCents = 0;
-  let dtlCents = 0;
-  for (const it of (items ?? []) as Array<{ category: 'DTA' | 'DTL'; deferred_tax_cents: number }>) {
-    const amt = Number(it.deferred_tax_cents ?? 0);
-    if (it.category === 'DTA') dtaCents += amt;
-    else dtlCents += amt;
-  }
-  return { dtaCents, dtlCents, hasPriorHistory: true };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Presentation helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -238,18 +199,10 @@ export async function buildTaxReturnPackage(
   // 2. Book-vs-tax depreciation for the tax year (MACRS/§179/bonus).
   const depr = await computeBookVsTaxDepreciation(supabase, taxYear);
 
-  // 3. DTA/DTL rollforward — beginning from persisted deferred_tax_items on prior provisions.
-  const begin = await readBeginningDeferredBalances(supabase, orgId, locationId, startDate);
-  const rollforward: DtaDtlRollforward = {
-    beginningDtaCents: begin.dtaCents,
-    beginningDtlCents: begin.dtlCents,
-    dtaChangeCents: r.dtaChangeCents,
-    dtlChangeCents: r.dtlChangeCents,
-    endingDtaCents: begin.dtaCents + r.dtaChangeCents,
-    endingDtlCents: begin.dtlCents + r.dtlChangeCents,
-    endingNetDtaCents: begin.dtaCents + r.dtaChangeCents - (begin.dtlCents + r.dtlChangeCents),
-    hasPriorHistory: begin.hasPriorHistory,
-  };
+  // 3. DTA/DTL rollforward — computed by the provision service (beginning from persisted
+  //    deferred_tax_items on prior provisions), so the return package and the ASC 740 provision
+  //    screen share one rollforward and can never disagree.
+  const rollforward: DtaDtlRollforward = computation.rollforward;
 
   // 4. Waterfall ladder (presentation-only; derived from already-computed figures).
   const waterfall: WaterfallStep[] = [

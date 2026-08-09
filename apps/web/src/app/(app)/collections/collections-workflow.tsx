@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
@@ -541,12 +541,24 @@ function Kpi({ icon: Icon, color, label, value, sub }: {
 }
 
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  const titleId = useId();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={onClose}>
-      <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-          <h3 className="text-sm font-semibold text-white">{title}</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          <h3 id={titleId} className="text-sm font-semibold text-white">{title}</h3>
+          <button onClick={onClose} aria-label="Close dialog" className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-5">{children}</div>
       </div>

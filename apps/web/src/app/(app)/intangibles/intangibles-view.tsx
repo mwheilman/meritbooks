@@ -335,6 +335,12 @@ function CreateIntangiblePanel({ onClose, onCreated }: { onClose: () => void; on
   const [acquisitionDate, setAcquisitionDate] = useState(new Date().toISOString().slice(0, 10));
   const [rail, setRail] = useState('ach');
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const goodwill = isNonAmortizing(category);
   const costNum = Number(cost);
   const canSubmit =
@@ -368,12 +374,15 @@ function CreateIntangiblePanel({ onClose, onCreated }: { onClose: () => void; on
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="New intangible asset"
         className="h-full w-full max-w-md overflow-y-auto border-l border-slate-800 bg-surface-950 p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-white">New intangible asset</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-white">
+          <button onClick={onClose} aria-label="Close panel" className="text-slate-500 hover:text-white">
             <X className="h-5 w-5" />
           </button>
         </div>

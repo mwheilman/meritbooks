@@ -87,6 +87,12 @@ export function LeaseParseReview({
   const [decisionId, setDecisionId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const { data: locData } = useQuery<LocationOption[]>('/api/locations');
   const locations = locData ?? [];
   const [locationId, setLocationId] = useState<string>('');
@@ -187,7 +193,7 @@ export function LeaseParseReview({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="card w-full max-w-3xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label="Set up a lease from its agreement" className="card w-full max-w-3xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-indigo-400" />

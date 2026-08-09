@@ -20,12 +20,32 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  BOX_META,
+  classify1099Box,
+  apportionCents,
+  mergeBoxCents,
+  type Box1099Code,
+  type Form1099Type,
+  type BoxCents,
+} from '@/lib/tax/box-classify';
 
 /** IRS reporting floor: $600 OR MORE (not strictly "over") in reportable payments. */
 export const REPORTABLE_THRESHOLD_CENTS = 60_000;
 
 export type W9State = 'on_file' | 'missing' | 'expired';
 export type Readiness = 'READY' | 'MISSING_W9' | 'NOT_MARKED_1099';
+
+/** One box slice of a vendor's reportable spend (derived from GL expense coding). */
+export interface Ten99Box {
+  code: Box1099Code;
+  form: Form1099Type;
+  /** IRS box label (e.g. "Rents"). */
+  label: string;
+  /** Compact label for dense UI. */
+  short: string;
+  cents: number;
+}
 
 export interface Ten99Row {
   vendorId: string;
@@ -37,6 +57,15 @@ export interface Ten99Row {
   w9Status: W9State;
   tinPresent: boolean;
   readiness: Readiness;
+  /**
+   * The reportable total split across 1099 boxes, classified from the GL expense
+   * accounts the vendor's paid bills were coded to. Sorted largest first.
+   */
+  boxes: Ten99Box[];
+  /** The form of the largest box — how this candidate should predominantly be filed. */
+  primaryForm: Form1099Type;
+  /** NEC Box-1 (nonemployee compensation) portion of the reportable total, cents. */
+  necReportableCents: number;
 }
 
 export interface Ten99Summary {
@@ -48,6 +77,10 @@ export interface Ten99Summary {
   missingDocs: number;
   /** Total reportable $ sitting behind un-documented candidates (cents). */
   dollarsAtRiskCents: number;
+  /** Candidates whose predominant box is 1099-NEC (nonemployee compensation). */
+  necCandidates: number;
+  /** Candidates whose predominant box is 1099-MISC (rents / royalties / medical / attorney). */
+  miscCandidates: number;
 }
 
 export interface Ten99Report {
@@ -126,6 +159,8 @@ export async function buildReadinessReport(
       ready: 0,
       missingDocs: 0,
       dollarsAtRiskCents: 0,
+      necCandidates: 0,
+      miscCandidates: 0,
     },
     rows: [],
   });
@@ -161,15 +196,54 @@ export async function buildReadinessReport(
     }
   }
 
-  // 3. Aggregate reportable (non-card) cents + count per vendor.
-  const agg = new Map<string, { cents: number; count: number }>();
+  // 2b. Box weights per bill — classify each bill's expense lines into 1099 boxes so a
+  //     payment's reportable cents can be apportioned to the correct return (NEC vs the
+  //     several MISC boxes). Sourced from the OWNED ledger's GL coding, not a guess.
+  const billBoxWeights = new Map<string, BoxCents>();
+  {
+    // Collect the account_ids coded on the paid bills, then classify them once.
+    const lineRows: Array<{ bill_id: string; account_id: string; amount_cents: number | string }> = [];
+    for (let i = 0; i < billIds.length; i += 500) {
+      const slice = billIds.slice(i, i + 500);
+      const { data: rows } = await supabase
+        .from('bill_lines')
+        .select('bill_id, account_id, amount_cents')
+        .in('bill_id', slice);
+      for (const r of (rows ?? []) as typeof lineRows) lineRows.push(r);
+    }
+    const acctIds = [...new Set(lineRows.map((l) => l.account_id).filter(Boolean))];
+    const acctBox = new Map<string, Box1099Code>();
+    for (let i = 0; i < acctIds.length; i += 500) {
+      const slice = acctIds.slice(i, i + 500);
+      if (slice.length === 0) break;
+      const { data: aRows } = await supabase
+        .from('accounts')
+        .select('id, account_number, name')
+        .in('id', slice);
+      for (const a of (aRows ?? []) as Array<{ id: string; account_number: string | null; name: string | null }>) {
+        acctBox.set(a.id, classify1099Box(a.account_number, a.name));
+      }
+    }
+    for (const l of lineRows) {
+      const box = acctBox.get(l.account_id) ?? 'NEC_1';
+      const w = billBoxWeights.get(l.bill_id) ?? {};
+      w[box] = (w[box] ?? 0) + (Number(l.amount_cents) || 0);
+      billBoxWeights.set(l.bill_id, w);
+    }
+  }
+
+  // 3. Aggregate reportable (non-card) cents + count + per-box split per vendor.
+  const agg = new Map<string, { cents: number; count: number; boxes: BoxCents }>();
   for (const p of payments) {
     if (!isReportableRail(p.method, p.rail)) continue;
     const vendorId = billVendor.get(p.bill_id);
     if (!vendorId) continue;
-    const cur = agg.get(vendorId) ?? { cents: 0, count: 0 };
-    cur.cents += Number(p.amount_cents) || 0;
+    const cents = Number(p.amount_cents) || 0;
+    const cur = agg.get(vendorId) ?? { cents: 0, count: 0, boxes: {} as BoxCents };
+    cur.cents += cents;
     cur.count += 1;
+    // Split this payment across boxes by the bill's expense-line coding.
+    mergeBoxCents(cur.boxes, apportionCents(cents, billBoxWeights.get(p.bill_id) ?? {}));
     agg.set(vendorId, cur);
   }
 
@@ -237,6 +311,39 @@ export async function buildReadinessReport(
     const w9State = deriveW9State(facts?.w9 ?? null, w9Doc.get(vendorId), now);
     const tinPresent = !!(facts?.tin && facts.tin.trim().length > 0);
     const is1099Eligible = facts?.is1099 ?? false;
+
+    // Box breakdown, largest first. Any un-apportioned residue lands in NEC (defensive).
+    const boxes: Ten99Box[] = (Object.entries(a.boxes) as [Box1099Code, number][])
+      .filter(([, cents]) => (cents || 0) > 0)
+      .map(([code, cents]) => ({
+        code,
+        form: BOX_META[code].form,
+        label: BOX_META[code].label,
+        short: BOX_META[code].short,
+        cents,
+      }))
+      .sort((x, y) => y.cents - x.cents);
+    const boxedTotal = boxes.reduce((s, b) => s + b.cents, 0);
+    if (boxedTotal < a.cents) {
+      // Payments on bills with no expense lines default to NEC.
+      const residue = a.cents - boxedTotal;
+      const nec = boxes.find((b) => b.code === 'NEC_1');
+      if (nec) nec.cents += residue;
+      else
+        boxes.push({
+          code: 'NEC_1',
+          form: 'NEC',
+          label: BOX_META.NEC_1.label,
+          short: BOX_META.NEC_1.short,
+          cents: residue,
+        });
+      boxes.sort((x, y) => y.cents - x.cents);
+    }
+    const primaryForm: Form1099Type = boxes[0]?.form ?? 'NEC';
+    const necReportableCents = boxes
+      .filter((b) => b.form === 'NEC')
+      .reduce((s, b) => s + b.cents, 0);
+
     return {
       vendorId,
       vendorName: facts?.name ?? 'Unknown vendor',
@@ -246,6 +353,9 @@ export async function buildReadinessReport(
       w9Status: w9State,
       tinPresent,
       readiness: computeReadiness({ is1099Eligible, w9Status: w9State, tinPresent }),
+      boxes,
+      primaryForm,
+      necReportableCents,
     };
   });
 
@@ -260,6 +370,8 @@ export async function buildReadinessReport(
   const dollarsAtRiskCents = rows
     .filter((r) => r.readiness !== 'READY')
     .reduce((s, r) => s + r.totalPaidCents, 0);
+  const necCandidates = rows.filter((r) => r.primaryForm === 'NEC').length;
+  const miscCandidates = rows.length - necCandidates;
 
   return {
     summary: {
@@ -269,6 +381,8 @@ export async function buildReadinessReport(
       ready,
       missingDocs,
       dollarsAtRiskCents,
+      necCandidates,
+      miscCandidates,
     },
     rows,
   };

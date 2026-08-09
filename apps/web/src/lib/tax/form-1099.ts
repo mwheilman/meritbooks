@@ -82,6 +82,14 @@ export interface RecipientInput {
   address: RecipientAddress;
   /** Optional raw payments — when present, Box 1 is re-summed excluding card rails. */
   payments?: RailPayment[];
+  /**
+   * Optional NEC-classified portion of the reportable total (cents), derived from GL
+   * expense coding (see lib/tax/box-classify). When present, THIS is Box 1 — so a
+   * vendor's rent / royalty / medical / attorney dollars never leak onto a 1099-NEC.
+   * When the reportable total clears $600 but the NEC portion does not, the candidate
+   * is EXCLUDED with code MISC_ONLY (it belongs on a 1099-MISC, filed separately).
+   */
+  necReportableCents?: number;
   /** Optional federal income-tax withheld (backup withholding), cents (box 4). */
   federalTaxWithheldCents?: number;
   /** Optional state boxes. */
@@ -123,6 +131,7 @@ export interface Form1099Exclusion {
   /** Stable reason code. */
   code:
     | 'BELOW_THRESHOLD'
+    | 'MISC_ONLY'
     | 'NOT_1099_ELIGIBLE'
     | 'MISSING_TIN'
     | 'MISSING_W9';
@@ -220,8 +229,13 @@ export function centsToAmountString(cents: number): string {
 export function classifyRecipient(
   input: RecipientInput,
 ): { status: RecordStatus; code?: Form1099Exclusion['code'] } {
-  const box1 = input.payments ? box1FromPayments(input.payments) : input.totalPaidCents;
-  if (box1 < REPORTABLE_THRESHOLD_CENTS) return { status: 'EXCLUDED', code: 'BELOW_THRESHOLD' };
+  const reportable = input.payments ? box1FromPayments(input.payments) : input.totalPaidCents;
+  // Box 1 (NEC) = the NEC-classified portion when supplied, else the whole reportable total.
+  const box1 = input.necReportableCents ?? reportable;
+  if (reportable < REPORTABLE_THRESHOLD_CENTS) return { status: 'EXCLUDED', code: 'BELOW_THRESHOLD' };
+  // Reportable clears $600 but its nonemployee-comp portion doesn't → 1099-MISC, not NEC.
+  if (input.necReportableCents !== undefined && box1 < REPORTABLE_THRESHOLD_CENTS)
+    return { status: 'EXCLUDED', code: 'MISC_ONLY' };
   if (!input.is1099Eligible) return { status: 'EXCLUDED', code: 'NOT_1099_ELIGIBLE' };
   if (!isValidTin(input.tin)) return { status: 'BLOCKED', code: 'MISSING_TIN' };
   if (input.w9Status !== 'on_file') return { status: 'BLOCKED', code: 'MISSING_W9' };
@@ -232,6 +246,8 @@ function exclusionReason(code: Form1099Exclusion['code'], name: string): string 
   switch (code) {
     case 'BELOW_THRESHOLD':
       return `${name} was paid under the $600 1099-NEC floor by reportable rails — no form required.`;
+    case 'MISC_ONLY':
+      return `${name}'s reportable payments are classified 1099-MISC (rents / royalties / medical / attorney proceeds), not nonemployee compensation. File a 1099-MISC separately — this NEC batch covers Box 1 services only.`;
     case 'NOT_1099_ELIGIBLE':
       return `${name} crossed $600 but is not flagged 1099-eligible. Confirm entity type (a corporation is exempt) or mark it eligible before filing.`;
     case 'MISSING_TIN':
@@ -254,7 +270,9 @@ export function assembleForm1099Batch(
   const exclusions: Form1099Exclusion[] = [];
 
   for (const input of recipients) {
-    const box1 = input.payments ? box1FromPayments(input.payments) : input.totalPaidCents;
+    const reportable = input.payments ? box1FromPayments(input.payments) : input.totalPaidCents;
+    // Box 1 (NEC) uses the nonemployee-comp portion when the caller has classified it.
+    const box1 = input.necReportableCents ?? reportable;
     const { status, code } = classifyRecipient(input);
 
     if (status === 'READY') {
@@ -282,7 +300,7 @@ export function assembleForm1099Batch(
       exclusions.push({
         vendorId: input.vendorId,
         vendorName: input.vendorName,
-        totalPaidCents: box1,
+        totalPaidCents: reportable,
         status,
         code: code!,
         reason: exclusionReason(code!, input.vendorName),

@@ -155,6 +155,9 @@ export async function GET(req: NextRequest) {
       paymentCount: r.paymentCount,
       is1099Eligible: r.is1099Eligible,
       w9Status: r.w9Status,
+      // Box 1 = the NEC-classified portion; MISC-classified dollars are held out of
+      // the IRS file (they belong on a 1099-MISC), matching the CSV/PDF generate path.
+      necReportableCents: r.necReportableCents,
       tin: d?.tin ?? null,
       address: {
         line1: d?.line1 ?? null,

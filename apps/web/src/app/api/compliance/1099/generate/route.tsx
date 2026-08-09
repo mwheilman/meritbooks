@@ -161,6 +161,9 @@ export async function GET(req: NextRequest) {
       paymentCount: r.paymentCount,
       is1099Eligible: r.is1099Eligible,
       w9Status: r.w9Status,
+      // Box 1 = the NEC-classified portion so rent / royalty / medical / attorney
+      // dollars are held out of the NEC file (they belong on a 1099-MISC).
+      necReportableCents: r.necReportableCents,
       tin: d?.tin ?? null,
       address: {
         line1: d?.line1 ?? null,

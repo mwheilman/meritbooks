@@ -47,6 +47,24 @@ export interface DeferredTaxItem {
   category: 'DTA' | 'DTL';
 }
 
+/**
+ * The beginning → change → ending DTA/DTL rollforward for a period. Beginning balances are the
+ * cumulative deferred-tax items persisted on PRIOR provisions for the same entity; the change is
+ * this period's live Δ DTA / Δ DTL. Every figure is integer cents.
+ */
+export interface DtaDtlRollforward {
+  beginningDtaCents: number;
+  beginningDtlCents: number;
+  dtaChangeCents: number;
+  dtlChangeCents: number;
+  endingDtaCents: number;
+  endingDtlCents: number;
+  /** Net deferred tax asset position at period end (ending DTA − ending DTL). */
+  endingNetDtaCents: number;
+  /** Whether beginning balances were found in prior persisted provisions. */
+  hasPriorHistory: boolean;
+}
+
 export interface ProvisionComputation {
   startDate: string;
   endDate: string;
@@ -54,8 +72,82 @@ export interface ProvisionComputation {
   result: ProvisionResult;
   m1: M1Report;
   deferredItems: DeferredTaxItem[];
+  /** Beginning → change → ending DTA/DTL rollforward (beginning read from prior provisions). */
+  rollforward: DtaDtlRollforward;
   /** Role names that could not be resolved (posting is blocked until these are seeded). */
   missingAccounts: string[];
+}
+
+/**
+ * Cumulative deferred-tax balances entering `startDate` for one entity: the sum of persisted
+ * `deferred_tax_items` on every PRIOR provision (end_date < startDate). RLS-scoped; the single
+ * source of truth for a DTA/DTL rollforward's beginning balances (shared by the provision screen
+ * and the 1120 return package so the two can never disagree). Read-only.
+ */
+export async function readBeginningDeferredBalances(
+  db: DB,
+  orgId: string,
+  locationId: string | null,
+  startDate: string,
+): Promise<{ dtaCents: number; dtlCents: number; hasPriorHistory: boolean }> {
+  let provQuery = db
+    .from('tax_provision')
+    .select('id')
+    .eq('org_id', orgId)
+    .lt('end_date', startDate);
+  provQuery = locationId ? provQuery.eq('location_id', locationId) : provQuery.is('location_id', null);
+  const { data: priorProvs, error: provErr } = await provQuery;
+  if (provErr) throw new Error(provErr.message);
+
+  const ids = ((priorProvs ?? []) as Array<{ id: string }>).map((p) => p.id);
+  if (ids.length === 0) return { dtaCents: 0, dtlCents: 0, hasPriorHistory: false };
+
+  const { data: items, error: itemErr } = await db
+    .from('deferred_tax_items')
+    .select('category, deferred_tax_cents')
+    .in('provision_id', ids);
+  if (itemErr) throw new Error(itemErr.message);
+
+  let dtaCents = 0;
+  let dtlCents = 0;
+  for (const it of (items ?? []) as Array<{ category: 'DTA' | 'DTL'; deferred_tax_cents: number }>) {
+    const amt = Number(it.deferred_tax_cents ?? 0);
+    if (it.category === 'DTA') dtaCents += amt;
+    else dtlCents += amt;
+  }
+  return { dtaCents, dtlCents, hasPriorHistory: true };
+}
+
+/**
+ * Assemble the DTA/DTL rollforward: prior-provision beginning balances + this period's change.
+ * Read-only; never throws for a missing history (degrades to zero beginnings).
+ */
+export async function computeDtaDtlRollforward(
+  db: DB,
+  orgId: string,
+  locationId: string | null,
+  startDate: string,
+  dtaChangeCents: number,
+  dtlChangeCents: number,
+): Promise<DtaDtlRollforward> {
+  let begin = { dtaCents: 0, dtlCents: 0, hasPriorHistory: false };
+  try {
+    begin = await readBeginningDeferredBalances(db, orgId, locationId, startDate);
+  } catch {
+    /* prior-balance read is additive — a failure degrades to zero beginnings. */
+  }
+  const endingDtaCents = begin.dtaCents + dtaChangeCents;
+  const endingDtlCents = begin.dtlCents + dtlChangeCents;
+  return {
+    beginningDtaCents: begin.dtaCents,
+    beginningDtlCents: begin.dtlCents,
+    dtaChangeCents,
+    dtlChangeCents,
+    endingDtaCents,
+    endingDtlCents,
+    endingNetDtaCents: endingDtaCents - endingDtlCents,
+    hasPriorHistory: begin.hasPriorHistory,
+  };
 }
 
 /** Derive the per-line deferred detail from the M-1 temporary differences. */
@@ -108,6 +200,14 @@ export async function computeProvisionForPeriod(
 
   const deferredItems = deriveDeferredItems(m1, input.statutoryRatePct);
   const accounts = await resolveProvisionAccounts(db, orgId, {});
+  const rollforward = await computeDtaDtlRollforward(
+    db,
+    orgId,
+    input.locationId ?? null,
+    input.startDate,
+    result.dtaChangeCents,
+    result.dtlChangeCents,
+  );
 
   return {
     startDate: input.startDate,
@@ -116,6 +216,7 @@ export async function computeProvisionForPeriod(
     result,
     m1,
     deferredItems,
+    rollforward,
     missingAccounts: accounts.missing,
   };
 }

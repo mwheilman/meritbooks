@@ -104,21 +104,30 @@ export interface ListArgs {
   entityId?: string | null;
   docType?: DocType | null;
   search?: string | null;
+  /** 'unfiled' → only rows not linked to a record; 'linked' → only linked; else all. */
+  linked?: 'all' | 'linked' | 'unfiled' | null;
+  /** Inclusive created_at lower/upper bounds (YYYY-MM-DD or ISO). */
+  dateFrom?: string | null;
+  dateTo?: string | null;
 }
 
 /**
  * List documents (RLS-scoped — only the caller's org). Optionally filter to a single
- * record's attachments (entityType [+ entityId]), to a doc_type, and/or a filename
- * search. Newest first.
+ * record's attachments (entityType [+ entityId]), to a doc_type, a filename search, a
+ * link state (linked / unfiled), and/or a created_at date range. Newest first.
  */
 export async function listDocuments(args: ListArgs): Promise<DocumentRow[]> {
-  const { supabase, entityType, entityId, docType, search } = args;
+  const { supabase, entityType, entityId, docType, search, linked, dateFrom, dateTo } = args;
   let q = supabase.from('documents').select(DOCUMENT_SELECT).order('created_at', { ascending: false });
 
   if (entityType) q = q.eq('entity_type', entityType);
   if (entityId) q = q.eq('entity_id', entityId);
   if (docType) q = q.eq('doc_type', docType);
   if (search && search.trim()) q = q.ilike('file_name', `%${search.trim()}%`);
+  if (linked === 'unfiled') q = q.is('entity_type', null);
+  else if (linked === 'linked') q = q.not('entity_type', 'is', null);
+  if (dateFrom && dateFrom.trim()) q = q.gte('created_at', dateFrom.trim());
+  if (dateTo && dateTo.trim()) q = q.lte('created_at', dateTo.trim());
 
   const { data, error } = await q;
   if (error) throw new Error(`Failed to list documents: ${error.message}`);
@@ -134,6 +143,7 @@ export async function getSignedUrl(
   supabase: SupabaseClient,
   documentId: string,
   expiresIn = 300,
+  opts?: { download?: boolean },
 ): Promise<{ url: string; fileName: string } | null> {
   const { data: row, error } = await supabase
     .from('documents')
@@ -143,14 +153,17 @@ export async function getSignedUrl(
   if (error) throw new Error(`Lookup failed: ${error.message}`);
   if (!row) return null;
 
+  const fileName = (row as { file_name: string }).file_name;
+  // download !== false → force a download (attachment) with the original filename;
+  // download === false → sign a plain URL so the object opens INLINE (view in tab).
+  const signOptions = opts?.download === false ? undefined : { download: fileName };
+
   const admin = createAdminSupabase();
   const { data: signed, error: signErr } = await admin.storage
     .from(DOCUMENTS_BUCKET)
-    .createSignedUrl((row as { storage_path: string }).storage_path, expiresIn, {
-      download: (row as { file_name: string }).file_name,
-    });
+    .createSignedUrl((row as { storage_path: string }).storage_path, expiresIn, signOptions);
   if (signErr || !signed) throw new Error(`Failed to sign URL: ${signErr?.message ?? 'unknown error'}`);
-  return { url: signed.signedUrl, fileName: (row as { file_name: string }).file_name };
+  return { url: signed.signedUrl, fileName };
 }
 
 /**

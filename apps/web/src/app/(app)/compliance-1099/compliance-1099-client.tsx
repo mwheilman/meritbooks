@@ -27,6 +27,15 @@ import { VendorComplianceTabs } from '../vendor-compliance/vendor-compliance-tab
 
 type W9State = 'on_file' | 'missing' | 'expired';
 type Readiness = 'READY' | 'MISSING_W9' | 'NOT_MARKED_1099';
+type Form1099Type = 'NEC' | 'MISC';
+
+interface Ten99Box {
+  code: string;
+  form: Form1099Type;
+  label: string;
+  short: string;
+  cents: number;
+}
 
 interface Ten99Row {
   vendorId: string;
@@ -37,6 +46,9 @@ interface Ten99Row {
   w9Status: W9State;
   tinPresent: boolean;
   readiness: Readiness;
+  boxes: Ten99Box[];
+  primaryForm: Form1099Type;
+  necReportableCents: number;
 }
 
 interface Ten99Summary {
@@ -46,6 +58,8 @@ interface Ten99Summary {
   ready: number;
   missingDocs: number;
   dollarsAtRiskCents: number;
+  necCandidates: number;
+  miscCandidates: number;
 }
 
 interface Ten99Report {
@@ -65,6 +79,11 @@ const W9_META: Record<W9State, { label: string; className: string }> = {
   on_file: { label: 'On file', className: 'text-emerald-400' },
   missing: { label: 'Missing', className: 'text-red-400' },
   expired: { label: 'Expired', className: 'text-amber-400' },
+};
+
+const FORM_META: Record<Form1099Type, { label: string; className: string }> = {
+  NEC: { label: '1099-NEC', className: 'bg-indigo-500/10 text-indigo-300 ring-1 ring-indigo-500/20' },
+  MISC: { label: '1099-MISC', className: 'bg-sky-500/10 text-sky-300 ring-1 ring-sky-500/20' },
 };
 
 // ── Year options: current + prior 4 ──────────────────────────────────────────────
@@ -111,9 +130,12 @@ export function Compliance1099Client() {
   const [flaggingId, setFlaggingId] = useState<string | null>(null);
   const [queued, setQueued] = useState<Set<string>>(new Set());
   const [showGenerate, setShowGenerate] = useState(false);
+  const [formFilter, setFormFilter] = useState<'ALL' | 'NEC' | 'MISC'>('ALL');
 
-  const rows = data?.rows ?? [];
+  const allRows = data?.rows ?? [];
   const summary = data?.summary;
+  const rows =
+    formFilter === 'ALL' ? allRows : allRows.filter((r) => r.primaryForm === formFilter);
 
   async function flag(row: Ten99Row) {
     setFlaggingId(row.vendorId);
@@ -164,6 +186,36 @@ export function Compliance1099Client() {
               </option>
             ))}
           </select>
+
+          {/* Form filter — NEC (services) vs MISC (rents/royalties/medical/attorney) */}
+          {!isLoading && !error && allRows.length > 0 && (
+            <div className="ml-2 inline-flex overflow-hidden rounded-lg border border-slate-800">
+              {(['ALL', 'NEC', 'MISC'] as const).map((f) => {
+                const count =
+                  f === 'ALL'
+                    ? summary?.candidates ?? allRows.length
+                    : f === 'NEC'
+                      ? summary?.necCandidates ?? 0
+                      : summary?.miscCandidates ?? 0;
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setFormFilter(f)}
+                    className={clsx(
+                      'px-3 py-1.5 text-xs font-medium transition-colors',
+                      formFilter === f
+                        ? 'bg-emerald-500/15 text-emerald-300'
+                        : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200',
+                    )}
+                  >
+                    {f === 'ALL' ? 'All' : f === 'NEC' ? '1099-NEC' : '1099-MISC'}
+                    <span className="ml-1.5 font-mono text-[10px] text-slate-500">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
         <button
           type="button"
@@ -205,10 +257,30 @@ export function Compliance1099Client() {
       ) : rows.length === 0 ? (
         <div className="card p-16 text-center">
           <Inbox className="mx-auto mb-3 h-10 w-10 text-slate-600" />
-          <p className="text-sm font-medium text-white">No 1099 candidates for {year}</p>
-          <p className="mt-1 text-xs text-slate-500">
-            No vendor was paid $600 or more by a reportable rail in this tax year.
-          </p>
+          {allRows.length === 0 ? (
+            <>
+              <p className="text-sm font-medium text-white">No 1099 candidates for {year}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                No vendor was paid $600 or more by a reportable rail in this tax year.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-white">
+                No {formFilter === 'NEC' ? '1099-NEC' : '1099-MISC'} candidates for {year}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {allRows.length} candidate{allRows.length === 1 ? '' : 's'} in other forms.{' '}
+                <button
+                  type="button"
+                  onClick={() => setFormFilter('ALL')}
+                  className="text-emerald-400 hover:underline"
+                >
+                  Show all
+                </button>
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <div className="card overflow-hidden">
@@ -218,6 +290,7 @@ export function Compliance1099Client() {
                 <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
                   <th className="px-4 py-3 font-medium">Vendor</th>
                   <th className="px-4 py-3 text-right font-medium">Total paid ({year})</th>
+                  <th className="px-4 py-3 font-medium">Form / box</th>
                   <th className="px-4 py-3 text-center font-medium">1099-eligible</th>
                   <th className="px-4 py-3 font-medium">W-9</th>
                   <th className="px-4 py-3 text-center font-medium">TIN</th>
@@ -241,6 +314,30 @@ export function Compliance1099Client() {
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-slate-200">
                         {formatMoney(row.totalPaidCents)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={clsx(
+                              'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold',
+                              FORM_META[row.primaryForm].className,
+                            )}
+                          >
+                            {FORM_META[row.primaryForm].label}
+                          </span>
+                          {row.boxes.map((b) => (
+                            <span
+                              key={b.code}
+                              title={`${b.label} — ${formatMoney(b.cents)}`}
+                              className="inline-flex items-center gap-1 rounded bg-slate-800/60 px-1.5 py-0.5 text-[10px] text-slate-400"
+                            >
+                              {b.short}
+                              {row.boxes.length > 1 && (
+                                <span className="font-mono text-slate-500">{formatMoney(b.cents)}</span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-center">
                         {row.is1099Eligible ? (

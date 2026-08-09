@@ -212,7 +212,10 @@ export function Generate1099Modal({ year, onClose }: { year: number; onClose: ()
 
   const summary = data?.summary;
   const blocked = (data?.exclusions ?? []).filter((e) => e.status === 'BLOCKED');
-  const excluded = (data?.exclusions ?? []).filter((e) => e.status === 'EXCLUDED');
+  const miscOnly = (data?.exclusions ?? []).filter((e) => e.code === 'MISC_ONLY');
+  const excluded = (data?.exclusions ?? []).filter(
+    (e) => e.status === 'EXCLUDED' && e.code !== 'MISC_ONLY',
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
@@ -367,6 +370,28 @@ export function Generate1099Modal({ year, onClose }: { year: number; onClose: ()
                 <div className="rounded-lg border border-slate-800 bg-slate-950 p-6 text-center text-sm text-slate-500">
                   No filable records yet. Mark candidates 1099-eligible and collect their W-9 / TIN, then re-assemble.
                 </div>
+              )}
+
+              {/* 1099-MISC candidates — held out of the NEC file, not dropped */}
+              {miscOnly.length > 0 && (
+                <section className="rounded-lg border border-sky-500/20 bg-sky-500/[0.04] px-3 py-2.5">
+                  <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-sky-300">
+                    <Landmark size={13} /> File on 1099-MISC instead ({miscOnly.length})
+                  </h3>
+                  <ul className="space-y-1">
+                    {miscOnly.map((e) => (
+                      <li key={e.vendorId} className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-300">{e.vendorName}</span>
+                        <span className="font-mono text-slate-500">{formatMoney(e.totalPaidCents)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1.5 text-[10px] leading-relaxed text-slate-600">
+                    These vendors&apos; reportable payments are classified as rents / royalties / medical /
+                    attorney proceeds (from the GL expense coding), so they belong on a 1099-MISC — held out of this
+                    NEC batch on purpose. This wave generates 1099-NEC only.
+                  </p>
+                </section>
               )}
 
               {excluded.length > 0 && (

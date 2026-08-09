@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { clsx } from 'clsx';
 import { formatMoney, dollarsToCents } from '@meritbooks/shared';
 import { api } from '@/lib/api-client';
@@ -87,6 +87,12 @@ export function LeaseRemeasureModal({
   const [termPreview, setTermPreview] = useState<TerminationPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const endpoint = `/api/leases/${lease.id}/${mode}`;
 

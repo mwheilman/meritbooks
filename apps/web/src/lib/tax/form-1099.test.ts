@@ -39,6 +39,7 @@ function recipient(over: Partial<RecipientInput>): RecipientInput {
     tin: 'tin' in over ? over.tin ?? null : '987654321',
     address: over.address ?? emptyAddress,
     payments: over.payments,
+    necReportableCents: over.necReportableCents,
     federalTaxWithheldCents: over.federalTaxWithheldCents,
     state: over.state,
   };
@@ -105,6 +106,22 @@ describe('classifyRecipient — threshold, eligibility, TIN/W-9 gate', () => {
     expect(classifyRecipient(recipient({})).status).toBe('READY');
   });
 
+  it('EXCLUDES (MISC_ONLY) when reportable clears $600 but the NEC portion does not', () => {
+    // $10k reportable, but only $200 classified as nonemployee comp → belongs on MISC.
+    const c = classifyRecipient(
+      recipient({ totalPaidCents: 1_000_000, necReportableCents: 20_000 }),
+    );
+    expect(c.status).toBe('EXCLUDED');
+    expect(c.code).toBe('MISC_ONLY');
+  });
+
+  it('uses the NEC portion as Box 1 when supplied, and stays READY above the floor', () => {
+    const c = classifyRecipient(
+      recipient({ totalPaidCents: 1_000_000, necReportableCents: 700_00 }),
+    );
+    expect(c.status).toBe('READY');
+  });
+
   it('re-derives Box 1 from payments when supplied (card excluded) for the threshold test', () => {
     // totalPaidCents claims $650, but reportable payments are only $500 → EXCLUDED.
     const c = classifyRecipient(
@@ -155,6 +172,25 @@ describe('assembleForm1099Batch', () => {
     expect(batch.summary.excludedCount).toBe(2);
     const codes = batch.exclusions.filter((e) => e.status === 'EXCLUDED').map((e) => e.code).sort();
     expect(codes).toEqual(['BELOW_THRESHOLD', 'NOT_1099_ELIGIBLE']);
+  });
+
+  it('files Box 1 as the NEC portion and holds MISC-only vendors out of the batch', () => {
+    const mixed = assembleForm1099Batch(
+      PAYER,
+      [
+        // $80k reportable, $50k of it nonemployee comp → Box 1 = $50k, files.
+        recipient({ vendorId: 'mixed', vendorName: 'Mixed Sub', totalPaidCents: 800_000, necReportableCents: 500_000 }),
+        // $90k reportable, all rent → MISC_ONLY, excluded from the NEC file.
+        recipient({ vendorId: 'rent', vendorName: 'Landlord LLC', totalPaidCents: 900_000, necReportableCents: 0 }),
+      ],
+      2026,
+    );
+    const filed = mixed.records.find((r) => r.vendorId === 'mixed');
+    expect(filed?.box1NonemployeeCompCents).toBe(500_000);
+    expect(mixed.records.map((r) => r.vendorId)).not.toContain('rent');
+    const miscOnly = mixed.exclusions.find((e) => e.code === 'MISC_ONLY');
+    expect(miscOnly?.vendorId).toBe('rent');
+    expect(miscOnly?.totalPaidCents).toBe(900_000); // shows the full reportable amount
   });
 
   it('flags a missing payer EIN as a filing blocker', () => {

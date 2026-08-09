@@ -30,7 +30,9 @@ export async function GET(request: Request, { params }: Params): Promise<NextRes
   }
 
   try {
-    const signed = await getSignedUrl(ctx.supabase, params.id, parsed.data.expires_in);
+    const signed = await getSignedUrl(ctx.supabase, params.id, parsed.data.expires_in, {
+      download: parsed.data.download !== '0',
+    });
     if (!signed) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
     return NextResponse.json(signed);
   } catch (err) {

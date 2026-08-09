@@ -373,6 +373,13 @@ export function ImportFromInvoice({ open, onClose, onCreated }: { open: boolean;
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const handleFile = async (file: File) => {
@@ -440,14 +447,14 @@ export function ImportFromInvoice({ open, onClose, onCreated }: { open: boolean;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 backdrop-blur-sm p-4 sm:p-8">
-      <div className="w-full max-w-3xl bg-surface-900 border border-slate-800 rounded-2xl shadow-2xl my-4">
+      <div role="dialog" aria-modal="true" aria-label="Add asset from invoice" className="w-full max-w-3xl bg-surface-900 border border-slate-800 rounded-2xl shadow-2xl my-4">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
           <div>
             <h2 className="text-sm font-semibold text-white flex items-center gap-2"><UploadCloud size={16} className="text-emerald-400" /> Add asset from invoice</h2>
             <p className="text-2xs text-slate-500 mt-0.5">Drop a capex invoice — AI proposes the class, useful life, and method for you to confirm.</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Close dialog" className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400"><X size={16} /></button>
         </div>
 
         <div className="p-5 space-y-4">

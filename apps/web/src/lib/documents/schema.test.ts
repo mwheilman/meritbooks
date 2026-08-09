@@ -13,6 +13,8 @@ import {
   shapeDocumentRow,
   filterByEntity,
   formatBytes,
+  entityTypeLabel,
+  entityRecordHref,
   type DocumentRow,
 } from './schema';
 
@@ -163,5 +165,40 @@ describe('formatBytes', () => {
     expect(formatBytes(null)).toBe('—');
     expect(formatBytes(-1)).toBe('—');
     expect(formatBytes(NaN)).toBe('—');
+  });
+});
+
+describe('entityTypeLabel', () => {
+  it('labels known entity types', () => {
+    expect(entityTypeLabel('bill')).toBe('Bill');
+    expect(entityTypeLabel('gl_entry')).toBe('Journal Entry');
+    expect(entityTypeLabel('debt_instrument')).toBe('Debt Instrument');
+  });
+  it('returns "Unfiled" for null/blank', () => {
+    expect(entityTypeLabel(null)).toBe('Unfiled');
+    expect(entityTypeLabel('   ')).toBe('Unfiled');
+  });
+  it('title-cases an unknown snake_case type', () => {
+    expect(entityTypeLabel('purchase_order')).toBe('Purchase Order');
+  });
+});
+
+describe('entityRecordHref', () => {
+  it('carries a deep-link id where the page supports it', () => {
+    expect(entityRecordHref('bill', 'b1')).toBe('/bills?id=b1');
+    expect(entityRecordHref('invoice', 'i1')).toBe('/invoices?invoice=i1');
+    expect(entityRecordHref('gl_entry', 'g1')).toBe('/journal-entries?id=g1');
+  });
+  it('routes to the record page when no id / no deep-link support', () => {
+    expect(entityRecordHref('lease', 'l1')).toBe('/leases');
+    expect(entityRecordHref('bill', null)).toBe('/bills');
+    expect(entityRecordHref('loan', 'x')).toBe('/debt');
+  });
+  it('returns null for unlinked or unknown types', () => {
+    expect(entityRecordHref(null, null)).toBeNull();
+    expect(entityRecordHref('mystery', 'z')).toBeNull();
+  });
+  it('url-encodes the id', () => {
+    expect(entityRecordHref('bill', 'a b/c')).toBe('/bills?id=a%20b%2Fc');
   });
 });

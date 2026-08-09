@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Package, Loader2, AlertCircle, Search, Plus, X, ChevronRight, TrendingDown } from 'lucide-react';
+import { Package, Loader2, AlertCircle, Search, Plus, X, ChevronRight, TrendingDown, BarChart3 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { api } from '@/lib/api-client';
@@ -59,12 +59,20 @@ function InventoryPageInner() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <PageHeader title="Inventory" description={`${summary?.count ?? 0} items · ${formatMoney(summary?.totalValueCents ?? 0)} on hand`} />
-        <button
-          onClick={() => setCreateOpen(true)}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-medium text-white"
-        >
-          <Plus size={14} /> New item
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href="/inventory/valuation"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-medium text-slate-200"
+          >
+            <BarChart3 size={14} /> Stock valuation
+          </Link>
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-medium text-white"
+          >
+            <Plus size={14} /> New item
+          </button>
+        </div>
       </div>
 
       {data?.degraded && (
