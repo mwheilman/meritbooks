@@ -40,7 +40,6 @@ export const PLANES: Record<Plane, PlaneDef> = {
       'Accounting',
       'Reporting & Analytics',
       'Firm & Governance',
-      'Settings & Admin',
     ],
   },
   practice: {

@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 // business dashboard so the plane's roadmap stays visible).
 const SECTIONS = [
   { icon: ToggleRight, title: 'Entitlements', desc: 'Toggle features (bank feed, consolidation, analytics) per tenant.' },
-  { icon: Receipt, title: 'Billing & Plans', desc: 'Connect tenant billing to populate subscription MRR and invoices.' },
+  { icon: Receipt, title: 'Billing activation', desc: 'List-price MRR is computed from each tenant’s plan below. Activate live charging to issue subscription invoices.' },
 ];
 
 export default async function PlatformPage() {

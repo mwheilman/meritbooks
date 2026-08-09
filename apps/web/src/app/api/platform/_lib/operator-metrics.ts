@@ -16,16 +16,20 @@
  *   • AI / API cost        — REAL: SUM(core.ai_usage_log.cost_cents) — the metering ledger.
  *   • Storage usage        — REAL: SUM(public.documents.size_bytes) — bytes actually held.
  *   • Storage COST         — ESTIMATE: usage × a labeled per-GB-month rate constant.
- *   • Subscription revenue — NOT YET INSTRUMENTED: there is no billing/price/plan source
- *                            in the schema (core.organizations has no plan/price column),
- *                            so we DO NOT fabricate MRR. The overview reports it as null
- *                            and the UI renders a "connect billing" card. See mrr below.
+ *   • Subscription revenue — LIST-PRICE, COMPUTED: each tenant's plan (core.organizations
+ *                            .billing_plan / .custom_mrr_cents) priced against its active
+ *                            company count (active core.locations) through the shared,
+ *                            deterministic pricing model (lib/billing/pricing). This is
+ *                            LIST-PRICE MRR — what each tenant WOULD be billed under its
+ *                            plan. Live billing/charging of tenants is NOT wired; no money
+ *                            moves. Labeled "list-price MRR (computed)" everywhere it shows.
  *
  * All money is bigint cents. Storage is bytes (a plain count, not money).
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { computeFeeRevenue, type FeeRevenueReport, type FeeRevenuePeriod } from './fee-revenue';
+import { planFor, planMrrCents, type BillingPlan } from '@/lib/billing/pricing';
 
 /**
  * Estimated blended storage cost, in cents per GB-month. Labeled an ESTIMATE
@@ -47,6 +51,9 @@ export interface TenantSummary {
   aiCostCents: number; // AI/API spend in the window
   storageBytes: number; // documents held (point-in-time snapshot)
   realizedFeeCents: number; // processor fee earned in the window
+  billingPlan: BillingPlan; // subscription plan
+  activeCompanies: number; // active core.locations (billable entities)
+  listPriceMrrCents: number; // computed list-price MRR under the plan (NOT charged)
 }
 
 export interface SignupPoint {
@@ -68,9 +75,13 @@ export interface OperatorOverview {
   revenue: {
     realizedFeeCents: number; // REAL — processor fee earned in the window
     grossProcessedCents: number; // gross payment volume (context for the fee)
-    // NOT YET INSTRUMENTED — no billing/price source exists in the schema.
-    subscriptionMrrCents: number | null; // always null until billing is connected
-    subscriptionStatus: 'not_instrumented';
+    // LIST-PRICE, COMPUTED — each tenant's plan priced against its active company count
+    // through the shared pricing model. This is what tenants WOULD be billed; live
+    // charging is NOT wired, so no money moves against this figure.
+    subscriptionMrrCents: number; // Σ list-price MRR across tenants
+    subscriptionArrCents: number; // subscriptionMrrCents × 12
+    subscriptionStatus: 'list_price_computed';
+    subscriptionBillingActivated: false; // charging is NOT wired
   };
   costs: {
     aiCostCents: number; // REAL — SUM(ai_usage_log.cost_cents) in the window
@@ -93,7 +104,7 @@ export interface OperatorOverview {
       aiCost: 'core.ai_usage_log.cost_cents';
       storage: 'public.documents.size_bytes';
       storageCost: 'estimated';
-      subscriptionRevenue: 'not_instrumented';
+      subscriptionRevenue: 'list_price_computed';
     };
   };
 }
@@ -103,6 +114,8 @@ interface OrgRow {
   name: string | null;
   setup_complete: boolean | null;
   created_at: string | null;
+  billing_plan: string | null;
+  custom_mrr_cents: number | string | null;
 }
 
 /** Sum a bigint column per-org across a paged, optionally date-windowed table. */
@@ -172,6 +185,29 @@ async function activeSeatsByOrg(db: SupabaseClient): Promise<Map<string, number>
   return byOrg;
 }
 
+/** Count ACTIVE companies (core.locations where is_active) per org, paged. */
+async function activeCompaniesByOrg(db: SupabaseClient): Promise<Map<string, number>> {
+  const byOrg = new Map<string, number>();
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await db
+      .schema('core')
+      .from('locations')
+      .select('org_id, is_active')
+      .eq('is_active', true)
+      .order('org_id', { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw new Error(`locations read failed: ${error.message}`);
+    const rows = (data ?? []) as { org_id: string }[];
+    for (const r of rows) {
+      const orgId = String(r.org_id ?? '');
+      if (!orgId) continue;
+      byOrg.set(orgId, (byOrg.get(orgId) ?? 0) + 1);
+    }
+    if (rows.length < PAGE) break;
+  }
+  return byOrg;
+}
+
 /** Build the last-12-month signup trend (cumulative tenant count) from org created_at. */
 function buildSignupTrend(orgs: OrgRow[]): SignupPoint[] {
   const perMonth = new Map<string, number>();
@@ -212,7 +248,7 @@ export async function computeOperatorOverview(
   const orgsRes = await db
     .schema('core')
     .from('organizations')
-    .select('id, name, setup_complete, created_at')
+    .select('id, name, setup_complete, created_at, billing_plan, custom_mrr_cents')
     .order('created_at', { ascending: false });
   if (orgsRes.error) throw new Error(`organizations read failed: ${orgsRes.error.message}`);
   const orgs = (orgsRes.data ?? []) as OrgRow[];
@@ -220,13 +256,15 @@ export async function computeOperatorOverview(
   for (const o of orgs) orgName.set(o.id, o.name ?? 'Unnamed tenant');
 
   // Parallelize the heavy aggregates.
-  const [seats, ai, storage, fee]: [
+  const [seats, companies, ai, storage, fee]: [
+    Map<string, number>,
     Map<string, number>,
     { byOrg: Map<string, number>; total: number; rowCount: number },
     { byOrg: Map<string, number>; total: number; rowCount: number },
     FeeRevenueReport,
   ] = await Promise.all([
     activeSeatsByOrg(db),
+    activeCompaniesByOrg(db),
     sumByOrg(db, {
       schema: 'core',
       table: 'ai_usage_log',
@@ -244,17 +282,26 @@ export async function computeOperatorOverview(
   for (const t of fee.byTenant) feeByOrg.set(t.orgId, t.feeCents);
 
   // Per-tenant table: union of every org (so a tenant with zero activity still shows).
+  // List-price MRR is each tenant's plan priced against its active company count through
+  // the shared, deterministic pricing model — NOT a charge (no billing is wired).
   const perTenant: TenantSummary[] = orgs
-    .map((o) => ({
-      orgId: o.id,
-      orgName: orgName.get(o.id) ?? 'Unnamed tenant',
-      onboarded: o.setup_complete === true,
-      createdAt: o.created_at,
-      activeSeats: seats.get(o.id) ?? 0,
-      aiCostCents: ai.byOrg.get(o.id) ?? 0,
-      storageBytes: storage.byOrg.get(o.id) ?? 0,
-      realizedFeeCents: feeByOrg.get(o.id) ?? 0,
-    }))
+    .map((o) => {
+      const { plan, customCents } = planFor(o);
+      const activeCompanies = companies.get(o.id) ?? 0;
+      return {
+        orgId: o.id,
+        orgName: orgName.get(o.id) ?? 'Unnamed tenant',
+        onboarded: o.setup_complete === true,
+        createdAt: o.created_at,
+        activeSeats: seats.get(o.id) ?? 0,
+        aiCostCents: ai.byOrg.get(o.id) ?? 0,
+        storageBytes: storage.byOrg.get(o.id) ?? 0,
+        realizedFeeCents: feeByOrg.get(o.id) ?? 0,
+        billingPlan: plan,
+        activeCompanies,
+        listPriceMrrCents: planMrrCents(plan, activeCompanies, customCents),
+      };
+    })
     .sort(
       (a, b) =>
         b.realizedFeeCents - a.realizedFeeCents ||
@@ -263,6 +310,7 @@ export async function computeOperatorOverview(
     );
 
   const totalActiveSeats = [...seats.values()].reduce((s, n) => s + n, 0);
+  const totalListPriceMrrCents = perTenant.reduce((s, t) => s + t.listPriceMrrCents, 0);
   const newInWindow = orgs.filter(
     (o) =>
       o.created_at &&
@@ -293,8 +341,10 @@ export async function computeOperatorOverview(
     revenue: {
       realizedFeeCents: fee.totals.feeCents,
       grossProcessedCents: fee.totals.grossCents,
-      subscriptionMrrCents: null, // NOT instrumented — do not fabricate
-      subscriptionStatus: 'not_instrumented',
+      subscriptionMrrCents: totalListPriceMrrCents, // Σ list-price MRR (computed, not charged)
+      subscriptionArrCents: totalListPriceMrrCents * 12,
+      subscriptionStatus: 'list_price_computed',
+      subscriptionBillingActivated: false,
     },
     costs: {
       aiCostCents: ai.total,
@@ -316,7 +366,7 @@ export async function computeOperatorOverview(
         aiCost: 'core.ai_usage_log.cost_cents',
         storage: 'public.documents.size_bytes',
         storageCost: 'estimated',
-        subscriptionRevenue: 'not_instrumented',
+        subscriptionRevenue: 'list_price_computed',
       },
     },
   };

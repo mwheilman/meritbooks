@@ -33,6 +33,9 @@ interface TenantSummary {
   aiCostCents: number;
   storageBytes: number;
   realizedFeeCents: number;
+  billingPlan: 'direct' | 'firm' | 'enterprise';
+  activeCompanies: number;
+  listPriceMrrCents: number;
 }
 interface SignupPoint {
   month: string;
@@ -52,8 +55,10 @@ interface OverviewResponse {
   revenue: {
     realizedFeeCents: number;
     grossProcessedCents: number;
-    subscriptionMrrCents: number | null;
+    subscriptionMrrCents: number;
+    subscriptionArrCents: number;
     subscriptionStatus: string;
+    subscriptionBillingActivated: boolean;
   };
   costs: {
     aiCostCents: number;
@@ -132,7 +137,19 @@ const dateLabel = (s: string | null) =>
     ? new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     : '—';
 
-type SortKey = 'orgName' | 'activeSeats' | 'aiCostCents' | 'storageBytes' | 'realizedFeeCents';
+type SortKey =
+  | 'orgName'
+  | 'activeSeats'
+  | 'aiCostCents'
+  | 'storageBytes'
+  | 'realizedFeeCents'
+  | 'listPriceMrrCents';
+
+const PLAN_LABEL: Record<TenantSummary['billingPlan'], string> = {
+  direct: 'Direct',
+  firm: 'Firm',
+  enterprise: 'Enterprise',
+};
 
 export function OperatorDashboard() {
   const [preset, setPreset] = useState<PresetKey>('ttm');
@@ -290,7 +307,11 @@ export function OperatorDashboard() {
           mono
         />
         <NetCard netCents={netCents} />
-        <SubscriptionCard mrrCents={revenue.subscriptionMrrCents} />
+        <SubscriptionCard
+          mrrCents={revenue.subscriptionMrrCents}
+          arrCents={revenue.subscriptionArrCents}
+          billingActivated={revenue.subscriptionBillingActivated}
+        />
       </div>
 
       {/* Tenant signup trend */}
@@ -330,6 +351,8 @@ export function OperatorDashboard() {
               <thead>
                 <tr className="border-b border-slate-800">
                   <Th label="Tenant" sortKey="orgName" sort={sort} onSort={toggleSort} align="left" />
+                  <Th label="Companies" sortKey="listPriceMrrCents" sort={sort} onSort={toggleSort} />
+                  <Th label="List-price MRR" sortKey="listPriceMrrCents" sort={sort} onSort={toggleSort} />
                   <Th label="Seats" sortKey="activeSeats" sort={sort} onSort={toggleSort} />
                   <Th label="AI / API cost" sortKey="aiCostCents" sort={sort} onSort={toggleSort} />
                   <Th label="Storage" sortKey="storageBytes" sort={sort} onSort={toggleSort} />
@@ -342,12 +365,21 @@ export function OperatorDashboard() {
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2">
                         <span className="text-slate-200">{t.orgName}</span>
+                        <span className="text-[10px] uppercase tracking-wider text-indigo-300/80 bg-indigo-500/10 rounded px-1.5 py-0.5">
+                          {PLAN_LABEL[t.billingPlan]}
+                        </span>
                         {!t.onboarded && (
                           <span className="text-[10px] uppercase tracking-wider text-amber-400/80 bg-amber-500/10 rounded px-1.5 py-0.5">
                             Onboarding
                           </span>
                         )}
                       </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono text-slate-300 tabular-nums">
+                      {t.activeCompanies.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono text-emerald-300 tabular-nums">
+                      {t.listPriceMrrCents > 0 ? formatMoney(t.listPriceMrrCents) : <span className="text-slate-600">—</span>}
                     </td>
                     <td className="px-4 py-2.5 text-right font-mono text-slate-300 tabular-nums">
                       {t.activeSeats.toLocaleString()}
@@ -367,6 +399,12 @@ export function OperatorDashboard() {
               <tfoot>
                 <tr className="bg-slate-800/20 border-t border-slate-700">
                   <td className="px-4 py-2.5 text-xs font-semibold text-white">Total</td>
+                  <td className="px-4 py-2.5 text-right font-mono text-white tabular-nums font-semibold">
+                    {perTenant.reduce((s, t) => s + t.activeCompanies, 0).toLocaleString()}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono text-emerald-300 tabular-nums font-semibold">
+                    {formatMoney(revenue.subscriptionMrrCents)}
+                  </td>
                   <td className="px-4 py-2.5 text-right font-mono text-white tabular-nums font-semibold">
                     {tenants.activeSeats.toLocaleString()}
                   </td>
@@ -394,9 +432,11 @@ export function OperatorDashboard() {
           from live data (core.organizations, core.memberships, core.ai_usage_log, public.documents,
           and the payment sub-ledger). Storage cost is an <span className="text-amber-400/80">estimate</span>{' '}
           (usage × ${(data.meta.storageRatePerGbMonthCents / 100).toFixed(3)}/GB-month) and storage usage
-          is a point-in-time snapshot, not windowed. Subscription/plan revenue is{' '}
-          <span className="text-slate-400">not yet instrumented</span> — no billing source exists — so it
-          is shown as unconnected rather than estimated.
+          is a point-in-time snapshot, not windowed. List-price MRR is{' '}
+          <span className="text-emerald-400/80">computed</span> — each tenant&apos;s plan
+          (core.organizations.billing_plan) priced against its active company count
+          (core.locations) — showing what tenants would be billed. Live billing/charging is{' '}
+          <span className="text-amber-400/80">not activated</span>, so no money moves against it.
         </p>
       </div>
     </div>
@@ -487,27 +527,39 @@ function NetCard({ netCents }: { netCents: number }) {
   );
 }
 
-// ── Subscription-not-instrumented card ───────────────────────────────────────
-function SubscriptionCard({ mrrCents }: { mrrCents: number | null }) {
-  if (mrrCents !== null) {
-    // Future: once billing is connected, this renders the real MRR.
-    return (
-      <Kpi icon={CreditCard} label="Subscription MRR" value={formatMoney(mrrCents)} accent="emerald" mono />
-    );
-  }
+// ── List-price MRR card (computed from each tenant's plan) ────────────────────
+// This is what tenants WOULD be billed under their plans — priced deterministically
+// from lib/billing/pricing against each tenant's active company count. Live billing/
+// charging is NOT wired, so the card says so plainly (no money moves against this figure).
+function SubscriptionCard({
+  mrrCents,
+  arrCents,
+  billingActivated,
+}: {
+  mrrCents: number;
+  arrCents: number;
+  billingActivated: boolean;
+}) {
   return (
-    <div className="card p-5 border border-dashed border-slate-700 bg-slate-900/40">
+    <div className="card p-5 border border-emerald-500/15 bg-emerald-500/[0.03]">
       <div className="flex items-start justify-between">
-        <p className="text-sm text-slate-400">Subscription MRR</p>
-        <div className="h-8 w-8 rounded-lg bg-slate-700/40 flex items-center justify-center">
-          <PlugZap size={16} className="text-slate-400" />
+        <p className="text-sm text-slate-400">List-price MRR (computed)</p>
+        <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+          <CreditCard size={16} className="text-emerald-400" />
         </div>
       </div>
-      <p className="mt-2 text-sm font-medium text-slate-300">Not yet instrumented</p>
-      <p className="mt-1 text-2xs text-slate-500">
-        No billing/plan-price source is connected. Wire tenant billing to populate real MRR here — no
-        figure is estimated.
+      <p className="mt-2 text-2xl font-semibold text-emerald-400 tracking-tight font-mono tabular-nums">
+        {formatMoney(mrrCents)}
       </p>
+      <p className="mt-1 text-2xs text-slate-500">
+        {formatMoney(arrCents)} ARR · summed from each tenant&apos;s plan
+      </p>
+      {!billingActivated && (
+        <p className="mt-1.5 flex items-center gap-1 text-2xs text-amber-400/80">
+          <PlugZap size={11} className="shrink-0" />
+          Live billing not activated — computed list price, not charged.
+        </p>
+      )}
     </div>
   );
 }

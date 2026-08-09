@@ -161,6 +161,7 @@ export const navigation: NavGroup[] = [
     label: 'Settings & Admin',
     items: [
       { label: 'Get Started', href: '/onboarding', icon: Sparkles },
+      { label: 'Plan & Billing', href: '/settings/billing', icon: CreditCard },
       { label: 'Payments', href: '/settings/payments', icon: CreditCard },
       { label: 'Approval Workflows', href: '/settings/approvals', icon: ClipboardCheck },
       { label: 'Roles & Permissions', href: '/settings/roles', icon: ShieldCheck },
