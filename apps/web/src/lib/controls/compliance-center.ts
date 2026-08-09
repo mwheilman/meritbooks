@@ -192,6 +192,7 @@ const EC_META: Record<string, { id: string; category: string; framework: string 
   ANOMALOUS_JE: { id: 'EC-10', category: 'General Ledger', framework: 'COSO Control Activities · Anomalous journal-entry detection' },
   CUTOFF_ERROR: { id: 'EC-12', category: 'Close', framework: 'COSO Control Activities · Period-cutoff accuracy' },
   BILL_ANOMALY: { id: 'AP-A', category: 'Accounts Payable', framework: 'COSO Control Activities · Bill anomaly vs vendor pattern' },
+  OUT_OF_POLICY_EXPENSE: { id: 'EC-14', category: 'Expenses', framework: 'COSO Control Activities · Out-of-policy expense enforcement (T&E)' },
   PAYMENT_FRAUD: { id: 'PF-1', category: 'Money Movement', framework: 'COSO Control Activities · Payment-run fraud screen (BEC / new-payee)' },
 };
 

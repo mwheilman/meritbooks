@@ -15,6 +15,7 @@ const querySchema = z.object({
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   root_entity_id: z.string().uuid().optional(),
   eliminate: z.enum(['true', 'false']).optional(),
+  translate: z.enum(['true', 'false']).optional(),
   reporting_currency: z.string().regex(/^[A-Za-z]{3}$/).optional(),
 });
 type Query = z.infer<typeof querySchema>;
@@ -34,6 +35,7 @@ export const GET = apiQueryHandler(querySchema, async (params: Query, ctx) => {
     endDate,
     rootEntityId: params.root_entity_id ?? null,
     eliminate: params.eliminate !== 'false',
+    translate: params.translate !== 'false',
     reportingCurrency: params.reporting_currency
       ? params.reporting_currency.toUpperCase()
       : null,

@@ -53,10 +53,11 @@ interface EntityFxInfo {
   rates: { average: number; closing: number; historical: number };
   ctaCents: number; translated: boolean;
   ratesResolved: { average: boolean; closing: boolean; historical: boolean };
+  originalNetIncomeCents: number; translatedNetIncomeCents: number;
 }
 interface FxResult {
   reportingCurrency: string; fxRatesAvailable: boolean; functionalCurrencyColumnAvailable: boolean;
-  multiCurrency: boolean; ctaTotalCents: number; byEntity: EntityFxInfo[];
+  multiCurrency: boolean; translationApplied: boolean; ctaTotalCents: number; byEntity: EntityFxInfo[];
 }
 interface StatementsResp {
   period: { startDate: string; endDate: string };
@@ -86,6 +87,14 @@ interface FxRatesResp {
   functionalCurrencyColumnAvailable: boolean; fxRatesAvailable: boolean; rates: FxRateRow[];
 }
 
+// Entity functional-currency payloads (migration 133).
+interface EntityCurrencyRow {
+  id: string; name: string; shortCode: string | null; functionalCurrency: string | null;
+}
+interface EntityCurrencyResp {
+  reportingCurrency: string; functionalCurrencyColumnAvailable: boolean; entities: EntityCurrencyRow[];
+}
+
 // Intercompany-match payloads.
 type IcSide = 'AR' | 'AP' | 'REV' | 'EXP';
 interface IcMatchPair {
@@ -112,6 +121,16 @@ interface OwnershipResp { entities: EntityRow[]; ownership: OwnershipRow[]; owne
 
 const fmt = (cents: number) =>
   (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+/** Format cents in an arbitrary ISO currency; falls back to a plain number + code
+ *  for codes Intl doesn't recognize, so a tenant-defined currency never throws. */
+const fmtIn = (cents: number, ccy: string) => {
+  try {
+    return (cents / 100).toLocaleString('en-US', { style: 'currency', currency: ccy });
+  } catch {
+    return `${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${ccy}`;
+  }
+};
+const fmtRate = (r: number) => Number(r).toLocaleString('en-US', { maximumFractionDigits: 6 });
 const fmtPct = (p: number) => `${(Math.round(p * 100) / 100).toString()}%`;
 const today = () => new Date().toISOString().slice(0, 10);
 const yearStart = () => `${new Date().getUTCFullYear()}-01-01`;
@@ -200,6 +219,7 @@ function StatementsTab() {
   const [startDate, setStartDate] = useState(yearStart());
   const [endDate, setEndDate] = useState(today());
   const [eliminate, setEliminate] = useState(true);
+  const [translate, setTranslate] = useState(true);
   const [showEntities, setShowEntities] = useState(false);
   const [reportingCcy, setReportingCcy] = useState<string>('');
 
@@ -224,7 +244,10 @@ function StatementsTab() {
     setRootId(id);
   };
 
-  const qs = new URLSearchParams({ start_date: startDate, end_date: endDate, eliminate: String(eliminate) });
+  const qs = new URLSearchParams({
+    start_date: startDate, end_date: endDate,
+    eliminate: String(eliminate), translate: String(translate),
+  });
   if (rootId) qs.set('root_entity_id', rootId);
   if (reportingCcy) qs.set('reporting_currency', reportingCcy);
   // NOTE: the filters live in the URL query string above, so the cache-buster `key`
@@ -235,7 +258,7 @@ function StatementsTab() {
   // shared hook auto-append `?location_id=…` to a URL that already has a query string
   // would re-introduce that double-`?` corruption whenever a specific company is active.
   const { data, isLoading, error } = useQuery<StatementsResp>(`/api/consolidation/statements?${qs.toString()}`, undefined, {
-    key: `${startDate}|${endDate}|${rootId}|${eliminate}|${reportingCcy}`,
+    key: `${startDate}|${endDate}|${rootId}|${eliminate}|${translate}|${reportingCcy}`,
     scope: false,
   });
 
@@ -256,6 +279,18 @@ function StatementsTab() {
     for (const em of data?.entityMeta ?? []) m.set(em.entityId, em);
     return m;
   }, [data]);
+  const nameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of data?.entities ?? []) m.set(e.id, e.shortCode ?? e.name);
+    return m;
+  }, [data]);
+
+  // Consolidated figures are stated in the reporting currency — format accordingly
+  // (identical to before whenever the reporting currency is USD, so single-currency
+  // tenants see no change).
+  const rc = data?.fx?.reportingCurrency ?? 'USD';
+  const money = (c: number) => fmtIn(c, rc);
+  const foreignFx = (data?.fx?.byEntity ?? []).filter((e) => e.translated);
 
   return (
     <div className="space-y-5">
@@ -279,6 +314,11 @@ function StatementsTab() {
           <input type="checkbox" checked={eliminate} onChange={(e) => setEliminate(e.target.checked)} className="accent-emerald-500" />
           Apply eliminations
         </label>
+        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer pb-2"
+          title="Translate foreign-currency entities into the reporting currency (ASC 830). Off shows the pre-translation combined amounts.">
+          <input type="checkbox" checked={translate} onChange={(e) => setTranslate(e.target.checked)} className="accent-emerald-500" />
+          Translate to reporting currency
+        </label>
         <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer pb-2">
           <input type="checkbox" checked={showEntities} onChange={(e) => setShowEntities(e.target.checked)} className="accent-emerald-500" />
           Show per-entity columns
@@ -301,17 +341,30 @@ function StatementsTab() {
       )}
       {data?.totals && data.totals.eliminatingResidualCents !== 0 && (
         <Banner tone="warning">
-          Intercompany positions are out of balance by {fmt(Math.abs(data.totals.eliminatingResidualCents))} — they will not
+          Intercompany positions are out of balance by {money(Math.abs(data.totals.eliminatingResidualCents))} — they will not
           fully eliminate. Review the intercompany-balance exceptions before relying on this consolidation.
         </Banner>
       )}
-      {data?.fx?.multiCurrency && (
+      {data?.fx?.multiCurrency && data.fx.translationApplied && (
         <Banner tone="info">
           Multi-currency consolidation — foreign entities were translated into <strong>{data.fx.reportingCurrency}</strong> (P&amp;L at
           average, balance sheet at closing, equity at historical). The net translation residual is booked to a
-          <strong> Cumulative translation adjustment</strong> of {fmt(data.fx.ctaTotalCents)} in equity so the balance sheet ties.
-          {!data.fx.functionalCurrencyColumnAvailable &&
-            ' Note: entity functional currencies are not configured yet, so every entity is treated as reporting-currency.'}
+          <strong> Cumulative translation adjustment</strong> of {fmtIn(data.fx.ctaTotalCents, data.fx.reportingCurrency)} in
+          equity so the balance sheet ties. See the per-entity breakdown below for the exact rates applied.
+        </Banner>
+      )}
+      {data?.fx?.multiCurrency && !data.fx.translationApplied && (
+        <Banner tone="warning">
+          Translation is <strong>off</strong> — foreign entities are combined at their functional-currency amounts without any
+          rate applied, so this consolidated total mixes currencies and will not tie. Turn on
+          <strong> Translate to reporting currency</strong> for an ASC 830 consolidated statement in {data.fx.reportingCurrency}.
+        </Banner>
+      )}
+      {data?.fx && !data.fx.functionalCurrencyColumnAvailable && (
+        <Banner tone="info">
+          Entity functional currencies are not configured yet, so every entity is treated as already in the reporting
+          currency ({data.fx.reportingCurrency}). Assign a functional currency per entity on the <strong>FX rates</strong> tab
+          to enable translation.
         </Banner>
       )}
 
@@ -330,44 +383,49 @@ function StatementsTab() {
         <>
           {/* Summary cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Metric label="Consolidated revenue" value={fmt(data.totals.revenueCents)} />
-            <Metric label="Net income (total)" value={fmt(data.totals.netIncomeCents)} accent />
-            <Metric label="Attributable to parent" value={fmt(data.totals.netIncomeParentCents)} />
-            <Metric label="Attributable to NCI" value={fmt(data.totals.netIncomeNciCents)} muted />
-            <Metric label="Total eliminations" value={fmt(data.totals.eliminationsCents)} muted />
-            <Metric label="Consolidated assets" value={fmt(data.totals.assetsCents)} />
-            <Metric label="Non-controlling interest (equity)" value={fmt(data.nci.equityCents)} muted />
-            {data.fx?.multiCurrency && (
-              <Metric label="Cumulative translation adj. (CTA)" value={fmt(data.fx.ctaTotalCents)} muted />
+            <Metric label={`Consolidated revenue (${rc})`} value={money(data.totals.revenueCents)} />
+            <Metric label="Net income (total)" value={money(data.totals.netIncomeCents)} accent />
+            <Metric label="Attributable to parent" value={money(data.totals.netIncomeParentCents)} />
+            <Metric label="Attributable to NCI" value={money(data.totals.netIncomeNciCents)} muted />
+            <Metric label="Total eliminations" value={money(data.totals.eliminationsCents)} muted />
+            <Metric label="Consolidated assets" value={money(data.totals.assetsCents)} />
+            <Metric label="Non-controlling interest (equity)" value={money(data.nci.equityCents)} muted />
+            {data.fx?.multiCurrency && data.fx.translationApplied && (
+              <Metric label="Cumulative translation adj. (CTA)" value={money(data.fx.ctaTotalCents)} muted />
             )}
-            <Metric label="Balance check" value={fmt(data.totals.balanceCheckCents)}
+            <Metric label="Balance check" value={money(data.totals.balanceCheckCents)}
               tone={data.totals.balanceCheckCents === 0 ? 'ok' : 'bad'} />
           </div>
 
+          {/* Per-entity FX translation transparency (rates applied + original vs translated + CTA) */}
+          {data.fx && foreignFx.length > 0 && (
+            <FxTranslationPanel fx={data.fx} foreign={foreignFx} nameById={nameById} />
+          )}
+
           <Statement title="Income statement" types={PNL_TYPES} data={data} fullEntities={fullEntities}
-            metaById={metaById} showEntities={showEntities} eliminate={eliminate}
+            metaById={metaById} showEntities={showEntities} eliminate={eliminate} money={money}
             footer={
               <>
-                <SubtotalRow label="Net income (fully consolidated)" cents={data.totals.netIncomeFullCents} cols={colCount(fullEntities, showEntities)} />
+                <SubtotalRow label="Net income (fully consolidated)" cents={data.totals.netIncomeFullCents} cols={colCount(fullEntities, showEntities)} money={money} />
                 {data.equityMethod.length > 0 && (
-                  <SubtotalRow label="Equity in earnings of affiliates" cols={colCount(fullEntities, showEntities)}
+                  <SubtotalRow label="Equity in earnings of affiliates" cols={colCount(fullEntities, showEntities)} money={money}
                     cents={data.equityMethod.reduce((s, e) => s + e.equityInEarningsCents, 0)} />
                 )}
-                <SubtotalRow label="Consolidated net income" cents={data.totals.netIncomeCents} cols={colCount(fullEntities, showEntities)} strong />
-                <SubtotalRow label="Less: net income attributable to NCI" cents={-data.totals.netIncomeNciCents} cols={colCount(fullEntities, showEntities)} muted />
-                <SubtotalRow label="Net income attributable to parent" cents={data.totals.netIncomeParentCents} cols={colCount(fullEntities, showEntities)} strong />
+                <SubtotalRow label="Consolidated net income" cents={data.totals.netIncomeCents} cols={colCount(fullEntities, showEntities)} money={money} strong />
+                <SubtotalRow label="Less: net income attributable to NCI" cents={-data.totals.netIncomeNciCents} cols={colCount(fullEntities, showEntities)} money={money} muted />
+                <SubtotalRow label="Net income attributable to parent" cents={data.totals.netIncomeParentCents} cols={colCount(fullEntities, showEntities)} money={money} strong />
               </>
             } />
 
           <Statement title="Balance sheet" types={BS_TYPES} data={data} fullEntities={fullEntities}
-            metaById={metaById} showEntities={showEntities} eliminate={eliminate}
+            metaById={metaById} showEntities={showEntities} eliminate={eliminate} money={money}
             footer={
               <>
                 {data.nci.equityCents !== 0 && (
-                  <SubtotalRow label="Non-controlling interest" cents={data.nci.equityCents} cols={colCount(fullEntities, showEntities)} />
+                  <SubtotalRow label="Non-controlling interest" cents={data.nci.equityCents} cols={colCount(fullEntities, showEntities)} money={money} />
                 )}
-                <SubtotalRow label="Current-period net income (to equity)" cents={data.totals.netIncomeFullCents} cols={colCount(fullEntities, showEntities)} muted />
-                <SubtotalRow label="Total equity section" cents={data.totals.equitySectionCents} cols={colCount(fullEntities, showEntities)} strong />
+                <SubtotalRow label="Current-period net income (to equity)" cents={data.totals.netIncomeFullCents} cols={colCount(fullEntities, showEntities)} money={money} muted />
+                <SubtotalRow label="Total equity section" cents={data.totals.equitySectionCents} cols={colCount(fullEntities, showEntities)} money={money} strong />
               </>
             } />
 
@@ -388,8 +446,8 @@ function StatementsTab() {
                     <tr key={e.entityId} className="border-b border-slate-800/60">
                       <td className="py-2 text-slate-200">{e.name}</td>
                       <td className="text-right text-slate-300 font-mono">{fmtPct(e.ownershipPercent)}</td>
-                      <td className="text-right text-slate-200 font-mono">{fmt(e.investmentCents)}</td>
-                      <td className="text-right text-emerald-400 font-mono">{fmt(e.equityInEarningsCents)}</td>
+                      <td className="text-right text-slate-200 font-mono">{money(e.investmentCents)}</td>
+                      <td className="text-right text-emerald-400 font-mono">{money(e.equityInEarningsCents)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -413,8 +471,8 @@ function StatementsTab() {
                       <td className="py-2 text-slate-200">{n.name}</td>
                       <td className="text-right text-slate-300 font-mono">{fmtPct(n.ownershipPercent)}</td>
                       <td className="text-right text-slate-400 font-mono">{fmtPct(n.minorityPercent)}</td>
-                      <td className="text-right text-slate-200 font-mono">{fmt(n.equityCents)}</td>
-                      <td className="text-right text-slate-200 font-mono">{fmt(n.netIncomeCents)}</td>
+                      <td className="text-right text-slate-200 font-mono">{money(n.equityCents)}</td>
+                      <td className="text-right text-slate-200 font-mono">{money(n.netIncomeCents)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -440,10 +498,11 @@ function colCount(fullEntities: EntityRow[], showEntities: boolean): number {
 }
 
 function Statement({
-  title, types, data, fullEntities, metaById, showEntities, eliminate, footer,
+  title, types, data, fullEntities, metaById, showEntities, eliminate, money, footer,
 }: {
   title: string; types: AccountType[]; data: StatementsResp; fullEntities: EntityRow[];
-  metaById: Map<string, EntityMeta>; showEntities: boolean; eliminate: boolean; footer?: React.ReactNode;
+  metaById: Map<string, EntityMeta>; showEntities: boolean; eliminate: boolean;
+  money: (c: number) => string; footer?: React.ReactNode;
 }) {
   const rows = data.accounts.filter((a) => types.includes(a.accountType));
   return (
@@ -476,7 +535,7 @@ function Statement({
               if (typeRows.length === 0) return null;
               return (
                 <TypeGroup key={t} type={t} typeRows={typeRows} fullEntities={fullEntities}
-                  showEntities={showEntities} />
+                  showEntities={showEntities} money={money} />
               );
             })}
             {footer}
@@ -487,8 +546,9 @@ function Statement({
   );
 }
 
-function TypeGroup({ type, typeRows, fullEntities, showEntities }: {
+function TypeGroup({ type, typeRows, fullEntities, showEntities, money }: {
   type: AccountType; typeRows: AccountLine[]; fullEntities: EntityRow[]; showEntities: boolean;
+  money: (c: number) => string;
 }) {
   const subtotalGross = typeRows.reduce((s, r) => s + r.grossCents, 0);
   const subtotalElim = typeRows.reduce((s, r) => s + r.eliminationCents, 0);
@@ -509,30 +569,30 @@ function TypeGroup({ type, typeRows, fullEntities, showEntities }: {
           </td>
           {showEntities && fullEntities.map((e) => (
             <td key={e.id} className="text-right px-3 font-mono text-slate-400">
-              {r.byEntity[e.id] ? fmt(r.byEntity[e.id]) : '—'}
+              {r.byEntity[e.id] ? money(r.byEntity[e.id]) : '—'}
             </td>
           ))}
-          {!showEntities && <td className="text-right px-3 font-mono text-slate-400">{fmt(r.grossCents)}</td>}
-          <td className="text-right px-3 font-mono text-amber-400/80">{r.eliminationCents ? fmt(r.eliminationCents) : '—'}</td>
-          <td className="text-right px-4 font-mono text-slate-200">{fmt(r.consolidatedCents)}</td>
+          {!showEntities && <td className="text-right px-3 font-mono text-slate-400">{money(r.grossCents)}</td>}
+          <td className="text-right px-3 font-mono text-amber-400/80">{r.eliminationCents ? money(r.eliminationCents) : '—'}</td>
+          <td className="text-right px-4 font-mono text-slate-200">{money(r.consolidatedCents)}</td>
         </tr>
       ))}
       <tr className="border-b border-slate-800 font-medium">
         <td className="py-1.5 px-4 text-slate-300 sticky left-0 bg-surface-900">Total {TYPE_LABEL[type].toLowerCase()}</td>
         {showEntities && fullEntities.map((e) => {
           const v = typeRows.reduce((s, r) => s + (r.byEntity[e.id] ?? 0), 0);
-          return <td key={e.id} className="text-right px-3 font-mono text-slate-300">{v ? fmt(v) : '—'}</td>;
+          return <td key={e.id} className="text-right px-3 font-mono text-slate-300">{v ? money(v) : '—'}</td>;
         })}
-        {!showEntities && <td className="text-right px-3 font-mono text-slate-300">{fmt(subtotalGross)}</td>}
-        <td className="text-right px-3 font-mono text-amber-400">{subtotalElim ? fmt(subtotalElim) : '—'}</td>
-        <td className="text-right px-4 font-mono text-white">{fmt(subtotalCons)}</td>
+        {!showEntities && <td className="text-right px-3 font-mono text-slate-300">{money(subtotalGross)}</td>}
+        <td className="text-right px-3 font-mono text-amber-400">{subtotalElim ? money(subtotalElim) : '—'}</td>
+        <td className="text-right px-4 font-mono text-white">{money(subtotalCons)}</td>
       </tr>
     </>
   );
 }
 
-function SubtotalRow({ label, cents, cols, strong, muted }: {
-  label: string; cents: number; cols: number; strong?: boolean; muted?: boolean;
+function SubtotalRow({ label, cents, cols, money, strong, muted }: {
+  label: string; cents: number; cols: number; money: (c: number) => string; strong?: boolean; muted?: boolean;
 }) {
   return (
     <tr className={clsx('border-b border-slate-800/40', strong && 'bg-surface-950/40')}>
@@ -540,9 +600,93 @@ function SubtotalRow({ label, cents, cols, strong, muted }: {
         {label}
       </td>
       <td className={clsx('text-right px-4 font-mono', strong ? 'text-white font-semibold' : muted ? 'text-slate-500' : 'text-slate-200')}>
-        {fmt(cents)}
+        {money(cents)}
       </td>
     </tr>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FX TRANSLATION TRANSPARENCY PANEL (per foreign entity: rate used + orig vs translated + CTA)
+// ─────────────────────────────────────────────────────────────────────────────
+function FxTranslationPanel({ fx, foreign, nameById }: {
+  fx: FxResult; foreign: EntityFxInfo[]; nameById: Map<string, string>;
+}) {
+  const rc = fx.reportingCurrency;
+  const anyFallback = foreign.some(
+    (e) => !e.ratesResolved.average || !e.ratesResolved.closing || !e.ratesResolved.historical,
+  );
+  return (
+    <div className="card p-4">
+      <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+        <Coins size={15} className="text-blue-400" /> Currency translation (ASC 830)
+      </h3>
+      <p className="text-xs text-slate-500 mb-3">
+        Each foreign entity is translated into <strong className="text-slate-300">{rc}</strong> — income statement at the average
+        rate, balance sheet at the closing rate, equity at the historical rate. The residual is the cumulative translation
+        adjustment (CTA), booked to equity so the balance sheet ties.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-2xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
+              <th className="text-left py-2">Entity</th>
+              <th className="text-left">Pair</th>
+              <th className="text-right">Avg (P&amp;L)</th>
+              <th className="text-right">Closing (BS)</th>
+              <th className="text-right">Historical (eq.)</th>
+              <th className="text-right">Net income (orig → {rc})</th>
+              <th className="text-right">CTA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {foreign.map((e) => (
+              <tr key={e.entityId} className="border-b border-slate-800/60">
+                <td className="py-2 text-slate-200">{nameById.get(e.entityId) ?? e.entityId}</td>
+                <td className="font-mono text-slate-300 text-xs">{e.functionalCurrency} → {rc}</td>
+                <td className="text-right font-mono text-slate-300">
+                  <RateCell value={e.rates.average} resolved={e.ratesResolved.average} />
+                </td>
+                <td className="text-right font-mono text-slate-300">
+                  <RateCell value={e.rates.closing} resolved={e.ratesResolved.closing} />
+                </td>
+                <td className="text-right font-mono text-slate-300">
+                  <RateCell value={e.rates.historical} resolved={e.ratesResolved.historical} />
+                </td>
+                <td className="text-right font-mono text-slate-400 text-xs">
+                  {fmtIn(e.originalNetIncomeCents, e.functionalCurrency)}
+                  <span className="text-slate-600 mx-1">→</span>
+                  <span className="text-slate-200">{fmtIn(e.translatedNetIncomeCents, rc)}</span>
+                </td>
+                <td className="text-right font-mono text-amber-400/90">{fmtIn(e.ctaCents, rc)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-slate-800 font-medium">
+              <td colSpan={6} className="py-2 text-slate-300">Total cumulative translation adjustment (to equity)</td>
+              <td className="text-right font-mono text-amber-400">{fmtIn(fx.ctaTotalCents, rc)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p className="text-2xs text-slate-600 mt-2 flex items-center gap-1.5">
+        <Info size={12} />
+        Rates read from the FX rates tab (closing / average, earliest spot as a historical proxy).
+        {anyFallback
+          ? ' A dashed rate means no matching rate row was found for that basis, so it fell back to the closing rate (or 1.0). Add the missing rate for an exact translation.'
+          : ' All rates are backed by entered rate rows.'}
+      </p>
+    </div>
+  );
+}
+
+function RateCell({ value, resolved }: { value: number; resolved: boolean }) {
+  return (
+    <span className={clsx(!resolved && 'text-amber-400/80 border-b border-dashed border-amber-500/40')}
+      title={resolved ? 'From an entered rate row' : 'No rate row for this basis — fell back to closing / 1.0'}>
+      {fmtRate(value)}
+    </span>
   );
 }
 
@@ -736,6 +880,92 @@ const RATE_TYPE_BADGE: Record<RateType, string> = {
   CLOSING: 'badge-info', AVERAGE: 'badge-success', SPOT: 'badge-neutral',
 };
 
+/**
+ * Assign each entity its ASC 830 functional currency (the currency it keeps its
+ * books in). An entity whose functional currency differs from the reporting currency
+ * is translated on the consolidated statements. Blank = reporting currency.
+ */
+function EntityCurrencyManager({ reporting }: { reporting: string }) {
+  const { data, isLoading, error, refetch } = useQuery<EntityCurrencyResp>(
+    '/api/consolidation/entity-currency', undefined, { scope: false },
+  );
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const save = async (entityId: string, value: string) => {
+    setSavingId(entityId);
+    const res = await api.post<{ ok: boolean }>('/api/consolidation/entity-currency', {
+      entity_id: entityId,
+      functional_currency: value ? value.toUpperCase() : null,
+    });
+    setSavingId(null);
+    if (res.error) { addToast('error', `Save failed: ${res.error.error}`); return; }
+    addToast('success', 'Functional currency updated');
+    refetch();
+  };
+
+  const columnMissing = !!(data && !data.functionalCurrencyColumnAvailable);
+
+  return (
+    <div className="card p-4">
+      <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+        <Building2 size={15} className="text-blue-400" /> Entity functional currencies
+      </h3>
+      <p className="text-xs text-slate-500 mb-3">
+        The currency each entity keeps its books in. Leave blank to use the reporting currency
+        (<strong className="text-slate-300">{reporting}</strong>). Any entity set to a different currency is translated into
+        {' '}{reporting} on the consolidated statements.
+      </p>
+
+      {columnMissing && (
+        <Banner tone="info">
+          The <span className="font-mono">functional_currency</span> column is not present yet (migration 133 pending) — every
+          entity is treated as reporting-currency. Apply the migration to enable per-entity assignment.
+        </Banner>
+      )}
+
+      {isLoading ? (
+        <div className="p-8 flex items-center justify-center text-slate-400">
+          <Loader2 className="animate-spin mr-2" size={16} /> Loading entities…
+        </div>
+      ) : error ? (
+        <div className="p-4 flex items-center gap-2 text-red-400"><AlertCircle size={16} /> {error}</div>
+      ) : (data?.entities.length ?? 0) === 0 ? (
+        <p className="text-sm text-slate-500 py-4">No entities yet. Add companies to assign functional currencies.</p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {(data?.entities ?? []).map((e) => {
+            const foreign = !!e.functionalCurrency && e.functionalCurrency !== reporting;
+            return (
+              <div key={e.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-800 bg-surface-950/40 px-3 py-2">
+                <div className="min-w-0">
+                  <div className="text-sm text-slate-200 truncate">{e.name}</div>
+                  <div className="text-2xs text-slate-500">
+                    {foreign ? <span className="text-amber-400">Translated → {reporting}</span> : `Reporting (${reporting})`}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text" maxLength={3} placeholder={reporting} disabled={savingId === e.id || columnMissing}
+                    defaultValue={e.functionalCurrency ?? ''}
+                    className="input font-mono uppercase w-20 text-center py-1"
+                    onBlur={(ev) => {
+                      const v = ev.target.value.trim().toUpperCase();
+                      const cur = (e.functionalCurrency ?? '').toUpperCase();
+                      if (v !== cur && (v.length === 0 || v.length === 3)) save(e.id, v);
+                    }}
+                    onKeyDown={(ev) => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur(); }}
+                  />
+                  {savingId === e.id && <Loader2 size={13} className="animate-spin text-slate-400" />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FxRatesTab() {
   const { data, isLoading, error, refetch } = useQuery<FxRatesResp>('/api/consolidation/rates', undefined, { scope: false });
   const [edit, setEdit] = useState<RateEditState | null>(null);
@@ -784,6 +1014,8 @@ function FxRatesTab() {
 
   return (
     <div className="space-y-5">
+      <EntityCurrencyManager reporting={reporting} />
+
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-400 max-w-2xl">
           Record exchange rates per currency pair, date, and type. The consolidation engine uses <strong className="text-slate-300">closing</strong> for

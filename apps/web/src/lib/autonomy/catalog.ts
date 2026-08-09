@@ -157,6 +157,14 @@ export const AUTONOMY_FEATURES: readonly AutonomyFeatureDef[] = [
     category: 'control',
     defaultMode: 'PROPOSE',
   },
+  {
+    feature: 'OUT_OF_POLICY_EXPENSE',
+    label: 'Out-of-policy expense (EC-14)',
+    description:
+      'Re-checks submitted/approved/reimbursed employee expense reports against the active compiled expense policy and flags any that still breach a WARN/BLOCK rule — the "approved out of policy anyway" catch.',
+    category: 'control',
+    defaultMode: 'PROPOSE',
+  },
 ] as const;
 
 /** Fast lookup by feature key. */

@@ -79,6 +79,10 @@ export type AccountRoleKey =
   | 'LEASE_LIABILITY'
   // Prepaid amortization
   | 'PREPAID_ASSET'
+  // Insurance premium amortization (prepaid insurance -> insurance expense).
+  // Registered in core.account_role_keys by migration 132.
+  | 'PREPAID_INSURANCE'
+  | 'INSURANCE_EXPENSE'
   // Intangibles + amortization — role_key names mirror lib/intangibles/accounts.ts
   | 'INTANGIBLE_ASSET'
   | 'ACCUMULATED_AMORTIZATION'
@@ -152,6 +156,11 @@ export const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
   LEASE_LIABILITY: '2550',
   // Prepaid amortization — 1330 "Prepaid Other" is the general prepaid bucket.
   PREPAID_ASSET: '1330',
+  // Insurance premium amortization. 1300 "Prepaid Insurance" (current asset) and
+  // 6700 "General Liability Insurance" (OPEX) both already exist in the standard COA;
+  // a tenant may remap either (e.g. property -> 6720) on the Account Roles screen.
+  PREPAID_INSURANCE: '1300',
+  INSURANCE_EXPENSE: '6700',
   // Intangibles + amortization — present in the standard COA.
   INTANGIBLE_ASSET: '1710',
   ACCUMULATED_AMORTIZATION: '1720',

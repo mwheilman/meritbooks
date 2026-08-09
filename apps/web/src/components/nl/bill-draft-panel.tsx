@@ -15,6 +15,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, AlertTriangle, HelpCircle, Check, FileText } from 'lucide-react';
 import { addToast } from '@/hooks/use-toast';
+import { AiUnavailableNotice } from '@/components/ai/ai-unavailable-notice';
 
 interface Draft {
   vendorName: string;
@@ -44,6 +45,7 @@ const EXPENSE_TYPES = new Set(['COGS', 'OPEX', 'OTHER']);
 export function BillDraftPanel({ description, onDone }: { description: string; onDone: () => void }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [unavailable, setUnavailable] = useState<string | null>(null);
   const [clarify, setClarify] = useState<string | null>(null);
 
   const [locations, setLocations] = useState<LocationOption[]>([]);
@@ -74,6 +76,8 @@ export function BillDraftPanel({ description, onDone }: { description: string; o
         ]);
         const draftData = await draftRes.json().catch(() => null);
         if (!alive) return;
+        // AI paused (org disabled / budget / no key) → calm notice, not a red error.
+        if (draftData?.unavailable) { setUnavailable(draftData.message ?? null); return; }
         if (!draftRes.ok) {
           setError(draftRes.status === 402 ? 'AI budget cap reached — enter this bill manually.' : (draftData?.error ?? 'Could not draft the bill.'));
           return;
@@ -162,7 +166,11 @@ export function BillDraftPanel({ description, onDone }: { description: string; o
 
       {loading && <div className="flex items-center gap-2 py-4 text-sm text-slate-400"><Loader2 size={15} className="animate-spin" /> Drafting the bill…</div>}
 
-      {!loading && error && (
+      {!loading && unavailable !== null && (
+        <AiUnavailableNotice message={unavailable} hint="Enter this bill manually from the Bills page in the meantime." />
+      )}
+
+      {!loading && !unavailable && error && (
         <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200"><AlertTriangle size={15} className="mt-0.5 shrink-0" /> {error}</div>
       )}
 
@@ -173,7 +181,7 @@ export function BillDraftPanel({ description, onDone }: { description: string; o
         </div>
       )}
 
-      {!loading && !error && !clarify && (
+      {!loading && !unavailable && !error && !clarify && (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Company">

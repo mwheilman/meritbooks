@@ -10,12 +10,13 @@
  */
 
 import { useRouter } from 'next/navigation';
-import { ArrowRight, HelpCircle, Compass, Ban, Info } from 'lucide-react';
+import { ArrowRight, HelpCircle, Compass, Ban } from 'lucide-react';
 import { ProcessingPanel } from './processing-panel';
 import { CategorizePanel } from './categorize-panel';
 import { BillDraftPanel } from './bill-draft-panel';
 import { InvoiceDraftPanel } from './invoice-draft-panel';
 import { AnalyticalPanel } from './analytical-panel';
+import { AiUnavailableNotice } from '@/components/ai/ai-unavailable-notice';
 import type { NlRouteResult } from './intent';
 
 export function ResultPanel({ result, onDone }: { result: NlRouteResult; onDone: () => void }) {
@@ -34,15 +35,15 @@ export function ResultPanel({ result, onDone }: { result: NlRouteResult; onDone:
     );
   }
 
+  // AI was unavailable (org disabled / budget cap / no key) and the rules fallback
+  // had nothing safe to do → calm paused notice, never a red error. When the rules
+  // DID resolve a lane (e.g. navigation still works), we fall through and render it.
   if (result.degraded && result.lane === 'ABSTAIN') {
     return (
-      <div className="flex items-start gap-2 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-3 text-sm text-slate-300">
-        <Info size={16} className="mt-0.5 shrink-0 text-amber-400" />
-        <div>
-          <p>{result.abstain?.reason}</p>
-          {result.abstain?.suggestion && <p className="mt-1 text-slate-400">{result.abstain.suggestion}</p>}
-        </div>
-      </div>
+      <AiUnavailableNotice
+        message={result.abstain?.reason ?? 'AI is temporarily unavailable — try again later.'}
+        hint={result.abstain?.suggestion ?? undefined}
+      />
     );
   }
 

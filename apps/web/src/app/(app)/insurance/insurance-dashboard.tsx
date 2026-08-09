@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
@@ -9,10 +8,11 @@ import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
 import {
   Loader2, AlertCircle, ShieldCheck, Plus, Sparkles, Pencil, Trash2, CalendarClock,
-  AlertTriangle, ExternalLink,
+  AlertTriangle, Repeat2,
 } from 'lucide-react';
 import { InsuranceParseReview } from './insurance-parse-review';
 import { InsuranceEditor, type EditorPolicy } from './insurance-editor';
+import { InsuranceAmortization, type AmortizeSetupPrefill } from './insurance-amortization';
 
 type CoverageType = EditorPolicy['coverage_type'];
 type Frequency = EditorPolicy['premium_frequency'];
@@ -96,6 +96,7 @@ function renewalTone(daysUntil: number): string {
 export function InsuranceDashboard() {
   const [editing, setEditing] = useState<EditorPolicy | null | 'new'>(null);
   const [parsing, setParsing] = useState(false);
+  const [amortizeFor, setAmortizeFor] = useState<AmortizeSetupPrefill | null>(null);
   const [refreshKey, setRefreshKey] = useState('0');
 
   const { data, isLoading, error, refetch } = useQuery<InsuranceResponse>('/api/insurance', undefined, { key: refreshKey });
@@ -254,10 +255,21 @@ export function InsuranceDashboard() {
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center justify-end gap-1">
-                        {p.status === 'ACTIVE' && p.premium_frequency === 'ANNUAL' && p.premium_cents !== null && (
-                          <Link href="/prepaids" title="Amortize this annual premium as a prepaid" className="px-2 py-1 text-[11px] text-indigo-300 hover:text-indigo-200 rounded-md hover:bg-slate-800 flex items-center gap-1">
-                            <ExternalLink size={11} /> Amortize
-                          </Link>
+                        {p.status === 'ACTIVE' && p.premium_frequency !== 'MONTHLY' && p.premium_cents !== null && (
+                          <button
+                            onClick={() => setAmortizeFor({
+                              policy_id: p.id,
+                              carrier: p.carrier,
+                              coverage_type: p.coverage_type,
+                              premium_cents: p.premium_cents,
+                              effective_date: p.effective_date,
+                              expiration_date: p.expiration_date,
+                            })}
+                            title="Amortize this premium to insurance expense over the coverage term"
+                            className="px-2 py-1 text-[11px] text-indigo-300 hover:text-indigo-200 rounded-md hover:bg-slate-800 flex items-center gap-1"
+                          >
+                            <Repeat2 size={11} /> Amortize
+                          </button>
                         )}
                         <button onClick={() => setEditing(toEditor(p))} className="px-2 py-1 text-[11px] text-slate-400 hover:text-white rounded-md hover:bg-slate-800 flex items-center gap-1">
                           <Pencil size={11} /> Edit
@@ -280,6 +292,11 @@ export function InsuranceDashboard() {
         (Vendor Compliance). AI proposes the extracted terms from an uploaded policy; every policy is confirmed
         by a human before it enters the register. Renewals are computed from each policy&rsquo;s expiration date.
       </p>
+
+      {/* Premium amortization — prepaid insurance → insurance expense, posted to the GL */}
+      <div className="pt-2 border-t border-slate-800">
+        <InsuranceAmortization pendingSetup={amortizeFor} onCloseSetup={() => setAmortizeFor(null)} />
+      </div>
 
       {parsing && (
         <InsuranceParseReview

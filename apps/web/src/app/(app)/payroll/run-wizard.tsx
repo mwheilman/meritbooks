@@ -12,6 +12,7 @@ import {
   ChevronRight,
   ArrowLeft,
   AlertCircle,
+  FlaskConical,
 } from 'lucide-react';
 import { useQuery, addToast } from '@/hooks';
 import { useMe } from '@/lib/hooks/use-me';
@@ -42,10 +43,14 @@ interface EmpDraft {
 type Step = 'inputs' | 'preview';
 
 export function RunWizard({
+  providerReady,
   onClose,
   onCreated,
   onReview,
 }: {
+  /** True only when a licensed payroll provider is connected for this tenant.
+   *  When false, the wizard is a non-binding ESTIMATE (flat placeholder rates). */
+  providerReady: boolean;
   onClose: () => void;
   onCreated: () => void;
   onReview: (runId: string) => void;
@@ -212,11 +217,20 @@ export function RunWizard({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-white">Run payroll</h2>
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+              Run payroll
+              {!providerReady && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-2xs font-medium text-amber-300">
+                  <FlaskConical size={10} /> Estimate
+                </span>
+              )}
+            </h2>
             <p className="mt-0.5 text-xs text-slate-500">
               {step === 'inputs'
                 ? 'Step 1 · Roster & inputs'
-                : 'Step 2 · Provider-computed preview'}
+                : providerReady
+                ? 'Step 2 · Provider-computed preview'
+                : 'Step 2 · Estimated preview (no provider connected)'}
             </p>
           </div>
           <button onClick={onClose} className="rounded-md p-1.5 text-slate-500 hover:bg-white/[0.04] hover:text-slate-200" aria-label="Close">
@@ -226,6 +240,18 @@ export function RunWizard({
 
         {step === 'inputs' ? (
           <div className="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-5">
+            {!providerReady && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] p-3">
+                <FlaskConical size={15} className="mt-0.5 shrink-0 text-amber-400" />
+                <p className="text-xs text-amber-100/90">
+                  <span className="font-semibold text-amber-200">No payroll provider connected — this is an estimate.</span>{' '}
+                  The next step computes gross-to-net with flat placeholder rates (~18% employee, ~9% employer). It is{' '}
+                  <span className="font-medium">not a tax calculation</span>, nothing is withheld, filed, or paid, and no
+                  money moves. Connect a provider (Check / Gusto) under Integrations to run real payroll. To book actual
+                  payroll now, close this and use <span className="text-slate-200">Import payroll register</span> instead.
+                </p>
+              </div>
+            )}
             {/* Header inputs */}
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
               <Field label="Company / entity">
@@ -402,7 +428,7 @@ export function RunWizard({
             </div>
           </div>
         ) : (
-          <PreviewStep detail={detail} grouped={me.user?.payrollVisibility !== 'ungrouped'} />
+          <PreviewStep detail={detail} providerReady={providerReady} grouped={me.user?.payrollVisibility !== 'ungrouped'} />
         )}
 
         {/* Footer */}
@@ -445,9 +471,11 @@ export function RunWizard({
 
 function PreviewStep({
   detail,
+  providerReady,
   grouped,
 }: {
   detail: { run: RunDetail; employees: RunEmployeeLine[] } | null;
+  providerReady: boolean;
   grouped: boolean;
 }) {
   if (!detail) {
@@ -461,21 +489,33 @@ function PreviewStep({
   const funding = run.fundingCents ?? run.netCents + (run.employeeTaxCents ?? 0) + (run.employerTaxCents ?? 0);
   return (
     <div className="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-5">
-      <div className="flex items-start gap-2 rounded-lg border border-indigo-500/20 bg-indigo-500/[0.06] p-3">
-        <Sparkles size={15} className="mt-0.5 shrink-0 text-indigo-400" />
-        <p className="text-xs text-slate-300">
-          This gross-to-net is <span className="font-medium text-indigo-300">computed by the payroll provider</span>,
-          not by MeritBooks. Review the totals before sending the run for approval. Nothing has moved — no money leaves
-          the bank until a second person approves and then explicitly releases the run.
-        </p>
-      </div>
+      {providerReady ? (
+        <div className="flex items-start gap-2 rounded-lg border border-indigo-500/20 bg-indigo-500/[0.06] p-3">
+          <Sparkles size={15} className="mt-0.5 shrink-0 text-indigo-400" />
+          <p className="text-xs text-slate-300">
+            This gross-to-net is <span className="font-medium text-indigo-300">computed by the payroll provider</span>,
+            not by the accounting system. Review the totals before sending the run for approval. Nothing has moved — no
+            money leaves the bank until a second person approves and then explicitly releases the run.
+          </p>
+        </div>
+      ) : (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] p-3">
+          <FlaskConical size={15} className="mt-0.5 shrink-0 text-amber-400" />
+          <p className="text-xs text-amber-100/90">
+            <span className="font-semibold text-amber-200">Estimated figures — not a tax calculation.</span> With no
+            provider connected these totals use flat placeholder rates (~18% employee, ~9% employer), so the
+            withholding and net pay are approximate. Nothing is withheld, filed, or paid, and no money moves. Use this
+            to preview the workflow only.
+          </p>
+        </div>
+      )}
 
       {/* Totals */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <MiniStat label="Gross" value={formatMoney(run.grossCents)} />
-        <MiniStat label="Employee tax" value={formatMoney(run.employeeTaxCents ?? 0)} />
-        <MiniStat label="Employer tax" value={formatMoney(run.employerTaxCents ?? 0)} />
-        <MiniStat label="Net pay" value={formatMoney(run.netCents)} tone="ok" />
+        <MiniStat label={providerReady ? 'Employee tax' : 'Employee tax (est.)'} value={formatMoney(run.employeeTaxCents ?? 0)} />
+        <MiniStat label={providerReady ? 'Employer tax' : 'Employer tax (est.)'} value={formatMoney(run.employerTaxCents ?? 0)} />
+        <MiniStat label={providerReady ? 'Net pay' : 'Net pay (est.)'} value={formatMoney(run.netCents)} tone="ok" />
       </div>
 
       <div className="flex items-center justify-between rounded-lg bg-slate-800/50 px-4 py-3">

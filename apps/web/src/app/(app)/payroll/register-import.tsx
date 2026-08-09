@@ -160,6 +160,8 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
   const [footingDelta, setFootingDelta] = useState(0);
   const [postedEntryNumber, setPostedEntryNumber] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // The extracted period totals (for the plain-English summary above the JE).
+  const [reg, setReg] = useState<ParseResponse['register'] | null>(null);
 
   // Accounts for the chosen company
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
@@ -172,7 +174,7 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
     if (!open) {
       setPhase('idle'); setError(null); setFileName(null); setDrafts([]); setLocationId(''); setPayDate('');
       setMemo(''); setDecisionId(null); setDocNote(null); setUnresolvedRoles([]); setRegisterFoots(true);
-      setFootingDelta(0); setPostedEntryNumber(null); setSaving(false); setAccounts([]);
+      setFootingDelta(0); setPostedEntryNumber(null); setSaving(false); setAccounts([]); setReg(null);
     }
   }, [open]);
 
@@ -217,6 +219,7 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
     try { body = await res.json(); } catch { setError('The server returned an unreadable response.'); setPhase('error'); return; }
     if (!res.ok) { setError(body.error || 'Failed to parse the payroll register.'); setPhase('error'); return; }
 
+    setReg(body.register ?? null);
     setDecisionId(body.meta?.decisionId ?? null);
     setDocNote(body.meta?.documentNote ?? null);
     setUnresolvedRoles(body.unresolvedRoles ?? []);
@@ -255,6 +258,18 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
   const allAccountsPicked = drafts.every((d) => inputToCents(d.amountInput) === 0 || !!d.accountId);
   const canPost = !saving && balanced && allAccountsPicked && !!locationId && !!payDate && drafts.length >= 2;
 
+  // Plain-English register summary, derived from the LIVE (editable) drafts so it
+  // tracks any edits the reviewer makes. Gross wages and employer taxes are the
+  // debit legs; net pay is the take-home credit; the employee side (withholdings +
+  // deductions) is what gross exceeds net by.
+  const sumByRole = (role: string, side: 'DR' | 'CR') =>
+    drafts.filter((d) => d.roleKey === role && d.side === side).reduce((s, d) => s + inputToCents(d.amountInput), 0);
+  const grossWagesCents = sumByRole('WAGES_EXPENSE', 'DR');
+  const employerTaxCents = sumByRole('PAYROLL_TAX_EXPENSE', 'DR');
+  const netPayCents = sumByRole('PAYMENTS_IN_TRANSIT', 'CR');
+  const employeeWithheldCents = Math.max(0, grossWagesCents - netPayCents);
+  const hasSummary = grossWagesCents > 0 || netPayCents > 0;
+
   const confirmPost = async () => {
     setSaving(true);
     const lines = drafts
@@ -284,7 +299,7 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
           <div>
             <h2 className="text-sm font-semibold text-white flex items-center gap-2"><UploadCloud size={16} className="text-emerald-400" /> Import payroll register</h2>
-            <p className="text-2xs text-slate-500 mt-0.5">For payroll run OUTSIDE MeritBooks — drop the processor&apos;s register and AI proposes a balanced payroll entry to confirm.</p>
+            <p className="text-2xs text-slate-500 mt-0.5">For payroll you ran at an outside processor — drop the register and we propose a balanced payroll entry for you to review and confirm.</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400"><X size={16} /></button>
         </div>
@@ -308,7 +323,7 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f); e.target.value = ''; }} />
               <div className="flex items-start gap-2 text-2xs text-slate-500">
                 <Info size={12} className="mt-0.5 shrink-0" />
-                <span>The AI proposes — it never posts. Nothing is written until you confirm the balanced entry. On the embedded provider instead? Use <span className="text-slate-300">Run payroll</span>.</span>
+                <span>The AI proposes — it never posts. Nothing is written until you confirm the balanced entry. Running payroll in-app with a connected provider instead? Use <span className="text-slate-300">Run payroll</span>.</span>
               </div>
             </>
           )}
@@ -372,6 +387,42 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
                   <p className="text-2xs text-amber-200/90">
                     No account role is mapped for: <span className="font-mono">{unresolvedRoles.join(', ')}</span>. Pick an account for each line below (or map the role on the Account Roles screen).
                   </p>
+                </div>
+              )}
+
+              {/* Extracted register summary — what we read, in plain English, and how
+                  it becomes the balanced entry below. */}
+              {hasSummary && (
+                <div className="rounded-xl border border-slate-800 bg-slate-800/20 p-3">
+                  <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-slate-500">
+                    <span className="font-semibold uppercase tracking-wider text-slate-400">Register totals</span>
+                    {reg?.payDate && <span>Pay date {reg.payDate}</span>}
+                    {(reg?.periodStart || reg?.periodEnd) && (
+                      <span>
+                        Period {reg?.periodStart ?? '—'} → {reg?.periodEnd ?? '—'}
+                      </span>
+                    )}
+                    {typeof reg?.employeeCount === 'number' && reg.employeeCount > 0 && (
+                      <span>{reg.employeeCount} employee{reg.employeeCount === 1 ? '' : 's'}</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <SummaryTile label="Gross wages" value={formatMoney(grossWagesCents)} tone="debit" />
+                    <SummaryTile label="Withheld & deductions" value={formatMoney(employeeWithheldCents)} />
+                    <SummaryTile label="Employer taxes" value={formatMoney(employerTaxCents)} tone="debit" />
+                    <SummaryTile label="Net pay (take-home)" value={formatMoney(netPayCents)} tone="net" />
+                  </div>
+                  <p className="mt-2 text-2xs text-slate-500">
+                    Posts as: DR gross wages + DR employer taxes → CR net pay (to cash / in-transit) + CR the tax &amp;
+                    deduction liabilities. Review the account for every line below before posting.
+                  </p>
+                </div>
+              )}
+
+              {reg && reg.lowConfidenceFields.length > 0 && (
+                <div className="flex items-start gap-2 rounded-lg bg-slate-800/40 px-3 py-2 text-2xs text-slate-400">
+                  <Info size={12} className="mt-0.5 shrink-0 text-amber-400/80" />
+                  Double-check these fields — the extraction was low-confidence: <span className="font-mono text-slate-300">{reg.lowConfidenceFields.join(', ')}</span>.
                 </div>
               )}
 
@@ -443,13 +494,19 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
                 </table>
               </div>
 
-              {/* Balance banner */}
+              {/* Balance banner — the Post button is gated on debits == credits. */}
               <div className={clsx('flex items-center gap-2 rounded-lg px-3 py-2 text-xs',
-                balanced ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border border-red-500/30 text-red-300')}>
+                totalDebits === 0
+                  ? 'bg-slate-800/40 border border-slate-700 text-slate-400'
+                  : balanced
+                  ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+                  : 'bg-red-500/10 border border-red-500/30 text-red-300')}>
                 <Scale size={14} className="shrink-0" />
-                {balanced
+                {totalDebits === 0
+                  ? <span>Enter the register amounts above to build the balanced entry.</span>
+                  : balanced
                   ? <span>Balanced — debits equal credits at <span className="font-mono">{formatMoney(totalDebits)}</span>.</span>
-                  : <span>Out of balance by <span className="font-mono">{formatMoney(Math.abs(imbalance))}</span> — fix the amounts before posting.</span>}
+                  : <span>Out of balance by <span className="font-mono">{formatMoney(Math.abs(imbalance))}</span> — debits <span className="font-mono">{formatMoney(totalDebits)}</span> vs credits <span className="font-mono">{formatMoney(totalCredits)}</span>. Fix the amounts before posting.</span>}
               </div>
 
               {/* Actions */}
@@ -465,6 +522,23 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Register summary tile ─────────────────────────────────────────────────────
+function SummaryTile({ label, value, tone }: { label: string; value: string; tone?: 'debit' | 'net' }) {
+  return (
+    <div className="rounded-lg bg-slate-900/40 px-2.5 py-2">
+      <p className="text-2xs uppercase tracking-wider text-slate-500">{label}</p>
+      <p
+        className={clsx(
+          'mt-0.5 font-mono text-sm font-semibold tabular-nums',
+          tone === 'net' ? 'text-emerald-400' : tone === 'debit' ? 'text-slate-200' : 'text-slate-300',
+        )}
+      >
+        {value}
+      </p>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import {
   CTA_ACCOUNT_NUMBER,
   type FxRateRow,
 } from './fx';
-import { consolidate, type EntityAccountBalance } from './consolidate';
+import { consolidate, entityNetIncomeCents, type EntityAccountBalance } from './consolidate';
 
 /**
  * Multi-currency translation correctness (GATE 11a). The current-rate method:
@@ -91,6 +91,22 @@ describe('translateEntityTB — current-rate method + CTA', () => {
     // Fed through the engine, the consolidated balance-check is exactly 0.
     const consolidated = consolidate({ entities: [], balances: r.translated });
     expect(consolidated.totals.balanceCheckCents).toBe(0);
+  });
+});
+
+describe('original vs translated net income (loader transparency fields)', () => {
+  it('states net income at the AVERAGE rate after translation', () => {
+    const rates = { average: 1.05, closing: 1.1, historical: 1.2 };
+    const original = eurTB('F');
+    // Original functional-currency net income = 300,000 − 200,000 = 100,000.
+    expect(entityNetIncomeCents(original, 'F')).toBe(100_000);
+    const r = translateEntityTB(original, {
+      functionalCurrency: 'EUR',
+      reportingCurrency: 'USD',
+      rates,
+    });
+    // Translated net income = round(300,000×1.05) − round(200,000×1.05) = 315,000 − 210,000.
+    expect(entityNetIncomeCents(r.translated, 'F')).toBe(105_000);
   });
 });
 

@@ -6,7 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { getAnthropicApiKey } from '@/lib/ai/gateway';
+import { getAnthropicApiKey, isAiUnavailableError, aiUnavailablePayload } from '@/lib/ai/gateway';
 import { extractCategorize } from '@/lib/nl/lanes/categorize';
 import {
   makeLaneGateway,
@@ -56,7 +56,9 @@ export async function POST(request: Request) {
   if (!guard.ok) return guard.response;
 
   const apiKey = getAnthropicApiKey();
-  if (!apiKey) return NextResponse.json({ error: 'AI is not configured.', code: 'NO_API_KEY' }, { status: 503 });
+  if (!apiKey) {
+    return NextResponse.json({ ...aiUnavailablePayload('AI is temporarily paused'), candidates: [], gateway: null });
+  }
 
   let body: z.infer<typeof schema>;
   try {
@@ -77,7 +79,13 @@ export async function POST(request: Request) {
     if (e instanceof BudgetBlockedError) {
       return NextResponse.json({ error: e.message, code: 'BUDGET_BLOCKED' }, { status: 402 });
     }
-    return NextResponse.json({ error: 'The categorizer could not run.', code: 'GATEWAY_ERROR' }, { status: 502 });
+    // Org disabled / bad key / provider outage → calm paused state, never a raw 502.
+    if (!isAiUnavailableError(e)) console.error('[nl-categorize] unexpected gateway error:', e);
+    return NextResponse.json({
+      ...aiUnavailablePayload('AI is temporarily paused'),
+      candidates: [],
+      gateway: gatewayClientMeta(gw.meta()),
+    });
   }
 
   if (!extraction.draft) {

@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { getAnthropicApiKey } from '@/lib/ai/gateway';
+import { getAnthropicApiKey, isAiUnavailableError, aiUnavailablePayload } from '@/lib/ai/gateway';
 import { runAiGateway } from '@meritbooks/core-ai';
 import {
   buildClassifierPrompt,
@@ -41,6 +41,20 @@ interface NlQueryResponse {
   rows: unknown[];
   citations: NlCitation[];
   drilldownHref?: string;
+  /** Set when the model couldn't be reached; the client renders the calm notice. */
+  unavailable?: true;
+  message?: string;
+}
+
+/**
+ * Calm degrade shared by every "AI is down" branch (no key, blocked, provider
+ * throw). Returns HTTP 200 so the client never sees a red error / raw 5xx — it
+ * keys off `unavailable` to show the inline paused notice. Deterministic surfaces
+ * (Reports, drill-downs) keep working; we simply can't route this one prompt.
+ */
+function unavailableResponse(answer: string) {
+  const resp: NlQueryResponse = { ...abstain(), answer, ...aiUnavailablePayload('AI is temporarily paused') };
+  return NextResponse.json(resp);
 }
 
 /** Extract the first text block from a gateway (Anthropic content array) result. */
@@ -65,9 +79,8 @@ export const POST = apiHandler(schema, async (body, ctx) => {
 
   const apiKey = getAnthropicApiKey();
   if (!apiKey) {
-    return NextResponse.json(
-      { error: 'ANTHROPIC_API_KEY is not configured.', code: 'NO_API_KEY' },
-      { status: 503 },
+    return unavailableResponse(
+      'AI is temporarily unavailable right now. You can still open the reports directly from the Reports page.',
     );
   }
 
@@ -91,19 +104,23 @@ export const POST = apiHandler(schema, async (body, ctx) => {
       },
     );
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Gateway error', code: 'GATEWAY_ERROR' },
-      { status: 502 },
+    // The Anthropic org being disabled/suspended (or a bad/absent key, exhausted
+    // credit, permission denial) throws here. Degrade to a calm "AI is paused"
+    // instead of the raw 502 the audit flagged. Log only genuinely unexpected errors.
+    if (!isAiUnavailableError(e)) {
+      console.error('[nl-query] unexpected gateway error:', e);
+    }
+    return unavailableResponse(
+      'AI is temporarily unavailable right now. You can still open the reports directly from the Reports page.',
     );
   }
 
   // Budget block / outage → degrade to an honest abstain, never a stack trace.
   if (gw.status === 'blocked' || gw.result == null) {
-    const resp = abstain();
-    resp.answer =
+    return unavailableResponse(
       'AI is paused for this account right now (budget or availability). ' +
-      'You can still open the reports directly from the Reports page.';
-    return NextResponse.json<NlQueryResponse>(resp);
+        'You can still open the reports directly from the Reports page.',
+    );
   }
 
   const text = extractText(gw.result);

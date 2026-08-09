@@ -118,7 +118,10 @@ export const POST = apiHandler(schema, async (body, ctx) => {
   const { result } = await classifyAndRoute(prompt, context, classify);
 
   // Trust rail: every classification is an AI action → append-only core.action_log.
-  const gw: GatewayMeta | null = gateway;
+  // `gateway` is only ever assigned inside the `classify` closure above, so TS
+  // control-flow narrows it back to `null` here and the field reads collapse to
+  // `never`. Assert the captured type once to restore the real shape.
+  const gw = gateway as GatewayMeta | null;
   await logAction(supabase, {
     orgId,
     actorType: 'AI',
@@ -144,7 +147,7 @@ export const POST = apiHandler(schema, async (body, ctx) => {
           status: gw.status,
           modelUsed: gw.model_used,
           costCents: gw.cost_cents,
-          budgetState: gw.budget.state,
+          budgetState: gw.budget?.state ?? null,
           correlationId: gw.correlation_id,
           message: gw.message,
         }

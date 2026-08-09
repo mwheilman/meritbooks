@@ -10,6 +10,7 @@ import {
   BookOpen,
   AlertTriangle,
   Info,
+  FlaskConical,
 } from 'lucide-react';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
 import { useQuery, addToast } from '@/hooks';
@@ -22,10 +23,13 @@ type Action = 'approve' | 'release' | 'post';
 
 export function RunDetailDrawer({
   runId,
+  providerReady = false,
   onClose,
   onChanged,
 }: {
   runId: string;
+  /** True only when a licensed payroll provider is connected for this tenant. */
+  providerReady?: boolean;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -37,6 +41,12 @@ export function RunDetailDrawer({
 
   const run = data?.run;
   const employees = data?.employees ?? [];
+
+  // An "estimated" run is one computed without a real provider — either none is
+  // connected now, or this run was computed/released on the deterministic mock
+  // engine (provider === 'mock'). Its taxes are placeholder estimates and its
+  // release does not instruct any external party to move money.
+  const estimated = !providerReady || run?.provider === 'mock';
 
   const myClerkId = me.user?.clerkId ?? null;
   const preparedByMe = !!myClerkId && !!run?.preparedBy && run.preparedBy === myClerkId;
@@ -94,12 +104,21 @@ export function RunDetailDrawer({
           </DetailSection>
 
           {/* Totals */}
-          <DetailSection title="Totals">
+          {estimated && (
+            <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2">
+              <FlaskConical size={13} className="mt-0.5 shrink-0 text-amber-400" />
+              <p className="text-2xs text-amber-100/90">
+                Estimated run — no payroll provider was used. Withholding and net pay are flat-rate estimates, not a tax
+                calculation. Nothing here is withheld, filed, or paid to any agency.
+              </p>
+            </div>
+          )}
+          <DetailSection title={estimated ? 'Totals (estimated)' : 'Totals'}>
             <DetailField label="Gross wages" value={grouped ? '••••' : formatMoney(run.grossCents)} mono />
-            <DetailField label="Employee withholding" value={grouped ? '••••' : formatMoney(run.employeeTaxCents ?? 0)} mono />
-            <DetailField label="Employer tax & benefits" value={grouped ? '••••' : formatMoney(run.employerTaxCents ?? 0)} mono />
-            <DetailField label="Net pay" value={grouped ? '••••' : formatMoney(run.netCents)} mono />
-            <DetailField label="Bank funding total" value={grouped ? '••••' : formatMoney(funding)} mono />
+            <DetailField label={estimated ? 'Employee withholding (est.)' : 'Employee withholding'} value={grouped ? '••••' : formatMoney(run.employeeTaxCents ?? 0)} mono />
+            <DetailField label={estimated ? 'Employer tax & benefits (est.)' : 'Employer tax & benefits'} value={grouped ? '••••' : formatMoney(run.employerTaxCents ?? 0)} mono />
+            <DetailField label={estimated ? 'Net pay (est.)' : 'Net pay'} value={grouped ? '••••' : formatMoney(run.netCents)} mono />
+            <DetailField label={estimated ? 'Bank funding total (est.)' : 'Bank funding total'} value={grouped ? '••••' : formatMoney(funding)} mono />
           </DetailSection>
 
           {/* Per-employee breakdown */}
@@ -150,6 +169,7 @@ export function RunDetailDrawer({
           {/* Action rail */}
           <ActionRail
             status={run.status}
+            estimated={estimated}
             preparedByMe={preparedByMe}
             canApprove={canApprove}
             pending={pending}
@@ -174,6 +194,7 @@ export function RunDetailDrawer({
 
 function ActionRail({
   status,
+  estimated,
   preparedByMe,
   canApprove,
   pending,
@@ -188,6 +209,7 @@ function ActionRail({
   onPost,
 }: {
   status: RunStatus;
+  estimated: boolean;
   preparedByMe: boolean;
   canApprove: boolean;
   pending: Action | null;
@@ -259,14 +281,25 @@ function ActionRail({
 
       {approved && !confirmingRelease && (
         <div>
-          <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-indigo-500/20 bg-indigo-500/[0.06] px-3 py-2 text-xs text-slate-300">
-            <ShieldAlert size={14} className="mt-0.5 shrink-0 text-indigo-400" />
-            <span>
-              <span className="font-medium text-indigo-300">Release moves money.</span> It authorizes the provider to
-              debit the bank{funding !== null ? ` for ${formatMoney(funding)}` : ''} and pay employees, tax agencies, and
-              garnishment recipients. This step is irreversible.
-            </span>
-          </div>
+          {estimated ? (
+            <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2 text-xs text-amber-100/90">
+              <FlaskConical size={14} className="mt-0.5 shrink-0 text-amber-400" />
+              <span>
+                <span className="font-medium text-amber-200">Estimate run — no money moves.</span> No payroll provider is
+                connected, so release only advances this workflow for preview. Nothing is debited from the bank and no
+                employee, agency, or garnishment recipient is paid.
+              </span>
+            </div>
+          ) : (
+            <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-indigo-500/20 bg-indigo-500/[0.06] px-3 py-2 text-xs text-slate-300">
+              <ShieldAlert size={14} className="mt-0.5 shrink-0 text-indigo-400" />
+              <span>
+                <span className="font-medium text-indigo-300">Release moves money.</span> It authorizes the provider to
+                debit the bank{funding !== null ? ` for ${formatMoney(funding)}` : ''} and pay employees, tax agencies, and
+                garnishment recipients. This step is irreversible.
+              </span>
+            </div>
+          )}
           <button
             onClick={onStartRelease}
             disabled={!canApprove}
@@ -281,15 +314,24 @@ function ActionRail({
       {approved && confirmingRelease && (
         <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/[0.08] p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium text-indigo-200">
-            <ShieldAlert size={16} /> Confirm release — money movement
+            <ShieldAlert size={16} /> {estimated ? 'Confirm release — estimate (no money movement)' : 'Confirm release — money movement'}
           </div>
-          <p className="mb-3 text-xs text-slate-300">
-            The provider will debit the bank{funding !== null ? <span className="font-mono font-semibold text-white"> {formatMoney(funding)}</span> : ''} and pay
-            employees, agencies, and garnishment recipients. This cannot be undone.
-          </p>
+          {estimated ? (
+            <p className="mb-3 text-xs text-slate-300">
+              This is an estimate run with no provider connected. Release only advances the workflow for preview —{' '}
+              <span className="font-medium text-amber-200">no bank debit occurs</span> and no one is paid.
+            </p>
+          ) : (
+            <p className="mb-3 text-xs text-slate-300">
+              The provider will debit the bank{funding !== null ? <span className="font-mono font-semibold text-white"> {formatMoney(funding)}</span> : ''} and pay
+              employees, agencies, and garnishment recipients. This cannot be undone.
+            </p>
+          )}
           <label className="mb-3 flex items-start gap-2 text-xs text-slate-300">
             <input type="checkbox" checked={ackRelease} onChange={onToggleAck} className="mt-0.5" />
-            I authorize this bank debit and release of payroll funding.
+            {estimated
+              ? 'I understand this is an estimate preview and no money will move.'
+              : 'I authorize this bank debit and release of payroll funding.'}
           </label>
           <div className="flex items-center justify-end gap-2">
             <button onClick={onCancelRelease} className="px-3 py-1.5 text-sm text-slate-400 hover:text-slate-200">

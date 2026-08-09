@@ -13,6 +13,9 @@ import {
   CalendarClock,
   EyeOff,
   UploadCloud,
+  Info,
+  FlaskConical,
+  PlugZap,
 } from 'lucide-react';
 import { PageHeader, EmptyState } from '@/components/ui';
 import { useQuery } from '@/hooks';
@@ -37,6 +40,18 @@ export function PayrollClient() {
 
   const { data, isLoading, error, refetch } = useQuery<RunsResponse>('/api/payroll/runs');
   const runs = useMemo(() => data?.runs ?? [], [data]);
+
+  // Is a licensed payroll provider (Check/Gusto) actually connected for this
+  // tenant? Until one is, running payroll end-to-end inside MeritBooks produces a
+  // NON-BINDING ESTIMATE (flat placeholder rates) — not a tax calculation, and no
+  // money moves or is filed. We surface that truth everywhere the run path shows.
+  const { data: capData } = useQuery<{ capabilities?: Array<{ capability: string; ready: boolean }> }>(
+    '/api/integrations/connections',
+    undefined,
+    { scope: false },
+  );
+  const providerReady =
+    capData?.capabilities?.some((c) => c.capability === 'PAYROLL' && c.ready) ?? false;
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -81,27 +96,87 @@ export function PayrollClient() {
     <div className="space-y-6">
       <PageHeader
         title="Payroll"
-        description="Run payroll every pay period: draft the roster, preview the provider-computed gross-to-net, approve under separation of duties, then release the funding. Every run posts a balanced, job-costed entry to the ledger."
+        description="Run payroll at your processor, then import the register — we read the period totals and post the balanced, job-costed payroll entry to the ledger. That import is the production path today. Running payroll end to end inside the app requires a connected payroll provider."
         actions={
           canCreate ? (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setImportOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-slate-700 text-slate-200 hover:bg-slate-800 transition-colors"
-                title="For payroll run outside MeritBooks: drop the processor's register and post a balanced payroll entry"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
+                title="Drop the processor's payroll register (PDF or image) and post a balanced payroll entry to the ledger"
               >
-                <UploadCloud size={14} /> Import payroll register (PDF)
+                <UploadCloud size={14} /> Import payroll register
               </button>
               <button
                 onClick={() => setWizardOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-slate-700 text-slate-200 hover:bg-slate-800 transition-colors"
+                title={
+                  providerReady
+                    ? 'Run payroll end-to-end through your connected provider'
+                    : 'No payroll provider connected — the run wizard produces a non-binding estimate only (not a tax calculation, no filing, no money movement)'
+                }
               >
-                <Play size={14} /> Run payroll
+                {providerReady ? <Play size={14} /> : <FlaskConical size={14} className="text-amber-400" />}
+                {providerReady ? 'Run payroll' : 'Run payroll (estimate)'}
               </button>
             </div>
           ) : undefined
         }
       />
+
+      {/* Honest framing: which path is real, and what the run wizard is when no
+          provider is connected. Always shown so no one mistakes the estimate for
+          filed payroll. */}
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="card flex items-start gap-3 p-4">
+          <div className="mt-0.5 rounded-lg bg-emerald-500/10 p-2 text-emerald-400">
+            <UploadCloud size={16} />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-white">Import a payroll register</p>
+            <p className="mt-0.5 text-xs text-slate-400">
+              The production path. Run payroll at ADP, Paychex, Gusto, QuickBooks — or a spreadsheet — then drop the
+              register here. We extract the period totals and post a balanced payroll entry you review first.
+            </p>
+            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-2xs font-medium text-emerald-300">
+              <Info size={10} /> Real entries to the ledger
+            </span>
+          </div>
+        </div>
+        <div className="card flex items-start gap-3 p-4">
+          <div
+            className={clsx(
+              'mt-0.5 rounded-lg p-2',
+              providerReady ? 'bg-indigo-500/10 text-indigo-300' : 'bg-amber-500/10 text-amber-400',
+            )}
+          >
+            {providerReady ? <PlugZap size={16} /> : <FlaskConical size={16} />}
+          </div>
+          <div>
+            <p className="text-sm font-medium text-white">Run payroll in-app</p>
+            {providerReady ? (
+              <p className="mt-0.5 text-xs text-slate-400">
+                A payroll provider is connected. The wizard computes gross-to-net through the provider, holds a
+                separation-of-duties approval, and only moves money when you explicitly release.
+              </p>
+            ) : (
+              <p className="mt-0.5 text-xs text-slate-400">
+                No payroll provider is connected yet. The wizard runs as a{' '}
+                <span className="text-amber-300">non-binding estimate</span> using flat placeholder rates — it does not
+                calculate real taxes, withhold, file, or move any money. Use it to preview the workflow only.
+              </p>
+            )}
+            <span
+              className={clsx(
+                'mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium',
+                providerReady ? 'bg-indigo-500/10 text-indigo-300' : 'bg-amber-500/10 text-amber-300',
+              )}
+            >
+              <Info size={10} /> {providerReady ? 'Provider connected' : 'Provider not connected — estimate only'}
+            </span>
+          </div>
+        </div>
+      </div>
 
       {data && runs.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -138,10 +213,10 @@ export function PayrollClient() {
             title="No payroll runs yet"
             description={
               canCreate
-                ? 'Start a run to draft the roster, preview the provider-computed gross-to-net, and post a balanced, job-costed entry to the ledger.'
+                ? 'Import a payroll register from your processor and we post the balanced, job-costed entry to the ledger. Runs and imports appear here once started.'
                 : 'No payroll runs have been created yet. Runs will appear here once a preparer starts one.'
             }
-            action={canCreate ? { label: 'Run payroll', onClick: () => setWizardOpen(true) } : undefined}
+            action={canCreate ? { label: 'Import payroll register', onClick: () => setImportOpen(true) } : undefined}
           />
         </div>
       ) : (
@@ -168,6 +243,7 @@ export function PayrollClient() {
 
       {wizardOpen && (
         <RunWizard
+          providerReady={providerReady}
           onClose={() => setWizardOpen(false)}
           onCreated={() => refetch()}
           onReview={(id) => {
@@ -188,6 +264,7 @@ export function PayrollClient() {
       {detailId && (
         <RunDetailDrawer
           runId={detailId}
+          providerReady={providerReady}
           onClose={() => setDetailId(null)}
           onChanged={() => refetch()}
         />

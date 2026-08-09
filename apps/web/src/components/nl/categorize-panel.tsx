@@ -15,6 +15,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, AlertTriangle, HelpCircle, Check, Tags, Inbox } from 'lucide-react';
 import { addToast } from '@/hooks/use-toast';
+import { AiUnavailableNotice } from '@/components/ai/ai-unavailable-notice';
 
 interface Candidate {
   transactionId: string;
@@ -34,6 +35,7 @@ const fmt = (c: number) => (Math.abs(c) / 100).toLocaleString('en-US', { minimum
 export function CategorizePanel({ prompt, onDone }: { prompt: string; onDone: () => void }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [unavailable, setUnavailable] = useState<string | null>(null);
   const [clarify, setClarify] = useState<string | null>(null);
   const [vendorQuery, setVendorQuery] = useState('');
   const [rows, setRows] = useState<Candidate[]>([]);
@@ -51,6 +53,8 @@ export function CategorizePanel({ prompt, onDone }: { prompt: string; onDone: ()
         ]);
         const data = await res.json().catch(() => null);
         if (!alive) return;
+        // AI paused (org disabled / budget / no key) → calm notice, not a red error.
+        if (data?.unavailable) { setUnavailable(data.message ?? null); return; }
         if (!res.ok) {
           setError(res.status === 402 ? 'AI budget cap reached — code these in the Bank Feed.' : (data?.error ?? 'Could not read that request.'));
           return;
@@ -112,7 +116,11 @@ export function CategorizePanel({ prompt, onDone }: { prompt: string; onDone: ()
 
       {loading && <div className="flex items-center gap-2 py-4 text-sm text-slate-400"><Loader2 size={15} className="animate-spin" /> Finding matching charges…</div>}
 
-      {!loading && error && (
+      {!loading && unavailable !== null && (
+        <AiUnavailableNotice message={unavailable} hint="Code these in the Bank Feed in the meantime." />
+      )}
+
+      {!loading && !unavailable && error && (
         <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200"><AlertTriangle size={15} className="mt-0.5 shrink-0" /> {error}</div>
       )}
 
@@ -123,14 +131,14 @@ export function CategorizePanel({ prompt, onDone }: { prompt: string; onDone: ()
         </div>
       )}
 
-      {!loading && !error && !clarify && rows.length === 0 && (
+      {!loading && !unavailable && !error && !clarify && rows.length === 0 && (
         <div className="flex items-start gap-2 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-3 text-sm text-slate-300">
           <Inbox size={16} className="mt-0.5 shrink-0 text-slate-500" />
           <span>No uncoded bank-feed charges match{vendorQuery ? ` “${vendorQuery}”` : ''}. They may already be posted.</span>
         </div>
       )}
 
-      {!loading && !error && !clarify && rows.length > 0 && (
+      {!loading && !unavailable && !error && !clarify && rows.length > 0 && (
         <div className="space-y-2">
           {rows.map((r) => (
             <div key={r.transactionId} className="rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2">

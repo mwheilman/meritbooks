@@ -11,8 +11,8 @@ export default function InsurancePage() {
   return (
     <>
       <PageHeader
-        title="Insurance Register"
-        description="Drop your own insurance policies — AI extracts carrier, coverage, limits, deductible, and premium for you to confirm. MeritBooks then tracks coverage and flags renewals before they lapse."
+        title="Insurance"
+        description="Drop your own insurance policies — AI extracts carrier, coverage, limits, deductible, and premium for you to confirm. MeritBooks tracks coverage, flags renewals before they lapse, and amortizes each prepaid premium to insurance expense over its coverage term with a balanced journal entry."
       />
       <HubTabs section="assets" />
       <CompanyScopeGuard>

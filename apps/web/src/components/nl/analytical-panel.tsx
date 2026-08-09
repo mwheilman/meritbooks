@@ -23,6 +23,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2, BarChart3, ExternalLink, Clock, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
+import { AiUnavailableNotice } from '@/components/ai/ai-unavailable-notice';
 
 interface Citation { label: string; href: string }
 interface QueryResponse {
@@ -32,12 +33,15 @@ interface QueryResponse {
   rows?: Array<Record<string, unknown>>;
   citations?: Citation[];
   drilldownHref?: string;
+  unavailable?: boolean;
+  message?: string;
 }
 
 type State =
   | { kind: 'loading' }
   | { kind: 'ok'; data: QueryResponse }
   | { kind: 'initializing' } // endpoint not deployed yet (404)
+  | { kind: 'unavailable'; message: string } // AI paused (org disabled / budget / no key)
   | { kind: 'error'; message: string };
 
 export function AnalyticalPanel({ prompt }: { prompt: string }) {
@@ -55,6 +59,12 @@ export function AnalyticalPanel({ prompt }: { prompt: string }) {
         });
         if (res.status === 404) { if (alive) setState({ kind: 'initializing' }); return; }
         const data = await res.json().catch(() => null);
+        // AI paused (org disabled / budget cap / no key). Returned as HTTP 200 with
+        // an `unavailable` flag so we render the calm notice, not a red error.
+        if (data && data.unavailable) {
+          if (alive) setState({ kind: 'unavailable', message: data.message ?? 'AI is temporarily unavailable — try again later.' });
+          return;
+        }
         if (!res.ok) {
           if (alive) setState({ kind: 'error', message: data?.error ?? 'The analytical engine could not answer that.' });
           return;
@@ -88,6 +98,13 @@ export function AnalyticalPanel({ prompt }: { prompt: string }) {
           <Clock size={15} className="mt-0.5 shrink-0" />
           <span>The analytical engine is initializing. Ledger Q&amp;A will answer here once it&rsquo;s live — your question was routed correctly.</span>
         </div>
+      )}
+
+      {state.kind === 'unavailable' && (
+        <AiUnavailableNotice
+          message={state.message}
+          hint="Open the numbers directly from the Reports page in the meantime."
+        />
       )}
 
       {state.kind === 'error' && (

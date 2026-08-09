@@ -50,3 +50,43 @@ export const updatePolicySchema = createPolicySchema.partial();
 
 export type CreatePolicyInput = z.infer<typeof createPolicySchema>;
 export type UpdatePolicyInput = z.infer<typeof updatePolicySchema>;
+
+// -----------------------------------------------------------------------------
+// Premium amortization (prepaid insurance -> insurance expense)
+// -----------------------------------------------------------------------------
+
+/**
+ * Set up straight-line amortization of a policy's up-front premium. `total_cents`,
+ * `start_date`, and the term (months, OR a coverage `end_date` to derive it) are
+ * required — the UI pre-fills them from the policy. Account legs are optional
+ * overrides; when omitted the server resolves them by ROLE (INSURANCE_EXPENSE /
+ * PREPAID_INSURANCE), coverage-type aware, and fails closed if unresolved.
+ */
+export const createAmortizationSchema = z
+  .object({
+    policy_id: z.string().uuid(),
+    total_cents: z.number().int().positive(),
+    start_date: ISO_DATE,
+    months: z.number().int().min(1).max(600).optional(),
+    end_date: ISO_DATE.optional(),
+    location_id: z.string().uuid().nullable().optional(),
+    expense_account_id: z.string().uuid().optional(),
+    prepaid_account_id: z.string().uuid().optional(),
+    department_id: z.string().uuid().nullable().optional(),
+    memo: z.string().max(500).nullable().optional(),
+  })
+  .refine((v) => v.months != null || v.end_date != null, {
+    message: 'Provide either a term (months) or a coverage end date',
+    path: ['months'],
+  })
+  .refine((v) => v.end_date == null || v.end_date >= v.start_date, {
+    message: 'Coverage end must be on or after the start date',
+    path: ['end_date'],
+  });
+export type CreateAmortizationInput = z.infer<typeof createAmortizationSchema>;
+
+export const runAmortizationSchema = z.object({
+  as_of: ISO_DATE.optional(),
+  schedule_id: z.string().uuid().optional(),
+});
+export type RunAmortizationInput = z.infer<typeof runAmortizationSchema>;

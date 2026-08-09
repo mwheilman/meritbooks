@@ -20,6 +20,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import {
   consolidate,
+  entityNetIncomeCents,
   type AccountType,
   type ConsolidationMethod,
   type EntityAccountBalance,
@@ -68,6 +69,10 @@ export interface EntityFxInfo {
   ctaCents: number;
   translated: boolean; // functional ≠ reporting
   ratesResolved: { average: boolean; closing: boolean; historical: boolean };
+  /** Entity net income BEFORE translation, in functional-currency cents. */
+  originalNetIncomeCents: number;
+  /** Entity net income AFTER translation, in reporting-currency cents. */
+  translatedNetIncomeCents: number;
 }
 
 export interface ConsolidationFxResult {
@@ -78,6 +83,12 @@ export interface ConsolidationFxResult {
   functionalCurrencyColumnAvailable: boolean;
   /** True when at least one entity's functional currency ≠ reporting currency. */
   multiCurrency: boolean;
+  /**
+   * Whether translation was actually run this pass. False when the caller turned it
+   * off (`translate=false`) — foreign entities then combine at their functional
+   * amounts (no rate applied, no CTA), for an auditor's pre-translation view.
+   */
+  translationApplied: boolean;
   /** Sum of every foreign entity's CTA plug (reporting cents), for a summary line. */
   ctaTotalCents: number;
   byEntity: EntityFxInfo[];
@@ -208,6 +219,12 @@ export interface LoadConsolidatedOptions {
   eliminate?: boolean;
   /** Override the reporting currency; default = org home_currency (else USD). */
   reportingCurrency?: string | null;
+  /**
+   * When false, foreign entities are NOT translated — their trial balances combine
+   * at functional amounts (no rate, no CTA). Default true (ASC 830 current-rate
+   * translation). Turning it off gives the pre-translation "original" combined view.
+   */
+  translate?: boolean;
 }
 
 /**
@@ -297,6 +314,7 @@ export async function loadConsolidated(
 ): Promise<ConsolidationLoadResult> {
   const { startDate, endDate } = opts;
   const eliminate = opts.eliminate !== false;
+  const translate = opts.translate !== false; // default true (ASC 830)
 
   const { entities, entityMeta, ownershipTableAvailable } = await loadOwnership(
     supabase,
@@ -411,27 +429,48 @@ export async function loadConsolidated(
   let multiCurrency = false;
   for (const [entityId, ebals] of byEntity) {
     const functional = fxCtx.functionalByEntity.get(entityId) ?? fxCtx.reportingCurrency;
+    const isForeign = functional !== fxCtx.reportingCurrency;
+    if (isForeign) multiCurrency = true;
     const { rates, resolved } = resolveTranslationRates(
       fxCtx.fxRows,
       functional,
       fxCtx.reportingCurrency,
     );
-    const tr = translateEntityTB(ebals, {
-      functionalCurrency: functional,
-      reportingCurrency: fxCtx.reportingCurrency,
-      rates,
-    });
-    translatedBalances.push(...tr.translated);
-    ctaTotalCents += tr.ctaCents;
-    if (tr.translated_applied) multiCurrency = true;
-    fxByEntity.push({
-      entityId,
-      functionalCurrency: functional,
-      rates: tr.rates,
-      ctaCents: tr.ctaCents,
-      translated: tr.translated_applied,
-      ratesResolved: resolved,
-    });
+    // Net income BEFORE translation, in the entity's own functional currency.
+    const originalNetIncomeCents = entityNetIncomeCents(ebals, entityId);
+
+    if (translate) {
+      const tr = translateEntityTB(ebals, {
+        functionalCurrency: functional,
+        reportingCurrency: fxCtx.reportingCurrency,
+        rates,
+      });
+      translatedBalances.push(...tr.translated);
+      ctaTotalCents += tr.ctaCents;
+      fxByEntity.push({
+        entityId,
+        functionalCurrency: functional,
+        rates: tr.rates,
+        ctaCents: tr.ctaCents,
+        translated: tr.translated_applied,
+        ratesResolved: resolved,
+        originalNetIncomeCents,
+        translatedNetIncomeCents: entityNetIncomeCents(tr.translated, entityId),
+      });
+    } else {
+      // Translation OFF: combine functional amounts as-is (no rate, no CTA).
+      translatedBalances.push(...ebals.map((b) => ({ ...b })));
+      fxByEntity.push({
+        entityId,
+        functionalCurrency: functional,
+        rates,
+        ctaCents: 0,
+        translated: false,
+        ratesResolved: resolved,
+        originalNetIncomeCents,
+        translatedNetIncomeCents: originalNetIncomeCents,
+      });
+    }
   }
 
   const result = consolidate({
@@ -452,6 +491,7 @@ export async function loadConsolidated(
       fxRatesAvailable: fxCtx.fxRatesAvailable,
       functionalCurrencyColumnAvailable: fxCtx.functionalCurrencyColumnAvailable,
       multiCurrency,
+      translationApplied: translate && multiCurrency,
       ctaTotalCents,
       byEntity: fxByEntity,
     },

@@ -6,7 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { getAnthropicApiKey } from '@/lib/ai/gateway';
+import { getAnthropicApiKey, isAiUnavailableError, aiUnavailablePayload } from '@/lib/ai/gateway';
 import { extractInvoiceDraft } from '@/lib/nl/lanes/invoice';
 import {
   makeLaneGateway,
@@ -44,7 +44,9 @@ export async function POST(request: Request) {
   if (!guard.ok) return guard.response;
 
   const apiKey = getAnthropicApiKey();
-  if (!apiKey) return NextResponse.json({ error: 'AI is not configured.', code: 'NO_API_KEY' }, { status: 503 });
+  if (!apiKey) {
+    return NextResponse.json({ ...aiUnavailablePayload('AI is temporarily paused'), draft: null, gateway: null });
+  }
 
   let body: z.infer<typeof schema>;
   try {
@@ -66,7 +68,13 @@ export async function POST(request: Request) {
     if (e instanceof BudgetBlockedError) {
       return NextResponse.json({ error: e.message, code: 'BUDGET_BLOCKED' }, { status: 402 });
     }
-    return NextResponse.json({ error: 'The invoice drafter could not run.', code: 'GATEWAY_ERROR' }, { status: 502 });
+    // Org disabled / bad key / provider outage → calm paused state, never a raw 502.
+    if (!isAiUnavailableError(e)) console.error('[nl-draft-invoice] unexpected gateway error:', e);
+    return NextResponse.json({
+      ...aiUnavailablePayload('AI is temporarily paused'),
+      draft: null,
+      gateway: gatewayClientMeta(gw.meta()),
+    });
   }
 
   if (!extraction.draft) {
