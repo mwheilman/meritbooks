@@ -24,6 +24,7 @@ import {
   DEFAULT_STALE_THRESHOLD_DAYS,
   type OutstandingItem,
 } from '@/lib/services/reconciliation-plug';
+import { bucketOutstandingByAge, decomposeDifference } from '@/lib/services/reconciliation-aging';
 
 /**
  * /api/reconciliation/session — the per-line reconciliation workspace (FPB Wave A).
@@ -251,6 +252,17 @@ export async function GET(request: Request): Promise<NextResponse> {
   const staleTotals = summarizeStaleItems(staleItems);
   const plug = differenceCents == null ? null : assessPlug(differenceCents);
 
+  // Aging of ALL outstanding reconciling items (0-30 / 31-60 / 61-90 / 90+),
+  // oldest band first — how long uncleared money has been sitting. Pure/derived.
+  const aging = bucketOutstandingByAge(outstandingItems, { asOfDate: period.end_date });
+
+  // Difference explainer: decompose the current statement-vs-book difference into
+  // its constituent outstanding lines + the residual (plug) no line explains.
+  const differenceExplainer =
+    differenceCents == null
+      ? null
+      : decomposeDifference({ differenceCents, outstandingItems, asOfDate: period.end_date });
+
   // Override availability + (if finalized) recorded override reason — degrade-safe.
   const overrideAvailable = await hasOverrideColumns(supabase);
   let overrideInfo: { overridden: boolean; reason: string | null } = { overridden: false, reason: null };
@@ -329,6 +341,49 @@ export async function GET(request: Request): Promise<NextResponse> {
       ageDays: s.ageDays,
       isOutflow: s.isOutflow,
     })),
+    // Aging of outstanding reconciling items — bands with count + $ totals, plus a
+    // capped item list per band (oldest-first) for drill-in.
+    aging: {
+      asOfDate: aging.asOfDate,
+      oldestAgeDays: aging.oldestAgeDays,
+      totals: aging.totals,
+      buckets: aging.buckets.map((b) => ({
+        key: b.key,
+        label: b.label,
+        count: b.count,
+        netCents: b.netCents,
+        outflowCents: b.outflowCents,
+        inflowCents: b.inflowCents,
+        items: b.items.slice(0, 15).map((i) => ({
+          id: i.id,
+          description: i.description,
+          amountCents: i.amountCents,
+          transactionDate: i.transactionDate,
+          ageDays: i.ageDays,
+          isOutflow: i.isOutflow,
+        })),
+      })),
+    },
+    // Difference explainer — what makes up the statement-vs-book gap.
+    differenceExplainer: differenceExplainer
+      ? {
+          differenceCents: differenceExplainer.differenceCents,
+          outstandingNetCents: differenceExplainer.outstandingNetCents,
+          residualCents: differenceExplainer.residualCents,
+          fullyExplained: differenceExplainer.fullyExplained,
+          outstandingChecksCents: differenceExplainer.outstandingChecksCents,
+          depositsInTransitCents: differenceExplainer.depositsInTransitCents,
+          components: differenceExplainer.components.slice(0, 25).map((c) => ({
+            id: c.id,
+            description: c.description,
+            amountCents: c.amountCents,
+            transactionDate: c.transactionDate,
+            ageDays: c.ageDays,
+            isOutflow: c.isOutflow,
+            reducesDifferenceBy: c.reducesDifferenceBy,
+          })),
+        }
+      : null,
     lines,
   });
 }

@@ -22,7 +22,12 @@ import {
   fetchArAging,
   fetchApAging,
   fetchDebt,
+  fetchTrendSeries,
 } from './queries';
+import type { TrendPoint } from '@/lib/reports/board-package';
+
+/** How many trailing months the KPI trend strip spans. */
+const TREND_PERIODS = 6;
 
 /**
  * GET /api/reports/board-package — assemble a board-ready financial package.
@@ -93,8 +98,9 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
   let currentIS: IncomeStatementPayload;
   let priorIS: IncomeStatementPayload | null = null;
   let balanceSheet, cashFlow, arAging, apAging, debt;
+  let trendSeries: TrendPoint[] = [];
   try {
-    [currentIS, priorIS, balanceSheet, cashFlow, arAging, apAging, debt] = await Promise.all([
+    [currentIS, priorIS, balanceSheet, cashFlow, arAging, apAging, debt, trendSeries] = await Promise.all([
       fetchIncomeStatement(ctx.supabase, { startDate, endDate, locationIds, basis }),
       fetchIncomeStatement(ctx.supabase, { startDate: prior.s, endDate: prior.e, locationIds, basis }),
       fetchBalanceSheet(ctx.supabase, { asOfDate, locationIds }),
@@ -102,6 +108,7 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
       fetchArAging(ctx.supabase, locationIds),
       fetchApAging(ctx.supabase, locationIds),
       fetchDebt(ctx.supabase, locationIds),
+      fetchTrendSeries(ctx.supabase, ctx.orgId ?? '', { endDate, locationIds, basis, periods: TREND_PERIODS }),
     ]);
   } catch (e) {
     return NextResponse.json(
@@ -111,8 +118,16 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
   }
 
   const periodLabel = `${startDate} to ${endDate}`;
+  const priorPeriodLabel = `${prior.s} to ${prior.e}`;
   const basisLabel = basis === 'cash' ? 'Cash basis' : 'Accrual basis';
   const generatedAt = new Date().toISOString();
+  // Inclusive day count of the reporting window — drives DSO/DPO.
+  const periodDays =
+    Math.round(
+      (Date.UTC(...(endDate.split('-').map(Number) as [number, number, number])) -
+        Date.UTC(...(startDate.split('-').map(Number) as [number, number, number]))) /
+        86_400_000,
+    ) + 1;
   const meta = {
     entityLabel,
     periodLabel,
@@ -125,7 +140,7 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
   };
 
   // 2. Executive summary. Deterministic by default; AI phrasing only on ai=1.
-  const kpis = computeKpis({ currentIS, priorIS, balanceSheet, cashFlow, arAging, apAging, debt });
+  const kpis = computeKpis({ currentIS, priorIS, balanceSheet, cashFlow, arAging, apAging, debt, periodDays });
   let executiveSummary: { text: string; source: 'ai' | 'deterministic'; model: string | null } = {
     text: deterministicExecutiveSummary(kpis, entityLabel, periodLabel),
     source: 'deterministic',
@@ -203,6 +218,9 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
     apAging,
     debt,
     executiveSummary,
+    periodDays,
+    priorPeriodLabel,
+    trendSeries,
   });
 
   return NextResponse.json({ ...pkg, aiMeta: { requested: params.ai === '1', message: aiMessage } });

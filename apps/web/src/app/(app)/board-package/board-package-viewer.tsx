@@ -13,6 +13,7 @@ import { useMe } from '@/lib/hooks/use-me';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { canConsolidate, isSpecificCompany } from '@/lib/company-scope';
 import type { BoardPackage } from '@/lib/reports/board-package';
+import { MdnaSection, KpiTrendStrip } from './board-package-sections';
 
 interface BoardPackageResponse extends BoardPackage {
   aiMeta?: { requested: boolean; message: string | null };
@@ -305,6 +306,9 @@ function BoardPackagePreview({ data, entityLabel, onGenerateAi }: { data: BoardP
         </div>
       </div>
 
+      {/* Management Discussion & Analysis (deterministic) */}
+      <MdnaSection mdna={data.mdna} />
+
       {/* KPIs */}
       <div>
         <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Key Performance Indicators</p>
@@ -325,6 +329,9 @@ function BoardPackagePreview({ data, entityLabel, onGenerateAi }: { data: BoardP
           ))}
         </div>
       </div>
+
+      {/* KPI trend strip (multi-period sparklines) */}
+      <KpiTrendStrip trend={data.trend} />
 
       {/* Statement summaries */}
       <div className="grid md:grid-cols-3 gap-4">

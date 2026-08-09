@@ -7,6 +7,18 @@ import { addToast } from '@/hooks/use-toast';
 import { EmptyState, StatusBadge } from '@/components/ui';
 import { ALL_ROLES, ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
 import { WORKFLOW_DOC_TYPES, type WorkflowDocType } from '@/lib/approvals/workflow';
+import { ChainVisualization } from './chain-visualization';
+import { ChainSimulator } from './chain-simulator';
+import { CoverageReport } from './coverage-report';
+
+type ApprovalsTab = 'configure' | 'visualize' | 'simulate' | 'coverage';
+
+const TABS: Array<{ id: ApprovalsTab; label: string }> = [
+  { id: 'configure', label: 'Configure' },
+  { id: 'visualize', label: 'Visualize' },
+  { id: 'simulate', label: 'Simulate' },
+  { id: 'coverage', label: 'Coverage gaps' },
+];
 
 interface StepForm {
   stepOrder: number;
@@ -51,6 +63,7 @@ export function ApprovalWorkflowsClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<ApprovalsTab>('configure');
 
   // Builder form state
   const [name, setName] = useState('Approval chain');
@@ -151,7 +164,41 @@ export function ApprovalWorkflowsClient() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* View tabs — deepen the admin experience without changing enforcement. */}
+      <div role="tablist" aria-label="Approval workflow views" className="flex flex-wrap gap-1 border-b border-white/5">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={`-mb-px rounded-t-lg border-b-2 px-3.5 py-2 text-xs font-medium focus:outline-none ${
+              tab === t.id
+                ? 'border-emerald-500 text-white'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab !== 'configure' && loading && (
+        <div className="rounded-lg border border-white/5 bg-surface-900 p-4 text-xs text-slate-500">
+          Loading workflows…
+        </div>
+      )}
+      {tab !== 'configure' && !loading && error && (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-xs text-red-300">{error}</div>
+      )}
+      {tab === 'visualize' && !loading && !error && <ChainVisualization workflows={workflows} />}
+      {tab === 'simulate' && !loading && !error && <ChainSimulator workflows={workflows} />}
+      {tab === 'coverage' && !loading && !error && <CoverageReport workflows={workflows} />}
+
+      {tab === 'configure' && (
+        <div className="space-y-8">
       {/* Builder */}
       <section className="rounded-xl border border-white/5 bg-surface-900 p-5">
         <h2 className="text-sm font-semibold text-white">Define a workflow</h2>
@@ -312,6 +359,8 @@ export function ApprovalWorkflowsClient() {
           </div>
         )}
       </section>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,16 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeKpis,
+  computeVariances,
+  buildMdna,
+  buildKpiTrend,
   assembleBoardPackage,
   buildBoardNotes,
   deterministicExecutiveSummary,
   boardPackageSchema,
   BOARD_SECTION_LIST,
+  MDNA_LABEL,
   type IncomeStatementPayload,
   type BalanceSheetPayload,
   type CashFlowPayload,
   type AgingPayload,
   type DebtPayload,
+  type TrendPoint,
 } from './board-package';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -193,6 +198,123 @@ describe('assembleBoardPackage', () => {
     const pkg = assembleBoardPackage({ meta, ...baseInput, executiveSummary: { text: 'AI phrasing.', source: 'ai', model: 'claude-x' } });
     expect(pkg.executiveSummary.source).toBe('ai');
     expect(pkg.executiveSummary.text).toBe('AI phrasing.');
+  });
+});
+
+// ── DSO / DPO ─────────────────────────────────────────────────────────────────
+describe('computeKpis DSO/DPO', () => {
+  it('computes DSO/DPO when a period length is supplied', () => {
+    const k = computeKpis({ ...baseInput, periodDays: 31 });
+    // DSO = AR(120000) * 31 / revenue(1,000,000) = 3.72
+    expect(k.dsoDays).toBe(3.7);
+    // DPO = AP(80000) * 31 / cogs(400,000) = 6.2
+    expect(k.dpoDays).toBe(6.2);
+    expect(k.cards.find((c) => c.key === 'dso')?.valueText).toBe('3.7 days');
+  });
+
+  it('returns null DSO/DPO when no period length is given', () => {
+    const k = computeKpis(baseInput);
+    expect(k.dsoDays).toBeNull();
+    expect(k.dpoDays).toBeNull();
+    expect(k.cards.find((c) => c.key === 'dpo')?.valueText).toBe('n/a');
+  });
+});
+
+// ── Variance decomposition ────────────────────────────────────────────────────
+describe('computeVariances', () => {
+  const cur: IncomeStatementPayload = {
+    ...currentIS,
+    sections: [
+      { type: 'REVENUE', label: 'Revenue', groups: [{ name: 'Product', accounts: [], totalCents: 900_000 }, { name: 'Service', accounts: [], totalCents: 100_000 }], totalCents: 1_000_000 },
+      { type: 'OPEX', label: 'Operating Expenses', groups: [{ name: 'Payroll', accounts: [], totalCents: 250_000 }], totalCents: 250_000 },
+    ],
+  };
+  const prior: IncomeStatementPayload = {
+    ...priorIS,
+    sections: [
+      { type: 'REVENUE', label: 'Revenue', groups: [{ name: 'Product', accounts: [], totalCents: 700_000 }, { name: 'Service', accounts: [], totalCents: 100_000 }], totalCents: 800_000 },
+      { type: 'OPEX', label: 'Operating Expenses', groups: [{ name: 'Payroll', accounts: [], totalCents: 200_000 }], totalCents: 200_000 },
+    ],
+  };
+
+  it('ranks movements by their effect on net income and flags direction', () => {
+    const v = computeVariances(cur, prior);
+    // Product revenue +200k is the biggest NI impact and is favorable.
+    expect(v[0].label).toBe('Product');
+    expect(v[0].deltaCents).toBe(200_000);
+    expect(v[0].netIncomeImpactCents).toBe(200_000);
+    expect(v[0].favorable).toBe(true);
+    // Payroll rose 50k → unfavorable (expense increase hurts NI).
+    const payroll = v.find((x) => x.label === 'Payroll')!;
+    expect(payroll.netIncomeImpactCents).toBe(-50_000);
+    expect(payroll.favorable).toBe(false);
+  });
+
+  it('omits unchanged lines and returns nothing without a prior period', () => {
+    const v = computeVariances(cur, prior);
+    expect(v.find((x) => x.label === 'Service')).toBeUndefined(); // unchanged
+    expect(computeVariances(cur, null)).toEqual([]);
+  });
+});
+
+// ── KPI trend ─────────────────────────────────────────────────────────────────
+describe('buildKpiTrend', () => {
+  const series: TrendPoint[] = [
+    { periodLabel: 'Jan 26', periodStart: '2026-01-01', periodEnd: '2026-01-31', revenueCents: 800_000, grossProfitCents: 480_000, grossMarginPct: 60, netIncomeCents: 200_000, endingCashCents: 250_000 },
+    { periodLabel: 'Feb 26', periodStart: '2026-02-01', periodEnd: '2026-02-28', revenueCents: 900_000, grossProfitCents: 540_000, grossMarginPct: 60, netIncomeCents: 250_000, endingCashCents: 275_000 },
+    { periodLabel: 'Mar 26', periodStart: '2026-03-01', periodEnd: '2026-03-31', revenueCents: 1_000_000, grossProfitCents: 600_000, grossMarginPct: 60, netIncomeCents: 300_000, endingCashCents: 300_000 },
+  ];
+
+  it('builds a metric per headline KPI with direction and delta', () => {
+    const t = buildKpiTrend(series);
+    expect(t.periods).toEqual(['Jan 26', 'Feb 26', 'Mar 26']);
+    const rev = t.metrics.find((m) => m.key === 'revenue')!;
+    expect(rev.points).toHaveLength(3);
+    expect(rev.firstValue).toBe(800_000);
+    expect(rev.lastValue).toBe(1_000_000);
+    expect(rev.deltaPct).toBe(25);
+    expect(rev.direction).toBe('up');
+    expect(rev.favorable).toBe(true);
+  });
+
+  it('returns an empty trend for an empty series', () => {
+    expect(buildKpiTrend([]).metrics).toEqual([]);
+  });
+});
+
+// ── MD&A ──────────────────────────────────────────────────────────────────────
+describe('buildMdna', () => {
+  it('emits the four deterministic MD&A blocks with the honest label', () => {
+    const k = computeKpis({ ...baseInput, periodDays: 31 });
+    const variances = computeVariances(currentIS, priorIS);
+    const m = buildMdna({
+      kpis: k,
+      variances,
+      entityLabel: 'Acme Holdings',
+      periodLabel: '2026-01-01 to 2026-01-31',
+      priorPeriodLabel: '2025-12-01 to 2025-12-31',
+      arPastDueCents: 20_000,
+      arPastDuePct: 16.67,
+    });
+    expect(m.label).toBe(MDNA_LABEL);
+    expect(m.blocks.map((b) => b.id)).toContain('results_of_operations');
+    expect(m.blocks.map((b) => b.id)).toContain('liquidity');
+    expect(m.blocks.map((b) => b.id)).toContain('receivables_payables');
+    // Figures are stated, not invented.
+    const results = m.blocks.find((b) => b.id === 'results_of_operations')!;
+    expect(results.paragraphs.join(' ')).toContain('$10,000.00'); // revenue 1,000,000 cents
+    // AR health block reflects the supplied past-due figure.
+    const arBlock = m.blocks.find((b) => b.id === 'receivables_payables')!;
+    expect(arBlock.paragraphs.join(' ')).toContain('16.67%');
+  });
+
+  it('drops the variances block when there is no prior period', () => {
+    const k = computeKpis(baseInput);
+    const m = buildMdna({
+      kpis: k, variances: [], entityLabel: 'Acme', periodLabel: 'P', priorPeriodLabel: null,
+      arPastDueCents: 0, arPastDuePct: 0,
+    });
+    expect(m.blocks.find((b) => b.id === 'key_variances')).toBeUndefined();
   });
 });
 

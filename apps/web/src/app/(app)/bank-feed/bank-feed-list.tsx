@@ -1,13 +1,14 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { Check, Flag, Pencil, Receipt, FileText, Link2, HelpCircle, Inbox, AlertCircle, Loader2, ArrowUp, ArrowDown, Sparkles, Search, X, Briefcase, Clock, Copy, Zap } from 'lucide-react';
+import { Check, Flag, Pencil, Receipt, FileText, Link2, HelpCircle, Inbox, AlertCircle, Loader2, ArrowUp, ArrowDown, Sparkles, Search, X, Copy, Zap, Info } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ConfidenceBar, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useDebounce } from '@/hooks';
 import type { BankFeedRow, JobSearchResult } from '@meritbooks/shared';
 import type { SortField, SortDir } from './bank-feed-content';
+import { type ConfidenceBand, selectionTotals } from './bank-feed-refine';
 
 interface BankFeedListProps {
   transactions: BankFeedRow[];
@@ -22,9 +23,12 @@ interface BankFeedListProps {
   selected: Set<string>;
   onToggleSelect: (id: string) => void;
   onToggleAll: () => void;
-  onSelectHighConfidence: () => void;
+  onSelectByBand: (band: ConfidenceBand) => void;
+  onClearSelection: () => void;
   onSelectByVendor: (vendorName: string) => void;
   onEdit: (txn: BankFeedRow) => void;
+  onExplainConfidence: (txn: BankFeedRow) => void;
+  bandCounts: Record<ConfidenceBand, number> & { all: number };
   sortField: SortField;
   sortDir: SortDir;
   onSort: (field: SortField) => void;
@@ -348,9 +352,12 @@ export function BankFeedList({
   selected,
   onToggleSelect,
   onToggleAll,
-  onSelectHighConfidence,
+  onSelectByBand,
+  onClearSelection,
   onSelectByVendor,
   onEdit,
+  onExplainConfidence,
+  bandCounts,
   sortField,
   sortDir,
   onSort,
@@ -413,34 +420,60 @@ export function BankFeedList({
     );
   }
 
-  const highConfCount = transactions.filter((t) => (t.ai_confidence ?? 0) >= 0.9 && (t.final_account ?? t.ai_account)).length;
+  const totals = selectionTotals(transactions, selected);
+  const bandChips: Array<{ key: ConfidenceBand; label: string; color: string }> = [
+    { key: 'high', label: '≥90%', color: 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20' },
+    { key: 'medium', label: '70–89%', color: 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/20' },
+    { key: 'low', label: '<70%', color: 'text-red-400 bg-red-500/10 hover:bg-red-500/20' },
+  ];
 
   return (
     <div className="card overflow-hidden">
-      {/* Batch action bar */}
-      <div className="px-3 py-2 border-b border-slate-800/50 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {selected.size > 0 && (
-            <span className="text-sm text-brand-400">{selected.size} selected</span>
+      {/* Batch action bar: running selection tally + select-by-band + batch approve */}
+      <div className="px-3 py-2 border-b border-slate-800/50 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          {totals.count > 0 && (
+            <>
+              <span className="text-sm text-brand-400 font-medium tabular-nums">
+                {totals.count} selected · {formatMoney(totals.totalCents)}
+              </span>
+              <button
+                onClick={onClearSelection}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-2xs text-slate-500 hover:text-slate-300 hover:bg-white/[0.04] transition-colors"
+              >
+                <X size={11} /> Clear
+              </button>
+              <span className="h-4 w-px bg-slate-800" />
+            </>
           )}
-          {highConfCount > 0 && (
-            <button
-              onClick={onSelectHighConfidence}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-2xs font-medium text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 transition-colors"
-            >
-              <Sparkles size={12} />
-              Select all ≥90% ({highConfCount})
-            </button>
-          )}
+          <span className="text-2xs text-slate-600 uppercase tracking-wider font-semibold">Select</span>
+          {bandChips.map((b) => {
+            const count = bandCounts[b.key];
+            if (count === 0) return null;
+            return (
+              <button
+                key={b.key}
+                onClick={() => onSelectByBand(b.key)}
+                className={clsx(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-2xs font-medium transition-colors',
+                  b.color,
+                )}
+                title={`Select all visible transactions with ${b.label} confidence`}
+              >
+                <Sparkles size={12} />
+                {b.label} ({count})
+              </button>
+            );
+          })}
         </div>
-        {selected.size > 0 && (
+        {totals.count > 0 && (
           <button
             onClick={() => onBatchApprove(Array.from(selected))}
             disabled={isApproving}
             className="btn-primary btn-sm"
           >
             {isApproving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-            <span>Batch Approve ({selected.size})</span>
+            <span>Batch Approve ({totals.count})</span>
           </button>
         )}
       </div>
@@ -634,6 +667,14 @@ export function BankFeedList({
                           <Zap size={11} />
                         </span>
                       )}
+                      <button
+                        onClick={() => onExplainConfidence(txn)}
+                        className="p-0.5 rounded text-slate-600 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors shrink-0"
+                        title="Why this confidence? — composite Vendor/Amount/Date breakdown"
+                        aria-label={`Explain the confidence score for ${txn.description}`}
+                      >
+                        <Info size={12} />
+                      </button>
                     </div>
                   </td>
 

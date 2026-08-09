@@ -198,6 +198,10 @@ export const kpiSummarySchema = z.object({
   totalDebtCents: z.number(),
   weightedAvgRatePct: z.number(),
   annualDebtServiceCents: z.number(),
+  /** Days Sales Outstanding — AR turnover in days. Null when not derivable. */
+  dsoDays: z.number().nullable(),
+  /** Days Payable Outstanding — AP turnover in days. Null when not derivable. */
+  dpoDays: z.number().nullable(),
   deltas: z.object({
     revenuePct: z.number().nullable(),
     grossProfitPct: z.number().nullable(),
@@ -238,6 +242,8 @@ export interface KpiInputs {
   arAging: AgingPayload;
   apAging: AgingPayload;
   debt: DebtPayload;
+  /** Reporting-period length in days — enables DSO/DPO. Null/absent → not computed. */
+  periodDays?: number | null;
 }
 
 export function computeKpis(input: KpiInputs): KpiSummary {
@@ -263,6 +269,18 @@ export function computeKpis(input: KpiInputs): KpiSummary {
   const cashCents = input.cashFlow.endingCashCents;
   const arCents = input.arAging.totalOutstanding;
   const apCents = input.apAging.totalOutstanding;
+
+  // DSO/DPO — activity ratios, only when a period length and the relevant
+  // income-statement denominator (revenue for DSO, COGS for DPO) are present.
+  const periodDays = input.periodDays ?? null;
+  const dsoDays =
+    periodDays != null && periodDays > 0 && s.revenueCents > 0
+      ? Number(((arCents * periodDays) / s.revenueCents).toFixed(1))
+      : null;
+  const dpoDays =
+    periodDays != null && periodDays > 0 && s.cogsCents > 0
+      ? Number(((apCents * periodDays) / s.cogsCents).toFixed(1))
+      : null;
 
   const revenuePct = deltaPct(s.revenueCents, input.priorIS?.summary.revenueCents ?? null);
   const grossProfitPct = deltaPct(s.grossProfitCents, input.priorIS?.summary.grossProfitCents ?? null);
@@ -356,6 +374,22 @@ export function computeKpis(input: KpiInputs): KpiSummary {
       favorable: null,
       hint: input.debt.summary.weightedAvgRate ? `${input.debt.summary.weightedAvgRate}% wtd avg rate` : undefined,
     },
+    {
+      key: 'dso',
+      label: 'DSO',
+      kind: 'count',
+      valueText: dsoDays != null ? `${dsoDays.toFixed(1)} days` : 'n/a',
+      favorable: null,
+      hint: dsoDays != null ? 'Avg days to collect' : 'Needs revenue in period',
+    },
+    {
+      key: 'dpo',
+      label: 'DPO',
+      kind: 'count',
+      valueText: dpoDays != null ? `${dpoDays.toFixed(1)} days` : 'n/a',
+      favorable: null,
+      hint: dpoDays != null ? 'Avg days to pay' : 'Needs COGS in period',
+    },
   ];
 
   return {
@@ -381,9 +415,249 @@ export function computeKpis(input: KpiInputs): KpiSummary {
     totalDebtCents: input.debt.summary.totalBalanceCents,
     weightedAvgRatePct: input.debt.summary.weightedAvgRate,
     annualDebtServiceCents: input.debt.summary.totalMonthlyPaymentCents * 12,
+    dsoDays,
+    dpoDays,
     deltas: { revenuePct, grossProfitPct, netIncomePct },
     cards,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Variance analysis (driver decomposition) — PURE
+// Ranks the largest period-over-period movements by their effect on net income.
+// Revenue increases and expense decreases are favorable; the sign convention
+// makes "effect on net income" directly comparable across sections.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const varianceLineSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  section: z.string(),
+  currentCents: z.number(),
+  priorCents: z.number(),
+  deltaCents: z.number(),
+  deltaPct: z.number().nullable(),
+  /** Signed effect on net income: revenue up = +, expense up = −. */
+  netIncomeImpactCents: z.number(),
+  favorable: z.boolean(),
+});
+export type VarianceLine = z.infer<typeof varianceLineSchema>;
+
+export function computeVariances(
+  currentIS: IncomeStatementPayload,
+  priorIS: IncomeStatementPayload | null | undefined,
+  topN = 6,
+): VarianceLine[] {
+  if (!priorIS) return [];
+
+  const priorMap = new Map<string, number>();
+  for (const sec of priorIS.sections) {
+    for (const g of sec.groups) priorMap.set(`${sec.type}::${g.name}`, g.totalCents);
+  }
+
+  const seen = new Set<string>();
+  const lines: VarianceLine[] = [];
+  const add = (secType: string, secLabel: string, name: string, cur: number, prior: number) => {
+    const key = `${secType}::${name}`;
+    seen.add(key);
+    const delta = cur - prior;
+    if (delta === 0) return;
+    const sign = secType === 'REVENUE' ? 1 : -1; // an expense increase hurts NI
+    lines.push({
+      key,
+      label: name,
+      section: secLabel,
+      currentCents: cur,
+      priorCents: prior,
+      deltaCents: delta,
+      deltaPct: prior !== 0 ? Number(((delta / Math.abs(prior)) * 100).toFixed(1)) : null,
+      netIncomeImpactCents: sign * delta,
+      favorable: sign * delta >= 0,
+    });
+  };
+
+  for (const sec of currentIS.sections) {
+    for (const g of sec.groups) {
+      add(sec.type, sec.label, g.name, g.totalCents, priorMap.get(`${sec.type}::${g.name}`) ?? 0);
+    }
+  }
+  // Groups present in the prior period but absent now (fell to zero) are movements too.
+  for (const sec of priorIS.sections) {
+    for (const g of sec.groups) {
+      if (!seen.has(`${sec.type}::${g.name}`)) add(sec.type, sec.label, g.name, 0, g.totalCents);
+    }
+  }
+
+  return lines
+    .sort((a, b) => Math.abs(b.netIncomeImpactCents) - Math.abs(a.netIncomeImpactCents))
+    .slice(0, topN);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KPI trend series (multi-period sparkline data) — PURE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const trendPointSchema = z.object({
+  periodLabel: z.string(),
+  periodStart: z.string(),
+  periodEnd: z.string(),
+  revenueCents: z.number().default(0),
+  grossProfitCents: z.number().default(0),
+  grossMarginPct: z.number().default(0),
+  netIncomeCents: z.number().default(0),
+  endingCashCents: z.number().default(0),
+});
+export type TrendPoint = z.infer<typeof trendPointSchema>;
+
+export const trendMetricSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  kind: z.enum(['money', 'pct']),
+  points: z.array(z.object({ label: z.string(), value: z.number(), valueText: z.string() })),
+  firstValue: z.number(),
+  lastValue: z.number(),
+  deltaPct: z.number().nullable(),
+  direction: z.enum(['up', 'down', 'flat']),
+  favorable: z.boolean(),
+});
+export type TrendMetric = z.infer<typeof trendMetricSchema>;
+
+export const kpiTrendSchema = z.object({
+  periods: z.array(z.string()).default([]),
+  metrics: z.array(trendMetricSchema).default([]),
+});
+export type KpiTrend = z.infer<typeof kpiTrendSchema>;
+
+export function buildKpiTrend(series: TrendPoint[]): KpiTrend {
+  const periods = series.map((p) => p.periodLabel);
+  if (series.length === 0) return { periods, metrics: [] };
+
+  const defs: Array<{
+    key: string;
+    label: string;
+    kind: 'money' | 'pct';
+    get: (p: TrendPoint) => number;
+    fmt: (v: number) => string;
+  }> = [
+    { key: 'revenue', label: 'Revenue', kind: 'money', get: (p) => p.revenueCents, fmt: (v) => formatMoney(v, { compact: true }) },
+    { key: 'gross_margin', label: 'Gross Margin', kind: 'pct', get: (p) => p.grossMarginPct, fmt: (v) => `${v}%` },
+    { key: 'net_income', label: 'Net Income', kind: 'money', get: (p) => p.netIncomeCents, fmt: (v) => formatMoney(v, { compact: true }) },
+    { key: 'cash', label: 'Cash', kind: 'money', get: (p) => p.endingCashCents, fmt: (v) => formatMoney(v, { compact: true }) },
+  ];
+
+  const metrics: TrendMetric[] = defs.map((d) => {
+    const points = series.map((p) => ({ label: p.periodLabel, value: d.get(p), valueText: d.fmt(d.get(p)) }));
+    const firstValue = points[0].value;
+    const lastValue = points[points.length - 1].value;
+    const deltaPct =
+      firstValue !== 0 ? Number((((lastValue - firstValue) / Math.abs(firstValue)) * 100).toFixed(1)) : null;
+    const direction: 'up' | 'down' | 'flat' =
+      lastValue > firstValue ? 'up' : lastValue < firstValue ? 'down' : 'flat';
+    return { key: d.key, label: d.label, kind: d.kind, points, firstValue, lastValue, deltaPct, direction, favorable: direction !== 'down' };
+  });
+
+  return { periods, metrics };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Management Discussion & Analysis (MD&A) — PURE, deterministic
+// A narrative built ENTIRELY from computed figures. No AI, no invented numbers.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const mdnaBlockSchema = z.object({
+  id: z.string(),
+  heading: z.string(),
+  paragraphs: z.array(z.string()).default([]),
+  bullets: z.array(z.string()).default([]),
+});
+export type MdnaBlock = z.infer<typeof mdnaBlockSchema>;
+
+export const mdnaSchema = z.object({
+  label: z.string(),
+  blocks: z.array(mdnaBlockSchema).default([]),
+});
+export type Mdna = z.infer<typeof mdnaSchema>;
+
+/** MD&A label — honest provenance stamp shown in the UI and exports. */
+export const MDNA_LABEL = 'Computed summary — deterministic, derived directly from ledger figures';
+
+function trendWord(p: number | null): string {
+  if (p == null) return 'held roughly flat';
+  if (p > 0) return `rose ${Math.abs(p)}%`;
+  if (p < 0) return `declined ${Math.abs(p)}%`;
+  return 'held flat';
+}
+
+export function buildMdna(input: {
+  kpis: KpiSummary;
+  variances: VarianceLine[];
+  entityLabel: string;
+  periodLabel: string;
+  priorPeriodLabel?: string | null;
+  arPastDueCents: number;
+  arPastDuePct: number;
+}): Mdna {
+  const k = input.kpis;
+  const vs = input.priorPeriodLabel ? ` versus the comparative period (${input.priorPeriodLabel})` : '';
+  const blocks: MdnaBlock[] = [];
+
+  // 1. Results of Operations
+  blocks.push({
+    id: 'results_of_operations',
+    heading: 'Results of Operations',
+    paragraphs: [
+      `For ${input.periodLabel}, ${input.entityLabel} recorded revenue of ${formatMoney(k.revenueCents)}, which ${trendWord(k.deltas.revenuePct)}${vs}. Gross profit was ${formatMoney(k.grossProfitCents)}, a ${k.grossMarginPct}% gross margin, and ${trendWord(k.deltas.grossProfitPct)} against the prior period.`,
+      `Operating income was ${formatMoney(k.operatingIncomeCents)}. Net income ${trendWord(k.deltas.netIncomePct)} to ${formatMoney(k.netIncomeCents)}, representing a ${k.netMarginPct}% net margin.`,
+    ],
+    bullets: [],
+  });
+
+  // 2. Key Drivers of Change (variance decomposition)
+  if (input.variances.length > 0) {
+    blocks.push({
+      id: 'key_variances',
+      heading: 'Key Drivers of Change',
+      paragraphs: ['The largest movements versus the prior period, ranked by their effect on net income, were:'],
+      bullets: input.variances.map((v) => {
+        const dir = v.deltaCents >= 0 ? 'increased' : 'decreased';
+        const eff = v.favorable ? 'favorable' : 'unfavorable';
+        const pctText = v.deltaPct != null ? ` (${v.deltaPct > 0 ? '+' : ''}${v.deltaPct}%)` : '';
+        return `${v.section} — ${v.label} ${dir} ${formatMoney(Math.abs(v.deltaCents))}${pctText}: a ${eff} ${formatMoney(Math.abs(v.netIncomeImpactCents))} effect on net income.`;
+      }),
+    });
+  }
+
+  // 3. Liquidity & Capital Resources
+  const cashDir = k.netChangeInCashCents >= 0 ? 'increased' : 'decreased';
+  const liq =
+    k.currentRatio != null
+      ? `The current ratio stood at ${k.currentRatio.toFixed(2)}x`
+      : 'A current ratio was not derivable from the chart of accounts';
+  const wc = k.workingCapitalCents != null ? `, on working capital of ${formatMoney(k.workingCapitalCents)}` : '';
+  blocks.push({
+    id: 'liquidity',
+    heading: 'Liquidity & Capital Resources',
+    paragraphs: [
+      `Cash and equivalents ${cashDir} ${formatMoney(Math.abs(k.netChangeInCashCents))} during the period, ending at ${formatMoney(k.cashCents)}. ${liq}${wc}.`,
+      `Total debt was ${formatMoney(k.totalDebtCents)} at a ${k.weightedAvgRatePct}% weighted-average rate, carrying ${formatMoney(k.annualDebtServiceCents)} of annualized debt service; debt-to-equity was ${k.debtToEquity != null ? `${k.debtToEquity.toFixed(2)}x` : 'not derivable'}.`,
+    ],
+    bullets: [],
+  });
+
+  // 4. Receivables & Payables Health
+  const dso = k.dsoDays != null ? ` Days sales outstanding was approximately ${k.dsoDays.toFixed(1)} days.` : '';
+  const dpo = k.dpoDays != null ? ` Days payable outstanding was approximately ${k.dpoDays.toFixed(1)} days.` : '';
+  blocks.push({
+    id: 'receivables_payables',
+    heading: 'Receivables & Payables Health',
+    paragraphs: [
+      `Trade receivables totaled ${formatMoney(k.arCents)}, of which ${formatMoney(input.arPastDueCents)} (${input.arPastDuePct}%) was past due.${dso}`,
+      `Trade payables totaled ${formatMoney(k.apCents)}.${dpo}`,
+    ],
+    bullets: [],
+  });
+
+  return { label: MDNA_LABEL, blocks };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -580,7 +854,8 @@ export function deterministicExecutiveSummary(k: KpiSummary, entityLabel: string
 
 export const BOARD_SECTION_LIST = [
   'Executive Summary',
-  'Key Performance Indicators',
+  'Management Discussion & Analysis',
+  'Key Performance Indicators & Trends',
   'Statement of Operations (P&L)',
   'Balance Sheet',
   'Statement of Cash Flows',
@@ -615,6 +890,8 @@ export const boardPackageSchema = z.object({
     sectionList: z.array(z.string()),
   }),
   executiveSummary: executiveSummarySchema,
+  mdna: mdnaSchema.default({ label: MDNA_LABEL, blocks: [] }),
+  trend: kpiTrendSchema.default({ periods: [], metrics: [] }),
   kpis: kpiSummarySchema,
   statements: z.object({
     incomeStatement: incomeStatementPayloadSchema,
@@ -639,6 +916,12 @@ export interface AssembleInput {
   debt: DebtPayload;
   /** Optional pre-generated (AI) executive summary; deterministic if omitted. */
   executiveSummary?: z.infer<typeof executiveSummarySchema> | null;
+  /** Reporting-period length in days — enables DSO/DPO in the KPIs. */
+  periodDays?: number | null;
+  /** Human label for the comparative period (used in the MD&A). */
+  priorPeriodLabel?: string | null;
+  /** Trailing multi-period series that powers the KPI trend strip. */
+  trendSeries?: TrendPoint[];
 }
 
 export function assembleBoardPackage(input: AssembleInput): BoardPackage {
@@ -650,7 +933,22 @@ export function assembleBoardPackage(input: AssembleInput): BoardPackage {
     arAging: input.arAging,
     apAging: input.apAging,
     debt: input.debt,
+    periodDays: input.periodDays ?? null,
   });
+
+  const variances = computeVariances(input.currentIS, input.priorIS ?? null);
+  const arPastDueCents = pastDueCents(input.arAging);
+  const arPastDuePctVal = pct(arPastDueCents, input.arAging.totalOutstanding);
+  const mdna = buildMdna({
+    kpis,
+    variances,
+    entityLabel: input.meta.entityLabel,
+    periodLabel: input.meta.periodLabel,
+    priorPeriodLabel: input.priorPeriodLabel ?? null,
+    arPastDueCents,
+    arPastDuePct: arPastDuePctVal,
+  });
+  const trend = buildKpiTrend(input.trendSeries ?? []);
 
   const executiveSummary =
     input.executiveSummary ??
@@ -683,6 +981,8 @@ export function assembleBoardPackage(input: AssembleInput): BoardPackage {
       sectionList: [...BOARD_SECTION_LIST],
     },
     executiveSummary,
+    mdna,
+    trend,
     kpis,
     statements: {
       incomeStatement: input.currentIS,

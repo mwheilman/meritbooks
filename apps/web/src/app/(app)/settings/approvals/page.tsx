@@ -14,7 +14,7 @@ export default async function ApprovalWorkflowsPage() {
     <>
       <PageHeader
         title="Approval Workflows"
-        description="Configure N-step approval chains per document type and amount tier — who must approve a bill, journal entry, payment, expense, or payroll run, and in what order. Documents route automatically; a doc type with no active workflow keeps its existing single-approver behavior."
+        description="Configure N-step approval chains per document type and amount tier — who must approve a bill, journal entry, payment, expense, or payroll run, and in what order. Visualize each chain, simulate a scenario to preview the required approver sequence, and audit coverage gaps. Documents route automatically; a doc type with no active workflow keeps its existing single-approver behavior."
       />
       <ApprovalWorkflowsClient />
     </>

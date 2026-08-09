@@ -49,6 +49,19 @@ export function BoardPackagePdf({ pkg }: { pkg: BoardPackage }) {
     kpiLabel: { fontSize: 7.5, textTransform: 'uppercase', letterSpacing: 0.5, color: '#6b7178', fontFamily: 'Helvetica-Bold' },
     kpiValue: { fontSize: 13, fontFamily: 'Courier-Bold', color: '#111', marginTop: 3 },
     kpiHint: { fontSize: 7.5, color: '#8a9096', marginTop: 2 },
+    // MD&A
+    mdnaHeading: { fontSize: 11, fontFamily: 'Helvetica-Bold', color: '#111', marginTop: 11, marginBottom: 3 },
+    mdnaPara: { fontSize: 9.5, lineHeight: 1.45, color: '#374151', marginBottom: 3 },
+    mdnaBullet: { flexDirection: 'row', marginBottom: 2, paddingLeft: 6 },
+    mdnaBulletDot: { width: 9, fontSize: 9.5, color: accent },
+    mdnaBulletText: { flex: 1, fontSize: 9.5, lineHeight: 1.4, color: '#374151' },
+    mdnaLabel: { fontSize: 8, color: '#8a9096', fontFamily: 'Helvetica-Oblique', marginTop: 10 },
+    // Trend table
+    trendHead: { flexDirection: 'row', borderBottomWidth: 0.75, borderBottomColor: '#c9ced4', paddingBottom: 3, marginBottom: 1 },
+    trendTh: { fontSize: 7, textTransform: 'uppercase', letterSpacing: 0.3, color: '#6b7178', fontFamily: 'Helvetica-Bold' },
+    trendRow: { flexDirection: 'row', paddingVertical: 2.5, borderBottomWidth: 0.5, borderBottomColor: '#eceef0' },
+    trendLabel: { fontSize: 8.5, color: '#1f2328', fontFamily: 'Helvetica-Bold' },
+    trendCell: { fontSize: 8, fontFamily: 'Courier', color: '#374151', textAlign: 'right' },
     // Generic statement rows (mirrors statement-pdf.tsx)
     thead: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#1f2328', paddingBottom: 4, marginBottom: 2, paddingTop: 4 },
     th: { fontSize: 7.5, textTransform: 'uppercase', letterSpacing: 0.6, color: '#6b7178', fontFamily: 'Helvetica-Bold' },
@@ -222,8 +235,57 @@ export function BoardPackagePdf({ pkg }: { pkg: BoardPackage }) {
             </View>
           ))}
         </View>
+
+        {pkg.trend.metrics.length > 0 ? (
+          <View wrap={false}>
+            <Text style={[s.tocTitle, { marginTop: 14 }]}>Trend — Last {pkg.trend.periods.length} Periods</Text>
+            <View style={s.trendHead}>
+              <Text style={[s.trendTh, { width: '22%' }]}>Metric</Text>
+              {pkg.trend.periods.map((p, i) => (
+                <Text key={i} style={[s.trendTh, { width: `${78 / pkg.trend.periods.length}%`, textAlign: 'right' }]}>{p}</Text>
+              ))}
+            </View>
+            {pkg.trend.metrics.map((m) => (
+              <View key={m.key} style={s.trendRow} wrap={false}>
+                <Text style={[s.trendLabel, { width: '22%' }]}>{m.label}</Text>
+                {m.points.map((pt, i) => (
+                  <Text key={i} style={[s.trendCell, { width: `${78 / pkg.trend.periods.length}%` }]}>{pt.valueText}</Text>
+                ))}
+              </View>
+            ))}
+          </View>
+        ) : null}
         <Footer />
       </Page>
+
+      {/* ── Management Discussion & Analysis ── */}
+      {pkg.mdna.blocks.length > 0 ? (
+        <Page size="LETTER" style={s.page}>
+          <View style={s.header}>
+            <Text style={s.entity}>{pkg.meta.entityLabel}</Text>
+            <Text style={s.sectionTitle}>Management Discussion &amp; Analysis</Text>
+            <View style={s.metaRow}>
+              <Text style={s.meta}>{pkg.meta.periodLabel}</Text>
+              <Text style={s.meta}>{pkg.meta.basisLabel}</Text>
+            </View>
+            <View style={s.rule} />
+          </View>
+          {pkg.mdna.blocks.map((b) => (
+            <View key={b.id} wrap={false}>
+              <Text style={s.mdnaHeading}>{b.heading}</Text>
+              {b.paragraphs.map((p, i) => <Text key={i} style={s.mdnaPara}>{p}</Text>)}
+              {b.bullets.map((bl, i) => (
+                <View key={i} style={s.mdnaBullet}>
+                  <Text style={s.mdnaBulletDot}>•</Text>
+                  <Text style={s.mdnaBulletText}>{bl}</Text>
+                </View>
+              ))}
+            </View>
+          ))}
+          <Text style={s.mdnaLabel}>{pkg.mdna.label}</Text>
+          <Footer />
+        </Page>
+      ) : null}
 
       {/* ── Core statements ── */}
       <StatementPage model={isModel} />

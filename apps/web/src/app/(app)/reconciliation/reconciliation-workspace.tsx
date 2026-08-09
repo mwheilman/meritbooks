@@ -23,11 +23,18 @@ import {
   ShieldAlert,
   UploadCloud,
   Wand2,
+  History,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { formatMoney } from '@meritbooks/shared';
+import {
+  ReconciliationAnalytics,
+  type AgingDto,
+  type DifferenceExplainerDto,
+} from './reconciliation-analytics';
+import { ReconciliationHistory } from './reconciliation-history';
 
 // ── Types (mirror /api/reconciliation/session) ──────────────────────────────────
 interface WorkspaceLine {
@@ -88,6 +95,8 @@ interface WorkspaceResponse {
     netCents: number;
   };
   staleItems: StaleItemDto[];
+  aging: AgingDto | null;
+  differenceExplainer: DifferenceExplainerDto | null;
   lines: WorkspaceLine[];
 }
 
@@ -270,6 +279,7 @@ export function ReconciliationWorkspace({
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
   const [memoOpen, setMemoOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [memoLoading, setMemoLoading] = useState(false);
   const [memoError, setMemoError] = useState<string | null>(null);
   const [memo, setMemo] = useState<MemoResponse | null>(null);
@@ -278,12 +288,14 @@ export function ReconciliationWorkspace({
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
+      // History has its own overlay + Escape handling — don't also close the workspace.
+      if (historyOpen) return;
       if (memoOpen) { setMemoOpen(false); return; }
       onClose();
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [memoOpen, onClose]);
+  }, [memoOpen, historyOpen, onClose]);
 
   // ── Adjusting-entry (bank fee / interest / other) state ───────────────────────
   const [showAdjust, setShowAdjust] = useState(false);
@@ -1003,6 +1015,11 @@ export function ReconciliationWorkspace({
                 </div>
               )}
 
+              {/* Visibility analytics — difference explainer + outstanding-item aging (read-only) */}
+              {rec && (
+                <ReconciliationAnalytics aging={data.aging} explainer={data.differenceExplainer} />
+              )}
+
               {/* The plug — unexplained residual surfaced, NEVER auto-posted (canon §3) */}
               {rec && !finalized && summary?.hasPlug && (
                 <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/25 bg-red-500/[0.06] px-4 py-2.5 text-sm">
@@ -1384,6 +1401,13 @@ export function ReconciliationWorkspace({
                 <FileText size={13} className="text-indigo-400" /> Draft memo
               </button>
             )}
+            <button
+              onClick={() => setHistoryOpen(true)}
+              title="View prior finalized reconciliations for this account"
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:border-indigo-500/40 hover:text-white"
+            >
+              <History size={13} className="text-indigo-400" /> History
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -1532,6 +1556,15 @@ export function ReconciliationWorkspace({
             </div>
           </div>
         </>
+      )}
+
+      {/* Reconciliation history (read-only) — prior finalized recs for this account */}
+      {historyOpen && (
+        <ReconciliationHistory
+          bankAccountId={account.id}
+          accountName={account.accountName}
+          onClose={() => setHistoryOpen(false)}
+        />
       )}
     </>
   );

@@ -9,8 +9,20 @@ import { isSpecificCompany } from '@/lib/company-scope';
 import { BankFeedFilters } from './bank-feed-filters';
 import { BankFeedList } from './bank-feed-list';
 import { BankFeedMetricsStrip } from './bank-feed-metrics';
+import { BankFeedRefineBar } from './bank-feed-refine-bar';
+import { ConfidenceExplainer } from './confidence-explainer';
 import { EditPanel } from './edit-panel';
 import { StatementImport } from './statement-import';
+import { useBankFeedViews } from './use-bank-feed-views';
+import {
+  type ConfidenceBand,
+  type ConfidenceBandFilter,
+  filterByRefine,
+  distinctVendors,
+  confidenceBandOf,
+  idsInBand,
+} from './bank-feed-refine';
+import type { SavedView } from './bank-feed-views';
 import { FileUp, RefreshCw, Copy, X } from 'lucide-react';
 
 interface ApproveResult {
@@ -114,6 +126,12 @@ export function BankFeedContent() {
   const { activeCompanyId } = useActiveCompany();
   const selectedLocationId = isSpecificCompany(activeCompanyId) ? activeCompanyId : null;
   const [flaggingTxn, setFlaggingTxn] = useState<BankFeedRow | null>(null);
+  // Review-only refinement lens (client-side over the loaded, RLS-scoped rows).
+  const [confidenceBand, setConfidenceBand] = useState<ConfidenceBandFilter>('all');
+  const [vendorFilter, setVendorFilter] = useState<string | null>(null);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const [explainingTxn, setExplainingTxn] = useState<BankFeedRow | null>(null);
+  const { views, saveView, deleteView } = useBankFeedViews();
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [showStatementImport, setShowStatementImport] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -135,6 +153,28 @@ export function BankFeedContent() {
     () => sortTransactions(data?.data ?? [], sortField, sortDir),
     [data?.data, sortField, sortDir]
   );
+
+  // --- Review refinement: vendor-scoped set (band counts + band selection run on
+  // this), the visible list (vendor + band applied), and the vendor menu options. ---
+  const vendorScoped = useMemo(
+    () =>
+      vendorFilter
+        ? transactions.filter(
+            (t) => (t.ai_vendor?.display_name ?? t.ai_vendor?.name ?? null) === vendorFilter,
+          )
+        : transactions,
+    [transactions, vendorFilter],
+  );
+  const visibleTransactions = useMemo(
+    () => filterByRefine(transactions, { band: confidenceBand, vendor: vendorFilter }),
+    [transactions, confidenceBand, vendorFilter],
+  );
+  const vendorOptions = useMemo(() => distinctVendors(transactions), [transactions]);
+  const bandCounts = useMemo(() => {
+    const counts = { all: vendorScoped.length, high: 0, medium: 0, low: 0, uncoded: 0 };
+    for (const t of vendorScoped) counts[confidenceBandOf(t.ai_confidence)] += 1;
+    return counts;
+  }, [vendorScoped]);
 
   // Plaid connection status (drives the Refresh button's enabled/last-synced state).
   const { data: plaidStatus, refetch: refetchStatus } = useQuery<PlaidStatusResponse>(
@@ -194,6 +234,7 @@ export function BankFeedContent() {
 
   // Sort handler
   const handleSort = useCallback((field: SortField) => {
+    setActiveViewId(null);
     if (field === sortField) {
       setSortDir((prev) => prev === 'asc' ? 'desc' : 'asc');
     } else {
@@ -416,19 +457,21 @@ export function BankFeedContent() {
   }, []);
 
   const toggleAll = useCallback(() => {
-    if (selected.size === transactions.length && transactions.length > 0) {
+    if (selected.size === visibleTransactions.length && visibleTransactions.length > 0) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(transactions.map((t) => t.id)));
+      setSelected(new Set(visibleTransactions.map((t) => t.id)));
     }
-  }, [selected.size, transactions]);
+  }, [selected.size, visibleTransactions]);
 
-  const selectHighConfidence = useCallback(() => {
-    const highConf = transactions
-      .filter((t) => (t.ai_confidence ?? 0) >= 0.9 && (t.final_account ?? t.ai_account))
-      .map((t) => t.id);
-    setSelected(new Set(highConf));
-  }, [transactions]);
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+
+  // Select every visible row in a confidence band (High/Med/Low). Runs on the
+  // vendor-scoped set so you can grab a band without first switching the band
+  // filter. Selection is neutral — approval is still gated per-row on approve.
+  const selectByBand = useCallback((band: ConfidenceBand) => {
+    setSelected(new Set(idsInBand(vendorScoped, band)));
+  }, [vendorScoped]);
 
   const selectByVendor = useCallback((vendorName: string) => {
     const ids = transactions
@@ -463,19 +506,68 @@ export function BankFeedContent() {
     refetch();
   }, [refetch]);
 
-  // Reset focus when data changes
+  // --- Saved views (local, view-only) ---
+  const handleApplyView = useCallback((v: SavedView) => {
+    setActiveTab(v.status);
+    setConfidenceBand(v.band);
+    setVendorFilter(v.vendor);
+    setSearch(v.search);
+    setSortField(v.sortField);
+    setSortDir(v.sortDir);
+    setActiveViewId(v.id);
+  }, []);
+
+  const handleSaveView = useCallback((name: string) => {
+    const v = saveView(name, {
+      status: activeTab,
+      band: confidenceBand,
+      vendor: vendorFilter,
+      search,
+      sortField,
+      sortDir,
+    });
+    if (v) {
+      setActiveViewId(v.id);
+      addToast('success', `Saved view "${v.name}"`);
+    }
+  }, [saveView, activeTab, confidenceBand, vendorFilter, search, sortField, sortDir]);
+
+  const handleDeleteView = useCallback((id: string) => {
+    deleteView(id);
+    setActiveViewId((cur) => (cur === id ? null : cur));
+  }, [deleteView]);
+
+  // Manual filter changes detach from the applied saved view.
+  const handleTabChange = useCallback((t: string) => {
+    setActiveTab(t);
+    setActiveViewId(null);
+  }, []);
+  const handleSearchChange = useCallback((v: string) => {
+    setSearch(v);
+    setActiveViewId(null);
+  }, []);
+  const handleBandChange = useCallback((b: ConfidenceBandFilter) => {
+    setConfidenceBand(b);
+    setActiveViewId(null);
+  }, []);
+  const handleVendorFilterChange = useCallback((v: string | null) => {
+    setVendorFilter(v);
+    setActiveViewId(null);
+  }, []);
+
+  // Reset focus when the visible slice changes
   useEffect(() => {
     setFocusedIndex(-1);
-  }, [activeTab, debouncedSearch]);
+  }, [activeTab, debouncedSearch, confidenceBand, vendorFilter]);
 
   // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (editingTxn || flaggingTxn) return;
+      if (editingTxn || flaggingTxn || explainingTxn) return;
 
-      const len = transactions.length;
+      const len = visibleTransactions.length;
       if (len === 0) return;
 
       switch (e.key) {
@@ -492,28 +584,28 @@ export function BankFeedContent() {
         case 'a': {
           if (focusedIndex >= 0 && focusedIndex < len) {
             e.preventDefault();
-            handleApprove(transactions[focusedIndex]);
+            handleApprove(visibleTransactions[focusedIndex]);
           }
           break;
         }
         case 'e': {
           if (focusedIndex >= 0 && focusedIndex < len) {
             e.preventDefault();
-            handleEdit(transactions[focusedIndex]);
+            handleEdit(visibleTransactions[focusedIndex]);
           }
           break;
         }
         case 'f': {
           if (focusedIndex >= 0 && focusedIndex < len) {
             e.preventDefault();
-            handleFlag(transactions[focusedIndex]);
+            handleFlag(visibleTransactions[focusedIndex]);
           }
           break;
         }
         case ' ': {
           if (focusedIndex >= 0 && focusedIndex < len) {
             e.preventDefault();
-            toggleSelect(transactions[focusedIndex].id);
+            toggleSelect(visibleTransactions[focusedIndex].id);
           }
           break;
         }
@@ -526,13 +618,13 @@ export function BankFeedContent() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [transactions, focusedIndex, handleApprove, handleEdit, handleFlag, toggleSelect, editingTxn, flaggingTxn]);
+  }, [visibleTransactions, focusedIndex, handleApprove, handleEdit, handleFlag, toggleSelect, editingTxn, flaggingTxn, explainingTxn]);
 
-  // Reset selection when location changes
+  // Reset selection when the location or refinement lens changes
   useEffect(() => {
     setSelected(new Set());
     setFocusedIndex(-1);
-  }, [selectedLocationId]);
+  }, [selectedLocationId, confidenceBand, vendorFilter]);
 
   return (
     <>
@@ -581,10 +673,23 @@ export function BankFeedContent() {
       )}
       <BankFeedFilters
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={handleSearchChange}
         counts={data?.counts ?? null}
+      />
+      <BankFeedRefineBar
+        band={confidenceBand}
+        onBandChange={handleBandChange}
+        bandCounts={bandCounts}
+        vendor={vendorFilter}
+        onVendorChange={handleVendorFilterChange}
+        vendors={vendorOptions}
+        views={views}
+        activeViewId={activeViewId}
+        onApplyView={handleApplyView}
+        onSaveView={handleSaveView}
+        onDeleteView={handleDeleteView}
       />
       {duplicates && duplicates.group_count > 0 && !dupBannerDismissed && (
         <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3">
@@ -616,7 +721,7 @@ export function BankFeedContent() {
       )}
       <BankFeedMetricsStrip metrics={data?.metrics ?? null} isLoading={isLoading} />
       <BankFeedList
-        transactions={transactions}
+        transactions={visibleTransactions}
         isLoading={isLoading}
         error={error}
         onApprove={handleApprove}
@@ -628,9 +733,12 @@ export function BankFeedContent() {
         selected={selected}
         onToggleSelect={toggleSelect}
         onToggleAll={toggleAll}
-        onSelectHighConfidence={selectHighConfidence}
+        onSelectByBand={selectByBand}
+        onClearSelection={clearSelection}
         onSelectByVendor={selectByVendor}
         onEdit={handleEdit}
+        onExplainConfidence={setExplainingTxn}
+        bandCounts={bandCounts}
         sortField={sortField}
         sortDir={sortDir}
         onSort={handleSort}
@@ -643,6 +751,12 @@ export function BankFeedContent() {
           locationId={selectedLocationId}
           onClose={handleEditClose}
           onSave={handleEditSave}
+        />
+      )}
+      {explainingTxn && (
+        <ConfidenceExplainer
+          transaction={explainingTxn}
+          onClose={() => setExplainingTxn(null)}
         />
       )}
       {/* Flag Dialog */}

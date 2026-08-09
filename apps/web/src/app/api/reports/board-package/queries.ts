@@ -20,6 +20,7 @@ import type {
   CashFlowPayload,
   AgingPayload,
   DebtPayload,
+  TrendPoint,
 } from '@/lib/reports/board-package';
 
 export interface PeriodScope {
@@ -514,4 +515,103 @@ export async function fetchDebt(supabase: SupabaseClient, locationIds: string[])
       weightedAvgRate: Math.round(weightedRate * 100) / 100,
     },
   };
+}
+
+// ── Trend series (multi-period sparkline data) ─────────────────────────────────
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+function lastDom(y: number, m: number): number {
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+/**
+ * Ending cash as-of each of `asOfDates`, computed in ONE query: pull all POSTED
+ * cash-account lines (with their entry date) up to the latest date, then take a
+ * cumulative debit−credit balance per as-of. Cash accounts are resolved BY ROLE
+ * plus the `is_bank_account` flag — never by number range.
+ */
+async function fetchCashAsOfSeries(
+  supabase: SupabaseClient,
+  orgId: string,
+  asOfDates: string[],
+  locationIds: string[],
+): Promise<number[]> {
+  if (asOfDates.length === 0) return [];
+  const maxDate = asOfDates.reduce((a, b) => (a > b ? a : b));
+
+  const { data: accts } = await supabase.from('accounts').select('id, is_bank_account');
+  const cashIds = new Set<string>();
+  for (const a of accts ?? []) if (a.is_bank_account) cashIds.add(a.id as string);
+  if (orgId) for (const id of await resolveRoleIds(supabase, orgId, ['CASH_ON_HAND', 'UNDEPOSITED_FUNDS', 'OPERATING_BANK'])) cashIds.add(id);
+  if (cashIds.size === 0) return asOfDates.map(() => 0);
+
+  const q = applyLoc(
+    supabase
+      .from('gl_entry_lines')
+      .select('debit_cents, credit_cents, gl_entries!inner(entry_date, status)')
+      .eq('gl_entries.status', 'POSTED')
+      .lte('gl_entries.entry_date', maxDate)
+      .in('account_id', Array.from(cashIds)),
+    locationIds,
+  );
+  const { data: lines } = await q;
+  const rows = (lines ?? []) as unknown as Array<{ debit_cents: number; credit_cents: number; gl_entries: { entry_date: string } }>;
+
+  return asOfDates.map((asOf) => {
+    let bal = 0;
+    for (const l of rows) {
+      if (l.gl_entries.entry_date <= asOf) bal += Number(l.debit_cents ?? 0) - Number(l.credit_cents ?? 0);
+    }
+    return bal;
+  });
+}
+
+/**
+ * Trailing whole-month P&L + ending-cash series ending in `endDate`'s month.
+ * Powers the board package's KPI trend strip. Deterministic and RLS-scoped:
+ * revenue / gross profit / margin / net income come from the SAME income-statement
+ * aggregation the statements use (basis-aware); ending cash from the ledger.
+ */
+export async function fetchTrendSeries(
+  supabase: SupabaseClient,
+  orgId: string,
+  scope: { endDate: string; locationIds: string[]; basis: 'accrual' | 'cash'; periods: number },
+): Promise<TrendPoint[]> {
+  const periods = Math.max(1, Math.min(24, scope.periods));
+  const [ey, em] = scope.endDate.split('-').map(Number);
+  if (!ey || !em) return [];
+
+  const windows: { start: string; end: string; label: string }[] = [];
+  for (let i = periods - 1; i >= 0; i--) {
+    const idx = ey * 12 + (em - 1) - i;
+    const y = Math.floor(idx / 12);
+    const m = (idx % 12) + 1;
+    windows.push({
+      start: `${y}-${pad2(m)}-01`,
+      end: `${y}-${pad2(m)}-${pad2(lastDom(y, m))}`,
+      label: `${MONTH_ABBR[m - 1]} ${String(y).slice(2)}`,
+    });
+  }
+
+  const [isResults, cashSeries] = await Promise.all([
+    Promise.all(
+      windows.map((w) =>
+        fetchIncomeStatement(supabase, { startDate: w.start, endDate: w.end, locationIds: scope.locationIds, basis: scope.basis }),
+      ),
+    ),
+    fetchCashAsOfSeries(supabase, orgId, windows.map((w) => w.end), scope.locationIds),
+  ]);
+
+  return windows.map((w, i) => ({
+    periodLabel: w.label,
+    periodStart: w.start,
+    periodEnd: w.end,
+    revenueCents: isResults[i].summary.revenueCents,
+    grossProfitCents: isResults[i].summary.grossProfitCents,
+    grossMarginPct: isResults[i].summary.grossMarginPct,
+    netIncomeCents: isResults[i].summary.netIncomeCents,
+    endingCashCents: cashSeries[i] ?? 0,
+  }));
 }

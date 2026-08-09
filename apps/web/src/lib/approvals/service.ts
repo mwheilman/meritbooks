@@ -552,6 +552,40 @@ export async function resolveActorRole(
   }
 }
 
+/**
+ * Count ACTIVE members per canonical Books role for an org — feeds the settings-side
+ * coverage audit (a step whose required authority no active member could satisfy is a
+ * dead step). READ-ONLY and best-effort: returns {} on any error.
+ *
+ * ADMIN CLIENT REQUIRED for the same reason as resolveActorRole: the `core` identity
+ * spine (core.memberships) is RLS-shielded from the user client. The single query
+ * carries an explicit, VERIFIED org_id filter and status='active', so tenant isolation
+ * holds. Membership roles are normalized onto the Books vocabulary before counting, so
+ * the keys line up with the RBAC catalog the analysis reasons over; a membership whose
+ * role doesn't normalize is skipped (it grants no known authority).
+ */
+export async function getActiveRoleCounts(orgId: string): Promise<Record<string, number>> {
+  const admin = createAdminSupabase();
+  try {
+    const { data, error } = await admin
+      .schema('core')
+      .from('memberships')
+      .select('role')
+      .eq('org_id', orgId)
+      .eq('status', 'active');
+    if (error || !data) return {};
+    const counts: Record<string, number> = {};
+    for (const row of data as Array<{ role: string | null }>) {
+      const role = normalizeMembershipRole(row.role ?? undefined);
+      if (!role) continue;
+      counts[role] = (counts[role] ?? 0) + 1;
+    }
+    return counts;
+  } catch {
+    return {};
+  }
+}
+
 export interface ActResult {
   request: RequestView;
   /** Set when the chain completed with full approval. */

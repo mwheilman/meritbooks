@@ -79,6 +79,47 @@ function kpiModel(pkg: BoardPackage): StatementModel {
   };
 }
 
+function trendModel(pkg: BoardPackage): StatementModel {
+  const periods = pkg.trend.periods;
+  const rows: StmtRow[] = pkg.trend.metrics.map((m) => ({
+    kind: 'account' as const,
+    label: m.label,
+    values: m.points.map((pt) => pt.valueText),
+  }));
+  return {
+    title: 'KPI Trend',
+    entityLabel: pkg.meta.entityLabel,
+    periodLabel: periods.length ? `${periods[0]} – ${periods[periods.length - 1]}` : pkg.meta.periodLabel,
+    generatedAt: pkg.meta.generatedAt,
+    accent: pkg.meta.accent,
+    columns: periods.length
+      ? periods.map((p, i) => ({ key: `p${i}`, label: p }))
+      : [{ key: 'value', label: 'Value' }],
+    rows,
+  };
+}
+
+function mdnaModel(pkg: BoardPackage): StatementModel {
+  const rows: StmtRow[] = [];
+  for (const b of pkg.mdna.blocks) {
+    rows.push({ kind: 'section', label: b.heading, values: [null] });
+    for (const p of b.paragraphs) rows.push({ kind: 'account', label: p, values: [null], indent: 1 });
+    for (const bl of b.bullets) rows.push({ kind: 'account', label: `• ${bl}`, values: [null], indent: 1 });
+    rows.push({ kind: 'spacer', label: '', values: [null] });
+  }
+  if (pkg.mdna.label) rows.push({ kind: 'note', label: pkg.mdna.label, values: [null] });
+  return {
+    title: 'MD&A',
+    entityLabel: pkg.meta.entityLabel,
+    periodLabel: pkg.meta.periodLabel,
+    basisLabel: pkg.meta.basisLabel || undefined,
+    generatedAt: pkg.meta.generatedAt,
+    accent: pkg.meta.accent,
+    columns: [{ key: 'detail', label: 'Detail' }],
+    rows,
+  };
+}
+
 function notesModel(pkg: BoardPackage): StatementModel {
   const rows: StmtRow[] = [];
   for (const n of pkg.notes.notes) {
@@ -123,6 +164,8 @@ export async function POST(req: Request) {
 
   const models: StatementModel[] = [
     kpiModel(pkg),
+    ...(pkg.trend.metrics.length > 0 ? [trendModel(pkg)] : []),
+    ...(pkg.mdna.blocks.length > 0 ? [mdnaModel(pkg)] : []),
     buildIncomeStatement(pkg.statements.incomeStatement, meta(pkg, 'Statement of Operations')),
     buildBalanceSheet(pkg.statements.balanceSheet, meta(pkg, 'Balance Sheet')),
     buildCashFlow(pkg.statements.cashFlow, meta(pkg, 'Statement of Cash Flows')),
