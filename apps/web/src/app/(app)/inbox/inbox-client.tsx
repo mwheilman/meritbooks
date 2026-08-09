@@ -1,10 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
-import { useQuery } from '@/hooks';
 import {
   Loader2,
   AlertCircle,
@@ -16,44 +15,21 @@ import {
   CalendarClock,
   Sparkles,
   FileText,
-  Inbox as InboxIcon,
+  Clock,
+  BellOff,
+  Undo2,
+  ArrowUpDown,
   type LucideIcon,
 } from 'lucide-react';
-
-// ── Types (mirror /api/inbox) ──────────────────────────────────────────────────
-
-type InboxItemType = 'APPROVAL' | 'POLICY_BLOCK' | 'ALERT' | 'EXCEPTION' | 'DRAFT';
-export type InboxGroupKey = 'APPROVALS' | 'POLICY_BLOCKS' | 'ALERTS' | 'EXCEPTIONS' | 'DRAFTS';
-type InboxSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-
-interface InboxItem {
-  id: string;
-  type: InboxItemType;
-  group: InboxGroupKey;
-  title: string;
-  subtitle: string | null;
-  dueOrAge: string;
-  severity: InboxSeverity;
-  actionHref: string;
-  actionLabel: string;
-  amountCents: number | null;
-  entity: { table: string; id: string };
-  sortValue: number;
-}
-
-interface InboxGroup {
-  key: InboxGroupKey;
-  items: InboxItem[];
-}
-
-interface InboxResponse {
-  asOf: string;
-  canApproveMoney: boolean;
-  items: InboxItem[];
-  groups: InboxGroup[];
-  counts: { total: number; byType: Record<InboxItemType, number> };
-  degraded: string[];
-}
+import type {
+  InboxItem,
+  InboxGroupKey,
+  InboxSeverity,
+  InboxResponse,
+} from './inbox-types';
+import { SEVERITY_RANK } from './inbox-types';
+import { useListKeynav } from './use-list-keynav';
+import { SNOOZE_PRESETS, canSnooze, type UseInboxSnooze } from './use-inbox-snooze';
 
 // ── Presentation ────────────────────────────────────────────────────────────────
 
@@ -93,81 +69,196 @@ const GROUP_META: Record<
   },
 };
 
-const GROUP_ORDER: InboxGroupKey[] = ['APPROVALS', 'POLICY_BLOCKS', 'ALERTS', 'EXCEPTIONS', 'DRAFTS'];
-
-const TYPE_LABEL: Record<InboxItemType, string> = {
-  APPROVAL: 'Approvals',
-  POLICY_BLOCK: 'Policy blocks',
-  ALERT: 'Alerts',
-  EXCEPTION: 'Exceptions',
-  DRAFT: 'Drafts',
+const SEVERITY_META: Record<InboxSeverity, { dot: string; label: string }> = {
+  CRITICAL: { dot: 'bg-red-500', label: 'Critical' },
+  HIGH: { dot: 'bg-amber-500', label: 'High' },
+  MEDIUM: { dot: 'bg-sky-500', label: 'Medium' },
+  LOW: { dot: 'bg-slate-500', label: 'Low' },
 };
 
-const SEVERITY_META: Record<InboxSeverity, { dot: string; label: string; text: string }> = {
-  CRITICAL: { dot: 'bg-red-500', label: 'Critical', text: 'text-red-400' },
-  HIGH: { dot: 'bg-amber-500', label: 'High', text: 'text-amber-400' },
-  MEDIUM: { dot: 'bg-sky-500', label: 'Medium', text: 'text-sky-400' },
-  LOW: { dot: 'bg-slate-500', label: 'Low', text: 'text-slate-400' },
-};
+const SEVERITY_ORDER: InboxSeverity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 
-const HORIZON_OPTIONS = [30, 60, 90];
+type SortKey = 'urgency' | 'amount' | 'oldest';
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'urgency', label: 'Most urgent' },
+  { key: 'amount', label: 'Highest amount' },
+  { key: 'oldest', label: 'Oldest first' },
+];
 
 // ── Row ───────────────────────────────────────────────────────────────────────
 
-function InboxRow({ item }: { item: InboxItem }) {
+function InboxRow({
+  item,
+  active,
+  rowRef,
+  onOpen,
+  snooze,
+}: {
+  item: InboxItem;
+  active: boolean;
+  rowRef: (el: HTMLElement | null) => void;
+  onOpen: () => void;
+  snooze: UseInboxSnooze;
+}) {
   const sev = SEVERITY_META[item.severity];
   const overdue = item.dueOrAge.includes('overdue');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const snoozeable = canSnooze(item.severity);
 
   return (
-    <Link
-      href={item.actionHref}
-      className="group flex items-center gap-4 rounded-lg border border-slate-800 bg-surface-900 px-4 py-3 transition hover:border-slate-700 hover:bg-slate-800/40"
+    <div
+      ref={rowRef}
+      data-active={active}
+      className={clsx(
+        'group relative flex items-center gap-4 rounded-lg border px-4 py-3 transition',
+        active
+          ? 'border-emerald-500/40 bg-slate-800/50 ring-1 ring-inset ring-emerald-500/20'
+          : 'border-slate-800 bg-surface-900 hover:border-slate-700 hover:bg-slate-800/40',
+      )}
     >
-      <span
-        className={clsx('h-2 w-2 flex-none rounded-full', sev.dot)}
-        title={`${sev.label} priority`}
-      />
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 flex-1 items-center gap-4 text-left focus:outline-none"
+      >
+        <span
+          className={clsx('h-2 w-2 flex-none rounded-full', sev.dot)}
+          title={`${sev.label} priority`}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-white">{item.title}</p>
+          {item.subtitle && (
+            <p className="mt-0.5 truncate text-xs text-slate-500">{item.subtitle}</p>
+          )}
+        </div>
+        <div className="flex-none text-right">
+          {item.amountCents !== null && (
+            <p className="font-mono text-sm text-slate-200">{formatMoney(item.amountCents)}</p>
+          )}
+          <p className={clsx('text-xs', overdue ? 'text-red-400' : 'text-slate-500')}>
+            {item.dueOrAge}
+          </p>
+        </div>
+      </button>
 
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-white">{item.title}</p>
-        {item.subtitle && <p className="mt-0.5 truncate text-xs text-slate-500">{item.subtitle}</p>}
-      </div>
+      {/* Snooze — LOCAL, view-only; never available for CRITICAL items. */}
+      {snoozeable && (
+        <div className="relative flex-none">
+          <button
+            type="button"
+            title="Snooze — hide from your view for a while (nothing is changed)"
+            onClick={() => setMenuOpen((o) => !o)}
+            className="rounded-md border border-slate-700 bg-slate-800/40 p-1.5 text-slate-400 opacity-0 transition hover:border-slate-600 hover:text-slate-200 focus:opacity-100 group-hover:opacity-100"
+          >
+            <Clock size={14} />
+          </button>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 top-full z-20 mt-1 w-32 overflow-hidden rounded-lg border border-slate-700 bg-surface-900 shadow-xl">
+                <p className="px-3 py-1.5 text-2xs uppercase tracking-wide text-slate-500">
+                  Snooze for
+                </p>
+                {SNOOZE_PRESETS.map((p) => (
+                  <button
+                    key={p.label}
+                    onClick={() => {
+                      snooze.snooze(item.id, p.ms);
+                      setMenuOpen(false);
+                    }}
+                    className="block w-full px-3 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800/60 hover:text-white"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
-      <div className="flex-none text-right">
-        {item.amountCents !== null && (
-          <p className="font-mono text-sm text-slate-200">{formatMoney(item.amountCents)}</p>
-        )}
-        <p className={clsx('text-xs', overdue ? 'text-red-400' : 'text-slate-500')}>{item.dueOrAge}</p>
-      </div>
-
-      <span className="flex w-24 flex-none items-center justify-end gap-1.5">
+      <span className="flex flex-none items-center gap-1.5">
         <span className="rounded-md border border-slate-700 bg-slate-800/40 px-2 py-1 text-xs font-medium text-slate-300 transition group-hover:border-emerald-500/40 group-hover:text-emerald-400">
           {item.actionLabel}
         </span>
         <ChevronRight size={16} className="text-slate-600 transition group-hover:text-slate-400" />
       </span>
-    </Link>
-  );
-}
-
-// ── Metric card ────────────────────────────────────────────────────────────────
-
-function Metric({ label, value, tone }: { label: string; value: string; tone?: string }) {
-  return (
-    <div className="rounded-xl border border-slate-800 bg-surface-900 px-4 py-3">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className={clsx('mt-1 font-mono text-lg font-semibold', tone ?? 'text-white')}>{value}</p>
     </div>
   );
 }
 
 // ── Screen ─────────────────────────────────────────────────────────────────────
 
-export function InboxClient({ only }: { only?: InboxGroupKey[] } = {}) {
-  const [horizon, setHorizon] = useState(30);
+export interface InboxClientProps {
+  /** Which groups this tab renders. */
+  only: InboxGroupKey[];
+  data: InboxResponse | null;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+  snooze: UseInboxSnooze;
+}
 
-  const params = useMemo<Record<string, string>>(() => ({ alert_horizon: String(horizon) }), [horizon]);
-  const { data, error, isLoading, refetch } = useQuery<InboxResponse>('/api/inbox', params);
+export function InboxClient({ only, data, isLoading, error, refetch, snooze }: InboxClientProps) {
+  const router = useRouter();
+  const [sevFilter, setSevFilter] = useState<InboxSeverity | 'all'>('all');
+  const [groupFilter, setGroupFilter] = useState<InboxGroupKey | 'all'>('all');
+  const [sort, setSort] = useState<SortKey>('urgency');
+  const [showSnoozed, setShowSnoozed] = useState(false);
+
+  // Items for this tab, in global rank order (server already ranked data.items).
+  const tabItems = useMemo(
+    () => (data?.items ?? []).filter((i) => only.includes(i.group)),
+    [data, only],
+  );
+
+  // Available filter facets (only show chips that exist in this tab).
+  const severitiesPresent = useMemo(() => {
+    const set = new Set(tabItems.map((i) => i.severity));
+    return SEVERITY_ORDER.filter((s) => set.has(s));
+  }, [tabItems]);
+
+  const groupsPresent = useMemo(() => {
+    const set = new Set(tabItems.map((i) => i.group));
+    return only.filter((g) => set.has(g));
+  }, [tabItems, only]);
+
+  // Partition by snooze first so the count/toggle is honest.
+  const { active, snoozed } = useMemo(() => {
+    const a: InboxItem[] = [];
+    const s: InboxItem[] = [];
+    for (const it of tabItems) (snooze.isSnoozed(it.id) ? s : a).push(it);
+    return { active: a, snoozed: s };
+  }, [tabItems, snooze]);
+
+  const visible = useMemo(() => {
+    const base = showSnoozed ? snoozed : active;
+    const filtered = base.filter((i) => {
+      if (sevFilter !== 'all' && i.severity !== sevFilter) return false;
+      if (groupFilter !== 'all' && i.group !== groupFilter) return false;
+      return true;
+    });
+    const sorted = [...filtered];
+    if (sort === 'amount') {
+      sorted.sort((a, b) => (b.amountCents ?? -1) - (a.amountCents ?? -1));
+    } else if (sort === 'oldest') {
+      // sortValue ascending = oldest / most-overdue first (see collect.ts).
+      sorted.sort((a, b) => a.sortValue - b.sortValue || SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
+    }
+    // 'urgency' keeps the server's global rank order.
+    return sorted;
+  }, [active, snoozed, showSnoozed, sevFilter, groupFilter, sort]);
+
+  const keynav = useListKeynav({
+    count: visible.length,
+    enabled: !isLoading && !error,
+    onOpen: (i) => {
+      const item = visible[i];
+      if (item) router.push(item.actionHref);
+    },
+  });
+
+  // ── States ───────────────────────────────────────────────────────────────────
 
   if (isLoading && !data) {
     return (
@@ -182,7 +273,7 @@ export function InboxClient({ only }: { only?: InboxGroupKey[] } = {}) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border border-red-900/40 bg-red-950/20 py-16 text-center">
         <AlertCircle className="mb-3 text-red-400" size={28} />
-        <p className="text-sm font-medium text-red-300">Could not load your action inbox</p>
+        <p className="text-sm font-medium text-red-300">Could not load this tab</p>
         <p className="mt-1 max-w-md text-xs text-slate-500">{error}</p>
         <button onClick={() => refetch()} className="btn-secondary btn-sm mt-4">
           <RefreshCw size={14} className="mr-1.5" />
@@ -192,75 +283,10 @@ export function InboxClient({ only }: { only?: InboxGroupKey[] } = {}) {
     );
   }
 
-  const counts = data?.counts;
-  const groups = data?.groups ?? [];
-  const byType = counts?.byType;
-
-  // When mounted inside a tabbed shell, restrict which groups render to the
-  // active tab's groups. Absent `only`, show everything (standalone behavior).
-  const orderToShow = only ? GROUP_ORDER.filter((k) => only.includes(k)) : GROUP_ORDER;
-  const visibleItemCount = orderToShow.reduce((n, key) => {
-    const g = groups.find((gr) => gr.key === key);
-    return n + (g?.items.length ?? 0);
-  }, 0);
+  const nothingInTab = tabItems.length === 0;
 
   return (
-    <div className="space-y-6">
-      {/* Metrics */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Metric
-          label="Needs you"
-          value={String(counts?.total ?? 0)}
-          tone={(counts?.total ?? 0) > 0 ? 'text-white' : 'text-emerald-400'}
-        />
-        <Metric
-          label="Approvals"
-          value={String(byType?.APPROVAL ?? 0)}
-          tone={(byType?.APPROVAL ?? 0) > 0 ? 'text-emerald-400' : 'text-white'}
-        />
-        <Metric
-          label="Policy blocks"
-          value={String(byType?.POLICY_BLOCK ?? 0)}
-          tone={(byType?.POLICY_BLOCK ?? 0) > 0 ? 'text-red-400' : 'text-white'}
-        />
-        <Metric
-          label="Alerts"
-          value={String(byType?.ALERT ?? 0)}
-          tone={(byType?.ALERT ?? 0) > 0 ? 'text-amber-400' : 'text-white'}
-        />
-        <Metric label="Exceptions" value={String(byType?.EXCEPTION ?? 0)} tone="text-indigo-300" />
-        <Metric label="Drafts" value={String(byType?.DRAFT ?? 0)} tone="text-slate-200" />
-      </div>
-
-      {/* Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-slate-500">
-          {data?.canApproveMoney
-            ? 'You have money-movement approval authority — approvals you can clear are flagged critical.'
-            : 'Approvals awaiting another approver are shown for visibility.'}
-        </p>
-        <div className="flex items-center gap-2">
-          <label htmlFor="inbox-horizon" className="text-xs text-slate-500">
-            Alerts within
-          </label>
-          <select
-            id="inbox-horizon"
-            value={horizon}
-            onChange={(e) => setHorizon(Number(e.target.value))}
-            className="rounded-lg border border-slate-800 bg-surface-900 px-2.5 py-1.5 text-xs text-slate-200 focus:border-emerald-500/50 focus:outline-none"
-          >
-            {HORIZON_OPTIONS.map((d) => (
-              <option key={d} value={d}>
-                {d} days
-              </option>
-            ))}
-          </select>
-          <button onClick={() => refetch()} className="btn-secondary btn-sm" title="Refresh">
-            <RefreshCw size={14} className={clsx(isLoading && 'animate-spin')} />
-          </button>
-        </div>
-      </div>
-
+    <div className="space-y-5">
       {/* Degraded-source note */}
       {data && data.degraded.length > 0 && (
         <p className="rounded-lg border border-amber-900/30 bg-amber-950/10 px-3 py-2 text-xs text-amber-400/80">
@@ -269,62 +295,189 @@ export function InboxClient({ only }: { only?: InboxGroupKey[] } = {}) {
         </p>
       )}
 
-      {/* Empty state */}
-      {counts && counts.total === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-slate-800 bg-surface-900 py-20 text-center">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10">
-            <CheckCircle2 size={24} className="text-emerald-400" />
-          </div>
-          <h3 className="text-sm font-medium text-slate-200">You&apos;re all caught up</h3>
-          <p className="mt-1 max-w-sm text-sm text-slate-500">
-            Nothing needs you right now. New approvals, policy blocks, alerts, AI proposals, and
-            drafts will land here — ranked by what&apos;s most urgent.
-          </p>
-        </div>
-      ) : only && visibleItemCount === 0 ? (
+      {nothingInTab ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-slate-800 bg-surface-900 py-16 text-center">
           <CheckCircle2 size={22} className="mb-2 text-emerald-400" />
           <p className="text-sm text-slate-300">Nothing in this tab right now.</p>
           <p className="mt-1 text-xs text-slate-500">
-            You still have items in other tabs — the counts above show the full picture.
+            New items will land here, ranked by what&apos;s most urgent. Other tabs may still need
+            you — the counts above show the full picture.
           </p>
         </div>
       ) : (
-        <div className="space-y-8">
-          {orderToShow.map((key) => {
-            const group = groups.find((g) => g.key === key);
-            if (!group || group.items.length === 0) return null;
-            const meta = GROUP_META[key];
-            const Icon = meta.icon;
-            return (
-              <section key={key}>
-                <div className="mb-3 flex items-center gap-2">
-                  <Icon size={16} className={meta.accent} />
-                  <h2 className="text-sm font-semibold text-slate-200">{meta.title}</h2>
-                  <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-400">
-                    {group.items.length}
-                  </span>
-                  <span className="text-xs text-slate-600">· {meta.hint}</span>
-                </div>
-                <div className="space-y-2">
-                  {group.items.map((item) => (
-                    <InboxRow key={item.id} item={item} />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      )}
+        <>
+          {/* Controls: severity + module filters, sort, snoozed toggle */}
+          <div className="flex flex-wrap items-center gap-2">
+            {severitiesPresent.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <FilterChip active={sevFilter === 'all'} onClick={() => setSevFilter('all')}>
+                  All
+                </FilterChip>
+                {severitiesPresent.map((s) => (
+                  <FilterChip key={s} active={sevFilter === s} onClick={() => setSevFilter(s)}>
+                    <span className={clsx('h-1.5 w-1.5 rounded-full', SEVERITY_META[s].dot)} />
+                    {SEVERITY_META[s].label}
+                  </FilterChip>
+                ))}
+              </div>
+            )}
 
-      {/* Footnote — reinforces the read-only, aggregate nature */}
-      {counts && counts.total > 0 && (
-        <p className="flex items-center gap-1.5 pt-2 text-xs text-slate-600">
-          <InboxIcon size={12} />
-          {TYPE_LABEL.APPROVAL} and blocks are ranked first, then time-sensitive alerts, then AI
-          exceptions and drafts. This view is read-only — acting on an item opens its own screen.
-        </p>
+            {groupsPresent.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-2xs uppercase tracking-wide text-slate-600">Module</span>
+                <FilterChip active={groupFilter === 'all'} onClick={() => setGroupFilter('all')}>
+                  All
+                </FilterChip>
+                {groupsPresent.map((g) => (
+                  <FilterChip key={g} active={groupFilter === g} onClick={() => setGroupFilter(g)}>
+                    {GROUP_META[g].title}
+                  </FilterChip>
+                ))}
+              </div>
+            )}
+
+            <div className="ml-auto flex items-center gap-2">
+              {snoozed.length > 0 && (
+                <button
+                  onClick={() => setShowSnoozed((s) => !s)}
+                  className={clsx(
+                    'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition',
+                    showSnoozed
+                      ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
+                      : 'border-slate-800 bg-slate-800/30 text-slate-400 hover:text-slate-200',
+                  )}
+                >
+                  <BellOff size={13} />
+                  Snoozed
+                  <span className="rounded bg-slate-700/50 px-1.5 py-0.5 font-mono text-[10px]">
+                    {snoozed.length}
+                  </span>
+                </button>
+              )}
+              <label className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-surface-900 px-2.5 py-1.5 text-xs text-slate-300">
+                <ArrowUpDown size={13} className="text-slate-500" />
+                <select
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as SortKey)}
+                  className="bg-transparent text-xs text-slate-200 focus:outline-none"
+                >
+                  {SORT_OPTIONS.map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+
+          {showSnoozed && (
+            <p className="rounded-lg border border-indigo-900/30 bg-indigo-950/10 px-3 py-2 text-xs text-indigo-300/80">
+              Showing snoozed items. These are hidden from your main view (and still counted in the
+              header bell) until they wake. Wake one to bring it back.
+            </p>
+          )}
+
+          {visible.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-slate-800 bg-surface-900 py-12 text-center">
+              <CheckCircle2 size={20} className="mb-2 text-emerald-400" />
+              <p className="text-sm text-slate-300">
+                {showSnoozed ? 'No snoozed items in this tab.' : 'No items match this filter.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {visible.map((item, i) => {
+                const rp = keynav.rowProps(i);
+                return (
+                  <div key={item.id} className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      {showSnoozed ? (
+                        <SnoozedRow item={item} onWake={() => snooze.unsnooze(item.id)} />
+                      ) : (
+                        <InboxRow
+                          item={item}
+                          active={rp['data-active']}
+                          rowRef={rp.ref}
+                          onOpen={() => router.push(item.actionHref)}
+                          snooze={snooze}
+                        />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Keyboard + read-only hint */}
+          {!showSnoozed && visible.length > 0 && (
+            <p className="flex flex-wrap items-center gap-2 pt-1 text-2xs text-slate-600">
+              <Kbd>j</Kbd>
+              <Kbd>k</Kbd>
+              move
+              <span className="text-slate-700">·</span>
+              <Kbd>↵</Kbd>
+              open
+              <span className="text-slate-700">·</span>
+              This view is read-only — acting on an item opens its own screen.
+            </p>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+// ── Small building blocks ────────────────────────────────────────────────────────
+
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
+        active
+          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+          : 'border-slate-800 bg-slate-800/30 text-slate-400 hover:text-slate-200',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SnoozedRow({ item, onWake }: { item: InboxItem; onWake: () => void }) {
+  return (
+    <div className="flex items-center gap-4 rounded-lg border border-slate-800 bg-surface-900/60 px-4 py-3">
+      <BellOff size={14} className="flex-none text-indigo-400/70" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm text-slate-300">{item.title}</p>
+        {item.subtitle && <p className="mt-0.5 truncate text-xs text-slate-600">{item.subtitle}</p>}
+      </div>
+      <button
+        onClick={onWake}
+        className="inline-flex flex-none items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:border-emerald-500/40 hover:text-emerald-400"
+      >
+        <Undo2 size={13} />
+        Wake
+      </button>
+    </div>
+  );
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="rounded border border-slate-700 bg-slate-800/60 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+      {children}
+    </kbd>
   );
 }

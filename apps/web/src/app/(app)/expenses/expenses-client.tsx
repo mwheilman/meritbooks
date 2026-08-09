@@ -1,17 +1,23 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   Plus, Receipt, CreditCard, AlertTriangle, Check, X, Send, Wallet,
-  Loader2, Inbox, FileText, ChevronRight, Trash2, ShieldCheck,
+  Loader2, Inbox, FileText, ChevronRight, Trash2, ShieldCheck, ShieldAlert,
+  Clock, UserRound, ListChecks, Gavel,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useMutation, addToast } from '@/hooks';
+import { useMe } from '@/lib/hooks/use-me';
 import { StatusBadge, EmptyState, TableSkeleton, MetricCard } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField } from '@/components/detail-drawer';
+import {
+  summarizeViolations, agingLabel, agingTone,
+  type LineViolationsInput, type AgingTone,
+} from '@/lib/expenses/queue-summary';
 
-type Scope = 'mine' | 'queue';
+type Scope = 'mine' | 'queue' | 'batch';
 type Status = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REIMBURSED' | 'REJECTED';
 
 interface ReportRow {
@@ -23,7 +29,15 @@ interface ReportRow {
   card_cents: number;
   policy_flag_count: number;
   submitted_by: string | null;
+  submitted_at: string | null;
+  approved_at: string | null;
   created_at: string;
+  // Enriched (queue / batch scopes only)
+  employee_name?: string | null;
+  block_count?: number;
+  warn_count?: number;
+  info_count?: number;
+  aging_days?: number | null;
 }
 interface ListResponse {
   data: ReportRow[];
@@ -50,12 +64,25 @@ interface LineRow {
 interface DetailResponse {
   report: ReportRow & { employee_name: string | null; location_id: string | null };
   lines: LineRow[];
+  policy: {
+    active: { name: string; version: number } | null;
+    requiredApprovalTier: string | null;
+    blockCount: number;
+    warnCount: number;
+  } | null;
 }
 
 const TABS: { key: Scope; label: string; icon: typeof Receipt }[] = [
   { key: 'mine', label: 'My Reports', icon: FileText },
   { key: 'queue', label: 'Approver Queue', icon: Inbox },
+  { key: 'batch', label: 'Reimbursement Batch', icon: Wallet },
 ];
+
+const AGING_TONE_CLASS: Record<AgingTone, string> = {
+  fresh: 'text-slate-400',
+  aging: 'text-amber-400',
+  stale: 'text-red-400',
+};
 
 export function ExpensesClient() {
   const [scope, setScope] = useState<Scope>('mine');
@@ -79,12 +106,12 @@ export function ExpensesClient() {
 
   return (
     <div className="space-y-5">
-      {/* Metric strip */}
+      {/* Metric strip — stable across tabs (server returns org-wide status counts) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard label="Draft" value={String(counts.DRAFT ?? 0)} icon={FileText} />
         <MetricCard label="Awaiting approval" value={String(counts.SUBMITTED ?? 0)} icon={Inbox} />
-        <MetricCard label="Approved" value={String(counts.APPROVED ?? 0)} icon={Check} />
-        <MetricCard label="Reimbursed" value={String(counts.REIMBURSED ?? 0)} icon={Wallet} />
+        <MetricCard label="Ready to reimburse" value={String(counts.APPROVED ?? 0)} icon={Wallet} />
+        <MetricCard label="Reimbursed" value={String(counts.REIMBURSED ?? 0)} icon={Check} />
       </div>
 
       {/* Tabs + create */}
@@ -92,6 +119,8 @@ export function ExpensesClient() {
         <div className="inline-flex rounded-lg bg-slate-900 border border-slate-800 p-0.5">
           {TABS.map((t) => {
             const Icon = t.icon;
+            const badge =
+              t.key === 'queue' ? counts.SUBMITTED ?? 0 : t.key === 'batch' ? counts.APPROVED ?? 0 : 0;
             return (
               <button
                 key={t.key}
@@ -102,6 +131,14 @@ export function ExpensesClient() {
                 )}
               >
                 <Icon size={14} /> {t.label}
+                {badge > 0 && (
+                  <span className={clsx(
+                    'ml-0.5 inline-flex min-w-[18px] items-center justify-center rounded-full px-1 text-2xs font-semibold',
+                    scope === t.key ? 'bg-brand-500/20 text-brand-300' : 'bg-slate-700 text-slate-300',
+                  )}>
+                    {badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -116,46 +153,32 @@ export function ExpensesClient() {
         </div>
       </div>
 
-      {/* List */}
+      {/* Body */}
       {isLoading ? (
         <TableSkeleton />
       ) : error ? (
         <EmptyState icon={AlertTriangle} title="Couldn’t load expense reports" description={error} />
+      ) : scope === 'batch' ? (
+        <BatchView rows={rows} onOpen={setSelectedId} onChanged={bump} />
       ) : rows.length === 0 ? (
         <EmptyState
           icon={scope === 'queue' ? Inbox : Receipt}
           title={scope === 'queue' ? 'Nothing awaiting your approval' : 'No expense reports yet'}
           description={scope === 'queue'
-            ? 'Submitted reports from your team will appear here for review.'
+            ? 'Submitted reports from your team will appear here for review, with policy-violation badges and one-click approve/reject.'
             : 'Create a report from captured receipts, add out-of-pocket or card expenses, then submit for approval.'}
           action={scope === 'mine' ? { label: 'New report', onClick: () => setShowCreate(true) } : undefined}
         />
+      ) : scope === 'queue' ? (
+        <div className="card divide-y divide-slate-800/70">
+          {rows.map((r) => (
+            <QueueRow key={r.id} report={r} onOpen={() => setSelectedId(r.id)} onChanged={bump} />
+          ))}
+        </div>
       ) : (
         <div className="card divide-y divide-slate-800/70">
           {rows.map((r) => (
-            <button
-              key={r.id}
-              onClick={() => setSelectedId(r.id)}
-              className="w-full flex items-center gap-4 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-white truncate">{r.title ?? 'Expense report'}</span>
-                  {r.policy_flag_count > 0 && (
-                    <span className="inline-flex items-center gap-1 text-2xs text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
-                      <AlertTriangle size={10} /> {r.policy_flag_count}
-                    </span>
-                  )}
-                </div>
-                <p className="text-2xs text-slate-500 mt-0.5">
-                  {new Date(r.created_at).toLocaleDateString()} · Out-of-pocket {formatMoney(r.reimbursable_cents)}
-                  {r.card_cents > 0 ? ` · Card ${formatMoney(r.card_cents)}` : ''}
-                </p>
-              </div>
-              <span className="text-sm font-mono tabular-nums text-slate-200">{formatMoney(r.total_cents)}</span>
-              <StatusBadge status={r.status} />
-              <ChevronRight size={16} className="text-slate-600 shrink-0" />
-            </button>
+            <MineRow key={r.id} report={r} onOpen={() => setSelectedId(r.id)} />
           ))}
         </div>
       )}
@@ -179,6 +202,291 @@ export function ExpensesClient() {
 }
 
 // ---------------------------------------------------------------------------
+// List rows
+// ---------------------------------------------------------------------------
+
+function ViolationBadges({ block, warn, info }: { block?: number; warn?: number; info?: number }) {
+  const b = block ?? 0, w = warn ?? 0, i = info ?? 0;
+  if (b + w + i === 0) return null;
+  return (
+    <div className="flex items-center gap-1">
+      {b > 0 && (
+        <span className="inline-flex items-center gap-1 text-2xs text-red-300 bg-red-500/10 px-1.5 py-0.5 rounded" title="Blocking violations">
+          <ShieldAlert size={10} /> {b} block
+        </span>
+      )}
+      {w > 0 && (
+        <span className="inline-flex items-center gap-1 text-2xs text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded" title="Warnings">
+          <AlertTriangle size={10} /> {w} warn
+        </span>
+      )}
+      {b === 0 && w === 0 && i > 0 && (
+        <span className="inline-flex items-center gap-1 text-2xs text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded" title="Informational">
+          {i} note{i === 1 ? '' : 's'}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function MineRow({ report: r, onOpen }: { report: ReportRow; onOpen: () => void }) {
+  return (
+    <button
+      onClick={onOpen}
+      className="w-full flex items-center gap-4 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-white truncate">{r.title ?? 'Expense report'}</span>
+          {r.policy_flag_count > 0 && (
+            <span className="inline-flex items-center gap-1 text-2xs text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
+              <AlertTriangle size={10} /> {r.policy_flag_count}
+            </span>
+          )}
+        </div>
+        <p className="text-2xs text-slate-500 mt-0.5">
+          {new Date(r.created_at).toLocaleDateString()} · Out-of-pocket {formatMoney(r.reimbursable_cents)}
+          {r.card_cents > 0 ? ` · Card ${formatMoney(r.card_cents)}` : ''}
+        </p>
+      </div>
+      <span className="text-sm font-mono tabular-nums text-slate-200">{formatMoney(r.total_cents)}</span>
+      <StatusBadge status={r.status} />
+      <ChevronRight size={16} className="text-slate-600 shrink-0" />
+    </button>
+  );
+}
+
+function QueueRow({ report: r, onOpen, onChanged }: { report: ReportRow; onOpen: () => void; onChanged: () => void }) {
+  const me = useMe();
+  const approve = useMutation(`/api/expenses/${r.id}/approve`);
+  const reject = useMutation(`/api/expenses/${r.id}/reject`);
+  const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
+
+  // Segregation of duties: the submitter cannot approve their own report. The
+  // server enforces this too (403); we disable the control to avoid a dead-end.
+  const iSubmitted = !!me.user?.clerkId && r.submitted_by === me.user.clerkId;
+  const tone = agingTone(r.aging_days ?? null);
+
+  async function doApprove(e: React.MouseEvent) {
+    e.stopPropagation();
+    setBusy('approve');
+    const res = await approve.mutate({});
+    setBusy(null);
+    if (res === null) { addToast('error', approve.error ?? 'Failed to approve'); return; }
+    addToast('success', 'Report approved');
+    onChanged();
+  }
+  async function doReject(e: React.MouseEvent) {
+    e.stopPropagation();
+    const reason = window.prompt('Reason for rejecting this report?');
+    if (!reason) return;
+    setBusy('reject');
+    const res = await reject.mutate({ reason });
+    setBusy(null);
+    if (res === null) { addToast('error', reject.error ?? 'Failed to reject'); return; }
+    addToast('success', 'Report rejected');
+    onChanged();
+  }
+
+  return (
+    <div className="flex items-center gap-4 px-4 py-3 hover:bg-white/[0.02] transition-colors">
+      <button onClick={onOpen} className="min-w-0 flex-1 text-left">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium text-white truncate">{r.title ?? 'Expense report'}</span>
+          <ViolationBadges block={r.block_count} warn={r.warn_count} info={r.info_count} />
+        </div>
+        <p className="text-2xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+          {r.employee_name && (
+            <span className="inline-flex items-center gap-1"><UserRound size={10} /> {r.employee_name}</span>
+          )}
+          <span className={clsx('inline-flex items-center gap-1', AGING_TONE_CLASS[tone])}>
+            <Clock size={10} /> waiting {agingLabel(r.aging_days ?? null)}
+          </span>
+          <span>Out-of-pocket {formatMoney(r.reimbursable_cents)}</span>
+        </p>
+      </button>
+      <span className="text-sm font-mono tabular-nums text-slate-200 shrink-0">{formatMoney(r.total_cents)}</span>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <button
+          onClick={doApprove}
+          disabled={busy !== null || iSubmitted}
+          title={iSubmitted ? 'You submitted this report — a different approver must review it (segregation of duties)' : 'Approve'}
+          className="btn-primary btn-sm inline-flex items-center gap-1 disabled:opacity-40"
+        >
+          {busy === 'approve' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Approve
+        </button>
+        <button
+          onClick={doReject}
+          disabled={busy !== null}
+          title="Reject with a reason"
+          className="btn-ghost btn-sm inline-flex items-center gap-1 text-red-400 disabled:opacity-40"
+        >
+          {busy === 'reject' ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reimbursement batch
+// ---------------------------------------------------------------------------
+
+interface BatchResult { id: string; ok: boolean; error?: string; reimbursed_cents?: number }
+interface BatchResponse { results: BatchResult[]; totalReimbursedCents: number; successCount: number; failCount: number }
+
+function BatchView({ rows, onOpen, onChanged }: { rows: ReportRow[]; onOpen: (id: string) => void; onChanged: () => void }) {
+  const me = useMe();
+  // Only reports with an out-of-pocket balance actually produce a payout JE.
+  const payable = useMemo(() => rows.filter((r) => r.reimbursable_cents > 0), [rows]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirming, setConfirming] = useState(false);
+  const batch = useMutation<{ report_ids: string[] }, BatchResponse>('/api/expenses/batch');
+
+  const canPost = me.can('payments', 'run');
+
+  const allSelected = payable.length > 0 && payable.every((r) => selected.has(r.id));
+  const selectedTotal = useMemo(
+    () => payable.filter((r) => selected.has(r.id)).reduce((s, r) => s + r.reimbursable_cents, 0),
+    [payable, selected],
+  );
+
+  function toggle(id: string) {
+    setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(payable.map((r) => r.id)));
+  }
+
+  async function run() {
+    const ids = Array.from(selected);
+    const res = await batch.mutate({ report_ids: ids });
+    setConfirming(false);
+    if (!res) { addToast('error', batch.error ?? 'Batch reimbursement failed'); return; }
+    if (res.failCount > 0) {
+      addToast(res.successCount > 0 ? 'success' : 'error',
+        `${res.successCount} reimbursed, ${res.failCount} failed — ${formatMoney(res.totalReimbursedCents)} to AP`);
+    } else {
+      addToast('success', `${res.successCount} report(s) reimbursed — ${formatMoney(res.totalReimbursedCents)} posted to AP`);
+    }
+    setSelected(new Set());
+    onChanged();
+  }
+
+  if (payable.length === 0) {
+    return (
+      <EmptyState
+        icon={Wallet}
+        title="Nothing to reimburse"
+        description="Approved reports with an out-of-pocket balance appear here, grouped for a single payout run. Corporate-card lines are settled via the card feed and never reimbursed."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Batch action bar */}
+      <div className="flex items-center justify-between gap-3 flex-wrap rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3">
+        <label className="inline-flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+          <input type="checkbox" checked={allSelected} onChange={toggleAll} className="accent-brand-500" aria-label="Select all payable reports" />
+          <ListChecks size={15} className="text-slate-500" />
+          {selected.size > 0 ? `${selected.size} selected · ${formatMoney(selectedTotal)}` : `${payable.length} report${payable.length === 1 ? '' : 's'} ready`}
+        </label>
+        <button
+          onClick={() => setConfirming(true)}
+          disabled={selected.size === 0 || batch.isLoading || !canPost}
+          title={!canPost ? 'You do not have permission to post reimbursements' : undefined}
+          className="btn-primary btn-sm inline-flex items-center gap-1.5 disabled:opacity-40"
+        >
+          {batch.isLoading ? <Loader2 size={14} className="animate-spin" /> : <Wallet size={14} />}
+          Reimburse {selected.size > 0 ? `${selected.size} · ${formatMoney(selectedTotal)}` : 'selected'}
+        </button>
+      </div>
+
+      <div className="card divide-y divide-slate-800/70">
+        {payable.map((r) => (
+          <div key={r.id} className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors">
+            <input
+              type="checkbox"
+              checked={selected.has(r.id)}
+              onChange={() => toggle(r.id)}
+              className="accent-brand-500"
+              aria-label={`Select ${r.title ?? 'report'} for reimbursement`}
+            />
+            <button onClick={() => onOpen(r.id)} className="min-w-0 flex-1 text-left">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium text-white truncate">{r.title ?? 'Expense report'}</span>
+                <ViolationBadges block={r.block_count} warn={r.warn_count} info={r.info_count} />
+              </div>
+              <p className="text-2xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                {r.employee_name && (
+                  <span className="inline-flex items-center gap-1"><UserRound size={10} /> {r.employee_name}</span>
+                )}
+                <span className="inline-flex items-center gap-1 text-slate-400">
+                  <Clock size={10} /> approved {agingLabel(r.aging_days ?? null)} ago
+                </span>
+                {r.card_cents > 0 && <span>Card {formatMoney(r.card_cents)} (not reimbursed)</span>}
+              </p>
+            </button>
+            <div className="text-right shrink-0">
+              <p className="text-2xs text-slate-500">Out-of-pocket</p>
+              <span className="text-sm font-mono tabular-nums text-emerald-400">{formatMoney(r.reimbursable_cents)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {confirming && (
+        <ConfirmDialog
+          title="Post reimbursement batch"
+          body={
+            <>
+              Post <span className="text-white font-semibold">{formatMoney(selectedTotal)}</span> across{' '}
+              <span className="text-white font-semibold">{selected.size}</span> report{selected.size === 1 ? '' : 's'} to the
+              general ledger (DR expense / CR Accounts Payable). Each report settles through the normal AP payment path.
+              This posts to the ledger and cannot be undone here.
+            </>
+          }
+          confirmLabel="Post reimbursements"
+          busy={batch.isLoading}
+          onConfirm={run}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConfirmDialog({ title, body, confirmLabel, busy, onConfirm, onCancel }: {
+  title: string; body: React.ReactNode; confirmLabel: string; busy: boolean; onConfirm: () => void; onCancel: () => void;
+}) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancel(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-40" onClick={onCancel} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+        <div role="dialog" aria-modal="true" aria-label={title} className="pointer-events-auto w-full max-w-md rounded-xl bg-slate-900 border border-slate-800 shadow-2xl">
+          <div className="px-4 py-3 border-b border-slate-800">
+            <h2 className="text-base font-semibold text-white">{title}</h2>
+          </div>
+          <div className="p-4 text-sm text-slate-300 leading-relaxed">{body}</div>
+          <div className="flex justify-end gap-2 px-4 py-3 border-t border-slate-800">
+            <button onClick={onCancel} className="btn-ghost btn-sm">Cancel</button>
+            <button onClick={onConfirm} disabled={busy} className="btn-primary btn-sm inline-flex items-center gap-1.5 disabled:opacity-50">
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <Wallet size={14} />} {confirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Detail drawer
 // ---------------------------------------------------------------------------
 
@@ -191,6 +499,7 @@ const SEVERITY_STYLE: Record<string, string> = {
 function ReportDrawer({ reportId, scope, onClose, onChanged }: {
   reportId: string; scope: Scope; onClose: () => void; onChanged: () => void;
 }) {
+  const me = useMe();
   const [refreshKey, setRefreshKey] = useState(0);
   const { data, isLoading, error, refetch } = useQuery<DetailResponse>(
     `/api/expenses/${reportId}`, undefined, { key: `${reportId}:${refreshKey}` },
@@ -212,14 +521,27 @@ function ReportDrawer({ reportId, scope, onClose, onChanged }: {
     addToast('success', `${kind} complete`);
     reload();
     if (kind === 'Reimburse' || kind === 'Approve' || kind === 'Reject' || kind === 'Submit') {
-      // status changed — a queue item may leave the list; close if it left this scope
-      if (scope === 'queue') onClose();
+      // status changed — a queue/batch item may leave the list; close if it left this scope
+      if (scope === 'queue' || scope === 'batch') onClose();
     }
   }
 
   const report = data?.report;
   const lines = data?.lines ?? [];
+  const policy = data?.policy ?? null;
   const editable = report?.status === 'DRAFT' || report?.status === 'REJECTED';
+
+  // SoD: an approver who is the submitter cannot approve their own report.
+  const iSubmitted = !!me.user?.clerkId && !!report?.submitted_by && report.submitted_by === me.user.clerkId;
+
+  const violationInput: LineViolationsInput[] = lines.map((l) => ({
+    lineNumber: l.line_number,
+    merchant: l.merchant,
+    description: l.description,
+    amountCents: l.amount_cents,
+    reasons: l.policy_reasons ?? [],
+  }));
+  const summary = summarizeViolations(violationInput);
 
   return (
     <DetailDrawer
@@ -241,12 +563,8 @@ function ReportDrawer({ reportId, scope, onClose, onChanged }: {
             <SummaryTile label="On card" value={formatMoney(report.card_cents)} accent="indigo" />
           </div>
 
-          {report.policy_flag_count > 0 && (
-            <div className="flex items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-              <AlertTriangle size={14} />
-              {report.policy_flag_count} line{report.policy_flag_count === 1 ? '' : 's'} flagged for policy review
-            </div>
-          )}
+          {/* Policy-violation summary — which lines tripped which rule, WARN vs BLOCK */}
+          <PolicyViolationSummary summary={summary} policy={policy} />
 
           {/* Lines */}
           <DetailSection title="Lines">
@@ -261,6 +579,9 @@ function ReportDrawer({ reportId, scope, onClose, onChanged }: {
 
           <DetailSection title="Details">
             <DetailField label="Status" value={<StatusBadge status={report.status} />} />
+            {report.employee_name && <DetailField label="Submitted for" value={report.employee_name} />}
+            {report.submitted_at && <DetailField label="Submitted" value={new Date(report.submitted_at).toLocaleString()} />}
+            {report.approved_at && <DetailField label="Approved" value={new Date(report.approved_at).toLocaleString()} />}
             <DetailField label="Created" value={new Date(report.created_at).toLocaleString()} />
           </DetailSection>
 
@@ -278,7 +599,8 @@ function ReportDrawer({ reportId, scope, onClose, onChanged }: {
             {report.status === 'SUBMITTED' && (
               <>
                 <button
-                  disabled={busy !== null}
+                  disabled={busy !== null || iSubmitted}
+                  title={iSubmitted ? 'You submitted this report — a different approver must review it (segregation of duties)' : undefined}
                   onClick={() => act('Approve', () => approve.mutate({}), approve.error)}
                   className="btn-primary btn-sm inline-flex items-center gap-1.5 disabled:opacity-50"
                 >
@@ -307,6 +629,11 @@ function ReportDrawer({ reportId, scope, onClose, onChanged }: {
               </button>
             )}
           </div>
+          {iSubmitted && report.status === 'SUBMITTED' && (
+            <p className="text-2xs text-amber-400/80 flex items-center gap-1">
+              <ShieldAlert size={12} /> You submitted this report — segregation of duties requires a different approver.
+            </p>
+          )}
           {report.status === 'APPROVED' && (
             <p className="text-2xs text-slate-500">
               Posts DR expense / CR Accounts Payable for out-of-pocket lines only. Corporate-card lines are booked via the card feed and are not reimbursed here.
@@ -315,6 +642,80 @@ function ReportDrawer({ reportId, scope, onClose, onChanged }: {
         </div>
       )}
     </DetailDrawer>
+  );
+}
+
+function PolicyViolationSummary({
+  summary, policy,
+}: {
+  summary: ReturnType<typeof summarizeViolations>;
+  policy: DetailResponse['policy'];
+}) {
+  const hasViolations = summary.groups.length > 0;
+  const tier = policy?.requiredApprovalTier ?? null;
+
+  if (!hasViolations && !tier && !policy?.active) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/60 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-800">
+        <div className="flex items-center gap-2">
+          <Gavel size={14} className="text-slate-400" />
+          <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider">Policy check</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {summary.blockCount > 0 && (
+            <span className="inline-flex items-center gap-1 text-2xs text-red-300 bg-red-500/10 px-1.5 py-0.5 rounded">
+              <ShieldAlert size={10} /> {summary.blockCount} block
+            </span>
+          )}
+          {summary.warnCount > 0 && (
+            <span className="inline-flex items-center gap-1 text-2xs text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded">
+              <AlertTriangle size={10} /> {summary.warnCount} warn
+            </span>
+          )}
+          {summary.blockCount === 0 && summary.warnCount === 0 && (
+            <span className="inline-flex items-center gap-1 text-2xs text-emerald-300 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+              <ShieldCheck size={10} /> Clean
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="px-3 py-2.5 space-y-2">
+        {(policy?.active || tier) && (
+          <p className="text-2xs text-slate-500 flex items-center gap-2 flex-wrap">
+            {policy?.active && <span>Policy: <span className="text-slate-300">{policy.active.name} v{policy.active.version}</span></span>}
+            {tier && (
+              <span className="inline-flex items-center gap-1 text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded">
+                Requires <span className="font-semibold">{tier}</span> approval
+              </span>
+            )}
+          </p>
+        )}
+
+        {hasViolations ? (
+          <div className="space-y-1.5">
+            {summary.groups.map((g) => (
+              <div key={g.code} className="flex items-start gap-2">
+                <span className={clsx('mt-0.5 inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded shrink-0', SEVERITY_STYLE[g.severity] ?? SEVERITY_STYLE.warn)}>
+                  {g.severity === 'block' ? <ShieldAlert size={9} /> : <AlertTriangle size={9} />}
+                  {g.severity.toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs text-slate-200">{g.message}</p>
+                  <p className="text-2xs text-slate-500">
+                    {g.count > 1 ? `${g.count} lines` : 'Line'} {g.lineNumbers.map((n) => `#${n}`).join(', ')}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-2xs text-slate-500">No policy violations on this report.</p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -345,6 +746,7 @@ function LineCard({ line, editable, onChanged }: { line: LineRow; editable: bool
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
+            <span className="text-2xs font-mono text-slate-600">#{line.line_number}</span>
             <span className="text-sm text-white truncate">{line.merchant ?? line.description ?? 'Expense'}</span>
             {line.payment_source === 'CORPORATE_CARD' ? (
               <span className="inline-flex items-center gap-1 text-2xs text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded"><CreditCard size={10} /> Card</span>

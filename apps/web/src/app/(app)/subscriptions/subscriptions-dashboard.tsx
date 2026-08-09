@@ -1,126 +1,61 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
 import {
-  Loader2, AlertCircle, RefreshCw, Plus, Sparkles, Pencil, Trash2, CalendarClock,
+  Loader2, AlertCircle, RefreshCw, Plus, Sparkles, Pencil, Trash2,
   TrendingUp, Copy, Clock, Check, XCircle, Ban,
+  LayoutGrid, TrendingUp as TrendUp, CalendarClock, KanbanSquare, List,
 } from 'lucide-react';
-import { SubscriptionEditor, type EditorSubscription, type Cadence, type SubStatus } from './subscription-editor';
+import { SubscriptionEditor, type EditorSubscription } from './subscription-editor';
 import { SubscriptionParseReview } from './subscription-parse-review';
+import {
+  type Subscription, type SubsResponse,
+  STATUS_STYLE, FLAG_STYLE, CADENCE_LABEL, fmtDate, fmtCents, annualized,
+} from './subscription-types';
+import { RunRateSummary, SpendTrend, PriceCreepPanel, RenewalsPanel, TriageBoard } from './subscription-views';
 
-type CreepFlag = 'NEW' | 'PRICE_INCREASE' | 'DUPLICATE_CATEGORY' | 'STALE';
+type View = 'overview' | 'creep' | 'renewals' | 'triage' | 'all';
 
-interface Subscription {
-  id: string;
-  vendor_id: string | null;
-  vendor_name: string;
-  product: string | null;
-  category: string | null;
-  amount_cents: number | null;
-  prior_amount_cents: number | null;
-  billing_cadence: Cadence;
-  first_seen_date: string | null;
-  last_charged_date: string | null;
-  next_renewal_date: string | null;
-  status: SubStatus;
-  auto_renews: boolean;
-  notice_period_days: number | null;
-  cancellation_terms: string | null;
-  cancellation_method: string | null;
-  notes: string | null;
-  source: 'DETECTED' | 'MANUAL' | 'PARSED';
-  creep_flags: CreepFlag[] | null;
-  charge_count: number;
-  cancellation_draft: string | null;
-}
+const TABS: { key: View; label: string; icon: typeof LayoutGrid }[] = [
+  { key: 'overview', label: 'Overview', icon: LayoutGrid },
+  { key: 'creep', label: 'Price creep', icon: TrendUp },
+  { key: 'renewals', label: 'Renewals', icon: CalendarClock },
+  { key: 'triage', label: 'Triage', icon: KanbanSquare },
+  { key: 'all', label: 'All', icon: List },
+];
 
-interface RenewalDue {
-  subscription: Subscription;
-  daysUntilRenewal: number;
-  daysUntilNoticeDeadline: number;
-  noticeWindowPassed: boolean;
-}
-
-interface SubsResponse {
-  data: Subscription[];
-  renewals: RenewalDue[];
-  summary: {
-    count: number;
-    totalMonthlyCents: number;
-    totalAnnualCents: number;
-    newCount: number;
-    priceIncreaseCount: number;
-    duplicateCount: number;
-    staleCount: number;
-    renewalsDue: number;
-    noticePassed: number;
-    windowDays: number;
-    asOf: string;
-  };
-}
-
-const CADENCE_ANNUAL: Record<Cadence, number> = { MONTHLY: 12, QUARTERLY: 4, ANNUAL: 1, OTHER: 12 };
-
-const STATUS_STYLE: Record<SubStatus, string> = {
-  DETECTED: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20',
-  ACTIVE: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  UNDER_REVIEW: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  CANCELLING: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-  CANCELLED: 'bg-slate-700/40 text-slate-400 border-slate-700',
-  KEPT: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-};
-
-const FLAG_STYLE: Record<CreepFlag, { label: string; cls: string }> = {
-  NEW: { label: 'New', cls: 'bg-blue-500/10 text-blue-300 border-blue-500/20' },
-  PRICE_INCREASE: { label: 'Price ↑', cls: 'bg-red-500/10 text-red-300 border-red-500/20' },
-  DUPLICATE_CATEGORY: { label: 'Overlap', cls: 'bg-amber-500/10 text-amber-300 border-amber-500/20' },
-  STALE: { label: 'Stale', cls: 'bg-slate-600/30 text-slate-300 border-slate-600' },
-};
-
-const CADENCE_LABEL: Record<Cadence, string> = { MONTHLY: '/mo', QUARTERLY: '/qtr', ANNUAL: '/yr', OTHER: '' };
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-}
-function fmtCents(cents: number | null): string {
-  return cents === null ? '—' : formatMoney(cents);
-}
-function annualized(s: Subscription): number {
-  return (s.amount_cents ?? 0) * CADENCE_ANNUAL[s.billing_cadence];
-}
-
-function StatCard({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {
-  return (
-    <div className="card p-4">
-      <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={clsx('mt-1 text-2xl font-semibold font-mono', tone ?? 'text-white')}>{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-slate-500">{sub}</div>}
-    </div>
-  );
-}
+const TREND_MONTHS = 12;
 
 export function SubscriptionsDashboard() {
   const [editing, setEditing] = useState<EditorSubscription | 'new' | null>(null);
   const [parsing, setParsing] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [refreshKey, setRefreshKey] = useState('0');
+  const [view, setView] = useState<View>('overview');
+  const [windowDays, setWindowDays] = useState(60);
+  const [focusId, setFocusId] = useState<string | null>(null);
 
-  const { data, isLoading, error, refetch } = useQuery<SubsResponse>('/api/subscriptions', undefined, { key: refreshKey });
+  const { data, isLoading, error, refetch } = useQuery<SubsResponse>(
+    '/api/subscriptions',
+    { window_days: String(windowDays), trend_months: String(TREND_MONTHS) },
+    { key: refreshKey },
+  );
 
   const subs = data?.data ?? [];
   const renewals = data?.renewals ?? [];
+  const trend = data?.trend ?? [];
+  const priceCreep = data?.priceCreep ?? [];
   const summary = data?.summary;
 
-  function bump() {
+  const bump = useCallback(() => {
     setRefreshKey((k) => String(Number(k) + 1));
     refetch();
-  }
+  }, [refetch]);
 
   async function scan() {
     setScanning(true);
@@ -134,16 +69,32 @@ export function SubscriptionsDashboard() {
     bump();
   }
 
-  async function decide(s: Subscription, action: 'keep' | 'cancel' | 'review') {
-    if (action === 'cancel' && !confirm(`Draft a cancellation request for ${s.vendor_name}? This does NOT cancel it — it prepares a message for you to send.`)) return;
-    const res = await api.post<{ cancellationDraft: string | null }>(`/api/subscriptions/${s.id}/decision`, { action });
-    if (res.error) {
-      addToast('error', res.error.error);
-      return;
-    }
-    if (action === 'cancel') addToast('success', 'Cancellation drafted — review it below and send it yourself');
-    else addToast('success', action === 'keep' ? 'Marked as kept' : 'Marked under review');
-    bump();
+  const decide = useCallback(
+    async (s: Subscription, action: 'keep' | 'cancel' | 'review') => {
+      if (action === 'cancel' && !confirm(`Flag ${s.vendor_name} for cancellation and draft a cancellation request? This does NOT cancel it — it prepares a message for you to send.`)) return;
+      const res = await api.post<{ cancellationDraft: string | null }>(`/api/subscriptions/${s.id}/decision`, { action });
+      if (res.error) {
+        addToast('error', res.error.error);
+        return;
+      }
+      if (action === 'cancel') addToast('success', 'Flagged to cancel — review the draft below and send it yourself');
+      else addToast('success', action === 'keep' ? 'Marked as kept' : 'Marked under review');
+      bump();
+    },
+    [bump],
+  );
+
+  const decideById = useCallback(
+    (id: string, action: 'keep' | 'cancel' | 'review') => {
+      const s = subs.find((x) => x.id === id);
+      if (s) decide(s, action);
+    },
+    [subs, decide],
+  );
+
+  function findInList(id: string) {
+    setFocusId(id);
+    setView('all');
   }
 
   async function remove(s: Subscription) {
@@ -195,38 +146,37 @@ export function SubscriptionsDashboard() {
         </button>
       </div>
 
-      {/* Creep summary */}
-      {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="Monthly run-rate" value={formatMoney(summary.totalMonthlyCents)} sub={`${summary.count} subscriptions`} />
-          <StatCard label="Annualized spend" value={formatMoney(summary.totalAnnualCents)} tone="text-emerald-400" />
-          <StatCard label="Creep signals" value={String(summary.newCount + summary.priceIncreaseCount + summary.duplicateCount + summary.staleCount)} sub={`${summary.newCount} new · ${summary.priceIncreaseCount} price ↑ · ${summary.duplicateCount} overlap · ${summary.staleCount} stale`} tone="text-amber-400" />
-          <StatCard label="Renewals due" value={String(summary.renewalsDue)} sub={summary.noticePassed > 0 ? `${summary.noticePassed} past notice deadline` : `next ${summary.windowDays} days`} tone={summary.noticePassed > 0 ? 'text-red-400' : 'text-white'} />
-        </div>
-      )}
+      {/* Run-rate summary (always visible) */}
+      {summary && <RunRateSummary summary={summary} />}
 
-      {/* Renewals needing a decision */}
-      {renewals.length > 0 && (
-        <div className="card p-4">
-          <div className="flex items-center gap-2 mb-3 text-sm font-medium text-white">
-            <CalendarClock size={15} className="text-amber-400" /> Renewals needing a decision
-          </div>
-          <div className="space-y-1.5">
-            {renewals.slice(0, 8).map((r) => (
-              <div key={r.subscription.id} className="flex items-center gap-3 text-sm">
-                <span className={clsx('font-mono text-xs w-24 shrink-0', r.noticeWindowPassed ? 'text-red-400' : r.daysUntilNoticeDeadline <= 7 ? 'text-amber-400' : 'text-slate-400')}>
-                  {r.noticeWindowPassed ? 'notice passed' : `${r.daysUntilNoticeDeadline}d to decide`}
-                </span>
-                <span className="text-white flex-1 truncate">{r.subscription.vendor_name}</span>
-                <span className="text-slate-400 font-mono">{fmtCents(r.subscription.amount_cents)}{CADENCE_LABEL[r.subscription.billing_cadence]}</span>
-                <span className="text-slate-500 text-xs w-24 text-right">renews {fmtDate(r.subscription.next_renewal_date)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Tabs */}
+      <div className="flex items-center gap-1 border-b border-slate-800 overflow-x-auto">
+        {TABS.map((t) => {
+          const Icon = t.icon;
+          const active = view === t.key;
+          const badge =
+            t.key === 'creep' ? summary?.priceCreepCount :
+            t.key === 'renewals' ? summary?.renewalsDue :
+            undefined;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setView(t.key)}
+              className={clsx(
+                'px-3 py-2 text-xs font-medium flex items-center gap-1.5 border-b-2 -mb-px whitespace-nowrap',
+                active ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200',
+              )}
+            >
+              <Icon size={13} /> {t.label}
+              {badge !== undefined && badge > 0 && (
+                <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-mono', active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400')}>{badge}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
-      {/* List */}
+      {/* States */}
       {isLoading ? (
         <div className="card p-12 flex items-center justify-center text-slate-500"><Loader2 className="animate-spin mr-2" size={18} /> Loading subscriptions…</div>
       ) : error ? (
@@ -240,57 +190,85 @@ export function SubscriptionsDashboard() {
           </button>
         </div>
       ) : (
-        <div className="space-y-2">
-          {subs.map((s) => (
-            <div key={s.id} className="card p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-white font-medium truncate">{s.vendor_name}</span>
-                    {s.product && <span className="text-slate-500 text-sm truncate">· {s.product}</span>}
-                    <span className={clsx('text-[10px] px-1.5 py-0.5 rounded border', STATUS_STYLE[s.status])}>{s.status.replace('_', ' ')}</span>
-                    {(s.creep_flags ?? []).map((f) => (
-                      <span key={f} className={clsx('text-[10px] px-1.5 py-0.5 rounded border inline-flex items-center gap-1', FLAG_STYLE[f].cls)}>
-                        {f === 'PRICE_INCREASE' && <TrendingUp size={10} />}
-                        {f === 'DUPLICATE_CATEGORY' && <Copy size={10} />}
-                        {f === 'STALE' && <Clock size={10} />}
-                        {FLAG_STYLE[f].label}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-1 flex items-center gap-4 text-xs text-slate-500 flex-wrap">
-                    <span className="font-mono text-slate-300">{fmtCents(s.amount_cents)}{CADENCE_LABEL[s.billing_cadence]}</span>
-                    {s.prior_amount_cents != null && <span className="text-red-400/80 line-through font-mono">{fmtCents(s.prior_amount_cents)}</span>}
-                    <span>{formatMoney(annualized(s))}/yr</span>
-                    {s.category && <span>· {s.category}</span>}
-                    <span>· renews {fmtDate(s.next_renewal_date)}</span>
-                    {s.notice_period_days != null && <span>· {s.notice_period_days}d notice</span>}
-                    {s.charge_count > 0 && <span>· {s.charge_count} charges</span>}
-                  </div>
-                  {s.status === 'CANCELLING' && s.cancellation_draft && (
-                    <details className="mt-2">
-                      <summary className="text-xs text-amber-400 cursor-pointer">Cancellation draft (send this yourself)</summary>
-                      <pre className="mt-1 whitespace-pre-wrap text-xs text-slate-400 bg-slate-950 border border-slate-800 rounded-md p-3">{s.cancellation_draft}</pre>
-                    </details>
-                  )}
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  {s.status !== 'KEPT' && (
-                    <button onClick={() => decide(s, 'keep')} title="Keep" className="p-1.5 rounded text-emerald-400 hover:bg-emerald-500/10"><Check size={15} /></button>
-                  )}
-                  {s.status !== 'CANCELLING' && s.status !== 'CANCELLED' && (
-                    <button onClick={() => decide(s, 'cancel')} title="Draft cancellation" className="p-1.5 rounded text-amber-400 hover:bg-amber-500/10"><Ban size={15} /></button>
-                  )}
-                  {(s.status === 'DETECTED' || s.status === 'ACTIVE') && (
-                    <button onClick={() => decide(s, 'review')} title="Mark under review" className="p-1.5 rounded text-blue-400 hover:bg-blue-500/10"><XCircle size={15} /></button>
-                  )}
-                  <button onClick={() => setEditing(toEditor(s))} title="Edit" className="p-1.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white"><Pencil size={15} /></button>
-                  <button onClick={() => remove(s)} title="Remove" className="p-1.5 rounded text-slate-500 hover:bg-red-500/10 hover:text-red-400"><Trash2 size={15} /></button>
-                </div>
+        <>
+          {view === 'overview' && summary && (
+            <div className="space-y-4">
+              <SpendTrend trend={trend} summary={summary} />
+              <div className="grid gap-4 lg:grid-cols-2">
+                <RenewalsPanel renewals={renewals} windowDays={windowDays} onWindowChange={setWindowDays} onDecide={decide} />
+                <PriceCreepPanel items={priceCreep.slice(0, 6)} annualizedCreepCents={summary.annualizedCreepCents} onFind={findInList} onDecide={decideById} />
               </div>
             </div>
-          ))}
-        </div>
+          )}
+
+          {view === 'creep' && summary && (
+            <PriceCreepPanel items={priceCreep} annualizedCreepCents={summary.annualizedCreepCents} onFind={findInList} onDecide={decideById} />
+          )}
+
+          {view === 'renewals' && (
+            <RenewalsPanel renewals={renewals} windowDays={windowDays} onWindowChange={setWindowDays} onDecide={decide} />
+          )}
+
+          {view === 'triage' && <TriageBoard subs={subs} onDecide={decide} onEdit={(s) => setEditing(toEditor(s))} />}
+
+          {view === 'all' && (
+            <div className="space-y-2">
+              {subs.map((s) => (
+                <div
+                  key={s.id}
+                  ref={focusId === s.id ? (el) => el?.scrollIntoView({ behavior: 'smooth', block: 'center' }) : undefined}
+                  className={clsx('card p-4', focusId === s.id && 'ring-2 ring-emerald-500/60')}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-white font-medium truncate">{s.vendor_name}</span>
+                        {s.product && <span className="text-slate-500 text-sm truncate">· {s.product}</span>}
+                        <span className={clsx('text-[10px] px-1.5 py-0.5 rounded border', STATUS_STYLE[s.status])}>{s.status.replace('_', ' ')}</span>
+                        {(s.creep_flags ?? []).map((f) => (
+                          <span key={f} className={clsx('text-[10px] px-1.5 py-0.5 rounded border inline-flex items-center gap-1', FLAG_STYLE[f].cls)}>
+                            {f === 'PRICE_INCREASE' && <TrendingUp size={10} />}
+                            {f === 'DUPLICATE_CATEGORY' && <Copy size={10} />}
+                            {f === 'STALE' && <Clock size={10} />}
+                            {FLAG_STYLE[f].label}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="mt-1 flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                        <span className="font-mono text-slate-300">{fmtCents(s.amount_cents)}{CADENCE_LABEL[s.billing_cadence]}</span>
+                        {s.prior_amount_cents != null && <span className="text-red-400/80 line-through font-mono">{fmtCents(s.prior_amount_cents)}</span>}
+                        <span>{formatMoney(annualized(s))}/yr</span>
+                        {s.category && <span>· {s.category}</span>}
+                        <span>· renews {fmtDate(s.next_renewal_date)}</span>
+                        {s.notice_period_days != null && <span>· {s.notice_period_days}d notice</span>}
+                        {s.charge_count > 0 && <span>· {s.charge_count} charges</span>}
+                      </div>
+                      {s.status === 'CANCELLING' && s.cancellation_draft && (
+                        <details className="mt-2">
+                          <summary className="text-xs text-amber-400 cursor-pointer">Cancellation draft (send this yourself)</summary>
+                          <pre className="mt-1 whitespace-pre-wrap text-xs text-slate-400 bg-slate-950 border border-slate-800 rounded-md p-3">{s.cancellation_draft}</pre>
+                        </details>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {s.status !== 'KEPT' && (
+                        <button onClick={() => decide(s, 'keep')} title="Keep" className="p-1.5 rounded text-emerald-400 hover:bg-emerald-500/10"><Check size={15} /></button>
+                      )}
+                      {s.status !== 'CANCELLING' && s.status !== 'CANCELLED' && (
+                        <button onClick={() => decide(s, 'cancel')} title="Flag to cancel" className="p-1.5 rounded text-amber-400 hover:bg-amber-500/10"><Ban size={15} /></button>
+                      )}
+                      {(s.status === 'DETECTED' || s.status === 'ACTIVE') && (
+                        <button onClick={() => decide(s, 'review')} title="Mark under review" className="p-1.5 rounded text-blue-400 hover:bg-blue-500/10"><XCircle size={15} /></button>
+                      )}
+                      <button onClick={() => setEditing(toEditor(s))} title="Edit" className="p-1.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white"><Pencil size={15} /></button>
+                      <button onClick={() => remove(s)} title="Remove" className="p-1.5 rounded text-slate-500 hover:bg-red-500/10 hover:text-red-400"><Trash2 size={15} /></button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {editing && (

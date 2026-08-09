@@ -4,7 +4,7 @@ import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { StatusBadge } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
-import { CheckCircle, AlertTriangle, FileWarning, Clock, ShieldAlert, FileText, Paperclip, UploadCloud, ShieldCheck, Copy } from 'lucide-react';
+import { CheckCircle, AlertTriangle, FileWarning, Clock, ShieldAlert, FileText, Paperclip, UploadCloud, ShieldCheck, Copy, Landmark, CreditCard, BadgeCheck, BadgeAlert } from 'lucide-react';
 import { VendorDocIntake } from './vendor-doc-intake';
 
 type ComplianceStatus = 'valid' | 'expired' | 'pending' | 'missing';
@@ -25,8 +25,22 @@ interface VenDetail {
     hold: { type: string; reason: string; endDate: string | null } | null;
   };
   complianceDocs: ComplianceDoc[];
-  ap: { openBalance: number; overdueCount: number; openBillCount: number };
+  ap: {
+    openBalance: number; overdueCount: number; openBillCount: number;
+    aging: { currentCents: number; d1_30Cents: number; d31_60Cents: number; d61_90Cents: number; d90PlusCents: number };
+  };
   spend: { ytdCents: number; ttmCents: number; lifetimeBilledCents: number; paidYtdCents: number };
+  ten99: {
+    eligible: boolean; reportable: boolean; crossedThreshold: boolean;
+    reportableYtdCents: number; thresholdCents: number;
+    tinPresent: boolean; missingTin: boolean;
+    w9State: 'on_file' | 'missing' | 'expired';
+    readiness: 'READY' | 'MISSING_W9' | 'NOT_MARKED_1099';
+  };
+  paymentProfile: {
+    method: string; accountType: string | null; accountMask: string | null;
+    routingMask: string | null; bankName: string | null; hasBankDetails: boolean;
+  } | null;
   openBills: Array<{ id: string; billNumber: string | null; billDate: string; dueDate: string | null; totalCents: number; balanceCents: number; status: string; daysOverdue: number }>;
   payments: Array<{ id: string; billId: string; billNumber: string | null; paymentDate: string; amountCents: number; method: string | null }>;
   recentBills: Array<{ id: string; billNumber: string | null; billDate: string; totalCents: number; balanceCents: number; status: string }>;
@@ -55,6 +69,50 @@ function fmtDate(d: string | null): string {
   if (!d) return '--';
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
+
+const AGING_BUCKETS = [
+  { key: 'currentCents', label: 'Current', cls: 'bg-emerald-500', text: 'text-emerald-400' },
+  { key: 'd1_30Cents', label: '1–30', cls: 'bg-amber-400', text: 'text-amber-300' },
+  { key: 'd31_60Cents', label: '31–60', cls: 'bg-amber-500', text: 'text-amber-400' },
+  { key: 'd61_90Cents', label: '61–90', cls: 'bg-orange-500', text: 'text-orange-400' },
+  { key: 'd90PlusCents', label: '90+', cls: 'bg-red-500', text: 'text-red-400' },
+] as const;
+
+/** A compact stacked bar + legend of this vendor's open A/P by days past due. */
+function AgingBar({ aging, total }: { aging: VenDetail['ap']['aging']; total: number }) {
+  if (total <= 0) return null;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Open A/P aging</h3>
+        <span className="text-2xs font-mono tabular-nums text-slate-400">{formatMoney(total)}</span>
+      </div>
+      <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-800">
+        {AGING_BUCKETS.map((b) => {
+          const cents = aging[b.key];
+          if (cents <= 0) return null;
+          return <div key={b.key} className={b.cls} style={{ width: `${(cents / total) * 100}%` }} title={`${b.label}: ${formatMoney(cents)}`} />;
+        })}
+      </div>
+      <div className="mt-2 grid grid-cols-5 gap-1">
+        {AGING_BUCKETS.map((b) => (
+          <div key={b.key} className="text-center">
+            <div className="text-[10px] uppercase tracking-wide text-slate-600">{b.label}</div>
+            <div className={`text-xs font-mono tabular-nums ${aging[b.key] > 0 ? b.text : 'text-slate-600'}`}>
+              {formatMoney(aging[b.key], { compact: true })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const READINESS_META: Record<VenDetail['ten99']['readiness'], { text: string; cls: string }> = {
+  READY: { text: 'Ready to file', cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+  MISSING_W9: { text: 'Missing W-9 / TIN', cls: 'bg-red-500/10 text-red-400 border-red-500/20' },
+  NOT_MARKED_1099: { text: 'Not marked 1099', cls: 'bg-slate-700/40 text-slate-400 border-slate-700' },
+};
 
 export function VendorDrawer({ vendorId, onClose }: { vendorId: string | null; onClose: () => void }) {
   const { data, isLoading, error, refetch } = useQuery<VenDetail>(vendorId ? `/api/vendors/${vendorId}` : '', undefined, { enabled: !!vendorId });
@@ -103,6 +161,75 @@ export function VendorDrawer({ vendorId, onClose }: { vendorId: string | null; o
               <div className="text-2xs uppercase tracking-wider text-slate-500">Trailing 12mo</div>
               <div className="mt-1 text-lg font-mono tabular-nums text-white">{formatMoney(data.spend.ttmCents)}</div>
               <div className="text-2xs text-slate-500">billed</div>
+            </div>
+          </div>
+
+          {/* Open A/P aging (this vendor's slice of the A/P-aging report) */}
+          {data.ap.openBalance > 0 && (
+            <div className="mb-6">
+              <AgingBar aging={data.ap.aging} total={data.ap.openBalance} />
+            </div>
+          )}
+
+          {/* 1099 status + payment method on file — read-only at-a-glance row */}
+          <div className="mb-6 grid grid-cols-2 gap-3">
+            {/* 1099 status (read-only; nothing is filed from here) */}
+            <div className="rounded-lg border border-slate-800 bg-slate-800/30 px-3 py-2.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-2xs uppercase tracking-wider text-slate-500 font-semibold">1099 status</span>
+                {data.ten99.eligible
+                  ? <BadgeCheck size={13} className="text-indigo-400" />
+                  : <BadgeAlert size={13} className="text-slate-600" />}
+              </div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className={`text-sm font-medium ${data.ten99.reportable ? 'text-white' : 'text-slate-300'}`}>
+                  {data.ten99.reportable ? 'Reportable' : data.ten99.eligible ? 'Not reportable' : 'Not 1099'}
+                </span>
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-2xs font-medium ${READINESS_META[data.ten99.readiness].cls}`}>
+                  {READINESS_META[data.ten99.readiness].text}
+                </span>
+              </div>
+              <div className="text-2xs text-slate-500">
+                {formatMoney(data.ten99.reportableYtdCents, { compact: true })} reportable YTD
+                {' · '}floor {formatMoney(data.ten99.thresholdCents, { compact: true })}
+              </div>
+              {data.ten99.missingTin && (
+                <div className="mt-1 inline-flex items-center gap-1 text-2xs text-red-400">
+                  <AlertTriangle size={10} /> No TIN on file
+                </div>
+              )}
+            </div>
+
+            {/* Payment method on file (masked; raw bank numbers are never stored) */}
+            <div className="rounded-lg border border-slate-800 bg-slate-800/30 px-3 py-2.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-2xs uppercase tracking-wider text-slate-500 font-semibold">Payment method</span>
+                {data.paymentProfile?.method === 'CHECK'
+                  ? <FileText size={13} className="text-slate-500" />
+                  : data.paymentProfile
+                    ? <Landmark size={13} className="text-emerald-400" />
+                    : <CreditCard size={13} className="text-slate-600" />}
+              </div>
+              {data.paymentProfile ? (
+                <>
+                  <div className="text-sm font-medium text-white">
+                    {data.paymentProfile.method === 'CHECK' ? 'Check' : 'ACH'}
+                    {data.paymentProfile.accountType && <span className="text-slate-400 font-normal"> · {data.paymentProfile.accountType}</span>}
+                  </div>
+                  <div className="text-2xs text-slate-500">
+                    {data.paymentProfile.accountMask
+                      ? <>acct <span className="font-mono text-slate-400">{data.paymentProfile.accountMask}</span>{data.paymentProfile.bankName ? ` · ${data.paymentProfile.bankName}` : ''}</>
+                      : data.paymentProfile.bankName ?? 'Pays to mailing address'}
+                  </div>
+                  {!data.paymentProfile.hasBankDetails && (
+                    <div className="mt-1 inline-flex items-center gap-1 text-2xs text-amber-400">
+                      <AlertTriangle size={10} /> Incomplete for remittance
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-xs text-slate-500">No payment details captured.</div>
+              )}
             </div>
           </div>
 
@@ -201,6 +328,28 @@ export function VendorDrawer({ vendorId, onClose }: { vendorId: string | null; o
               </DetailTable>
             )}
           </div>
+
+          {/* Recent bills — full history slice with status (paid + open). */}
+          {data.recentBills.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Recent bills</h3>
+              <DetailTable columns={[
+                { key: 'n', label: 'Bill' }, { key: 'd', label: 'Date' },
+                { key: 't', label: 'Total', align: 'right' }, { key: 'b', label: 'Balance', align: 'right' },
+                { key: 's', label: 'Status', align: 'center' },
+              ]}>
+                {data.recentBills.map((b) => (
+                  <tr key={b.id}>
+                    <td className="px-3 py-2 text-sm font-mono text-slate-300">{b.billNumber ?? '--'}</td>
+                    <td className="px-3 py-2 text-xs font-mono text-slate-400">{fmtDate(b.billDate)}</td>
+                    <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-200">{formatMoney(b.totalCents)}</td>
+                    <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-400">{formatMoney(b.balanceCents)}</td>
+                    <td className="px-3 py-2 text-center"><StatusBadge status={b.status} /></td>
+                  </tr>
+                ))}
+              </DetailTable>
+            </div>
+          )}
 
           {/* Possible duplicate vendors — read-only detection (no auto-merge). */}
           {data.possibleDuplicates && data.possibleDuplicates.length > 0 && (

@@ -2,14 +2,18 @@
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { AccountPeek } from './account-peek';
 import { AccountDrawer } from './account-drawer';
+import { AccountsGroupedView, type GroupedAccount, type AccountBalance } from './accounts-grouped-view';
+import { GlDetailModal } from './gl-detail-modal';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   Search, Plus, Check, X, Lock, Building2, CreditCard, Landmark,
-  Loader2, AlertCircle, ChevronDown, ChevronRight, Shield, Clock, Inbox
+  Loader2, AlertCircle, Shield, Clock, Inbox, ListTree, Table2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, useMutation } from '@/hooks';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 import { PageHeader, EmptyState } from '@/components/ui';
 
 // ─── Types ──────────────────────────────────────────────────
@@ -22,6 +26,7 @@ interface AccountRow {
   groupName: string;
   subTypeName: string;
   typeName: string;
+  normalBalance: string;
   isActive: boolean;
   isControlAccount: boolean;
   isCompanySpecific: boolean;
@@ -42,47 +47,71 @@ interface AccountsResponse {
   counts: { pending: number; approved: number; total: number };
 }
 
+interface BalancesResponse {
+  balances: Record<string, AccountBalance>;
+  period: { year: number; month: number; periodStart: string; periodEnd: string; yearStart: string; ytdEnd: string; label: string };
+  meta: { linesScanned: number; truncated: boolean };
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
 // ─── Main Page ──────────────────────────────────────────────
 
 export default function ChartOfAccountsPage() {
   const [showRequest, setShowRequest] = useState(false);
   const [tab, setTab] = useState<'all' | 'pending'>('all');
+  const [view, setView] = useState<'grouped' | 'list'>('grouped');
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const now = new Date();
+  const [year, setYear] = useState(now.getUTCFullYear());
+  const [month, setMonth] = useState(now.getUTCMonth() + 1);
+
+  const { activeCompanyId } = useActiveCompany();
+  const scopedLocation = isSpecificCompany(activeCompanyId) ? activeCompanyId : null;
 
   const params: Record<string, string> = {};
   if (tab === 'pending') params.approval_status = 'PENDING';
   if (typeFilter) params.account_type = typeFilter;
 
-  const { data, isLoading, error, refetch } = useQuery<AccountsResponse>(
+  const { data, isLoading, error } = useQuery<AccountsResponse>(
     '/api/accounts', Object.keys(params).length > 0 ? params : undefined,
     { key: String(refreshKey) }
   );
+
+  // Per-account ledger activity (POSTED only), scoped to the active company via
+  // the shared hook. Only needed for the grouped balance view / list balances.
+  const { data: balData, isLoading: balLoading } = useQuery<BalancesResponse>(
+    '/api/accounts/balances',
+    { year: String(year), period_month: String(month) },
+    { key: String(refreshKey) }
+  );
+  const balances = balData?.balances ?? {};
+  const periodLabel = balData?.period.label ?? `${MONTHS[month - 1]} ${year}`;
+
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [ledgerAccount, setLedgerAccount] = useState<GroupedAccount | null>(null);
   const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<{ id: string }>();
 
-  const accounts = data?.data ?? [];
+  const accounts = useMemo(() => data?.data ?? [], [data]);
   const counts = data?.counts;
 
-  const filtered = search
-    ? accounts.filter((a) =>
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return accounts.filter((a) => {
+      if (statusFilter === 'active' && !a.isActive) return false;
+      if (statusFilter === 'inactive' && a.isActive) return false;
+      if (!q) return true;
+      return (
         a.accountNumber.includes(search) ||
-        a.name.toLowerCase().includes(search.toLowerCase()) ||
-        a.groupName.toLowerCase().includes(search.toLowerCase())
-      )
-    : accounts;
-
-  // Group by type → subType → group
-  const typeGroups = new Map<string, Map<string, Map<string, AccountRow[]>>>();
-  for (const acct of filtered) {
-    if (!typeGroups.has(acct.typeName)) typeGroups.set(acct.typeName, new Map());
-    const stMap = typeGroups.get(acct.typeName)!;
-    if (!stMap.has(acct.subTypeName)) stMap.set(acct.subTypeName, new Map());
-    const gMap = stMap.get(acct.subTypeName)!;
-    if (!gMap.has(acct.groupName)) gMap.set(acct.groupName, []);
-    gMap.get(acct.groupName)!.push(acct);
-  }
+        a.name.toLowerCase().includes(q) ||
+        a.groupName.toLowerCase().includes(q)
+      );
+    });
+  }, [accounts, search, statusFilter]);
 
   const handleApproval = useCallback(async (accountId: string, action: 'approve' | 'reject') => {
     await fetch('/api/accounts', {
@@ -94,6 +123,8 @@ export default function ChartOfAccountsPage() {
   }, []);
 
   const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'COGS', 'OPEX', 'OTHER'];
+  const showGrouped = tab === 'all' && view === 'grouped';
+  const yearOptions = [now.getUTCFullYear(), now.getUTCFullYear() - 1, now.getUTCFullYear() - 2];
 
   return (
     <div className="space-y-6">
@@ -118,7 +149,7 @@ export default function ChartOfAccountsPage() {
       )}
 
       {/* Tabs + filters */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-800">
           <button onClick={() => setTab('all')} className={clsx('px-3 py-1.5 rounded-md text-xs font-medium', tab === 'all' ? 'bg-slate-700 text-white' : 'text-slate-500')}>
             All <span className="font-mono ml-1 text-slate-600">{counts?.total ?? 0}</span>
@@ -127,6 +158,17 @@ export default function ChartOfAccountsPage() {
             Pending <span className="font-mono ml-1 text-amber-500">{counts?.pending ?? 0}</span>
           </button>
         </div>
+
+        {tab === 'all' && (
+          <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-800">
+            <button onClick={() => setView('grouped')} aria-label="Grouped view" className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium', view === 'grouped' ? 'bg-slate-700 text-white' : 'text-slate-500')}>
+              <ListTree size={13} /> Grouped
+            </button>
+            <button onClick={() => setView('list')} aria-label="List view" className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium', view === 'list' ? 'bg-slate-700 text-white' : 'text-slate-500')}>
+              <Table2 size={13} /> List
+            </button>
+          </div>
+        )}
 
         <select
           value={typeFilter}
@@ -138,7 +180,31 @@ export default function ChartOfAccountsPage() {
           {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
 
-        <div className="relative flex-1 max-w-xs">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+          aria-label="Filter accounts by status"
+          className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"
+        >
+          <option value="all">All Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+
+        {showGrouped && (
+          <div className="flex items-center gap-1.5">
+            <select value={month} onChange={(e) => setMonth(Number(e.target.value))} aria-label="Balance period month"
+              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
+              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+            <select value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Balance period year"
+              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
+              {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        )}
+
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
@@ -160,15 +226,30 @@ export default function ChartOfAccountsPage() {
         <div className="card">
           <EmptyState
             icon={Inbox}
-            title={tab === 'pending' ? 'No pending requests' : search || typeFilter ? 'No matching accounts' : 'No accounts yet'}
+            title={tab === 'pending' ? 'No pending requests' : search || typeFilter || statusFilter !== 'all' ? 'No matching accounts' : 'No accounts yet'}
             description={
               tab === 'pending'
                 ? 'New account requests awaiting approval will appear here.'
-                : search || typeFilter
-                  ? 'No accounts match your search or filter. Try clearing them.'
+                : search || typeFilter || statusFilter !== 'all'
+                  ? 'No accounts match your search or filters. Try clearing them.'
                   : 'Request your first account to start building the chart of accounts.'
             }
             action={tab === 'pending' ? undefined : { label: 'Request Account', onClick: () => setShowRequest(true) }}
+          />
+        </div>
+      ) : showGrouped ? (
+        <div className="relative">
+          {balLoading && (
+            <div className="absolute right-0 -top-7 flex items-center gap-1.5 text-2xs text-slate-500">
+              <Loader2 size={11} className="animate-spin" /> loading balances…
+            </div>
+          )}
+          <AccountsGroupedView
+            accounts={filtered as GroupedAccount[]}
+            balances={balances}
+            periodLabel={periodLabel}
+            onSelectAccount={(id) => setSelectedAccountId(id)}
+            onOpenLedger={(a) => setLedgerAccount(a)}
           />
         </div>
       ) : (
@@ -242,6 +323,18 @@ export default function ChartOfAccountsPage() {
       </HoverPeekCard>
 
       <AccountDrawer accountId={selectedAccountId} onClose={() => setSelectedAccountId(null)} />
+
+      {ledgerAccount && balData && (
+        <GlDetailModal
+          accountId={ledgerAccount.id}
+          accountNumber={ledgerAccount.accountNumber}
+          accountName={ledgerAccount.name}
+          startDate={balData.period.yearStart}
+          endDate={balData.period.ytdEnd}
+          locationId={scopedLocation}
+          onClose={() => setLedgerAccount(null)}
+        />
+      )}
     </div>
   );
 }

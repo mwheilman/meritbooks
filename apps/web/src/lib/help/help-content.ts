@@ -785,11 +785,14 @@ export const HELP_CONTENT: Record<string, HelpContent> = {
   '/rev-rec': {
     title: 'Revenue Recognition',
     whatItDoes:
-      'Preview and post period revenue recognition. Each job recognizes by its resolved method (override → job-type mapping → company default).',
+      'Preview and post period revenue recognition, then report on it. Each job recognizes by its resolved method (override → job-type mapping → company default).',
     keyFeatures: [
       'Method resolution: job override → job-type mapping → company default',
       'Preview the recognition before you post it',
       'Supports all configured rev-rec methods',
+      'Deferred-revenue rollforward that ties to GL account 2410 (beginning → billings → recognized → ending)',
+      'Per-contract recognition waterfall: amounts recognized by period, recognized-to-date vs remaining',
+      'Summary of revenue recognized this period by method',
     ],
   },
 

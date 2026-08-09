@@ -59,12 +59,18 @@ function daysToTerms(days: number | null | undefined): string {
 // Surface the API-shaped fields the UI expects on top of the raw DB row so the
 // response contract stays stable even though the underlying columns differ.
 function withApiFields(v: Record<string, unknown>): Record<string, unknown> {
+  // Never surface the raw encrypted TIN to the client. Strip it from the spread
+  // and expose only a boolean gap flag for the 1099 chip.
+  const { tin_encrypted, ...rest } = v;
+  const tinPresent = typeof tin_encrypted === 'string' && tin_encrypted.trim().length > 0;
   return {
-    ...v,
+    ...rest,
     is_1099: !!v.is_1099_eligible,
     payment_terms: daysToTerms(v.payment_terms_days as number | null),
     tax_id: null, // no plaintext TIN column on core.vendors (tin_encrypted is not surfaced)
     notes: null, // no notes column on core.vendors
+    // 1099 chip signal: eligible vendor with no TIN on file — a January-chase gap.
+    missing_tin: !!v.is_1099_eligible && !tinPresent,
   };
 }
 
@@ -128,8 +134,23 @@ export async function GET(req: NextRequest) {
 
     const docsByVendor = new Map<string, Array<{ doc_type: string; status: string; expiration_date: string | null }>>();
     const holdsByVendor = new Map<string, Array<{ hold_type: string; start_date: string | null; end_date: string | null }>>();
+    // YTD spend (billed, ex-voided) per vendor for the list spend column.
+    const ytdSpendByVendor = new Map<string, number>();
 
     if (vendorIds.length > 0) {
+      const yearStart = `${new Date().getFullYear()}-01-01`;
+      const { data: spendBills } = await supabase
+        .from('bills')
+        .select('vendor_id, total_cents, status, bill_date')
+        .eq('org_id', orgId)
+        .in('vendor_id', vendorIds)
+        .neq('status', 'VOIDED')
+        .gte('bill_date', yearStart);
+      for (const b of (spendBills ?? []) as Array<{ vendor_id: string; total_cents: number | string }>) {
+        const cur = ytdSpendByVendor.get(b.vendor_id) ?? 0;
+        ytdSpendByVendor.set(b.vendor_id, cur + (Number(b.total_cents) || 0));
+      }
+
       const [{ data: docs }, { data: holds }] = await Promise.all([
         supabase
           .from('vendor_compliance_docs')
@@ -188,7 +209,11 @@ export async function GET(req: NextRequest) {
         hasActiveHold: holds.some(holdInEffect),
       };
 
-      return { ...withApiFields(v), compliance: complianceStatus };
+      return {
+        ...withApiFields(v),
+        compliance: complianceStatus,
+        ytd_spend_cents: ytdSpendByVendor.get(v.id as string) ?? 0,
+      };
     });
 
     // Filter by payment hold after enrichment

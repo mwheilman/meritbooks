@@ -5,6 +5,12 @@ import { requireAuthedContext, apiHandler, type ApiContext } from '@/lib/api-han
 import { createSubscriptionSchema, type CreateSubscriptionInput } from '@/lib/subscriptions/schema';
 import { summarizeCreep, subscriptionDedupKey, type CreepFlag, type BillingCadence } from '@/lib/subscriptions/detect';
 import { dueRenewals, type RenewableSubscription } from '@/lib/subscriptions/renewals';
+import {
+  monthlyRunRateTrend,
+  trendDelta,
+  priceCreepList,
+  totalAnnualizedCreepCents,
+} from '@/lib/subscriptions/analytics';
 
 /**
  * /api/subscriptions — the tenant's OWN recurring subscription register + creep guard.
@@ -25,9 +31,16 @@ const SELECT =
 const DEFAULT_WINDOW_DAYS = 60;
 
 interface SubscriptionRow extends RenewableSubscription {
+  id: string;
+  vendor_name: string;
+  product: string | null;
+  category: string | null;
   creep_flags: CreepFlag[] | null;
   billing_cadence: BillingCadence;
   amount_cents: number | null;
+  prior_amount_cents: number | null;
+  first_seen_date: string | null;
+  last_charged_date: string | null;
 }
 
 function todayIso(): string {
@@ -56,6 +69,39 @@ export async function GET(request: Request): Promise<NextResponse> {
   const rows = (data ?? []) as unknown as SubscriptionRow[];
   const renewals = dueRenewals(rows, asOf, windowDays);
 
+  // Deepened views — ALL derived read-only from the detector's own facts (no re-detect,
+  // no write, no post). The trend window follows the (optional) trend_months param.
+  const trendMonthsParam = Number(url.searchParams.get('trend_months'));
+  const trendMonths = Number.isFinite(trendMonthsParam) && trendMonthsParam > 0 ? Math.trunc(trendMonthsParam) : 12;
+  const trend = monthlyRunRateTrend(
+    rows.map((r) => ({
+      amount_cents: r.amount_cents ?? 0,
+      prior_amount_cents: r.prior_amount_cents ?? null,
+      billing_cadence: r.billing_cadence,
+      first_seen_date: r.first_seen_date ?? null,
+      last_charged_date: r.last_charged_date ?? null,
+      status: r.status,
+    })),
+    asOf,
+    trendMonths,
+  );
+  const priceCreep = priceCreepList(
+    rows.map((r) => ({
+      id: r.id,
+      vendor_name: r.vendor_name,
+      product: r.product ?? null,
+      category: r.category ?? null,
+      billing_cadence: r.billing_cadence,
+      amount_cents: r.amount_cents ?? 0,
+      prior_amount_cents: r.prior_amount_cents ?? null,
+      next_renewal_date: r.next_renewal_date ?? null,
+      last_charged_date: r.last_charged_date ?? null,
+      status: r.status,
+      creep_flags: r.creep_flags ?? [],
+    })),
+  );
+
+  const delta = trendDelta(trend);
   const summary = {
     ...summarizeCreep(
       rows.map((r) => ({
@@ -69,9 +115,14 @@ export async function GET(request: Request): Promise<NextResponse> {
     noticePassed: renewals.filter((r) => r.noticeWindowPassed).length,
     windowDays,
     asOf,
+    trendMonths,
+    trendDeltaCents: delta.deltaCents,
+    trendPct: delta.pct,
+    priceCreepCount: priceCreep.length,
+    annualizedCreepCents: totalAnnualizedCreepCents(priceCreep),
   };
 
-  return NextResponse.json({ data: rows, renewals, summary });
+  return NextResponse.json({ data: rows, renewals, trend, priceCreep, summary });
 }
 
 export const POST = apiHandler(

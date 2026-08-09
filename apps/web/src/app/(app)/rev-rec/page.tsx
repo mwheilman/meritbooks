@@ -1,20 +1,18 @@
 'use client';
 
 import { PageHeader } from '@/components/ui';
-import { CompanyScopeGuard } from '@/components/company-scope-guard';
-import { RevRecRun } from './rev-rec-run';
+import { RevRecTabs } from './rev-rec-tabs';
 
 export default function RevRecPage() {
-  // COMPANY-SCOPE CONTROL: rev-rec posts revenue into one company's books.
+  // Run tab posts into ONE company's books (scope-guarded inside the tabs);
+  // Reports tab is read-only and allows the consolidated view.
   return (
     <div className="space-y-6">
       <PageHeader
         title="Revenue Recognition"
-        description="Preview and post period revenue recognition. Each job recognizes by its resolved method (override → job-type mapping → company default)."
+        description="Preview and post period revenue recognition, then report on deferred-revenue rollforward, per-contract recognition waterfall, and revenue recognized by method."
       />
-      <CompanyScopeGuard>
-        <RevRecRun />
-      </CompanyScopeGuard>
+      <RevRecTabs />
     </div>
   );
 }

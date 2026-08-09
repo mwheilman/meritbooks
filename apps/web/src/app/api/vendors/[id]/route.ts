@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { pairsForVendor, type VendorDupInput } from '@/lib/vendors/dedupe';
+import { loadVendorPaymentProfiles } from '@/lib/ap/vendor-payment-details';
+import { computeReadiness, REPORTABLE_THRESHOLD_CENTS, type W9State } from '@/app/api/compliance/1099/readiness';
 
 /**
  * GET /api/vendors/[id] — vendor detail + ledger rollup for the detail drawer/peek.
@@ -150,10 +152,70 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     totalCents: Number(b.total_cents ?? 0), balanceCents: Number(b.balance_cents ?? 0), status: b.status,
   }));
 
-  // ---- Live "possible duplicates" surface (read-only; never auto-merges).
-  const possibleDuplicates = await computePossibleDuplicates(supabase, orgId, params.id);
+  // ---- Open-A/P aging buckets (by days past due on the open bills). These roll
+  // this vendor's slice of the org A/P-aging report onto the vendor 360.
+  const aging = { currentCents: 0, d1_30Cents: 0, d31_60Cents: 0, d61_90Cents: 0, d90PlusCents: 0 };
+  for (const b of openBills) {
+    const d = b.daysOverdue;
+    if (d <= 0) aging.currentCents += b.balanceCents;
+    else if (d <= 30) aging.d1_30Cents += b.balanceCents;
+    else if (d <= 60) aging.d31_60Cents += b.balanceCents;
+    else if (d <= 90) aging.d61_90Cents += b.balanceCents;
+    else aging.d90PlusCents += b.balanceCents;
+  }
 
   const ven = v as Record<string, any>;
+
+  // ---- 1099 status (read-only). A vendor is "reportable" when marked
+  // 1099-eligible AND paid >= the $600 IRS floor this year over a REPORTABLE
+  // (non-card) rail — card/TPN spend lands on the processor's 1099-K, so it is
+  // excluded here (mirrors the 1099 readiness engine). Missing-TIN is flagged
+  // when eligible but no encrypted TIN is on file. Nothing is filed from here.
+  const isReportableRail = (method: string | null, rail: string | null): boolean => {
+    const m = (method ?? '').toUpperCase();
+    const r = (rail ?? '').toUpperCase();
+    return !(m.includes('CARD') || r.includes('CARD'));
+  };
+  const reportableYtdCents = paymentRows
+    .filter((p) => p.payment_date && new Date(p.payment_date) >= yearStart && isReportableRail(p.method ?? null, p.rail ?? null))
+    .reduce((s, p) => s + (Number(p.amount_cents) || 0), 0);
+  const is1099Eligible = !!ven.is_1099_eligible;
+  const tinPresent = typeof ven.tin_encrypted === 'string' && ven.tin_encrypted.trim().length > 0;
+  const w9State: W9State = ((): W9State => {
+    const s = docStatus('W9');
+    if (s === 'valid') return 'on_file';
+    if (s === 'expired') return 'expired';
+    return 'missing';
+  })();
+  const ten99 = {
+    eligible: is1099Eligible,
+    reportable: is1099Eligible && reportableYtdCents >= REPORTABLE_THRESHOLD_CENTS,
+    crossedThreshold: reportableYtdCents >= REPORTABLE_THRESHOLD_CENTS,
+    reportableYtdCents,
+    thresholdCents: REPORTABLE_THRESHOLD_CENTS,
+    tinPresent,
+    missingTin: is1099Eligible && !tinPresent,
+    w9State,
+    readiness: computeReadiness({ is1099Eligible, w9Status: w9State, tinPresent }),
+  };
+
+  // ---- Masked payment method on file (last-4 only; raw bank numbers are never
+  // stored or returned — see lib/ap/vendor-payment-details). Degrades to null.
+  const profileMap = await loadVendorPaymentProfiles(supabase, [params.id]);
+  const prof = profileMap.get(params.id) ?? null;
+  const paymentProfile = prof
+    ? {
+        method: prof.paymentMethod,
+        accountType: prof.accountType,
+        accountMask: prof.accountMask,
+        routingMask: prof.routingMask,
+        bankName: prof.bankName,
+        hasBankDetails: prof.hasBankDetails,
+      }
+    : null;
+
+  // ---- Live "possible duplicates" surface (read-only; never auto-merges).
+  const possibleDuplicates = await computePossibleDuplicates(supabase, orgId, params.id);
   return NextResponse.json({
     id: ven.id,
     name: ven.display_name || ven.name,
@@ -192,6 +254,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       openBalance,
       overdueCount,
       openBillCount: openBills.length,
+      aging,
     },
     spend: {
       ytdCents,
@@ -199,6 +262,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       lifetimeBilledCents,
       paidYtdCents,
     },
+    ten99,
+    paymentProfile,
 
     openBills,
     payments,

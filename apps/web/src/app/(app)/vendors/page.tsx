@@ -6,6 +6,7 @@ import {
   ChevronDown, ChevronUp, Loader2, ExternalLink, Shield,
 } from 'lucide-react';
 import { VendorDrawer } from './vendor-drawer';
+import { formatMoney } from '@meritbooks/shared';
 
 interface Vendor {
   id: string;
@@ -19,6 +20,8 @@ interface Vendor {
   zip: string | null;
   payment_terms: string;
   is_1099: boolean;
+  missing_tin: boolean;
+  ytd_spend_cents: number;
   tax_id: string | null;
   notes: string | null;
   website: string | null;
@@ -433,7 +436,7 @@ export default function VendorsPage() {
       ) : (
         <div className="bg-zinc-800/30 border border-zinc-700/50 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px]">
+          <table className="w-full min-w-[940px]">
             <thead>
               <tr className="border-b border-zinc-700/50">
                 <th
@@ -444,6 +447,7 @@ export default function VendorsPage() {
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">Contact</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">Terms</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">YTD Spend</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">
                   <span className="flex items-center gap-1 justify-center"><Shield className="w-3 h-3" /> Compliance</span>
                 </th>
@@ -478,6 +482,13 @@ export default function VendorsPage() {
                       {PAYMENT_TERMS.find((t) => t.value === v.payment_terms)?.label || v.payment_terms}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    {v.ytd_spend_cents > 0 ? (
+                      <span className="text-sm font-mono tabular-nums text-zinc-200">{formatMoney(v.ytd_spend_cents, { compact: true })}</span>
+                    ) : (
+                      <span className="text-xs text-zinc-600">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-2">
                       <div className="flex items-center gap-0.5" title="W-9">
@@ -499,7 +510,13 @@ export default function VendorsPage() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     {v.is_1099 ? (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/15 text-amber-400">1099</span>
+                      v.missing_tin ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-red-500/15 text-red-400" title="1099-eligible but no TIN on file">
+                          <AlertTriangle className="w-3 h-3" /> No TIN
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/15 text-amber-400">1099</span>
+                      )
                     ) : (
                       <span className="text-xs text-zinc-600">—</span>
                     )}
