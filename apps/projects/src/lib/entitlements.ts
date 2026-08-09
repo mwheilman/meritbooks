@@ -1,25 +1,37 @@
-import { auth } from '@clerk/nextjs/server';
 import { createAuthedServerSupabase } from '@/lib/supabase/authed';
 
 export type Entitlements = Record<string, boolean>;
 
+// Resolve the caller's org THROUGH the RLS-scoped client, i.e. via the database's
+// get_org_id(). That function resolves an explicit `org_id` claim, Clerk's native
+// active-org object (`o.id` -> clerk_org_id), OR — when the session carries no
+// active org at all — the caller's single active employee seat (fail-closed).
+// Reading the org row via RLS (which returns ONLY `id = get_org_id()`) keeps the
+// gate, the dashboard, and every data query on the SAME resolution, so they can
+// never disagree the way a narrower claim-only parse did.
 export async function currentOrgId(): Promise<string | null> {
-  const { sessionClaims } = await auth();
-  const claims = sessionClaims as Record<string, unknown> | null;
-  return typeof claims?.org_id === 'string' ? claims.org_id : null;
+  const sb = await createAuthedServerSupabase();
+  if (!sb) return null;
+  const { data } = await sb
+    .schema('core')
+    .from('organizations')
+    .select('id')
+    .limit(1)
+    .maybeSingle();
+  return (data as { id: string } | null)?.id ?? null;
 }
 
-// Reads core.organizations.entitlements for the current org (RLS-scoped).
-// Suite Core owns entitlements; Projects only READS them to gate its surfaces.
-export async function getEntitlements(orgId: string | null): Promise<Entitlements> {
-  if (!orgId) return {};
+// Reads core.organizations.entitlements for the caller's resolved org (RLS-scoped
+// to get_org_id()). The optional argument is accepted for call-site compatibility
+// but ignored — RLS already scopes the read to exactly the caller's org row.
+export async function getEntitlements(_orgId?: string | null): Promise<Entitlements> {
   const sb = await createAuthedServerSupabase();
   if (!sb) return {};
   const { data } = await sb
     .schema('core')
     .from('organizations')
     .select('entitlements')
-    .eq('id', orgId)
+    .limit(1)
     .maybeSingle();
   return ((data?.entitlements as Entitlements) ?? {});
 }
