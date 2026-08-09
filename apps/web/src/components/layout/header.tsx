@@ -4,8 +4,9 @@ import { UserButton } from '@clerk/nextjs';
 import { Search, Bell, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { clsx } from 'clsx';
-import { useMe } from '@/lib/hooks/use-me';
 import { usePlane } from '@/lib/hooks/use-plane';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { ALL_COMPANIES } from '@/lib/company-scope';
 import { PlaneSwitcher } from '@/components/layout/plane-switcher';
 
 interface CompanyOption {
@@ -15,19 +16,19 @@ interface CompanyOption {
 }
 
 export function Header() {
-  const { locations } = useMe();
+  // The picker is now a real, persisted control: it drives the active company
+  // (a cookie-backed context) that scopes every processing request. "All
+  // Companies" is the consolidated sentinel — allowed on the dashboard/reports,
+  // gated everywhere processing happens.
+  const { activeCompanyId, setActiveCompany, companies: assigned } = useActiveCompany();
   const companies: CompanyOption[] = [
-    { id: 'all', name: 'All Companies', shortCode: 'ALL' },
-    ...locations.map((l) => ({
-      id: l.id,
-      name: l.name,
-      shortCode: (l.code || l.name).slice(0, 3).toUpperCase(),
-    })),
+    { id: ALL_COMPANIES, name: 'All Companies', shortCode: 'ALL' },
+    ...assigned,
   ];
 
-  const [selectedId, setSelectedId] = useState('all');
   const [companyOpen, setCompanyOpen] = useState(false);
-  const selectedCompany = companies.find((c) => c.id === selectedId) ?? companies[0];
+  const selectedCompany =
+    companies.find((c) => c.id === activeCompanyId) ?? companies[0];
   const { plane } = usePlane();
 
   return (
@@ -67,7 +68,7 @@ export function Header() {
                 <button
                   key={company.id}
                   onClick={() => {
-                    setSelectedId(company.id);
+                    setActiveCompany(company.id);
                     setCompanyOpen(false);
                   }}
                   className={clsx(

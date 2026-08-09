@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ElementType } from 'react';
+import { useEffect, useMemo, useState, type ElementType } from 'react';
 import { clsx } from 'clsx';
 import { Building2, Calendar, LayoutGrid, GitCompare, Layers, SlidersHorizontal } from 'lucide-react';
 import { useQuery } from '@/hooks';
@@ -20,6 +20,16 @@ type Tab = 'entry' | 'variance' | 'scenarios';
 export function BudgetsWorkspace() {
   const [tab, setTab] = useState<Tab>('entry');
   const [fiscalYear, setFiscalYear] = useState(CURRENT_YEAR);
+
+  // Deep-link support (e.g. the FP&A dashboard's "AI what-if" callout links to
+  // /budgets?tab=scenarios). Read once on mount to land on the requested tab.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (t === 'entry' || t === 'variance' || t === 'scenarios') setTab(t);
+    const fy = new URLSearchParams(window.location.search).get('fiscal_year');
+    const fyNum = fy ? parseInt(fy, 10) : NaN;
+    if (Number.isFinite(fyNum) && FISCAL_YEARS.includes(fyNum)) setFiscalYear(fyNum);
+  }, []);
   const [locationId, setLocationId] = useState<string>(''); // '' = All companies
   const [departmentId, setDepartmentId] = useState<string>(''); // '' = company-level (no dept)
 

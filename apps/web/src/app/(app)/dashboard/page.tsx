@@ -72,7 +72,7 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
-        description="Portfolio overview across all entities"
+        description="Consolidated summary of work and status across your companies. Select a company below to start working in it."
       />
 
       <Suspense fallback={<MetricsSkeleton />}>

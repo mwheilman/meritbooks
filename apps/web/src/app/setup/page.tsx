@@ -189,8 +189,8 @@ export default function SetupPage() {
             <h2 className="text-2xl font-semibold text-white mb-1">Set up your organization</h2>
             <p className="text-sm text-slate-400 mb-8">The parent entity that owns all companies and data.</p>
             <div className="space-y-5 max-w-lg">
-              <div><label className={labelCls}>Organization Name *</label><input value={orgName} onChange={(e) => { setOrgName(e.target.value); setOrgSlug(''); }} placeholder="e.g. Merit Management Group" className={inputCls} /></div>
-              <div><label className={labelCls}>URL Slug</label><div className="flex items-center gap-2"><span className="text-xs text-slate-600 shrink-0">meritbooks.app/</span><input value={orgSlug} onChange={(e) => setOrgSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="merit-mgmt" className={clsx(inputCls, 'flex-1')} /></div></div>
+              <div><label className={labelCls}>Organization Name *</label><input value={orgName} onChange={(e) => { setOrgName(e.target.value); setOrgSlug(''); }} placeholder="e.g. Acme Holdings, Inc." className={inputCls} /></div>
+              <div><label className={labelCls}>URL Slug</label><div className="flex items-center gap-2"><span className="text-xs text-slate-600 shrink-0">meritbooks.app/</span><input value={orgSlug} onChange={(e) => setOrgSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="acme-holdings" className={clsx(inputCls, 'flex-1')} /></div></div>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className={labelCls}>Your Name</label><input value={contactName} onChange={(e) => setContactName(e.target.value)} className={inputCls} /></div>
                 <div><label className={labelCls}>Email</label><input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} className={inputCls} /></div>

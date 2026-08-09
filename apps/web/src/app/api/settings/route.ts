@@ -18,7 +18,7 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Also get locations for portfolio companies (RLS scopes to this org)
+  // Also get the org's companies/entities (locations; RLS scopes to this org)
   const { data: locations } = await supabase
     .schema('core').from('locations')
     .select('id, name, short_code, industry, is_active, created_at')

@@ -2,6 +2,7 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { ToastContainer } from '@/components/ui';
 import { CommandBar } from '@/components/nl/command-bar';
+import { HelpButtonFloating } from '@/components/help/help-button';
 import { AppProviders } from './providers';
 
 export default function AppLayout({
@@ -21,6 +22,7 @@ export default function AppLayout({
         </div>
         <ToastContainer />
         <CommandBar />
+        <HelpButtonFloating />
       </div>
     </AppProviders>
   );

@@ -303,7 +303,7 @@ export function CustomerDrawer({ customerId, onClose, onEdit }: { customerId: st
     <DetailDrawer
       open={!!customerId} onClose={onClose} width="lg"
       title={data?.name ?? 'Customer'}
-      subtitle={data?.isPortfolioCompany ? 'Portfolio company' : 'External customer'}
+      subtitle={data?.isPortfolioCompany ? 'Internal company' : 'External customer'}
       isLoading={isLoading} error={error}
       headerRight={data && onEdit ? (
         <button onClick={onEdit} className="px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">Edit</button>

@@ -1,3 +1,5 @@
+import { HelpButton } from '@/components/help/help-button';
+
 interface PageHeaderProps {
   title: string;
   description?: string;
@@ -31,7 +33,10 @@ export function PageHeader({ title, description, actions, breadcrumbs }: PageHea
             <p className="mt-1 text-sm text-slate-400">{description}</p>
           )}
         </div>
-        {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+        <div className="flex items-center gap-2 shrink-0">
+          {actions}
+          <HelpButton />
+        </div>
       </div>
     </div>
   );

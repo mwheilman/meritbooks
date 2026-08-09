@@ -16,6 +16,7 @@ import {
   type SensitivityAxis,
 } from '@/lib/budget/scenarios';
 import type { BudgetDriver } from '@/lib/budget/drivers';
+import { NlScenarioBar, type ParsedCaseLevers, type CaseKey as NlCaseKey } from './nl-scenario-bar';
 
 interface AccountLite { id: string; accountNumber: string; name: string; accountType: string; isActive: boolean; approvalStatus: string }
 
@@ -149,6 +150,19 @@ export function ScenarioModeler({
     setCases((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   }, []);
 
+  // Apply an NL-parsed scenario: map the numeric levers into the case editors so
+  // the existing (deterministic) engine recomputes live and the normal save path
+  // takes over. The user can still tweak every field before saving.
+  const applyNlScenario = useCallback((name: string, nlCases: Record<NlCaseKey, ParsedCaseLevers>) => {
+    const toStr = (lv: ParsedCaseLevers): CaseLevers => ({
+      revenueGrowthPct: lv.revenueGrowthPct ? String(lv.revenueGrowthPct) : '',
+      costChangePct: lv.costChangePct ? String(lv.costChangePct) : '',
+      headcountDelta: lv.headcountDelta ? String(lv.headcountDelta) : '',
+    });
+    setCases({ best: toStr(nlCases.best), base: toStr(nlCases.base), worst: toStr(nlCases.worst) });
+    if (name.trim()) setScenarioName(name.trim());
+  }, []);
+
   const save = useCallback(async () => {
     if (!baseDrivers || !three) return;
     if (!scenarioName.trim()) { addToast('error', 'Name the scenario before saving.'); return; }
@@ -221,6 +235,15 @@ export function ScenarioModeler({
 
   return (
     <div className="space-y-5">
+      {/* Natural-language what-if — AI parses plain English into the levers below */}
+      <NlScenarioBar
+        baseDrivers={baseDrivers}
+        beginningCashCents={beginningCashCents}
+        monthlyCostPerHeadCents={monthlyCostPerHeadCents}
+        headcountAccountId={headcountAccountId || undefined}
+        onApply={applyNlScenario}
+      />
+
       {/* Global scenario assumptions */}
       <div className="flex items-end gap-4 p-3 rounded-xl bg-slate-800/20 border border-slate-800 flex-wrap">
         <AssumptionInput icon={Wallet} label="Beginning cash ($)" value={beginningCashStr} onChange={setBeginningCashStr} placeholder="0" />

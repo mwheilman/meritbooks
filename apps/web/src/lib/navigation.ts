@@ -144,7 +144,7 @@ export const navigation: NavGroup[] = [
   {
     label: 'Firm & Governance',
     items: [
-      { label: 'Portfolio', href: '/portfolio', icon: LayoutGrid },
+      { label: 'Entities', href: '/portfolio', icon: LayoutGrid },
       { label: 'Jobs & Projects', href: '/jobs', icon: Briefcase },
       { label: 'Job WIP Schedule', href: '/jobs/wip', icon: ClipboardCheck },
       { label: 'Inventory', href: '/inventory', icon: Package },

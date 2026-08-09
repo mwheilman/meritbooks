@@ -327,7 +327,7 @@ export default function CustomersPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={form.is_portfolio_company} onChange={(e) => setForm({ ...form, is_portfolio_company: e.target.checked })}
                   className="rounded border-zinc-600 text-emerald-500 focus:ring-emerald-500/30 bg-zinc-900" />
-                <span className="text-sm text-zinc-300">Portfolio Company</span>
+                <span className="text-sm text-zinc-300">Internal company</span>
               </label>
             </div>
             <div className="md:col-span-3">
@@ -412,7 +412,7 @@ export default function CustomersPage() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     {c.is_portfolio_company ? (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-500/15 text-emerald-400">Portfolio</span>
+                      <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-500/15 text-emerald-400">Internal</span>
                     ) : (
                       <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-blue-500/15 text-blue-400">External</span>
                     )}

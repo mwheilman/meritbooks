@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     default: 'MeritBooks',
     template: '%s | MeritBooks',
   },
-  description: 'AI-native accounting platform for multi-entity portfolio management.',
+  description: 'AI-native accounting platform for multi-entity finance teams.',
 };
 
 export default function RootLayout({

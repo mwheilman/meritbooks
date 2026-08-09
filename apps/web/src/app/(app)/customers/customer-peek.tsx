@@ -18,7 +18,7 @@ export function CustomerPeek({ customerId }: { customerId: string }) {
     <div className="p-3">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-semibold text-white truncate">{data.name}</span>
-        {data.isPortfolioCompany && <span className="px-1.5 py-0.5 rounded text-2xs font-medium bg-emerald-500/15 text-emerald-400">Portfolio</span>}
+        {data.isPortfolioCompany && <span className="px-1.5 py-0.5 rounded text-2xs font-medium bg-emerald-500/15 text-emerald-400">Internal</span>}
       </div>
       {data.contactName && <div className="text-2xs text-slate-400 mb-1">{data.contactName}</div>}
       <div className="space-y-0.5 mb-2">

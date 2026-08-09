@@ -5,7 +5,7 @@ import { locationQuerySchema } from '@/lib/validations/transactions';
 
 /**
  * GET /api/locations
- * Returns active locations (portfolio companies) for the org.
+ * Returns active locations (companies/entities) for the org.
  */
 export const GET = apiQueryHandler(
   locationQuerySchema,

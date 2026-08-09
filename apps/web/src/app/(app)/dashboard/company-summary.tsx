@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { formatMoney } from '@meritbooks/shared';
 import { clsx } from 'clsx';
+import { EnterCompany, EnterCompanyLink } from './enter-company';
 
 interface CompanyData {
   id: string;
@@ -80,12 +81,15 @@ export async function CompanySummaryTable() {
 
   return (
     <div className="card">
-      <div className="px-5 py-4 border-b border-slate-800">
-        <h2 className="text-sm font-semibold text-white">Portfolio Companies</h2>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+        <h2 className="text-sm font-semibold text-white">Companies</h2>
+        <span className="text-2xs text-slate-500">
+          Select a company to start working in it
+        </span>
       </div>
       {companies.length === 0 ? (
         <div className="px-5 py-8 text-center text-sm text-slate-500">
-          No companies found. Add portfolio companies in Settings.
+          No companies found. Add companies in Settings.
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -96,20 +100,27 @@ export async function CompanySummaryTable() {
                 <th className="px-5 py-2.5 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Cash</th>
                 <th className="px-5 py-2.5 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">Pending</th>
                 <th className="px-5 py-2.5 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                <th className="px-5 py-2.5 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/30">
               {companies.map((co) => {
                 const statusConfig = CASH_STATUS_CONFIG[co.cashStatus];
                 return (
-                  <tr key={co.id} className="table-row-hover">
+                  <tr key={co.id} className="table-row-hover group">
                     <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
+                      <EnterCompany
+                        companyId={co.id}
+                        href="/bank-feed"
+                        className="flex items-center gap-2 text-left"
+                      >
                         <span className="text-2xs font-mono text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">
                           {co.short_code}
                         </span>
-                        <span className="text-sm text-slate-200">{co.name}</span>
-                      </div>
+                        <span className="text-sm text-slate-200 group-hover:text-brand-300 transition-colors">
+                          {co.name}
+                        </span>
+                      </EnterCompany>
                     </td>
                     <td className="px-5 py-3 text-right text-sm font-mono tabular-nums text-slate-300">
                       {formatMoney(co.cashCents)}
@@ -129,6 +140,11 @@ export async function CompanySummaryTable() {
                         statusConfig.className
                       )}>
                         {statusConfig.label}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <EnterCompanyLink companyId={co.id} href="/bank-feed" />
                       </span>
                     </td>
                   </tr>
