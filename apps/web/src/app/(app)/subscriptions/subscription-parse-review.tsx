@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { clsx } from 'clsx';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
@@ -35,6 +35,12 @@ export function SubscriptionParseReview({ onClose, onSaved }: { onClose: () => v
   const [terms, setTerms] = useState<ProposedTerms | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy && !saving) onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [busy, saving, onClose]);
 
   async function upload(file: File) {
     setBusy(true);
@@ -97,7 +103,7 @@ export function SubscriptionParseReview({ onClose, onSaved }: { onClose: () => v
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="card w-full max-w-xl max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-xl max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Upload subscription agreement">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <Sparkles size={16} className="text-indigo-400" /> Upload subscription agreement

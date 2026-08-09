@@ -58,7 +58,7 @@ export function slugify(input: string): string {
 }
 
 /** e.g. buildExportFilename('Profit & Loss', 'pdf') → "profit-loss_2026-08-01.pdf" */
-export function buildExportFilename(title: string, ext: 'pdf' | 'csv'): string {
+export function buildExportFilename(title: string, ext: 'pdf' | 'csv' | 'xlsx'): string {
   const stamp = new Date().toISOString().slice(0, 10);
   return `${slugify(title)}_${stamp}.${ext}`;
 }

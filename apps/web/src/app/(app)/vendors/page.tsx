@@ -241,6 +241,7 @@ export default function VendorsPage() {
           <input
             type="text"
             placeholder="Search vendors..."
+            aria-label="Search vendors"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/50"
@@ -431,7 +432,8 @@ export default function VendorsPage() {
         </div>
       ) : (
         <div className="bg-zinc-800/30 border border-zinc-700/50 rounded-xl overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px]">
             <thead>
               <tr className="border-b border-zinc-700/50">
                 <th
@@ -522,6 +524,7 @@ export default function VendorsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

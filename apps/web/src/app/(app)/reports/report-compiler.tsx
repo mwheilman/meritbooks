@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Sparkles, Loader2, FileText, Download, AlertTriangle, ChevronRight, X, Wand2, Save } from 'lucide-react';
+import { Sparkles, Loader2, FileText, Download, AlertTriangle, ChevronRight, X, Wand2, Save, Sheet } from 'lucide-react';
 import { clsx } from 'clsx';
 import { addToast } from '@/hooks';
 import type { ResolvedSpec, ReportSpec } from '@/lib/reports/compiler/spec';
@@ -46,7 +46,7 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [parsing, setParsing] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  const [generating, setGenerating] = useState<'pdf' | 'xlsx' | null>(null);
   const [result, setResult] = useState<CompileResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saveName, setSaveName] = useState('');
@@ -80,17 +80,18 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
     }
   }, [prompt, parsing, entityLabel, locationIds]);
 
-  const generate = useCallback(async () => {
+  const generate = useCallback(async (fmt: 'pdf' | 'xlsx') => {
     if (!result?.pack || generating) return;
-    setGenerating(true);
+    setGenerating(fmt);
     try {
-      const resp = await fetch('/api/reports/compile/pdf', {
+      const endpoint = fmt === 'xlsx' ? '/api/reports/compile/xlsx' : '/api/reports/compile/pdf';
+      const resp = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(result.pack),
       });
       if (!resp.ok) {
-        let msg = 'PDF generation failed.';
+        let msg = `${fmt.toUpperCase()} generation failed.`;
         try { const j = await resp.json(); msg = j.error ?? msg; } catch { /* binary body */ }
         throw new Error(msg);
       }
@@ -98,16 +99,16 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `report-pack_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.download = `report-pack_${new Date().toISOString().slice(0, 10)}.${fmt}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      addToast('success', 'Report pack PDF generated.');
+      addToast('success', `Report pack ${fmt === 'xlsx' ? 'Excel workbook' : 'PDF'} generated.`);
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Export failed.');
     } finally {
-      setGenerating(false);
+      setGenerating(null);
     }
   }, [result, generating]);
 
@@ -258,14 +259,25 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
               </div>
               <div className="px-4 py-3 border-t border-slate-800 flex items-center justify-between gap-3 bg-slate-900/40">
                 <p className="text-[11px] text-slate-500">Every figure is computed from your ledger — the AI only chose the reports and periods.</p>
-                <button
-                  onClick={generate}
-                  disabled={generating}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
-                >
-                  {generating ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                  {generating ? 'Building PDF…' : 'Generate PDF'}
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => generate('xlsx')}
+                    disabled={generating !== null}
+                    title="Download the pack as an Excel workbook (one sheet per report)"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {generating === 'xlsx' ? <Loader2 size={14} className="animate-spin" /> : <Sheet size={14} />}
+                    {generating === 'xlsx' ? 'Building…' : 'Excel'}
+                  </button>
+                  <button
+                    onClick={() => generate('pdf')}
+                    disabled={generating !== null}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {generating === 'pdf' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                    {generating === 'pdf' ? 'Building PDF…' : 'Generate PDF'}
+                  </button>
+                </div>
               </div>
               {/* Save as a reusable pack — re-resolves to current dates on every future run. */}
               {result.descriptors && result.descriptors.length > 0 && (

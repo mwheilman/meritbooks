@@ -2,7 +2,7 @@
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { DepartmentDrawer, type DeptLike } from './dept-drawer';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Loader2, AlertCircle, Plus, Network, Pencil, Power, X, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
@@ -90,6 +90,14 @@ function DepartmentsPageInner() {
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Escape closes the create/edit modal (unless a save is in flight).
+  useEffect(() => {
+    if (!form) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !saving) setForm(null); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [form, saving]);
 
   const departments = data?.departments ?? [];
   const locationList = locations ?? [];
@@ -268,7 +276,8 @@ function DepartmentsPageInner() {
                 <h2 className="text-sm font-semibold text-white">{group.companyName}</h2>
                 <p className="text-2xs text-slate-500">{group.rows.length} department{group.rows.length === 1 ? '' : 's'}</p>
               </div>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[640px]">
                 <thead>
                   <tr className="border-b border-slate-800">
                     <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Department</th>
@@ -336,6 +345,7 @@ function DepartmentsPageInner() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           ))}
         </div>
@@ -366,12 +376,12 @@ function DepartmentsPageInner() {
       {form && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => !saving && setForm(null)} />
-          <div className="relative z-10 w-full max-w-lg rounded-xl border border-slate-800 bg-surface-900 shadow-2xl">
+          <div className="relative z-10 w-full max-w-lg rounded-xl border border-slate-800 bg-surface-900 shadow-2xl" role="dialog" aria-modal="true" aria-label={form.id ? 'Edit department' : 'New department'}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
               <h3 className="text-sm font-semibold text-white">
                 {form.id ? 'Edit department' : 'New department'}
               </h3>
-              <button onClick={() => !saving && setForm(null)} className="text-slate-500 hover:text-white">
+              <button onClick={() => !saving && setForm(null)} className="text-slate-500 hover:text-white" aria-label="Close">
                 <X size={18} />
               </button>
             </div>

@@ -128,3 +128,54 @@ export function resolveEmailProvider(): EmailProvider | null {
 export function resolveFromAddress(): string | null {
   return process.env.INVOICE_FROM_EMAIL ?? null;
 }
+
+/**
+ * ONE honest definition of "is outbound email configured", so every caller — the
+ * invoice/statement/dunning/reminder/invitation/report-pack send paths and any UI
+ * that wants to warn before a click — agrees on what "configured" means and never
+ * has to re-derive it (or, worse, silently no-op when it isn't).
+ *
+ * `configured` is true only when BOTH a provider (RESEND_API_KEY) and a verified
+ * From address (INVOICE_FROM_EMAIL) are present. When it is false, `code` +
+ * `reason` say exactly what is missing so the UI can render an actionable,
+ * non-silent "email not configured" state rather than pretending a send happened.
+ */
+export type EmailConfigCode =
+  | 'CONFIGURED'
+  | 'EMAIL_NOT_CONFIGURED' // no provider (RESEND_API_KEY missing)
+  | 'EMAIL_FROM_MISSING'; // provider present but no From address
+
+export interface EmailConfigStatus {
+  configured: boolean;
+  hasProvider: boolean;
+  hasFromAddress: boolean;
+  code: EmailConfigCode;
+  /** Null when configured; otherwise a short, actionable message. */
+  reason: string | null;
+}
+
+export function emailConfigStatus(): EmailConfigStatus {
+  const hasProvider = Boolean(process.env.RESEND_API_KEY);
+  const hasFromAddress = Boolean(process.env.INVOICE_FROM_EMAIL);
+
+  if (!hasProvider) {
+    return {
+      configured: false,
+      hasProvider,
+      hasFromAddress,
+      code: 'EMAIL_NOT_CONFIGURED',
+      reason: 'Email is not configured. Set RESEND_API_KEY and verify the sending domain.',
+    };
+  }
+  if (!hasFromAddress) {
+    return {
+      configured: false,
+      hasProvider,
+      hasFromAddress,
+      code: 'EMAIL_FROM_MISSING',
+      reason:
+        'No sending address configured. Set INVOICE_FROM_EMAIL to an address on a domain verified with the provider.',
+    };
+  }
+  return { configured: true, hasProvider, hasFromAddress, code: 'CONFIGURED', reason: null };
+}

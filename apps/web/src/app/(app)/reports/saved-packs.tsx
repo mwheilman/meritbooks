@@ -1,13 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Bookmark, Loader2, Download, Trash2, CalendarClock, AlertTriangle,
-  ChevronRight, Mail, Check, X,
+  ChevronRight, Mail, Check, X, Sheet,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { addToast } from '@/hooks';
 import { REPORT_CATALOG, type ReportType, type ReportSpec } from '@/lib/reports/compiler/spec';
+import { nextOccurrence, cadenceLabel } from '@/lib/reports/compiler/packs';
 import { PACKS_CHANGED_EVENT } from './report-compiler';
 
 /**
@@ -48,6 +49,7 @@ export function SavedPacks() {
   const [packs, setPacks] = useState<Pack[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState<string | null>(null);
+  const [runFmt, setRunFmt] = useState<'pdf' | 'xlsx' | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -73,13 +75,14 @@ export function SavedPacks() {
     return () => window.removeEventListener(PACKS_CHANGED_EVENT, handler);
   }, [load]);
 
-  const runPack = useCallback(async (pack: Pack) => {
+  const runPack = useCallback(async (pack: Pack, fmt: 'pdf' | 'xlsx') => {
     if (running) return;
     setRunning(pack.id);
+    setRunFmt(fmt);
     try {
-      const resp = await fetch(`/api/reports/packs/${pack.id}/pdf`, { method: 'POST' });
+      const resp = await fetch(`/api/reports/packs/${pack.id}/${fmt}`, { method: 'POST' });
       if (!resp.ok) {
-        let msg = 'PDF generation failed.';
+        let msg = `${fmt.toUpperCase()} generation failed.`;
         try { const j = await resp.json(); msg = j.error ?? msg; } catch { /* binary */ }
         throw new Error(msg);
       }
@@ -87,16 +90,17 @@ export function SavedPacks() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${pack.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.download = `${pack.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}_${new Date().toISOString().slice(0, 10)}.${fmt}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      addToast('success', `Generated “${pack.name}”.`);
+      addToast('success', `Generated “${pack.name}” (${fmt === 'xlsx' ? 'Excel' : 'PDF'}).`);
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Export failed.');
     } finally {
       setRunning(null);
+      setRunFmt(null);
     }
   }, [running]);
 
@@ -202,13 +206,22 @@ export function SavedPacks() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button
-                      onClick={() => runPack(pack)}
+                      onClick={() => runPack(pack, 'xlsx')}
+                      disabled={running === pack.id}
+                      title="Run & download as an Excel workbook (one sheet per report)"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-40 transition-colors"
+                    >
+                      {running === pack.id && runFmt === 'xlsx' ? <Loader2 size={13} className="animate-spin" /> : <Sheet size={13} />}
+                      Excel
+                    </button>
+                    <button
+                      onClick={() => runPack(pack, 'pdf')}
                       disabled={running === pack.id}
                       title="Run & download PDF"
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 transition-colors"
                     >
-                      {running === pack.id ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                      Run
+                      {running === pack.id && runFmt === 'pdf' ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                      PDF
                     </button>
                     <button
                       onClick={() => setEditing((id) => (id === pack.id ? null : pack.id))}
@@ -242,26 +255,53 @@ export function SavedPacks() {
 // Schedule editor — cadence + recipients, with the human gate enforced here too.
 // ─────────────────────────────────────────────────────────────────────────────
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function ScheduleEditor({ pack, onSaved, onCancel }: { pack: Pack; onSaved: (p: Pack) => void; onCancel: () => void }) {
   const [cadence, setCadence] = useState<Cadence>(pack.schedule_cadence ?? 'NONE');
   const [recipientsText, setRecipientsText] = useState((pack.recipients ?? []).join(', '));
   const [saving, setSaving] = useState(false);
 
-  const recipients = recipientsText
-    .split(/[,;\s]+/)
-    .map((r) => r.trim().toLowerCase())
-    .filter(Boolean);
+  // Split, dedupe (case-insensitive), and classify each entry so the user sees
+  // exactly which addresses are valid before scheduling anything.
+  const { valid, invalid } = useMemo(() => {
+    const seen = new Set<string>();
+    const valid: string[] = [];
+    const invalid: string[] = [];
+    for (const raw of recipientsText.split(/[,;\s]+/)) {
+      const t = raw.trim();
+      if (!t) continue;
+      const lower = t.toLowerCase();
+      if (EMAIL_RE.test(lower)) {
+        if (!seen.has(lower)) { seen.add(lower); valid.push(lower); }
+      } else {
+        invalid.push(t);
+      }
+    }
+    return { valid, invalid };
+  }, [recipientsText]);
 
-  const active = cadence !== 'NONE' && recipients.length > 0;
+  // Mirror the server gate exactly (packs/[id] PATCH): a live schedule needs a real
+  // cadence AND ≥1 valid recipient. Any invalid address blocks save so nothing is
+  // scheduled against a typo.
+  const wantsSchedule = cadence !== 'NONE';
+  const canSave = !wantsSchedule || (valid.length > 0 && invalid.length === 0);
+
+  // Preview the next fire date with the SAME deterministic math the server uses to
+  // seed next_run_date, so the UI and the DB agree.
+  const nextRun = useMemo(
+    () => (wantsSchedule && canSave ? nextOccurrence(cadence, new Date().toISOString().slice(0, 10)) : null),
+    [wantsSchedule, canSave, cadence],
+  );
 
   const save = useCallback(async () => {
-    if (saving) return;
+    if (saving || !canSave) return;
     setSaving(true);
     try {
       const resp = await fetch(`/api/reports/packs/${pack.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cadence, recipients, schedule_active: cadence !== 'NONE' && recipients.length > 0 }),
+        body: JSON.stringify({ cadence, recipients: valid, schedule_active: wantsSchedule && valid.length > 0 }),
       });
       const j = (await resp.json()) as { pack?: Pack; error?: string };
       if (!resp.ok) throw new Error(j.error ?? 'Could not save the schedule.');
@@ -272,7 +312,7 @@ function ScheduleEditor({ pack, onSaved, onCancel }: { pack: Pack; onSaved: (p: 
     } finally {
       setSaving(false);
     }
-  }, [pack.id, cadence, recipients, saving, onSaved]);
+  }, [pack.id, cadence, valid, wantsSchedule, canSave, saving, onSaved]);
 
   return (
     <div className="px-4 py-3 border-t border-slate-800 bg-slate-950/40">
@@ -297,27 +337,57 @@ function ScheduleEditor({ pack, onSaved, onCancel }: { pack: Pack; onSaved: (p: 
         value={recipientsText}
         onChange={(e) => setRecipientsText(e.target.value)}
         placeholder="Recipient emails, comma-separated"
-        className="w-full px-3 py-1.5 bg-slate-900/60 border border-slate-800 rounded-lg text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50"
+        className={clsx(
+          'w-full px-3 py-1.5 bg-slate-900/60 border rounded-lg text-xs text-white placeholder:text-slate-600 focus:outline-none',
+          invalid.length > 0 ? 'border-red-500/50 focus:border-red-500/70' : 'border-slate-800 focus:border-emerald-500/50',
+        )}
       />
+
+      {/* Live recipient validation */}
+      {(valid.length > 0 || invalid.length > 0) && (
+        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+          {valid.map((e) => (
+            <span key={e} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 text-[10px] text-emerald-300">
+              <Check size={9} /> {e}
+            </span>
+          ))}
+          {invalid.map((e, i) => (
+            <span key={`${e}-${i}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 text-[10px] text-red-300" title="Not a valid email address">
+              <AlertTriangle size={9} /> {e}
+            </span>
+          ))}
+        </div>
+      )}
+      {invalid.length > 0 && (
+        <p className="text-[11px] text-red-400 mt-1.5">Fix or remove {invalid.length} invalid address{invalid.length === 1 ? '' : 'es'} before scheduling.</p>
+      )}
+
       <div className="flex items-center justify-between gap-2 mt-2.5">
-        <p className="text-[11px] text-slate-500">
-          {cadence === 'NONE'
-            ? 'Delivery is off — the pack stays available to run manually.'
-            : active
-              ? `Will email the PDF ${cadence.toLowerCase()} to ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}.`
-              : 'Add at least one recipient to enable delivery.'}
-        </p>
+        <div className="min-w-0">
+          <p className="text-[11px] text-slate-500">
+            {cadence === 'NONE'
+              ? 'Delivery is off — the pack stays available to run manually.'
+              : canSave
+                ? `Emails the PDF ${cadence.toLowerCase()} to ${valid.length} recipient${valid.length === 1 ? '' : 's'}.`
+                : 'Add at least one valid recipient to enable delivery.'}
+          </p>
+          {nextRun && (
+            <p className="text-[11px] text-emerald-300/80 mt-0.5 flex items-center gap-1">
+              <CalendarClock size={10} /> First delivery: {fmtDate(nextRun)} ({cadenceLabel(cadence)})
+            </p>
+          )}
+        </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <button onClick={onCancel} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
             <X size={12} /> Cancel
           </button>
           <button
             onClick={save}
-            disabled={saving || (cadence !== 'NONE' && recipients.length === 0)}
+            disabled={saving || !canSave}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-            {saving ? 'Saving…' : 'Save schedule'}
+            {saving ? 'Saving…' : cadence === 'NONE' ? 'Turn off delivery' : 'Save schedule'}
           </button>
         </div>
       </div>

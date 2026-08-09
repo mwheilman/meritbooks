@@ -166,7 +166,8 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
       {/* Budget vs actual by category */}
       <div className="card overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-800"><h2 className="text-sm font-semibold text-white">Budget vs Actual by Category</h2></div>
-        <table className="w-full">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px]">
           <thead>
             <tr className="border-b border-slate-800">
               <th className="px-4 py-2 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Category</th>
@@ -203,6 +204,7 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Change orders */}
@@ -228,7 +230,8 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
         {ledger.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-500"><Inbox size={20} className="mx-auto mb-2 text-slate-600" />No costs posted to this job yet.</div>
         ) : (
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px]">
             <thead>
               <tr className="border-b border-slate-800">
                 <th className="px-4 py-2 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
@@ -250,6 +253,7 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

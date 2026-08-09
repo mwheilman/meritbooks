@@ -12,6 +12,9 @@ import {
   Inbox,
   Cpu,
   Bot,
+  Mail,
+  Clock,
+  ExternalLink,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
@@ -47,6 +50,12 @@ interface ExtractedBill {
   engineVersion: string;
   extractionMs: number;
 }
+interface InboundMeta {
+  from: string;
+  subject: string | null;
+  receivedAt: string;
+  messageId: string | null;
+}
 interface DraftProposal {
   extracted: ExtractedBill;
   fileName: string;
@@ -57,6 +66,14 @@ interface DraftProposal {
   suggestedAccountId: string | null;
   suggestedAccountLabel: string | null;
   duplicateWarning: string | null;
+  /** How the draft entered the queue. Absent (legacy rows) = 'upload'. */
+  source?: 'upload' | 'email';
+  /** Whether the document was actually read yet. Absent = 'PARSED'. */
+  parseState?: 'PARSED' | 'PENDING_PARSE';
+  /** Retained source document (documents bucket) — open the original invoice. */
+  sourceDocumentId?: string | null;
+  /** Present only for email-sourced drafts. */
+  inbound?: InboundMeta | null;
 }
 interface Draft {
   id: string;
@@ -98,6 +115,43 @@ function centsFromDollarInput(v: string): number {
   const n = Number(v.replace(/[,$\s]/g, ''));
   if (!Number.isFinite(n)) return 0;
   return Math.round(n * 100);
+}
+
+/** Open the retained source invoice in a new tab via a short-lived signed URL. */
+async function openSourceDocument(documentId: string): Promise<void> {
+  try {
+    const res = await fetch(`/api/documents/${documentId}/signed-url`);
+    const data = (await res.json()) as { url?: string; error?: string };
+    if (!res.ok || !data.url) {
+      addToast('error', data.error ?? 'Could not open the source document.');
+      return;
+    }
+    window.open(data.url, '_blank', 'noopener,noreferrer');
+  } catch {
+    addToast('error', 'Network error opening the source document.');
+  }
+}
+
+/** Small source chip: distinguishes an emailed invoice from an uploaded one, and
+ *  flags one that arrived but hasn't been machine-read yet (PENDING_PARSE). */
+function SourceBadges({ proposal }: { proposal: DraftProposal }) {
+  const isEmail = proposal.source === 'email';
+  const pending = proposal.parseState === 'PENDING_PARSE';
+  if (!isEmail && !pending) return null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      {isEmail && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-indigo-800/60 bg-indigo-950/40 px-2 py-0.5 text-[10px] text-indigo-300">
+          <Mail size={10} /> Email
+        </span>
+      )}
+      {pending && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-800/60 bg-amber-950/40 px-2 py-0.5 text-[10px] text-amber-300">
+          <Clock size={10} /> Awaiting AI parse
+        </span>
+      )}
+    </div>
+  );
 }
 
 export function IntakeQueueClient() {
@@ -220,12 +274,17 @@ export function IntakeQueueClient() {
                     <ConfidenceBar value={conf} />
                     <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
                       <Cpu size={11} />
-                      {ex.providerName === 'azure-doc-intelligence' ? 'Azure OCR' : 'AI vision'}
+                      {d.proposal.parseState === 'PENDING_PARSE'
+                        ? 'Not read yet'
+                        : ex.providerName === 'azure-doc-intelligence'
+                          ? 'Azure OCR'
+                          : 'AI vision'}
                     </span>
                   </div>
                   <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500 truncate">
                     <FileText size={11} /> {d.proposal.fileName}
                   </div>
+                  <SourceBadges proposal={d.proposal} />
                   {d.proposal.duplicateWarning && (
                     <div className="mt-2 flex items-center gap-1 text-[11px] text-amber-400">
                       <AlertTriangle size={11} /> Possible duplicate
@@ -560,6 +619,46 @@ function ReviewPanel({
           <X size={18} />
         </button>
       </div>
+
+      {/* Inbound (email) provenance + source-document access. */}
+      {(draft.proposal.source === 'email' || draft.proposal.sourceDocumentId) && (
+        <div className="mx-5 mt-4 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2.5 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2 text-slate-400">
+              {draft.proposal.source === 'email' ? <Mail size={13} className="shrink-0 text-indigo-400" /> : <FileText size={13} className="shrink-0" />}
+              <span className="truncate">
+                {draft.proposal.source === 'email' && draft.proposal.inbound
+                  ? <>Received by email from <span className="text-slate-200">{draft.proposal.inbound.from}</span></>
+                  : 'Uploaded document'}
+              </span>
+            </div>
+            {draft.proposal.sourceDocumentId && (
+              <button
+                onClick={() => void openSourceDocument(draft.proposal.sourceDocumentId!)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800"
+              >
+                <ExternalLink size={11} /> View original
+              </button>
+            )}
+          </div>
+          {draft.proposal.source === 'email' && draft.proposal.inbound?.subject && (
+            <p className="mt-1 truncate text-slate-500">Subject: {draft.proposal.inbound.subject}</p>
+          )}
+        </div>
+      )}
+
+      {/* Degrade-safe state: the document arrived but AI hasn't read it yet. */}
+      {draft.proposal.parseState === 'PENDING_PARSE' && (
+        <div className="mx-5 mt-4 flex items-start gap-2 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2.5 text-xs text-amber-300">
+          <Clock size={14} className="mt-0.5 shrink-0" />
+          <span>
+            Awaiting AI parse — this invoice was received and stored, but hasn&apos;t been read yet
+            {draft.proposal.extracted.notes ? ` (${draft.proposal.extracted.notes})` : ''}. Open the
+            original above and enter the fields to process it now, or leave it here and the machine
+            will read it once AI is back.
+          </span>
+        </div>
+      )}
 
       {draft.proposal.duplicateWarning && (
         <div className="mx-5 mt-4 flex items-start gap-2 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-300">

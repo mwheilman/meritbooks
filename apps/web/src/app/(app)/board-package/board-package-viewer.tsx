@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   Calendar, Building2, ChevronDown, Check, Loader2, AlertCircle, Sparkles, RefreshCw,
-  Download, FileText, ShieldCheck, TrendingUp, TrendingDown, BookOpen,
+  Download, FileText, ShieldCheck, TrendingUp, TrendingDown, BookOpen, Sheet,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
@@ -40,7 +40,7 @@ export function BoardPackageViewer() {
   const [selectedLocs, setSelectedLocs] = useState<string[]>([]);
   const [wantAi, setWantAi] = useState(false);
   const [nonce, setNonce] = useState(0);
-  const [downloading, setDownloading] = useState(false);
+  const [downloading, setDownloading] = useState<'pdf' | 'xlsx' | null>(null);
 
   const { data: rawLocs } = useQuery<LocationEx[]>('/api/locations');
   const locations = rawLocs ?? [];
@@ -116,20 +116,21 @@ export function BoardPackageViewer() {
     setNonce((n) => n + 1);
   }, []);
 
-  const downloadPdf = useCallback(async () => {
+  const download = useCallback(async (fmt: 'pdf' | 'xlsx') => {
     if (!data || downloading) return;
-    setDownloading(true);
+    setDownloading(fmt);
     try {
       // Strip our non-schema field before POSTing the package back to the renderer.
       const { aiMeta: _omit, ...pkg } = data;
       void _omit;
-      const resp = await fetch('/api/reports/board-package/pdf', {
+      const endpoint = fmt === 'xlsx' ? '/api/reports/board-package/xlsx' : '/api/reports/board-package/pdf';
+      const resp = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(pkg),
       });
       if (!resp.ok) {
-        let msg = 'PDF export failed.';
+        let msg = `${fmt.toUpperCase()} export failed.`;
         try { const j = await resp.json(); msg = j.error ?? msg; } catch { /* binary body */ }
         throw new Error(msg);
       }
@@ -137,16 +138,16 @@ export function BoardPackageViewer() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `board-package_${sd}_${ed}.pdf`;
+      a.download = `board-package_${sd}_${ed}.${fmt}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      addToast('success', 'Board package PDF exported.');
+      addToast('success', `Board package ${fmt === 'xlsx' ? 'Excel workbook' : 'PDF'} exported.`);
     } catch (err) {
       addToast('error', err instanceof Error ? err.message : 'Export failed.');
     } finally {
-      setDownloading(false);
+      setDownloading(null);
     }
   }, [data, downloading, sd, ed]);
 
@@ -187,14 +188,23 @@ export function BoardPackageViewer() {
           </div>
         )}
 
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <button
-            onClick={downloadPdf}
-            disabled={!data || downloading || isLoading}
+            onClick={() => download('xlsx')}
+            disabled={!data || downloading !== null || isLoading}
+            title="Download the full package as an Excel workbook (one sheet per statement)"
+            className="btn-secondary btn-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {downloading === 'xlsx' ? <Loader2 size={14} className="animate-spin" /> : <Sheet size={14} />}
+            {downloading === 'xlsx' ? 'Building Excel…' : 'Download Excel'}
+          </button>
+          <button
+            onClick={() => download('pdf')}
+            disabled={!data || downloading !== null || isLoading}
             className="btn-primary btn-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-            {downloading ? 'Building PDF…' : 'Download PDF'}
+            {downloading === 'pdf' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            {downloading === 'pdf' ? 'Building PDF…' : 'Download PDF'}
           </button>
         </div>
       </div>

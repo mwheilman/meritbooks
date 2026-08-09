@@ -9,7 +9,7 @@
  * fallback. One cohesive component drives both document types.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { centsToDollars, dollarsToCents } from '@meritbooks/shared';
 import { addToast } from '@/hooks/use-toast';
@@ -104,6 +104,15 @@ export function VendorDocIntake({
   const [coi, setCoi] = useState<CoiProposal | null>(null);
   const [keep, setKeep] = useState<Record<number, boolean>>({});
   const fileInput = useRef<HTMLInputElement>(null);
+
+  // Escape closes the modal unless a parse/save is in flight.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && phase !== 'parsing' && phase !== 'confirming') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [phase, onClose]);
 
   const endpoint = mode === 'W9' ? '/api/vendors/w9-parse' : '/api/vendors/coi-parse';
   const title = mode === 'W9' ? 'Upload W-9' : 'Upload Certificate of Insurance';
@@ -237,7 +246,7 @@ export function VendorDocIntake({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="card w-full max-w-3xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-3xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-indigo-400" />

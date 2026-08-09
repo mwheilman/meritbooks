@@ -80,6 +80,12 @@ export function JobCreateForm({ onClose, onCreated }: { onClose: () => void; onC
   const { data: locData } = useQuery<{ data: LocationOption[] }>('/api/locations');
   const locations = locData?.data ?? [];
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !submitting) onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [submitting, onClose]);
+
   const isService = ['RETAINER', 'SUBSCRIPTION', 'HOURLY'].includes(pricingModel);
   const revRecMethod = REV_REC_DEFAULTS[pricingModel] ?? 'COMPLETED_CONTRACT';
 
@@ -176,7 +182,7 @@ export function JobCreateForm({ onClose, onCreated }: { onClose: () => void; onC
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center pt-6 overflow-y-auto">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl mb-8">
+      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl mb-8" role="dialog" aria-modal="true" aria-label={isService ? 'New service engagement' : 'New project'}>
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-gray-700/50">
           <div className="flex items-center gap-3">
@@ -186,7 +192,7 @@ export function JobCreateForm({ onClose, onCreated }: { onClose: () => void; onC
               <p className="text-xs text-gray-500 mt-0.5">Rev rec: {revRecMethod.replace(/_/g, ' ').toLowerCase()}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-white" aria-label="Close"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-5 space-y-5">

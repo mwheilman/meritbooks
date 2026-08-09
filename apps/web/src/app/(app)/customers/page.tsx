@@ -242,7 +242,7 @@ export default function CustomersPage() {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
-            type="text" placeholder="Search customers..." value={search}
+            type="text" placeholder="Search customers..." aria-label="Search customers" value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/50"
           />
@@ -363,7 +363,8 @@ export default function CustomersPage() {
         </div>
       ) : (
         <div className="bg-zinc-800/30 border border-zinc-700/50 rounded-xl overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px]">
             <thead>
               <tr className="border-b border-zinc-700/50">
                 <th onClick={() => handleSort('name')} className="text-left px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-zinc-300">
@@ -398,7 +399,7 @@ export default function CustomersPage() {
                   <td className="px-4 py-3 text-right">
                     {c.ar.totalOutstanding > 0 ? (
                       <div>
-                        <span className="text-sm font-mono text-white">{formatMoney(c.ar.totalOutstanding)}</span>
+                        <span className="text-sm font-mono tabular-nums text-white">{formatMoney(c.ar.totalOutstanding)}</span>
                         {c.ar.overdueCount > 0 && (
                           <div className="flex items-center justify-end gap-1 mt-0.5">
                             <AlertTriangle className="w-3 h-3 text-red-400" />
@@ -425,6 +426,7 @@ export default function CustomersPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

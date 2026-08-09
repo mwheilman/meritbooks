@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Package, Loader2, AlertCircle, Search, Plus, X, ChevronRight, TrendingDown } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -175,6 +175,12 @@ function CreateItemModal({ onClose, onCreated }: { onClose: () => void; onCreate
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   async function submit() {
     setSaving(true);
     setErr(null);
@@ -194,7 +200,7 @@ function CreateItemModal({ onClose, onCreated }: { onClose: () => void; onCreate
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-slate-800 bg-surface-900 p-5" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-xl border border-slate-800 bg-surface-900 p-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="New inventory item">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-white font-semibold">New inventory item</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={18} /></button>

@@ -14,6 +14,7 @@ export {
 export { resolveDocProvider, type ResolveDocProviderOptions } from './resolve';
 export {
   createDocIntakeDraft,
+  createInboundIntakeDraft,
   listDocIntakeDrafts,
   getDocIntakeDraft,
   disposeDocIntakeDraft,
@@ -21,8 +22,13 @@ export {
   AP_DOC_INTAKE_FEATURE,
   type DocIntakeProposal,
   type DocIntakeDraft,
+  type DocIntakeSource,
+  type DocIntakeParseState,
+  type DocIntakeInbound,
   type CreateDraftArgs,
   type CreateDraftResult,
+  type CreateInboundDraftArgs,
+  type CreateInboundDraftResult,
   type DraftResolution,
   type DisposeAction,
 } from './intake-queue';

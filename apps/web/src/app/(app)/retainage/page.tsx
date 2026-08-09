@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2, AlertCircle, PiggyBank, X, CheckCircle2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
@@ -84,7 +84,8 @@ function RetainagePageInner() {
             />
           ) : (
             <div className="card overflow-hidden">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[720px]">
                 <thead className="text-2xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
                   <tr>
                     <th className="text-left font-medium px-4 py-2.5">Bill</th>
@@ -107,12 +108,12 @@ function RetainagePageInner() {
                         </td>
                         <td className="px-4 py-2.5 text-slate-300">{r.vendorName}</td>
                         <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">{r.billDate}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-slate-300">
+                        <td className="px-4 py-2.5 text-right font-mono tabular-nums text-slate-300">
                           {fmt(r.withheldCents)}
                           <span className="block text-2xs text-slate-500">{r.retainagePct}%</span>
                         </td>
-                        <td className="px-4 py-2.5 text-right font-mono text-slate-400">{fmt(r.releasedCents)}</td>
-                        <td className={clsx('px-4 py-2.5 text-right font-mono', settled ? 'text-slate-500' : 'text-amber-300')}>
+                        <td className="px-4 py-2.5 text-right font-mono tabular-nums text-slate-400">{fmt(r.releasedCents)}</td>
+                        <td className={clsx('px-4 py-2.5 text-right font-mono tabular-nums', settled ? 'text-slate-500' : 'text-amber-300')}>
                           {fmt(r.outstandingCents)}
                         </td>
                         <td className="px-4 py-2.5 text-right">
@@ -134,6 +135,7 @@ function RetainagePageInner() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </div>
@@ -154,7 +156,7 @@ function SummaryCard({ label, value, tone }: { label: string; value: string; ton
   return (
     <div className="card p-4">
       <p className="text-xs text-slate-500">{label}</p>
-      <p className={clsx('text-xl font-mono font-semibold mt-1',
+      <p className={clsx('text-xl font-mono tabular-nums font-semibold mt-1',
         tone === 'amber' ? 'text-amber-300' : tone === 'muted' ? 'text-slate-400' : 'text-white')}>
         {value}
       </p>
@@ -169,6 +171,12 @@ function ReleaseModal({ row, onClose, onDone }: { row: Row; onClose: () => void;
   const [memo, setMemo] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !saving) onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [saving, onClose]);
 
   const submit = async () => {
     setErr(null);
@@ -192,7 +200,7 @@ function ReleaseModal({ row, onClose, onDone }: { row: Row; onClose: () => void;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Release retainage">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-white">Release retainage</h3>
           <button className="text-slate-500 hover:text-slate-300" onClick={onClose}><X size={18} /></button>

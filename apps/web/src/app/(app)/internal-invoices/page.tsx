@@ -2,7 +2,7 @@
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { InternalInvoiceDrawer } from './internal-invoice-drawer';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Loader2, AlertCircle, Plus, ArrowLeftRight, Trash2, X, Check, Ban, Send, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
@@ -104,6 +104,18 @@ function InternalInvoicesPageInner() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<InvoiceRow | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+
+  // Escape closes whichever modal is open (unless a save is in flight).
+  useEffect(() => {
+    if (!form && !rejecting) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (form && !saving) setForm(null);
+      if (rejecting && busyId == null) setRejecting(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [form, rejecting, saving, busyId]);
 
   const rows = data?.data ?? [];
   const counts = data?.counts ?? {};
@@ -249,7 +261,8 @@ function InternalInvoicesPageInner() {
 
       {!isLoading && !error && rows.length > 0 && (
         <div className="rounded-xl border border-white/5 overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[760px]">
             <thead className="bg-white/5 text-slate-400 text-xs uppercase tracking-wide">
               <tr>
                 <th className="text-left font-medium px-4 py-3">Invoice</th>
@@ -281,7 +294,7 @@ function InternalInvoicesPageInner() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-200">{fmt(inv.totalCents)}</td>
+                    <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-200">{fmt(inv.totalCents)}</td>
                     <td className="px-4 py-3">
                       <span className={clsx('inline-block px-2 py-0.5 rounded text-xs font-medium', st.className)}>{st.label}</span>
                       {inv.status === 'rejected' && inv.rejectionReason && (
@@ -323,6 +336,7 @@ function InternalInvoicesPageInner() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -350,10 +364,10 @@ function InternalInvoicesPageInner() {
       {/* Create modal */}
       {form && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => !saving && setForm(null)}>
-          <div className="bg-[#0f1729] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[#0f1729] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="New internal invoice">
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
               <h2 className="text-lg font-semibold text-slate-100">New internal invoice</h2>
-              <button onClick={() => !saving && setForm(null)} className="text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
+              <button onClick={() => !saving && setForm(null)} className="text-slate-400 hover:text-slate-200" aria-label="Close"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-6 space-y-5">
               <div>
@@ -449,7 +463,7 @@ function InternalInvoicesPageInner() {
       {/* Reject modal */}
       {rejecting && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => busyId == null && setRejecting(null)}>
-          <div className="bg-[#0f1729] border border-white/10 rounded-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[#0f1729] border border-white/10 rounded-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Reject ${rejecting.invoiceNumber}`}>
             <div className="px-6 py-4 border-b border-white/10">
               <h2 className="text-lg font-semibold text-slate-100">Reject {rejecting.invoiceNumber}</h2>
             </div>

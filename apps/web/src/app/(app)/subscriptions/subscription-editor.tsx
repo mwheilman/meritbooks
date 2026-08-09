@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
@@ -82,6 +82,12 @@ export function SubscriptionEditor({
   const [saving, setSaving] = useState(false);
   const isEdit = Boolean(initial?.id);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !saving) onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [saving, onClose]);
+
   const set = <K extends keyof EditorSubscription>(k: K, v: EditorSubscription[K]) =>
     setS((prev) => ({ ...prev, [k]: v }));
 
@@ -126,7 +132,7 @@ export function SubscriptionEditor({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="card w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit subscription' : 'Add subscription'}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white">{isEdit ? 'Edit subscription' : 'Add subscription'}</h2>
           <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close">
