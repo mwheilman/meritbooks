@@ -33,13 +33,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /** The ordered steps of the unified onboarding wizard. */
-export type OnboardingStepKey = 'welcome' | 'coa' | 'opening' | 'bank' | 'team' | 'launch';
+export type OnboardingStepKey = 'welcome' | 'coa' | 'opening' | 'bank' | 'erp' | 'team' | 'launch';
 
 export const ONBOARDING_STEPS: OnboardingStepKey[] = [
   'welcome',
   'coa',
   'opening',
   'bank',
+  'erp',
   'team',
   'launch',
 ];

@@ -1,4 +1,5 @@
 export { PageHeader } from './page-header';
+export { ActiveCompanyIndicator } from './active-company-indicator';
 export { MetricCard } from './metric-card';
 export { DataTable, type Column } from './data-table';
 export { StatusBadge } from './status-badge';

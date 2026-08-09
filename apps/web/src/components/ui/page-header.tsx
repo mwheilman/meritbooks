@@ -1,4 +1,5 @@
 import { HelpButton } from '@/components/help/help-button';
+import { ActiveCompanyIndicator } from './active-company-indicator';
 
 interface PageHeaderProps {
   title: string;
@@ -34,6 +35,7 @@ export function PageHeader({ title, description, actions, breadcrumbs }: PageHea
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <ActiveCompanyIndicator />
           {actions}
           <HelpButton />
         </div>

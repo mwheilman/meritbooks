@@ -10,7 +10,8 @@ import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { ReceiptPeek } from './receipt-peek';
 import { ReceiptDrawer } from './receipt-drawer';
 import type { ApproveReceiptInput } from '@/lib/validations/transactions';
-import { CompanySelector } from '../bank-feed/company-selector';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 
 interface ReceiptRow {
   id: string;
@@ -57,7 +58,12 @@ export function ReceiptQueue() {
   const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<ReceiptRow>();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
-  const [locationId, setLocationId] = useState<string | null>(null);
+  // Company scope is owned by the header picker + <CompanyScopeGuard> (this page
+  // is behind the guard, so a specific company is always active). Derive the
+  // location from the shared active-company context instead of a redundant
+  // in-page selector; useQuery also auto-attaches it as `location_id`.
+  const { activeCompanyId } = useActiveCompany();
+  const locationId = isSpecificCompany(activeCompanyId) ? activeCompanyId : null;
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [isCategorizing, setIsCategorizing] = useState(false);
 
@@ -132,8 +138,7 @@ export function ReceiptQueue() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <CompanySelector selectedId={locationId} onChange={setLocationId} />
+      <div className="flex items-center justify-end gap-3">
         <button
           onClick={handleCategorizeAll}
           disabled={isCategorizing}

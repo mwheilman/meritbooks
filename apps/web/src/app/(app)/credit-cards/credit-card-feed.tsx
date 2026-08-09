@@ -9,7 +9,8 @@ import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { CreditCardDrawer, type CCLike } from './cc-drawer';
 import type { ApproveBankTransactionInput } from '@/lib/validations/transactions';
-import { CompanySelector } from '../bank-feed/company-selector';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 
 interface CCRow {
   id: string;
@@ -79,7 +80,12 @@ export function CreditCardFeed() {
   const [activeTab, setActiveTab] = useState('all');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
-  const [locationId, setLocationId] = useState<string | null>(null);
+  // Company scope is owned by the header picker + <CompanyScopeGuard> (this page
+  // is behind the guard, so a specific company is always active). Derive the
+  // location from the shared active-company context instead of a redundant
+  // in-page selector; useQuery also auto-attaches it as `location_id`.
+  const { activeCompanyId } = useActiveCompany();
+  const locationId = isSpecificCompany(activeCompanyId) ? activeCompanyId : null;
   const [approvingId, setApprovingId] = useState<string | null>(null);
 
   const params: Record<string, string> = {};
@@ -124,10 +130,6 @@ export function CreditCardFeed() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
-        <CompanySelector selectedId={locationId} onChange={setLocationId} />
-      </div>
-
       {/* Status tabs */}
       <div className="flex items-center gap-1 p-1 rounded-lg bg-surface-900 border border-slate-800 w-fit">
         {TAB_CONFIG.map((tab) => {

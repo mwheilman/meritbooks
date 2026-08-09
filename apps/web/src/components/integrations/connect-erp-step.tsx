@@ -155,8 +155,8 @@ export function ConnectErpStep({ embedded = false, onSkip, onDone }: ConnectErpS
               <Plug size={20} className="text-brand-400" /> Connect your existing system
             </h1>
             <p className="text-sm text-slate-400 mt-1 max-w-2xl">
-              If you don’t run the Merit Projects ERP, link the operational system you already use so your
-              accounting-relevant data — customers, jobs, invoices, bills, costs — flows into the book of record.
+              Link the operational system your team already uses so your accounting-relevant data —
+              customers, jobs, invoices, bills, costs — flows into the book of record.
             </p>
           </div>
         </div>

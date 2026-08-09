@@ -7,7 +7,8 @@ import { clsx } from 'clsx';
 import { StatusBadge, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useDebounce } from '@/hooks';
-import { CompanySelector } from '../bank-feed/company-selector';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
 
 interface JobRow {
   id: string; job_number: string; name: string; customer_name: string | null;
@@ -79,7 +80,12 @@ export function JobList() {
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
   const ds = useDebounce(search, 300);
-  const [locId, setLocId] = useState<string | null>(null);
+  // Company scope is owned by the header picker + <CompanyScopeGuard> (this page
+  // is behind the guard, so a specific company is always active). Derive the
+  // location from the shared active-company context instead of a redundant
+  // in-page selector; useQuery also auto-attaches it as `location_id`.
+  const { activeCompanyId } = useActiveCompany();
+  const locId = isSpecificCompany(activeCompanyId) ? activeCompanyId : null;
 
   const p: Record<string, string> = {};
   if (tab !== 'all') p.status = tab;
@@ -93,8 +99,6 @@ export function JobList() {
 
   return (
     <div className="space-y-4">
-      <CompanySelector selectedId={locId} onChange={setLocId} />
-
       {s && s.activeCount > 0 && (
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 rounded-lg bg-surface-900 border border-slate-800 text-sm">
           <span className="text-slate-400">Active: <span className="text-white font-mono font-medium">{s.activeCount}</span>

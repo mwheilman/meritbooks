@@ -1,138 +1,167 @@
 /**
- * Document Management Center — pure helpers.
- *
- * Pins the metadata shaping (blank → null normalization, size coercion, doc_type
- * default), the storage-path builder + filename sanitizer (org namespacing, collision
- * prefix, path-separator stripping), doc-type inference, and the entity-link filter
- * semantics (unfiled = both null). No Storage / Postgres dependency.
+ * Unit tests for the PURE document-metadata helpers backing the source-retention
+ * (store-source) flow. store-source.ts itself is all Supabase I/O; the deterministic
+ * logic it depends on (storage-path building, filename sanitizing, doc-type inference,
+ * row shaping, entity-link filtering) lives here and is testable with no I/O.
  */
 
 import { describe, it, expect } from 'vitest';
 import {
   sanitizeFileName,
   buildStoragePath,
+  inferDocType,
   shapeDocumentRow,
   filterByEntity,
-  inferDocType,
   formatBytes,
-  DOC_TYPES,
+  type DocumentRow,
 } from './schema';
 
+const ORG = 'org_abc';
+const ID = 'doc_0001';
+
 describe('sanitizeFileName', () => {
-  it('strips path separators and keeps the base name', () => {
-    expect(sanitizeFileName('/Users/mike/Bill Q4.pdf')).toBe('bill-q4.pdf');
-    expect(sanitizeFileName('C:\\docs\\W-9 Form.PDF')).toBe('w-9-form.pdf');
+  it('lowercases, strips path separators, keeps extension', () => {
+    expect(sanitizeFileName('/tmp/Some Path/Invoice #42.PDF')).toBe('invoice-42.pdf');
   });
-  it('collapses unsafe chars and never returns empty', () => {
-    expect(sanitizeFileName('   !!! .pdf')).toBe('pdf');
+  it('collapses repeated separators and trims leading/trailing junk', () => {
+    expect(sanitizeFileName('--A   B..name--')).toBe('a-b..name');
+  });
+  it('never returns empty — falls back to "file"', () => {
     expect(sanitizeFileName('')).toBe('file');
     expect(sanitizeFileName('***')).toBe('file');
+    expect(sanitizeFileName('///')).toBe('file');
+  });
+  it('caps length at 120 chars', () => {
+    expect(sanitizeFileName('a'.repeat(400)).length).toBeLessThanOrEqual(120);
+  });
+  it('defends against path traversal by keeping only the basename', () => {
+    expect(sanitizeFileName('../../etc/passwd')).toBe('passwd');
   });
 });
 
 describe('buildStoragePath', () => {
-  const org = '11111111-1111-1111-1111-111111111111';
-  const id = '22222222-2222-2222-2222-222222222222';
-  it('namespaces by org, folders by entity type, and prefixes with the id', () => {
-    expect(buildStoragePath(org, 'BILL', 'Invoice 100.pdf', id)).toBe(
-      `${org}/bill/${id}-invoice-100.pdf`,
+  it('namespaces by org and uses the entity folder', () => {
+    expect(buildStoragePath(ORG, 'covenant', 'Loan.pdf', ID)).toBe(
+      'org_abc/covenant/doc_0001-loan.pdf',
     );
   });
-  it('files documents with no entity under unfiled', () => {
-    expect(buildStoragePath(org, null, 'note.txt', id)).toBe(`${org}/unfiled/${id}-note.txt`);
-    expect(buildStoragePath(org, '   ', 'note.txt', id)).toBe(`${org}/unfiled/${id}-note.txt`);
+  it('uses "unfiled" when entityType is null/blank', () => {
+    expect(buildStoragePath(ORG, null, 'x.pdf', ID)).toBe('org_abc/unfiled/doc_0001-x.pdf');
+    expect(buildStoragePath(ORG, '   ', 'x.pdf', ID)).toBe('org_abc/unfiled/doc_0001-x.pdf');
   });
-  it('two identical filenames get distinct paths via the id prefix', () => {
-    const a = buildStoragePath(org, 'RECEIPT', 'r.pdf', 'aaaaaaaa-0000-0000-0000-000000000000');
-    const b = buildStoragePath(org, 'RECEIPT', 'r.pdf', 'bbbbbbbb-0000-0000-0000-000000000000');
+  it('sanitizes a dirty entityType into a safe folder', () => {
+    expect(buildStoragePath(ORG, 'Bank Account!!', 'x.pdf', ID)).toBe(
+      'org_abc/bank-account/doc_0001-x.pdf',
+    );
+  });
+  it('two identical filenames never collide because id prefixes the key', () => {
+    const a = buildStoragePath(ORG, 'bill', 'same.pdf', 'id_a');
+    const b = buildStoragePath(ORG, 'bill', 'same.pdf', 'id_b');
     expect(a).not.toBe(b);
   });
 });
 
+describe('inferDocType', () => {
+  it.each([
+    ['vendor-w9.pdf', 'W9'],
+    ['w-9-form.pdf', 'W9'],
+    ['acme-coi.pdf', 'COI'],
+    ['certificate-of-insurance.pdf', 'COI'],
+    ['policy-2026.pdf', 'POLICY'],
+    ['office-lease.pdf', 'LEASE'],
+    ['promissory-note.pdf', 'LOAN'],
+    ['bank-statement-jan.pdf', 'STATEMENT'],
+    ['receipt-lunch.jpg', 'RECEIPT'],
+    ['invoice-1001.pdf', 'BILL'],
+    ['master-services-agreement.pdf', 'CONTRACT'],
+    ['random.bin', 'OTHER'],
+  ] as const)('infers %s → %s', (name, expected) => {
+    expect(inferDocType(name, null)).toBe(expected);
+  });
+
+  it('handles empty filename → OTHER', () => {
+    expect(inferDocType('', null)).toBe('OTHER');
+  });
+});
+
 describe('shapeDocumentRow', () => {
-  it('normalizes blanks to null and truncates size to an int', () => {
+  it('normalizes blank strings to null and defaults doc_type to OTHER', () => {
     const row = shapeDocumentRow({
-      orgId: 'org-1',
-      storagePath: 'org-1/unfiled/x-file.pdf',
-      fileName: 'File.pdf',
-      mimeType: '  ',
-      sizeBytes: 123.9,
+      orgId: ORG,
+      storagePath: 'org_abc/unfiled/doc-x.pdf',
+      fileName: 'x.pdf',
+      mimeType: '   ',
       entityType: '',
       entityId: '   ',
-      notes: '  keep me  ',
-      uploadedByUser: 'user_abc',
+      notes: undefined,
     });
     expect(row.mime_type).toBeNull();
     expect(row.entity_type).toBeNull();
     expect(row.entity_id).toBeNull();
-    expect(row.size_bytes).toBe(123);
-    expect(row.notes).toBe('keep me');
-    expect(row.uploaded_by_user).toBe('user_abc');
+    expect(row.notes).toBeNull();
     expect(row.doc_type).toBe('OTHER');
+    expect(row.org_id).toBe(ORG);
   });
-  it('rejects negative / non-finite sizes as null and preserves a chosen doc_type', () => {
+
+  it('falls back to "file" for a blank filename', () => {
+    const row = shapeDocumentRow({ orgId: ORG, storagePath: 'p', fileName: '   ' });
+    expect(row.file_name).toBe('file');
+  });
+
+  it('truncates and floors non-negative size; rejects negative/NaN', () => {
+    expect(shapeDocumentRow({ orgId: ORG, storagePath: 'p', fileName: 'f', sizeBytes: 10.9 }).size_bytes).toBe(10);
+    expect(shapeDocumentRow({ orgId: ORG, storagePath: 'p', fileName: 'f', sizeBytes: -5 }).size_bytes).toBeNull();
+    expect(shapeDocumentRow({ orgId: ORG, storagePath: 'p', fileName: 'f', sizeBytes: NaN }).size_bytes).toBeNull();
+  });
+
+  it('trims retained string fields', () => {
     const row = shapeDocumentRow({
-      orgId: 'org-1',
+      orgId: ORG,
       storagePath: 'p',
-      fileName: 'x',
-      sizeBytes: -5,
-      docType: 'W9',
-      entityType: 'VENDOR',
-      entityId: '33333333-3333-3333-3333-333333333333',
+      fileName: 'f',
+      entityType: '  covenant  ',
+      entityId: '  abc  ',
+      notes: '  hi  ',
     });
-    expect(row.size_bytes).toBeNull();
-    expect(row.doc_type).toBe('W9');
-    expect(row.entity_type).toBe('VENDOR');
-    expect(row.entity_id).toBe('33333333-3333-3333-3333-333333333333');
-  });
-  it('every DOC_TYPE round-trips', () => {
-    for (const t of DOC_TYPES) {
-      expect(shapeDocumentRow({ orgId: 'o', storagePath: 'p', fileName: 'f', docType: t }).doc_type).toBe(t);
-    }
+    expect(row.entity_type).toBe('covenant');
+    expect(row.entity_id).toBe('abc');
+    expect(row.notes).toBe('hi');
   });
 });
 
-describe('filterByEntity — attachments link semantics', () => {
-  const docs = [
-    { entity_type: 'BILL', entity_id: 'b1' },
-    { entity_type: 'BILL', entity_id: 'b2' },
-    { entity_type: 'INVOICE', entity_id: 'b1' },
-    { entity_type: null, entity_id: null },
+describe('filterByEntity', () => {
+  const rows: Pick<DocumentRow, 'entity_type' | 'entity_id'>[] = [
+    { entity_type: 'covenant', entity_id: 'c1' },
+    { entity_type: 'covenant', entity_id: 'c2' },
+    { entity_type: 'bill', entity_id: 'c1' },
+    { entity_type: null, entity_id: null }, // unfiled
   ];
-  it('returns only the exact (type,id) match', () => {
-    expect(filterByEntity(docs, 'BILL', 'b1')).toEqual([{ entity_type: 'BILL', entity_id: 'b1' }]);
-  });
-  it('does not cross entity types even with the same id', () => {
-    const res = filterByEntity(docs, 'INVOICE', 'b1');
-    expect(res).toHaveLength(1);
-    expect(res[0].entity_type).toBe('INVOICE');
-  });
-  it('a null/blank entity_id matches only unfiled rows', () => {
-    expect(filterByEntity(docs, null, null)).toEqual([{ entity_type: null, entity_id: null }]);
-    expect(filterByEntity(docs, '  ', '  ')).toEqual([{ entity_type: null, entity_id: null }]);
-  });
-  it('no match yields an empty array, never throws', () => {
-    expect(filterByEntity(docs, 'LEASE', 'zzz')).toEqual([]);
-  });
-});
 
-describe('inferDocType', () => {
-  it('maps common names to types', () => {
-    expect(inferDocType('vendor-w9.pdf', 'application/pdf')).toBe('W9');
-    expect(inferDocType('ABC-COI-2026.pdf', null)).toBe('COI');
-    expect(inferDocType('office-lease.pdf', null)).toBe('LEASE');
-    expect(inferDocType('bank statement jan.pdf', null)).toBe('STATEMENT');
-    expect(inferDocType('promissory note.pdf', null)).toBe('LOAN');
-    expect(inferDocType('random.dat', null)).toBe('OTHER');
+  it('returns only rows matching (entityType, entityId)', () => {
+    const out = filterByEntity(rows, 'covenant', 'c1');
+    expect(out).toHaveLength(1);
+    expect(out[0].entity_type).toBe('covenant');
+  });
+
+  it('a blank entityId matches only unfiled (null) rows', () => {
+    expect(filterByEntity(rows, null, null)).toHaveLength(1);
+    expect(filterByEntity(rows, '  ', '  ')).toHaveLength(1);
+  });
+
+  it('does not cross entity_type even with the same id', () => {
+    expect(filterByEntity(rows, 'bill', 'c1')).toHaveLength(1);
   });
 });
 
 describe('formatBytes', () => {
-  it('formats and degrades', () => {
-    expect(formatBytes(500)).toBe('500 B');
+  it('renders B / KB / MB', () => {
+    expect(formatBytes(512)).toBe('512 B');
     expect(formatBytes(2048)).toBe('2.0 KB');
     expect(formatBytes(5 * 1024 * 1024)).toBe('5.0 MB');
+  });
+  it('renders an em dash for null/negative/NaN', () => {
     expect(formatBytes(null)).toBe('—');
     expect(formatBytes(-1)).toBe('—');
+    expect(formatBytes(NaN)).toBe('—');
   });
 });

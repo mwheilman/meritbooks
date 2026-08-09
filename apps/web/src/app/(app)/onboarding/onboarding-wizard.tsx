@@ -1,16 +1,18 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Building2, BookOpen, Scale, Landmark, Users, Rocket, Check, Loader2, AlertCircle,
   ArrowLeft, ArrowRight, Sparkles, Percent, CircleCheck, ChevronRight, Plus, ShieldCheck,
+  Plug,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { PlaidLinkButton } from '@/components/integrations/plaid-link-button';
+import { ConnectErpStep } from '@/components/integrations/connect-erp-step';
 import ConversionClient from './conversion/conversion-client';
+import { ACTIVE_COMPANY_COOKIE } from '@/lib/company-scope';
 import type { OnboardingStepKey, OnboardingStatus } from '@/lib/onboarding/status';
 
 // ── Shared shapes ─────────────────────────────────────────────────────────────
@@ -64,6 +66,7 @@ const STEPS: { key: OnboardingStepKey; label: string; icon: typeof Building2 }[]
   { key: 'coa', label: 'Chart of Accounts', icon: BookOpen },
   { key: 'opening', label: 'Opening Balances', icon: Scale },
   { key: 'bank', label: 'Bank Feed', icon: Landmark },
+  { key: 'erp', label: 'Connect Systems', icon: Plug },
   { key: 'team', label: 'Team', icon: Users },
   { key: 'launch', label: 'Launch', icon: Rocket },
 ];
@@ -71,15 +74,30 @@ const STEPS: { key: OnboardingStepKey; label: string; icon: typeof Building2 }[]
 const inputCls = 'w-full px-3 py-2 bg-surface-900 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50';
 const labelCls = 'block text-xs text-slate-500 mb-1.5 font-medium';
 
+/**
+ * Pin the active company by writing the documented company-scope cookie. The name
+ * comes from `lib/company-scope.ts` (single source of truth) so the header selector,
+ * useQuery auto-scoping, server components, and the processing-page guard all read
+ * the same value. Mirrors the client mechanism in use-active-company's writeCookie.
+ */
+function writeActiveCompanyCookie(id: string) {
+  try {
+    const oneYear = 60 * 60 * 24 * 365;
+    document.cookie = `${ACTIVE_COMPANY_COOKIE}=${encodeURIComponent(id)}; path=/; max-age=${oneYear}; samesite=lax`;
+  } catch {
+    /* document unavailable (SSR) — ignore */
+  }
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 export function OnboardingWizard() {
-  const router = useRouter();
   const { data: meta, isLoading: metaLoading, refetch: refetchMeta } = useQuery<EntitiesMeta>('/api/settings/entities');
 
   const [step, setStep] = useState<OnboardingStepKey>('welcome');
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
   const [createdAccounts, setCreatedAccounts] = useState<number | null>(null);
+  const [createdCompanyId, setCreatedCompanyId] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
 
   // Load status once → resume the saved/derived step.
@@ -102,6 +120,14 @@ export function OnboardingWizard() {
 
   const entities = meta?.entities ?? [];
   const stepIndex = STEPS.findIndex((s) => s.key === step);
+
+  // The company the user will ENTER on finish: the one created in this session,
+  // else the tenant's single/first company. Onboarding then pins it and drops the
+  // user into that company's workspace so processing is already company-scoped.
+  const enterCompany = useMemo(
+    () => entities.find((e) => e.id === createdCompanyId) ?? entities[0] ?? null,
+    [entities, createdCompanyId],
+  );
 
   // Persist the step as the user advances (degrade-safe; never blocks navigation).
   const persistStep = useCallback((next: OnboardingStepKey) => {
@@ -135,13 +161,27 @@ export function OnboardingWizard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ complete: true, currentStep: 'launch' }),
       });
+
+      // Pin the freshly-created company as ACTIVE and drop the user straight into
+      // its workspace, so they land already company-scoped (the control that
+      // processing happens inside exactly one company). A hard navigation forces
+      // the app shell + providers to re-init from the cookie with the new company
+      // now present in /api/me — avoiding a stale-locations reconcile that would
+      // otherwise reset the scope to consolidated.
+      if (enterCompany) {
+        writeActiveCompanyCookie(enterCompany.id);
+        addToast('success', `You are live — entering ${enterCompany.name}.`);
+        window.location.assign('/bank-feed');
+        return;
+      }
+
       addToast('success', 'You are live — your book of record is set up.');
-      router.push('/dashboard');
+      window.location.assign('/dashboard');
     } catch {
       addToast('error', 'Could not finish onboarding. Please try again.');
       setFinishing(false);
     }
-  }, [router]);
+  }, [enterCompany]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
@@ -181,7 +221,12 @@ export function OnboardingWizard() {
             <WelcomeStep
               meta={meta ?? null}
               entities={entities}
-              onCreated={async (r) => { setCreatedAccounts(r.accountCount); await refetchMeta(); await loadStatus(); }}
+              onCreated={async (r) => {
+                setCreatedAccounts(r.accountCount);
+                setCreatedCompanyId(r.locationId);
+                await refetchMeta();
+                await loadStatus();
+              }}
             />
           )}
           {step === 'coa' && (
@@ -189,11 +234,14 @@ export function OnboardingWizard() {
           )}
           {step === 'opening' && <OpeningStep />}
           {step === 'bank' && <BankStep entities={entities} />}
+          {step === 'erp' && <ErpStep onSkip={goNext} onDone={goNext} />}
           {step === 'team' && <TeamStep entities={entities} />}
           {step === 'launch' && (
             <LaunchStep
               entities={entities}
+              enterCompanyName={enterCompany?.name ?? null}
               accountCount={createdAccounts ?? status?.counts.accounts ?? 0}
+              teamMembers={status?.counts.teamMembers ?? 0}
               hasOpeningEntry={status?.hasOpeningEntry ?? false}
               onRefresh={loadStatus}
             />
@@ -217,7 +265,7 @@ export function OnboardingWizard() {
                   finishing ? 'bg-slate-700 text-slate-500' : 'bg-brand-500 text-slate-900 hover:bg-brand-400')}
               >
                 {finishing ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
-                Finish &amp; go to dashboard
+                {enterCompany ? `Finish & enter ${enterCompany.shortCode || enterCompany.name}` : 'Finish & go to dashboard'}
               </button>
             ) : (
               <button
@@ -559,7 +607,31 @@ function BankStep({ entities }: { entities: EntityRow[] }) {
   );
 }
 
-// ── Step 5: Invite team ────────────────────────────────────────────────────────
+// ── Step 5: Connect an existing system (ERP; optional, degrade-safe) ────────────
+function ErpStep({ onSkip, onDone }: { onSkip: () => void; onDone: () => void }) {
+  return (
+    <div className="space-y-4">
+      <div className="card p-6 space-y-2">
+        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+          <Plug size={18} className="text-brand-400" /> Connect your existing systems
+        </h2>
+        <p className="text-xs text-slate-500">
+          Already run an operational system — field service, project management, POS, an existing accounting
+          package? Link it so customers, jobs, invoices, bills, and costs flow into your book of record
+          automatically. This is optional — you can connect or change systems any time under Integrations.
+        </p>
+      </div>
+
+      {/* The reusable connector surface, mounted in embedded mode (compact chrome,
+          its own search / catalog / connected-status / CSV path / degrade notice). */}
+      <div className="card p-6">
+        <ConnectErpStep embedded onSkip={onSkip} onDone={onDone} />
+      </div>
+    </div>
+  );
+}
+
+// ── Step 6: Invite team ────────────────────────────────────────────────────────
 interface TeamMember { id: string; firstName: string; lastName: string; email: string | null; roleLabel: string; isActive: boolean }
 interface TeamMembersResponse { data: TeamMember[]; summary: { total: number; active: number; invited: number } }
 
@@ -706,12 +778,14 @@ function TeamStep({ entities }: { entities: EntityRow[] }) {
   );
 }
 
-// ── Step 6: Launch ─────────────────────────────────────────────────────────────
+// ── Step 7: Launch ─────────────────────────────────────────────────────────────
 function LaunchStep({
-  entities, accountCount, hasOpeningEntry, onRefresh,
+  entities, enterCompanyName, accountCount, teamMembers, hasOpeningEntry, onRefresh,
 }: {
   entities: EntityRow[];
+  enterCompanyName: string | null;
   accountCount: number;
+  teamMembers: number;
   hasOpeningEntry: boolean;
   onRefresh: () => Promise<void>;
 }) {
@@ -721,6 +795,7 @@ function LaunchStep({
     { icon: Building2, label: 'Companies', value: `${entities.length} created`, done: entities.length > 0 },
     { icon: BookOpen, label: 'Chart of accounts', value: `${accountCount} accounts`, done: accountCount > 0 },
     { icon: Scale, label: 'Opening balances', value: hasOpeningEntry ? 'Posted — you are live' : 'None (clean start)', done: true },
+    { icon: Users, label: 'Team', value: teamMembers > 0 ? `${teamMembers} member${teamMembers === 1 ? '' : 's'}` : 'Just you (invite later)', done: true },
   ];
 
   return (
@@ -731,7 +806,10 @@ function LaunchStep({
             <Rocket size={28} className="text-brand-400" />
           </div>
           <h2 className="text-xl font-semibold text-white">You&apos;re ready to launch</h2>
-          <p className="text-sm text-slate-400 mt-1">Here&apos;s what&apos;s set up. Finish to mark onboarding complete and open your dashboard.</p>
+          <p className="text-sm text-slate-400 mt-1">
+            Here&apos;s what&apos;s set up. Finishing marks onboarding complete
+            {enterCompanyName ? <> and drops you into <span className="text-brand-300 font-medium">{enterCompanyName}</span> to start processing.</> : ' and opens your dashboard.'}
+          </p>
         </div>
 
         <div className="space-y-2">

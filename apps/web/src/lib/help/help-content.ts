@@ -161,6 +161,20 @@ export const HELP_CONTENT: Record<string, HelpContent> = {
     ],
   },
 
+  '/recurring': {
+    title: 'Recurring Transactions',
+    whatItDoes:
+      'The register of recurring entry templates for one company — rent, insurance, depreciation, and other periodic postings — showing each template’s frequency, next run, and last run.',
+    keyFeatures: [
+      'Per-company template list with frequency (monthly / quarterly / annually)',
+      'Next-run-due highlighting so nothing lapses',
+      'Reversing-entry and active/paused status flags at a glance',
+    ],
+    tips: [
+      'Compose and approve the underlying entries from Recurring Journal Entries.',
+    ],
+  },
+
   '/reconciliation': {
     title: 'Bank Reconciliation',
     whatItDoes:
@@ -724,6 +738,17 @@ export const HELP_CONTENT: Record<string, HelpContent> = {
     ],
   },
 
+  '/jobs/wip': {
+    title: 'Job WIP Schedule',
+    whatItDoes:
+      'The work-in-progress schedule for one company — percent-complete revenue against amounts actually billed, surfacing over- and under-billing per job.',
+    keyFeatures: [
+      'Earned (percent-complete) revenue vs billed-to-date per job',
+      'Over-billing (billings in excess of costs) and under-billing computed for each job',
+      'Ties the WIP adjustment back to the general ledger',
+    ],
+  },
+
   '/inventory': {
     title: 'Inventory',
     whatItDoes:
@@ -894,6 +919,20 @@ export const HELP_CONTENT: Record<string, HelpContent> = {
     ],
   },
 
+  '/settings/payments': {
+    title: 'Payments',
+    whatItDoes:
+      'Connect a Stripe account so customers can pay invoices online by card or bank transfer. Once connected, invoice payment → PAID → GL post runs automatically.',
+    keyFeatures: [
+      'Guided Stripe Connect onboarding for the tenant',
+      'Card and ACH bank-transfer acceptance on the hosted invoice pay page',
+      'Payments turn on automatically once Stripe finishes its review',
+    ],
+    tips: [
+      'System/integration setting — restricted to roles that can view org settings.',
+    ],
+  },
+
   '/settings/new-entity': {
     title: 'Add Company',
     whatItDoes:
@@ -932,6 +971,20 @@ export const HELP_CONTENT: Record<string, HelpContent> = {
       'Guided first-run book-of-record setup',
       'Historical conversion import from your prior system',
       'Connect an existing ERP as a migration source',
+    ],
+  },
+
+  '/onboarding/conversion': {
+    title: 'Historical Conversion',
+    whatItDoes:
+      'Bring a company’s prior books into MeritBooks. Upload a trial balance, let the AI propose the account mapping, review the opening balances, and go live only once a person has tied out. MeritBooks owns the general ledger from that point on.',
+    keyFeatures: [
+      'Trial-balance upload with AI-proposed account mapping',
+      'Reviewable proposed opening balances before anything posts',
+      'Human tie-out gate — the conversion goes live only on approval',
+    ],
+    tips: [
+      'Prior systems (QuickBooks/Sage) are one-time migration sources, not the ongoing book of record.',
     ],
   },
 

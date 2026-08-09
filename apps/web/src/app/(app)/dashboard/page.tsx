@@ -1,68 +1,18 @@
 export const dynamic = "force-dynamic";
 import { Suspense } from 'react';
-import {
-  Receipt,
-  Wallet,
-  ArrowDownRight,
-  ArrowUpRight,
-} from 'lucide-react';
-import { PageHeader, MetricCard, MetricCardSkeleton } from '@/components/ui';
-import { CompanySummaryTable } from './company-summary';
+import { PageHeader } from '@/components/ui';
+import { CompanyBoardGrid } from './company-board';
 import { ActivityFeed } from './activity-feed';
-import { getDashboardMetrics, getRecentActivity } from './actions';
-import { formatMoney } from '@meritbooks/shared';
 
-async function DashboardMetrics() {
-  const m = await getDashboardMetrics();
-
+function BoardSkeleton() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      <MetricCard
-        label="Pending Review"
-        value={m.pendingReview.toLocaleString()}
-        icon={Receipt}
-        change={{
-          value: `${m.pendingReceipts} receipts · ${m.pendingBills} bills`,
-          direction: m.pendingReview > 30 ? 'up' : 'flat',
-        }}
-      />
-      <MetricCard
-        label="Cash Position"
-        value={formatMoney(m.cashPositionCents, { compact: true })}
-        icon={Wallet}
-        change={{
-          value: 'All entities',
-          direction: 'flat',
-        }}
-      />
-      <MetricCard
-        label="Open AP"
-        value={formatMoney(m.openAPCents, { compact: true })}
-        icon={ArrowDownRight}
-        change={{
-          value: 'Unpaid bills',
-          direction: 'flat',
-        }}
-      />
-      <MetricCard
-        label="Open AR"
-        value={formatMoney(m.openARCents, { compact: true })}
-        icon={ArrowUpRight}
-        change={{
-          value: 'Outstanding invoices',
-          direction: 'flat',
-        }}
-      />
-    </div>
-  );
-}
-
-function MetricsSkeleton() {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <MetricCardSkeleton key={i} />
-      ))}
+    <div className="space-y-5">
+      <div className="card h-20 animate-pulse" />
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="card h-56 animate-pulse" />
+        ))}
+      </div>
     </div>
   );
 }
@@ -72,22 +22,17 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
-        description="Consolidated summary of work and status across your companies. Select a company below to start working in it."
+        description="Your cross-company work and status board. Consolidated totals up top, then a card per company — select one to pin it and start working."
       />
 
-      <Suspense fallback={<MetricsSkeleton />}>
-        <DashboardMetrics />
-      </Suspense>
-
-      {/* Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <Suspense fallback={<div className="card p-8 animate-pulse h-64" />}>
-            <CompanySummaryTable />
+          <Suspense fallback={<BoardSkeleton />}>
+            <CompanyBoardGrid />
           </Suspense>
         </div>
         <div>
-          <Suspense fallback={<div className="card p-8 animate-pulse h-64" />}>
+          <Suspense fallback={<div className="card h-64 animate-pulse" />}>
             <ActivityFeed />
           </Suspense>
         </div>
