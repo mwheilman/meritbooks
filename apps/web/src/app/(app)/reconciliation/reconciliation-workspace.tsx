@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X,
   Loader2,
@@ -273,6 +273,17 @@ export function ReconciliationWorkspace({
   const [memoLoading, setMemoLoading] = useState(false);
   const [memoError, setMemoError] = useState<string | null>(null);
   const [memo, setMemo] = useState<MemoResponse | null>(null);
+
+  // Escape closes the memo drawer first (if open), otherwise the workspace.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      if (memoOpen) { setMemoOpen(false); return; }
+      onClose();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [memoOpen, onClose]);
 
   // ── Adjusting-entry (bank fee / interest / other) state ───────────────────────
   const [showAdjust, setShowAdjust] = useState(false);
@@ -593,7 +604,12 @@ export function ReconciliationWorkspace({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
-      <div className="fixed left-1/2 top-1/2 z-50 flex max-h-[92vh] w-[760px] max-w-[95vw] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-slate-700 bg-surface-900 shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Reconcile ${account.accountName}`}
+        className="fixed left-1/2 top-1/2 z-50 flex max-h-[92vh] w-[760px] max-w-[95vw] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-slate-700 bg-surface-900 shadow-2xl"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
           <div>
@@ -1421,7 +1437,12 @@ export function ReconciliationWorkspace({
       {memoOpen && (
         <>
           <div className="fixed inset-0 z-[60] bg-black/50" onClick={() => setMemoOpen(false)} />
-          <div className="fixed left-1/2 top-1/2 z-[70] flex max-h-[85vh] w-[620px] max-w-[94vw] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-slate-700 bg-surface-900 shadow-2xl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Reconciliation memo"
+            className="fixed left-1/2 top-1/2 z-[70] flex max-h-[85vh] w-[620px] max-w-[94vw] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-slate-700 bg-surface-900 shadow-2xl"
+          >
             <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
               <h3 className="flex items-center gap-2 text-base font-semibold text-white">
                 <FileText size={16} className="text-indigo-400" /> Reconciliation memo

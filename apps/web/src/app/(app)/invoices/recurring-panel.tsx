@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
+import { EmptyState } from '@/components/ui';
 import {
   Plus, X, Loader2, Repeat, AlertCircle, Play, Pause, Zap, Send, Trash2, Pencil, CalendarClock,
 } from 'lucide-react';
@@ -181,14 +182,15 @@ export function RecurringPanel() {
       ) : isLoading ? (
         <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
       ) : templates.length === 0 ? (
-        <div className="text-center py-16">
-          <Repeat className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400 font-medium">No recurring schedules</p>
-          <p className="text-sm text-gray-500 mt-1">Create a schedule to bill a customer automatically each period</p>
-        </div>
+        <EmptyState
+          icon={Repeat}
+          title="No recurring schedules"
+          description="Create a schedule to bill a customer automatically each period."
+          action={{ label: 'New Schedule', onClick: () => setShowCreate(true) }}
+        />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[820px]">
             <thead>
               <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-gray-700/50">
                 <th className="pb-3 pr-4">Schedule</th>
@@ -231,13 +233,13 @@ export function RecurringPanel() {
                     ) : (
                       <div className="inline-flex items-center gap-1">
                         {t.isActive && t.isDue && (
-                          <button onClick={() => runOne(t)} title="Generate now" className="p-1.5 text-gray-400 hover:text-amber-400 hover:bg-gray-700/50 rounded"><Send className="w-4 h-4" /></button>
+                          <button onClick={() => runOne(t)} title="Generate now" aria-label={`Generate ${t.name} now`} className="p-1.5 text-gray-400 hover:text-amber-400 hover:bg-gray-700/50 rounded"><Send className="w-4 h-4" /></button>
                         )}
-                        <button onClick={() => toggleActive(t)} title={t.isActive ? 'Pause' : 'Resume'} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded">
+                        <button onClick={() => toggleActive(t)} title={t.isActive ? 'Pause' : 'Resume'} aria-label={`${t.isActive ? 'Pause' : 'Resume'} ${t.name}`} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded">
                           {t.isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                         </button>
-                        <button onClick={() => setEditId(t.id)} title="Edit" className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded"><Pencil className="w-4 h-4" /></button>
-                        <button onClick={() => remove(t)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-700/50 rounded"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => setEditId(t.id)} title="Edit" aria-label={`Edit ${t.name}`} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded"><Pencil className="w-4 h-4" /></button>
+                        <button onClick={() => remove(t)} title="Delete" aria-label={`Delete ${t.name}`} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-700/50 rounded"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     )}
                   </td>
@@ -294,6 +296,13 @@ function TemplateModal({ templateId, onClose, onSaved }: { templateId?: string; 
   const locations = locData?.data ?? [];
   const customers = custData?.data ?? [];
   const accounts = acctData?.data ?? [];
+
+  // Close on Escape (modal a11y).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   // Hydrate the form from the loaded template when editing.
   useEffect(() => {
@@ -362,10 +371,10 @@ function TemplateModal({ templateId, onClose, onSaved }: { templateId?: string; 
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center pt-8 overflow-y-auto">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-3xl mb-8">
+      <div role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit recurring schedule' : 'New recurring schedule'} className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-3xl mb-8">
         <div className="flex items-center justify-between p-6 border-b border-gray-700/50">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2"><CalendarClock className="w-5 h-5 text-emerald-400" /> {isEdit ? 'Edit Recurring Schedule' : 'New Recurring Schedule'}</h2>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-6 space-y-5">

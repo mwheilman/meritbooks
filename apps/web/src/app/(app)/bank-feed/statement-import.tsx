@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { formatMoney, centsToDollars } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
@@ -89,6 +89,16 @@ export function StatementImport({
   const { data: acctData, isLoading: acctLoading } = useQuery<{ accounts: AccountOption[] }>(
     '/api/bank-feed/import-statement',
   );
+
+  // Close on Escape (skip while actively parsing/confirming so a keystroke can't
+  // abandon in-flight work).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && phase !== 'parsing' && phase !== 'confirming') onClose();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose, phase]);
   const accounts = acctData?.accounts ?? [];
   const manualAccounts = accounts.filter((a) => !a.plaidLinked);
   const selected = accounts.find((a) => a.id === accountId) ?? null;
@@ -206,13 +216,19 @@ export function StatementImport({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="card w-full max-w-5xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="statement-import-title"
+        className="card w-full max-w-5xl max-h-[92vh] overflow-y-auto p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-indigo-400" />
             <div>
-              <h2 className="text-lg font-semibold text-white">Import statement (PDF)</h2>
+              <h2 id="statement-import-title" className="text-lg font-semibold text-white">Import statement (PDF)</h2>
               <p className="text-[11px] text-slate-500">
                 For manual accounts without a Plaid feed. Drop a bank or credit-card statement — AI extracts the
                 transactions; you review and confirm. Nothing is imported until you confirm.
@@ -234,7 +250,7 @@ export function StatementImport({
         {(phase === 'select' || phase === 'parsing') && (
           <>
             <div className="mb-4">
-              <label className="block text-[11px] text-slate-500 mb-1">Target account</label>
+              <label htmlFor="statement-target-account" className="block text-[11px] text-slate-500 mb-1">Target account</label>
               {acctLoading ? (
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <Loader2 size={13} className="animate-spin" /> Loading accounts…
@@ -243,6 +259,7 @@ export function StatementImport({
                 <div className="text-xs text-slate-500">No bank accounts found. Add a bank account first.</div>
               ) : (
                 <select
+                  id="statement-target-account"
                   className={clsx(inputCls, 'max-w-md')}
                   value={accountId}
                   onChange={(e) => { setAccountId(e.target.value); setError(null); }}

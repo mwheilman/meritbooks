@@ -5,9 +5,10 @@ import { Download, Loader2, ChevronDown, FileText, Sheet, Table } from 'lucide-r
 import { clsx } from 'clsx';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks';
-import { resolveExportSpec, type ExportMeta } from '@/lib/reports/export/build-model';
+import { resolveExportSpec, buildStatementSummary, type ExportMeta } from '@/lib/reports/export/build-model';
+import type { CompareMode } from '@/lib/reports/export/compare';
 import { toCsv, downloadBlob } from '@/lib/reports/export/csv';
-import { buildExportFilename } from '@/lib/reports/export/statement-model';
+import { buildExportFilename, type StatementModel } from '@/lib/reports/export/statement-model';
 
 /**
  * Export the currently-viewed statement (PDF or CSV) for the active
@@ -17,13 +18,14 @@ import { buildExportFilename } from '@/lib/reports/export/statement-model';
  * the model to the server PDF renderer. Wires FPB Dimension 7's dead buttons.
  */
 export function ExportMenu({
-  reportKey, sd, ed, locIds, basis, reportLabel, entityLabel, periodLabel, basisLabel,
+  reportKey, sd, ed, locIds, basis, compareMode = 'none', reportLabel, entityLabel, periodLabel, basisLabel,
 }: {
   reportKey: string;
   sd: string;
   ed: string;
   locIds: string;
   basis: string;
+  compareMode?: CompareMode;
   reportLabel: string;
   entityLabel: string;
   periodLabel: string;
@@ -39,7 +41,7 @@ export function ExportMenu({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const spec = resolveExportSpec(reportKey, { sd, ed, locIds, basis });
+  const spec = resolveExportSpec(reportKey, { sd, ed, locIds, basis, compareMode });
   const disabled = !spec;
 
   async function run(fmt: 'pdf' | 'csv' | 'xlsx') {
@@ -54,9 +56,21 @@ export function ExportMenu({
         throw new Error(res.error?.error ?? 'Could not load report data.');
       }
 
+      // 1b. Comparative reports (P&L / BS with a prior period/year selected) fetch a
+      // SECOND payload for the comparison window so the export carries the same
+      // prior / variance / % columns the on-screen table shows. Best-effort: if the
+      // comparison fetch fails we still export the single-column statement.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let cmp: { data: any; label: string } | undefined;
+      if (spec.compare) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cmpRes = await api.get<any>(spec.compare.url, spec.compare.query);
+        if (!cmpRes.error && cmpRes.data) cmp = { data: cmpRes.data, label: spec.compare.label };
+      }
+
       // 2. Project it into the normalized statement model.
       const meta: ExportMeta = { reportLabel, entityLabel, periodLabel, basisLabel, accent: '#10b981' };
-      const model = spec.build(res.data, meta);
+      const model = spec.build(res.data, meta, cmp);
 
       if (!model.rows.some((r) => r.kind === 'account' || r.kind === 'total')) {
         addToast('error', 'Nothing to export for the selected filters.');
@@ -67,17 +81,24 @@ export function ExportMenu({
       if (fmt === 'csv') {
         const blob = new Blob([toCsv(model)], { type: 'text/csv;charset=utf-8' });
         downloadBlob(blob, buildExportFilename(model.title, 'csv'));
-        addToast('success', 'CSV exported.');
+        addToast('success', cmp ? 'CSV exported (with comparison columns).' : 'CSV exported.');
         return;
       }
 
       // 3b. XLSX / PDF — server renders (zlib for the workbook, @react-pdf for the
       // PDF), both kept out of the client bundle. The model is the same either way.
+      // For a comparative XLSX we prepend an executive "Summary" worksheet
+      // (section/subtotal/total lines only) so the workbook opens board-ready.
       const endpoint = fmt === 'xlsx' ? '/api/reports/export/xlsx' : '/api/reports/export/pdf';
+      let payload: unknown = model;
+      if (fmt === 'xlsx' && model.columns.length > 1) {
+        const sheets: StatementModel[] = [buildStatementSummary(model), model];
+        payload = { title: model.title, sheets };
+      }
       const resp = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(model),
+        body: JSON.stringify(payload),
       });
       if (!resp.ok) {
         let msg = `${fmt.toUpperCase()} export failed.`;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Check, Flag, Camera, Mail, Upload, Inbox, AlertCircle, Loader2, Search, Bell, ChevronRight } from 'lucide-react';
+import { Check, Camera, Mail, Upload, Inbox, AlertCircle, Loader2, Search, Bell, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatusBadge, ConfidenceBar, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
@@ -197,8 +197,8 @@ export function ReceiptQueue() {
       ) : receipts.length === 0 ? (
         <EmptyState icon={Inbox} title="No receipts" description="No receipts match your filters." />
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full">
+        <div className="card overflow-x-auto">
+          <table className="w-full min-w-[900px]">
             <thead>
               <tr className="border-b border-slate-800">
                 <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
@@ -209,7 +209,7 @@ export function ReceiptQueue() {
                 <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 w-20">Conf.</th>
                 <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Amount</th>
                 <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                <th className="w-20 px-4 py-3"></th>
+                <th className="w-20 px-4 py-3"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/30">
@@ -265,6 +265,8 @@ export function ReceiptQueue() {
                         <button
                           onClick={(e) => { e.stopPropagation(); handleApprove(r); }}
                           disabled={!r.account || !r.amount_cents || isPosted || approvingId === r.id}
+                          aria-label={`Approve receipt from ${r.vendor_name ?? r.vendor?.name ?? 'unknown vendor'}`}
+                          title="Approve and post to the GL"
                           className={clsx(
                             'p-1.5 rounded-md transition-colors',
                             !r.account || !r.amount_cents || isPosted
@@ -273,9 +275,6 @@ export function ReceiptQueue() {
                           )}
                         >
                           {approvingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                        </button>
-                        <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-md text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors">
-                          <Flag size={14} />
                         </button>
                         <ChevronRight size={14} className="row-chevron" />
                       </div>

@@ -55,7 +55,7 @@ export function JournalEntryPeek({ entryId }: { entryId: string }) {
           </tr>
         </tbody>
       </table>
-      <div className={`mt-1.5 text-2xs font-medium ${data.balanced ? 'text-emerald-400' : 'text-rose-400'}`}>
+      <div className={`mt-1.5 text-2xs font-medium ${data.balanced ? 'text-emerald-400' : 'text-red-400'}`}>
         {data.balanced ? '✓ Balanced' : '✗ Out of balance'}
       </div>
     </div>

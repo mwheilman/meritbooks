@@ -61,9 +61,10 @@ export function ReconciliationView() {
     <div className="space-y-6">
       {/* Filter */}
       <div className="flex items-center gap-3">
-        <Building2 className="w-4 h-4 text-gray-500" />
+        <Building2 className="w-4 h-4 text-slate-500" />
         <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
-          className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
+          aria-label="Filter by company"
+          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white">
           <option value="">All Companies</option>
           {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
@@ -75,21 +76,21 @@ export function ReconciliationView() {
           <h3 className="text-sm font-semibold text-amber-400 mb-3 flex items-center gap-2">
             <AlertCircle className="w-4 h-4" /> {needs.length} accounts need reconciliation
           </h3>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {needs.map((a) => (
               <button
                 key={a.id}
                 onClick={() => setWorkspace({ account: { id: a.id, accountName: a.accountName, locationId: a.locationId, locationCode: a.locationCode }, periodId: null, year: null })}
-                className="text-left bg-gray-800/30 border border-amber-700/30 rounded-lg p-3 hover:border-emerald-500/50 hover:bg-gray-800/50 transition-colors cursor-pointer group"
+                className="text-left bg-slate-800/30 border border-amber-700/30 rounded-lg p-3 hover:border-emerald-500/50 hover:bg-slate-800/50 transition-colors cursor-pointer group"
               >
                 <div className="flex items-center gap-2 mb-1">
-                  <CreditCard className="w-4 h-4 text-gray-500" />
+                  <CreditCard className="w-4 h-4 text-slate-500" />
                   <span className="text-sm text-white font-medium">{a.accountName}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-gray-600 ml-auto group-hover:text-emerald-400 transition-colors" />
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-600 ml-auto group-hover:text-emerald-400 transition-colors" />
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-500">{a.locationCode} · {a.accountNumber}</span>
-                  <span className="font-mono text-gray-300">{formatMoney(a.balanceCents)}</span>
+                  <span className="text-slate-500">{a.locationCode} · {a.accountNumber}</span>
+                  <span className="font-mono text-slate-300">{formatMoney(a.balanceCents)}</span>
                 </div>
                 <div className="mt-2 text-2xs text-emerald-400/80 opacity-0 group-hover:opacity-100 transition-opacity">
                   Click to reconcile →
@@ -107,7 +108,7 @@ export function ReconciliationView() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-gray-700/50">
+                <tr className="text-left text-xs text-slate-500 uppercase tracking-wider border-b border-slate-700/50">
                   <th className="pb-3 pr-4">Account</th>
                   <th className="pb-3 pr-4">Company</th>
                   <th className="pb-3 pr-4">Period</th>
@@ -118,7 +119,7 @@ export function ReconciliationView() {
                   <th className="pb-3"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/30">
+              <tbody className="divide-y divide-slate-800/30">
                 {recs.map((r) => (
                   <tr
                     key={r.id}
@@ -130,13 +131,13 @@ export function ReconciliationView() {
                         year: r.periodYear,
                       })
                     }
-                    className="hover:bg-gray-800/20 cursor-pointer"
+                    className="hover:bg-slate-800/20 cursor-pointer"
                   >
                     <td className="py-2.5 pr-4 text-white">{r.bankAccountName}</td>
-                    <td className="py-2.5 pr-4 text-xs text-gray-400">{r.locationCode}</td>
-                    <td className="py-2.5 pr-4 font-mono text-xs text-gray-400">{r.periodYear}-{String(r.periodMonth).padStart(2, '0')}</td>
-                    <td className="py-2.5 pr-4 text-right font-mono text-gray-300">{formatMoney(r.statementBalanceCents)}</td>
-                    <td className="py-2.5 pr-4 text-right font-mono text-gray-300">{formatMoney(r.glBalanceCents)}</td>
+                    <td className="py-2.5 pr-4 text-xs text-slate-400">{r.locationCode}</td>
+                    <td className="py-2.5 pr-4 font-mono text-xs text-slate-400">{r.periodYear}-{String(r.periodMonth).padStart(2, '0')}</td>
+                    <td className="py-2.5 pr-4 text-right font-mono text-slate-300">{formatMoney(r.statementBalanceCents)}</td>
+                    <td className="py-2.5 pr-4 text-right font-mono text-slate-300">{formatMoney(r.glBalanceCents)}</td>
                     <td className={clsx('py-2.5 pr-4 text-right font-mono font-medium', r.differenceCents === 0 ? 'text-emerald-400' : 'text-red-400')}>
                       {formatMoney(r.differenceCents)}
                     </td>
@@ -147,7 +148,7 @@ export function ReconciliationView() {
                       }
                     </td>
                     <td className="py-2.5 text-right">
-                      <ArrowRight className="w-3.5 h-3.5 text-gray-600 ml-auto" />
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-600 ml-auto" />
                     </td>
                   </tr>
                 ))}
@@ -157,9 +158,9 @@ export function ReconciliationView() {
         </div>
       ) : needs.length === 0 ? (
         <div className="text-center py-12">
-          <CheckCircle2 className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400">No bank accounts connected yet</p>
-          <p className="text-sm text-gray-500 mt-1 mb-4">Connect a bank to import transactions and reconcile against the GL.</p>
+          <CheckCircle2 className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+          <p className="text-slate-400">No bank accounts connected yet</p>
+          <p className="text-sm text-slate-500 mt-1 mb-4">Connect a bank to import transactions and reconcile against the GL.</p>
           <div className="flex justify-center">
             <PlaidLinkButton variant="full" entities={locations} onChanged={() => refetch()} />
           </div>

@@ -165,6 +165,7 @@ export function CreditCardFeed() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by vendor or description..."
+          aria-label="Search credit card transactions by vendor or description"
           className="input pl-9"
         />
       </div>
@@ -185,8 +186,8 @@ export function CreditCardFeed() {
           description="No transactions match your filters. Try a different status or company."
         />
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full">
+        <div className="card overflow-x-auto">
+          <table className="w-full min-w-[900px]">
             <thead>
               <tr className="border-b border-slate-800">
                 <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
@@ -263,10 +264,11 @@ export function CreditCardFeed() {
                               : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'
                           )}
                           title="Approve"
+                          aria-label={`Approve transaction ${txn.description}`}
                         >
                           {approvingId === txn.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                         </button>
-                        <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-md text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors" title="Flag">
+                        <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-md text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors" title="Flag" aria-label={`Flag transaction ${txn.description}`}>
                           <Flag size={14} />
                         </button>
                         <ChevronRight size={14} className="row-chevron" />

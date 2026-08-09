@@ -13,7 +13,7 @@
  * fallback; this is an additive lane.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks/use-query';
@@ -106,6 +106,13 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<ParseResponse['meta'] | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  // Close on Escape (modal a11y).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   // Editable review state (populated from the parse response).
   const [contract, setContract] = useState<Contract | null>(null);
@@ -313,7 +320,7 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="card w-full max-w-4xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label="Import from contract or SOW" className="card w-full max-w-4xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">

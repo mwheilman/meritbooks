@@ -683,14 +683,20 @@ function FlagDialog({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] max-w-[90vw] bg-surface-900 border border-slate-800 rounded-xl shadow-2xl z-50 p-6">
-        <h3 className="text-lg font-semibold text-white mb-1">Flag for Review</h3>
+      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} aria-hidden="true" />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="flag-dialog-title"
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] max-w-[90vw] bg-surface-900 border border-slate-800 rounded-xl shadow-2xl z-50 p-6"
+      >
+        <h3 id="flag-dialog-title" className="text-lg font-semibold text-white mb-1">Flag for Review</h3>
         <p className="text-sm text-slate-400 mb-4 truncate">{transaction.description}</p>
-        <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
+        <label htmlFor="flag-reason" className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
           Reason <span className="text-red-400">*</span>
         </label>
         <textarea
+          id="flag-reason"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Why does this need manager review?"

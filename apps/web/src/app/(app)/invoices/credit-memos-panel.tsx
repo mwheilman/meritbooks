@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
+import { EmptyState } from '@/components/ui';
 import {
   Plus, X, Loader2, Receipt, AlertCircle, Check, Ban, Send, Link2, ChevronRight,
 } from 'lucide-react';
@@ -108,14 +109,15 @@ export function CreditMemosPanel({ prefill, onConsumePrefill }: {
       ) : isLoading ? (
         <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
       ) : memos.length === 0 ? (
-        <div className="text-center py-16">
-          <Receipt className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400 font-medium">No credit memos</p>
-          <p className="text-sm text-gray-500 mt-1">Create a credit memo to reverse revenue and reduce a customer&apos;s balance</p>
-        </div>
+        <EmptyState
+          icon={Receipt}
+          title="No credit memos"
+          description="Create a credit memo to reverse revenue and reduce a customer's balance."
+          action={{ label: 'New Credit Memo', onClick: () => setShowCreate(true) }}
+        />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[820px]">
             <thead>
               <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-gray-700/50">
                 <th className="pb-3 pr-4">Credit #</th>
@@ -356,6 +358,13 @@ function CreateCreditMemoModal({ prefill, onClose, onCreated }: {
   const accounts = acctData?.data ?? [];
   const linkableInvoices = (invData?.data ?? []).filter((i) => i.balanceCents > 0 && i.status !== 'DRAFT' && i.status !== 'VOIDED');
 
+  // Close on Escape (modal a11y).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const subtotal = lines.reduce((s, l) => s + Math.max(0, l.amount_cents), 0);
   const total = subtotal + taxCents;
 
@@ -394,10 +403,10 @@ function CreateCreditMemoModal({ prefill, onClose, onCreated }: {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center pt-8 overflow-y-auto">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl mb-8">
+      <div role="dialog" aria-modal="true" aria-label="Create credit memo" className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl mb-8">
         <div className="flex items-center justify-between p-6 border-b border-gray-700/50">
           <h2 className="text-lg font-semibold text-white">Create Credit Memo</h2>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-6 space-y-5">

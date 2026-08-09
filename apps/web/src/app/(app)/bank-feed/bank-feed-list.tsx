@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Check, Flag, Pencil, Receipt, FileText, Link2, HelpCircle, Inbox, AlertCircle, Loader2, ArrowUp, ArrowDown, Sparkles, Search, X, Briefcase, Clock, Copy, Zap } from 'lucide-react';
 import { clsx } from 'clsx';
-import { StatusBadge, ConfidenceBar, EmptyState, TableSkeleton } from '@/components/ui';
+import { ConfidenceBar, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useDebounce } from '@/hooks';
 import type { BankFeedRow, JobSearchResult } from '@meritbooks/shared';
@@ -174,6 +174,7 @@ function InlineAccountPicker({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search accounts..."
+            aria-label="Search GL accounts"
             className="w-full pl-8 pr-3 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500/40"
           />
         </div>
@@ -292,6 +293,7 @@ function InlineJobPicker({
             onChange={(e) => setSearch(e.target.value)}
             placeholder={effectiveLocation ? 'Search jobs...' : 'Select company first'}
             disabled={!effectiveLocation}
+            aria-label="Search jobs"
             className="w-full pl-8 pr-3 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500/40 disabled:opacity-50"
           />
         </div>
@@ -444,7 +446,7 @@ export function BankFeedList({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full min-w-[920px]">
           <thead>
             <tr className="border-b border-slate-800">
               <th className="w-10 px-3 py-3">
@@ -452,6 +454,7 @@ export function BankFeedList({
                   type="checkbox"
                   checked={selected.size === transactions.length && transactions.length > 0}
                   onChange={onToggleAll}
+                  aria-label="Select all transactions"
                   className="rounded border-slate-600 bg-transparent text-brand-500 focus:ring-brand-500/40"
                 />
               </th>
@@ -497,6 +500,7 @@ export function BankFeedList({
                       type="checkbox"
                       checked={selected.has(txn.id)}
                       onChange={() => onToggleSelect(txn.id)}
+                      aria-label={`Select transaction ${txn.description}`}
                       className="rounded border-slate-600 bg-transparent text-brand-500 focus:ring-brand-500/40"
                     />
                   </td>
@@ -656,6 +660,7 @@ export function BankFeedList({
                             : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'
                         )}
                         title={isCogs && !job ? 'Assign job before approving (COGS)' : 'Approve (a)'}
+                        aria-label={isCogs && !job ? 'Assign job before approving (COGS)' : 'Approve transaction'}
                       >
                         {approvingId === txn.id
                           ? <Loader2 size={14} className="animate-spin" />
@@ -665,6 +670,7 @@ export function BankFeedList({
                         onClick={() => onEdit(txn)}
                         className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] transition-colors"
                         title="Full edit panel (e)"
+                        aria-label="Edit transaction"
                       >
                         <Pencil size={14} />
                       </button>
@@ -678,6 +684,7 @@ export function BankFeedList({
                             : 'text-slate-500 hover:text-amber-400 hover:bg-amber-500/10'
                         )}
                         title="Flag for review (f)"
+                        aria-label="Flag transaction for review"
                       >
                         <Flag size={14} />
                       </button>

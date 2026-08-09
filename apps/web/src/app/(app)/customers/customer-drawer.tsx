@@ -19,13 +19,24 @@ type StatementMode = 'open' | 'activity';
  */
 function StatementActions({ customerId, hasEmail }: { customerId: string; hasEmail: boolean }) {
   const today = new Date().toISOString().slice(0, 10);
+  const yearStart = `${today.slice(0, 4)}-01-01`;
   const [mode, setMode] = useState<StatementMode>('open');
   const [asOf, setAsOf] = useState(today);
+  // Activity-mode window. Defaults to year-to-date through the as-of date; the
+  // route treats an empty `from` as "all history" and an empty `to` as the as-of.
+  const [from, setFrom] = useState(yearStart);
+  const [to, setTo] = useState(today);
   const [sending, setSending] = useState(false);
+
+  const rangeInvalid = mode === 'activity' && !!from && !!to && from > to;
 
   const query = () => {
     const p = new URLSearchParams({ mode });
     if (asOf && asOf !== today) p.set('as_of', asOf);
+    if (mode === 'activity') {
+      if (from) p.set('from', from);
+      if (to) p.set('to', to);
+    }
     return p.toString();
   };
 
@@ -45,7 +56,7 @@ function StatementActions({ customerId, hasEmail }: { customerId: string; hasEma
       const res = await fetch(`/api/customers/${customerId}/statement/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, as_of: asOf }),
+        body: JSON.stringify({ mode, as_of: asOf, ...(mode === 'activity' ? { from, to } : {}) }),
       });
       const body = await res.json().catch(() => ({}));
       if (res.ok && body.sent) {
@@ -62,6 +73,8 @@ function StatementActions({ customerId, hasEmail }: { customerId: string; hasEma
   };
 
   const toggle = 'px-2.5 py-1 rounded-md text-xs font-medium transition-colors';
+  const dateInput = 'px-2 py-1 rounded-md bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50';
+  const canAct = !rangeInvalid;
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -69,18 +82,34 @@ function StatementActions({ customerId, hasEmail }: { customerId: string; hasEma
         <button onClick={() => setMode('activity')} className={`${toggle} ${mode === 'activity' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Activity</button>
         <div className="ml-auto flex items-center gap-1.5">
           <span className="text-2xs text-slate-500 uppercase tracking-wider">As of</span>
-          <input type="date" value={asOf} max={today} onChange={(e) => setAsOf(e.target.value || today)}
-            className="px-2 py-1 rounded-md bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50" />
+          <input type="date" value={asOf} max={today} onChange={(e) => setAsOf(e.target.value || today)} className={dateInput} />
         </div>
       </div>
+
+      {mode === 'open' ? (
+        <p className="text-2xs text-slate-500">Open-item statement: only invoices with a balance still outstanding, aged as of the date above.</p>
+      ) : (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-2xs text-slate-500 uppercase tracking-wider w-10">From</span>
+            <input type="date" value={from} max={to || today} onChange={(e) => setFrom(e.target.value)} className={dateInput} />
+            <span className="text-2xs text-slate-500 uppercase tracking-wider">To</span>
+            <input type="date" value={to} max={today} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={dateInput} />
+          </div>
+          <p className={`text-2xs ${rangeInvalid ? 'text-rose-400' : 'text-slate-500'}`}>
+            {rangeInvalid ? 'The From date must be on or before the To date.' : 'Balance-forward statement: opening balance, every charge and payment in the range, and a running balance.'}
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
-        <button onClick={() => preview(false)} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
+        <button onClick={() => preview(false)} disabled={!canAct} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed">
           <FileText size={12} /> Preview
         </button>
-        <button onClick={() => preview(true)} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
+        <button onClick={() => preview(true)} disabled={!canAct} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed">
           <Download size={12} /> Download
         </button>
-        <button onClick={send} disabled={sending || !hasEmail}
+        <button onClick={send} disabled={sending || !hasEmail || !canAct}
           title={hasEmail ? 'Email this statement to the customer' : 'No customer email on file'}
           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed">
           {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
@@ -99,7 +128,10 @@ interface CustDetail {
   contactName: string | null; addressLine: string | null; website: string | null;
   paymentTermsDays: number | null; creditLimitCents: number | null; taxExempt: boolean;
   isPortfolioCompany: boolean; isActive: boolean; notes: string | null;
-  ar: { totalOutstanding: number; overdueCount: number; openInvoiceCount: number };
+  ar: {
+    totalOutstanding: number; overdueCount: number; overdueOutstanding: number; openInvoiceCount: number;
+    oldestOpenInvoiceDays: number | null; lastPaymentDate: string | null; lastPaymentCents: number | null;
+  };
   recentInvoices: Array<{ id: string; invoiceNumber: string; invoiceDate: string; totalCents: number; balanceCents: number; status: string }>;
 }
 
@@ -297,6 +329,52 @@ function CustomerDossierSections({ customerId, survivorName }: { customerId: str
   );
 }
 
+/**
+ * AR-at-a-glance strip (task B7): the four numbers a collector wants first —
+ * total open, overdue, the age of the oldest open invoice, and the last payment
+ * received. Computed server-side over the customer's full open-invoice set so it's
+ * exact, not a sample of recent rows.
+ */
+function ArGlanceStrip({ ar }: { ar: CustDetail['ar'] }) {
+  const tiles: Array<{ label: string; value: string; sub: string; tone: string }> = [
+    {
+      label: 'Total open',
+      value: formatMoney(ar.totalOutstanding),
+      sub: ar.openInvoiceCount > 0 ? `${ar.openInvoiceCount} open invoice${ar.openInvoiceCount !== 1 ? 's' : ''}` : 'Zero balance',
+      tone: 'text-white',
+    },
+    {
+      label: 'Overdue',
+      value: formatMoney(ar.overdueOutstanding),
+      sub: ar.overdueCount > 0 ? `${ar.overdueCount} invoice${ar.overdueCount !== 1 ? 's' : ''} past due` : 'Nothing past due',
+      tone: ar.overdueOutstanding > 0 ? 'text-rose-400' : 'text-slate-300',
+    },
+    {
+      label: 'Oldest invoice',
+      value: ar.oldestOpenInvoiceDays != null ? `${ar.oldestOpenInvoiceDays}d` : '--',
+      sub: ar.oldestOpenInvoiceDays != null ? 'since invoiced' : 'None open',
+      tone: ar.oldestOpenInvoiceDays != null && ar.oldestOpenInvoiceDays > 60 ? 'text-amber-300' : 'text-slate-200',
+    },
+    {
+      label: 'Last payment',
+      value: ar.lastPaymentCents != null ? formatMoney(ar.lastPaymentCents) : '--',
+      sub: ar.lastPaymentDate ?? 'No payments yet',
+      tone: 'text-slate-200',
+    },
+  ];
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
+      {tiles.map((t) => (
+        <div key={t.label} className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2.5">
+          <div className="text-2xs text-slate-500 uppercase tracking-wider mb-1">{t.label}</div>
+          <div className={`text-sm font-mono tabular-nums ${t.tone}`}>{t.value}</div>
+          <div className="text-2xs text-slate-500 mt-0.5 truncate">{t.sub}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function CustomerDrawer({ customerId, onClose, onEdit }: { customerId: string | null; onClose: () => void; onEdit?: () => void }) {
   const { data, isLoading, error } = useQuery<CustDetail>(customerId ? `/api/customers/${customerId}` : '', undefined, { enabled: !!customerId });
   return (
@@ -311,6 +389,7 @@ export function CustomerDrawer({ customerId, onClose, onEdit }: { customerId: st
     >
       {data && (
         <>
+          <ArGlanceStrip ar={data.ar} />
           <DetailSection title="Contact">
             {data.contactName && <DetailField label="Contact" value={data.contactName} />}
             <DetailField label="Email" value={data.email ?? '--'} />
@@ -324,12 +403,6 @@ export function CustomerDrawer({ customerId, onClose, onEdit }: { customerId: st
             <DetailField label="Tax exempt" value={data.taxExempt ? 'Yes' : 'No'} />
             <DetailField label="Status" value={data.isActive ? 'Active' : 'Inactive'} />
           </DetailSection>
-          <DetailSection title="Accounts receivable">
-            <DetailField label="Open balance" value={formatMoney(data.ar.totalOutstanding)} mono />
-            <DetailField label="Open invoices" value={data.ar.openInvoiceCount} />
-            <DetailField label="Overdue" value={data.ar.overdueCount} />
-          </DetailSection>
-
           <CustomerDossierSections customerId={data.id} survivorName={data.name} />
 
           <DetailSection title="Statement">

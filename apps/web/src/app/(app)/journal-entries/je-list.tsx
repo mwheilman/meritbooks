@@ -134,6 +134,7 @@ export function JournalEntryList() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by entry # or memo..."
+          aria-label="Search journal entries by entry number or memo"
           className="input pl-9"
         />
       </div>
@@ -146,10 +147,14 @@ export function JournalEntryList() {
           <p className="text-sm text-red-400 font-medium">{error}</p>
         </div>
       ) : entries.length === 0 ? (
-        <EmptyState icon={Inbox} title="No journal entries" description="No entries match your filters." />
+        debouncedSearch || activeTab !== 'all' ? (
+          <EmptyState icon={Inbox} title="No matching entries" description="No journal entries match your search or filter. Try clearing them." />
+        ) : (
+          <EmptyState icon={Inbox} title="No journal entries yet" description="Post your first manual entry, or let the AI composer draft one from a plain-English description." />
+        )
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full">
+        <div className="card overflow-x-auto">
+          <table className="w-full min-w-[900px]">
             <thead>
               <tr className="border-b border-slate-800">
                 <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Entry #</th>

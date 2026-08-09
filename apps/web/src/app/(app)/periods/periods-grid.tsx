@@ -91,9 +91,9 @@ export function PeriodsGrid() {
       {/* Year nav + generate-all */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <button onClick={() => setYear((y) => y - 1)} className="p-1.5 rounded-md bg-slate-800 text-slate-400 hover:text-white"><ChevronLeft size={16} /></button>
+          <button onClick={() => setYear((y) => y - 1)} aria-label="Previous year" className="p-1.5 rounded-md bg-slate-800 text-slate-400 hover:text-white"><ChevronLeft size={16} /></button>
           <span className="text-lg font-semibold text-white font-mono w-16 text-center">{year}</span>
-          <button onClick={() => setYear((y) => y + 1)} className="p-1.5 rounded-md bg-slate-800 text-slate-400 hover:text-white"><ChevronRight size={16} /></button>
+          <button onClick={() => setYear((y) => y + 1)} aria-label="Next year" className="p-1.5 rounded-md bg-slate-800 text-slate-400 hover:text-white"><ChevronRight size={16} /></button>
           {year !== nowYear && (
             <button onClick={() => setYear(nowYear)} className="text-xs text-slate-500 hover:text-slate-300 ml-1">Today</button>
           )}
@@ -133,7 +133,7 @@ export function PeriodsGrid() {
         <EmptyState icon={Calendar} title="No companies" description="Add a company to manage its fiscal periods." />
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[760px]">
             <thead>
               <tr className="border-b border-slate-800">
                 <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 sticky left-0 bg-surface-900">Company</th>
@@ -157,6 +157,7 @@ export function PeriodsGrid() {
                         onClick={(e) => onCellClick(row, cell, e)}
                         disabled={busy}
                         title={cell.status === 'NONE' ? 'Click to generate this year' : cell.status.replace('_', ' ')}
+                        aria-label={`${row.locationName} ${MONTHS[cell.month - 1]} ${year} — ${cell.status === 'NONE' ? 'not generated' : cell.status.replace('_', ' ').toLowerCase()}`}
                         className={clsx('w-full h-7 rounded border text-2xs font-medium transition-colors flex items-center justify-center', CELL_STYLE[cell.status])}
                       >
                         {cell.status === 'HARD_CLOSE' ? <Lock size={11} /> : cell.status === 'NONE' ? '+' : cell.status === 'SOFT_CLOSE' ? 'S' : 'O'}

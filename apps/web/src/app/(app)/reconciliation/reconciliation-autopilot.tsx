@@ -249,6 +249,7 @@ export function ReconciliationAutopilot() {
           <CreditCard className="h-4 w-4 text-slate-500" />
           <select
             value={accountId}
+            aria-label="Bank account"
             onChange={(e) => {
               setAccountId(e.target.value);
               setPeriodId('');
@@ -269,6 +270,7 @@ export function ReconciliationAutopilot() {
             <Building2 className="h-4 w-4 text-slate-500" />
             <select
               value={year}
+              aria-label="Year"
               onChange={(e) => {
                 setYear(parseInt(e.target.value, 10));
                 setPeriodId('');
@@ -283,6 +285,7 @@ export function ReconciliationAutopilot() {
             </select>
             <select
               value={periodId}
+              aria-label="Fiscal period"
               onChange={(e) => setPeriodId(e.target.value)}
               className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-200"
             >
@@ -441,8 +444,8 @@ export function ReconciliationAutopilot() {
                 <p className="text-sm text-slate-400">No cleared transactions yet for this period.</p>
               </div>
             ) : (
-              <div className="card overflow-hidden">
-                <table className="w-full text-sm">
+              <div className="card overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm">
                   <thead>
                     <tr className="border-b border-slate-800/50 text-left text-[11px] uppercase tracking-wider text-slate-500">
                       <th className="px-4 py-3">Date</th>

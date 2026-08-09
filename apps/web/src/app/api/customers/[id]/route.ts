@@ -27,21 +27,51 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .limit(50);
 
   const invoices = (invRows ?? []) as Array<Record<string, any>>;
-  const today = new Date();
-  let totalOutstanding = 0;
-  let overdueCount = 0;
-  for (const inv of invoices) {
-    const bal = Number(inv.balance_cents ?? 0);
-    if (bal > 0) {
-      totalOutstanding += bal;
-      if (inv.due_date && new Date(inv.due_date) < today) overdueCount += 1;
-    }
-  }
-
   const recentInvoices = invoices.slice(0, 5).map((inv) => ({
     id: inv.id, invoiceNumber: inv.invoice_number, invoiceDate: inv.invoice_date,
     totalCents: Number(inv.total_cents ?? 0), balanceCents: Number(inv.balance_cents ?? 0), status: inv.status,
   }));
+
+  // AR-at-a-glance figures — computed over the FULL set of open invoices (not the
+  // 50-row recent slice) so the strip is exact even for high-volume customers.
+  // `balance_cents` is a stored generated column, so it's filterable server-side.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const daysSince = (d: string | null): number | null => {
+    if (!d) return null;
+    const t = Date.parse(`${d}T00:00:00Z`);
+    if (Number.isNaN(t)) return null;
+    return Math.max(0, Math.floor((Date.parse(`${todayStr}T00:00:00Z`) - t) / 86_400_000));
+  };
+
+  const { data: openRows } = await supabase
+    .from('invoices')
+    .select('invoice_date, due_date, balance_cents')
+    .eq('org_id', orgId).eq('customer_id', params.id)
+    .gt('balance_cents', 0)
+    .neq('status', 'VOIDED')
+    .order('invoice_date', { ascending: true });
+  const open = (openRows ?? []) as Array<Record<string, any>>;
+  let totalOutstanding = 0;
+  let overdueCount = 0;
+  let overdueOutstanding = 0;
+  for (const inv of open) {
+    const bal = Number(inv.balance_cents ?? 0);
+    totalOutstanding += bal;
+    if (inv.due_date && inv.due_date < todayStr) {
+      overdueCount += 1;
+      overdueOutstanding += bal;
+    }
+  }
+  const oldestOpenInvoiceDays = open.length ? daysSince(String(open[0].invoice_date ?? '')) : null;
+
+  const { data: lastPay } = await supabase
+    .from('customer_payments')
+    .select('payment_date, amount_cents')
+    .eq('org_id', orgId).eq('customer_id', params.id)
+    .order('payment_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const lp = lastPay as Record<string, any> | null;
 
   const cust = c as Record<string, any>;
   return NextResponse.json({
@@ -59,7 +89,15 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     isPortfolioCompany: !!cust.is_portfolio_company,
     isActive: cust.is_active !== false,
     notes: cust.notes ?? null,
-    ar: { totalOutstanding, overdueCount, openInvoiceCount: invoices.filter((i) => Number(i.balance_cents ?? 0) > 0).length },
+    ar: {
+      totalOutstanding,
+      overdueCount,
+      overdueOutstanding,
+      openInvoiceCount: open.length,
+      oldestOpenInvoiceDays,
+      lastPaymentDate: lp?.payment_date ?? null,
+      lastPaymentCents: lp?.amount_cents != null ? Number(lp.amount_cents) : null,
+    },
     recentInvoices,
   });
 }

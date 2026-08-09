@@ -51,7 +51,7 @@ export function AccountTree() {
       </div>
 
       {/* Tree */}
-      <div className="card divide-y divide-slate-800/30">
+      <div className="card divide-y divide-slate-800/30 overflow-x-auto">
         {ACCOUNT_TYPE_HIERARCHY.map((type) => {
           const typeKey = type.code;
           const typeExpanded = expanded.has(typeKey);
@@ -114,9 +114,9 @@ export function AccountTree() {
                           {gExpanded && group.accounts.map((account) => (
                             <div
                               key={account.number}
-                              className="flex items-center gap-3 pl-24 pr-5 py-2 hover:bg-white/[0.02] transition-colors cursor-pointer group"
+                              className="flex items-center gap-3 pl-24 pr-5 py-2 min-w-[480px] hover:bg-white/[0.02] transition-colors"
                             >
-                              <span className="text-xs font-mono text-brand-400 w-12">{account.number}</span>
+                              <span className="text-xs font-mono text-brand-400 w-12 shrink-0">{account.number}</span>
                               <span className="text-sm text-slate-300">{account.name}</span>
 
                               {/* Flags */}

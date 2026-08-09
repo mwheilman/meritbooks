@@ -107,6 +107,7 @@ function AccountPicker({ value, label, onChange, locationId }: {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by number or name..."
+                aria-label="Search accounts by number or name"
                 className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50"
                 autoFocus
               />
@@ -153,11 +154,12 @@ function AccountPicker({ value, label, onChange, locationId }: {
 
 // ─── Dollar Input ───────────────────────────────────────────
 
-function DollarInput({ value, onChange, disabled, placeholder }: {
+function DollarInput({ value, onChange, disabled, placeholder, ariaLabel }: {
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  ariaLabel?: string;
 }) {
   return (
     <div className="relative">
@@ -165,6 +167,7 @@ function DollarInput({ value, onChange, disabled, placeholder }: {
       <input
         type="text"
         inputMode="decimal"
+        aria-label={ariaLabel}
         value={value}
         onChange={(e) => {
           const v = e.target.value.replace(/[^0-9.]/g, '');
@@ -287,7 +290,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
         <h2 className="text-lg font-semibold text-white">New Journal Entry</h2>
-        <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+        <button onClick={onClose} aria-label="Close new journal entry form" className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
           <X size={18} />
         </button>
       </div>
@@ -343,8 +346,8 @@ export function JournalEntryForm({ onClose, onSuccess }: {
         </div>
 
         {/* Line items table */}
-        <div className="border border-slate-800 rounded-xl overflow-hidden">
-          <table className="w-full">
+        <div className="border border-slate-800 rounded-xl overflow-x-auto">
+          <table className="w-full min-w-[640px]">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/30">
                 <th className="px-3 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-8">#</th>
@@ -376,6 +379,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
                       value={line.debit}
                       onChange={(v) => updateLine(line.key, 'debit', v)}
                       disabled={!!line.credit}
+                      ariaLabel={`Line ${idx + 1} debit amount`}
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -383,6 +387,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
                       value={line.credit}
                       onChange={(v) => updateLine(line.key, 'credit', v)}
                       disabled={!!line.debit}
+                      ariaLabel={`Line ${idx + 1} credit amount`}
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -391,6 +396,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
                       value={line.memo}
                       onChange={(e) => updateLine(line.key, 'memo', e.target.value)}
                       placeholder="—"
+                      aria-label={`Line ${idx + 1} memo`}
                       className="w-full px-2 py-1.5 bg-slate-800/50 border border-slate-700/50 rounded-lg text-xs text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50"
                     />
                   </td>
@@ -399,6 +405,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
                       type="button"
                       onClick={() => removeLine(line.key)}
                       disabled={lines.length <= 2}
+                      aria-label={`Remove line ${idx + 1}`}
                       className={clsx(
                         'p-1 rounded',
                         lines.length <= 2 ? 'text-slate-700 cursor-not-allowed' : 'text-slate-500 hover:text-red-400 hover:bg-red-500/10'

@@ -20,8 +20,8 @@ export function InvoicePeek({ invoiceId }: { invoiceId: string }) {
   }
   if (!data) return <div className="px-3 py-6 text-center text-xs text-slate-500">Preview unavailable</div>;
 
-  const shown = data.lines.slice(0, 6);
-  const more = data.lines.length - shown.length;
+  const shown = (data.lines ?? []).slice(0, 6);
+  const more = (data.lines?.length ?? 0) - shown.length;
 
   return (
     <div className="bg-white text-slate-800 m-2 rounded-lg p-3 text-[11px] leading-relaxed">

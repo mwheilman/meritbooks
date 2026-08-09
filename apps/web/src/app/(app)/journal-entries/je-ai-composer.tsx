@@ -148,7 +148,7 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
           <h3 className="text-sm font-semibold text-white">Compose with AI</h3>
           <span className="text-2xs text-slate-500">advisory — you review and post</span>
         </div>
-        <button onClick={onClose} className="text-slate-500 hover:text-slate-300"><X size={16} /></button>
+        <button onClick={onClose} aria-label="Close AI composer" className="text-slate-500 hover:text-slate-300"><X size={16} /></button>
       </div>
 
       <div className="grid grid-cols-3 gap-3 mb-3">
@@ -216,11 +216,13 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
                 <div className="min-w-0">
                   <p className={`text-sm truncate ${l.account_id ? 'text-slate-200' : 'text-rose-300'}`}>{l.account_label}</p>
                   <input value={l.memo} onChange={(e) => updateLine(i, { memo: e.target.value })}
-                    placeholder="line memo" className="mt-0.5 w-full bg-transparent text-2xs text-slate-500 placeholder:text-slate-600 focus:outline-none" />
+                    placeholder="line memo" aria-label={`Line ${i + 1} memo`} className="mt-0.5 w-full bg-transparent text-2xs text-slate-500 placeholder:text-slate-600 focus:outline-none" />
                 </div>
                 <input value={l.debit} onChange={(e) => updateLine(i, { debit: e.target.value, credit: '' })}
+                  aria-label={`Line ${i + 1} debit amount`}
                   className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-right text-white font-mono" placeholder="0.00" />
                 <input value={l.credit} onChange={(e) => updateLine(i, { credit: e.target.value, debit: '' })}
+                  aria-label={`Line ${i + 1} credit amount`}
                   className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-right text-white font-mono" placeholder="0.00" />
               </div>
             ))}

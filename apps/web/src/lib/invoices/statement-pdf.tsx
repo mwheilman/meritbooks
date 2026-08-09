@@ -62,6 +62,12 @@ function StatementBody({ doc, accent }: { doc: StatementDoc; accent: string }) {
     cBal: { width: '16%', textAlign: 'right' }, cStat: { width: '8%', textAlign: 'right' },
     mono: { fontFamily: 'Courier', fontSize: 8.5 },
     stat: { fontSize: 7 },
+    // Balance-forward ledger (activity mode)
+    lDate: { width: '13%' }, lDesc: { width: '39%' },
+    lCharge: { width: '16%', textAlign: 'right' }, lPay: { width: '16%', textAlign: 'right' },
+    lBal: { width: '16%', textAlign: 'right' },
+    ledgerBoundary: { flexDirection: 'row', paddingVertical: 6, paddingHorizontal: 6, backgroundColor: '#f7f8f9', borderTopWidth: 0.75, borderTopColor: '#e2e5e9' },
+    boundaryLabel: { fontFamily: 'Helvetica-Bold', fontSize: 8.5, color: '#4b5158' },
     totalRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 14 },
     pill: { backgroundColor: accent, borderRadius: 5, paddingVertical: 11, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minWidth: '46%' },
     pillK: { color: '#fff', fontSize: 9, textTransform: 'uppercase', letterSpacing: 1 },
@@ -121,8 +127,49 @@ function StatementBody({ doc, accent }: { doc: StatementDoc; accent: string }) {
         </View>
       </View>
 
-      {/* Lines */}
-      {doc.lines.length > 0 ? (
+      {/* Activity (balance-forward) ledger — running balance across charges + payments */}
+      {doc.mode === 'activity' && doc.transactions ? (
+        <>
+          <View style={s.thead}>
+            <Text style={[s.th, s.lDate]}>Date</Text>
+            <Text style={[s.th, s.lDesc]}>Description</Text>
+            <Text style={[s.th, s.lCharge]}>Charges</Text>
+            <Text style={[s.th, s.lPay]}>Payments</Text>
+            <Text style={[s.th, s.lBal]}>Balance</Text>
+          </View>
+          <View style={s.ledgerBoundary} wrap={false}>
+            <Text style={[s.lDate, s.boundaryLabel]}>{doc.periodFrom ? fmtDate(doc.periodFrom) : ''}</Text>
+            <Text style={[s.lDesc, s.boundaryLabel]}>Opening balance</Text>
+            <Text style={s.lCharge} />
+            <Text style={s.lPay} />
+            <Text style={[s.lBal, { fontFamily: 'Courier-Bold', fontSize: 8.5 }]}>{money(doc.openingBalanceCents ?? 0)}</Text>
+          </View>
+          {doc.transactions.map((t, i) => (
+            <View key={i} style={s.row} wrap={false}>
+              <Text style={[s.mono, s.lDate]}>{fmtDate(t.date)}</Text>
+              <Text style={[s.lDesc, { fontSize: 8.5, color: t.kind === 'invoice' ? '#1f2328' : '#15803d' }]}>{t.description}</Text>
+              <Text style={[s.mono, s.lCharge]}>{t.chargeCents > 0 ? money(t.chargeCents) : ''}</Text>
+              <Text style={[s.mono, s.lPay, { color: '#15803d' }]}>{t.paymentCents > 0 ? `-${money(t.paymentCents)}` : ''}</Text>
+              <Text style={[s.mono, s.lBal]}>{money(t.balanceCents)}</Text>
+            </View>
+          ))}
+          <View style={s.ledgerBoundary} wrap={false}>
+            <Text style={[s.lDate, s.boundaryLabel]}>{fmtDate(doc.periodTo ?? doc.asOf)}</Text>
+            <Text style={[s.lDesc, s.boundaryLabel]}>Balance as of {fmtDate(doc.periodTo ?? doc.asOf)}</Text>
+            <Text style={s.lCharge} />
+            <Text style={s.lPay} />
+            <Text style={[s.lBal, { fontFamily: 'Courier-Bold', fontSize: 9 }]}>
+              {money(doc.transactions.length ? doc.transactions[doc.transactions.length - 1].balanceCents : doc.openingBalanceCents ?? 0)}
+            </Text>
+          </View>
+          <View style={s.totalRow}>
+            <View style={s.pill}>
+              <Text style={s.pillK}>Total Balance Due</Text>
+              <Text style={s.pillV}>{money(doc.totalBalanceCents)}</Text>
+            </View>
+          </View>
+        </>
+      ) : doc.lines.length > 0 ? (
         <>
           <View style={s.thead}>
             <Text style={[s.th, s.cDate]}>Date</Text>

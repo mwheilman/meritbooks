@@ -27,6 +27,15 @@ import { NarrativePanel } from './narrative-panel';
 import { ReportCompiler } from './report-compiler';
 import { SavedPacks } from './saved-packs';
 import { SavedViews, type SavedView, type ViewConfig } from './saved-views';
+import {
+  type CompareMode,
+  parseISO,
+  isoStr,
+  lastDayOfMonth,
+  addMonthsYM,
+  derivePriorPeriod,
+  derivePriorYear,
+} from '@/lib/reports/export/compare';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -183,40 +192,9 @@ const PERIODS = [
 //  start_date, so a quarter/year compared against one prior month. Wrong.)
 // ═══════════════════════════════════════════════════════════════
 
-type CompareMode = 'none' | 'prior_period' | 'prior_year' | 'budget';
-
-function parseISO(s: string) { const [y, m, d] = s.split('-').map(Number); return { y, m, d }; }
-function isoStr(y: number, m: number, d: number) { return `${y}-${pad(m)}-${pad(d)}`; }
-function lastDayOfMonth(y: number, m: number) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
-function addMonthsYM(y: number, m: number, delta: number) { const idx = y * 12 + (m - 1) + delta; return { y: Math.floor(idx / 12), m: ((idx % 12) + 12) % 12 + 1 }; }
-function shiftDaysISO(s: { y: number; m: number; d: number }, delta: number) { const t = new Date(Date.UTC(s.y, s.m - 1, s.d) + delta * 86400000); return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate() }; }
-function daysInclusive(a: { y: number; m: number; d: number }, b: { y: number; m: number; d: number }) { return Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / 86400000) + 1; }
-
-// Equal-length period ending immediately before the selected range. Whole-month
-// ranges shift by whole calendar months (a full year → the prior full year);
-// arbitrary ranges shift by exact day count.
-function derivePriorPeriod(sd: string, ed: string): { s: string; e: string } {
-  const a = parseISO(sd), b = parseISO(ed);
-  const wholeMonths = a.d === 1 && b.d === lastDayOfMonth(b.y, b.m);
-  if (wholeMonths) {
-    const span = (b.y * 12 + b.m) - (a.y * 12 + a.m) + 1;
-    const ps = addMonthsYM(a.y, a.m, -span);
-    const pe = addMonthsYM(a.y, a.m, -1);
-    return { s: isoStr(ps.y, ps.m, 1), e: isoStr(pe.y, pe.m, lastDayOfMonth(pe.y, pe.m)) };
-  }
-  const len = daysInclusive(a, b);
-  const pe = shiftDaysISO(a, -1);
-  const ps = shiftDaysISO(pe, -(len - 1));
-  return { s: isoStr(ps.y, ps.m, ps.d), e: isoStr(pe.y, pe.m, pe.d) };
-}
-
-// The same calendar range exactly one year earlier (month-end aware).
-function derivePriorYear(sd: string, ed: string): { s: string; e: string } {
-  const a = parseISO(sd), b = parseISO(ed);
-  const sD = Math.min(a.d, lastDayOfMonth(a.y - 1, a.m));
-  const eD = b.d === lastDayOfMonth(b.y, b.m) ? lastDayOfMonth(b.y - 1, b.m) : Math.min(b.d, lastDayOfMonth(b.y - 1, b.m));
-  return { s: isoStr(a.y - 1, a.m, sD), e: isoStr(b.y - 1, b.m, eD) };
-}
+// CompareMode + the prior-period/prior-year window math now live in the shared
+// export/compare module so the on-screen tables and the .xlsx/.csv exports derive
+// the SAME comparison window (imported above).
 
 // P&L favorability: revenue up is good, cost up is bad. 1 favorable / -1 unfavorable / 0 flat.
 function favorability(type: string, variance: number) { if (variance === 0) return 0; const good = type === 'REVENUE' ? variance > 0 : variance < 0; return good ? 1 : -1; }
@@ -506,6 +484,7 @@ export function ReportViewer() {
                 ed={ed}
                 locIds={locIdsParam}
                 basis={basis}
+                compareMode={reportDef?.hasCompare ? compareMode : 'none'}
                 reportLabel={reportDef?.label ?? 'Report'}
                 entityLabel={entityLabel}
                 periodLabel={exportPeriodLabel}

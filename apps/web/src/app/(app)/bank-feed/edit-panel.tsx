@@ -369,16 +369,19 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/40 z-40" />
+      <div className="fixed inset-0 bg-black/40 z-40" aria-hidden="true" />
 
       {/* Panel */}
       <div
         ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-panel-title"
         className="fixed top-0 right-0 h-full w-[480px] max-w-full bg-surface-900 border-l border-slate-800 z-50 flex flex-col animate-in slide-in-from-right duration-200"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-          <h2 className="text-lg font-semibold text-white">Edit Transaction</h2>
+          <h2 id="edit-panel-title" className="text-lg font-semibold text-white">Edit Transaction</h2>
           <button
             onClick={onClose}
             className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] transition-colors"
@@ -518,6 +521,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
               value={vendorName}
               onChange={(e) => setVendorName(e.target.value)}
               placeholder="Vendor name..."
+              aria-label="Vendor name"
               className="w-full px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500/40 focus:border-brand-500/40"
             />
           </div>
@@ -625,6 +629,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
                   onChange={(e) => setAccountSearch(e.target.value)}
                   onFocus={() => setShowAccountDropdown(true)}
                   placeholder="Search by account number or name..."
+                  aria-label="Search GL accounts"
                   className="w-full pl-9 pr-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500/40 focus:border-brand-500/40"
                   autoFocus={!selectedAccount}
                 />
@@ -755,6 +760,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
                   onChange={(e) => setJobSearch(e.target.value)}
                   onFocus={() => setShowJobDropdown(true)}
                   placeholder={effectiveLocationId ? 'Search by job number or name...' : 'Select a company first'}
+                  aria-label="Search jobs"
                   disabled={!effectiveLocationId}
                   className="w-full pl-9 pr-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500/40 focus:border-brand-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
@@ -806,6 +812,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Add notes about this transaction..."
+              aria-label="Notes"
               rows={3}
               className="w-full px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500/40 focus:border-brand-500/40 resize-none"
             />

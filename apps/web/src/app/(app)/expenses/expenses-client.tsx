@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Plus, Receipt, CreditCard, AlertTriangle, Check, X, Send, Wallet,
   Loader2, Inbox, FileText, ChevronRight, Trash2, ShieldCheck,
@@ -450,10 +450,10 @@ function AddLineForm({ reportId, onAdded, defaultLocationId }: { reportId: strin
   return (
     <div className="mt-2 rounded-lg bg-slate-950 border border-slate-800 p-3 space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <input value={merchant} onChange={(e) => setMerchant(e.target.value)} placeholder="Merchant" className="input input-sm" />
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input input-sm" />
-        <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount (e.g. 42.50)" inputMode="decimal" className="input input-sm" />
-        <select value={source} onChange={(e) => setSource(e.target.value as typeof source)} className="input input-sm">
+        <input value={merchant} onChange={(e) => setMerchant(e.target.value)} placeholder="Merchant" aria-label="Merchant" className="input input-sm" />
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Expense date" className="input input-sm" />
+        <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount (e.g. 42.50)" aria-label="Amount" inputMode="decimal" className="input input-sm" />
+        <select value={source} onChange={(e) => setSource(e.target.value as typeof source)} aria-label="Payment source" className="input input-sm">
           <option value="OUT_OF_POCKET">Out-of-pocket</option>
           <option value="CORPORATE_CARD">Corporate card</option>
         </select>
@@ -492,17 +492,28 @@ function CreateReportModal({ onClose, onCreated }: { onClose: () => void; onCrea
 
   const receipts = data?.data ?? [];
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <>
       <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-        <div className="pointer-events-auto w-full max-w-lg rounded-xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col max-h-[85vh]">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-report-title"
+          className="pointer-events-auto w-full max-w-lg rounded-xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col max-h-[85vh]"
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-            <h2 className="text-base font-semibold text-white">New expense report</h2>
-            <button onClick={onClose} className="p-1 text-slate-500 hover:text-slate-200"><X size={18} /></button>
+            <h2 id="create-report-title" className="text-base font-semibold text-white">New expense report</h2>
+            <button onClick={onClose} aria-label="Close" className="p-1 text-slate-500 hover:text-slate-200"><X size={18} /></button>
           </div>
           <div className="p-4 space-y-3 overflow-auto">
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Report title (e.g. August client travel)" className="input w-full" />
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Report title (e.g. August client travel)" aria-label="Report title" className="input w-full" />
             <div>
               <p className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
                 Build from captured receipts {selected.size > 0 ? `· ${selected.size} selected` : ''}

@@ -37,6 +37,9 @@ export function CompanySelector({ selectedId, onChange }: CompanySelectorProps) 
       <button
         onClick={() => setIsOpen(!isOpen)}
         disabled={isLoading}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-label={`Filter by company: ${label}`}
         className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-900 border border-slate-800 text-sm text-slate-200 hover:border-slate-700 hover:bg-white/[0.02] transition-colors"
       >
         <Building2 size={14} className="text-slate-500" />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import {
   UploadCloud, FileText, Loader2, X, Trash2, Sparkles, AlertTriangle, Info,
@@ -290,14 +290,26 @@ function CompileModal({
     }
   }, [onCompiled]);
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="card w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="compile-policy-title"
+        className="card w-full max-w-lg p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-indigo-400" />
             <div>
-              <h2 className="text-lg font-semibold text-white">Compile an expense policy</h2>
+              <h2 id="compile-policy-title" className="text-lg font-semibold text-white">Compile an expense policy</h2>
               <p className="text-[11px] text-slate-500">Drop your written policy — AI compiles it into a ruleset you review. Nothing is saved until you activate.</p>
             </div>
           </div>
@@ -309,10 +321,15 @@ function CompileModal({
           </div>
         )}
         <div
+          role="button"
+          tabIndex={phase === 'upload' ? 0 : -1}
+          aria-label="Upload an expense policy document"
+          aria-disabled={phase === 'parsing'}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) void parse(f); }}
           onClick={() => phase === 'upload' && fileInput.current?.click()}
+          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && phase === 'upload') { e.preventDefault(); fileInput.current?.click(); } }}
           className={clsx(
             'flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-14 text-center transition-colors',
             phase === 'parsing' ? 'border-indigo-500/40 bg-indigo-500/5 cursor-default'
@@ -320,7 +337,7 @@ function CompileModal({
               : 'border-slate-700 hover:border-slate-600 cursor-pointer'
           )}
         >
-          <input ref={fileInput} type="file" accept=".pdf,image/*" className="hidden"
+          <input ref={fileInput} type="file" accept=".pdf,image/*" className="hidden" aria-label="Expense policy file"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void parse(f); e.target.value = ''; }} />
           {phase === 'parsing' ? (
             <>
@@ -398,7 +415,7 @@ function PolicyEditor({
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
-          <input className={clsx(inputCls, 'w-64 text-sm')} value={name} onChange={(e) => setName(e.target.value)} placeholder="Policy name" />
+          <input className={clsx(inputCls, 'w-64 text-sm')} value={name} onChange={(e) => setName(e.target.value)} placeholder="Policy name" aria-label="Policy name" />
           {rs.unmappedClauses.length > 0 && (
             <span className="text-2xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded inline-flex items-center gap-1">
               <AlertTriangle size={11} /> {rs.unmappedClauses.length} unmapped

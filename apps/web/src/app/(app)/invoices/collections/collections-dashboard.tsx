@@ -161,6 +161,7 @@ export function CollectionsDashboard({ embedded = false }: { embedded?: boolean 
         <div className="relative">
           <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
           <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
+            aria-label="Filter collections by company"
             className="pl-9 pr-8 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white appearance-none cursor-pointer">
             <option value="">All companies</option>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -375,7 +376,7 @@ function Worklist({ rows, onOpen, onRemind, remindingId }: {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm min-w-[760px]">
         <thead>
           <tr className="text-left text-xs text-slate-500 uppercase tracking-wider border-b border-slate-700/50">
             <th className="pb-3 pr-4">#</th>
@@ -435,7 +436,7 @@ function CustomerTable({ customers, onOpen, onRemind, remindingId }: {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm min-w-[760px]">
         <thead>
           <tr className="text-left text-xs text-slate-500 uppercase tracking-wider border-b border-slate-700/50">
             <th className="pb-3 pr-4">Customer</th>

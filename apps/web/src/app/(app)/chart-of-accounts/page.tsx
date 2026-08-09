@@ -6,11 +6,11 @@ import { AccountDrawer } from './account-drawer';
 import { useState, useCallback } from 'react';
 import {
   Search, Plus, Check, X, Lock, Building2, CreditCard, Landmark,
-  Loader2, AlertCircle, ChevronDown, ChevronRight, Shield, Clock
+  Loader2, AlertCircle, ChevronDown, ChevronRight, Shield, Clock, Inbox
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, useMutation } from '@/hooks';
-import { PageHeader } from '@/components/ui';
+import { PageHeader, EmptyState } from '@/components/ui';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -131,6 +131,7 @@ export default function ChartOfAccountsPage() {
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
+          aria-label="Filter accounts by type"
           className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"
         >
           <option value="">All Types</option>
@@ -144,6 +145,7 @@ export default function ChartOfAccountsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search accounts..."
+            aria-label="Search accounts by number, name, or group"
             className="w-full pl-9 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500"
           />
         </div>
@@ -155,12 +157,23 @@ export default function ChartOfAccountsPage() {
       ) : error ? (
         <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{error}</p></div>
       ) : filtered.length === 0 ? (
-        <div className="card p-12 text-center text-sm text-slate-500">
-          {tab === 'pending' ? 'No pending account requests.' : 'No accounts found.'}
+        <div className="card">
+          <EmptyState
+            icon={Inbox}
+            title={tab === 'pending' ? 'No pending requests' : search || typeFilter ? 'No matching accounts' : 'No accounts yet'}
+            description={
+              tab === 'pending'
+                ? 'New account requests awaiting approval will appear here.'
+                : search || typeFilter
+                  ? 'No accounts match your search or filter. Try clearing them.'
+                  : 'Request your first account to start building the chart of accounts.'
+            }
+            action={tab === 'pending' ? undefined : { label: 'Request Account', onClick: () => setShowRequest(true) }}
+          />
         </div>
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px]">
             <thead>
               <tr className="border-b border-slate-800">
                 <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-20">Number</th>
@@ -201,10 +214,12 @@ export default function ChartOfAccountsPage() {
                       <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={(e) => { e.stopPropagation(); handleApproval(acct.id, 'approve'); }}
+                          aria-label={`Approve account ${acct.accountNumber}`}
                           className="p-1 rounded bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
                         ><Check size={13} /></button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleApproval(acct.id, 'reject'); }}
+                          aria-label={`Reject account ${acct.accountNumber}`}
                           className="p-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
                         ><X size={13} /></button>
                       </div>
@@ -282,7 +297,7 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
         <h2 className="text-lg font-semibold text-white">Request New Account</h2>
-        <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400"><X size={18} /></button>
+        <button onClick={onClose} aria-label="Close request account form" className="p-1 rounded-lg hover:bg-slate-800 text-slate-400"><X size={18} /></button>
       </div>
       <div className="p-6 space-y-4">
         <p className="text-xs text-slate-500 bg-amber-500/5 border border-amber-500/10 rounded-lg px-3 py-2">

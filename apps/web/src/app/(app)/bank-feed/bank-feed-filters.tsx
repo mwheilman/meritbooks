@@ -1,6 +1,6 @@
 'use client';
 
-import { Filter, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import type { BankFeedStatusCounts } from '@meritbooks/shared';
@@ -52,7 +52,7 @@ export function BankFeedFilters({ activeTab, onTabChange, search, onSearchChange
         })}
       </div>
 
-      {/* Search + filters row */}
+      {/* Search row */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -61,13 +61,10 @@ export function BankFeedFilters({ activeTab, onTabChange, search, onSearchChange
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search by vendor, amount, or description..."
+            aria-label="Search bank transactions"
             className="input pl-9"
           />
         </div>
-        <button className="btn-ghost btn-sm">
-          <Filter size={14} />
-          <span>Filters</span>
-        </button>
       </div>
     </div>
   );

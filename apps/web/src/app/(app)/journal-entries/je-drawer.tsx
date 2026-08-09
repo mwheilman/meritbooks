@@ -162,7 +162,7 @@ export function JournalEntryDrawer({ entryId, onClose }: { entryId: string | nul
             <div className="mb-4 rounded-lg border border-amber-600/40 bg-amber-500/5 p-3">
               <div className="flex items-center gap-2 text-amber-400 text-sm font-medium mb-2"><ShieldAlert size={15} /> Posted entry — override required</div>
               <p className="text-2xs text-slate-400 mb-2">This entry is posted to the GL. Saving reverses it and re-posts a corrected entry; the change is audit-logged.</p>
-              <input type="text" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Reason for override (required)…"
+              <input type="text" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Reason for override (required)…" aria-label="Reason for override"
                 className="w-full px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-500/40" />
             </div>
           )}
@@ -187,13 +187,13 @@ export function JournalEntryDrawer({ entryId, onClose }: { entryId: string | nul
           <div className="space-y-2">
             {lines.map((l, i) => (
               <div key={i} className="grid grid-cols-12 gap-2 items-center rounded-lg bg-slate-800/30 p-2">
-                <select value={l.accountId} onChange={(e) => updateLine(i, { accountId: e.target.value })} className="col-span-5 px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200">
+                <select value={l.accountId} onChange={(e) => updateLine(i, { accountId: e.target.value })} aria-label={`Line ${i + 1} account`} className="col-span-5 px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200">
                   <option value="">Account…</option>
                   {accountOptions.map((a) => <option key={a.id} value={a.id}>{a.account_number} · {a.name}</option>)}
                 </select>
-                <input type="text" inputMode="decimal" defaultValue={centsToInput(l.debitCents)} placeholder="Debit" onChange={(e) => updateLine(i, { debitCents: inputToCents(e.target.value), creditCents: 0 })} className="col-span-3 px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200 text-right font-mono" />
-                <input type="text" inputMode="decimal" defaultValue={centsToInput(l.creditCents)} placeholder="Credit" onChange={(e) => updateLine(i, { creditCents: inputToCents(e.target.value), debitCents: 0 })} className="col-span-3 px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200 text-right font-mono" />
-                <button onClick={() => setLines((p) => p.filter((_, j) => j !== i))} className="col-span-1 p-1 text-slate-500 hover:text-red-400"><Trash2 size={14} /></button>
+                <input type="text" inputMode="decimal" defaultValue={centsToInput(l.debitCents)} placeholder="Debit" aria-label={`Line ${i + 1} debit amount`} onChange={(e) => updateLine(i, { debitCents: inputToCents(e.target.value), creditCents: 0 })} className="col-span-3 px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200 text-right font-mono" />
+                <input type="text" inputMode="decimal" defaultValue={centsToInput(l.creditCents)} placeholder="Credit" aria-label={`Line ${i + 1} credit amount`} onChange={(e) => updateLine(i, { creditCents: inputToCents(e.target.value), debitCents: 0 })} className="col-span-3 px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200 text-right font-mono" />
+                <button onClick={() => setLines((p) => p.filter((_, j) => j !== i))} aria-label={`Remove line ${i + 1}`} className="col-span-1 p-1 text-slate-500 hover:text-red-400"><Trash2 size={14} /></button>
               </div>
             ))}
           </div>

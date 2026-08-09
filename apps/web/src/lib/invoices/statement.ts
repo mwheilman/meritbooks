@@ -1,4 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { buildActivityLedger, type StatementTxn } from '@/lib/ar/activity-ledger';
+
+export type { StatementTxn } from '@/lib/ar/activity-ledger';
 
 /**
  * AR CUSTOMER STATEMENT (FPB-invoices §7 — closes delta D7.3 "no per-customer AR
@@ -70,6 +73,13 @@ export interface StatementDoc {
   aging: AgingSummary;
   totalBalanceCents: number;
   openInvoiceCount: number;
+  /**
+   * Balance-forward ledger — populated in ACTIVITY mode only. Opening balance +
+   * every charge/payment in the window with a running balance after each. Undefined
+   * for OPEN-item statements (which show only what's still owed).
+   */
+  openingBalanceCents?: number;
+  transactions?: StatementTxn[];
 }
 
 // ── Pure math (unit-tested) ──────────────────────────────────────────────────
@@ -167,42 +177,79 @@ export async function loadCustomerStatement(
 
   // Invoices for the customer. VOIDED never appears on a statement (it was
   // reversed and carries no obligation). Everything else is a real document.
-  let q = supabase
+  // We always pull the FULL history (unwindowed): OPEN mode filters to what's
+  // owed, ACTIVITY mode windows for display but still needs pre-window charges
+  // to roll a correct opening balance, and aging is always as-of the whole book.
+  const { data: invRows } = await supabase
     .from('invoices')
     .select('id, invoice_number, invoice_date, due_date, total_cents, amount_paid_cents, balance_cents, status, location_id')
     .eq('org_id', orgId)
     .eq('customer_id', customerId)
     .neq('status', 'VOIDED')
     .order('invoice_date', { ascending: true });
-
-  if (mode === 'activity') {
-    if (opts.from) q = q.gte('invoice_date', opts.from);
-    if (opts.to) q = q.lte('invoice_date', opts.to);
-  }
-
-  const { data: invRows } = await q;
   const rows = (invRows ?? []) as Array<Record<string, unknown>>;
 
-  const lines: StatementLine[] = rows
-    .map((r) => {
-      const balanceCents = num(r.balance_cents);
-      const dueDate = String(r.due_date ?? '');
-      return {
-        id: String(r.id),
-        invoiceNumber: String(r.invoice_number ?? ''),
-        invoiceDate: String(r.invoice_date ?? ''),
-        dueDate,
-        totalCents: num(r.total_cents),
-        paidCents: num(r.amount_paid_cents),
-        balanceCents,
-        status: String(r.status ?? ''),
-        bucket: balanceCents > 0 ? agingBucketFor(dueDate, asOf) : null,
-      };
-    })
-    // OPEN mode is open-item: only what's still owed. ACTIVITY keeps every doc.
-    .filter((l) => (mode === 'open' ? l.balanceCents > 0 : true));
+  const allLines: StatementLine[] = rows.map((r) => {
+    const balanceCents = num(r.balance_cents);
+    const dueDate = String(r.due_date ?? '');
+    return {
+      id: String(r.id),
+      invoiceNumber: String(r.invoice_number ?? ''),
+      invoiceDate: String(r.invoice_date ?? ''),
+      dueDate,
+      totalCents: num(r.total_cents),
+      paidCents: num(r.amount_paid_cents),
+      balanceCents,
+      status: String(r.status ?? ''),
+      bucket: balanceCents > 0 ? agingBucketFor(dueDate, asOf) : null,
+    };
+  });
 
-  const summary = summarizeStatement(lines, asOf);
+  // Displayed lines: OPEN = open-item (balance still owed); ACTIVITY = every doc
+  // dated within the [from, to] window (paid + open), balance-forward feel.
+  const lines: StatementLine[] =
+    mode === 'open'
+      ? allLines.filter((l) => l.balanceCents > 0)
+      : allLines.filter(
+          (l) =>
+            (!opts.from || l.invoiceDate >= opts.from) && (!opts.to || l.invoiceDate <= opts.to),
+        );
+
+  // Aging + total due always reflect the WHOLE open book as-of (what's owed now),
+  // independent of any activity window — a statement's aging strip isn't windowed.
+  const openForAging = allLines
+    .filter((l) => l.balanceCents > 0)
+    .map((l) => ({ dueDate: l.dueDate, balanceCents: l.balanceCents }));
+  const summary = summarizeStatement(openForAging, asOf);
+
+  // Balance-forward ledger (ACTIVITY mode only): interleave invoice charges with
+  // customer payments in date order and carry a running balance. WRITTEN_OFF
+  // invoices are excluded — they were relieved by a write-off and no longer owed.
+  let openingBalanceCents: number | undefined;
+  let transactions: StatementTxn[] | undefined;
+  if (mode === 'activity') {
+    const { data: payRows } = await supabase
+      .from('customer_payments')
+      .select('payment_date, amount_cents, payment_method, reference_number')
+      .eq('org_id', orgId)
+      .eq('customer_id', customerId)
+      .order('payment_date', { ascending: true });
+    const payments = ((payRows ?? []) as Array<Record<string, unknown>>).map((p) => ({
+      date: String(p.payment_date ?? ''),
+      ref: String(p.reference_number ?? ''),
+      amountCents: num(p.amount_cents),
+      method: (p.payment_method as string | null) ?? null,
+    }));
+    const chargeInvoices = allLines
+      .filter((l) => l.status !== 'WRITTEN_OFF')
+      .map((l) => ({ date: l.invoiceDate, ref: l.invoiceNumber, amountCents: l.totalCents, status: l.status }));
+    const ledger = buildActivityLedger(chargeInvoices, payments, {
+      from: opts.from ?? null,
+      to: opts.to ?? asOf,
+    });
+    openingBalanceCents = ledger.openingBalanceCents;
+    transactions = ledger.transactions;
+  }
 
   // Resolve the issuing entity + branding. A customer may have invoices across
   // several locations; pick the customer's home location, else the location that
@@ -255,6 +302,8 @@ export async function loadCustomerStatement(
     aging: summary.aging,
     totalBalanceCents: summary.totalBalanceCents,
     openInvoiceCount: summary.openInvoiceCount,
+    openingBalanceCents,
+    transactions,
   };
 }
 

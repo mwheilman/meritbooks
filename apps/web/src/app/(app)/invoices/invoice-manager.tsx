@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@/hooks/use-query';
 import { formatMoney } from '@meritbooks/shared';
-import { CurrencyTag } from '@/components/ui';
+import { CurrencyTag, EmptyState } from '@/components/ui';
 import { InvoiceDrawer } from './invoice-drawer';
 import { CreditMemosPanel, type CreditMemoPrefill } from './credit-memos-panel';
 import { RecurringPanel } from './recurring-panel';
@@ -165,6 +165,7 @@ function InvoiceList({
           <select
             value={locationId}
             onChange={(e) => setLocationId(e.target.value)}
+            aria-label="Filter invoices by company"
             className="pl-9 pr-8 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white appearance-none cursor-pointer"
           >
             <option value="">All Companies</option>
@@ -181,6 +182,7 @@ function InvoiceList({
             placeholder="Search invoices..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search invoices"
             className="w-full pl-9 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-500"
           />
         </div>
@@ -212,14 +214,15 @@ function InvoiceList({
           <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
         </div>
       ) : invoices.length === 0 ? (
-        <div className="text-center py-16">
-          <FileText className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400 font-medium">No invoices</p>
-          <p className="text-sm text-gray-500 mt-1">Create your first invoice to get started</p>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="No invoices"
+          description="Create your first invoice to start billing customers and tracking receivables."
+          action={{ label: 'New Invoice', onClick: onCreateClick }}
+        />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[900px]">
             <thead>
               <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-gray-700/50">
                 <th className="pb-3 pr-4">Invoice #</th>
@@ -280,6 +283,7 @@ function InvoiceList({
                         onClick={(e) => { e.stopPropagation(); onPaymentClick(inv); }}
                         className="p-1.5 text-gray-400 hover:text-emerald-400 hover:bg-gray-700/50 rounded transition-colors"
                         title="Receive payment"
+                        aria-label={`Receive payment for invoice ${inv.invoiceNumber}`}
                       >
                         <DollarSign className="w-4 h-4" />
                       </button>
@@ -359,6 +363,13 @@ function CreateInvoiceForm({
   const locations = locData?.data ?? [];
   const customers = custData?.data ?? [];
   const accounts = acctData?.data ?? [];
+
+  // Close on Escape (modal a11y).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   // Auto-calculate due date from customer terms
   useEffect(() => {
@@ -467,10 +478,10 @@ function CreateInvoiceForm({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center pt-8 overflow-y-auto">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-3xl mb-8">
+      <div role="dialog" aria-modal="true" aria-label="Create invoice" className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-3xl mb-8">
         <div className="flex items-center justify-between p-6 border-b border-gray-700/50">
           <h2 className="text-lg font-semibold text-white">Create Invoice</h2>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-6 space-y-5">
@@ -639,6 +650,13 @@ function PaymentDialog({
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
+  // Close on Escape (modal a11y).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const handleSubmit = async () => {
     if (amountCents <= 0) { setFormError('Amount must be positive'); return; }
     if (amountCents > invoice.balanceCents) { setFormError('Amount exceeds invoice balance'); return; }
@@ -674,13 +692,13 @@ function PaymentDialog({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md">
+      <div role="dialog" aria-modal="true" aria-label="Receive payment" className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-gray-700/50">
           <div>
             <h2 className="text-base font-semibold text-white">Receive Payment</h2>
             <p className="text-xs text-gray-400 mt-0.5">Invoice {invoice.invoiceNumber} — {invoice.customer?.name}</p>
           </div>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-5 space-y-4">
