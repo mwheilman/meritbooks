@@ -5,7 +5,7 @@ It is deliberately small (~5 min read) so re-grounding is cheap. It is the disti
 always-current truth. When it conflicts with the repo, **the canon wins** — fix the repo.
 Source of truth: the Project-knowledge doc set (mirrored/digested in `docs/canon/`, indexed in `00-INDEX.md`).
 
-Last reconciled: **2026-08-02 (Session 46)**. Latest handoff: `docs/MERITBOOKS-HANDOFF-session46.md`.
+Last reconciled: **2026-08-09 (Session 47)**. Latest handoff: `docs/MERITBOOKS-HANDOFF-session47.md`.
 
 ---
 
@@ -215,15 +215,46 @@ ungated, spec-less work in Session 40.)
   a **single cause** — a missing `ROLE_DEFAULT_NUMBER` export (`76bca49`) — now fixed; Vercel `next build`
   green at HEAD. **A Session-47 wave is IN FLIGHT** (M9 loop expansion, reconciliation Wave B,
   explain-this-X, collections depth, AP money-out MVP).
+- **Session-47 (operability + white-label + auth-stability; migrations 099–111; HEAD `f961727`):**
+  the "make it usable, keep it running" session. **(a) The production Clerk cutover was REVERTED
+  to the DEV instance** — the prod attempt failed on **crossed publishable/secret keys**, so
+  Vercel Clerk env + Supabase Third-Party-Auth were repointed to dev and production now runs on
+  **dev Clerk ON PURPOSE**. ⚠️ Do NOT re-cut to prod until a **separate prod Supabase project +
+  prod-Clerk Third-Party-Auth trust + a funded Anthropic key** are ready together (check pk/sk
+  pairing). **Parked live tenant `eb3d8087-…` (prod Clerk, empty); working seeded tenant
+  `1d1aa1ef-…` (dev Clerk).** **(b) Full sidebar INFORMATION-ARCHITECTURE redesign** —
+  `navigation.ts` → **9 workflow groups** (Home · Payables · Receivables · Banking & Cash ·
+  Accounting · Reporting & Analytics · Firm & Governance · Settings & Admin · Platform), pages
+  folded into tabs/redirects, `planes.ts` remapped. **(c) Company-scoped processing control** —
+  an active-company cookie context, header company picker, `useQuery` auto-scoping `location_id`,
+  **`CompanyScopeGuard` on 31 processing pages**, sidebar hides processing nav until a company is
+  selected, consolidated dashboard otherwise, reports consolidation admin-gated (a few master-data
+  / cross-entity pages are intentionally NOT guarded). **(d) migration 110** grants EXECUTE on the
+  Core AI-gateway RPCs to `authenticated` (fixed document upload); **migration 111** adds
+  `core.locations.is_management_company` — `api/me` now filters on `!is_management_company` instead
+  of a hardcoded `'merit management'` name-match (white-label). **(e)** RBAC page-guard
+  single-active-membership org fallback (fixed ~18 pages reverting to dashboard); 5 erroring pages
+  fixed (tax-dep/sales-tax/book-to-tax/consolidation/fixed-assets — API-envelope + cross-schema
+  embed + query-param bugs); per-page help system; FP&A NL scenarios (`/api/fpna/nl-scenario` via
+  the gateway); real global search palette + notifications bell; white-label copy scrub
+  (Portfolio→Entities). ⚠️ **KNOWN-OPEN, not code bugs:** document AI parse still fails with
+  Anthropic **"This organization has been disabled"** — the `ANTHROPIC_API_KEY` account is
+  **disabled (billing/credits)**; and the standing Stripe/pglite/nl-route tsc/test-harness
+  failures are **pre-existing, not regressions.** Next Books migration: **112**.
 - **No gate may start until its `Prereq:` gates are DONE. "Complete" is demonstrated, not asserted.**
 
-## 6. Canonical immediate priorities (Session 46 reconciliation)
+## 6. Canonical immediate priorities (Session 47 reconciliation)
 
-0. **Continue the IN-FLIGHT Session-47 wave** — M9 loop expansion (order-to-cash / close-run /
-   pay-run recipes on the runner), reconciliation Wave B (line check-off/lock + plug/stale detector
-   + rec-memo), explain-this-X narrative drawer (M7 breadth), collections depth (pay-date prediction
-   + escalating dunning), and an AP money-out MVP (disbursement batch + NACHA/CSV export + human
-   release). Keep every money/GL step on the deterministic engines behind human gates.
+0. **Make the operator flow real, then prep a clean prod cutover.** (a) **Verify in Chrome** on
+   the deployed (dev-Clerk) app: company picker → scoped processing pages → `CompanyScopeGuard`
+   behavior → consolidated dashboard → reports admin-gate → no page reverts to dashboard.
+   (b) **Fund/re-enable the Anthropic account** to unblock document AI (the disabled-account error
+   is NOT a code bug; migration 110 fixed the Postgres-permission half). (c) **Prepare — do NOT
+   execute — the production cutover:** stand up a dedicated **prod Supabase project**, repoint
+   **prod-Clerk Third-Party-Auth trust**, and script the env swap with a **pk/sk pairing check** so
+   the crossed-key failure cannot recur. Keep every money/GL step on the deterministic engines
+   behind human gates. (The S46 in-flight wave — M9 loop expansion, reconciliation Wave B,
+   explain-this-X, collections depth, AP money-out MVP — has LANDED, migrations 099–109.)
 1. **Finish closing identity gate #9** — org resolution is **CLOSED live** (Clerk native `o.id`
    claim + auto-bind, fallbacks removed) and the dedicated `payments` permission is DONE. The
    residual is now mostly **MANUAL for Mike:** stand up the **Clerk production instance for
