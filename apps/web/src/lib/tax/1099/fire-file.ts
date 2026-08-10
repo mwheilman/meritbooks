@@ -77,8 +77,12 @@ export interface FireFileResult {
 
 // ── Fixed-width primitives ──────────────────────────────────────────────────────
 
-/** A blank 750-position record as a mutable char array. */
-function blankRecord(): string[] {
+/**
+ * A blank 750-position record as a mutable char array.
+ * Exported (additive) so the sibling 1099-MISC FIRE builder reuses the exact same
+ * fixed-width primitives — no behavior change to the NEC path.
+ */
+export function blankRecord(): string[] {
   return new Array<string>(FIRE_RECORD_LENGTH).fill(' ');
 }
 
@@ -86,19 +90,19 @@ function blankRecord(): string[] {
  * Write `value` into `rec` at 1-based `start` for `len` positions. Values longer
  * than `len` are truncated; the caller pre-formats (pad/justify) to exactly `len`.
  */
-function put(rec: string[], start: number, len: number, value: string): void {
+export function put(rec: string[], start: number, len: number, value: string): void {
   for (let i = 0; i < len; i++) {
     rec[start - 1 + i] = value[i] ?? ' ';
   }
 }
 
 /** Alpha field: uppercase, left-justified, space-filled, truncated to `len`. */
-function alpha(value: string | null | undefined, len: number): string {
+export function alpha(value: string | null | undefined, len: number): string {
   return (value ?? '').toString().toUpperCase().slice(0, len).padEnd(len, ' ');
 }
 
 /** Numeric field: digits only, right-justified, ZERO-filled, truncated to `len`. */
-function numeric(value: number | string | null | undefined, len: number): string {
+export function numeric(value: number | string | null | undefined, len: number): string {
   const digits = String(value ?? '').replace(/\D/g, '');
   return digits.slice(Math.max(0, digits.length - len)).padStart(len, '0');
 }
@@ -108,7 +112,7 @@ function numeric(value: number | string | null | undefined, len: number): string
  * "dollars and cents, no decimal" format is exactly the cents integer. Negative
  * amounts are not permitted on an information return, so they are floored at 0.
  */
-function money(cents: number, len: number): string {
+export function money(cents: number, len: number): string {
   const n = Math.max(0, Math.trunc(Number(cents) || 0));
   return String(n).padStart(len, '0').slice(-len);
 }
@@ -126,7 +130,7 @@ export function nameControl(name: string | null | undefined): string {
 // ── Record builders ─────────────────────────────────────────────────────────────
 
 /** Set the shared Record Sequence Number (positions 500-507, 1-based). */
-function putSeq(rec: string[], seq: number): void {
+export function putSeq(rec: string[], seq: number): void {
   put(rec, 500, 8, numeric(seq, 8));
 }
 

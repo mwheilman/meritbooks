@@ -337,6 +337,16 @@ export const ERP_CATALOG: ErpConnector[] = [
     logoHint: 'xero',
     description: 'Read your existing books (also a migration import source).',
   },
+  {
+    id: 'sage',
+    name: 'Sage',
+    vertical: 'accounting',
+    connectionMethod: 'OAUTH',
+    status: 'PLANNED',
+    dataTypes: ['customers', 'invoices', 'bills', 'payments'],
+    logoHint: 'sage',
+    description: 'Migrate your prior books from Sage (Accounting / 50) — a one-time import source.',
+  },
 
   // ── General / always-available paths ────────────────────────────────────────
   {

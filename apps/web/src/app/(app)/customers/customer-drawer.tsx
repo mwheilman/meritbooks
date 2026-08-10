@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
 import { EntityInvoiceSettings } from '@/components/entity-invoice-settings';
 import { InvoiceTextOverrides } from '@/components/invoice-text-overrides';
+import { CustomerPortalAccess } from '@/components/customer-portal-access';
 
 type StatementMode = 'open' | 'activity';
 
@@ -407,6 +408,10 @@ export function CustomerDrawer({ customerId, onClose, onEdit }: { customerId: st
 
           <DetailSection title="Statement">
             <StatementActions customerId={data.id} hasEmail={!!data.email} />
+          </DetailSection>
+
+          <DetailSection title="Portal access">
+            <CustomerPortalAccess customerId={data.id} />
           </DetailSection>
 
           <DetailSection title="Invoice settings">

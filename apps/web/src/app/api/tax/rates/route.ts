@@ -14,14 +14,18 @@ import { normalizeState } from '@/lib/tax/sales-tax-calc';
 
 interface RateRow {
   id: string;
+  country: string | null;
   state: string | null;
   county: string | null;
   city: string | null;
+  postal_code: string | null;
+  category: string | null;
   jurisdiction_label: string | null;
   combined_rate_pct: number | string | null;
   effective_date: string | null;
   end_date: string | null;
   is_active: boolean | null;
+  source: string | null;
   notes: string | null;
   created_at: string | null;
 }
@@ -35,7 +39,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('sales_tax_rates')
-    .select('id, state, county, city, jurisdiction_label, combined_rate_pct, effective_date, end_date, is_active, notes, created_at')
+    .select('id, country, state, county, city, postal_code, category, jurisdiction_label, combined_rate_pct, effective_date, end_date, is_active, source, notes, created_at')
     .eq('org_id', orgId ?? '')
     .order('state', { ascending: true })
     .order('effective_date', { ascending: false })
@@ -49,14 +53,18 @@ export async function GET() {
   return NextResponse.json({
     data: rows.map((r) => ({
       id: r.id,
+      country: r.country ?? 'US',
       state: r.state,
       county: r.county,
       city: r.city,
+      postalCode: r.postal_code,
+      category: r.category,
       jurisdictionLabel: r.jurisdiction_label,
       combinedRatePct: Number(r.combined_rate_pct) || 0,
       effectiveDate: r.effective_date,
       endDate: r.end_date,
       isActive: r.is_active !== false,
+      source: r.source ?? 'MANUAL',
       notes: r.notes,
       createdAt: r.created_at,
     })),
@@ -67,6 +75,8 @@ const createSchema = z.object({
   state: z.string().min(2).max(40),
   county: z.string().max(80).optional().nullable(),
   city: z.string().max(80).optional().nullable(),
+  postal_code: z.string().max(12).optional().nullable(),
+  category: z.string().max(60).optional().nullable(),
   jurisdiction_label: z.string().max(120).optional().nullable(),
   combined_rate_pct: z.number().min(0).max(30),
   effective_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -92,22 +102,28 @@ export async function POST(request: Request) {
 
   const city = b.city?.trim() || null;
   const county = b.county?.trim() || null;
+  const postalCode = b.postal_code?.trim() || null;
+  const category = b.category?.trim() || null;
   const label =
     b.jurisdiction_label?.trim() ||
-    [city, county ? `${county} County` : null, state].filter(Boolean).join(', ');
+    [postalCode, city, county ? `${county} County` : null, state].filter(Boolean).join(', ');
 
   const { data, error } = await supabase
     .from('sales_tax_rates')
     .insert({
       org_id: orgId ?? '',
+      country: 'US',
       state,
       county,
       city,
+      postal_code: postalCode,
+      category,
       jurisdiction_label: label,
       combined_rate_pct: b.combined_rate_pct,
       effective_date: b.effective_date,
       end_date: b.end_date ?? null,
       is_active: true,
+      source: 'MANUAL',
       notes: b.notes?.trim() || null,
       created_by: userId,
     })

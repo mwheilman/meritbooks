@@ -26,6 +26,7 @@ interface Session {
   posted: boolean;
   postedGlEntryId?: string | null;
   blockers?: string[];
+  companyId?: string;
   companyShortCode: string;
   asOfDate: string;
   sourceLines: SourceLine[];
@@ -71,6 +72,39 @@ export default function ConversionClient() {
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => setCompanies(Array.isArray(d) ? d : []))
       .catch(() => setCompanies([]));
+  }, []);
+
+  // Hydrate directly into REVIEW when arriving with a staged ?sessionId — the path a
+  // direct-API migration takes after it pulls + maps the prior books and stages the
+  // same conversion session the CSV path stages. Same review, tie-out, and post UI.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sessionId = new URLSearchParams(window.location.search).get('sessionId');
+    if (!sessionId) return;
+    let cancelled = false;
+    (async () => {
+      setBusy(true);
+      setError('');
+      try {
+        const r = await fetch(`/api/onboarding/conversion/${encodeURIComponent(sessionId)}`);
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error ?? 'Could not load that conversion session');
+        if (cancelled) return;
+        const s = data as Session;
+        if (s.companyId) {
+          setCompanyId(s.companyId);
+          await loadCoa(s.companyId);
+        }
+        setSession(s);
+        setStep('review');
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load the conversion session');
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const reset = useCallback(() => {

@@ -23,6 +23,7 @@ import { PageHeader, EmptyState } from '@/components/ui';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { VendorPaymentDetailsModal, type VendorPaymentProfileView } from './vendor-payment-details';
+import { OriginationPanel } from './origination-panel';
 
 interface CheckRow {
   id: string;
@@ -196,6 +197,10 @@ export function ChecksClient() {
       {batch && batch.controls.itemCount > 0 && (
         <DisbursementBatchPanel batch={batch} onReleased={refreshAll} />
       )}
+
+      {/* Money-out origination rail (migration 143) — hand released disbursements to
+          a payment rail and track submission → settlement. SANDBOX; never posts. */}
+      <OriginationPanel />
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">

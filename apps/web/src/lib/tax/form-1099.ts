@@ -366,13 +366,18 @@ export const NEC_CSV_COLUMNS = [
   'Box 7 State Income',
 ] as const;
 
-/** RFC-4180-safe CSV cell: quote when it contains comma / quote / newline. */
-function csvCell(value: string | number | null | undefined): string {
+/**
+ * RFC-4180-safe CSV cell: quote when it contains comma / quote / newline.
+ * Exported (additive) so the sibling 1099-MISC import CSV reuses the exact same
+ * quoting — no behavior change to the NEC path.
+ */
+export function csvCell(value: string | number | null | undefined): string {
   const s = value === null || value === undefined ? '' : String(value);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-function payerAddressLine(p: PayerInfo): string {
+/** Payer street address as a single line ("100 Main St, Suite 200"). */
+export function payerAddressLine(p: PayerInfo): string {
   return [p.addressLine1, p.addressLine2].filter(Boolean).join(', ');
 }
 

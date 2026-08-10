@@ -13,6 +13,7 @@ import {
   type ErpConnector, type ErpVertical,
 } from '@/lib/integrations/erp/catalog';
 import type { ErpConnection } from '@/lib/integrations/erp/connection';
+import { MigrationConnectors } from '@/components/integrations/migration-connectors';
 
 interface ErpApiResponse {
   catalog: ErpConnector[];
@@ -172,6 +173,10 @@ export function ConnectErpStep({ embedded = false, onSkip, onDone }: ConnectErpS
           </span>
         </div>
       )}
+
+      {/* Direct-API migration sources (QuickBooks / Xero / Sage) — one-time import
+          of prior books straight into the historical-conversion pipeline. */}
+      <MigrationConnectors />
 
       {/* Existing connections for this tenant. */}
       {connections.length > 0 && (

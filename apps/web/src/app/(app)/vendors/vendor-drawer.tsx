@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
 import { CheckCircle, AlertTriangle, FileWarning, Clock, ShieldAlert, FileText, Paperclip, UploadCloud, ShieldCheck, Copy, Landmark, CreditCard, BadgeCheck, BadgeAlert } from 'lucide-react';
 import { VendorDocIntake } from './vendor-doc-intake';
+import { VendorPortalAccess } from '@/components/vendor-portal-access';
 
 type ComplianceStatus = 'valid' | 'expired' | 'pending' | 'missing';
 
@@ -279,6 +280,18 @@ export function VendorDrawer({ vendorId, onClose }: { vendorId: string | null; o
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Portal access — mint/revoke the vendor's self-service upload link and
+              review what they submitted (each PENDING until a human accepts it). */}
+          {vendorId && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <UploadCloud size={13} className="text-emerald-400" />
+                <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Document request portal</h3>
+              </div>
+              <VendorPortalAccess vendorId={vendorId} />
             </div>
           )}
 

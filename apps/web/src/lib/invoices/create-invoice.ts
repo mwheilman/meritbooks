@@ -104,6 +104,7 @@ export async function createInvoice(
   let taxCents = input.tax_cents ?? 0;
   let resolvedTaxRatePct: number | null = null;
   let resolvedTaxJurisdiction: string | null = null;
+  let resolvedTaxSource: string | null = null;
   if (input.auto_tax) {
     const resolved = await resolveInvoiceTax(supabase, {
       orgId,
@@ -116,6 +117,7 @@ export async function createInvoice(
     if (resolved.rateResolved) {
       resolvedTaxRatePct = resolved.ratePct;
       resolvedTaxJurisdiction = resolved.jurisdictionLabel;
+      resolvedTaxSource = resolved.source; // rate provenance (INTERNAL_TABLE | AVALARA | …)
     } else if (resolved.exempt) {
       resolvedTaxJurisdiction = 'EXEMPT';
     }
@@ -204,6 +206,7 @@ export async function createInvoice(
       tax_cents: taxCents,
       ...(resolvedTaxRatePct != null ? { tax_rate_pct: resolvedTaxRatePct } : {}),
       ...(resolvedTaxJurisdiction != null ? { tax_jurisdiction: resolvedTaxJurisdiction } : {}),
+      ...(resolvedTaxSource != null ? { tax_rate_source: resolvedTaxSource } : {}),
     },
   });
 

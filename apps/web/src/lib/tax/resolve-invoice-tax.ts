@@ -21,6 +21,7 @@ import {
   type SalesTaxRate,
   type RateContext,
 } from './sales-tax-calc';
+import { getTaxRateProvider, INTERNAL_SOURCE } from './rate-provider';
 
 interface RateRow {
   id: string;
@@ -79,6 +80,8 @@ export interface ResolvedInvoiceTax {
   exempt: boolean;
   /** true when a configured rate actually resolved (vs degraded to 0). */
   rateResolved: boolean;
+  /** provenance of the applied rate ('INTERNAL_TABLE' | 'AVALARA' | …), null when none. */
+  source: string | null;
   perLineCents: number[];
 }
 
@@ -90,6 +93,7 @@ const ZERO = (taxable: number): ResolvedInvoiceTax => ({
   state: null,
   exempt: false,
   rateResolved: false,
+  source: null,
   perLineCents: [],
 });
 
@@ -97,10 +101,22 @@ function jsonState(snapshot: Record<string, unknown> | null | undefined): string
   if (!snapshot || typeof snapshot !== 'object') return null;
   return normalizeState(snapshot['state'] ?? snapshot['region'] ?? null);
 }
-function jsonCity(snapshot: Record<string, unknown> | null | undefined): string | null {
+function jsonStr(snapshot: Record<string, unknown> | null | undefined, ...keys: string[]): string | null {
   if (!snapshot || typeof snapshot !== 'object') return null;
-  const v = snapshot['city'];
-  return typeof v === 'string' && v.trim() ? v.trim() : null;
+  for (const k of keys) {
+    const v = snapshot[k];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return null;
+}
+function jsonCity(snapshot: Record<string, unknown> | null | undefined): string | null {
+  return jsonStr(snapshot, 'city');
+}
+function jsonCounty(snapshot: Record<string, unknown> | null | undefined): string | null {
+  return jsonStr(snapshot, 'county');
+}
+function jsonPostal(snapshot: Record<string, unknown> | null | undefined): string | null {
+  return jsonStr(snapshot, 'postal_code', 'postalCode', 'zip', 'zip_code');
 }
 
 /**
@@ -114,8 +130,10 @@ export async function resolveInvoiceTax(
     customerId: string | null;
     onDate: string;
     lineAmountsCents: number[];
-    /** optional ship-to snapshot ({ state, city }) — wins over customer HQ when present. */
+    /** optional ship-to snapshot ({ state, city, county, postal_code }) — wins over customer HQ when present. */
     shipTo?: Record<string, unknown> | null;
+    /** optional product/service tax category — selects a category-specific rate row when present. */
+    category?: string | null;
   },
 ): Promise<ResolvedInvoiceTax> {
   const taxableSubtotal = (args.lineAmountsCents ?? []).reduce((s, c) => s + Math.max(0, Math.round(Number(c) || 0)), 0);
@@ -124,18 +142,20 @@ export async function resolveInvoiceTax(
     let exempt = false;
     let custState: string | null = null;
     let custCity: string | null = null;
+    let custPostal: string | null = null;
     if (args.customerId) {
       try {
         const { data: cust } = await supabase
           .schema('core')
           .from('customers')
-          .select('state, city, tax_exempt')
+          .select('state, city, zip, tax_exempt')
           .eq('id', args.customerId)
           .maybeSingle();
-        const c = cust as { state: string | null; city: string | null; tax_exempt: boolean | null } | null;
+        const c = cust as { state: string | null; city: string | null; zip: string | null; tax_exempt: boolean | null } | null;
         exempt = c?.tax_exempt === true;
         custState = normalizeState(c?.state ?? null);
         custCity = c?.city ?? null;
+        custPostal = c?.zip ?? null;
       } catch {
         /* degrade: treat as no jurisdiction */
       }
@@ -146,16 +166,55 @@ export async function resolveInvoiceTax(
       return { ...ZERO(0), exempt: true, perLineCents: t.perLineCents };
     }
 
-    // Destination: explicit ship-to wins, else customer HQ.
+    // Destination: explicit ship-to wins, else customer HQ. A ship-to snapshot is used
+    // whole (state + finer fields) when it carries a state; otherwise customer HQ.
     const shipState = jsonState(args.shipTo);
+    const useShip = shipState != null;
     const state = shipState ?? custState;
-    const city = shipState ? jsonCity(args.shipTo) : custCity;
+    const city = useShip ? jsonCity(args.shipTo) : custCity;
+    const county = useShip ? jsonCounty(args.shipTo) : null;
+    const postalCode = useShip ? jsonPostal(args.shipTo) : custPostal;
     if (!state) return ZERO(taxableSubtotal);
 
+    // PROVIDER-FIRST: consult the provider-agnostic tax adapter (internal rate table by
+    // default; Avalara/TaxJar behind the same interface once credentialed). If it
+    // resolves a rate, that rate is authoritative and we record its source. The adapter
+    // is called inside try/catch so an unconfigured external provider's throw degrades
+    // to the fallback below rather than breaking invoice creation.
+    let providerResolved: { ratePct: number; jurisdictionLabel: string; source: string } | null = null;
+    try {
+      const provider = getTaxRateProvider(supabase, args.orgId);
+      providerResolved = await provider.resolveRate(
+        { country: 'US', state, county, city, postalCode },
+        args.onDate,
+        args.category ?? null,
+      );
+    } catch {
+      providerResolved = null; // e.g. external adapter not configured → fall back
+    }
+
+    if (providerResolved && providerResolved.ratePct > 0) {
+      const t = computeInvoiceTax({ lineAmountsCents: args.lineAmountsCents, ratePct: providerResolved.ratePct });
+      return {
+        taxCents: t.taxCents,
+        taxableSubtotalCents: t.taxableSubtotalCents,
+        ratePct: t.ratePct,
+        jurisdictionLabel: providerResolved.jurisdictionLabel,
+        state,
+        exempt: false,
+        rateResolved: t.ratePct > 0,
+        source: providerResolved.source,
+        perLineCents: t.perLineCents,
+      };
+    }
+
+    // FALLBACK: the ORIGINAL behavior (unchanged) — load the tenant's active rows and
+    // resolve most-specific-wins via the pure calc. Guarantees no regression when the
+    // provider returns no match (or an external adapter threw).
     const rates = await loadActiveRates(supabase);
     if (rates.length === 0) return ZERO(taxableSubtotal);
 
-    const ctx: RateContext = { state, city, county: null, onDate: args.onDate };
+    const ctx: RateContext = { state, city, county, onDate: args.onDate };
     const resolved = resolveRate(rates, ctx);
     if (!resolved) return ZERO(taxableSubtotal);
 
@@ -168,6 +227,7 @@ export async function resolveInvoiceTax(
       state,
       exempt: false,
       rateResolved: t.taxCents >= 0 && t.ratePct > 0,
+      source: INTERNAL_SOURCE,
       perLineCents: t.perLineCents,
     };
   } catch {

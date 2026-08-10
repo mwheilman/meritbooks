@@ -21,6 +21,7 @@ import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { PageHeader } from '@/components/ui';
 import { Generate1099Modal } from './generate-1099-modal';
+import { Generate1099MiscModal } from './generate-1099-misc-modal';
 import { VendorComplianceTabs } from '../vendor-compliance/vendor-compliance-tabs';
 
 // ── Types (mirror /api/compliance/1099) ─────────────────────────────────────────
@@ -129,7 +130,7 @@ export function Compliance1099Client() {
   });
   const [flaggingId, setFlaggingId] = useState<string | null>(null);
   const [queued, setQueued] = useState<Set<string>>(new Set());
-  const [showGenerate, setShowGenerate] = useState(false);
+  const [generateForm, setGenerateForm] = useState<'NEC' | 'MISC' | null>(null);
   const [formFilter, setFormFilter] = useState<'ALL' | 'NEC' | 'MISC'>('ALL');
 
   const allRows = data?.rows ?? [];
@@ -160,8 +161,8 @@ export function Compliance1099Client() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="1099-NEC Readiness"
-        description={`Vendors paid $600 or more by check / ACH / wire in ${year} — card payments excluded (those are 1099-K). Flag gaps to queue a W-9 chase, then generate the 1099s.`}
+        title="1099 Readiness"
+        description={`Vendors paid $600 or more by check / ACH / wire in ${year} — card payments excluded (those are 1099-K). Services file on 1099-NEC; rents / royalties / medical / attorney proceeds file on 1099-MISC. Flag gaps to queue a W-9 chase, then generate each form.`}
       />
 
       <div className="mb-6">
@@ -217,16 +218,26 @@ export function Compliance1099Client() {
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setShowGenerate(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3.5 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-400"
-        >
-          <FileOutput size={15} /> Generate 1099s
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setGenerateForm('NEC')}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/50 px-3.5 py-1.5 text-sm font-semibold text-slate-200 transition-colors hover:border-emerald-500/40 hover:text-emerald-400"
+          >
+            <FileOutput size={15} /> Generate 1099-NEC
+          </button>
+          <button
+            type="button"
+            onClick={() => setGenerateForm('MISC')}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3.5 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-400"
+          >
+            <FileOutput size={15} /> Generate 1099-MISC
+          </button>
+        </div>
       </div>
 
-      {showGenerate && <Generate1099Modal year={year} onClose={() => setShowGenerate(false)} />}
+      {generateForm === 'NEC' && <Generate1099Modal year={year} onClose={() => setGenerateForm(null)} />}
+      {generateForm === 'MISC' && <Generate1099MiscModal year={year} onClose={() => setGenerateForm(null)} />}
 
       {/* Summary tiles */}
       {!isLoading && !error && summary && summary.candidates > 0 && (
