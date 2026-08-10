@@ -5,10 +5,13 @@ It is deliberately small (~5 min read) so re-grounding is cheap. It is the disti
 always-current truth. When it conflicts with the repo, **the canon wins** — fix the repo.
 Source of truth: the Project-knowledge doc set (mirrored/digested in `docs/canon/`, indexed in `00-INDEX.md`).
 
-Last reconciled: **2026-08-09 (Session 49)**. Latest handoff: `docs/MERITBOOKS-HANDOFF-session49.md`.
-Repo HEAD **`43ff536`** on `main` (`origin/main == HEAD`, all pushed). Migrations through **138**;
-next Books migration **139**. Prod on **dev Clerk** on purpose; Anthropic org disabled → all AI
-operationally down (app degrades gracefully). See the handoff §4 for the launch blockers.
+Last reconciled: **2026-08-09 (Session 50)**. Latest handoff: `docs/MERITBOOKS-HANDOFF-session50.md`.
+Repo HEAD **`e2702c5`** on `main` (`origin/main == d2b438c` — working tree **ahead 3**, the
+auto-push loop is shipping `c8c3b22`/`9c0ee28`/`e2702c5`). Migrations through **149**; next Books
+migration **150**. Prod on **dev Clerk** on purpose; Anthropic org disabled → all AI operationally
+down (app degrades gracefully). **Material S50 milestone: subledger-to-GL tie-out remediation —
+subledgers now tie to the GL by construction (independent re-audit confirmed closed).** See the
+handoff §4 for the launch blockers.
 
 ---
 
@@ -302,9 +305,56 @@ ungated, spec-less work in Session 40.)
   (4) Stripe TEST + Plaid SANDBOX; (5) payroll provider unpicked (mock = estimate; register-import = honest
   primary); (6) marketing-honesty items (FTS not vector; 1099 IRIS not built); (7) paused hourly autonomous
   build task; (8) standing tsc/pglite harness failures are NOT regressions.
+- **Session-50 (product breadth to the credential boundary, then a subledger↔GL INTEGRITY
+  remediation; migrations 139–149; HEAD `e2702c5`, working tree ahead 3 of `origin/main`):** no
+  gate flips, no auth/billing change. First pushed the last customer-facing gaps out to the
+  **credential boundary** (each needs only Mike's live credential/provider): **estimates→invoice**
+  (mig 139, non-posting doc; convert calls the unchanged `createInvoice`/GL path) + **customer
+  deposits/retainers** (mig 140, 2420 subledger, over-apply impossible); **borrowing base**
+  calculator; **customer + vendor self-service portals** (mig 141/142, magic-link, token-scoped;
+  vendor uploads land PENDING); **1099-MISC + FIRE e-file** (NEC untouched; transmission needs a
+  human TCC); **ACH/wire origination rail** (mig 143, SANDBOX adapter on the already-posted
+  disbursement release — **posts nothing to the GL**); **live sales-tax rate engine** (mig 144,
+  effective-dated internal table + Avalara/TaxJar scaffold, SAFE fallback); **direct-API migration
+  connectors** (QBO/Xero/Sage MOCK pull feeding the real conversion pipeline); **external-auditor
+  access + PBC** (mig 145, view-only on the custom-role system); **error observability** (mig 146,
+  `app_error_log` wired into api-handler + boundaries, optional Sentry); **perf pagination +
+  indexes** (mig 148); and a **reporting-basis overlay** (mig 147, Accrual|Tax|Cash|Custom — a
+  non-posting layer on the one GAAP book; the safe stand-in for full parallel-ledger multi-book,
+  which stays deferred). Also fixed the **api-client double-`?` URL bug** (broke AR aging via a
+  `uuid` cast) and **rebuilt the accounting-manager KPI dashboard** (was silently empty from an
+  API-contract mismatch). **THE MATERIAL MILESTONE — `e2702c5` INTEGRITY REMEDIATION (mig 149):**
+  a read-only subledger-to-GL tie-out audit found several subledgers not tying to the GL; the fix
+  makes them **tie by construction** (independent re-audit **confirmed all closed**): **AR now
+  debits AR_CONTROL(1100) BY ROLE** (was a broken account-number range that excluded 1100,
+  mis-posting to 12xx on estimate-conversion/recurring/agentic invoices — `v_ar_aging` now ties to
+  GL 1100); **lease commencement** posts DR ROU(1580)/CR lease-liability(2550); **debt origination**
+  posts DR cash/CR notes-payable(2500) and splits principal vs interest(8000) by role (**fails
+  closed 422** without an open period + resolvable roles); **rev-rec** resolves 2410/1180/revenue
+  by role + `source_ref` idempotency; **payroll remittance** route clears tax/benefit payables;
+  **fixed-asset** orphan-GL reversal + disposal idempotency + prepaid tie-out; **one-click
+  cash/accrual** basis toggle; and **security mediums** — rate-limit the 3 public token endpoints
+  (429), payroll **releaser≠approver** SoD, `gl/post` empty-org 400, anon grants revoked on
+  portal-token tables. Everything still posts only through `postJournalEntry` (debits=credits),
+  accounts resolve by role, idempotency via `source_ref` + mig-064 unique index. **Deferred by
+  design:** semantic/embeddings search (needs an embedding provider; non-functional with AI down —
+  `/search` stays FTS) and full multi-book parallel ledger (basis overlay is the shipped safe
+  version). **KNOWN-OPEN launch blockers UNCHANGED** (all human-only): (1) Anthropic org disabled →
+  all AI operationally down (graceful, not a code bug); (2) prod intentionally on dev Clerk (do NOT
+  re-cut until separate prod Supabase + prod-Clerk trust + funded Anthropic + live-billing decision
+  are ready together; watch pk/sk pairing); (3) live tenant Stripe charging NOT wired (Operator MRR
+  list-price computed); (4) Stripe TEST + Plaid SANDBOX (+ ACH origination SANDBOX); (5) payroll
+  provider unpicked (register-import = honest primary; mock = estimate; the releaser≠preparer SoD
+  half now landed); (6) marketing-honesty items (FTS not vector; 1099 IRIS/FIRE-transmission needs a
+  TCC; insurance-posts FIXED); (7) paused hourly autonomous build task; (8) standing tsc/pglite
+  harness failures are NOT regressions. ⚠️ **Branded invoice email already works — do NOT list email
+  as a blocker.** Minor follow-ups: basis-adjustments manager still allows manual CASH rows the
+  toggle ignores; role-based sidebar shows-all for custom roles (fail-safe; page-guards still
+  enforce); the new public-token rate limiter is per-instance in-memory (move to a shared store for
+  cross-instance throttling).
 - **No gate may start until its `Prereq:` gates are DONE. "Complete" is demonstrated, not asserted.**
 
-## 6. Canonical immediate priorities (Session 49 reconciliation — unchanged from S48; all human-gated)
+## 6. Canonical immediate priorities (Session 50 reconciliation — unchanged from S48/S49; all human-gated)
 
 0. **Clear the launch blockers, then prep a clean prod cutover.** (a) **Fund/re-enable the
    Anthropic account** — the org is disabled/unfunded so ALL AI is operationally down (the app
