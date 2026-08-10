@@ -70,6 +70,17 @@ export const DEFAULT_TARGETS = {
   reworkGate: 0.08,
   /** Override rate above this is a coaching/miscalibration flag (co-reported, not a gate). */
   overrideWatch: 0.35,
+  /**
+   * Close-schedule target (owner KPI #3): the books for a fiscal month should be
+   * HARD_CLOSE by this business day of the FOLLOWING month. A close stamped after
+   * that day is "late." Tenant-overridable.
+   */
+  closeBusinessDay: 5,
+  /**
+   * Regulatory filing target (owner KPI #4): days of grace after a filing's due
+   * date before it counts as late. 0 = the due date itself is the deadline.
+   */
+  filingGraceDays: 0,
 };
 
 export type Targets = typeof DEFAULT_TARGETS;
@@ -98,6 +109,8 @@ export function resolveTargets(overrides: Partial<Targets> | null | undefined): 
   return {
     reworkGate: overrides?.reworkGate ?? DEFAULT_TARGETS.reworkGate,
     overrideWatch: overrides?.overrideWatch ?? DEFAULT_TARGETS.overrideWatch,
+    closeBusinessDay: overrides?.closeBusinessDay ?? DEFAULT_TARGETS.closeBusinessDay,
+    filingGraceDays: overrides?.filingGraceDays ?? DEFAULT_TARGETS.filingGraceDays,
   };
 }
 
@@ -254,4 +267,207 @@ export function buildLeaderboard(cards: ScorecardInput[], targets: Targets): Lea
   }));
   const top = entries.find((e) => !e.qualityFlag && e.composite > 0);
   return { entries, topPerformerUserId: top?.userId ?? null };
+}
+
+const DAY_MS_KPI = 86_400_000;
+
+// ── VOLUME BY DOLLARS (owner KPI #2) ─────────────────────────────────────────
+//
+// The owner's second named KPI: not just "how many items" but "how much MONEY did
+// each person move." Attribution is the same action_log spine — we join a person's
+// finished-work actions to the underlying record's amount (JE debit total posted,
+// bill $ approved, invoice $ issued, payroll gross approved, disbursement $ released).
+// All money is bigint cents.
+
+export type DollarFamily = 'journal' | 'bill' | 'invoice' | 'payroll' | 'payments';
+
+export interface DollarItem {
+  family: DollarFamily;
+  cents: number;
+}
+
+export interface DollarResult {
+  totalCents: number;
+  byFamily: Record<DollarFamily, number>;
+}
+
+export function emptyDollarFamilies(): Record<DollarFamily, number> {
+  return { journal: 0, bill: 0, invoice: 0, payroll: 0, payments: 0 };
+}
+
+/**
+ * Sum the dollar VALUE (cents) one person processed, bucketed by work family.
+ * Non-finite or non-positive amounts are ignored so a malformed row can never
+ * corrupt the roll-up (a $0 or negative cannot be "dollars processed").
+ */
+export function computeDollars(items: DollarItem[]): DollarResult {
+  const byFamily = emptyDollarFamilies();
+  let totalCents = 0;
+  for (const it of items) {
+    if (!it || !Number.isFinite(it.cents) || it.cents <= 0) continue;
+    const c = Math.round(it.cents);
+    byFamily[it.family] += c;
+    totalCents += c;
+  }
+  return { totalCents, byFamily };
+}
+
+// ── CLOSE-SCHEDULE ADHERENCE (owner KPI #3) ──────────────────────────────────
+
+/** Calendar days from a→b (floor). Null if either timestamp is missing/unparseable. */
+export function calendarDaysBetween(
+  aIso: string | null | undefined,
+  bIso: string | null | undefined,
+): number | null {
+  if (!aIso || !bIso) return null;
+  const a = Date.parse(aIso);
+  const b = Date.parse(bIso);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return Math.floor((b - a) / DAY_MS_KPI);
+}
+
+/**
+ * The Nth business day (Mon–Fri; no holiday calendar — deterministic) of a month,
+ * UTC. Clamps to the LAST business day if the month has fewer than n business days.
+ */
+export function nthBusinessDayOfMonthUTC(year: number, month1: number, n: number): Date {
+  let count = 0;
+  let last = new Date(Date.UTC(year, month1 - 1, 1));
+  const target = Math.max(1, Math.floor(n));
+  for (let day = 1; day <= 31; day++) {
+    const d = new Date(Date.UTC(year, month1 - 1, day));
+    if (d.getUTCMonth() !== month1 - 1) break; // ran past the end of the month
+    const dow = d.getUTCDay();
+    if (dow !== 0 && dow !== 6) {
+      last = d;
+      count += 1;
+      if (count >= target) return d;
+    }
+  }
+  return last;
+}
+
+/**
+ * The close DUE date for a fiscal period: the Nth business day of the month AFTER
+ * the period month (books close early in the following month). UTC midnight of the
+ * due day.
+ */
+export function closeDueDateForPeriod(periodYear: number, periodMonth: number, businessDay: number): Date {
+  let y = periodYear;
+  let m = periodMonth + 1;
+  if (m > 12) {
+    m = 1;
+    y += 1;
+  }
+  return nthBusinessDayOfMonthUTC(y, m, businessDay);
+}
+
+/** On time if the close timestamp is on/before the end of the due day. Null if not closed. */
+export function isCloseOnTime(closedAtIso: string | null | undefined, dueDate: Date): boolean | null {
+  if (!closedAtIso) return null;
+  const c = Date.parse(closedAtIso);
+  if (Number.isNaN(c)) return null;
+  return c <= dueDate.getTime() + DAY_MS_KPI - 1;
+}
+
+export interface ClosePeriodEval {
+  closed: boolean;
+  onTime: boolean | null;
+  daysToClose: number | null;
+}
+
+export interface CloseAdherence {
+  closedCount: number;
+  onTimeCount: number;
+  lateCount: number;
+  /** on-time % among CLOSED periods with a determinable on-time verdict; null if none. */
+  onTimePct: number | null;
+  avgDaysToClose: number | null;
+}
+
+export function rollupCloseAdherence(items: ClosePeriodEval[]): CloseAdherence {
+  let closedCount = 0;
+  let onTimeCount = 0;
+  let lateCount = 0;
+  let dtcSum = 0;
+  let dtcN = 0;
+  for (const it of items) {
+    if (!it.closed) continue;
+    closedCount += 1;
+    if (it.onTime === true) onTimeCount += 1;
+    else if (it.onTime === false) lateCount += 1;
+    if (it.daysToClose != null && Number.isFinite(it.daysToClose)) {
+      dtcSum += it.daysToClose;
+      dtcN += 1;
+    }
+  }
+  const determinable = onTimeCount + lateCount;
+  return {
+    closedCount,
+    onTimeCount,
+    lateCount,
+    onTimePct: determinable > 0 ? Math.round((onTimeCount / determinable) * 10000) / 10000 : null,
+    avgDaysToClose: dtcN > 0 ? Math.round((dtcSum / dtcN) * 10) / 10 : null,
+  };
+}
+
+// ── REGULATORY FILING-SCHEDULE ADHERENCE (owner KPI #4) ──────────────────────
+
+/** On time if filed on/before the end of the due day (+ optional grace). Null if unknown. */
+export function isFilingOnTime(
+  filedAtIso: string | null | undefined,
+  dueDateIso: string | null | undefined,
+  graceDays = 0,
+): boolean | null {
+  if (!filedAtIso || !dueDateIso) return null;
+  const f = Date.parse(filedAtIso);
+  const due = Date.parse(dueDateIso);
+  if (Number.isNaN(f) || Number.isNaN(due)) return null;
+  const deadline = due + (Math.max(0, graceDays) + 1) * DAY_MS_KPI - 1;
+  return f <= deadline;
+}
+
+export interface FilingEval {
+  filed: boolean;
+  /** determinable only for filed rows that carry a filed timestamp. */
+  onTime: boolean | null;
+  /** unfiled AND past its due date. */
+  overdue: boolean;
+}
+
+export interface FilingAdherence {
+  /** obligations that have come due (filed OR overdue) in the window. */
+  totalDue: number;
+  filedCount: number;
+  filedOnTime: number;
+  filedLate: number;
+  overdueCount: number;
+  /** filedOnTime / (filedOnTime + filedLate); null when nothing is determinable. */
+  onTimePct: number | null;
+}
+
+export function rollupFilingAdherence(items: FilingEval[]): FilingAdherence {
+  let filedCount = 0;
+  let filedOnTime = 0;
+  let filedLate = 0;
+  let overdueCount = 0;
+  let totalDue = 0;
+  for (const it of items) {
+    if (it.filed) {
+      filedCount += 1;
+      if (it.onTime === true) filedOnTime += 1;
+      else if (it.onTime === false) filedLate += 1;
+    }
+    if (it.overdue) overdueCount += 1;
+    if (it.filed || it.overdue) totalDue += 1;
+  }
+  const determinable = filedOnTime + filedLate;
+  return {
+    totalDue,
+    filedCount,
+    filedOnTime,
+    filedLate,
+    overdueCount,
+    onTimePct: determinable > 0 ? Math.round((filedOnTime / determinable) * 10000) / 10000 : null,
+  };
 }

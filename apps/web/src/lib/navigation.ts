@@ -38,6 +38,7 @@ import {
   Bot,
   LayoutGrid,
   Package,
+  PiggyBank,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -100,8 +101,10 @@ export const navigation: NavGroup[] = [
     label: 'Receivables',
     items: [
       { label: 'Invoices', href: '/invoices', icon: DollarSign },
+      { label: 'Estimates & Quotes', href: '/estimates', icon: FileText },
       { label: 'Collections', href: '/collections', icon: Contact },
       { label: 'Customers', href: '/customers', icon: Contact },
+      { label: 'Customer Deposits', href: '/customer-deposits', icon: PiggyBank },
       { label: 'Revenue Recognition', href: '/rev-rec', icon: Percent },
     ],
   },
@@ -112,6 +115,7 @@ export const navigation: NavGroup[] = [
       { label: 'Reconciliation', href: '/reconciliation', icon: FileCheck },
       { label: 'Cash Position', href: '/cash', icon: Wallet },
       { label: 'Debt & Loans', href: '/debt', icon: Landmark },
+      { label: 'Borrowing Base', href: '/borrowing-base', icon: Scale },
       { label: 'Renewals & Obligations', href: '/obligations', icon: CalendarDays },
       { label: 'Subscriptions', href: '/subscriptions', icon: CreditCard },
     ],

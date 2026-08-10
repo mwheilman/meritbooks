@@ -9,12 +9,15 @@ import { navigation } from '@/lib/navigation';
 import { usePlane } from '@/lib/hooks/use-plane';
 import { PLANES } from '@/lib/planes';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { useMe } from '@/lib/hooks/use-me';
+import { filterNavByPermissions } from '@/components/layout/nav-permissions';
 
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const { plane } = usePlane();
   const { isAll } = useActiveCompany();
+  const { permissions, can } = useMe();
   // Control: in the Book-of-Record plane the processing nav stays hidden until a
   // specific company is selected, so a bookkeeper can never start working (or land
   // on a page) without first choosing the account. Only Home (the consolidated
@@ -22,9 +25,22 @@ export function Sidebar() {
   // planes (practice/platform) are cross-company by design and are not gated.
   const mustSelectCompany = plane === 'books' && isAll;
   const activeGroups = PLANES[plane].groups;
-  const visibleNav = navigation
-    .filter((g) => activeGroups.includes(g.label))
-    .filter((g) => !mustSelectCompany || g.label === 'Home');
+  // Do we have USABLE per-feature grants for this user? /api/me populates
+  // featurePermissions with the full FEATURE_CATALOG for the 9 system roles (so a real
+  // role always has keys); it is EMPTY while loading, on error, or for a custom role
+  // whose grants aren't enumerated client-side. In those cases we fall back to showing
+  // everything (fail-safe) — the server-side page/route guards still fail closed, so nav
+  // is a usability lens, never the security boundary. See nav-permissions.ts.
+  const hasPermissionData =
+    permissions !== null &&
+    Object.keys(permissions.featurePermissions).length > 0;
+  // 1) plane filter (which hat)  2) company-selection gate  3) role permission filter.
+  const visibleNav = filterNavByPermissions(
+    navigation
+      .filter((g) => activeGroups.includes(g.label))
+      .filter((g) => !mustSelectCompany || g.label === 'Home'),
+    { hasPermissionData, canView: (featureId) => can(featureId, 'view') },
+  );
   const PlaneIcon = PLANES[plane].icon;
 
   return (

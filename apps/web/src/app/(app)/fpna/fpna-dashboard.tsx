@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useMemo, useState, useCallback, useEffect } from 'react';
+import { Fragment, useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   Loader2,
@@ -20,11 +20,38 @@ import {
   Scale,
   BarChart3,
   ArrowRight,
+  SlidersHorizontal,
+  ArrowUp,
+  ArrowDown,
+  Plus,
+  X,
+  GripVertical,
+  RotateCcw,
+  Check,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
+import { useMe } from '@/lib/hooks/use-me';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { FpnaNlScenario } from './fpna-nl-scenario';
+import {
+  KPI_CATALOG,
+  KPI_IDS,
+  LAYOUTS,
+  defaultConfig,
+  applyLayout,
+  deserializeConfig,
+  serializeConfig,
+  moveMetric,
+  toggleMetric,
+  setPeriodOffset,
+  kpiConfigStorageKey,
+  kpiMeta,
+  type KpiId,
+  type KpiGroup,
+  type KpiDashboardConfig,
+} from '@/lib/fpna/kpi-config';
 
 // ── Response types (mirror /api/fpna/dashboard) ──────────────────────────────
 
@@ -449,6 +476,272 @@ function VarianceTable({
   );
 }
 
+// ── KPI id → real tile props (every figure comes from DashboardResponse) ───────
+
+interface KpiTileProps {
+  label: string;
+  value: string;
+  sub?: string;
+  icon: typeof Wallet;
+  tone?: 'default' | 'good' | 'danger' | 'warn';
+  delta?: Delta;
+  deltaKind?: 'money' | 'points' | 'ratio';
+  higherIsBetter?: boolean;
+}
+
+/**
+ * Map a catalog KPI id to the tile it renders, sourced entirely from the live
+ * dashboard response (KPIs / runway / prior-period deltas). No fabricated
+ * numbers — a metric the response can't supply is simply not in the catalog.
+ */
+function kpiTileProps(id: KpiId, data: DashboardResponse): KpiTileProps {
+  const k = data.kpis;
+  const d = data.deltas;
+  const runway = data.runway;
+  switch (id) {
+    case 'revenue':
+      return { label: 'Revenue (month)', value: formatMoney(k.revenueCents, { compact: true }), sub: 'current month', icon: Wallet, delta: d.revenue };
+    case 'grossProfit':
+      return { label: 'Gross profit', value: formatMoney(k.grossProfitCents, { compact: true }), sub: fmtPct(k.grossMarginPct) + ' margin', icon: Percent, tone: k.grossProfitCents >= 0 ? 'good' : 'danger', delta: d.grossProfit };
+    case 'grossMargin':
+      return { label: 'Gross margin', value: fmtPct(k.grossMarginPct), sub: `${formatMoney(k.grossProfitCents, { compact: true })} gross profit`, icon: Percent, tone: k.grossProfitCents >= 0 ? 'good' : 'danger', delta: d.grossMarginPct, deltaKind: 'points' };
+    case 'cogs':
+      return { label: 'Cost of goods sold', value: formatMoney(k.cogsCents, { compact: true }), sub: 'current month', icon: Landmark, higherIsBetter: false };
+    case 'opex':
+      return { label: 'Operating expenses', value: formatMoney(k.opexCents, { compact: true }), sub: 'current month', icon: Landmark, higherIsBetter: false };
+    case 'operatingIncome':
+      return { label: 'Operating income', value: formatMoney(k.operatingIncomeCents, { compact: true }), sub: fmtPct(k.operatingMarginPct) + ' margin', icon: k.operatingIncomeCents >= 0 ? TrendingUp : TrendingDown, tone: k.operatingIncomeCents >= 0 ? 'good' : 'danger', delta: d.operatingIncome };
+    case 'operatingMargin':
+      return { label: 'Operating margin', value: fmtPct(k.operatingMarginPct), sub: `${formatMoney(k.operatingIncomeCents, { compact: true })} op. income`, icon: Percent, tone: k.operatingIncomeCents >= 0 ? 'good' : 'danger' };
+    case 'netIncome':
+      return { label: 'Net income', value: formatMoney(k.netIncomeCents, { compact: true }), sub: fmtPct(k.netMarginPct) + ' net margin', icon: k.netIncomeCents >= 0 ? TrendingUp : TrendingDown, tone: k.netIncomeCents >= 0 ? 'good' : 'danger', delta: d.netIncome };
+    case 'netMargin':
+      return { label: 'Net margin', value: fmtPct(k.netMarginPct), sub: `${formatMoney(k.netIncomeCents, { compact: true })} net income`, icon: Percent, tone: k.netIncomeCents >= 0 ? 'good' : 'danger', delta: d.netMarginPct, deltaKind: 'points' };
+    case 'cash':
+      return { label: 'Cash', value: formatMoney(k.cashCents, { compact: true }), sub: 'as of period end', icon: Wallet, delta: d.cash };
+    case 'monthlyBurn':
+      return {
+        label: 'Monthly burn',
+        value: runway.cashGenerating ? 'Cash+' : formatMoney(runway.monthlyBurnCents, { compact: true }),
+        sub: runway.cashGenerating ? 'generating cash' : `avg of ${runway.basisMonths} mo`,
+        icon: Flame,
+        tone: runway.cashGenerating ? 'good' : 'warn',
+      };
+    case 'runway':
+      return {
+        label: 'Runway',
+        value: runway.runwayMonths === null ? '∞' : `${runway.runwayMonths.toFixed(1)} mo`,
+        sub: runway.cashGenerating ? 'not burning' : 'cash ÷ burn',
+        icon: Timer,
+        tone: runway.runwayMonths !== null && runway.runwayMonths < 6 ? 'danger' : runway.runwayMonths !== null && runway.runwayMonths < 12 ? 'warn' : 'good',
+      };
+    case 'ar':
+      return { label: 'Accounts receivable', value: formatMoney(k.arCents, { compact: true }), sub: 'as of period end', icon: Landmark, delta: d.ar, higherIsBetter: false };
+    case 'ap':
+      return { label: 'Accounts payable', value: formatMoney(k.apCents, { compact: true }), sub: 'as of period end', icon: Landmark, delta: d.ap, higherIsBetter: false };
+    case 'workingCapital':
+      return { label: 'Working capital', value: formatMoney(k.workingCapitalCents, { compact: true }), sub: 'current assets − liabilities', icon: Scale, tone: k.workingCapitalCents >= 0 ? 'good' : 'danger', delta: d.workingCapital };
+    case 'currentRatio':
+      return {
+        label: 'Current ratio',
+        value: fmtRatio(k.currentRatio),
+        sub: `${formatMoney(k.workingCapitalCents, { compact: true })} working cap`,
+        icon: Scale,
+        tone: k.currentRatio === null ? 'default' : k.currentRatio >= 1.5 ? 'good' : k.currentRatio >= 1 ? 'warn' : 'danger',
+        delta: d.currentRatio,
+        deltaKind: 'ratio',
+      };
+  }
+}
+
+// ── Customize panel: toggle, reorder, pick default period, apply a layout ──────
+
+const GROUP_ORDER: KpiGroup[] = ['Profitability', 'Liquidity & runway', 'Balance sheet'];
+
+function monthOffsetLabel(offset: number): string {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + offset);
+  const label = d.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+  if (offset === 0) return `Current month (${label})`;
+  return `${-offset} mo ago (${label})`;
+}
+
+function CustomizePanel({
+  config,
+  onToggle,
+  onMove,
+  onApplyLayout,
+  onReset,
+  onSetPeriod,
+  onClose,
+}: {
+  config: KpiDashboardConfig;
+  onToggle: (id: KpiId) => void;
+  onMove: (id: KpiId, dir: -1 | 1) => void;
+  onApplyLayout: (layoutId: (typeof LAYOUTS)[number]['id']) => void;
+  onReset: () => void;
+  onSetPeriod: (offset: number) => void;
+  onClose: () => void;
+}) {
+  const visibleSet = new Set(config.visible);
+  const hiddenByGroup = useMemo(() => {
+    const map: Record<string, KpiId[]> = {};
+    for (const m of KPI_CATALOG) {
+      if (visibleSet.has(m.id)) continue;
+      (map[m.group] ??= []).push(m.id);
+    }
+    return map;
+  }, [config.visible]);
+  const hasHidden = KPI_IDS.some((id) => !visibleSet.has(id));
+
+  return (
+    <section
+      className="card p-5 space-y-5"
+      role="region"
+      aria-label="Customize dashboard"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal size={15} className="text-brand-400" />
+          <h3 className="text-sm font-semibold text-white">Customize your KPI dashboard</h3>
+        </div>
+        <button
+          onClick={onClose}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500/15 px-3 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-500/25"
+        >
+          <Check size={13} /> Done
+        </button>
+      </div>
+
+      {/* Starter layouts */}
+      <div>
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">Start from a layout</p>
+        <div className="flex flex-wrap gap-2">
+          {LAYOUTS.map((l) => (
+            <button
+              key={l.id}
+              onClick={() => onApplyLayout(l.id)}
+              title={l.description}
+              className="group rounded-lg border border-slate-800 bg-surface-950 px-3 py-2 text-left hover:border-brand-500/40 hover:bg-slate-800/40"
+            >
+              <span className="block text-xs font-semibold text-slate-200 group-hover:text-white">{l.label}</span>
+              <span className="block max-w-[220px] text-[10px] text-slate-500">{l.description}</span>
+            </button>
+          ))}
+          <button
+            onClick={onReset}
+            className="inline-flex items-center gap-1.5 self-start rounded-lg border border-slate-800 bg-surface-950 px-3 py-2 text-xs font-medium text-slate-400 hover:border-slate-600 hover:text-white"
+          >
+            <RotateCcw size={13} /> Reset to default
+          </button>
+        </div>
+      </div>
+
+      {/* Default period */}
+      <div>
+        <label htmlFor="fpna-default-period" className="mb-2 block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+          Default period on open
+        </label>
+        <select
+          id="fpna-default-period"
+          value={config.periodOffset}
+          onChange={(e) => onSetPeriod(Number(e.target.value))}
+          className="w-full max-w-xs rounded-lg border border-slate-800 bg-surface-950 px-3 py-2 text-sm text-slate-200 focus:border-brand-500/50 focus:outline-none"
+        >
+          {Array.from({ length: 12 }, (_, i) => -i).map((off) => (
+            <option key={off} value={off}>{monthOffsetLabel(off)}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Shown tiles (ordered) */}
+      <div>
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+          Shown tiles · {config.visible.length}
+        </p>
+        <ul className="space-y-1.5" aria-label="Visible KPI tiles in display order">
+          {config.visible.map((id, idx) => {
+            const meta = kpiMeta(id);
+            return (
+              <li
+                key={id}
+                className="flex items-center gap-2 rounded-lg border border-slate-800 bg-surface-950 px-3 py-2"
+              >
+                <GripVertical size={13} className="shrink-0 text-slate-600" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium text-slate-200">{meta.label}</span>
+                  <span className="block truncate text-[10px] text-slate-500">{meta.description}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => onMove(id, -1)}
+                    disabled={idx === 0}
+                    aria-label={`Move ${meta.label} up`}
+                    className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-white disabled:opacity-25"
+                  >
+                    <ArrowUp size={13} />
+                  </button>
+                  <button
+                    onClick={() => onMove(id, 1)}
+                    disabled={idx === config.visible.length - 1}
+                    aria-label={`Move ${meta.label} down`}
+                    className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-white disabled:opacity-25"
+                  >
+                    <ArrowDown size={13} />
+                  </button>
+                  <button
+                    onClick={() => onToggle(id)}
+                    disabled={config.visible.length <= 1}
+                    aria-label={`Remove ${meta.label}`}
+                    className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-red-500/10 enabled:hover:text-red-400 disabled:opacity-25"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {/* Add tiles */}
+      {hasHidden && (
+        <div>
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">Add tiles</p>
+          <div className="space-y-3">
+            {GROUP_ORDER.map((group) => {
+              const ids = hiddenByGroup[group];
+              if (!ids || ids.length === 0) return null;
+              return (
+                <div key={group}>
+                  <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">{group}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {ids.map((id) => {
+                      const meta = kpiMeta(id);
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => onToggle(id)}
+                          title={meta.description}
+                          aria-label={`Add ${meta.label}`}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-surface-950 px-2.5 py-1.5 text-xs text-slate-300 hover:border-brand-500/40 hover:text-white"
+                        >
+                          <Plus size={12} className="text-brand-400" /> {meta.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export function FpnaDashboard() {
@@ -457,6 +750,60 @@ export function FpnaDashboard() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [refreshKey, setRefreshKey] = useState(0);
   const [, forceTick] = useState(0);
+
+  // ── Configurable KPI layout (persisted client-side per user + company) ──────
+  const { user, loading: meLoading } = useMe();
+  const { activeCompanyId, ready: companyReady } = useActiveCompany();
+  const [config, setConfig] = useState<KpiDashboardConfig>(() => defaultConfig());
+  const [customizing, setCustomizing] = useState(false);
+  const hydratedRef = useRef(false);
+  const appliedPeriodRef = useRef(false);
+
+  const storageKey = useMemo(
+    () => kpiConfigStorageKey(user?.clerkId ?? 'anon', activeCompanyId),
+    [user?.clerkId, activeCompanyId],
+  );
+
+  // Hydrate the saved layout once identity + active company have resolved. Also
+  // re-runs when the active company changes, loading that company's own layout.
+  useEffect(() => {
+    if (meLoading || !companyReady) return;
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(storageKey);
+    } catch {
+      /* storage unavailable (private mode) — fall back to default */
+    }
+    const next = deserializeConfig(stored);
+    hydratedRef.current = true;
+    appliedPeriodRef.current = false;
+    setConfig(next);
+  }, [meLoading, companyReady, storageKey]);
+
+  // Persist on every change, but only after the initial hydration so we never
+  // clobber a saved layout with the transient default.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    try {
+      window.localStorage.setItem(storageKey, serializeConfig(config));
+    } catch {
+      /* storage unavailable — non-fatal */
+    }
+  }, [config, storageKey]);
+
+  // Apply the saved default period offset once per hydration (the user can still
+  // navigate months freely afterwards).
+  useEffect(() => {
+    if (!hydratedRef.current || appliedPeriodRef.current) return;
+    appliedPeriodRef.current = true;
+    if (config.periodOffset !== 0) {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + config.periodOffset);
+      setYear(d.getFullYear());
+      setMonth(d.getMonth() + 1);
+    }
+  }, [config.periodOffset]);
 
   const { data, isLoading, error, refetch } = useQuery<DashboardResponse>(
     '/api/fpna/dashboard',
@@ -475,9 +822,30 @@ export function FpnaDashboard() {
     setMonth(d.getMonth() + 1);
   }, [year, month]);
 
+  // Config mutators (all pure helpers → new config → persisted by the effect).
+  const handleToggle = useCallback((id: KpiId) => setConfig((c) => toggleMetric(c, id)), []);
+  const handleMove = useCallback((id: KpiId, dir: -1 | 1) => setConfig((c) => moveMetric(c, id, dir)), []);
+  const handleApplyLayout = useCallback(
+    (layoutId: (typeof LAYOUTS)[number]['id']) => setConfig((c) => applyLayout(layoutId, c.periodOffset)),
+    [],
+  );
+  const handleReset = useCallback(() => setConfig(() => defaultConfig()), []);
+  const handleSetPeriod = useCallback((offset: number) => {
+    setConfig((c) => setPeriodOffset(c, offset));
+    if (offset !== 0) {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + offset);
+      setYear(d.getFullYear());
+      setMonth(d.getMonth() + 1);
+    } else {
+      setYear(now.getFullYear());
+      setMonth(now.getMonth() + 1);
+    }
+  }, [now]);
+
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
   const k = data?.kpis;
-  const deltas = data?.deltas ?? {};
   const drillBase = useMemo(() => {
     if (!data) return '/reports';
     const start = `${data.period.fiscalYear}-${String(data.period.asOfMonth).padStart(2, '0')}-01`;
@@ -503,6 +871,20 @@ export function FpnaDashboard() {
         <div className="flex items-center gap-3">
           {data && <span className="text-[11px] text-slate-500">Updated {relativeTime(data.meta.generatedAt)}</span>}
           <button
+            onClick={() => setCustomizing((v) => !v)}
+            aria-pressed={customizing}
+            aria-label="Customize KPI tiles"
+            className={clsx(
+              'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium',
+              customizing
+                ? 'border-brand-500/40 bg-brand-500/15 text-brand-300'
+                : 'border-slate-800 bg-surface-900 text-slate-300 hover:bg-slate-800 hover:text-white',
+            )}
+          >
+            <SlidersHorizontal size={13} />
+            Customize
+          </button>
+          <button
             onClick={() => { setRefreshKey((x) => x + 1); refetch(); }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-surface-900 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
           >
@@ -511,6 +893,18 @@ export function FpnaDashboard() {
           </button>
         </div>
       </div>
+
+      {customizing && (
+        <CustomizePanel
+          config={config}
+          onToggle={handleToggle}
+          onMove={handleMove}
+          onApplyLayout={handleApplyLayout}
+          onReset={handleReset}
+          onSetPeriod={handleSetPeriod}
+          onClose={() => setCustomizing(false)}
+        />
+      )}
 
       {isLoading && !data ? (
         <div className="flex items-center justify-center py-20">
@@ -532,42 +926,15 @@ export function FpnaDashboard() {
         </div>
       ) : (
         <>
-          {/* Profitability KPIs */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Kpi label="Revenue (month)" value={formatMoney(k.revenueCents, { compact: true })} sub="current month" icon={Wallet} delta={deltas.revenue} />
-            <Kpi label="Gross margin" value={fmtPct(k.grossMarginPct)} sub={`${formatMoney(k.grossProfitCents, { compact: true })} gross profit`} icon={Percent} tone={k.grossProfitCents >= 0 ? 'good' : 'danger'} delta={deltas.grossMarginPct} deltaKind="points" />
-            <Kpi label="Operating income" value={formatMoney(k.operatingIncomeCents, { compact: true })} sub={fmtPct(k.operatingMarginPct) + ' margin'} icon={k.operatingIncomeCents >= 0 ? TrendingUp : TrendingDown} tone={k.operatingIncomeCents >= 0 ? 'good' : 'danger'} delta={deltas.operatingIncome} />
-            <Kpi label="Net income" value={formatMoney(k.netIncomeCents, { compact: true })} sub={fmtPct(k.netMarginPct) + ' net margin'} icon={k.netIncomeCents >= 0 ? TrendingUp : TrendingDown} tone={k.netIncomeCents >= 0 ? 'good' : 'danger'} delta={deltas.netIncome} />
-          </div>
-
-          {/* Liquidity + runway KPIs */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-            <Kpi label="Cash" value={formatMoney(k.cashCents, { compact: true })} icon={Wallet} delta={deltas.cash} />
-            <Kpi
-              label="Monthly burn"
-              value={data.runway.cashGenerating ? 'Cash+' : formatMoney(data.runway.monthlyBurnCents, { compact: true })}
-              sub={data.runway.cashGenerating ? 'generating cash' : `avg of ${data.runway.basisMonths} mo`}
-              icon={Flame}
-              tone={data.runway.cashGenerating ? 'good' : 'warn'}
-            />
-            <Kpi
-              label="Runway"
-              value={data.runway.runwayMonths === null ? '∞' : `${data.runway.runwayMonths.toFixed(1)} mo`}
-              sub={data.runway.cashGenerating ? 'not burning' : 'cash ÷ burn'}
-              icon={Timer}
-              tone={data.runway.runwayMonths !== null && data.runway.runwayMonths < 6 ? 'danger' : data.runway.runwayMonths !== null && data.runway.runwayMonths < 12 ? 'warn' : 'good'}
-            />
-            <Kpi label="Accounts receivable" value={formatMoney(k.arCents, { compact: true })} icon={Landmark} delta={deltas.ar} higherIsBetter={false} />
-            <Kpi label="Accounts payable" value={formatMoney(k.apCents, { compact: true })} icon={Landmark} delta={deltas.ap} higherIsBetter={false} />
-            <Kpi
-              label="Current ratio"
-              value={fmtRatio(k.currentRatio)}
-              sub={`${formatMoney(k.workingCapitalCents, { compact: true })} working cap`}
-              icon={Scale}
-              tone={k.currentRatio === null ? 'default' : k.currentRatio >= 1.5 ? 'good' : k.currentRatio >= 1 ? 'warn' : 'danger'}
-              delta={deltas.currentRatio}
-              deltaKind="ratio"
-            />
+          {/* Configurable KPI strip — renders only the selected tiles, in the
+              chosen order. Every tile is computed from the live dashboard
+              response (kpiTileProps); nothing is fabricated. Unknown/removed
+              ids were already dropped when the config was hydrated. */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+            {config.visible.map((id) => {
+              const props = kpiTileProps(id, data);
+              return <Kpi key={id} {...props} />;
+            })}
           </div>
 
           {!data.meta.hasBudget && (

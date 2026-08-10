@@ -2,13 +2,15 @@
 
 import { useState } from 'react';
 import { clsx } from 'clsx';
-import { Play, BarChart3 } from 'lucide-react';
+import { Play, BarChart3, TrendingUp } from 'lucide-react';
 import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { RevRecRun } from './rev-rec-run';
 import { RevRecReports } from './rev-rec-reports';
+import { RevRecAccrual } from './rev-rec-accrual';
 
 const TABS = [
   { id: 'run', label: 'Run recognition', icon: Play },
+  { id: 'accrual', label: 'Accrue unbilled', icon: TrendingUp },
   { id: 'reports', label: 'Reports', icon: BarChart3 },
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
@@ -41,6 +43,11 @@ export function RevRecTabs() {
         // Posting recognition writes into ONE company's books — scope-guard it.
         <CompanyScopeGuard>
           <RevRecRun />
+        </CompanyScopeGuard>
+      ) : tab === 'accrual' ? (
+        // Accruing unbilled revenue posts into ONE company's books — scope-guard it.
+        <CompanyScopeGuard>
+          <RevRecAccrual />
         </CompanyScopeGuard>
       ) : (
         // Reports are read-only and allow the consolidated ("All") view — EXEMPT
