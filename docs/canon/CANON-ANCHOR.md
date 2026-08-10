@@ -5,7 +5,10 @@ It is deliberately small (~5 min read) so re-grounding is cheap. It is the disti
 always-current truth. When it conflicts with the repo, **the canon wins** — fix the repo.
 Source of truth: the Project-knowledge doc set (mirrored/digested in `docs/canon/`, indexed in `00-INDEX.md`).
 
-Last reconciled: **2026-08-09 (Session 48)**. Latest handoff: `docs/MERITBOOKS-HANDOFF-session48.md`.
+Last reconciled: **2026-08-09 (Session 49)**. Latest handoff: `docs/MERITBOOKS-HANDOFF-session49.md`.
+Repo HEAD **`43ff536`** on `main` (`origin/main == HEAD`, all pushed). Migrations through **138**;
+next Books migration **139**. Prod on **dev Clerk** on purpose; Anthropic org disabled → all AI
+operationally down (app degrades gracefully). See the handoff §4 for the launch blockers.
 
 ---
 
@@ -270,9 +273,38 @@ ungated, spec-less work in Session 40.)
   (6) marketing-honesty items (semantic search is FTS not vector; 1099 IRIS not built; insurance-posts now
   FIXED); (7) the paused hourly autonomous build task; (8) standing tsc/pglite harness failures are NOT
   regressions.
+- **Session-49 (deterministic depth-and-polish while AI stays dark; migrations 136–138; HEAD `43ff536`,
+  `origin/main == HEAD`):** no new architecture, no gate flips, no auth/billing change — a full wave of
+  deterministic module depth that works without live AI. Shipped: **AP pay-run + remittance-advice PDF**
+  (mig 137 vendor payment profiles, check-number assignment), **saved report views** (mig 138) + report
+  drill/comparatives + exec-summary export, **deterministic CSV/XLSX payroll-register importer → balanced
+  JE, no AI** (mig 136, zero-dep XLSX reader; the honest primary payroll path — mock run stays labeled an
+  estimate), **customer statements** + AR activity ledger, **job POC P&L + WIP schedule**, **1099
+  NEC-vs-MISC box classification + candidate worklist** (classify-only; NEC generates, MISC/IRIS future),
+  **inventory stock-valuation report + GL tie-out**, **documents center + audit-trail depth**, **ASC 740
+  deferred rollforward + M-1 subtotals**, **COA grouped-balances view** + `/api/accounts/balances`,
+  **rev-rec deferred rollforward + per-contract waterfall + method summary**, **expenses approver queue +
+  reimbursement batch**, **subscriptions run-rate/creep/renewals/triage**, **vendor 360** (+ removed a raw
+  `tin_encrypted` PII field from the `/api/vendors` response), **inbox live-count depth**, **bank-feed
+  saved views + deterministic confidence explainer + bulk select-by-band/vendor**, **reconciliation
+  outstanding-item aging + difference decomposer (surfaces the residual plug) + read-only history**,
+  **board-package deterministic MD&A + KPI trend strip + DSO/DPO into PDF/XLSX**, **approval-workflow
+  chain visualizer + read-only scenario simulator + coverage-gap detector**, and **~105 new pure unit
+  tests**. ⚠️ **Ground-truth correction:** the S48 handoff said "next migration 136" — in fact **136/137/138
+  all landed in S49** (git-verified), so the S48 body listing them as already-recorded was inaccurate.
+  ⚠️ **New security seam for the next pass:** the reconciliation-history route (`/api/reconciliation/history`)
+  uses the **admin client** to resolve finalizer display names, strictly scoped to `core.users` ids present
+  on the caller's own org-scoped recs (no cross-tenant exposure) — flag for the security lane. **KNOWN-OPEN
+  launch blockers UNCHANGED** (all human-only): (1) Anthropic org disabled → all AI operationally down (app
+  degrades gracefully, not a code bug); (2) prod intentionally on dev Clerk (do NOT re-cut until separate
+  prod Supabase + prod-Clerk trust + funded Anthropic + live-billing decision are ready together; watch
+  pk/sk pairing); (3) live tenant Stripe charging NOT wired (Operator MRR list-price computed only);
+  (4) Stripe TEST + Plaid SANDBOX; (5) payroll provider unpicked (mock = estimate; register-import = honest
+  primary); (6) marketing-honesty items (FTS not vector; 1099 IRIS not built); (7) paused hourly autonomous
+  build task; (8) standing tsc/pglite harness failures are NOT regressions.
 - **No gate may start until its `Prereq:` gates are DONE. "Complete" is demonstrated, not asserted.**
 
-## 6. Canonical immediate priorities (Session 48 reconciliation)
+## 6. Canonical immediate priorities (Session 49 reconciliation — unchanged from S48; all human-gated)
 
 0. **Clear the launch blockers, then prep a clean prod cutover.** (a) **Fund/re-enable the
    Anthropic account** — the org is disabled/unfunded so ALL AI is operationally down (the app
