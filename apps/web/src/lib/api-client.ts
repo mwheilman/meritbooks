@@ -60,10 +60,20 @@ async function request<T>(
 
 export const api = {
   get: <T>(url: string, params?: Record<string, string>) => {
-    const query = params
-      ? '?' + new URLSearchParams(params).toString()
-      : '';
-    return request<T>(url + query);
+    // Merge params INTO any query string the url already carries, rather than
+    // blindly prepending another "?". Prevents malformed URLs like
+    // `/x?location_id=A?location_id=A` (which the server then reads as the uuid
+    // "A?location_id=A" and rejects). `set` also de-dupes a key already present
+    // in the url with the param value.
+    const [path, existingQuery = ''] = url.split('?');
+    const sp = new URLSearchParams(existingQuery);
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== null && v !== '') sp.set(k, String(v));
+      }
+    }
+    const qs = sp.toString();
+    return request<T>(qs ? `${path}?${qs}` : path);
   },
 
   post: <T>(url: string, body: unknown) =>
