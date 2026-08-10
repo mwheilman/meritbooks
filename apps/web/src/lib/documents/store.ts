@@ -19,6 +19,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { resolvePageParams } from '@/lib/pagination';
 import {
   DOCUMENT_SELECT,
   buildStoragePath,
@@ -109,16 +110,40 @@ export interface ListArgs {
   /** Inclusive created_at lower/upper bounds (YYYY-MM-DD or ISO). */
   dateFrom?: string | null;
   dateTo?: string | null;
+  /** Raw 1-based page number (string, from the query). Defaults to page 1. */
+  page?: string | null;
+  /** Raw rows-per-page (string, from the query). Hard-capped to MAX_PAGE_SIZE. */
+  perPage?: string | null;
+}
+
+export interface ListDocumentsResult {
+  documents: DocumentRow[];
+  page: number;
+  perPage: number;
+  total: number;
+  totalPages: number;
 }
 
 /**
- * List documents (RLS-scoped — only the caller's org). Optionally filter to a single
- * record's attachments (entityType [+ entityId]), to a doc_type, a filename search, a
- * link state (linked / unfiled), and/or a created_at date range. Newest first.
+ * List documents (RLS-scoped — only the caller's org), newest first. Optionally filter
+ * to a single record's attachments (entityType [+ entityId]), to a doc_type, a filename
+ * search, a link state (linked / unfiled), and/or a created_at date range.
+ *
+ * SERVER-SIDE PAGINATED + HARD-CAPPED: the center is a ledger-scale list (every retained
+ * source file + attachment), so this never returns an unbounded row set. `count: 'exact'`
+ * gives the client a real total so it can page.
  */
-export async function listDocuments(args: ListArgs): Promise<DocumentRow[]> {
+export async function listDocuments(args: ListArgs): Promise<ListDocumentsResult> {
   const { supabase, entityType, entityId, docType, search, linked, dateFrom, dateTo } = args;
-  let q = supabase.from('documents').select(DOCUMENT_SELECT).order('created_at', { ascending: false });
+  const { page, perPage, rangeFrom, rangeTo } = resolvePageParams({
+    page: args.page ?? null,
+    per_page: args.perPage ?? null,
+  });
+
+  let q = supabase
+    .from('documents')
+    .select(DOCUMENT_SELECT, { count: 'exact' })
+    .order('created_at', { ascending: false });
 
   if (entityType) q = q.eq('entity_type', entityType);
   if (entityId) q = q.eq('entity_id', entityId);
@@ -129,9 +154,16 @@ export async function listDocuments(args: ListArgs): Promise<DocumentRow[]> {
   if (dateFrom && dateFrom.trim()) q = q.gte('created_at', dateFrom.trim());
   if (dateTo && dateTo.trim()) q = q.lte('created_at', dateTo.trim());
 
-  const { data, error } = await q;
+  const { data, error, count } = await q.range(rangeFrom, rangeTo);
   if (error) throw new Error(`Failed to list documents: ${error.message}`);
-  return (data ?? []) as unknown as DocumentRow[];
+  const total = count ?? 0;
+  return {
+    documents: (data ?? []) as unknown as DocumentRow[],
+    page,
+    perPage,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / perPage)),
+  };
 }
 
 /**

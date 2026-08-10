@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
+  AlertCircle,
   XCircle,
   PlusCircle,
   ChevronDown,
@@ -210,6 +211,7 @@ export function OriginationPanel() {
         </div>
       ) : error ? (
         <div className="rounded-lg border border-red-900/50 bg-red-950/20 p-3 text-center">
+          <AlertCircle className="mx-auto text-red-400 mb-1" size={18} />
           <p className="text-xs text-red-400">{error}</p>
         </div>
       ) : batches.length === 0 ? (
@@ -244,7 +246,7 @@ export function OriginationPanel() {
                     <StatusBadge tone={tone} />
                     <span className="text-xs text-slate-300">
                       <span className="font-mono text-slate-200">{b.rail}</span> · {b.itemCount} payment(s) ·{' '}
-                      <span className="font-mono text-slate-200">{formatMoney(b.totalCents)}</span>
+                      <span className="font-mono tabular-nums text-slate-200">{formatMoney(b.totalCents)}</span>
                     </span>
                     <span className="text-2xs text-slate-600 hidden md:inline">{b.provider}</span>
                   </button>
@@ -304,7 +306,7 @@ export function OriginationPanel() {
                           <span className={clsx('text-2xs font-medium uppercase tracking-wide', ITEM_TONE[it.status])}>
                             {it.status}
                           </span>
-                          <span className="text-xs font-mono text-slate-300">{formatMoney(it.amountCents)}</span>
+                          <span className="text-xs font-mono tabular-nums text-slate-300">{formatMoney(it.amountCents)}</span>
                         </div>
                       </div>
                     ))}

@@ -7,6 +7,7 @@ import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
 import { createInvoice } from '@/lib/invoices/create-invoice';
 import { getHomeCurrency, normalizeCurrency } from '@/lib/currency';
+import { resolvePageParams, totalPages } from '@/lib/pagination';
 
 // ─── GET: List invoices ───────────────────────────────────────────────
 const querySchema = z.object({
@@ -26,10 +27,9 @@ export async function GET(request: Request) {
   const raw = Object.fromEntries(searchParams.entries());
   const params = querySchema.parse(raw);
 
-  const page = parseInt(params.page ?? '1', 10);
-  const perPage = parseInt(params.per_page ?? '50', 10);
-  const from = (page - 1) * perPage;
-  const to = from + perPage - 1;
+  // Hard-clamp the page size — an uncapped per_page let a caller pull the entire
+  // (ledger-scale) invoices table in one request. Defaults unchanged (50/page).
+  const { page, perPage, rangeFrom: from, rangeTo: to } = resolvePageParams(params);
 
   // Base query.
   // NOTE: no PostgREST embeds on customers/locations/jobs here — those tables
@@ -150,7 +150,7 @@ export async function GET(request: Request) {
     data: invoices,
     counts,
     homeCurrency,
-    pagination: { page, per_page: perPage, total: count ?? 0, total_pages: Math.ceil((count ?? 0) / perPage) },
+    pagination: { page, per_page: perPage, total: count ?? 0, total_pages: totalPages(count ?? 0, perPage) },
   });
 }
 

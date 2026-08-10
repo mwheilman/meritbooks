@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 
 /**
  * Public vendor upload UI (no app hooks — this renders OUTSIDE the authenticated
@@ -130,11 +131,16 @@ function DocCard({ token, kind, label, hint }: { token: string; kind: PortalDocK
       </div>
 
       {done ? (
-        <div style={S.doneBox}>
+        <div style={S.doneBox} aria-live="polite">
           <div style={S.doneMsg}>
             <strong>{fileName}</strong> received — pending review.
           </div>
-          <button type="button" style={S.linkBtn} onClick={() => { setPhase('idle'); setError(null); }}>
+          <button
+            type="button"
+            className="mb-linkbtn"
+            style={S.linkBtn}
+            onClick={() => { setPhase('idle'); setError(null); }}
+          >
             Replace file
           </button>
         </div>
@@ -143,6 +149,7 @@ function DocCard({ token, kind, label, hint }: { token: string; kind: PortalDocK
           <div
             role="button"
             tabIndex={0}
+            className="mb-dropzone"
             onClick={() => phase !== 'uploading' && inputRef.current?.click()}
             onKeyDown={(e) => {
               if ((e.key === 'Enter' || e.key === ' ') && phase !== 'uploading') {
@@ -166,6 +173,8 @@ function DocCard({ token, kind, label, hint }: { token: string; kind: PortalDocK
               type="file"
               accept={ACCEPT}
               style={{ display: 'none' }}
+              tabIndex={-1}
+              aria-hidden="true"
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) void upload(f);
@@ -173,10 +182,13 @@ function DocCard({ token, kind, label, hint }: { token: string; kind: PortalDocK
               }}
             />
             {phase === 'uploading' ? (
-              <div style={S.dropText}>Uploading {fileName}…</div>
+              <div style={S.dropText}>
+                <Loader2 size={16} className="animate-spin" style={{ display: 'inline-block', verticalAlign: '-3px', marginRight: 6, color: ACCENT }} aria-hidden="true" />
+                Uploading {fileName}…
+              </div>
             ) : (
               <>
-                <div style={S.dropIcon}>↑</div>
+                <div style={S.dropIcon} aria-hidden="true">↑</div>
                 <div style={S.dropText}>
                   <strong>Drop a file here</strong> or click to browse
                 </div>

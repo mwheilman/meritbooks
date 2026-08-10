@@ -134,6 +134,7 @@ export const navigation: NavGroup[] = [
     label: 'Reporting & Analytics',
     items: [
       { label: 'Reports', href: '/reports', icon: BarChart3 },
+      { label: 'Basis Adjustments', href: '/reports/basis-adjustments', icon: Scale },
       { label: 'FP&A Dashboard', href: '/fpna', icon: BarChart3 },
       { label: 'Budgets', href: '/budgets', icon: TrendingUp },
       { label: 'Profitability', href: '/profitability', icon: TrendingUp },
@@ -157,6 +158,7 @@ export const navigation: NavGroup[] = [
       { label: 'Tax', href: '/tax', icon: Scale },
       { label: 'Compliance & Controls', href: '/compliance', icon: ShieldCheck },
       { label: 'Audit Trail', href: '/audit', icon: History },
+      { label: 'Audit Requests (PBC)', href: '/pbc', icon: ClipboardList },
       { label: 'Documents', href: '/documents', icon: FileText },
       { label: 'Team & Access', href: '/team', icon: Users },
     ],

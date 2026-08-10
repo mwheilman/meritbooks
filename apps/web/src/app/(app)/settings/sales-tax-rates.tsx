@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { Loader2, Plus, Trash2, Receipt, Search, Upload, X, Pencil, Check, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import { Loader2, Plus, Trash2, Receipt, Search, Upload, X, Pencil, Check, FileSpreadsheet, AlertTriangle, AlertCircle } from 'lucide-react';
 import { useQuery, addToast } from '@/hooks';
 import { parseRateCsv, labelForRow, type ParsedRateRow, type RateImportError } from '@/lib/tax/rate-provider/csv-import';
 
@@ -163,7 +163,7 @@ export function SalesTaxRates() {
         </div>
         <button
           onClick={() => setShowImport((v) => !v)}
-          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-slate-700 text-slate-200 hover:bg-slate-800"
+          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-slate-700 text-slate-200 hover:bg-slate-800 transition-colors"
         >
           <Upload className="w-4 h-4" /> Import CSV
         </button>
@@ -175,49 +175,49 @@ export function SalesTaxRates() {
       <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
           <div>
-            <label className="block text-[11px] text-slate-500 mb-1">State *</label>
-            <input value={state} onChange={(e) => setState(e.target.value)} placeholder="IA"
+            <label htmlFor="tax-rate-state" className="block text-[11px] text-slate-500 mb-1">State *</label>
+            <input id="tax-rate-state" value={state} onChange={(e) => setState(e.target.value)} placeholder="IA"
               className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white" />
           </div>
           <div>
-            <label className="block text-[11px] text-slate-500 mb-1">County</label>
-            <input value={county} onChange={(e) => setCounty(e.target.value)} placeholder="Polk"
+            <label htmlFor="tax-rate-county" className="block text-[11px] text-slate-500 mb-1">County</label>
+            <input id="tax-rate-county" value={county} onChange={(e) => setCounty(e.target.value)} placeholder="Polk"
               className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white" />
           </div>
           <div>
-            <label className="block text-[11px] text-slate-500 mb-1">City</label>
-            <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Des Moines"
+            <label htmlFor="tax-rate-city" className="block text-[11px] text-slate-500 mb-1">City</label>
+            <input id="tax-rate-city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Des Moines"
               className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white" />
           </div>
           <div>
-            <label className="block text-[11px] text-slate-500 mb-1">Postal</label>
-            <input value={postal} onChange={(e) => setPostal(e.target.value)} placeholder="50309"
+            <label htmlFor="tax-rate-postal" className="block text-[11px] text-slate-500 mb-1">Postal</label>
+            <input id="tax-rate-postal" value={postal} onChange={(e) => setPostal(e.target.value)} placeholder="50309"
               className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white font-mono" />
           </div>
           <div>
-            <label className="block text-[11px] text-slate-500 mb-1">Category</label>
-            <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="(all)"
+            <label htmlFor="tax-rate-category" className="block text-[11px] text-slate-500 mb-1">Category</label>
+            <input id="tax-rate-category" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="(all)"
               className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white" />
           </div>
           <div>
-            <label className="block text-[11px] text-slate-500 mb-1">Rate % *</label>
-            <input type="number" value={ratePct} onChange={(e) => setRatePct(e.target.value)} min={0} step={0.001} placeholder="7.0"
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white text-right font-mono" />
+            <label htmlFor="tax-rate-pct" className="block text-[11px] text-slate-500 mb-1">Rate % *</label>
+            <input id="tax-rate-pct" type="number" value={ratePct} onChange={(e) => setRatePct(e.target.value)} min={0} step={0.001} placeholder="7.0"
+              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white text-right font-mono tabular-nums" />
           </div>
           <div>
-            <label className="block text-[11px] text-slate-500 mb-1">Effective *</label>
-            <input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)}
+            <label htmlFor="tax-rate-effective" className="block text-[11px] text-slate-500 mb-1">Effective *</label>
+            <input id="tax-rate-effective" type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)}
               className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white" />
           </div>
           <div>
-            <label className="block text-[11px] text-slate-500 mb-1">End (opt.)</label>
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
+            <label htmlFor="tax-rate-end" className="block text-[11px] text-slate-500 mb-1">End (opt.)</label>
+            <input id="tax-rate-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
               className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white" />
           </div>
         </div>
         <div className="mt-3 flex justify-end">
           <button onClick={addRate} disabled={saving}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50">
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add rate
           </button>
         </div>
@@ -239,7 +239,9 @@ export function SalesTaxRates() {
       {isLoading ? (
         <div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="w-4 h-4 animate-spin" /> Loading rates…</div>
       ) : error ? (
-        <div className="text-sm text-red-400">Could not load rates.</div>
+        <div className="flex items-center gap-2 text-sm text-red-400">
+          <AlertCircle className="w-4 h-4 shrink-0" /> Could not load rates.
+        </div>
       ) : rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-800 p-6 text-center text-sm text-slate-500">
           No sales-tax rates configured yet. Add one above or import a CSV to enable automatic tax on invoices.
@@ -278,7 +280,7 @@ export function SalesTaxRates() {
                       {editing ? (
                         <input type="number" value={editRate} onChange={(e) => setEditRate(e.target.value)} min={0} step={0.001}
                           aria-label="Edit rate percent"
-                          className="w-20 px-1.5 py-1 bg-slate-800 border border-slate-600 rounded text-right font-mono text-white" />
+                          className="w-20 px-1.5 py-1 bg-slate-800 border border-slate-600 rounded text-right font-mono tabular-nums text-white" />
                       ) : `${r.combinedRatePct}%`}
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-400">{r.effectiveDate}</td>
@@ -297,20 +299,20 @@ export function SalesTaxRates() {
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {editing ? (
                         <div className="inline-flex items-center gap-1">
-                          <button onClick={() => saveEdit(r.id)} disabled={editSaving} title="Save"
-                            className="p-1 text-emerald-400 hover:text-emerald-300 disabled:opacity-50">
+                          <button onClick={() => saveEdit(r.id)} disabled={editSaving} title="Save" aria-label="Save rate"
+                            className="p-1 text-emerald-400 hover:text-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                             {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                           </button>
-                          <button onClick={() => setEditId(null)} title="Cancel" className="p-1 text-slate-500 hover:text-slate-300">
+                          <button onClick={() => setEditId(null)} title="Cancel" aria-label="Cancel edit" className="p-1 text-slate-500 hover:text-slate-300 transition-colors">
                             <X className="w-4 h-4" />
                           </button>
                         </div>
                       ) : (
                         <div className="inline-flex items-center gap-1">
-                          <button onClick={() => beginEdit(r)} title="Edit rate / end date" className="p-1 text-slate-500 hover:text-emerald-400">
+                          <button onClick={() => beginEdit(r)} title="Edit rate / end date" aria-label={`Edit rate for ${r.jurisdictionLabel || r.state || 'this jurisdiction'}`} className="p-1 text-slate-500 hover:text-emerald-400 transition-colors">
                             <Pencil className="w-4 h-4" />
                           </button>
-                          <button onClick={() => retire(r.id)} title="Retire this rate" className="p-1 text-slate-500 hover:text-red-400">
+                          <button onClick={() => retire(r.id)} title="Retire this rate" aria-label={`Retire rate for ${r.jurisdictionLabel || r.state || 'this jurisdiction'}`} className="p-1 text-slate-500 hover:text-red-400 transition-colors">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -413,7 +415,7 @@ function ImportPanel({ onClose, onImported }: { onClose: () => void; onImported:
           </div>
 
           {preview.rows.length > 0 && (
-            <div className="max-h-40 overflow-y-auto rounded border border-slate-800">
+            <div className="max-h-40 overflow-y-auto overflow-x-auto rounded border border-slate-800">
               <table className="w-full text-xs">
                 <thead className="bg-slate-900/60 text-[10px] uppercase tracking-wider text-slate-500 sticky top-0">
                   <tr>
@@ -449,7 +451,7 @@ function ImportPanel({ onClose, onImported }: { onClose: () => void; onImported:
 
       <div className="flex justify-end">
         <button onClick={doImport} disabled={importing || !preview || preview.rows.length === 0}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50">
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
           {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
           Import {preview?.rows.length ? `${preview.rows.length} row${preview.rows.length === 1 ? '' : 's'}` : ''}
         </button>

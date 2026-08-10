@@ -3,7 +3,7 @@
 import { useMemo, useState, useCallback } from 'react';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
-import { Loader2, AlertCircle, ChevronRight } from 'lucide-react';
+import { Loader2, AlertCircle, ChevronRight, Inbox } from 'lucide-react';
 import { clsx } from 'clsx';
 import {
   mergeArAging,
@@ -113,7 +113,14 @@ export function ArAgingReport({ params }: { params: Record<string, string> }) {
   if (isLoading) return <div className="card p-12 flex items-center justify-center"><Loader2 size={24} className="animate-spin text-slate-500" /></div>;
   if (error) return <div className="card p-8 text-center"><AlertCircle size={24} className="mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{String(error)}</p></div>;
   if (!data || !merged || merged.customers.length === 0) {
-    return <div className="card p-8 text-center text-sm text-slate-500">No outstanding receivables.</div>;
+    return (
+      <div className="card p-8 flex flex-col items-center justify-center text-center">
+        <div className="h-12 w-12 rounded-xl bg-slate-800 flex items-center justify-center mb-3">
+          <Inbox size={22} className="text-slate-500" />
+        </div>
+        <p className="text-sm text-slate-400">No outstanding receivables.</p>
+      </div>
+    );
   }
 
   const { customers, combinedTotals, combinedTotalCents, billedTotals, billedTotalCents, unbilledTotals, unbilledTotalCents } = merged;
@@ -184,6 +191,7 @@ export function ArAgingReport({ params }: { params: Record<string, string> }) {
             {splitAll ? 'Collapse all' : 'Show billed vs unbilled'}
           </button>
         </div>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <caption className="sr-only">
             Accounts receivable aging — billed trade AR and unbilled contract asset combined per customer, expandable to the billed vs unbilled split.
@@ -237,6 +245,7 @@ export function ArAgingReport({ params }: { params: Record<string, string> }) {
             </tr>
           </tfoot>
         </table>
+        </div>
       </div>
     </div>
   );

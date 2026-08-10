@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   PiggyBank, Plus, Search, X, ArrowDownRight, ArrowUpRight, Loader2,
   AlertCircle, CheckCircle2, Scale, Users,
@@ -500,7 +500,22 @@ function NewDepositModal({
 function DepositDrawer({
   depositId, onClose, onChanged,
 }: { depositId: string; onClose: () => void; onChanged: () => void }) {
+  const panelRef = useRef<HTMLDivElement>(null);
   const [refetchKey, setRefetchKey] = useState(0);
+
+  // Escape-to-close
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  // Initial focus
+  useEffect(() => {
+    panelRef.current?.focus();
+  }, []);
   const { data, isLoading, error } = useQuery<{ data: DepositDetail }>(
     `/api/customer-deposits/${depositId}`,
     undefined,
@@ -565,9 +580,16 @@ function DepositDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden />
-      <div className="relative flex h-full w-full max-w-lg flex-col overflow-y-auto border-l border-slate-800 bg-surface-900 shadow-xl">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="deposit-drawer-title"
+        tabIndex={-1}
+        className="relative flex h-full w-full max-w-lg flex-col overflow-y-auto border-l border-slate-800 bg-surface-900 shadow-xl outline-none"
+      >
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-white">
+          <h2 id="deposit-drawer-title" className="flex items-center gap-2 text-base font-semibold text-white">
             <PiggyBank className="h-4 w-4 text-brand-400" />
             Deposit detail
           </h2>
@@ -691,7 +713,7 @@ function DepositDrawer({
                 <button
                   onClick={doRefund}
                   disabled={busy}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {busy && <Loader2 className="h-4 w-4 animate-spin" />}
                   Refund {formatMoney(remaining)}
@@ -749,12 +771,35 @@ function Field({ label, required, children }: { label: string; required?: boolea
 }
 
 function Overlay({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Escape-to-close
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  // Initial focus
+  useEffect(() => {
+    panelRef.current?.focus();
+  }, []);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden />
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-800 bg-surface-900 shadow-xl">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="deposit-overlay-title"
+        tabIndex={-1}
+        className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-800 bg-surface-900 shadow-xl outline-none"
+      >
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-          <h2 className="text-base font-semibold text-white">{title}</h2>
+          <h2 id="deposit-overlay-title" className="text-base font-semibold text-white">{title}</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-200" aria-label="Close">
             <X className="h-5 w-5" />
           </button>

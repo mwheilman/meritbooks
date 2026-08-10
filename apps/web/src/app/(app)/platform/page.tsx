@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/ui';
 import { resolvePlatformStaff } from '@/app/api/platform/_lib/platform-auth';
 import { OperatorDashboard } from './_components/operator-dashboard';
 import { FeeRevenueReport } from './_components/fee-revenue-report';
+import { OpsHealthDashboard } from './_components/ops-health-dashboard';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +42,11 @@ export default async function PlatformPage() {
           </p>
         </div>
         <FeeRevenueReport />
+      </div>
+
+      {/* Ops health: internal observability — captured failures across all tenants. */}
+      <div className="mt-10">
+        <OpsHealthDashboard />
       </div>
 
       {/* Roadmap: the rest of the operator plane. */}

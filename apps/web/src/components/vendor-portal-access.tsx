@@ -175,6 +175,7 @@ export function VendorPortalAccess({ vendorId }: { vendorId: string }) {
                   readOnly
                   value={urlFor(t.token)}
                   onFocus={(e) => e.currentTarget.select()}
+                  aria-label="Portal link URL"
                   className="flex-1 min-w-0 px-2 py-1.5 rounded-md bg-slate-950 border border-slate-700 text-2xs font-mono text-slate-300 focus:outline-none focus:border-emerald-500/50"
                 />
                 <button
@@ -202,7 +203,7 @@ export function VendorPortalAccess({ vendorId }: { vendorId: string }) {
                 <button
                   onClick={() => revoke(t.id)}
                   disabled={busy !== null}
-                  className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-medium bg-red-600/90 text-white hover:bg-red-500 disabled:opacity-50"
+                  className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-medium bg-red-600/90 text-white hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {busy === t.id ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />} Revoke
                 </button>
@@ -226,6 +227,7 @@ export function VendorPortalAccess({ vendorId }: { vendorId: string }) {
               key={d.key}
               type="button"
               onClick={() => toggleKind(d.key)}
+              aria-pressed={kinds[d.key]}
               className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-2xs font-medium transition-colors ${
                 kinds[d.key]
                   ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
@@ -243,13 +245,14 @@ export function VendorPortalAccess({ vendorId }: { vendorId: string }) {
             min={today}
             value={expiry}
             onChange={(e) => setExpiry(e.target.value)}
+            aria-label="Link expiration date (optional)"
             className="px-2 py-1 rounded-md bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
           />
         </div>
         <button
           onClick={mint}
           disabled={busy !== null}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {busy === 'mint' ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />} Create upload link
         </button>

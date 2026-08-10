@@ -358,7 +358,8 @@ function BorrowingBaseInner({ consolidated }: { consolidated: boolean }) {
                   {entityLabel} · as of {data?.asOf} · {data?.arInvoiceCount ?? 0} open invoices · {data?.inventoryItemCount ?? 0} inventory items
                 </p>
               </div>
-              <table className="w-full text-sm tabular-nums">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-sm tabular-nums">
                 <tbody>
                   <CertSection title="Accounts receivable" />
                   <CertLine label="Gross accounts receivable" cents={result.grossArCents} />
@@ -393,6 +394,7 @@ function BorrowingBaseInner({ consolidated }: { consolidated: boolean }) {
                   </tr>
                 </tfoot>
               </table>
+              </div>
             </div>
 
             {/* Concentration table */}
@@ -477,7 +479,7 @@ function ExportButton({
     <button
       onClick={onClick}
       disabled={disabled || busy}
-      className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-40"
+      className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {busy ? <Loader2 size={13} className="animate-spin" /> : icon}
       {label}

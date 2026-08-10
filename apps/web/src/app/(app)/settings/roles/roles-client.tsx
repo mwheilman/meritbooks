@@ -13,6 +13,9 @@ import {
   X,
   Check,
   Sparkles,
+  Eye,
+  UserPlus,
+  Copy,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api } from '@/lib/api-client';
@@ -355,7 +358,9 @@ export function RolesClient() {
   if (!roles) return null;
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_1fr]">
+    <div className="space-y-6">
+      <ExternalAuditorPanel />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_1fr]">
       {/* Role list */}
       <aside className="space-y-4">
         <RoleGroup
@@ -487,6 +492,7 @@ export function RolesClient() {
           }}
         />
       )}
+      </div>
     </div>
   );
 }
@@ -611,6 +617,259 @@ function Legend() {
       <span className="flex items-center gap-1.5 text-slate-500">
         <Info className="h-3.5 w-3.5" /> Hover a toggle to see what it grants
       </span>
+    </div>
+  );
+}
+
+// ── External Auditor access ─────────────────────────────────────────────────────
+// Additive admin surface: provision the read-only External Auditor role + invite an
+// outside CPA to VIEW the books. Hidden entirely for non-admins (the list route 403s).
+interface AuditorSeat {
+  id: string;
+  email: string | null;
+  name: string;
+  isActive: boolean;
+  claimed: boolean;
+  createdAt: string;
+}
+
+function ExternalAuditorPanel() {
+  const [seats, setSeats] = useState<AuditorSeat[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [hidden, setHidden] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const res = await api.get<{ data: AuditorSeat[] }>('/api/audit-access/auditors');
+    if (res.error) {
+      if (res.status === 403) setHidden(true);
+      setLoading(false);
+      return;
+    }
+    setSeats(res.data!.data);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const revoke = useCallback(
+    async (id: string) => {
+      if (!confirm('Revoke this auditor’s access? They will immediately lose all access.')) return;
+      const res = await api.delete(`/api/audit-access/auditors/${id}`);
+      if (res.error) {
+        addToast('error', res.error.error || 'Could not revoke access');
+        return;
+      }
+      addToast('success', 'Access revoked');
+      await load();
+    },
+    [load],
+  );
+
+  if (hidden) return null;
+
+  const active = seats.filter((s) => s.isActive);
+
+  return (
+    <div className="rounded-xl border border-indigo-900/40 bg-indigo-950/10 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Eye className="h-4 w-4 text-indigo-300" />
+            <h2 className="text-base font-semibold text-white">External auditor access</h2>
+          </div>
+          <p className="mt-1 max-w-2xl text-sm text-slate-400">
+            Give an outside CPA / auditor <span className="text-slate-200">view-only</span> access to the books plus a
+            PBC request list. They can read reports, journals, bank feed, invoices, and the audit trail — and raise /
+            accept document requests — but cannot post, approve, move money, or change a setting.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowInvite(true)}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-600"
+        >
+          <UserPlus className="h-4 w-4" /> Invite auditor
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
+        </div>
+      ) : active.length > 0 ? (
+        <div className="mt-3 divide-y divide-slate-800 overflow-hidden rounded-lg border border-slate-800 bg-surface-900">
+          {active.map((s) => (
+            <div key={s.id} className="flex items-center justify-between gap-3 px-3 py-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm text-white">{s.name}</div>
+                <div className="truncate text-xs text-slate-500">{s.email}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span
+                  className={clsx(
+                    'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                    s.claimed ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300',
+                  )}
+                >
+                  {s.claimed ? 'Active' : 'Pending sign-up'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void revoke(s.id)}
+                  title="Revoke access"
+                  className="inline-flex items-center rounded-lg border border-red-900/50 p-1.5 text-red-300 hover:bg-red-950/40"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-slate-500">No external auditors yet.</p>
+      )}
+
+      {showInvite && (
+        <InviteAuditorModal
+          onClose={() => setShowInvite(false)}
+          onInvited={async () => {
+            setShowInvite(false);
+            await load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function InviteAuditorModal({ onClose, onInvited }: { onClose: () => void; onInvited: () => void }) {
+  const [email, setEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [link, setLink] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+      addToast('error', 'Enter a valid email address.');
+      return;
+    }
+    setSaving(true);
+    const res = await api.post<{ acceptUrl?: string; emailSent?: boolean }>('/api/audit-access/auditors', {
+      email: email.trim(),
+      firstName: firstName.trim() || undefined,
+      lastName: lastName.trim() || undefined,
+    });
+    setSaving(false);
+    if (res.error) {
+      addToast('error', res.error.error || 'Could not invite auditor');
+      return;
+    }
+    addToast('success', res.data?.emailSent ? 'Auditor invited — email sent' : 'Auditor invited');
+    if (res.data?.acceptUrl && !res.data?.emailSent) {
+      setLink(res.data.acceptUrl);
+    } else {
+      onInvited();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-md rounded-xl border border-slate-800 bg-surface-950 p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-white">Invite external auditor</h3>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-white">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        {link ? (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-300">
+              The auditor seat is created. Email isn’t configured, so share this sign-up link — they must sign up with{' '}
+              <span className="text-white">{email.trim().toLowerCase()}</span>.
+            </p>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-surface-900 p-2">
+              <input readOnly value={link} className="min-w-0 flex-1 bg-transparent text-xs text-slate-300 focus:outline-none" />
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(link);
+                  addToast('success', 'Link copied');
+                }}
+                className="inline-flex items-center gap-1 rounded bg-slate-700/60 px-2 py-1 text-xs text-slate-200 hover:bg-slate-700"
+              >
+                <Copy className="h-3 w-3" /> Copy
+              </button>
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={onInvited}
+                className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-600"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-300">Email</label>
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="auditor@cpafirm.com"
+                  className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-300">
+                    First name <span className="text-slate-500">(optional)</span>
+                  </label>
+                  <input
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-300">
+                    Last name <span className="text-slate-500">(optional)</span>
+                  </label>
+                  <input
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                The auditor gets view-only access to every company in this organization and the PBC request list.
+              </p>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={onClose} className="rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-surface-900">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submit}
+                disabled={saving}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-600 disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                Invite
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

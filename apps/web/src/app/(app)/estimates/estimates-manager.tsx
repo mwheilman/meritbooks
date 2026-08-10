@@ -100,7 +100,7 @@ export function EstimatesManager() {
       <div className="p-8 text-center">
         <AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" />
         <p className="text-red-400">Failed to load estimates</p>
-        <p className="text-sm text-gray-500 mt-1">{error}</p>
+        <p className="text-sm text-slate-500 mt-1">{error}</p>
       </div>
     );
   }
@@ -111,7 +111,7 @@ export function EstimatesManager() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-white">Estimates &amp; Quotes</h1>
-          <p className="text-sm text-gray-400 mt-1">
+          <p className="text-sm text-slate-400 mt-1">
             Quote work, track your pipeline, and convert a won estimate into a posting invoice.
           </p>
         </div>
@@ -153,27 +153,27 @@ export function EstimatesManager() {
           hint={`${counts.ALL?.count ?? 0} total`}
           value={formatMoney(counts.ALL?.totalCents ?? 0)}
           icon={FileText}
-          color="text-gray-400"
+          color="text-slate-400"
         />
       </div>
 
       {/* Search */}
       <div className="flex items-center gap-3 mb-4">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
           <input
             type="text"
             placeholder="Search by estimate number…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search estimates"
-            className="w-full pl-9 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-500"
+            className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-500"
           />
         </div>
       </div>
 
       {/* Status tabs */}
-      <div className="flex gap-1 mb-4 border-b border-gray-700/50 pb-px overflow-x-auto">
+      <div className="flex gap-1 mb-4 border-b border-slate-700/50 pb-px overflow-x-auto">
         {TABS.map((t) => {
           const c = counts[t];
           return (
@@ -182,8 +182,8 @@ export function EstimatesManager() {
               onClick={() => setStatus(t)}
               className={`px-3 py-2 text-sm rounded-t-lg whitespace-nowrap transition-colors ${
                 status === t
-                  ? 'bg-gray-800 text-emerald-400 border-b-2 border-emerald-400'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-slate-800 text-emerald-400 border-b-2 border-emerald-400'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
               {t.charAt(0) + t.slice(1).toLowerCase()}{' '}
@@ -209,7 +209,7 @@ export function EstimatesManager() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[820px]">
             <thead>
-              <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-gray-700/50">
+              <tr className="text-left text-xs text-slate-500 uppercase tracking-wider border-b border-slate-700/50">
                 <SortHeader label="Estimate #" active={sortKey === 'estimateNumber'} dir={sortDir} onClick={() => toggleSort('estimateNumber')} />
                 <SortHeader label="Customer" active={sortKey === 'customer'} dir={sortDir} onClick={() => toggleSort('customer')} />
                 <SortHeader label="Date" active={sortKey === 'estimateDate'} dir={sortDir} onClick={() => toggleSort('estimateDate')} />
@@ -265,14 +265,14 @@ export function EstimatesManager() {
 
 function EstimateTableRow({ row, onClick }: { row: EstimateRow; onClick: () => void }) {
   return (
-    <tr onClick={onClick} className="border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/40 transition-colors">
+    <tr onClick={onClick} className="border-b border-slate-800/50 cursor-pointer hover:bg-slate-800/40 transition-colors">
       <td className="py-3 pr-4">
         <span className="font-mono text-white">{row.estimateNumber}</span>
       </td>
-      <td className="py-3 pr-4 text-gray-300">{row.customer?.name ?? '—'}</td>
-      <td className="py-3 pr-4 font-mono text-gray-400 text-xs tabular-nums">{row.estimateDate}</td>
+      <td className="py-3 pr-4 text-slate-300">{row.customer?.name ?? '—'}</td>
+      <td className="py-3 pr-4 font-mono text-slate-400 text-xs tabular-nums">{row.estimateDate}</td>
       <td className="py-3 pr-4">
-        <span className={`font-mono text-xs tabular-nums ${row.isPastExpiration ? 'text-amber-400' : 'text-gray-400'}`}>
+        <span className={`font-mono text-xs tabular-nums ${row.isPastExpiration ? 'text-amber-400' : 'text-slate-400'}`}>
           {row.expirationDate ?? '—'}
         </span>
         {row.isPastExpiration && <span className="ml-1 text-[10px] text-amber-400">past</span>}
@@ -304,7 +304,7 @@ function SortHeader({
     <th className={`pb-3 pr-4 ${align === 'right' ? 'text-right' : ''}`}>
       <button
         onClick={onClick}
-        className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-gray-300 ${
+        className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-slate-300 ${
           active ? 'text-emerald-400' : ''
         } ${align === 'right' ? 'flex-row-reverse' : ''}`}
       >
@@ -337,13 +337,13 @@ function PipelineCard({
   color: string;
 }) {
   return (
-    <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+    <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm text-gray-400">{label}</span>
+        <span className="text-sm text-slate-400">{label}</span>
         <Icon className={`w-4 h-4 ${color}`} />
       </div>
       <p className="text-xl font-mono font-semibold text-white tabular-nums">{value}</p>
-      <p className="text-xs text-gray-500 mt-1">{hint}</p>
+      <p className="text-xs text-slate-500 mt-1">{hint}</p>
     </div>
   );
 }

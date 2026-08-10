@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks/use-query';
@@ -33,6 +33,7 @@ export function EstimateDrawer({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [confirm, setConfirm] = useState<{ label: string; run: () => void } | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, refetch } = useQuery<EstimateDetail>(
     estimateId ? `/api/estimates/${estimateId}` : null,
@@ -50,6 +51,11 @@ export function EstimateDrawer({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [estimateId, onClose, confirm]);
+
+  // Move focus into the drawer when it opens.
+  useEffect(() => {
+    if (estimateId) panelRef.current?.focus();
+  }, [estimateId]);
 
   if (!estimateId) return null;
 
@@ -103,17 +109,21 @@ export function EstimateDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="Estimate detail">
+    <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-labelledby="estimate-drawer-title">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
-      <div className="relative w-full max-w-xl bg-gray-900 border-l border-gray-700 h-full overflow-y-auto">
-        <div className="sticky top-0 z-10 flex items-center justify-between p-5 border-b border-gray-700/50 bg-gray-900">
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        className="relative w-full max-w-xl bg-surface-900 border-l border-slate-700 h-full overflow-y-auto focus:outline-none"
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between p-5 border-b border-slate-700/50 bg-surface-900">
           <div className="flex items-center gap-3">
-            <h2 className="text-base font-semibold text-white font-mono">
+            <h2 id="estimate-drawer-title" className="text-base font-semibold text-white font-mono">
               {est?.estimateNumber ?? 'Estimate'}
             </h2>
             {est && <EstimateStatusBadge status={est.status} />}
           </div>
-          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-white">
+          <button onClick={onClose} aria-label="Close" className="p-1 text-slate-400 hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -155,10 +165,10 @@ export function EstimateDrawer({
             </div>
 
             {/* Lines */}
-            <div className="rounded-lg border border-gray-800 overflow-hidden">
+            <div className="rounded-lg border border-slate-800 overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs text-gray-500 uppercase tracking-wider bg-gray-800/50">
+                  <tr className="text-left text-xs text-slate-500 uppercase tracking-wider bg-slate-800/50">
                     <th className="py-2 px-3">Description</th>
                     <th className="py-2 px-3 text-right">Qty</th>
                     <th className="py-2 px-3 text-right">Rate</th>
@@ -167,17 +177,17 @@ export function EstimateDrawer({
                 </thead>
                 <tbody>
                   {est.lines.map((l) => (
-                    <tr key={l.id} className="border-t border-gray-800/50">
+                    <tr key={l.id} className="border-t border-slate-800/50">
                       <td className="py-2 px-3">
-                        <div className="text-gray-200">{l.description}</div>
+                        <div className="text-slate-200">{l.description}</div>
                         {l.account && (
-                          <div className="text-[11px] text-gray-500 font-mono">
+                          <div className="text-[11px] text-slate-500 font-mono">
                             {l.account.accountNumber} · {l.account.name}
                           </div>
                         )}
                       </td>
-                      <td className="py-2 px-3 text-right font-mono text-gray-400 tabular-nums">{l.quantity}</td>
-                      <td className="py-2 px-3 text-right font-mono text-gray-400 tabular-nums">
+                      <td className="py-2 px-3 text-right font-mono text-slate-400 tabular-nums">{l.quantity}</td>
+                      <td className="py-2 px-3 text-right font-mono text-slate-400 tabular-nums">
                         {formatMoney(l.unitPriceCents, { currency: est.currency })}
                       </td>
                       <td className="py-2 px-3 text-right font-mono text-white tabular-nums">
@@ -195,7 +205,7 @@ export function EstimateDrawer({
               {est.taxCents > 0 && (
                 <Row label="Tax" value={formatMoney(est.taxCents, { currency: est.currency })} muted />
               )}
-              <div className="flex justify-between border-t border-gray-700/50 pt-2 font-semibold">
+              <div className="flex justify-between border-t border-slate-700/50 pt-2 font-semibold">
                 <span className="text-white">Total</span>
                 <span className="font-mono text-emerald-400 tabular-nums">
                   {formatMoney(est.totalCents, { currency: est.currency })}
@@ -204,13 +214,13 @@ export function EstimateDrawer({
             </div>
 
             {est.notes && (
-              <div className="rounded-lg bg-gray-800/50 border border-gray-700/50 p-3 text-sm text-gray-300 whitespace-pre-wrap">
+              <div className="rounded-lg bg-slate-800/50 border border-slate-700/50 p-3 text-sm text-slate-300 whitespace-pre-wrap">
                 {est.notes}
               </div>
             )}
 
             {/* Actions */}
-            <div className="border-t border-gray-700/50 pt-4 space-y-3">
+            <div className="border-t border-slate-700/50 pt-4 space-y-3">
               {!isConverted && (
                 <div className="flex flex-wrap gap-2">
                   {est.status !== 'SENT' && (
@@ -252,7 +262,7 @@ export function EstimateDrawer({
                   href={`/api/estimates/${est.id}/pdf`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200"
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200"
                 >
                   <FileDown className="w-4 h-4" /> Download PDF
                 </a>
@@ -288,12 +298,12 @@ export function EstimateDrawer({
           <div
             role="alertdialog"
             aria-modal="true"
-            aria-label="Confirm action"
-            className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-sm p-5"
+            aria-labelledby="estimate-confirm-title"
+            className="bg-surface-900 border border-slate-700 rounded-xl w-full max-w-sm p-5"
           >
-            <p className="text-sm text-gray-200">{confirm.label}</p>
+            <p id="estimate-confirm-title" className="text-sm text-slate-200">{confirm.label}</p>
             <div className="flex justify-end gap-3 mt-5">
-              <button onClick={() => setConfirm(null)} className="px-4 py-2 text-sm text-gray-400 hover:text-white">
+              <button onClick={() => setConfirm(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">
                 Cancel
               </button>
               <button
@@ -317,8 +327,8 @@ export function EstimateDrawer({
 function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[11px] text-gray-500 uppercase tracking-wider">{label}</div>
-      <div className="text-gray-200 mt-0.5">{value}</div>
+      <div className="text-[11px] text-slate-500 uppercase tracking-wider">{label}</div>
+      <div className="text-slate-200 mt-0.5">{value}</div>
     </div>
   );
 }
@@ -326,8 +336,8 @@ function Meta({ label, value }: { label: string; value: string }) {
 function Row({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
     <div className="flex justify-between">
-      <span className={muted ? 'text-gray-400' : 'text-white'}>{label}</span>
-      <span className="font-mono text-gray-200 tabular-nums">{value}</span>
+      <span className={muted ? 'text-slate-400' : 'text-white'}>{label}</span>
+      <span className="font-mono text-slate-200 tabular-nums">{value}</span>
     </div>
   );
 }
@@ -350,12 +360,12 @@ function ActionBtn({
       ? 'text-emerald-300 hover:bg-emerald-500/10 border-emerald-500/30'
       : tone === 'red'
         ? 'text-red-300 hover:bg-red-500/10 border-red-500/30'
-        : 'text-gray-200 hover:bg-gray-700 border-gray-700';
+        : 'text-slate-200 hover:bg-slate-700 border-slate-700';
   return (
     <button
       onClick={onClick}
       disabled={busy}
-      className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-gray-800 border disabled:opacity-50 ${toneCls}`}
+      className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-slate-800 border disabled:opacity-50 ${toneCls}`}
     >
       {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className="w-4 h-4" />}
       {label}

@@ -37,7 +37,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const documents = await listDocuments({
+    const result = await listDocuments({
       supabase: ctx.supabase,
       entityType: parsed.data.entity_type ?? null,
       entityId: parsed.data.entity_id ?? null,
@@ -46,8 +46,18 @@ export async function GET(request: Request): Promise<NextResponse> {
       linked: parsed.data.linked ?? null,
       dateFrom: parsed.data.date_from ?? null,
       dateTo: parsed.data.date_to ?? null,
+      page: parsed.data.page ?? null,
+      perPage: parsed.data.per_page ?? null,
     });
-    return NextResponse.json({ data: documents });
+    return NextResponse.json({
+      data: result.documents,
+      pagination: {
+        page: result.page,
+        per_page: result.perPage,
+        total: result.total,
+        total_pages: result.totalPages,
+      },
+    });
   } catch (err) {
     console.error('[documents] list failed:', err);
     return NextResponse.json({ error: 'Failed to load documents', code: 'INTERNAL_ERROR' }, { status: 500 });

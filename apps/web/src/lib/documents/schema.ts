@@ -99,6 +99,10 @@ export const listDocumentsQuery = z.object({
   date_from: z.string().trim().min(1).max(40).optional(),
   /** Inclusive created_at upper bound (YYYY-MM-DD or ISO). */
   date_to: z.string().trim().min(1).max(40).optional(),
+  /** 1-based page number (server-side pagination — the store hard-caps page size). */
+  page: z.string().regex(/^\d+$/).optional(),
+  /** Rows per page (clamped to the store's MAX_PAGE_SIZE). */
+  per_page: z.string().regex(/^\d+$/).optional(),
 });
 export type ListDocumentsQuery = z.infer<typeof listDocumentsQuery>;
 

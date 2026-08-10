@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { ZodSchema, ZodError } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAuthedSupabase } from '@/lib/supabase/authed';
+import { captureError } from '@/lib/observability/capture';
 
 export interface ApiContext {
   userId: string;
@@ -151,6 +152,7 @@ export function apiHandler<T>(
       return await handler(body, { userId, orgId, supabase });
     } catch (error) {
       console.error('[API Error]', error);
+      void captureError({ source: 'api', route: new URL(request.url).pathname, error, userId, orgId });
 
       if (error instanceof SyntaxError) {
         return NextResponse.json(
@@ -209,6 +211,7 @@ export function apiQueryHandler<T>(
       return await handler(params, { userId, orgId, supabase });
     } catch (error) {
       console.error('[API Error]', error);
+      void captureError({ source: 'api', route: new URL(request.url).pathname, error, userId, orgId });
       return NextResponse.json(
         {
           error: error instanceof Error ? error.message : 'Internal server error',

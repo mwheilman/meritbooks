@@ -27,6 +27,8 @@ import { NarrativePanel } from './narrative-panel';
 import { ReportCompiler } from './report-compiler';
 import { SavedPacks } from './saved-packs';
 import { SavedViews, type SavedView, type ViewConfig } from './saved-views';
+import { useBasisOverlay, type PresentationBasis, type BasisOverlay } from './use-basis-overlay';
+import { BasisBanner } from './basis-banner';
 import {
   type CompareMode,
   parseISO,
@@ -216,6 +218,8 @@ export function ReportViewer() {
   const [selectedLocs, setSelectedLocs] = useState<string[]>([]);
   const [selectedIndustries, setSelectedIndustries] = useState<string[]>([]);
   const [basis, setBasis] = useState<'accrual'|'cash'>('accrual');
+  // Presentation-basis overlay (layered on the GAAP output; never touches the ledger).
+  const [presentationBasis, setPresentationBasis] = useState<PresentationBasis>('GAAP');
   const [viewMode, setViewMode] = useState<'summary'|'detail'>('summary');
   const [compareMode, setCompareMode] = useState<CompareMode>('none');
   const [drill, setDrill] = useState<DrillDownTarget | null>(null);
@@ -387,7 +391,24 @@ export function ReportViewer() {
     return sd && ed ? `${sd} to ${ed}` : 'Current period';
   }, [reportDef, sd, ed]);
 
-  const exportBasisLabel = reportDef?.hasBasis ? (basis === 'cash' ? 'Cash basis' : 'Accrual basis') : undefined;
+  // Reports that can carry the reporting-basis overlay (statements read off the GL).
+  const supportsOverlay = ['pnl', 'pnl_dept', 'pnl_class', 'bs', 'tb'].includes(reportKey ?? '');
+  const overlayActive = supportsOverlay && presentationBasis !== 'GAAP';
+  const overlayLabel =
+    presentationBasis === 'TAX' ? 'Tax basis (adjusted presentation)'
+    : presentationBasis === 'CASH' ? 'Cash basis (adjusted presentation)'
+    : presentationBasis === 'CUSTOM' ? 'Custom basis (adjusted presentation)'
+    : undefined;
+  const exportBasisLabel = overlayActive
+    ? overlayLabel
+    : reportDef?.hasBasis ? (basis === 'cash' ? 'Cash basis' : 'Accrual basis') : undefined;
+
+  // ── Reporting-basis overlay (lifted here so both the on-screen statement AND the export
+  // path use the SAME adjustments). Year from the report window; a single whole-calendar
+  // month passes its month so month-scoped + whole-year adjustments both apply. ──
+  const overlayYear = (ed || sd || '').slice(0, 4) || String(new Date().getFullYear());
+  const overlaySingleMonth = sd && ed && sd.slice(0, 7) === ed.slice(0, 7) ? sd.slice(5, 7) : undefined;
+  const overlay = useBasisOverlay(supportsOverlay ? presentationBasis : 'GAAP', overlayYear, overlaySingleMonth, locIdsParam);
 
   const companyOptions = useMemo(() =>
     locations.map((l) => ({ value: l.id, label: `${l.short_code} · ${l.name}`, group: l.industry ?? 'Other' })),
@@ -489,6 +510,7 @@ export function ReportViewer() {
                 entityLabel={entityLabel}
                 periodLabel={exportPeriodLabel}
                 basisLabel={exportBasisLabel}
+                overlay={overlay}
               />
             </div>
 
@@ -539,6 +561,24 @@ export function ReportViewer() {
                 </div>
               )}
 
+              {supportsOverlay && (
+                <div className="flex items-center gap-1.5" title="Present this statement on a different basis by layering saved adjustments on top of the accrual (GAAP) output. The ledger stays accrual.">
+                  <Landmark size={13} className={overlayActive ? 'text-indigo-400' : 'text-slate-500'} />
+                  <select
+                    value={presentationBasis}
+                    onChange={(e) => setPresentationBasis(e.target.value as PresentationBasis)}
+                    aria-label="Reporting basis"
+                    className={clsx('px-2 py-1.5 rounded-lg text-xs border', overlayActive ? 'bg-indigo-600/20 border-indigo-500/30 text-indigo-200' : 'bg-slate-800 border-slate-700 text-white')}
+                  >
+                    <option value="GAAP" className="bg-slate-900 text-white">Accrual (GAAP)</option>
+                    <option value="TAX" className="bg-slate-900 text-white">Tax basis</option>
+                    <option value="CASH" className="bg-slate-900 text-white">Cash basis</option>
+                    <option value="CUSTOM" className="bg-slate-900 text-white">Custom basis</option>
+                  </select>
+                  <a href="/reports/basis-adjustments" className="text-[11px] text-slate-500 hover:text-indigo-300 underline decoration-dotted underline-offset-2">Manage</a>
+                </div>
+              )}
+
               {reportDef?.hasDetail && (
                 <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-700">
                   <button onClick={() => setViewMode('summary')} className={clsx('px-2 py-1 rounded-md text-xs flex items-center gap-1', viewMode==='summary'?'bg-slate-700 text-white':'text-slate-500')}><LayoutGrid size={11}/>Summary</button>
@@ -570,7 +610,7 @@ export function ReportViewer() {
               />
             )}
 
-            <ReportContent reportKey={reportKey} sd={sd} ed={ed} locIds={locIdsParam} basis={basis} viewMode={viewMode} compareMode={compareMode} onDrill={setDrill} />
+            <ReportContent reportKey={reportKey} sd={sd} ed={ed} locIds={locIdsParam} basis={basis} presentationBasis={presentationBasis} overlay={overlay} viewMode={viewMode} compareMode={compareMode} onDrill={setDrill} />
           </div>
         )}
       </div>
@@ -584,31 +624,34 @@ export function ReportViewer() {
 // REPORT CONTENT ROUTER (TS-fixed: proper typing on params)
 // ═══════════════════════════════════════════════════════════════
 
-function ReportContent({ reportKey, sd, ed, locIds, basis, viewMode, compareMode, onDrill }: {
-  reportKey: string; sd: string; ed: string; locIds: string; basis: string; viewMode: string; compareMode: CompareMode; onDrill: (t: DrillDownTarget) => void;
+function ReportContent({ reportKey, sd, ed, locIds, basis, presentationBasis, overlay, viewMode, compareMode, onDrill }: {
+  reportKey: string; sd: string; ed: string; locIds: string; basis: string; presentationBasis: PresentationBasis; overlay: BasisOverlay; viewMode: string; compareMode: CompareMode; onDrill: (t: DrillDownTarget) => void;
 }) {
   // Build params with location_ids for ALL APIs (multi-select support)
   const p: Record<string, string> = {};
   if (sd) p.start_date = sd;
   if (ed) p.end_date = ed;
   if (locIds) p.location_ids = locIds;
-  if (basis !== 'accrual') p.basis = basis;
+  // A non-GAAP presentation basis layers on the ACCRUAL (GAAP) output, so force accrual
+  // for the underlying fetch when an overlay basis is active (the cash toggle is a
+  // separate entry-level cash view that only applies when presentation basis = GAAP).
+  if (basis !== 'accrual' && presentationBasis === 'GAAP') p.basis = basis;
 
   switch (reportKey) {
     case 'pnl':
     case 'pnl_dept':
     case 'pnl_class':
-      return <PnlReport p={p} onDrill={onDrill} compareMode={compareMode} />;
+      return <PnlReport p={p} onDrill={onDrill} compareMode={compareMode} overlay={overlay} />;
     case 'pnl_month':
       return <PnlByMonthReport locIds={locIds} basis={basis} year={sd?.slice(0,4) ?? String(new Date().getFullYear())} />;
     case 'bs':
-      return <BsReport ed={ed} locIds={locIds} onDrill={onDrill} compareMode={compareMode} />;
+      return <BsReport ed={ed} locIds={locIds} onDrill={onDrill} compareMode={compareMode} overlay={overlay} />;
     case 'cf':
       return <CashFlowReport startDate={sd} endDate={ed} locationId={locIds.split(',')[0] || 'all'} />;
     case 'cf_direct':
       return <CashFlowDirectReport startDate={sd} endDate={ed} locIds={locIds} />;
     case 'tb':
-      return <TbReport locIds={locIds} onDrill={onDrill} />;
+      return <TbReport locIds={locIds} onDrill={onDrill} overlay={overlay} />;
     case 'ap_aging':
       return <ApAgingReport params={p} />;
     case 'ar_aging':
@@ -694,7 +737,74 @@ interface ISR { sections: ISSection[]; summary: { revenueCents: number; grossPro
 
 interface BudgetVsActual { data: { accountNumber: string; budgetCents: number }[]; totals?: Record<string, { budget: number; actual: number; variance: number }> }
 
-function PnlReport({ p, onDrill, compareMode }: { p: Record<string, string>; onDrill: (t: DrillDownTarget) => void; compareMode: CompareMode }) {
+// ═══════════════════════════════════════════════════════════════
+// BASIS OVERLAY — apply the adjustments onto a fetched GAAP payload
+// ═══════════════════════════════════════════════════════════════
+
+interface OverlayAcctLabel { accountNumber: string; accountName: string }
+
+/** The itemized, auditable schedule of adjustments that make up an adjusted statement. */
+function BasisAdjustmentsSchedule({ overlay, labels }: { overlay: BasisOverlay; labels: Map<string, OverlayAcctLabel> }) {
+  if (!overlay.enabled) return null;
+  const rows: { key: string; number: string; name: string; description: string | null; type: string | null; source: string; amount: number }[] = [];
+  for (const [accountId, acc] of overlay.byAccount.entries()) {
+    const label = labels.get(accountId);
+    if (!label) continue; // only adjustments that touch an account on THIS statement
+    acc.items.forEach((it, i) => rows.push({ key: `${accountId}-${i}`, number: label.accountNumber, name: label.accountName, description: it.description, type: it.adjustmentType, source: it.source, amount: it.amountCents }));
+  }
+  if (rows.length === 0) return null;
+  return (
+    <div className="card overflow-hidden mt-4">
+      <div className="px-6 py-3 border-b border-slate-800 flex items-center gap-2">
+        <Filter size={13} className="text-indigo-400" />
+        <p className="text-xs font-semibold text-slate-300">{overlay.basisLabel} adjustments <span className="text-slate-500 font-normal">— {rows.length} on this statement · itemized &amp; auditable · never posted to the GL</span></p>
+      </div>
+      <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-6 py-2 text-left w-20">Acct</th><th className="px-4 py-2 text-left">Account / Description</th><th className="px-4 py-2 text-left w-24">Type</th><th className="px-4 py-2 text-left w-20">Source</th><th className="px-6 py-2 text-right w-32">Adjustment</th></tr></thead>
+        <tbody className="divide-y divide-slate-800/30">{rows.map((r) => <tr key={r.key} className="hover:bg-slate-800/20"><td className="px-6 py-1.5 text-xs font-mono text-slate-500">{r.number}</td><td className="px-4 py-1.5 text-slate-300">{r.name}{r.description && <span className="text-slate-500"> — {r.description}</span>}</td><td className="px-4 py-1.5 text-2xs text-slate-500">{r.type ?? '—'}</td><td className="px-4 py-1.5 text-2xs text-slate-500">{r.source}</td><td className={clsx('px-6 py-1.5 text-right font-mono', r.amount >= 0 ? 'text-emerald-400' : 'text-red-400')}>{r.amount > 0 ? '+' : ''}{formatMoney(r.amount)}</td></tr>)}</tbody></table>
+    </div>
+  );
+}
+
+function applyOverlayToPnl(data: ISR, overlay: BasisOverlay): { data: ISR; labels: Map<string, OverlayAcctLabel> } {
+  const labels = new Map<string, OverlayAcctLabel>();
+  for (const sec of data.sections) for (const g of sec.groups) for (const a of g.accounts) labels.set(a.accountId, { accountNumber: a.accountNumber, accountName: a.accountName });
+  if (!overlay.enabled) return { data, labels };
+  let dRev = 0, dCogs = 0, dOpex = 0, dOther = 0;
+  const sections = data.sections.map((sec) => {
+    let secDelta = 0;
+    const groups = sec.groups.map((g) => {
+      let gTotal = 0;
+      const accounts = g.accounts.map((a) => {
+        const delta = overlay.byAccount.get(a.accountId)?.naturalCents ?? 0;
+        const amountCents = a.amountCents + delta;
+        gTotal += amountCents; secDelta += delta;
+        return { ...a, amountCents };
+      });
+      return { ...g, accounts, totalCents: gTotal };
+    });
+    if (sec.type === 'REVENUE') dRev += secDelta;
+    else if (sec.type === 'COGS') dCogs += secDelta;
+    else if (sec.type === 'OPEX') dOpex += secDelta;
+    else if (sec.type === 'OTHER') dOther += secDelta;
+    return { ...sec, groups, totalCents: sec.totalCents + secDelta };
+  });
+  const s = data.summary;
+  const revenueCents = s.revenueCents + dRev;
+  const grossProfitCents = s.grossProfitCents + dRev - dCogs;
+  const netIncomeCents = s.netIncomeCents + dRev - dCogs - dOpex - dOther;
+  const rb = Math.abs(revenueCents) || 1;
+  const summary = {
+    ...s,
+    revenueCents,
+    grossProfitCents,
+    netIncomeCents,
+    grossMarginPct: Math.round((grossProfitCents / rb) * 10000) / 100,
+    netMarginPct: Math.round((netIncomeCents / rb) * 10000) / 100,
+  };
+  return { data: { ...data, sections, summary }, labels };
+}
+
+function PnlReport({ p, onDrill, compareMode, overlay }: { p: Record<string, string>; onDrill: (t: DrillDownTarget) => void; compareMode: CompareMode; overlay: BasisOverlay }) {
   const { data, isLoading, error } = useQuery<ISR>('/api/reports/income-statement', p);
 
   // ── Derive the comparison window from the SELECTED range (the fix). ──
@@ -719,8 +829,9 @@ function PnlReport({ p, onDrill, compareMode }: { p: Record<string, string>; onD
   }, [budgetActive, p]);
   const { data: budgetData } = useQuery<BudgetVsActual>(budgetActive ? '/api/budgets/vs-actual' : null, budgetParams);
 
-  if (isLoading) return <Ld />; if (error) return <Er m={String(error)} />; if (!data) return <Em />;
-  const { sections, summary: s } = data; const rb = Math.abs(s.revenueCents) || 1;
+  if (isLoading || overlay.loading) return <Ld />; if (error) return <Er m={String(error)} />; if (!data) return <Em />;
+  const adjusted = applyOverlayToPnl(data, overlay);
+  const { sections, summary: s } = adjusted.data; const rb = Math.abs(s.revenueCents) || 1;
   const comparing = compareMode !== 'none';
 
   // ── Merge comparison figures by account number. ──
@@ -740,6 +851,8 @@ function PnlReport({ p, onDrill, compareMode }: { p: Record<string, string>; onD
   const gpVar = s.grossProfitCents - cmpGP, niVar = s.netIncomeCents - cmpNI;
 
   return (
+    <>
+      <BasisBanner overlay={overlay} />
     <div className="card overflow-hidden"><table className="w-full"><thead><tr className="border-b border-slate-800/50"><th className="px-6 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24">Acct</th><th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Description</th><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Amount</th><th className="px-3 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-12">%</th>{comparing&&<><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">{cmpLabel}</th><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Var $</th><th className="px-3 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-14">Var %</th></>}</tr></thead><tbody>
       {sections.map((sec: ISSection) => (<React.Fragment key={sec.type}><tr className="bg-slate-800/30"><td colSpan={cols} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase">{sec.label} <span className="font-mono text-slate-500 ml-1">{formatMoney(sec.totalCents)}</span></td></tr>
         {sec.groups.flatMap((g: ISGroup) => g.accounts.map((a: ISAcct) => { const pv=cmpMap.get(a.accountNumber)??0; const v=a.amountCents-pv; const f=favorability(sec.type,v); return <tr key={a.accountNumber} onClick={() => onDrill({accountId:a.accountId,accountNumber:a.accountNumber,accountName:a.accountName})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td><td className="px-4 py-1.5 text-sm text-slate-300 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600"/></td><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-200">{formatMoney(a.amountCents)}</td><td className="px-3 py-1.5 text-right text-2xs font-mono text-slate-600">{Math.round(Math.abs(a.amountCents)/rb*100)}%</td>{comparing&&<><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-400">{formatMoney(pv)}</td><td className={clsx('px-4 py-1.5 text-right text-sm font-mono',favClass(f))}>{v>0?'+':''}{formatMoney(v)}</td><td className={clsx('px-3 py-1.5 text-right text-2xs font-mono',favClass(f))}>{variancePct(v,pv)}</td></>}</tr>; }))}
@@ -747,6 +860,8 @@ function PnlReport({ p, onDrill, compareMode }: { p: Record<string, string>; onD
       <tr className="bg-slate-800/20"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Gross Profit</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(s.grossProfitCents)} <span className="text-2xs text-slate-500">{s.grossMarginPct}%</span></td><td/>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{formatMoney(cmpGP)}</td><td className={clsx('px-4 py-2.5 text-right font-mono text-sm',favClass(favorability('REVENUE',gpVar)))}>{gpVar>0?'+':''}{formatMoney(gpVar)}</td><td className={clsx('px-3 py-2.5 text-right text-2xs font-mono',favClass(favorability('REVENUE',gpVar)))}>{variancePct(gpVar,cmpGP)}</td></>}</tr>
       <tr className="bg-brand-500/[0.04]"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Net Income</td><td className={clsx('px-4 py-2.5 text-right font-mono font-semibold',s.netIncomeCents>=0?'text-emerald-400':'text-red-400')}>{formatMoney(s.netIncomeCents)} <span className="text-2xs text-slate-500">{s.netMarginPct}%</span></td><td/>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{formatMoney(cmpNI)}</td><td className={clsx('px-4 py-2.5 text-right font-mono text-sm',favClass(favorability('REVENUE',niVar)))}>{niVar>0?'+':''}{formatMoney(niVar)}</td><td className={clsx('px-3 py-2.5 text-right text-2xs font-mono',favClass(favorability('REVENUE',niVar)))}>{variancePct(niVar,cmpNI)}</td></>}</tr>
     </tbody></table></div>
+      <BasisAdjustmentsSchedule overlay={overlay} labels={adjusted.labels} />
+    </>
   );
 }
 
@@ -838,7 +953,36 @@ function PnlByMonthReport({ locIds, basis, year }: { locIds: string; basis: stri
 
 interface BSData { sections: { type: string; label: string; subTypes: { groups: { accounts: { accountId: string; accountNumber: string; accountName: string; balanceCents: number }[] }[] }[]; totalCents: number }[]; summary: { totalAssetsCents: number; totalLiabilitiesCents: number; totalEquityCents: number; isBalanced: boolean; varianceCents: number } }
 
-function BsReport({ ed, locIds, onDrill, compareMode }: { ed: string; locIds: string; onDrill: (t: DrillDownTarget) => void; compareMode: CompareMode }) {
+function applyOverlayToBs(data: BSData, overlay: BasisOverlay): { data: BSData; labels: Map<string, OverlayAcctLabel> } {
+  const labels = new Map<string, OverlayAcctLabel>();
+  for (const sec of data.sections) for (const st of sec.subTypes) for (const g of st.groups) for (const a of g.accounts) labels.set(a.accountId, { accountNumber: a.accountNumber, accountName: a.accountName });
+  if (!overlay.enabled) return { data, labels };
+  const deltaByType: Record<string, number> = {};
+  const sections = data.sections.map((sec) => {
+    let secDelta = 0;
+    const subTypes = sec.subTypes.map((st) => ({
+      ...st,
+      groups: st.groups.map((g) => ({
+        ...g,
+        accounts: g.accounts.map((a) => {
+          const delta = overlay.byAccount.get(a.accountId)?.naturalCents ?? 0;
+          secDelta += delta;
+          return { ...a, balanceCents: a.balanceCents + delta };
+        }),
+      })),
+    }));
+    deltaByType[sec.type] = (deltaByType[sec.type] ?? 0) + secDelta;
+    return { ...sec, subTypes, totalCents: sec.totalCents + secDelta };
+  });
+  const totalAssetsCents = data.summary.totalAssetsCents + (deltaByType.ASSET ?? 0);
+  const totalLiabilitiesCents = data.summary.totalLiabilitiesCents + (deltaByType.LIABILITY ?? 0);
+  const totalEquityCents = data.summary.totalEquityCents + (deltaByType.EQUITY ?? 0);
+  const varianceCents = totalAssetsCents - (totalLiabilitiesCents + totalEquityCents);
+  const summary = { ...data.summary, totalAssetsCents, totalLiabilitiesCents, totalEquityCents, isBalanced: varianceCents === 0, varianceCents };
+  return { data: { ...data, sections, summary }, labels };
+}
+
+function BsReport({ ed, locIds, onDrill, compareMode, overlay }: { ed: string; locIds: string; onDrill: (t: DrillDownTarget) => void; compareMode: CompareMode; overlay: BasisOverlay }) {
   const p: Record<string,string> = { as_of_date: ed };
   if (locIds) p.location_ids = locIds;
   const { data, isLoading, error } = useQuery<BSData>('/api/reports/balance-sheet', p);
@@ -856,8 +1000,9 @@ function BsReport({ ed, locIds, onDrill, compareMode }: { ed: string; locIds: st
   const cmpParams = cmpAsOf ? { ...p, as_of_date: cmpAsOf } : undefined;
   const { data: cmpData } = useQuery<BSData>(cmpAsOf ? '/api/reports/balance-sheet' : null, cmpParams);
 
-  if (isLoading) return <Ld />; if (error) return <Er m={String(error)} />; if (!data) return <Em />;
-  const { sections, summary: s } = data;
+  if (isLoading || overlay.loading) return <Ld />; if (error) return <Er m={String(error)} />; if (!data) return <Em />;
+  const adjusted = applyOverlayToBs(data, overlay);
+  const { sections, summary: s } = adjusted.data;
   const comparing = !!cmpAsOf;
   const cmpMap = new Map<string, number>();
   if (cmpData) cmpData.sections.forEach((sec) => sec.subTypes.forEach((st) => st.groups.forEach((g) => g.accounts.forEach((a) => cmpMap.set(a.accountNumber, a.balanceCents)))));
@@ -866,6 +1011,8 @@ function BsReport({ ed, locIds, onDrill, compareMode }: { ed: string; locIds: st
   const cmpLE = (cmpData?.summary.totalLiabilitiesCents ?? 0) + (cmpData?.summary.totalEquityCents ?? 0);
 
   return (
+    <>
+      <BasisBanner overlay={overlay} />
     <div className="card overflow-hidden">
       <div className="px-6 py-3 border-b border-slate-800 flex items-center justify-between"><p className="text-2xs text-slate-500 font-mono">As of {ed}{comparing && <span className="text-slate-600"> · vs {cmpAsOf}</span>}</p>{s.isBalanced?<span className="px-2 py-0.5 rounded text-xs bg-emerald-500/10 text-emerald-400">Balanced ✓</span>:<span className="px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-400">Off by {formatMoney(Math.abs(s.varianceCents))}</span>}</div>
       <table className="w-full"><thead><tr className="border-b border-slate-800/50"><th className="px-6 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24">Acct</th><th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Description</th><th className="px-6 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Balance</th>{comparing&&<><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">{cmpLabel}</th><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Change</th></>}</tr></thead><tbody>
@@ -876,6 +1023,8 @@ function BsReport({ ed, locIds, onDrill, compareMode }: { ed: string; locIds: st
         <tr className="bg-brand-500/[0.04]"><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Total L + E</td><td className="px-6 py-2.5 text-right text-base font-mono font-semibold text-white">{formatMoney(s.totalLiabilitiesCents+s.totalEquityCents)}</td>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-500">{formatMoney(cmpLE)}</td><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{(s.totalLiabilitiesCents+s.totalEquityCents)-cmpLE>0?'+':''}{formatMoney((s.totalLiabilitiesCents+s.totalEquityCents)-cmpLE)}</td></>}</tr>
       </tbody></table>
     </div>
+      <BasisAdjustmentsSchedule overlay={overlay} labels={adjusted.labels} />
+    </>
   );
 }
 
@@ -883,20 +1032,31 @@ function BsReport({ ed, locIds, onDrill, compareMode }: { ed: string; locIds: st
 // TB (multi-location)
 // ═══════════════════════════════════════════════════════════════
 
-function TbReport({ locIds, onDrill }: { locIds: string; onDrill: (t: DrillDownTarget) => void }) {
+interface TbRow { account_id: string; account_number: string; account_name: string; account_type: string; total_debits: number; total_credits: number; net_balance: number }
+
+function TbReport({ locIds, onDrill, overlay }: { locIds: string; onDrill: (t: DrillDownTarget) => void; overlay: BasisOverlay }) {
   const p: Record<string,string> = {};
   if (locIds) p.location_ids = locIds;
-  const { data, isLoading, error } = useQuery<{ data: { account_number: string; account_name: string; account_type: string; total_debits: number; total_credits: number; net_balance: number }[] }>('/api/gl/trial-balance', p);
-  if (isLoading) return <Ld />; if (error) return <Er m={String(error)} />;
+  const { data, isLoading, error } = useQuery<{ data: TbRow[] }>('/api/gl/trial-balance', p);
+  if (isLoading || overlay.loading) return <Ld />; if (error) return <Er m={String(error)} />;
   const rows = data?.data ?? []; if (!rows.length) return <Em m="No posted entries." />;
+  const on = overlay.enabled;
+  const delta = (accountId: string) => (on ? overlay.byAccount.get(accountId)?.naturalCents ?? 0 : 0);
+  const labels = new Map<string, OverlayAcctLabel>();
+  for (const r of rows) labels.set(r.account_id, { accountNumber: r.account_number, accountName: r.account_name });
   const td=rows.reduce((s: number, r) => s+Number(r.total_debits),0); const tc=rows.reduce((s: number, r) => s+Number(r.total_credits),0);
+  const netTotal = rows.reduce((s: number, r) => s + Number(r.net_balance) + delta(r.account_id), 0);
   return (
+    <>
+      <BasisBanner overlay={overlay} />
     <div className="card overflow-hidden">
-      <div className="px-6 py-3 border-b border-slate-800 flex items-center justify-between"><p className="text-2xs text-slate-500">{rows.length} accounts</p>{td===tc?<span className="px-2 py-0.5 rounded text-xs bg-emerald-500/10 text-emerald-400">Balanced ✓</span>:<span className="px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-400">Unbalanced</span>}</div>
-      <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-6 py-2.5 text-left w-20">Acct</th><th className="px-4 py-2.5 text-left">Name</th><th className="px-4 py-2.5 text-left w-16">Type</th><th className="px-6 py-2.5 text-right">Debits</th><th className="px-6 py-2.5 text-right">Credits</th><th className="px-6 py-2.5 text-right">Net</th></tr></thead>
-        <tbody className="divide-y divide-slate-800/30">{rows.map((r) => <tr key={r.account_number} onClick={() => onDrill({accountNumber:r.account_number,accountName:r.account_name})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500">{r.account_number}</td><td className="px-4 py-1.5 text-slate-300">{r.account_name}</td><td className="px-4 py-1.5 text-2xs text-slate-500">{r.account_type}</td><td className="px-6 py-1.5 text-right font-mono text-slate-300">{Number(r.total_debits)>0?formatMoney(r.total_debits):''}</td><td className="px-6 py-1.5 text-right font-mono text-slate-300">{Number(r.total_credits)>0?formatMoney(r.total_credits):''}</td><td className="px-6 py-1.5 text-right font-mono font-medium text-slate-200">{formatMoney(r.net_balance)}</td></tr>)}</tbody>
-        <tfoot><tr className="border-t-2 border-slate-700 bg-slate-800/30"><td colSpan={3} className="px-6 py-2.5 font-semibold text-white">Totals</td><td className="px-6 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(td)}</td><td className="px-6 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(tc)}</td><td className="px-6 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(td-tc)}</td></tr></tfoot>
+      <div className="px-6 py-3 border-b border-slate-800 flex items-center justify-between"><p className="text-2xs text-slate-500">{rows.length} accounts{on ? ` · ${overlay.basisLabel}` : ''}</p>{(on ? overlay.balances : td===tc)?<span className="px-2 py-0.5 rounded text-xs bg-emerald-500/10 text-emerald-400">Balanced ✓</span>:<span className="px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-400">Unbalanced</span>}</div>
+      <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase"><th className="px-6 py-2.5 text-left w-20">Acct</th><th className="px-4 py-2.5 text-left">Name</th><th className="px-4 py-2.5 text-left w-16">Type</th><th className="px-6 py-2.5 text-right">Debits</th><th className="px-6 py-2.5 text-right">Credits</th>{on&&<th className="px-6 py-2.5 text-right">Adj</th>}<th className="px-6 py-2.5 text-right">{on ? 'Adj Net' : 'Net'}</th></tr></thead>
+        <tbody className="divide-y divide-slate-800/30">{rows.map((r) => { const d = delta(r.account_id); const adjNet = Number(r.net_balance) + d; return <tr key={r.account_number} onClick={() => onDrill({accountNumber:r.account_number,accountName:r.account_name})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500">{r.account_number}</td><td className="px-4 py-1.5 text-slate-300">{r.account_name}</td><td className="px-4 py-1.5 text-2xs text-slate-500">{r.account_type}</td><td className="px-6 py-1.5 text-right font-mono text-slate-300">{Number(r.total_debits)>0?formatMoney(r.total_debits):''}</td><td className="px-6 py-1.5 text-right font-mono text-slate-300">{Number(r.total_credits)>0?formatMoney(r.total_credits):''}</td>{on&&<td className={clsx('px-6 py-1.5 text-right font-mono text-2xs', d>0?'text-emerald-400':d<0?'text-red-400':'text-slate-600')}>{d!==0?`${d>0?'+':''}${formatMoney(d)}`:'—'}</td>}<td className="px-6 py-1.5 text-right font-mono font-medium text-slate-200">{formatMoney(adjNet)}</td></tr>; })}</tbody>
+        <tfoot><tr className="border-t-2 border-slate-700 bg-slate-800/30"><td colSpan={3} className="px-6 py-2.5 font-semibold text-white">Totals</td><td className="px-6 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(td)}</td><td className="px-6 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(tc)}</td>{on&&<td className="px-6 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(overlay.netDebitPositiveCents)}</td>}<td className="px-6 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(on ? netTotal : td-tc)}</td></tr></tfoot>
       </table>
     </div>
+      <BasisAdjustmentsSchedule overlay={overlay} labels={labels} />
+    </>
   );
 }

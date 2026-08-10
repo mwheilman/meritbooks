@@ -132,6 +132,7 @@ export function CustomerPortalAccess({ customerId }: { customerId: string }) {
               readOnly
               value={active.url ?? ''}
               onFocus={(e) => e.currentTarget.select()}
+              aria-label="Portal link URL"
               className="flex-1 min-w-0 px-2 py-1.5 rounded-md bg-slate-950 border border-slate-700 text-2xs font-mono text-slate-300 focus:outline-none focus:border-emerald-500/50"
             />
             <button
@@ -161,14 +162,14 @@ export function CustomerPortalAccess({ customerId }: { customerId: string }) {
             <button
               onClick={mint}
               disabled={busy !== null}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {busy === 'mint' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Regenerate
             </button>
             <button
               onClick={revoke}
               disabled={busy !== null}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-red-600/90 text-white hover:bg-red-500 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-red-600/90 text-white hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {busy === 'revoke' ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Revoke
             </button>
@@ -187,13 +188,14 @@ export function CustomerPortalAccess({ customerId }: { customerId: string }) {
               min={today}
               value={expiry}
               onChange={(e) => setExpiry(e.target.value)}
+              aria-label="Link expiration date (optional)"
               className="px-2 py-1 rounded-md bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
             />
           </div>
           <button
             onClick={mint}
             disabled={busy !== null}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {busy === 'mint' ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />} Create portal link
           </button>

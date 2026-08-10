@@ -89,7 +89,7 @@ export default async function CustomerPortalPage({ params }: { params: { token: 
               <div style={{ ...S.logoFallback, color: accent }}>{(data.entity?.name || 'M').slice(0, 1)}</div>
             )}
             <div>
-              <div style={S.bandEntity}>{data.entity?.name || 'Customer portal'}</div>
+              <h1 style={S.bandEntity}>{data.entity?.name || 'Customer portal'}</h1>
               <div style={{ ...S.bandSub, color: onAccent, opacity: 0.85 }}>Account for {data.customer.name}</div>
             </div>
           </div>
@@ -106,8 +106,15 @@ export default async function CustomerPortalPage({ params }: { params: { token: 
             <SummaryTile label="Open invoices" value={String(data.openInvoiceCount)} tone="#0f172a" />
             <SummaryTile label="Paid to date" value={String(data.paidInvoiceCount)} tone="#0f172a" />
             <div style={{ ...S.summaryTile, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <a href={statementHref} target="_blank" rel="noreferrer" style={{ ...S.statementBtn, borderColor: accent, color: accent }}>
-                <FileText size={14} /> Download statement
+              <a
+                href={statementHref}
+                target="_blank"
+                rel="noreferrer"
+                className="mb-statement-btn"
+                aria-label="Download account statement (opens in a new tab)"
+                style={{ ...S.statementBtn, borderColor: accent, color: accent }}
+              >
+                <FileText size={14} aria-hidden="true" /> Download statement
               </a>
             </div>
           </section>
@@ -136,40 +143,53 @@ export default async function CustomerPortalPage({ params }: { params: { token: 
           {historyInvoices.length > 0 && (
             <section>
               <h2 style={S.sectionTitle}>Invoice history</h2>
-              <table style={S.table}>
-                <thead>
-                  <tr>
-                    <th style={{ ...S.th, textAlign: 'left' }}>Invoice</th>
-                    <th style={S.th}>Date</th>
-                    <th style={S.th}>Status</th>
-                    <th style={{ ...S.th, textAlign: 'right' }}>Amount</th>
-                    <th style={{ ...S.th, textAlign: 'right' }}>Balance</th>
-                    <th style={S.th} aria-label="View" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {historyInvoices.map((inv) => (
-                    <tr key={inv.id} style={S.tr}>
-                      <td style={S.tdMono}>{inv.invoiceNumber}</td>
-                      <td style={{ ...S.td, textAlign: 'center' }}>{fmtDate(inv.invoiceDate)}</td>
-                      <td style={{ ...S.td, textAlign: 'center' }}>
-                        <span style={{ ...S.badge, color: inv.status === 'PAID' || inv.balanceCents <= 0 ? '#16a34a' : '#475569', background: inv.status === 'PAID' || inv.balanceCents <= 0 ? '#dcfce7' : '#f1f5f9' }}>
-                          {STATUS_LABEL[inv.status] ?? inv.status}
-                        </span>
-                      </td>
-                      <td style={{ ...S.tdMono, textAlign: 'right' }}>{money(inv.totalCents)}</td>
-                      <td style={{ ...S.tdMono, textAlign: 'right' }}>{money(inv.balanceCents)}</td>
-                      <td style={{ ...S.td, textAlign: 'right' }}>
-                        {inv.payToken ? (
-                          <a href={`/pay/${inv.payToken}`} style={{ ...S.viewLink, color: accent }} target="_blank" rel="noreferrer">View</a>
-                        ) : (
-                          <span style={{ color: '#cbd5e1' }}>—</span>
-                        )}
-                      </td>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={S.table}>
+                  <thead>
+                    <tr>
+                      <th scope="col" style={{ ...S.th, textAlign: 'left' }}>Invoice</th>
+                      <th scope="col" style={S.th}>Date</th>
+                      <th scope="col" style={S.th}>Status</th>
+                      <th scope="col" style={{ ...S.th, textAlign: 'right' }}>Amount</th>
+                      <th scope="col" style={{ ...S.th, textAlign: 'right' }}>Balance</th>
+                      <th scope="col" style={S.th}>
+                        <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>View</span>
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {historyInvoices.map((inv) => (
+                      <tr key={inv.id} style={S.tr}>
+                        <td style={S.tdMono}>{inv.invoiceNumber}</td>
+                        <td style={{ ...S.td, textAlign: 'center' }}>{fmtDate(inv.invoiceDate)}</td>
+                        <td style={{ ...S.td, textAlign: 'center' }}>
+                          <span style={{ ...S.badge, color: inv.status === 'PAID' || inv.balanceCents <= 0 ? '#16a34a' : '#475569', background: inv.status === 'PAID' || inv.balanceCents <= 0 ? '#dcfce7' : '#f1f5f9' }}>
+                            {STATUS_LABEL[inv.status] ?? inv.status}
+                          </span>
+                        </td>
+                        <td style={{ ...S.tdMono, textAlign: 'right' }}>{money(inv.totalCents)}</td>
+                        <td style={{ ...S.tdMono, textAlign: 'right' }}>{money(inv.balanceCents)}</td>
+                        <td style={{ ...S.td, textAlign: 'right' }}>
+                          {inv.payToken ? (
+                            <a
+                              href={`/pay/${inv.payToken}`}
+                              className="mb-view-link"
+                              aria-label={`View invoice ${inv.invoiceNumber} (opens in a new tab)`}
+                              style={{ ...S.viewLink, color: accent }}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              View
+                            </a>
+                          ) : (
+                            <span style={{ color: '#cbd5e1' }} aria-hidden="true">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
           )}
 
@@ -209,12 +229,19 @@ function InvoiceRow({ inv, accent, onAccent }: { inv: PortalInvoice; accent: str
           {inv.paidCents > 0 && <div style={S.invoiceSub}>of {money(inv.totalCents)}</div>}
         </div>
         {inv.payToken ? (
-          <a href={`/pay/${inv.payToken}`} target="_blank" rel="noreferrer" style={{ ...S.payBtn, background: accent, color: onAccent }}>
-            Pay <ArrowRight size={14} />
+          <a
+            href={`/pay/${inv.payToken}`}
+            target="_blank"
+            rel="noreferrer"
+            className="mb-pay-btn"
+            aria-label={`Pay invoice ${inv.invoiceNumber} (opens in a new tab)`}
+            style={{ ...S.payBtn, background: accent, color: onAccent }}
+          >
+            Pay <ArrowRight size={14} aria-hidden="true" />
           </a>
         ) : (
           <span style={{ ...S.payBtn, background: '#f1f5f9', color: '#94a3b8', cursor: 'default' }}>
-            <Clock size={13} /> Unavailable
+            <Clock size={13} aria-hidden="true" /> Unavailable
           </span>
         )}
       </div>
@@ -228,6 +255,10 @@ function FontHead() {
       @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
       * { box-sizing: border-box; }
       body { margin: 0; }
+      a:focus-visible, button:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; border-radius: 6px; }
+      .mb-pay-btn:hover { filter: brightness(0.94); }
+      .mb-statement-btn:hover { background: rgba(15,23,42,0.04); }
+      .mb-view-link:hover { text-decoration: underline; }
     ` }} />
   );
 }

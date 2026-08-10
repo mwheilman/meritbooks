@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks/use-query';
 import { X, Loader2, Plus, FileText } from 'lucide-react';
@@ -80,6 +80,8 @@ export function EstimateForm({
   );
   const jobs = jobData?.data ?? [];
 
+  const panelRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -87,6 +89,11 @@ export function EstimateForm({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Move focus into the dialog on open so keyboard/AT users start inside it.
+  useEffect(() => {
+    panelRef.current?.focus();
+  }, []);
 
   const subtotal = lines.reduce((s, l) => s + Math.round(l.quantity * l.unit_price_cents), 0);
   const total = subtotal + taxCents;
@@ -149,18 +156,24 @@ export function EstimateForm({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center pt-8 overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center pt-8 overflow-y-auto"
+      onClick={onClose}
+    >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={mode === 'create' ? 'Create estimate' : 'Edit estimate'}
-        className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-3xl mb-8"
+        aria-labelledby="estimate-form-title"
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-surface-900 border border-slate-700 rounded-xl w-full max-w-3xl mb-8 focus:outline-none"
       >
-        <div className="flex items-center justify-between p-6 border-b border-gray-700/50">
-          <h2 className="text-lg font-semibold text-white">
+        <div className="flex items-center justify-between p-6 border-b border-slate-700/50">
+          <h2 id="estimate-form-title" className="text-lg font-semibold text-white">
             {mode === 'create' ? 'New Estimate' : `Edit ${initial?.estimateNumber ?? 'Estimate'}`}
           </h2>
-          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-white">
+          <button onClick={onClose} aria-label="Close" className="p-1 text-slate-400 hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -174,14 +187,14 @@ export function EstimateForm({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="est-customer" className="block text-xs text-gray-400 mb-1">
+              <label htmlFor="est-customer" className="block text-xs text-slate-400 mb-1">
                 Customer *
               </label>
               <select
                 id="est-customer"
                 value={customerId}
                 onChange={(e) => setCustomerId(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
               >
                 <option value="">Select customer</option>
                 {customers.map((c) => (
@@ -192,14 +205,14 @@ export function EstimateForm({
               </select>
             </div>
             <div>
-              <label htmlFor="est-job" className="block text-xs text-gray-400 mb-1">
+              <label htmlFor="est-job" className="block text-xs text-slate-400 mb-1">
                 Job / project (optional)
               </label>
               <select
                 id="est-job"
                 value={jobId}
                 onChange={(e) => setJobId(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
               >
                 <option value="">No job</option>
                 {jobs.map((j) => (
@@ -213,7 +226,7 @@ export function EstimateForm({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="est-date" className="block text-xs text-gray-400 mb-1">
+              <label htmlFor="est-date" className="block text-xs text-slate-400 mb-1">
                 Estimate date *
               </label>
               <input
@@ -221,11 +234,11 @@ export function EstimateForm({
                 type="date"
                 value={estimateDate}
                 onChange={(e) => setEstimateDate(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
               />
             </div>
             <div>
-              <label htmlFor="est-exp" className="block text-xs text-gray-400 mb-1">
+              <label htmlFor="est-exp" className="block text-xs text-slate-400 mb-1">
                 Valid until (expiration)
               </label>
               <input
@@ -233,7 +246,7 @@ export function EstimateForm({
                 type="date"
                 value={expirationDate}
                 onChange={(e) => setExpirationDate(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
               />
             </div>
           </div>
@@ -241,7 +254,7 @@ export function EstimateForm({
           {/* Line items */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-gray-400 uppercase tracking-wider">Line items</span>
+              <span className="text-xs text-slate-400 uppercase tracking-wider">Line items</span>
               <button onClick={addLine} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300">
                 <Plus className="w-3 h-3" /> Add line
               </button>
@@ -250,23 +263,23 @@ export function EstimateForm({
               {lines.map((line, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-end">
                   <div className="col-span-4">
-                    {i === 0 && <label className="block text-[10px] text-gray-500 mb-0.5">Description</label>}
+                    {i === 0 && <label className="block text-[10px] text-slate-500 mb-0.5">Description</label>}
                     <input
                       type="text"
                       value={line.description}
                       onChange={(e) => updateLine(i, 'description', e.target.value)}
                       placeholder="Service or item"
                       aria-label={`Line ${i + 1} description`}
-                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white placeholder:text-gray-600"
+                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white placeholder:text-slate-600"
                     />
                   </div>
                   <div className="col-span-3">
-                    {i === 0 && <label className="block text-[10px] text-gray-500 mb-0.5">Revenue account</label>}
+                    {i === 0 && <label className="block text-[10px] text-slate-500 mb-0.5">Revenue account</label>}
                     <select
                       value={line.revenue_account_id}
                       onChange={(e) => updateLine(i, 'revenue_account_id', e.target.value)}
                       aria-label={`Line ${i + 1} revenue account`}
-                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white"
+                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white"
                     >
                       <option value="">Select account</option>
                       {accounts.map((a) => (
@@ -277,7 +290,7 @@ export function EstimateForm({
                     </select>
                   </div>
                   <div className="col-span-1">
-                    {i === 0 && <label className="block text-[10px] text-gray-500 mb-0.5">Qty</label>}
+                    {i === 0 && <label className="block text-[10px] text-slate-500 mb-0.5">Qty</label>}
                     <input
                       type="number"
                       value={line.quantity}
@@ -285,11 +298,11 @@ export function EstimateForm({
                       step={0.01}
                       aria-label={`Line ${i + 1} quantity`}
                       onChange={(e) => updateLine(i, 'quantity', parseFloat(e.target.value) || 0)}
-                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono tabular-nums"
+                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white text-right font-mono tabular-nums"
                     />
                   </div>
                   <div className="col-span-2">
-                    {i === 0 && <label className="block text-[10px] text-gray-500 mb-0.5">Unit price</label>}
+                    {i === 0 && <label className="block text-[10px] text-slate-500 mb-0.5">Unit price</label>}
                     <input
                       type="number"
                       value={(line.unit_price_cents / 100).toFixed(2)}
@@ -299,7 +312,7 @@ export function EstimateForm({
                       onChange={(e) =>
                         updateLine(i, 'unit_price_cents', Math.round(parseFloat(e.target.value) * 100) || 0)
                       }
-                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono tabular-nums"
+                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white text-right font-mono tabular-nums"
                     />
                   </div>
                   <div className="col-span-1 text-right font-mono text-sm text-white py-1.5 tabular-nums">
@@ -310,7 +323,7 @@ export function EstimateForm({
                       <button
                         onClick={() => removeLine(i)}
                         aria-label={`Remove line ${i + 1}`}
-                        className="p-1 text-gray-500 hover:text-red-400"
+                        className="p-1 text-slate-500 hover:text-red-400"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -322,13 +335,13 @@ export function EstimateForm({
           </div>
 
           {/* Totals */}
-          <div className="border-t border-gray-700/50 pt-4 space-y-2">
+          <div className="border-t border-slate-700/50 pt-4 space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Subtotal</span>
+              <span className="text-slate-400">Subtotal</span>
               <span className="font-mono text-white tabular-nums">{formatMoney(subtotal)}</span>
             </div>
             <div className="flex justify-between text-sm items-center">
-              <span className="text-gray-400">Tax</span>
+              <span className="text-slate-400">Tax</span>
               <input
                 type="number"
                 value={(taxCents / 100).toFixed(2)}
@@ -336,17 +349,17 @@ export function EstimateForm({
                 step={0.01}
                 aria-label="Tax amount"
                 onChange={(e) => setTaxCents(Math.round(parseFloat(e.target.value) * 100) || 0)}
-                className="w-28 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono tabular-nums"
+                className="w-28 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-sm text-white text-right font-mono tabular-nums"
               />
             </div>
-            <div className="flex justify-between text-base font-semibold border-t border-gray-700/50 pt-2">
+            <div className="flex justify-between text-base font-semibold border-t border-slate-700/50 pt-2">
               <span className="text-white">Total</span>
               <span className="font-mono text-emerald-400 tabular-nums">{formatMoney(total)}</span>
             </div>
           </div>
 
           <div>
-            <label htmlFor="est-notes" className="block text-xs text-gray-400 mb-1">
+            <label htmlFor="est-notes" className="block text-xs text-slate-400 mb-1">
               Notes (shown on the estimate)
             </label>
             <textarea
@@ -355,13 +368,13 @@ export function EstimateForm({
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
               placeholder="Terms, scope caveats, thank-you note…"
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-600"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600"
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-700/50">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-700/50">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">
             Cancel
           </button>
           <button

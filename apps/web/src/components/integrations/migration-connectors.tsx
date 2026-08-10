@@ -169,8 +169,9 @@ export function MigrationConnectors() {
       {/* Target company + as-of date (shared by every preview). */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-2xs font-medium uppercase tracking-wider text-slate-500 mb-1">Migrate into company</label>
+          <label htmlFor="migration-company" className="block text-2xs font-medium uppercase tracking-wider text-slate-500 mb-1">Migrate into company</label>
           <select
+            id="migration-company"
             value={companyId}
             onChange={(e) => setCompanyId(e.target.value)}
             className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white"
@@ -183,8 +184,9 @@ export function MigrationConnectors() {
           )}
         </div>
         <div>
-          <label className="block text-2xs font-medium uppercase tracking-wider text-slate-500 mb-1">Opening balances as of</label>
+          <label htmlFor="migration-as-of-date" className="block text-2xs font-medium uppercase tracking-wider text-slate-500 mb-1">Opening balances as of</label>
           <input
+            id="migration-as-of-date"
             type="date"
             value={asOfDate}
             onChange={(e) => setAsOfDate(e.target.value)}

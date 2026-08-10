@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   X,
   Loader2,
@@ -152,6 +152,7 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
   const [fire, setFire] = useState<FireInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const set = (k: keyof PayerForm) => (v: string) => setPayer((p) => ({ ...p, [k]: v }));
 
@@ -187,6 +188,12 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Initial focus: move focus into the dialog on mount so keyboard/screen-reader
+  // users land inside it rather than on whatever was behind it.
+  useEffect(() => {
+    panelRef.current?.focus();
+  }, []);
 
   function download(format: 'csv' | 'pdf') {
     if (!data || data.summary.readyCount === 0) {
@@ -227,17 +234,24 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
-      <div role="dialog" aria-modal="true" aria-label={`Generate ${year} 1099-MISC`} className="my-6 w-full max-w-3xl rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="misc-modal-title"
+        tabIndex={-1}
+        className="my-6 w-full max-w-3xl rounded-xl border border-slate-800 bg-slate-900 shadow-2xl focus:outline-none"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold text-white">Generate {year} 1099-MISC</h2>
+            <h2 id="misc-modal-title" className="text-base font-semibold text-white">Generate {year} 1099-MISC</h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Rents, royalties, other income, medical, and attorney proceeds — classified from the GL. Read-only
               assembly; nothing is filed with the IRS.
             </p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-300">
+          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-300 transition-colors">
             <X size={18} />
           </button>
         </div>
@@ -259,7 +273,7 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
             <button
               onClick={() => void review()}
               disabled={loading}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-emerald-500/40 hover:text-emerald-400 disabled:opacity-60"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-emerald-500/40 hover:text-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? <Loader2 size={13} className="animate-spin" /> : <Wrench size={13} />} Re-assemble
             </button>
@@ -280,15 +294,15 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
                   <div className="flex items-center gap-1.5 text-[11px] text-slate-500"><Users size={12} /> Ready to file</div>
-                  <p className="mt-1 font-mono text-xl font-semibold text-emerald-400">{summary.readyCount}</p>
+                  <p className="mt-1 font-mono tabular-nums text-xl font-semibold text-emerald-400">{summary.readyCount}</p>
                 </div>
                 <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
                   <div className="flex items-center gap-1.5 text-[11px] text-slate-500"><DollarSign size={12} /> Total reportable</div>
-                  <p className="mt-1 font-mono text-xl font-semibold text-white">{formatMoney(summary.totalReportableMiscCents)}</p>
+                  <p className="mt-1 font-mono tabular-nums text-xl font-semibold text-white">{formatMoney(summary.totalReportableMiscCents)}</p>
                 </div>
                 <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
                   <div className="flex items-center gap-1.5 text-[11px] text-slate-500"><ShieldAlert size={12} /> Blockers</div>
-                  <p className={clsx('mt-1 font-mono text-xl font-semibold', summary.blockedCount > 0 ? 'text-red-400' : 'text-slate-500')}>{summary.blockedCount}</p>
+                  <p className={clsx('mt-1 font-mono tabular-nums text-xl font-semibold', summary.blockedCount > 0 ? 'text-red-400' : 'text-slate-500')}>{summary.blockedCount}</p>
                 </div>
               </div>
 
@@ -302,7 +316,7 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
                     >
                       <span className="text-sky-300">Box {MISC_BOX_LABEL[c].num}</span>
                       {MISC_BOX_LABEL[c].label}
-                      <span className="font-mono text-slate-200">{formatMoney(summary.boxTotals[c])}</span>
+                      <span className="font-mono tabular-nums text-slate-200">{formatMoney(summary.boxTotals[c])}</span>
                     </span>
                   ))}
                 </div>
@@ -347,14 +361,14 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
               {blocked.length > 0 && (
                 <section>
                   <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-red-400">
-                    <Wrench size={13} /> Fix first — {formatMoney(summary.blockedDollarsCents)} blocked
+                    <Wrench size={13} /> Fix first — <span className="font-mono tabular-nums">{formatMoney(summary.blockedDollarsCents)}</span> blocked
                   </h3>
                   <ul className="space-y-1.5">
                     {blocked.map((e) => (
                       <li key={e.vendorId} className="rounded-lg border border-red-500/15 bg-red-500/[0.03] px-3 py-2">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium text-white">{e.vendorName}</span>
-                          <span className="font-mono text-xs text-slate-400">{formatMoney(e.totalPaidCents)}</span>
+                          <span className="font-mono tabular-nums text-xs text-slate-400">{formatMoney(e.totalPaidCents)}</span>
                         </div>
                         <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{e.reason}</p>
                       </li>
@@ -369,7 +383,7 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
                   <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-400">
                     <CheckCircle2 size={13} /> Ready ({data.records.length})
                   </h3>
-                  <div className="overflow-hidden rounded-lg border border-slate-800">
+                  <div className="overflow-x-auto rounded-lg border border-slate-800">
                     <table className="w-full text-sm">
                       <tbody className="divide-y divide-slate-800/60">
                         {data.records.map((r) => (
@@ -384,7 +398,7 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
                                     className="inline-flex items-center gap-1 rounded bg-slate-800/60 px-1.5 py-0.5 text-[10px] text-slate-400"
                                   >
                                     <span className="text-sky-300">Box {MISC_BOX_LABEL[c].num}</span>
-                                    <span className="font-mono text-slate-300">{formatMoney(r.boxAmounts[c])}</span>
+                                    <span className="font-mono tabular-nums text-slate-300">{formatMoney(r.boxAmounts[c])}</span>
                                   </span>
                                 ))}
                               </div>
@@ -397,7 +411,7 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
                                 <span className="text-[11px] text-amber-400">no address</span>
                               )}
                             </td>
-                            <td className="px-3 py-2 text-right font-mono text-slate-200">{formatMoney(r.totalReportableMiscCents)}</td>
+                            <td className="px-3 py-2 text-right font-mono tabular-nums text-slate-200">{formatMoney(r.totalReportableMiscCents)}</td>
                           </tr>
                         ))}
                       </tbody>

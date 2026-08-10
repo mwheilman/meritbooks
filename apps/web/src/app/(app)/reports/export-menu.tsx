@@ -9,6 +9,8 @@ import { resolveExportSpec, buildStatementSummary, type ExportMeta } from '@/lib
 import type { CompareMode } from '@/lib/reports/export/compare';
 import { toCsv, downloadBlob } from '@/lib/reports/export/csv';
 import { buildExportFilename, type StatementModel } from '@/lib/reports/export/statement-model';
+import type { BasisOverlay } from './use-basis-overlay';
+import { applyOverlayToExportPayload } from './export-overlay';
 
 /**
  * Export the currently-viewed statement (PDF or CSV) for the active
@@ -18,7 +20,7 @@ import { buildExportFilename, type StatementModel } from '@/lib/reports/export/s
  * the model to the server PDF renderer. Wires FPB Dimension 7's dead buttons.
  */
 export function ExportMenu({
-  reportKey, sd, ed, locIds, basis, compareMode = 'none', reportLabel, entityLabel, periodLabel, basisLabel,
+  reportKey, sd, ed, locIds, basis, compareMode = 'none', reportLabel, entityLabel, periodLabel, basisLabel, overlay,
 }: {
   reportKey: string;
   sd: string;
@@ -30,6 +32,8 @@ export function ExportMenu({
   entityLabel: string;
   periodLabel: string;
   basisLabel?: string;
+  /** When a non-GAAP presentation basis is active, the export applies the SAME overlay. */
+  overlay?: BasisOverlay;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<'pdf' | 'csv' | 'xlsx' | null>(null);
@@ -56,13 +60,22 @@ export function ExportMenu({
         throw new Error(res.error?.error ?? 'Could not load report data.');
       }
 
+      // 1a. When a non-GAAP presentation basis is active, layer the SAME adjustments onto
+      // the fetched GAAP payload so the exported figures match the on-screen adjusted
+      // statement (and the basis label is therefore accurate). GAAP → pass-through.
+      const overlayActive = !!overlay?.enabled;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const primary: any = overlay ? applyOverlayToExportPayload(reportKey, res.data, overlay) : res.data;
+
       // 1b. Comparative reports (P&L / BS with a prior period/year selected) fetch a
       // SECOND payload for the comparison window so the export carries the same
       // prior / variance / % columns the on-screen table shows. Best-effort: if the
-      // comparison fetch fails we still export the single-column statement.
+      // comparison fetch fails we still export the single-column statement. A basis
+      // overlay suppresses the comparison leg (mixing adjusted-current with GAAP-prior
+      // would be misleading).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let cmp: { data: any; label: string } | undefined;
-      if (spec.compare) {
+      if (spec.compare && !overlayActive) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const cmpRes = await api.get<any>(spec.compare.url, spec.compare.query);
         if (!cmpRes.error && cmpRes.data) cmp = { data: cmpRes.data, label: spec.compare.label };
@@ -70,7 +83,7 @@ export function ExportMenu({
 
       // 2. Project it into the normalized statement model.
       const meta: ExportMeta = { reportLabel, entityLabel, periodLabel, basisLabel, accent: '#10b981' };
-      const model = spec.build(res.data, meta, cmp);
+      const model = spec.build(primary, meta, cmp);
 
       if (!model.rows.some((r) => r.kind === 'account' || r.kind === 'total')) {
         addToast('error', 'Nothing to export for the selected filters.');

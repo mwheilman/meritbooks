@@ -79,6 +79,9 @@ function FontHead() {
       @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
       * { box-sizing: border-box; }
       body { margin: 0; }
+      a:focus-visible, button:focus-visible, [role="button"]:focus-visible { outline: 2px solid #10b981; outline-offset: 2px; border-radius: 6px; }
+      .mb-dropzone:hover { border-color: #10b981; }
+      .mb-linkbtn:hover { color: #0d9488; }
     `,
       }}
     />
