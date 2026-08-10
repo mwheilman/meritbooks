@@ -7,6 +7,12 @@ import {
   derivePriorAsOf,
   variancePct,
 } from './compare';
+import {
+  mergeArAging,
+  AR_BUCKET_ORDER,
+  type ArBucketKey,
+  type BilledInvoiceLine,
+} from '../ar-aging-merge';
 
 /**
  * Client-side transformers: the exact JSON the report API returns (the SAME
@@ -349,61 +355,81 @@ export function buildGenericTable(
   return base(meta, meta.reportLabel, columns.length ? columns : [{ key: labelKey, label: pretty(labelKey) }], rows);
 }
 
-// ─── AR Aging (billed generic table + DISTINCT unbilled contract-asset section) ─
+// ─── AR Aging (ONE unified combined-by-customer statement) ────────────────────
 interface UnbilledExportRow {
   customerName: string;
   jobLabel: string | null;
   buckets: Record<string, number>;
   totalCents: number;
 }
+interface BilledExportRow {
+  customerName?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  dueDate?: string;
+  agingBucket?: string;
+  balanceCents?: number;
+  locationName?: string;
+}
 interface ArAgingExportData {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data?: any[];
+  data?: BilledExportRow[];
   unbilled?: { rows: UnbilledExportRow[]; buckets: Record<string, number>; totalCents: number };
   totalOutstanding?: number;
   totalReceivablesCents?: number;
 }
 
 /**
- * AR Aging export. The BILLED table is produced by the SAME generic projection as
- * every other tabular report — byte-for-byte unchanged (buildGenericTable only
- * reads `data.data`, so the extra `unbilled` key is ignored). We then APPEND the
- * DISTINCT unbilled receivable (contract asset, acct 1180) section additively:
- * its per-customer/job balances land in the export's balance column, followed by
- * a Total Unbilled line and a combined Billed + Unbilled total. Nothing about the
- * billed numbers or layout is touched.
+ * AR Aging export — the SAME unified model the on-screen report shows. Billed
+ * trade AR + unbilled receivable (contract asset, acct 1180) are merged BY
+ * CUSTOMER (no amount is recomputed — billed cents stay the invoice subledger's,
+ * unbilled cents stay the GL's), so the export carries a combined parent per
+ * customer PLUS the billed-vs-unbilled breakdown as indented detail rows. Columns
+ * are the five aging bands + a combined Balance, so the file reads exactly like
+ * the expanded UI and the grand total ties to billed subtotal + unbilled subtotal.
  */
 export function buildArAging(data: ArAgingExportData, meta: ExportMeta): StatementModel {
-  const model = buildGenericTable(data, meta);
-  const unbilled = data.unbilled;
-  if (!unbilled || unbilled.rows.length === 0) return model;
+  const billedLines: BilledInvoiceLine[] = (data.data ?? []).map((r) => ({
+    customerName: r.customerName ?? 'Unnamed customer',
+    invoiceNumber: r.invoiceNumber ?? '',
+    invoiceDate: r.invoiceDate ?? '',
+    dueDate: r.dueDate ?? '',
+    agingBucket: r.agingBucket ?? '',
+    balanceCents: Number(r.balanceCents ?? 0),
+    locationName: r.locationName ?? '',
+  }));
+  const merged = mergeArAging(billedLines, data.unbilled?.rows ?? []);
 
-  const colCount = model.columns.length;
-  const balanceIdx = (() => {
-    const i = model.columns.findIndex((c) => c.key === 'balanceCents');
-    if (i >= 0) return i;
-    const m = model.columns.findIndex((c) => c.money);
-    return m >= 0 ? m : colCount - 1;
-  })();
-  const blank = (): (number | string | null)[] => Array.from({ length: colCount }, () => null);
-  const withBalance = (cents: number): (number | string | null)[] => {
-    const v = blank();
-    v[balanceIdx] = cents;
-    return v;
-  };
+  const columns: StatementModel['columns'] = [
+    ...AR_BUCKET_ORDER.map((b) => ({ key: b, label: b === 'CURRENT' ? 'Current' : b, money: true })),
+    { key: 'balance', label: 'Balance', money: true },
+  ];
 
-  const rows: StmtRow[] = [...model.rows];
-  rows.push({ kind: 'spacer', label: '', values: blank() });
-  rows.push({ kind: 'section', label: 'Unbilled Receivable (Contract Asset · Acct 1180)', values: blank() });
-  for (const r of unbilled.rows) {
-    const label = r.jobLabel ? `${r.customerName} · ${r.jobLabel}` : r.customerName;
-    rows.push({ kind: 'account', label, values: withBalance(r.totalCents), indent: 1 });
+  // One row = the five bucket cells + the balance. Zero cells emit null so the
+  // export mirrors the on-screen "—" and stays readable.
+  const cells = (buckets: Record<ArBucketKey, number>, total: number): (number | string | null)[] => [
+    ...AR_BUCKET_ORDER.map((b) => (buckets[b] ? buckets[b] : null)),
+    total ? total : null,
+  ];
+  const blank = (): (number | string | null)[] => columns.map(() => null);
+
+  const rows: StmtRow[] = [];
+  if (merged.customers.length === 0) {
+    rows.push({ kind: 'note', label: 'No outstanding receivables.', values: blank() });
+    return base(meta, 'AR Aging', columns, rows);
   }
-  rows.push({ kind: 'total', label: 'Total Unbilled', values: withBalance(unbilled.totalCents) });
-  const combined = data.totalReceivablesCents ?? (data.totalOutstanding ?? 0) + unbilled.totalCents;
-  rows.push({ kind: 'total', label: 'Total Receivables (Billed + Unbilled)', values: withBalance(combined) });
 
-  return { ...model, rows };
+  for (const c of merged.customers) {
+    rows.push({ kind: 'section', label: c.customerName, values: cells(c.buckets, c.totalCents), indent: 0 });
+    rows.push({ kind: 'account', label: 'Billed', values: cells(c.billed.buckets, c.billed.totalCents), indent: 1 });
+    rows.push({ kind: 'account', label: 'Unbilled (contract asset · Acct 1180)', values: cells(c.unbilled.buckets, c.unbilled.totalCents), indent: 1 });
+  }
+
+  rows.push({ kind: 'spacer', label: '', values: blank() });
+  rows.push({ kind: 'subtotal', label: 'Total Billed', values: cells(merged.billedTotals, merged.billedTotalCents) });
+  rows.push({ kind: 'subtotal', label: 'Total Unbilled (contract asset)', values: cells(merged.unbilledTotals, merged.unbilledTotalCents) });
+  rows.push({ kind: 'total', label: 'Total Receivables (Billed + Unbilled)', values: cells(merged.combinedTotals, merged.combinedTotalCents) });
+
+  return base(meta, 'AR Aging', columns, rows);
 }
 
 // ─── Executive summary sheet (comparative statements only) ───────────────────
