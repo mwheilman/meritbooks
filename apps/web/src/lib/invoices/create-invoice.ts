@@ -217,16 +217,14 @@ export async function createInvoice(
   // Projects-driven JOB_BILLING consumer uses, so the two never disagree.
   if (input.post_to_gl && totalCents > 0) {
     try {
-      // Find the AR control account (12xxx range).
-      const { data: arAccount } = await supabase
-        .from('accounts')
-        .select('id')
-        .eq('org_id', orgId)
-        .gte('account_number', '12000')
-        .lt('account_number', '13000')
-        .eq('is_active', true)
-        .limit(1)
-        .single();
+      // Resolve the AR control account BY ROLE (AR_CONTROL → '1100'), the same
+      // resolver the AR credit side / cash-application / reports use. This replaces
+      // a broken string-range lookup (`account_number >= '12000' AND < '13000'`)
+      // that lexicographically EXCLUDED the 4-digit '1100' AR account, so the DR
+      // landed on the wrong asset (e.g. 1210 Job WIP / 1300 Prepaid) — breaking the
+      // AR subledger ↔ GL 1100 tie. resolveRole throws PostingError on a COA/role
+      // gap, which the surrounding catch turns into "leave the invoice DRAFT".
+      const arAccount = await resolveRole(supabase, orgId, 'AR_CONTROL', input.location_id);
 
       if (arAccount) {
         const creditLines = await resolveInvoiceCreditAccounts(supabase, {

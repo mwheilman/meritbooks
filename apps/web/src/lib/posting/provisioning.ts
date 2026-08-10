@@ -12,6 +12,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { postTransaction, type PostingFacts } from './posting-templates';
 import { resolveRole } from './account-roles';
 import { createSchedule } from './schedule-engine';
+import { reverseGlEntry } from './lifecycle';
 
 type DB = SupabaseClient;
 
@@ -87,7 +88,16 @@ export async function recordAssetAcquisition(
     .select('id')
     .single();
 
-  if (error) return { success: false, error: `GL posted but fixed_asset insert failed: ${error.message}` };
+  if (error) {
+    // The GL posted but the subledger insert failed. Mirror the customer-deposit take
+    // path: reverse the JE so we never leave an orphaned acquisition entry with no
+    // fixed_assets row (GL⇄register drift). The subledger row and the GL post now
+    // commit together — either both exist or neither does.
+    if (posted.entry_id) {
+      await reverseGlEntry(db, facts.org_id, posted.entry_id, 'Fixed-asset subledger insert failed');
+    }
+    return { success: false, error: `Fixed-asset insert failed; GL entry reversed: ${error.message}` };
+  }
   return { success: true, entry_id: posted.entry_id, entry_number: posted.entry_number, provisioned_id: (data as { id: string }).id };
 }
 
@@ -114,21 +124,31 @@ export async function recordPrepaidPurchase(
   const posted = await postTransaction(db, 'prepaid_purchase', facts, { created_by: opts.created_by });
   if (!posted.success) return { success: false, error: posted.error };
 
-  // Amortize the prepaid base (exclude tax folded into the GL cost).
-  const schedule = await createSchedule(db, {
-    orgId: facts.org_id,
-    locationId: facts.location_id,
-    scheduleType: 'PREPAID_AMORTIZATION',
-    debitAccountId: input.expense_account_id,
-    creditAccountId: facts.category_account_id,
-    totalCents: facts.amount_cents,
-    months: input.amortization_months,
-    startDate: input.start_date ?? facts.entry_date,
-    departmentId: facts.department_id,
-    sourceType: 'PREPAID_PURCHASE',
-    sourceId: posted.entry_id,
-    memo: facts.memo ?? 'Prepaid amortization',
-  });
+  // Amortize the prepaid base (exclude tax folded into the GL cost). If the schedule
+  // insert fails, reverse the JE — never leave a prepaid GL debit with no amortization
+  // schedule behind it (same GL⇄subledger safe-ordering as the asset path).
+  let schedule: { id: string };
+  try {
+    schedule = await createSchedule(db, {
+      orgId: facts.org_id,
+      locationId: facts.location_id,
+      scheduleType: 'PREPAID_AMORTIZATION',
+      debitAccountId: input.expense_account_id,
+      creditAccountId: facts.category_account_id,
+      totalCents: facts.amount_cents,
+      months: input.amortization_months,
+      startDate: input.start_date ?? facts.entry_date,
+      departmentId: facts.department_id,
+      sourceType: 'PREPAID_PURCHASE',
+      sourceId: posted.entry_id,
+      memo: facts.memo ?? 'Prepaid amortization',
+    });
+  } catch (e) {
+    if (posted.entry_id) {
+      await reverseGlEntry(db, facts.org_id, posted.entry_id, 'Prepaid amortization schedule creation failed');
+    }
+    return { success: false, error: `Prepaid schedule creation failed; GL entry reversed: ${e instanceof Error ? e.message : 'unknown'}` };
+  }
 
   return { success: true, entry_id: posted.entry_id, entry_number: posted.entry_number, provisioned_id: schedule.id };
 }
@@ -169,20 +189,28 @@ export async function recordDeferredRevenue(
   if (!input.revenue_account_id) return { success: false, error: 'revenue_account_id is required when recognition_months is set' };
 
   const deferred = await resolveRole(db, facts.org_id, 'DEFERRED_REVENUE');
-  const schedule = await createSchedule(db, {
-    orgId: facts.org_id,
-    locationId: facts.location_id,
-    scheduleType: 'DEFERRED_REVENUE',
-    debitAccountId: deferred.id,
-    creditAccountId: input.revenue_account_id,
-    totalCents: facts.amount_cents,
-    months: input.recognition_months,
-    startDate: input.start_date ?? facts.entry_date,
-    departmentId: facts.department_id,
-    sourceType: 'DEFERRED_REVENUE',
-    sourceId: posted.entry_id,
-    memo: facts.memo ?? 'Deferred revenue recognition',
-  });
+  let schedule: { id: string };
+  try {
+    schedule = await createSchedule(db, {
+      orgId: facts.org_id,
+      locationId: facts.location_id,
+      scheduleType: 'DEFERRED_REVENUE',
+      debitAccountId: deferred.id,
+      creditAccountId: input.revenue_account_id,
+      totalCents: facts.amount_cents,
+      months: input.recognition_months,
+      startDate: input.start_date ?? facts.entry_date,
+      departmentId: facts.department_id,
+      sourceType: 'DEFERRED_REVENUE',
+      sourceId: posted.entry_id,
+      memo: facts.memo ?? 'Deferred revenue recognition',
+    });
+  } catch (e) {
+    if (posted.entry_id) {
+      await reverseGlEntry(db, facts.org_id, posted.entry_id, 'Deferred-revenue recognition schedule creation failed');
+    }
+    return { success: false, error: `Deferred-revenue schedule creation failed; GL entry reversed: ${e instanceof Error ? e.message : 'unknown'}` };
+  }
 
   return { success: true, entry_id: posted.entry_id, entry_number: posted.entry_number, provisioned_id: schedule.id };
 }

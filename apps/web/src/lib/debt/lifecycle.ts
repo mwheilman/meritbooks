@@ -433,7 +433,9 @@ export async function confirmRefinance(
   };
   let created: CreateDebtResult;
   try {
-    created = await createDebtInstrument(db, orgId, userId, linkedTerms);
+    // Refinance books the new liability itself via the rollover entry below, so DON'T
+    // post an origination JE here (it would double-credit the new liability).
+    created = await createDebtInstrument(db, orgId, userId, linkedTerms, { postOrigination: false });
   } catch (e) {
     throw new PostingError(`Failed to create the refinanced loan: ${e instanceof Error ? e.message : String(e)}`);
   }

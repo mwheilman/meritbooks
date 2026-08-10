@@ -99,6 +99,12 @@ export interface PayrollRemittanceInput {
   liabilities: PayrollComponent[]; // accrued payroll-liability accounts to clear
   rail?: PaymentRail;
   cashAccountId?: string;
+  /** Optional idempotency key. When set, migration 064's UNIQUE(org_id, source_ref,
+   *  entry_type) is the DB double-post guarantor: a second remittance with the same
+   *  key fails on insert instead of double-crediting cash. */
+  sourceRef?: string;
+  /** Optional entry memo (defaults to "Payroll remittance"). */
+  memo?: string;
 }
 
 /** Remit accrued payroll liabilities: DR each liability / CR cash for the total. */
@@ -126,8 +132,9 @@ export async function recordPayrollRemittance(db: DB, input: PayrollRemittanceIn
     location_id: input.locationId,
     entry_date: input.payDate,
     entry_type: 'STANDARD',
-    memo: 'Payroll remittance',
+    memo: input.memo ?? 'Payroll remittance',
     source_module: 'PAYROLL',
+    source_ref: input.sourceRef,
     created_by: null,
     lines,
   });

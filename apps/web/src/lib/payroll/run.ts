@@ -33,7 +33,7 @@ import type {
   PayrollRunTotals,
   PayrollRunPreview,
 } from '@/lib/payroll/engine/types';
-import { recordPayrollRun, type PayrollComponent } from '@/lib/posting/payroll';
+import { recordPayrollRun, recordPayrollRemittance, type PayrollComponent } from '@/lib/posting/payroll';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
 
 type DB = SupabaseClient;
@@ -83,6 +83,13 @@ export class RunPreparerCannotApproveError extends Error {
   constructor() {
     super('The payroll run approver/releaser cannot be its preparer (separation of duties).');
     this.name = 'RunPreparerCannotApproveError';
+  }
+}
+
+export class RunReleaserCannotApproveError extends Error {
+  constructor() {
+    super('The payroll run releaser cannot be its approver (separation of duties).');
+    this.name = 'RunReleaserCannotApproveError';
   }
 }
 
@@ -372,6 +379,13 @@ export async function releaseRun(
   const run = await getRun(db, orgId, runId);
   assertRunTransition(run.status, 'RELEASED');
 
+  // Separation of duties: the human releasing the money cannot be the one who
+  // approved it (mirrors the AP releaser != preparer check on /ap/disbursements).
+  // Fail closed BEFORE any provider call — no money moves on an SoD violation.
+  if (run.approved_by && run.approved_by === releaserClerkId) {
+    throw new RunReleaserCannotApproveError();
+  }
+
   const eng = await loadEngine(db, orgId, engine);
 
   // Rebuild the previewed run (persisted at preview time) into the engine's
@@ -573,4 +587,98 @@ export async function postRun(db: DB, orgId: string, runId: string): Promise<Pos
   if (error) throw new RunStateError(`Failed to link GL entry to run: ${error.message}`);
 
   return { glEntryId: result.gl_entry_id, alreadyPosted: false };
+}
+
+// ── remitRun (clear the run's payroll payables against cash) ─────────────────
+
+/**
+ * The payroll-payable roles a remittance clears, paired with the run's aggregate
+ * column that funded each. This mirrors buildPayrollPostingLines' liability side
+ * exactly, so a remittance DRs back precisely what postRun CR'd — after remitting,
+ * these five payables net to zero for the run:
+ *
+ *   FEDERAL_TAX_PAYABLE       ← employee_tax_cents  (employee income-tax withholding)
+ *   FICA_PAYABLE              ← employer_tax_cents  (employer payroll tax)
+ *   HEALTH_INSURANCE_PAYABLE  ← benefits_cents      (employee benefit deductions)
+ *   GARNISHMENT_PAYABLE       ← deductions_cents    (garnishments / other deductions)
+ */
+const REMIT_LIABILITY_ROLES: ReadonlyArray<{ role: AccountRoleKey; column: keyof Pick<PayrollRunRow, 'employee_tax_cents' | 'employer_tax_cents' | 'benefits_cents' | 'deductions_cents'>; memo: string }> = [
+  { role: 'FEDERAL_TAX_PAYABLE', column: 'employee_tax_cents', memo: 'Remit employee tax withholding' },
+  { role: 'FICA_PAYABLE', column: 'employer_tax_cents', memo: 'Remit employer payroll tax' },
+  { role: 'HEALTH_INSURANCE_PAYABLE', column: 'benefits_cents', memo: 'Remit employee benefit deductions' },
+  { role: 'GARNISHMENT_PAYABLE', column: 'deductions_cents', memo: 'Remit garnishments / deductions' },
+];
+
+/** Stable per-run idempotency key for a payroll remittance entry. */
+export function remittanceSourceRef(runId: string): string {
+  return `payroll_remit:${runId}`;
+}
+
+export interface RemitRunResult {
+  glEntryId: string | null;
+  totalCents: number;
+  alreadyRemitted: boolean;
+}
+
+/**
+ * Record a remittance of a posted run's payroll payables: DR each payable (resolved
+ * by ROLE) / CR cash for the total. Balanced, and **idempotent per run** via the
+ * stable source_ref `payroll_remit:<runId>` — migration 064's UNIQUE(org_id,
+ * source_ref, entry_type) is the DB double-post guarantor, so a concurrent or
+ * repeated remittance cannot double-credit cash.
+ *
+ * Only allowed once the run has been posted to the GL (its payables must exist to be
+ * cleared). No provider/money-movement API is called here — this books the accounting
+ * of a tax/benefit payment (the cash actually leaves via the tenant's bank/EFTPS).
+ */
+export async function remitRun(db: DB, orgId: string, runId: string): Promise<RemitRunResult> {
+  const run = await getRun(db, orgId, runId);
+
+  if (!run.gl_entry_id) {
+    throw new RunStateError('Post the payroll run to the GL before remitting its payables');
+  }
+  if (!run.location_id) {
+    throw new PostingError('Payroll run has no location; a location is required to resolve accounts and the fiscal period');
+  }
+
+  const sourceRef = remittanceSourceRef(runId);
+
+  // Idempotency pre-check (the 064 unique index is the hard race guarantor).
+  const { data: existing } = await db
+    .from('gl_entries')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('source_ref', sourceRef)
+    .eq('status', 'POSTED')
+    .limit(1)
+    .maybeSingle();
+  if (existing) {
+    return { glEntryId: (existing as { id: string }).id, totalCents: 0, alreadyRemitted: true };
+  }
+
+  // Resolve the payable accounts by role and build the liability components from the
+  // run's aggregate columns (skipping zero-value payables).
+  const liabilities: PayrollComponent[] = [];
+  for (const spec of REMIT_LIABILITY_ROLES) {
+    const amount = Number(run[spec.column] ?? 0);
+    if (amount <= 0) continue;
+    const ref = await resolveRole(db, orgId, spec.role, run.location_id);
+    liabilities.push({ account_id: ref.id, amount_cents: amount, memo: spec.memo });
+  }
+
+  if (liabilities.length === 0) {
+    throw new RunStateError('This run has no payroll payables to remit');
+  }
+
+  const result = await recordPayrollRemittance(db, {
+    orgId,
+    locationId: run.location_id,
+    payDate: run.pay_date,
+    liabilities,
+    // Default rail (ach) resolves to OPERATING_BANK for the cash credit.
+    memo: `Payroll remittance — run ${runId}`,
+    sourceRef,
+  });
+
+  return { glEntryId: result.gl_entry_id, totalCents: result.total_cents, alreadyRemitted: false };
 }

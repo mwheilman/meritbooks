@@ -197,6 +197,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 // trail, and the actor is the Clerk user id recorded on each audit row.
 import { z } from 'zod';
 import { postJournalEntry, voidJournalEntry } from '@/lib/services/gl-posting';
+import { resolveRole } from '@/lib/posting/account-roles';
+import { resolveInvoiceCreditAccounts } from '@/lib/invoices/rev-rec-credit';
 
 const lineInput = z.object({
   description: z.string().min(1).max(500),
@@ -212,8 +214,6 @@ const patchSchema = z.object({
   lines: z.array(lineInput).min(1).optional(),
   override: z.object({ reason: z.string().min(3).max(500) }).optional(),
 });
-
-const AR_CONTROL_ACCOUNT_NUMBER = '1100';
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const ctx = await requireAuthedContext();
@@ -238,7 +238,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
   const { data: inv, error: invErr } = await supabase
     .from('invoices')
-    .select('id, status, location_id, invoice_date, due_date, memo, subtotal_cents, tax_cents, total_cents, gl_entry_id, invoice_number')
+    .select('id, status, location_id, job_id, invoice_date, due_date, memo, subtotal_cents, tax_cents, retainage_cents, total_cents, gl_entry_id, invoice_number')
     .eq('org_id', orgId).eq('id', params.id).single();
   if (invErr || !inv) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
 
@@ -273,7 +273,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       amount_cents: Math.round(l.quantity * l.unit_price_cents),
     }));
     newSubtotal = lines.reduce((s, l) => s + l.amount_cents, 0);
-    const newTotal = newSubtotal + Number(inv.tax_cents ?? 0);
+    // Total mirrors issuance (create-invoice.ts): subtotal + tax − retainage. Tax
+    // and retainage are held at their stored invoice values (a line edit does not
+    // renegotiate either), so the AR balance and GL DR stay in lock-step.
+    const taxCents = Number(inv.tax_cents ?? 0);
+    const retainageCents = Number(inv.retainage_cents ?? 0);
+    const newTotal = newSubtotal + taxCents - retainageCents;
 
     await supabase.from('invoice_lines').delete().eq('invoice_id', inv.id);
     const { error: lineErr } = await supabase.from('invoice_lines').insert(lines);
@@ -290,15 +295,40 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         `Invoice ${inv.invoice_number} edited via override: ${body.override?.reason ?? ''}`);
       if (!rev.success) return NextResponse.json({ error: `Reverse failed: ${rev.error}` }, { status: 500 });
 
-      const { data: arAcct } = await supabase
-        .from('accounts').select('id')
-        .eq('org_id', orgId).eq('account_number', AR_CONTROL_ACCOUNT_NUMBER).maybeSingle();
-      if (!arAcct) return NextResponse.json({ error: `AR control account ${AR_CONTROL_ACCOUNT_NUMBER} missing from COA` }, { status: 400 });
-
-      const glLines = [
-        { account_id: (arAcct as { id: string }).id, debit_cents: newTotal, credit_cents: 0, location_id: inv.location_id as string, memo: 'Accounts receivable' },
-        ...lines.map((l) => ({ account_id: l.account_id, debit_cents: 0, credit_cents: l.amount_cents, location_id: inv.location_id as string, memo: 'Revenue' })),
-      ];
+      // Re-post the IDENTICAL structure issuance uses (create-invoice.ts): resolve
+      // AR control BY ROLE (AR_CONTROL, not a hardcoded '1100', so a remapped tenant
+      // still ties), credit rev-rec-aware accounts (Deferred Revenue 2410 for
+      // deferring streams — NOT full revenue), and carry the sales-tax-payable and
+      // retainage-receivable legs. Dropping any of these on re-post drifts those
+      // subledgers; this keeps the AR subledger tied to GL 1100 after an edit.
+      let glLines: Parameters<typeof postJournalEntry>[1]['lines'];
+      try {
+        const arAccount = await resolveRole(supabase, orgId, 'AR_CONTROL', inv.location_id as string);
+        const creditLines = await resolveInvoiceCreditAccounts(supabase, {
+          orgId,
+          locationId: inv.location_id as string,
+          jobId: (inv.job_id as string | null) ?? null,
+          lines: lines.map((l) => ({ account_id: l.account_id, amount_cents: l.amount_cents })),
+        });
+        const jobDim = (inv.job_id as string | null) ?? undefined;
+        glLines = [
+          { account_id: arAccount.id, debit_cents: newTotal, credit_cents: 0, location_id: inv.location_id as string, job_id: jobDim, memo: 'Accounts receivable' },
+          ...creditLines.map((cl) => ({ account_id: cl.account_id, debit_cents: 0, credit_cents: cl.amount_cents, location_id: inv.location_id as string, job_id: jobDim, memo: cl.deferred ? 'Deferred revenue' : 'Revenue' })),
+        ];
+        if (taxCents > 0) {
+          const taxAcct = await resolveRole(supabase, orgId, 'SALES_TAX_PAYABLE');
+          glLines.push({ account_id: taxAcct.id, debit_cents: 0, credit_cents: taxCents, location_id: inv.location_id as string, job_id: jobDim, memo: 'Sales tax payable' });
+        }
+        if (retainageCents > 0) {
+          const retAcct = await resolveRole(supabase, orgId, 'RETAINAGE_RECEIVABLE');
+          glLines.push({ account_id: retAcct.id, debit_cents: retainageCents, credit_cents: 0, location_id: inv.location_id as string, job_id: jobDim, memo: 'Retainage receivable' });
+        }
+      } catch (e) {
+        return NextResponse.json(
+          { error: `AR re-post account resolution failed: ${e instanceof Error ? e.message : String(e)}` },
+          { status: 400 },
+        );
+      }
       const reposted = await postJournalEntry(supabase, {
         org_id: orgId, location_id: inv.location_id as string,
         entry_date: (body.invoice_date ?? inv.invoice_date) as string,

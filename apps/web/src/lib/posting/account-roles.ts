@@ -77,6 +77,14 @@ export type AccountRoleKey =
   // Leases (ASC 842) — also declared locally in lib/leases/lease-accounts.ts
   | 'ROU_ASSET'
   | 'LEASE_LIABILITY'
+  // Debt (notes payable + interest). Origination books DR Cash / CR Notes Payable and
+  // payment splits principal (DR Notes Payable) vs interest (DR Interest Expense) by
+  // role. These role_keys must be seeded into core.account_role_keys by the lead (see
+  // build report). NOTES_PAYABLE defaults to 2500 "Term Loan" (LOCATION-scope,
+  // company-specific — the standard generic term-debt liability); INTEREST_EXPENSE to
+  // 8000 "Interest Expense" (ORG-scope), matching lib/debt/accounts.ts + lease interest.
+  | 'NOTES_PAYABLE'
+  | 'INTEREST_EXPENSE'
   // Prepaid amortization
   | 'PREPAID_ASSET'
   // Insurance premium amortization (prepaid insurance -> insurance expense).
@@ -154,6 +162,11 @@ export const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
   // Leases (ASC 842) — 1580 / 2550 seeded by migration 082.
   ROU_ASSET: '1580',
   LEASE_LIABILITY: '2550',
+  // Debt. 2500 "Term Loan" (company-specific, LOCATION-scope) is the standard generic
+  // term-debt liability; 8000 "Interest Expense" (ORG-scope) already exists in the COA.
+  // No new accounts are needed — only the two role_keys the lead seeds (see build report).
+  NOTES_PAYABLE: '2500',
+  INTEREST_EXPENSE: '8000',
   // Prepaid amortization — 1330 "Prepaid Other" is the general prepaid bucket.
   PREPAID_ASSET: '1330',
   // Insurance premium amortization. 1300 "Prepaid Insurance" (current asset) and

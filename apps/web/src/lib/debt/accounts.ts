@@ -61,24 +61,6 @@ async function accountByName(
   };
 }
 
-async function accountByNumber(db: DB, orgId: string, number: string): Promise<AccountRef | null> {
-  const { data } = await db
-    .from('accounts')
-    .select('id, account_type, account_sub_type, account_number, name')
-    .eq('org_id', orgId)
-    .eq('account_number', number)
-    .eq('is_active', true)
-    .limit(1)
-    .maybeSingle<AccountRow>();
-  if (!data) return null;
-  return {
-    id: data.id,
-    account_type: data.account_type as AccountRef['account_type'],
-    account_sub_type: data.account_sub_type as AccountRef['account_sub_type'],
-    account_number: data.account_number,
-  };
-}
-
 export interface DebtAccountOverrides {
   liabilityAccountId?: string | null;
   interestExpenseAccountId?: string | null;
@@ -111,16 +93,14 @@ export async function resolveDebtAccounts(
     ? await getAccountRef(db, orgId, overrides.cashAccountId)
     : await resolveRole(db, orgId, 'OPERATING_BANK', overrides.locationId ?? undefined);
 
-  // Interest expense — override → name-matched → COA 8000.
+  // Interest expense — override → name-matched → INTEREST_EXPENSE role (default COA 8000).
+  // resolveRole honors a tenant remap on the Account Roles screen and degrades to a
+  // PostingError (never a guess) if neither the role nor account 8000 resolves.
   let interestExpense: AccountRef | null = overrides.interestExpenseAccountId
     ? await getAccountRef(db, orgId, overrides.interestExpenseAccountId)
-    : (await accountByName(db, orgId, '%interest expense%', ['OTHER', 'OPEX'])) ??
-      (await accountByNumber(db, orgId, INTEREST_EXPENSE_NUMBER));
+    : await accountByName(db, orgId, '%interest expense%', ['OTHER', 'OPEX']);
   if (!interestExpense) {
-    throw new PostingError(
-      'No interest-expense account resolved. Set the interest-expense account on the loan, ' +
-        `or seed account ${INTEREST_EXPENSE_NUMBER} (Interest Expense) in this tenant's chart of accounts.`,
-    );
+    interestExpense = await resolveRole(db, orgId, 'INTEREST_EXPENSE', overrides.locationId ?? undefined);
   }
 
   // Interest payable — override → name-matched liability → ACCRUED_EXPENSES role (2400).
@@ -138,4 +118,20 @@ export async function resolveDebtAccounts(
     : null;
 
   return { cash, interestExpense, interestPayable, liability };
+}
+
+/**
+ * Resolve the notes-payable / term-debt LIABILITY account for a loan. Prefers the
+ * instrument's explicit override, else the NOTES_PAYABLE role (per-tenant map →
+ * standard COA 2500 "Term Loan" for the location). Degrades to a PostingError — never
+ * a guess — when neither is set/seeded. Used by origination (CR) and payment (DR).
+ */
+export async function resolveDebtLiability(
+  db: DB,
+  orgId: string,
+  overrideId: string | null | undefined,
+  locationId: string | null | undefined,
+): Promise<AccountRef> {
+  if (overrideId) return getAccountRef(db, orgId, overrideId);
+  return resolveRole(db, orgId, 'NOTES_PAYABLE', locationId ?? undefined);
 }

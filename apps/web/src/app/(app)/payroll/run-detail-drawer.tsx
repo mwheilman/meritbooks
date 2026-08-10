@@ -19,7 +19,7 @@ import { formatMoney } from '@meritbooks/shared';
 import { fmtDate, type RunDetailResponse, type RunStatus } from './types';
 import { RunStatusBadge } from './run-status';
 
-type Action = 'approve' | 'release' | 'post';
+type Action = 'approve' | 'release' | 'post' | 'remit';
 
 export function RunDetailDrawer({
   runId,
@@ -58,13 +58,21 @@ export function RunDetailDrawer({
       setPending(action);
       try {
         const res = await fetch(`/api/payroll/runs/${runId}/${action}`, { method: 'POST' });
-        const body = (await res.json().catch(() => ({}))) as { ok?: boolean; status?: string; error?: string };
+        const body = (await res.json().catch(() => ({}))) as { ok?: boolean; status?: string; error?: string; alreadyRemitted?: boolean };
         if (!res.ok) {
           addToast('error', body.error ?? `Could not ${action} the run.`);
           return;
         }
-        const label = action === 'approve' ? 'Run approved' : action === 'release' ? 'Funding released' : 'Posted to the ledger';
-        addToast('success', label);
+        if (action === 'remit' && body.alreadyRemitted) {
+          addToast('info', 'This run’s payables were already remitted.');
+        } else {
+          const label =
+            action === 'approve' ? 'Run approved'
+            : action === 'release' ? 'Funding released'
+            : action === 'remit' ? 'Payroll payables remitted'
+            : 'Posted to the ledger';
+          addToast('success', label);
+        }
         setConfirmingRelease(false);
         setAckRelease(false);
         await refetch();
@@ -164,6 +172,20 @@ export function RunDetailDrawer({
             >
               <BookOpen size={15} /> Posted to the ledger — view journal entry
             </a>
+          )}
+
+          {/* Remittance — clear the run's tax/benefit payables against cash. Available
+              once the run is posted (its payables exist on the ledger). */}
+          {run.glEntryId && (
+            <RemitAffordance
+              payablesCents={
+                (run.employeeTaxCents ?? 0) + (run.employerTaxCents ?? 0) + (run.benefitsCents ?? 0) + (run.deductionsCents ?? 0)
+              }
+              grouped={grouped}
+              canApprove={canApprove}
+              pending={pending === 'remit'}
+              onRemit={() => runAction('remit')}
+            />
           )}
 
           {/* Action rail */}
@@ -366,6 +388,48 @@ function ActionRail({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Remittance affordance — clears the run's tax & benefit payables (FEDERAL / FICA /
+ * HEALTH / GARNISHMENT) against cash with a balanced, idempotent journal entry. Shown
+ * once the run is posted. Gated on payroll:approve (same authority that posts the run).
+ */
+function RemitAffordance({
+  payablesCents,
+  grouped,
+  canApprove,
+  pending,
+  onRemit,
+}: {
+  payablesCents: number;
+  grouped: boolean;
+  canApprove: boolean;
+  pending: boolean;
+  onRemit: () => void;
+}) {
+  if (payablesCents <= 0) return null;
+  return (
+    <div className="mb-4 rounded-lg border border-slate-800 bg-slate-800/30 px-4 py-3">
+      <div className="mb-2 flex items-start gap-1.5 text-xs text-slate-400">
+        <Banknote size={13} className="mt-0.5 shrink-0 text-indigo-400" />
+        <span>
+          Record a remittance of this run’s tax &amp; benefit payables{grouped ? '' : ` (${formatMoney(payablesCents)})`}. This
+          debits the payroll liabilities and credits the operating bank — clearing them to zero. Idempotent: a run can be
+          remitted once.
+        </span>
+      </div>
+      <button
+        onClick={onRemit}
+        disabled={pending || !canApprove}
+        title={!canApprove ? 'Your role cannot remit payroll payables.' : undefined}
+        className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {pending ? <Loader2 size={14} className="animate-spin" /> : <Banknote size={14} />}
+        Record remittance
+      </button>
     </div>
   );
 }

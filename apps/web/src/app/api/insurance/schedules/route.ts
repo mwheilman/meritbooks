@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/rbac/require-permission';
 import {
   listInsuranceSchedules,
   createInsuranceSchedule,
+  getInsuranceTieOut,
   InsuranceAmortizationError,
 } from '@/lib/insurance/amortize';
 import {
@@ -33,11 +34,22 @@ export async function GET(): Promise<NextResponse> {
 
   try {
     const schedules = await listInsuranceSchedules(ctx.supabase);
+    // Subledger⇄GL tie-out: schedules' remaining premium vs the prepaid-insurance GL
+    // control account(s). Soft — a missing account / view error must not 500 the list.
+    let tieOut = null;
+    if (ctx.orgId) {
+      try {
+        tieOut = await getInsuranceTieOut(ctx.supabase, ctx.orgId, { schedules });
+      } catch (e) {
+        console.error('[insurance/schedules] tie-out failed:', e instanceof Error ? e.message : e);
+      }
+    }
     const summary = {
       total: schedules.length,
       active: schedules.filter((s) => s.status === 'ACTIVE').length,
       completed: schedules.filter((s) => s.status === 'COMPLETED').length,
       remaining_cents: schedules.reduce((s, r) => s + (r.status === 'ACTIVE' ? r.remaining_cents : 0), 0),
+      tie_out: tieOut,
     };
     return NextResponse.json({ data: schedules, summary });
   } catch (e) {

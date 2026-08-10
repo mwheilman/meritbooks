@@ -4,6 +4,8 @@ import {
   computeDisposalGainLoss,
   buildDisposalLines,
   previewAssetDisposal,
+  recordAssetDisposal,
+  disposalSourceRef,
   type DisposalLinePlan,
 } from './asset-disposal';
 import { PostingError } from './account-roles';
@@ -172,5 +174,90 @@ describe('previewAssetDisposal — resolves gain/loss by ROLE', () => {
     await expect(
       previewAssetDisposal(db, { orgId: 'o', assetId: 'asset-1', disposalDate: '2026-06-30', proceedsCents: 5_000, cashAccountId: 'cash' }),
     ).rejects.toBeInstanceOf(PostingError);
+  });
+});
+
+// ── Disposal idempotency: stable source_ref + migration-064 UNIQUE guard ──────
+describe('disposalSourceRef', () => {
+  it('is stable and per-asset', () => {
+    expect(disposalSourceRef('asset-1')).toBe('asset-disposal:asset-1');
+    expect(disposalSourceRef('asset-1')).toBe(disposalSourceRef('asset-1'));
+    expect(disposalSourceRef('asset-2')).not.toBe(disposalSourceRef('asset-1'));
+  });
+});
+
+/**
+ * Minimal supabase stub for recordAssetDisposal on a BREAKEVEN sale (no gain/loss,
+ * so no account-role resolution): fixed_assets.single, fiscal_periods.single,
+ * gl_entries insert→select→single (captured; optionally a duplicate-key error),
+ * and thenable builders for line inserts / the status update.
+ */
+function disposalStub(opts: {
+  asset: Record<string, unknown>;
+  duplicate?: boolean;
+  capture?: (row: Record<string, unknown>) => void;
+}): SupabaseClient {
+  function builder(table: string) {
+    let inserted = false;
+    const b: Record<string, unknown> = {
+      select: () => b,
+      insert: (row: Record<string, unknown>) => {
+        inserted = true;
+        if (table === 'gl_entries' && opts.capture) opts.capture(row);
+        return b;
+      },
+      update: () => b,
+      delete: () => b,
+      eq: () => b,
+      neq: () => b,
+      lte: () => b,
+      gte: () => b,
+      or: () => b,
+      limit: () => b,
+      single: async () => {
+        if (table === 'fixed_assets') return { data: opts.asset, error: null };
+        if (table === 'fiscal_periods') return { data: { id: 'fp-1', status: 'OPEN' }, error: null };
+        if (table === 'gl_entries' && inserted) {
+          if (opts.duplicate) {
+            return { data: null, error: { message: 'duplicate key value violates unique constraint "uq_gl_entries_org_source_type"' } };
+          }
+          return { data: { id: 'je-1', entry_number: 'JE-1' }, error: null };
+        }
+        return { data: null, error: null };
+      },
+      maybeSingle: async () => ({ data: null, error: null }),
+      then: (onF: (r: { data: unknown; error: null }) => unknown, onR?: (e: unknown) => unknown) =>
+        Promise.resolve({ data: null, error: null }).then(onF, onR),
+    };
+    return b as unknown as ReturnType<SupabaseClient['from']>;
+  }
+  return { from: (t: string) => builder(t) } as unknown as SupabaseClient;
+}
+
+describe('recordAssetDisposal — idempotent via source_ref + 064 UNIQUE', () => {
+  // Breakeven: cost 100k, accum 60k, proceeds 40k → NBV 40k, no gain/loss line.
+  const asset = {
+    id: 'asset-1', location_id: 'loc-1', name: 'Truck',
+    acquisition_cost_cents: 100_000, accumulated_depreciation_cents: 60_000,
+    asset_account_id: 'fa-acct', accumulated_depreciation_account_id: 'ad-acct', status: 'ACTIVE',
+  };
+
+  it('writes the stable disposal source_ref onto the GL entry (the 064 key)', async () => {
+    let captured: Record<string, unknown> | null = null;
+    const db = disposalStub({ asset, capture: (r) => { captured = r; } });
+    const res = await recordAssetDisposal(db, {
+      orgId: 'o', assetId: 'asset-1', disposalDate: '2026-06-30', proceedsCents: 40_000, cashAccountId: 'cash',
+    });
+    expect(res.gain_loss_cents).toBe(0);
+    expect(captured).not.toBeNull();
+    expect((captured as unknown as { source_ref: string }).source_ref).toBe('asset-disposal:asset-1');
+    expect((captured as unknown as { entry_type: string }).entry_type).toBe('STANDARD');
+  });
+
+  it('a concurrent/repeat disposal collides on the unique key and is refused (no double-post)', async () => {
+    const db = disposalStub({ asset, duplicate: true });
+    await expect(
+      recordAssetDisposal(db, { orgId: 'o', assetId: 'asset-1', disposalDate: '2026-06-30', proceedsCents: 40_000, cashAccountId: 'cash' }),
+    ).rejects.toThrow(/already disposed/i);
   });
 });

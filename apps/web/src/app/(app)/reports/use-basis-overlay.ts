@@ -12,6 +12,12 @@ import {
  * per-account natural-delta map the P&L / BS / TB renderers layer on top of the GAAP output
  * they already fetched. When `basis` is 'GAAP' nothing is fetched and the overlay is inert —
  * so the Accrual (GAAP) default renders exactly today's numbers, untouched.
+ *
+ * CASH is AUTOMATIC and ONE-CLICK: it hits `/api/basis-adjustments/cash`, which reuses the
+ * proven full cash conversion (`fetchCashIncomeStatement` — the SAME engine the report
+ * compiler uses) and returns the accrual→cash deltas live. No manual basis-adjustment rows
+ * are needed to flip Accrual⇆Cash. TAX (M-1 derived) and CUSTOM (manual) read the stored
+ * `reporting_basis_adjustments` rows via `/api/basis-adjustments`.
  */
 
 export type PresentationBasis = 'GAAP' | ReportingBasis;
@@ -64,17 +70,29 @@ export function useBasisOverlay(
   year: string,
   month: string | undefined,
   locIds: string,
+  /** Exact statement window — required so CASH derives on the SAME period the report shows. */
+  startDate?: string,
+  endDate?: string,
 ): BasisOverlay {
-  const enabled = basis !== 'GAAP' && !!year;
+  const isCash = basis === 'CASH';
+  // CASH needs a concrete window; TAX/CUSTOM key off period_year/month.
+  const enabled = basis !== 'GAAP' && (isCash ? !!(startDate && endDate) : !!year);
   const params: Record<string, string> = {};
   if (enabled) {
-    params.basis = basis;
-    params.period_year = year;
-    if (month) params.period_month = month;
-    if (locIds) params.location_ids = locIds;
+    if (isCash) {
+      // Live, automatic cash derivation — no stored rows, always ties to the ledger.
+      params.start_date = startDate as string;
+      params.end_date = endDate as string;
+      if (locIds) params.location_ids = locIds;
+    } else {
+      params.basis = basis;
+      params.period_year = year;
+      if (month) params.period_month = month;
+      if (locIds) params.location_ids = locIds;
+    }
   }
   const { data: resp, isLoading, error } = useQuery<AdjApiResponse>(
-    enabled ? '/api/basis-adjustments' : null,
+    enabled ? (isCash ? '/api/basis-adjustments/cash' : '/api/basis-adjustments') : null,
     params,
     { scope: false },
   );

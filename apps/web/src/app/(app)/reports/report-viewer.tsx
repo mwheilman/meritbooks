@@ -405,10 +405,22 @@ export function ReportViewer() {
 
   // ── Reporting-basis overlay (lifted here so both the on-screen statement AND the export
   // path use the SAME adjustments). Year from the report window; a single whole-calendar
-  // month passes its month so month-scoped + whole-year adjustments both apply. ──
+  // month passes its month so month-scoped + whole-year adjustments both apply (TAX/CUSTOM).
+  // CASH auto-derives on the EXACT statement window: the P&L period for income statements,
+  // and inception→as-of for the cumulative Balance Sheet / Trial Balance. ──
   const overlayYear = (ed || sd || '').slice(0, 4) || String(new Date().getFullYear());
   const overlaySingleMonth = sd && ed && sd.slice(0, 7) === ed.slice(0, 7) ? sd.slice(5, 7) : undefined;
-  const overlay = useBasisOverlay(supportsOverlay ? presentationBasis : 'GAAP', overlayYear, overlaySingleMonth, locIdsParam);
+  const cumulative = reportKey === 'bs' || reportKey === 'tb';
+  const cashStart = cumulative ? '1900-01-01' : sd;
+  const cashEnd = ed || sd;
+  const overlay = useBasisOverlay(
+    supportsOverlay ? presentationBasis : 'GAAP',
+    overlayYear,
+    overlaySingleMonth,
+    locIdsParam,
+    cashStart,
+    cashEnd,
+  );
 
   const companyOptions = useMemo(() =>
     locations.map((l) => ({ value: l.id, label: `${l.short_code} · ${l.name}`, group: l.industry ?? 'Other' })),
@@ -504,7 +516,9 @@ export function ReportViewer() {
                 sd={sd}
                 ed={ed}
                 locIds={locIdsParam}
-                basis={basis}
+                // Overlay-supported statements are always fetched on ACCRUAL and the basis
+                // (incl. one-click Cash) is applied via the overlay, so force accrual here.
+                basis={supportsOverlay ? 'accrual' : basis}
                 compareMode={reportDef?.hasCompare ? compareMode : 'none'}
                 reportLabel={reportDef?.label ?? 'Report'}
                 entityLabel={entityLabel}
@@ -554,28 +568,54 @@ export function ReportViewer() {
                 </div>
               )}
 
-              {reportDef?.hasBasis && (
+              {reportDef?.hasBasis && !supportsOverlay && (
                 <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-700">
                   <button onClick={() => setBasis('accrual')} className={clsx('px-2.5 py-1 rounded-md text-xs font-medium', basis==='accrual' ? 'bg-slate-700 text-white' : 'text-slate-500')}>Accrual</button>
                   <button onClick={() => setBasis('cash')} className={clsx('px-2.5 py-1 rounded-md text-xs font-medium', basis==='cash' ? 'bg-slate-700 text-white' : 'text-slate-500')}>Cash</button>
                 </div>
               )}
 
+              {/* PROMINENT, one-click basis switch. Accrual (GAAP) is the untouched default;
+                  Cash auto-derives the full accrual→cash conversion instantly (no manual rows).
+                  Tax (M-1 derived) and Custom read stored presentation adjustments. */}
               {supportsOverlay && (
-                <div className="flex items-center gap-1.5" title="Present this statement on a different basis by layering saved adjustments on top of the accrual (GAAP) output. The ledger stays accrual.">
-                  <Landmark size={13} className={overlayActive ? 'text-indigo-400' : 'text-slate-500'} />
-                  <select
-                    value={presentationBasis}
-                    onChange={(e) => setPresentationBasis(e.target.value as PresentationBasis)}
-                    aria-label="Reporting basis"
-                    className={clsx('px-2 py-1.5 rounded-lg text-xs border', overlayActive ? 'bg-indigo-600/20 border-indigo-500/30 text-indigo-200' : 'bg-slate-800 border-slate-700 text-white')}
-                  >
-                    <option value="GAAP" className="bg-slate-900 text-white">Accrual (GAAP)</option>
-                    <option value="TAX" className="bg-slate-900 text-white">Tax basis</option>
-                    <option value="CASH" className="bg-slate-900 text-white">Cash basis</option>
-                    <option value="CUSTOM" className="bg-slate-900 text-white">Custom basis</option>
-                  </select>
-                  <a href="/reports/basis-adjustments" className="text-[11px] text-slate-500 hover:text-indigo-300 underline decoration-dotted underline-offset-2">Manage</a>
+                <div
+                  className="flex items-center gap-1.5"
+                  title="Switch how this statement is presented. The general ledger always stays accrual (GAAP) — this is presentation only, never posted. Cash recognizes revenue when received and expense when paid, computed automatically."
+                >
+                  <Landmark size={14} className={overlayActive ? 'text-indigo-400' : 'text-slate-400'} />
+                  <span className="text-xs font-semibold text-slate-300">Basis:</span>
+                  <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-700" role="group" aria-label="Reporting basis">
+                    {([
+                      { key: 'GAAP', label: 'Accrual' },
+                      { key: 'CASH', label: 'Cash' },
+                      { key: 'TAX', label: 'Tax' },
+                      { key: 'CUSTOM', label: 'Custom' },
+                    ] as { key: PresentationBasis; label: string }[]).map((b) => {
+                      const active = presentationBasis === b.key;
+                      const accent = b.key === 'GAAP';
+                      return (
+                        <button
+                          key={b.key}
+                          onClick={() => setPresentationBasis(b.key)}
+                          aria-pressed={active}
+                          className={clsx(
+                            'px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                            active
+                              ? accent
+                                ? 'bg-slate-700 text-white'
+                                : 'bg-indigo-600/30 text-indigo-100 border border-indigo-500/40'
+                              : 'text-slate-500 hover:text-slate-300',
+                          )}
+                        >
+                          {b.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(presentationBasis === 'TAX' || presentationBasis === 'CUSTOM') && (
+                    <a href="/reports/basis-adjustments" className="text-[11px] text-slate-500 hover:text-indigo-300 underline decoration-dotted underline-offset-2">Manage</a>
+                  )}
                 </div>
               )}
 
@@ -632,10 +672,12 @@ function ReportContent({ reportKey, sd, ed, locIds, basis, presentationBasis, ov
   if (sd) p.start_date = sd;
   if (ed) p.end_date = ed;
   if (locIds) p.location_ids = locIds;
-  // A non-GAAP presentation basis layers on the ACCRUAL (GAAP) output, so force accrual
-  // for the underlying fetch when an overlay basis is active (the cash toggle is a
-  // separate entry-level cash view that only applies when presentation basis = GAAP).
-  if (basis !== 'accrual' && presentationBasis === 'GAAP') p.basis = basis;
+  // Overlay-supported statements (P&L / BS / TB) are always fetched on ACCRUAL — the basis
+  // (incl. one-click Cash) is layered via the presentation overlay, which is the single
+  // source of truth for the cash conversion. The legacy accrual/cash toggle only applies to
+  // non-overlay basis reports (e.g. P&L by Month), and never while an overlay basis is active.
+  const overlayReport = ['pnl', 'pnl_dept', 'pnl_class', 'bs', 'tb'].includes(reportKey);
+  if (!overlayReport && basis !== 'accrual' && presentationBasis === 'GAAP') p.basis = basis;
 
   switch (reportKey) {
     case 'pnl':

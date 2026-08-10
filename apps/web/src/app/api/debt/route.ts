@@ -5,6 +5,7 @@ import { requireAuthedContext, apiHandler, type ApiContext } from '@/lib/api-han
 import { createDebtSchema, type CreateDebtInput } from '@/lib/debt/schema';
 import { createDebtInstrument } from '@/lib/debt/create';
 import { AmortizationError } from '@/lib/debt/amortization';
+import { PostingError } from '@/lib/posting/account-roles';
 
 /**
  * /api/debt
@@ -139,6 +140,11 @@ export const POST = apiHandler(
     } catch (e) {
       if (e instanceof AmortizationError) {
         return NextResponse.json({ error: e.message, code: 'SCHEDULE_ERROR' }, { status: 422 });
+      }
+      // Origination-posting failure (e.g. an unresolved role or no open fiscal period):
+      // the create was rolled back, so surface a clear 422 rather than a 500.
+      if (e instanceof PostingError) {
+        return NextResponse.json({ error: e.message, code: 'ORIGINATION_POST_FAILED' }, { status: 422 });
       }
       console.error('[debt] create failed:', e instanceof Error ? e.message : e);
       return NextResponse.json({ error: 'Failed to create debt instrument', code: 'CREATE_FAILED' }, { status: 500 });

@@ -7,6 +7,13 @@ import { listConnections } from '@/lib/money/connections';
 import { createDestinationPaymentIntent } from '@/lib/money/providers/stripe';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
 import { computeFee, resolveMerchantFeeSchedule } from '@/lib/money/fees';
+import { sharedRateLimiter, clientIp, retryAfterSeconds } from '@/lib/security/rate-limit';
+
+// Abuse throttle for this UNAUTHENTICATED endpoint — each call can create a Stripe
+// PaymentIntent. Short window, per-token AND per-IP; a customer paying an invoice
+// makes only a handful of attempts, a hostile client looping intents is capped.
+const INTENT_PER_TOKEN = { windowMs: 60_000, max: 15 } as const;
+const INTENT_PER_IP = { windowMs: 60_000, max: 30 } as const;
 
 /**
  * POST /api/pay/[token]/intent — create a Stripe PaymentIntent for the hosted
@@ -17,6 +24,20 @@ import { computeFee, resolveMerchantFeeSchedule } from '@/lib/money/fees';
  * passed-through card surcharge is added to the amount charged only.
  */
 export async function POST(req: Request, { params }: { params: { token: string } }) {
+  // Throttle BEFORE the invoice lookup / any Stripe call. Per-token AND per-IP;
+  // either breach returns 429 so a hostile client cannot spam PaymentIntent creation.
+  const ip = clientIp(req);
+  const throttle = sharedRateLimiter.checkAll([
+    { key: `pay-intent:token:${params.token}`, rule: INTENT_PER_TOKEN },
+    { key: `pay-intent:ip:${ip}`, rule: INTENT_PER_IP },
+  ]);
+  if (!throttle.allowed) {
+    return NextResponse.json(
+      { enabled: false, message: 'Too many payment attempts in a short time. Please wait a moment and try again.' },
+      { status: 429, headers: { 'Retry-After': String(retryAfterSeconds(throttle)) } },
+    );
+  }
+
   const supabase = createAdminSupabase();
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
   const method: 'CARD' | 'ACH' = body.method === 'CARD' ? 'CARD' : 'ACH';

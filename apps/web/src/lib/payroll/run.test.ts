@@ -17,8 +17,10 @@ import {
   assertRunTransition,
   InvalidRunTransitionError,
   RunPreparerCannotApproveError,
+  RunReleaserCannotApproveError,
   RunStateError,
   approveRun,
+  releaseRun,
   postRun,
   buildPayrollPostingLines,
   type PayrollRunRow,
@@ -120,6 +122,27 @@ describe('approveRun — separation of duties', () => {
   it('rejects when the run has no recorded preparer (cannot prove SoD)', async () => {
     const db = makeDb({ data: baseRun({ status: 'PREVIEWED', prepared_by: null }), error: null });
     await expect(approveRun(db, 'org1', 'run1', 'clerk_other')).rejects.toBeInstanceOf(RunStateError);
+  });
+});
+
+// ── separation of duties (releaseRun) ───────────────────────────────────────
+
+describe('releaseRun — separation of duties (releaser != approver)', () => {
+  it('rejects when the releaser IS the run approver (before any provider call)', async () => {
+    // APPROVED run whose approved_by == the releasing actor → SoD violation. The
+    // check fires before loadEngine, so the injected engine (which would throw if
+    // reached) is never touched.
+    const db = makeDb({ data: baseRun({ status: 'APPROVED', approved_by: 'clerk_same' }), error: null });
+    const engineThatMustNotRun = {
+      name: 'test',
+      submitRun: async () => {
+        throw new Error('submitRun must not be called on an SoD violation');
+      },
+    } as unknown as Parameters<typeof releaseRun>[4];
+
+    await expect(releaseRun(db, 'org1', 'run1', 'clerk_same', engineThatMustNotRun)).rejects.toBeInstanceOf(
+      RunReleaserCannotApproveError,
+    );
   });
 });
 

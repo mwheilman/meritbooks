@@ -2,8 +2,11 @@
  * Lease persistence + posting (ASC 842).
  *
  *   persistLeaseWithSchedule — on human CONFIRM, compute the schedule deterministically
- *   (`buildLeaseSchedule`), insert the lease with its initial ROU asset + liability, and
- *   insert every amortization line. Writes nothing to the GL yet.
+ *   (`buildLeaseSchedule`), insert the lease with its initial ROU asset + liability,
+ *   insert every amortization line, AND post the ASC 842 commencement entry
+ *   (DR ROU asset / CR Lease liability) so the GL control accounts tie to the register
+ *   from day one. The commencement post is idempotent (stable source_ref per lease) and
+ *   fails CLOSED — if it can't post, the whole lease is rolled back.
  *
  *   recordLeasePeriod — the monthly "record this period" action. Posts the next unposted
  *   schedule line as a balanced journal entry through `postJournalEntry`, resolving every
@@ -124,7 +127,118 @@ export async function persistLeaseWithSchedule(
     throw new PostingError(`Failed to create lease schedule: ${linesErr.message}`);
   }
 
+  // Post the ASC 842 commencement entry so the GL ties to the register immediately.
+  // Fail CLOSED: if the opening JE can't post (unmapped role / no open period), roll
+  // the lease + schedule back rather than leave a subledger that can never tie out.
+  try {
+    await recordLeaseCommencement(db, orgId, userId, {
+      leaseId,
+      locationId: input.locationId,
+      rouAssetCents: schedule.rouAssetCents,
+      liabilityCents: schedule.liabilityCents,
+      entryDate: input.commencementDate,
+    });
+  } catch (e) {
+    await db.from('lease_schedule_lines').delete().eq('lease_id', leaseId);
+    await db.from('leases').delete().eq('id', leaseId);
+    throw e;
+  }
+
   return { leaseId, schedule };
+}
+
+/** Stable ref for the one-time commencement entry (idempotency guard per lease). */
+export function leaseCommencementRef(leaseId: string): string {
+  return `lease:commencement:${leaseId}`;
+}
+
+export interface RecordLeaseCommencementInput {
+  leaseId: string;
+  locationId: string;
+  /** Initial ROU asset (cents) — equals the initial liability in this model. */
+  rouAssetCents: number;
+  /** Initial lease liability (cents) = PV of the remaining payments. */
+  liabilityCents: number;
+  /** Commencement date (YYYY-MM-DD). */
+  entryDate: string;
+}
+
+export interface CommencementResult {
+  posted: boolean;
+  entryId?: string;
+  entryNumber?: string | null;
+  alreadyPosted: boolean;
+  message: string;
+}
+
+/**
+ * Post the ASC 842 initial-recognition entry for a lease: DR Right-of-Use Asset /
+ * CR Lease Liability for the initial measurement. Both legs resolve BY ROLE (ROU_ASSET,
+ * LEASE_LIABILITY) and the amounts are equal by construction, so the entry balances.
+ * Idempotent: guarded on a stable source_ref, so a re-run posts nothing and reports the
+ * existing entry. Degrades (PostingError) rather than guess an account.
+ */
+export async function recordLeaseCommencement(
+  db: DB,
+  orgId: string,
+  userId: string | null,
+  input: RecordLeaseCommencementInput,
+): Promise<CommencementResult> {
+  if (input.rouAssetCents <= 0 || input.liabilityCents <= 0) {
+    // Nothing to recognize (e.g. a fully-prepaid / zero-PV lease) — not an error.
+    return { posted: false, alreadyPosted: false, message: 'No initial ROU/liability to recognize.' };
+  }
+
+  const sourceRef = leaseCommencementRef(input.leaseId);
+  const { data: existing } = await db
+    .from('gl_entries')
+    .select('id, entry_number, status')
+    .eq('org_id', orgId)
+    .eq('source_ref', sourceRef)
+    .neq('status', 'VOIDED')
+    .limit(1)
+    .maybeSingle<{ id: string; entry_number: string | null; status: string }>();
+  if (existing) {
+    return {
+      posted: false,
+      alreadyPosted: true,
+      entryId: existing.id,
+      entryNumber: existing.entry_number,
+      message: 'Lease commencement already posted.',
+    };
+  }
+
+  const locationId = input.locationId;
+  const rouAsset = await resolveLeaseRole(db, orgId, 'ROU_ASSET', locationId);
+  const leaseLiability = await resolveLeaseRole(db, orgId, 'LEASE_LIABILITY', locationId);
+
+  const lines = [
+    { account_id: rouAsset.id, debit_cents: input.rouAssetCents, credit_cents: 0, location_id: locationId, memo: 'ROU asset — lease commencement' },
+    { account_id: leaseLiability.id, debit_cents: 0, credit_cents: input.liabilityCents, location_id: locationId, memo: 'Lease liability — commencement' },
+  ];
+
+  const je = await postJournalEntry(db, {
+    org_id: orgId,
+    location_id: locationId,
+    entry_date: input.entryDate,
+    entry_type: 'STANDARD',
+    memo: 'Lease commencement (ASC 842) — initial recognition',
+    source_module: 'LEASE',
+    source_ref: sourceRef,
+    created_by: userId,
+    lines,
+  });
+  if (!je.success || !je.entry_id) {
+    throw new PostingError(je.error ?? 'Failed to post lease commencement');
+  }
+
+  return {
+    posted: true,
+    alreadyPosted: false,
+    entryId: je.entry_id,
+    entryNumber: je.entry_number ?? null,
+    message: `Posted lease commencement (${je.entry_number ?? je.entry_id}).`,
+  };
 }
 
 export interface RecordPeriodResult {

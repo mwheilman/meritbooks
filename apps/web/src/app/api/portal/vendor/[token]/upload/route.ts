@@ -12,6 +12,13 @@ import {
   isPortalDocKind,
   PORTAL_DOC_LABEL,
 } from '@/lib/portal/vendor/tokens';
+import { sharedRateLimiter, clientIp, retryAfterSeconds } from '@/lib/security/rate-limit';
+
+// Abuse throttle for this UNAUTHENTICATED endpoint (15 MB uploads, no session).
+// Short window, generous enough that a real vendor uploading a few documents is
+// never touched; a hostile client looping uploads is capped per-token AND per-IP.
+const UPLOAD_PER_TOKEN = { windowMs: 60_000, max: 12 } as const;
+const UPLOAD_PER_IP = { windowMs: 60_000, max: 30 } as const;
 
 /**
  * POST /api/portal/vendor/[token]/upload — the ONLY write a vendor can make.
@@ -30,6 +37,21 @@ import {
  *  • The response reveals nothing about the tenant beyond a generic confirmation.
  */
 export async function POST(req: Request, { params }: { params: { token: string } }) {
+  // 0. Throttle BEFORE any work (token validation, multipart parse, storage) so a
+  //    hostile client cannot spend server/DB/storage on a flood. Keyed per-token
+  //    AND per-IP; either breach returns 429. Normal single-vendor use never hits it.
+  const ip = clientIp(req);
+  const throttle = sharedRateLimiter.checkAll([
+    { key: `vendor-upload:token:${params.token}`, rule: UPLOAD_PER_TOKEN },
+    { key: `vendor-upload:ip:${ip}`, rule: UPLOAD_PER_IP },
+  ]);
+  if (!throttle.allowed) {
+    return NextResponse.json(
+      { error: 'Too many uploads in a short time. Please wait a moment and try again.' },
+      { status: 429, headers: { 'Retry-After': String(retryAfterSeconds(throttle)) } },
+    );
+  }
+
   const admin = createAdminSupabase();
 
   // 1. Validate the token → resolve org + vendor from the row (never the client).

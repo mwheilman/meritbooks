@@ -12,10 +12,24 @@
  * Recognition posts the incremental earned amount for the period:
  *   CR Revenue (delta); DR Deferred Revenue (relieve billings-in-excess) and/or
  *   DR Unbilled Receivable / Contract Asset (earned beyond billed).
+ *
+ * ORDERING vs the unbilled-accrual service (lib/rev-rec/unbilled-accrual-service):
+ * both mechanisms can touch the contract asset (1180 / UNBILLED_RECEIVABLE), so a
+ * job must be driven by ONE of them, not both:
+ *   • THIS method-driven engine is the authoritative recognizer for jobs with a
+ *     rev-rec method — it advances `revenue_recognized_cents` and posts the P&L
+ *     revenue with its 1180/2410 balance-sheet offsets.
+ *   • The unbilled-accrual service is a POC-based *adjust-to-target* accrual for jobs
+ *     NOT under method-driven rev-rec. It nets against the EXISTING 1180 balance
+ *     (target − existing), so if it runs AFTER this engine it simply sees 1180
+ *     already at target and does nothing (action NONE) — it will not double-count the
+ *     balance-sheet asset. Do not run both as independent revenue recognizers for the
+ *     same job in the same period; pick one per job.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from './gl-posting';
+import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 
 type DB = SupabaseClient;
 
@@ -23,8 +37,11 @@ export type RevRecMethod =
   | 'PCT_COSTS_INCURRED' | 'PCT_COMPLETE' | 'COMPLETED_CONTRACT' | 'POINT_OF_SALE'
   | 'MILESTONE' | 'AS_BILLED' | 'RATABLY' | 'SUBSCRIPTION' | 'CASH';
 
-const DEFERRED_ACCT = '2410';      // Deferred Revenue (billings in excess)
-const UNBILLED_ACCT = '1180';      // Unbilled Receivable (contract asset)
+// Deferred Revenue (billings in excess) and Unbilled Receivable (contract asset)
+// are resolved by ROLE — DEFERRED_REVENUE / UNBILLED_RECEIVABLE — never by a
+// hard-coded account number, so a tenant that remaps 2410/1180 on the Account
+// Roles screen is honored (Rule 11 / posting-engine contract). The role registry's
+// standard-COA fallback is still 2410 / 1180 (see account-roles.ROLE_DEFAULT_NUMBER).
 
 export interface JobRevRecRow {
   id: string;
@@ -126,11 +143,6 @@ export function earnedToDate(
   }
 }
 
-async function acctByNumber(db: DB, orgId: string, number: string): Promise<string | null> {
-  const { data } = await db.from('accounts').select('id').eq('org_id', orgId).eq('account_number', number).limit(1).maybeSingle();
-  return (data as { id: string } | null)?.id ?? null;
-}
-
 async function revenueAccount(db: DB, orgId: string): Promise<string | null> {
   const { data } = await db.from('accounts').select('id, name').eq('org_id', orgId).eq('account_type', 'REVENUE').eq('is_active', true).order('account_number', { ascending: true });
   const rows = (data ?? []) as { id: string; name: string }[];
@@ -158,6 +170,31 @@ async function jobDeferredBalance(db: DB, orgId: string, jobId: string, deferred
 async function jobCollected(db: DB, orgId: string, jobId: string): Promise<number> {
   const { data } = await db.from('invoices').select('amount_paid_cents').eq('org_id', orgId).eq('job_id', jobId);
   return (data ?? []).reduce((s: number, r: { amount_paid_cents: number }) => s + Number(r.amount_paid_cents ?? 0), 0);
+}
+
+/**
+ * Stable per-job+period idempotency key for a recognition entry. Recognition is a
+ * once-per-period (month-end) event: one recognition JE per job per calendar month.
+ * Migration 064's UNIQUE (org_id, source_ref, entry_type) makes the DB the
+ * double-post guarantor — two concurrent recognition runs that both read the same
+ * `prior` can no longer both post; the loser fails on insert. (Mirrors the
+ * unbilled-accrual service's `unbilled_accrual:<job>:<period>` scheme.)
+ */
+export function revRecSourceRef(jobId: string, asOf: string): string {
+  return `rev_rec:${jobId}:${asOf.slice(0, 7)}`;
+}
+
+/** True if a POSTED recognition JE already exists for this job+period source_ref. */
+async function recognitionAlreadyPosted(db: DB, orgId: string, sourceRef: string): Promise<boolean> {
+  const { data } = await db
+    .from('gl_entries')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('source_ref', sourceRef)
+    .eq('status', 'POSTED')
+    .limit(1)
+    .maybeSingle();
+  return !!(data as { id: string } | null);
 }
 
 export interface RecognizeOneResult {
@@ -193,11 +230,31 @@ export async function recognizeJob(
   if (delta === 0) return base;
   if (opts.preview) return { ...base, status: 'posted' }; // preview reports what *would* post
 
-  const revenueId = await revenueAccount(db, orgId);
-  const deferredId = await acctByNumber(db, orgId, DEFERRED_ACCT);
-  const unbilledId = await acctByNumber(db, orgId, UNBILLED_ACCT);
-  if (!revenueId || !deferredId || !unbilledId) {
-    return { ...base, status: 'skipped', reason: 'Missing revenue / deferred (2410) / unbilled (1180) account' };
+  // Resolve the balance-sheet offsets by ROLE (honors a tenant's 2410/1180 remap),
+  // and the revenue account the same way the billing paths do — prefer the job's own
+  // revenue stream, else the first suitable REVENUE account.
+  let deferredId: string;
+  let unbilledId: string;
+  try {
+    deferredId = (await resolveRole(db, orgId, 'DEFERRED_REVENUE')).id;
+    unbilledId = (await resolveRole(db, orgId, 'UNBILLED_RECEIVABLE')).id;
+  } catch (e) {
+    return {
+      ...base,
+      status: 'skipped',
+      reason: e instanceof PostingError ? e.message : 'Cannot resolve deferred-revenue / unbilled-receivable roles',
+    };
+  }
+  const revenueId = job.revenue_account_id ?? (await revenueAccount(db, orgId));
+  if (!revenueId) {
+    return { ...base, status: 'skipped', reason: 'No revenue account to credit — set the job revenue account or seed a REVENUE account' };
+  }
+
+  // Idempotency: one recognition JE per job+period. The pre-check reports gracefully;
+  // migration 064's UNIQUE(org_id, source_ref, entry_type) is the hard race guarantor.
+  const sourceRef = revRecSourceRef(job.id, asOf);
+  if (await recognitionAlreadyPosted(db, orgId, sourceRef)) {
+    return { ...base, status: 'skipped', reason: `Revenue already recognized for ${asOf.slice(0, 7)} (${sourceRef})` };
   }
 
   const lines: { account_id: string; debit_cents: number; credit_cents: number; location_id: string; job_id: string; memo: string }[] = [];
@@ -223,6 +280,9 @@ export async function recognizeJob(
     memo: `Revenue recognition (${method})`,
     source_module: 'REV_REC',
     source_id: job.id,
+    // Per-job+period idempotency key. Migration 064's UNIQUE(org_id, source_ref,
+    // entry_type) is the DB double-post guarantor against concurrent recognition runs.
+    source_ref: sourceRef,
     // created_by is a uuid column; Clerk actor IDs are text and don't cast (see
     // migration 018). Record the human actor in revenue_recognition_runs.run_by
     // (text) below; the GL author follows the app-wide null-attribution pattern.

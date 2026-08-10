@@ -35,6 +35,16 @@ type DB = SupabaseClient;
 export const GAIN_ON_DISPOSAL_NUMBER = '7010';
 export const LOSS_ON_DISPOSAL_NUMBER = '8010';
 
+/**
+ * Stable idempotency key for an asset's disposal JE. Written to gl_entries.source_ref
+ * so the migration-064 partial UNIQUE (org_id, source_ref, entry_type) index is the
+ * DB-level guarantor: two concurrent disposals of the same asset can't both post the
+ * gain/loss — the second collides on this key and is refused. One disposal per asset.
+ */
+export function disposalSourceRef(assetId: string): string {
+  return `asset-disposal:${assetId}`;
+}
+
 export interface DisposeAssetInput {
   orgId: string;
   assetId: string;
@@ -292,11 +302,26 @@ export async function recordAssetDisposal(db: DB, input: DisposeAssetInput): Pro
     memo: `Asset disposal — ${asset.name}`,
     source_module: 'FIXED_ASSET',
     source_id: asset.id,
+    // Idempotency key — the migration-064 UNIQUE(org_id, source_ref, entry_type) index
+    // rejects a second disposal JE for the same asset, so a concurrent/repeat disposal
+    // can never double-post the gain/loss (the prior guard was only an app-level status
+    // read with no DB uniqueness).
+    source_ref: disposalSourceRef(asset.id),
     created_by: null,
     lines,
   });
-  if (!je.success || !je.entry_id) throw new PostingError(je.error ?? 'Failed to post disposal');
+  if (!je.success || !je.entry_id) {
+    // A unique-violation on the disposal key means the asset was already disposed
+    // (a concurrent or repeat call beat us). Surface it clearly rather than as a raw
+    // DB error — nothing double-posted.
+    if (je.error && /duplicate|unique/i.test(je.error)) {
+      throw new PostingError('Asset already disposed (a disposal entry already exists for this asset).');
+    }
+    throw new PostingError(je.error ?? 'Failed to post disposal');
+  }
 
+  // Compare-and-set: only flip an asset that is NOT already disposed. Defensive belt
+  // to the JE-level guarantor above; the two together make double-disposal impossible.
   await db
     .from('fixed_assets')
     .update({
@@ -306,7 +331,8 @@ export async function recordAssetDisposal(db: DB, input: DisposeAssetInput): Pro
       disposal_gl_entry_id: je.entry_id,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', asset.id);
+    .eq('id', asset.id)
+    .neq('status', 'DISPOSED');
 
   return {
     asset_id: asset.id,

@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/rbac/require-permission';
 import { postJournalEntrySchema } from '@/lib/validations/gl';
 import { postJournalEntry, type JournalEntryLineInput } from '@/lib/services/gl-posting';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { resolveOrgId, PostingError } from '@/lib/posting';
 
 export async function POST(request: Request) {
   // 1. Authenticate — fail CLOSED. No 'dev-user' fallback: an auth failure must
@@ -13,6 +14,12 @@ export async function POST(request: Request) {
   const authResult = await requireAuth();
   if (authResult instanceof NextResponse) return authResult;
   const { userId, orgId } = authResult;
+
+  // Never post with an empty org. Reject fast on a missing tenant claim rather than
+  // handing the posting service `org_id: ''` (which would be an unscoped write).
+  if (!orgId) {
+    return NextResponse.json({ error: 'No organization on request', code: 'NO_ORG' }, { status: 400 });
+  }
 
   // 2. Authorize — REFERENCE PATTERN for guarding money/mutation routes.
   //    Posting a journal entry requires journal_entries:post. Copy these two
@@ -39,6 +46,17 @@ export async function POST(request: Request) {
     const body = result.data;
     const supabase = createAdminSupabase();
 
+    // Resolve the tenant claim through the shared resolver (uuid passthrough or
+    // Clerk-org → Books tenant), consistent with the deposit/lifecycle routes.
+    // Fails closed on an absent/unmapped claim — never posts to an arbitrary tenant.
+    let resolvedOrgId: string;
+    try {
+      resolvedOrgId = await resolveOrgId(supabase, orgId);
+    } catch (e) {
+      const msg = e instanceof PostingError ? e.message : 'Could not resolve organization';
+      return NextResponse.json({ error: msg, code: 'NO_ORG' }, { status: 400 });
+    }
+
     // Map lines: convert null to undefined for JournalEntryLineInput compatibility
     const lines: JournalEntryLineInput[] = body.lines.map((l) => ({
       account_id: l.account_id,
@@ -54,7 +72,7 @@ export async function POST(request: Request) {
     }));
 
     const postResult = await postJournalEntry(supabase, {
-      org_id: orgId ?? '',
+      org_id: resolvedOrgId,
       location_id: body.location_id,
       entry_date: body.entry_date,
       entry_type: body.entry_type,
@@ -69,8 +87,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: postResult.error, code: 'POST_FAILED' }, { status: 400 });
     }
 
-    if (orgId) {
-      await logHumanAction(supabase, userId, orgId, {
+    if (resolvedOrgId) {
+      await logHumanAction(supabase, userId, resolvedOrgId, {
         action: 'gl.post',
         subjectTable: 'gl_entries',
         subjectId: postResult.entry_id ?? null,

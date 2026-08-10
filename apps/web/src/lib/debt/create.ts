@@ -16,6 +16,7 @@ import {
   type AmortizationSchedule,
 } from './amortization';
 import type { CreateDebtInput } from './schema';
+import { recordDebtOrigination } from './posting';
 
 type DB = SupabaseClient;
 
@@ -24,11 +25,21 @@ export interface CreateDebtResult {
   schedule: AmortizationSchedule;
 }
 
+export interface CreateDebtOptions {
+  /**
+   * Post the origination JE (DR Cash / CR Notes Payable) after persisting. Default
+   * true. The refinance path passes false — it books the liability itself via a
+   * rollover entry, so an origination post there would double-credit the liability.
+   */
+  postOrigination?: boolean;
+}
+
 export async function createDebtInstrument(
   db: DB,
   orgId: string,
   userId: string | null,
   input: CreateDebtInput,
+  opts: CreateDebtOptions = {},
 ): Promise<CreateDebtResult> {
   // Build the schedule FIRST — if the terms are impossible, fail before any write.
   const schedule = buildAmortizationSchedule({
@@ -100,6 +111,20 @@ export async function createDebtInstrument(
     // Roll back the instrument so we never leave a scheduleless shell.
     await db.from('debt_instruments').delete().eq('id', instrumentId);
     throw new AmortizationError(`Failed to write amortization schedule: ${linesError.message}`);
+  }
+
+  // Recognize the loan on the GL at origination: DR Cash / CR Notes Payable for the
+  // principal (idempotent per instrument). Fail CLOSED — if the GL can't accept the
+  // opening entry (e.g. no fiscal period), roll the whole instrument back rather than
+  // leave a subledger register that can never tie to the GL control account.
+  if (opts.postOrigination !== false) {
+    try {
+      await recordDebtOrigination(db, { orgId, instrumentId, userId });
+    } catch (e) {
+      await db.from('debt_schedule_lines').delete().eq('instrument_id', instrumentId);
+      await db.from('debt_instruments').delete().eq('id', instrumentId);
+      throw e;
+    }
   }
 
   return { id: instrumentId, schedule };

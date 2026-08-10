@@ -239,6 +239,117 @@ export async function listInsuranceSchedules(db: DB): Promise<InsuranceScheduleS
   });
 }
 
+// ─── Prepaid-insurance subledger ⇄ GL tie-out ────────────────────────────────
+//
+// The amortization schedules ARE the prepaid-insurance subledger: each ACTIVE
+// schedule's remaining balance is unconsumed prepaid premium that must still sit as
+// a DEBIT on its prepaid-insurance GL account. This mirrors the customer-deposit
+// tie-out (lib/customer-deposits/service.ts): the sum of open remainders must equal
+// the control account's GL balance. Because the amortization CR leg is resolved BY
+// ROLE (PREPAID_INSURANCE) at setup, the account we tie to is the same account the
+// premium was booked into at issuance — so drift here means the premium wasn't booked
+// to the prepaid account the schedule amortizes (the exact gap this closes).
+
+function num(v: unknown): number {
+  return typeof v === 'string' ? Number(v) : (v as number) ?? 0;
+}
+
+export interface InsuranceTieOutAccount {
+  prepaid_account_id: string;
+  prepaid_account_name: string | null;
+  /** Sum of ACTIVE schedules' remaining premium booked against this prepaid account. */
+  subledger_remaining_cents: number;
+  /** The prepaid-insurance account's net (debit) balance in the GL. */
+  gl_balance_cents: number;
+  /** subledger − GL. Zero when they tie. */
+  difference_cents: number;
+  in_balance: boolean;
+}
+
+export interface InsuranceTieOut {
+  by_account: InsuranceTieOutAccount[];
+  subledger_remaining_cents: number;
+  gl_balance_cents: number;
+  difference_cents: number;
+  in_balance: boolean;
+}
+
+/**
+ * PURE: fold ACTIVE schedules' remaining balances (grouped by prepaid account) against
+ * the prepaid accounts' GL balances into a per-account + aggregate tie-out. Unit-tested
+ * without a DB.
+ */
+export function computeInsuranceTieOut(
+  schedules: Array<Pick<InsuranceScheduleSummary, 'prepaid_account_id' | 'prepaid_account_name' | 'status' | 'remaining_cents'>>,
+  glBalanceByAccount: Map<string, number>,
+): InsuranceTieOut {
+  const remainingByAccount = new Map<string, number>();
+  const nameByAccount = new Map<string, string | null>();
+  for (const s of schedules) {
+    if (s.status !== 'ACTIVE') continue;
+    remainingByAccount.set(s.prepaid_account_id, (remainingByAccount.get(s.prepaid_account_id) ?? 0) + s.remaining_cents);
+    if (!nameByAccount.has(s.prepaid_account_id)) nameByAccount.set(s.prepaid_account_id, s.prepaid_account_name ?? null);
+  }
+
+  const acctIds = new Set<string>([...remainingByAccount.keys(), ...glBalanceByAccount.keys()]);
+  const by_account: InsuranceTieOutAccount[] = [];
+  for (const id of acctIds) {
+    const sub = remainingByAccount.get(id) ?? 0;
+    const gl = glBalanceByAccount.get(id) ?? 0;
+    const diff = sub - gl;
+    by_account.push({
+      prepaid_account_id: id,
+      prepaid_account_name: nameByAccount.get(id) ?? null,
+      subledger_remaining_cents: sub,
+      gl_balance_cents: gl,
+      difference_cents: diff,
+      in_balance: diff === 0,
+    });
+  }
+  by_account.sort((a, b) => a.prepaid_account_id.localeCompare(b.prepaid_account_id));
+
+  const subledger_remaining_cents = by_account.reduce((s, a) => s + a.subledger_remaining_cents, 0);
+  const gl_balance_cents = by_account.reduce((s, a) => s + a.gl_balance_cents, 0);
+  const difference_cents = subledger_remaining_cents - gl_balance_cents;
+  return {
+    by_account,
+    subledger_remaining_cents,
+    gl_balance_cents,
+    difference_cents,
+    in_balance: difference_cents === 0,
+  };
+}
+
+/**
+ * Compute the prepaid-insurance subledger⇄GL tie-out for the org. Reads the canonical
+ * v_trial_balance (POSTED entries only), so it always agrees with the balance sheet.
+ * Pass `schedules` to reuse an already-fetched list (avoids a second query). RLS-scoped.
+ */
+export async function getInsuranceTieOut(
+  db: DB,
+  orgId: string,
+  opts: { schedules?: InsuranceScheduleSummary[] } = {},
+): Promise<InsuranceTieOut> {
+  const schedules = opts.schedules ?? (await listInsuranceSchedules(db));
+  const active = schedules.filter((s) => s.status === 'ACTIVE');
+  const acctIds = Array.from(new Set(active.map((s) => s.prepaid_account_id)));
+
+  const glByAccount = new Map<string, number>();
+  if (acctIds.length > 0) {
+    const { data, error } = await db
+      .from('v_trial_balance')
+      .select('account_id, net_balance')
+      .eq('org_id', orgId)
+      .in('account_id', acctIds);
+    if (error) throw new InsuranceAmortizationError(error.message);
+    for (const r of (data ?? []) as { account_id: string; net_balance: unknown }[]) {
+      glByAccount.set(r.account_id, (glByAccount.get(r.account_id) ?? 0) + num(r.net_balance));
+    }
+  }
+
+  return computeInsuranceTieOut(schedules, glByAccount);
+}
+
 /** Cancel a schedule — future amortization stops; posted periods are untouched. */
 export async function cancelInsuranceSchedule(db: DB, scheduleId: string): Promise<void> {
   const { error } = await db
