@@ -16,8 +16,9 @@ import { runUnbilledAccrual } from '@/lib/rev-rec/unbilled-accrual-service';
  * and never double-counts; idempotent per job+period.
  *
  * SoD (reuses the journal_entries feature — the accrual IS a journal entry):
- *   GET  (preview / propose) → journal_entries:create   (a preparer proposes)
- *   POST (approve / post)    → journal_entries:post      (posting authority approves)
+ *   GET  (preview only, no posting) → journal_entries:view   (relaxed: any role that
+ *                                     can see the ledger may preview what WOULD accrue)
+ *   POST (approve / post)           → journal_entries:post    (posting authority approves)
  * Both fail closed. Company-scoped via location_id (a sub-filter inside tenant RLS).
  */
 
@@ -37,7 +38,9 @@ export async function GET(request: Request) {
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
-  const guard = await requirePermission(userId, 'journal_entries', 'create');
+  // Preview is read-only (no GL write), so it only needs view rights on the ledger —
+  // a view-only role (e.g. CFO) can see what would accrue. Posting stays :post-gated.
+  const guard = await requirePermission(userId, 'journal_entries', 'view');
   if (!guard.ok) return guard.response;
 
   const asOf = asOfFrom(request.url);

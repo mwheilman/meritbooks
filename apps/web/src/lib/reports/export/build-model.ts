@@ -349,6 +349,63 @@ export function buildGenericTable(
   return base(meta, meta.reportLabel, columns.length ? columns : [{ key: labelKey, label: pretty(labelKey) }], rows);
 }
 
+// ─── AR Aging (billed generic table + DISTINCT unbilled contract-asset section) ─
+interface UnbilledExportRow {
+  customerName: string;
+  jobLabel: string | null;
+  buckets: Record<string, number>;
+  totalCents: number;
+}
+interface ArAgingExportData {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data?: any[];
+  unbilled?: { rows: UnbilledExportRow[]; buckets: Record<string, number>; totalCents: number };
+  totalOutstanding?: number;
+  totalReceivablesCents?: number;
+}
+
+/**
+ * AR Aging export. The BILLED table is produced by the SAME generic projection as
+ * every other tabular report — byte-for-byte unchanged (buildGenericTable only
+ * reads `data.data`, so the extra `unbilled` key is ignored). We then APPEND the
+ * DISTINCT unbilled receivable (contract asset, acct 1180) section additively:
+ * its per-customer/job balances land in the export's balance column, followed by
+ * a Total Unbilled line and a combined Billed + Unbilled total. Nothing about the
+ * billed numbers or layout is touched.
+ */
+export function buildArAging(data: ArAgingExportData, meta: ExportMeta): StatementModel {
+  const model = buildGenericTable(data, meta);
+  const unbilled = data.unbilled;
+  if (!unbilled || unbilled.rows.length === 0) return model;
+
+  const colCount = model.columns.length;
+  const balanceIdx = (() => {
+    const i = model.columns.findIndex((c) => c.key === 'balanceCents');
+    if (i >= 0) return i;
+    const m = model.columns.findIndex((c) => c.money);
+    return m >= 0 ? m : colCount - 1;
+  })();
+  const blank = (): (number | string | null)[] => Array.from({ length: colCount }, () => null);
+  const withBalance = (cents: number): (number | string | null)[] => {
+    const v = blank();
+    v[balanceIdx] = cents;
+    return v;
+  };
+
+  const rows: StmtRow[] = [...model.rows];
+  rows.push({ kind: 'spacer', label: '', values: blank() });
+  rows.push({ kind: 'section', label: 'Unbilled Receivable (Contract Asset · Acct 1180)', values: blank() });
+  for (const r of unbilled.rows) {
+    const label = r.jobLabel ? `${r.customerName} · ${r.jobLabel}` : r.customerName;
+    rows.push({ kind: 'account', label, values: withBalance(r.totalCents), indent: 1 });
+  }
+  rows.push({ kind: 'total', label: 'Total Unbilled', values: withBalance(unbilled.totalCents) });
+  const combined = data.totalReceivablesCents ?? (data.totalOutstanding ?? 0) + unbilled.totalCents;
+  rows.push({ kind: 'total', label: 'Total Receivables (Billed + Unbilled)', values: withBalance(combined) });
+
+  return { ...model, rows };
+}
+
 // ─── Executive summary sheet (comparative statements only) ───────────────────
 /**
  * Collapse a (usually comparative) statement to its section / subtotal / total /
@@ -378,6 +435,9 @@ const STATEMENT_BUILDERS: Record<string, { url: string; build: ExportSpec['build
   cf:       { url: '/api/reports/cash-flow',        build: buildCashFlow,        query: (c) => clean({ start_date: c.sd, end_date: c.ed, location_ids: c.locIds }) },
   cf_direct:{ url: '/api/reports/cash-flow-direct', build: buildCashFlowDirect,  query: (c) => clean({ start_date: c.sd, end_date: c.ed, location_ids: c.locIds }) },
   tb:       { url: '/api/gl/trial-balance',         build: buildTrialBalance,    query: (c) => clean({ location_ids: c.locIds }) },
+  // AR Aging gets a bespoke builder so the export carries the DISTINCT unbilled
+  // contract-asset section beneath billed AR. Billed projection is unchanged.
+  ar_aging: { url: '/api/reports/ar-aging',         build: buildArAging,         query: (c) => clean({ location_ids: c.locIds, end_date: c.ed }) },
 };
 
 /** Every other report → its endpoint (mirrors report-viewer's urlMap) + generic builder. */

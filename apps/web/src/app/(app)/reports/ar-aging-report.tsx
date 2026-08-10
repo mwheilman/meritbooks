@@ -18,10 +18,27 @@ interface ArAgingRow {
   locationName: string;
 }
 
+interface UnbilledAgingRow {
+  customerName: string;
+  jobLabel: string | null;
+  buckets: Record<string, number>;
+  totalCents: number;
+}
+
+interface UnbilledSection {
+  rows: UnbilledAgingRow[];
+  buckets: Record<string, number>;
+  totalCents: number;
+  hasAttribution: boolean;
+}
+
 interface ArAgingData {
   data: ArAgingRow[];
   buckets: Record<string, { count: number; totalCents: number }>;
   totalOutstanding: number;
+  unbilled?: UnbilledSection;
+  asOf?: string;
+  totalReceivablesCents?: number;
 }
 
 const BUCKET_ORDER = ['CURRENT', '1-30', '31-60', '61-90', '90+'];
@@ -39,9 +56,16 @@ export function ArAgingReport({ params }: { params: Record<string, string> }) {
 
   if (isLoading) return <div className="card p-12 flex items-center justify-center"><Loader2 size={24} className="animate-spin text-slate-500" /></div>;
   if (error) return <div className="card p-8 text-center"><AlertCircle size={24} className="mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{String(error)}</p></div>;
-  if (!data || data.data.length === 0) return <div className="card p-8 text-center text-sm text-slate-500">No outstanding receivables.</div>;
+
+  const unbilled = data?.unbilled;
+  const hasBilled = !!data && data.data.length > 0;
+  const hasUnbilled = !!unbilled && unbilled.rows.length > 0;
+  if (!data || (!hasBilled && !hasUnbilled)) {
+    return <div className="card p-8 text-center text-sm text-slate-500">No outstanding receivables.</div>;
+  }
 
   const { data: rows, buckets, totalOutstanding } = data;
+  const combinedTotal = data.totalReceivablesCents ?? (totalOutstanding + (unbilled?.totalCents ?? 0));
   const totalForBar = Math.max(totalOutstanding, 1);
 
   // Group by customer
@@ -55,6 +79,7 @@ export function ArAgingReport({ params }: { params: Record<string, string> }) {
 
   return (
     <div className="space-y-4">
+      {hasBilled && (<>
       {/* Summary */}
       <div className="card p-5">
         <div className="flex items-center justify-between mb-3">
@@ -137,6 +162,98 @@ export function ArAgingReport({ params }: { params: Record<string, string> }) {
           </tfoot>
         </table>
       </div>
+      </>)}
+
+      {/* ─── Unbilled receivable (contract asset, acct 1180) ─── */}
+      {/* A DISTINCT section, sourced from the GL — NOT the invoice subledger — so */}
+      {/* billed trade AR above stays byte-for-byte the ledger's invoice tie-out. */}
+      <UnbilledSectionCard unbilled={unbilled} asOf={data.asOf} />
+
+      {/* ─── Combined total (billed + unbilled) ─── */}
+      {hasBilled && hasUnbilled && (
+        <div className="card p-4 flex items-center justify-between">
+          <p className="text-sm font-semibold text-white">Total Receivables (billed + unbilled)</p>
+          <p className="font-mono text-base font-bold text-emerald-400 tabular-nums">{formatMoney(combinedTotal)}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UNBILLED RECEIVABLE (CONTRACT ASSET) SECTION
+// ═══════════════════════════════════════════════════════════════
+
+function UnbilledSectionCard({ unbilled, asOf }: { unbilled?: UnbilledSection; asOf?: string }) {
+  // Zero balance → a clear empty state, never an error. The billed section above
+  // (when present) still renders; this simply reports that nothing is unbilled.
+  if (!unbilled || unbilled.rows.length === 0) {
+    return (
+      <div className="card p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <h3 className="text-sm font-semibold text-white">Unbilled Receivable (Contract Asset)</h3>
+          <span className="px-1.5 py-0.5 text-[10px] rounded bg-indigo-500/10 text-indigo-400">Acct 1180 · GL</span>
+        </div>
+        <p className="text-xs text-slate-500">No unbilled receivable — every job's earned revenue has been billed.</p>
+      </div>
+    );
+  }
+
+  const { rows, buckets, totalCents } = unbilled;
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-white">Unbilled Receivable (Contract Asset)</h3>
+          <span className="px-1.5 py-0.5 text-[10px] rounded bg-indigo-500/10 text-indigo-400">Acct 1180 · GL</span>
+        </div>
+        <p className="text-[11px] text-slate-500">
+          Earned but not yet billed, aged by accrual month{asOf ? ` · as of ${asOf}` : ''}
+        </p>
+      </div>
+      <table className="w-full text-sm">
+        <caption className="sr-only">Unbilled receivable (contract asset) aged by the month the revenue was accrued</caption>
+        <thead>
+          <tr className="border-b border-slate-800">
+            <th scope="col" className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Customer / Job</th>
+            {BUCKET_ORDER.map((b) => (
+              <th key={b} scope="col" className={clsx('px-3 py-2.5 text-right text-2xs font-semibold uppercase w-24', BUCKET_TEXT[b])}>
+                {b === 'CURRENT' ? 'Current' : b}
+              </th>
+            ))}
+            <th scope="col" className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-28">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={`${row.customerName}-${row.jobLabel ?? ''}-${i}`} className="hover:bg-slate-800/20 border-b border-slate-800/30">
+              <td className="px-4 py-2 text-xs">
+                <span className="font-medium text-white">{row.customerName}</span>
+                {row.jobLabel && <span className="text-slate-500"> · {row.jobLabel}</span>}
+              </td>
+              {BUCKET_ORDER.map((b) => {
+                const v = row.buckets[b] ?? 0;
+                return (
+                  <td key={b} className={clsx('px-3 py-2 text-right text-xs font-mono tabular-nums', v !== 0 ? BUCKET_TEXT[b] : 'text-slate-700')}>
+                    {v !== 0 ? formatMoney(v) : '—'}
+                  </td>
+                );
+              })}
+              <td className="px-4 py-2 text-right text-xs font-mono tabular-nums font-semibold text-white">{formatMoney(row.totalCents)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-slate-700 bg-slate-800/30">
+            <td className="px-4 py-2.5 text-sm font-semibold text-white">Total Unbilled</td>
+            {BUCKET_ORDER.map((b) => (
+              <td key={b} className={clsx('px-3 py-2.5 text-right text-xs font-mono tabular-nums font-semibold', BUCKET_TEXT[b])}>{formatMoney(buckets[b] ?? 0)}</td>
+            ))}
+            <td className="px-4 py-2.5 text-right text-sm font-mono tabular-nums font-bold text-white">{formatMoney(totalCents)}</td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }
