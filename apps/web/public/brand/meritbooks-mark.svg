@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="MeritBooks mark">
+  <!-- The Total: three entry bars (right-aligned), a subtotal rule, a grand-total double-rule -->
+  <rect x="40" y="19" width="48" height="10" rx="2" fill="#10b981"/>
+  <rect x="24" y="35" width="64" height="10" rx="2" fill="#10b981"/>
+  <rect x="52" y="51" width="36" height="10" rx="2" fill="#10b981"/>
+  <rect x="16" y="66" width="72" height="4" rx="1" fill="#059669"/>
+  <rect x="16" y="76" width="72" height="4" rx="1" fill="#34d399"/>
+  <rect x="16" y="82" width="72" height="4" rx="1" fill="#34d399"/>
+</svg>

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -9,6 +9,37 @@
     --color-brand: 16 185 129; /* emerald-500 */
     --sidebar-width: 260px;
     --header-height: 56px;
+
+    /* ── MeritBooks brand tokens (drop-in from MeritBooks-Brand-Tokens.md) ──
+       Single source of truth for raw CSS (ledger utilities, inline styles).
+       Tailwind tokens in tailwind.config.ts mirror these exact values. */
+    --em: #10b981;
+    --em-bright: #34d399;
+    --em-deep: #059669;
+    --bg: #0a0f0d;
+    --bg-alt: #0c120f;
+    --surface: #121a16;
+    --surface-2: #0e1512;
+    --elevated: #18211c;
+    --hairline: #232c27;
+    --hairline-2: #2c362f;
+    --text-hi: #edf2ef;
+    --text: #aeb8b2;
+    --text-mid: #7e8983;
+    --text-dim: #7c877f;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --red-fig: #f87171;
+    --blue: #3b82f6;
+    --indigo: #818cf8;
+    --pos: #34d399;
+    --ink-on-em: #05221a;
+    --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --radius-sm: 7px;
+    --ease-brand: cubic-bezier(0.2, 0.6, 0.2, 1);
   }
 
   html {
@@ -17,7 +48,32 @@
   }
 
   body {
-    @apply bg-surface-950 text-slate-200;
+    /* Brand page background (--bg) + body text (--text). */
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font-display);
+  }
+
+  /* Numbers are the product: every mono run defaults to aligned tabular
+     figures so ledger columns line up without per-cell classes. */
+  .font-mono,
+  code,
+  kbd,
+  samp,
+  pre {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Reduced motion honored globally — show final state, no transforms. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 
   /* Scrollbar styling */
@@ -143,5 +199,38 @@
   }
   .animate-in {
     animation: slide-up 0.3s ease-out both;
+  }
+
+  /* ── Ledger utilities (MeritBooks-Platform-Design-Criteria.md §3 Tables) ──
+     Reusable building blocks for the signature ledger pattern. */
+
+  /* Mono figure cell: JetBrains Mono, tabular, right-aligned. */
+  .mono-fig {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  /* Negative figures: red-fig. Parentheses are applied in JS/formatting;
+     this class carries the color. */
+  .fig-neg {
+    color: var(--red-fig);
+  }
+
+  /* Positive figures: em-bright. */
+  .fig-pos {
+    color: var(--pos);
+  }
+
+  /* The balanced grand-total mark — the accountant's double-rule and the
+     logo motif: a 2px emerald rule above and a 2px emerald rule below the
+     total, ~5px apart. Use only for a balanced / final total row. */
+  .ledger-total {
+    color: var(--text-hi);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    border-top: 2px solid var(--em);
+    border-bottom: 2px solid var(--em);
+    box-shadow: inset 0 -5px 0 -3px var(--em);
   }
 }

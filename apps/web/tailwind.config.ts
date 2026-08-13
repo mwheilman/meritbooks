@@ -11,25 +11,54 @@ const config: Config = {
           100: '#d1fae5',
           200: '#a7f3d0',
           300: '#6ee7b7',
-          400: '#34d399',
-          500: '#10b981', // primary emerald
-          600: '#059669',
+          400: '#34d399', // = --em-bright
+          500: '#10b981', // primary emerald (= --em)
+          600: '#059669', // = --em-deep
           700: '#047857',
           800: '#065f46',
           900: '#064e3b',
           950: '#022c22',
         },
+        // ── Brand emerald aliases (MeritBooks-Brand-Tokens.md §Brand) ───────
+        // Semantic emerald names so markup can read intent: `bg-em`, `text-em-bright`.
+        em: {
+          DEFAULT: '#10b981', // --em: primary. Buttons, links, active, ledger accent.
+          bright: '#34d399', // --em-bright: positive figures, hover, grand-total double-rule.
+          deep: '#059669', // --em-deep: subtotal rule, pressed, emerald-context dividers.
+        },
+        // ── Surfaces (MeritBooks brand — green-tinted near-black) ────────────
+        // The app's existing dark steps are REMAPPED onto the brand surface
+        // tokens so every screen re-skins without a per-file rewrite. Light
+        // steps (0–300) are retained for print/document surfaces.
         surface: {
           0: '#ffffff',
           50: '#f8fafc',
           100: '#f1f5f9',
           200: '#e2e8f0',
           300: '#cbd5e1',
-          // Dark mode surfaces
-          800: '#1e293b',
-          850: '#172033',
-          900: '#0f172a',
-          950: '#020617',
+          // Dark surfaces → brand near-black ramp
+          800: '#18211C', // --elevated  (raised / hover surfaces)
+          850: '#0E1512', // --surface-2 (insets, wells, code blocks)
+          900: '#121A16', // --surface   (cards, panels)
+          950: '#0A0F0D', // --bg        (page / app background)
+        },
+        // ── Neutrals: green-tinted ramp (REMAPS Tailwind slate) ─────────────
+        // Components reference `slate-*` ~6.7k times for text and hairlines.
+        // Remapping the palette re-skins them all to the brand's warm-green
+        // greys and hairline borders while every existing class name still
+        // resolves. Luminance ordering is preserved so contrast is unchanged.
+        slate: {
+          50: '#EDF2EF', // ≈ --text-hi
+          100: '#E0E6E2',
+          200: '#CBD3CE',
+          300: '#AEB8B2', // = --text (body)
+          400: '#97A19B',
+          500: '#7E8983', // = --text-mid (secondary/labels — reading floor)
+          600: '#4A544E',
+          700: '#2C362F', // = --hairline-2 (stronger borders, inputs, secondary btn hover)
+          800: '#232C27', // = --hairline (default borders/dividers)
+          900: '#121A16', // = --surface
+          950: '#0A0F0D', // = --bg
         },
         // ── Semantic roles (see docs/DESIGN-SYSTEM.md §Color) ──────────────
         // Meaning-bearing colors. Prefer these over raw palette utilities so
@@ -41,6 +70,26 @@ const config: Config = {
         warning: { DEFAULT: '#f59e0b', fg: '#fbbf24' }, // needs review, soft-close
         info: { DEFAULT: '#3b82f6', fg: '#60a5fa' }, // neutral status, in-progress
         ai: { DEFAULT: '#6366f1', fg: '#818cf8' }, // AI-generated / suggested
+        // ── Brand text tokens (MeritBooks-Brand-Tokens.md §Text) ────────────
+        // Warm-green text ramp. `text-ink` = body; `text-ink-hi` = headings;
+        // `text-ink-mid` = labels; `text-ink-dim` = captions; `ink-on-em` =
+        // text/icons ON an emerald fill (never pure white on emerald).
+        ink: {
+          hi: '#EDF2EF', // --text-hi   (headings, high-emphasis)
+          DEFAULT: '#AEB8B2', // --text      (body)
+          mid: '#7E8983', // --text-mid  (secondary / labels)
+          dim: '#7C877F', // --text-dim  (captions / footnotes)
+          'on-em': '#05221A', // --ink-on-em (on emerald fills)
+        },
+        // Structural hairlines (borders/dividers) as named tokens.
+        hairline: {
+          DEFAULT: '#232C27', // --hairline
+          strong: '#2C362F', // --hairline-2
+        },
+        // Functional-accent figure tints (meaning only, never decoration).
+        'red-fig': '#f87171', // negative figures (parentheses)
+        pos: '#34d399', // positive figures (= --em-bright)
+        'ink-on-em': '#05221A', // flat alias of ink.on-em
       },
       fontFamily: {
         sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
@@ -75,6 +124,10 @@ const config: Config = {
       },
       borderRadius: {
         '4xl': '2rem',
+        // ── Brand radii (MeritBooks-Brand-Tokens.md §Shape) ─────────────────
+        'brand-sm': '7px', // --radius-sm: chips, small controls
+        brand: '10px', // --radius:    buttons, inputs
+        'brand-lg': '14px', // --radius-lg: cards, panels
       },
       boxShadow: {
         'glow-sm': '0 0 10px -3px rgba(16, 185, 129, 0.3)',

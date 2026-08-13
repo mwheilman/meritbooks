@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="MeritBooks mark">
+  <!-- Single-color (mono) mark: use on emerald, photography, or where one ink is required. Recolor `fill` as needed. -->
+  <g fill="#FFFFFF">
+    <rect x="40" y="19" width="48" height="10" rx="2"/>
+    <rect x="24" y="35" width="64" height="10" rx="2"/>
+    <rect x="52" y="51" width="36" height="10" rx="2"/>
+    <rect x="16" y="66" width="72" height="4" rx="1" opacity="0.72"/>
+    <rect x="16" y="76" width="72" height="4" rx="1"/>
+    <rect x="16" y="82" width="72" height="4" rx="1"/>
+  </g>
+</svg>

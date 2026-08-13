@@ -53,19 +53,24 @@ export function Sidebar() {
       {/* Logo */}
       <div className="flex h-[var(--header-height)] items-center justify-between px-4 border-b border-slate-800">
         {!collapsed && (
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-lg bg-brand-500 flex items-center justify-center">
-              <span className="text-xs font-bold text-white">M</span>
-            </div>
-            <span className="text-sm font-semibold text-white tracking-tight">
-              Merit<span className="text-brand-400">Books</span>
-            </span>
+          <Link href="/dashboard" className="flex items-center" aria-label="MeritBooks">
+            {/* Brand dark lockup (mark + wordmark). Min 120px wide per brand
+                clearspace rules; ~h-7 keeps it ≥120px at the 4.3:1 aspect. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/meritbooks-logo-dark.svg"
+              alt="MeritBooks"
+              className="h-7 w-auto"
+            />
           </Link>
         )}
         {collapsed && (
-          <div className="mx-auto h-7 w-7 rounded-lg bg-brand-500 flex items-center justify-center">
-            <span className="text-xs font-bold text-white">M</span>
-          </div>
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src="/brand/meritbooks-mark.svg"
+            alt="MeritBooks"
+            className="mx-auto h-6 w-6"
+          />
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}

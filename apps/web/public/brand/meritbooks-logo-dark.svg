@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 100" width="430" height="100" role="img" aria-label="MeritBooks">
+  <g>
+    <rect x="40" y="19" width="48" height="10" rx="2" fill="#10b981"/>
+    <rect x="24" y="35" width="64" height="10" rx="2" fill="#10b981"/>
+    <rect x="52" y="51" width="36" height="10" rx="2" fill="#10b981"/>
+    <rect x="16" y="66" width="72" height="4" rx="1" fill="#059669"/>
+    <rect x="16" y="76" width="72" height="4" rx="1" fill="#34d399"/>
+    <rect x="16" y="82" width="72" height="4" rx="1" fill="#34d399"/>
+  </g>
+  <text x="118" y="63" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="46" letter-spacing="-1">
+    <tspan fill="#EDF2EF">Merit</tspan><tspan fill="#10b981">Books</tspan>
+  </text>
+</svg>
