@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MeritBooks — Onboarding experience (prototype)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0f14; --card:#111827; --card2:#161f2e; --line:#1f2937; --line2:#2b3648;
+    --ink:#e6edf5; --ink2:#9fb0c3; --ink3:#6b7c92; --emer:#10b981; --emer-d:#04120b;
+    --indigo:#8b93f8; --amber:#f5b74e; --red:#f0715f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  .mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;}
+  .wrap{max-width:720px;margin:0 auto;padding:28px 20px 80px;}
+  .brand{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--emer);font-weight:600;}
+  .bar{display:flex;gap:6px;margin:14px 0 26px;}
+  .seg{height:4px;flex:1;border-radius:99px;background:var(--line);transition:.3s;}
+  .seg.on{background:var(--emer);}
+  h1{font-size:26px;line-height:1.25;font-weight:600;margin:0 0 6px;letter-spacing:-.01em;}
+  h2{font-size:19px;font-weight:600;margin:0 0 4px;}
+  .sub{color:var(--ink2);font-size:14.5px;line-height:1.6;margin:0 0 20px;max-width:56ch;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px;}
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px;}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 16px;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:12px;}
+  .tile:hover{border-color:var(--line2);background:var(--card2);transform:translateY(-1px);}
+  .tile.sel{border-color:var(--emer);background:rgba(16,185,129,.06);}
+  .tile .ic{width:34px;height:34px;border-radius:9px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:var(--ink);}
+  .tile .t{font-weight:600;font-size:14.5px;}
+  .tile .d{font-size:12px;color:var(--ink3);}
+  .aibar{display:flex;gap:11px;align-items:flex-start;background:rgba(139,147,248,.09);border:1px solid rgba(139,147,248,.22);border-radius:12px;padding:13px 15px;margin-bottom:16px;}
+  .aibar .lab{color:var(--indigo);font-weight:700;font-size:12px;flex:0 0 auto;letter-spacing:.03em;}
+  .aibar .msg{color:#c9cdf6;font-size:13.5px;line-height:1.55;}
+  .row{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);font-size:14px;}
+  .row:last-child{border-bottom:none;}
+  .k{color:var(--ink2);} .v{color:var(--ink);text-align:right;font-weight:500;}
+  .chk{color:var(--emer);font-weight:600;font-size:12px;}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+  .dot.hi{background:var(--emer);} .dot.mid{background:var(--amber);}
+  .prop{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:11px;margin-bottom:8px;background:var(--card2);}
+  .prop .p1{font-size:13.5px;} .prop .p2{font-size:12px;color:var(--ink3);margin-top:2px;}
+  .pill{font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;white-space:nowrap;}
+  .pill.hi{background:rgba(16,185,129,.12);color:var(--emer);} .pill.mid{background:rgba(245,183,78,.12);color:var(--amber);}
+  .accept{font-size:12px;font-weight:600;color:var(--emer-d);background:var(--emer);border:none;border-radius:8px;padding:6px 12px;cursor:pointer;}
+  .tieout{text-align:center;padding:34px 20px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.05);border-radius:16px;}
+  .tieout .big{font-size:22px;font-weight:600;color:var(--emer);margin-bottom:12px;}
+  .tieout .eq{font-size:20px;letter-spacing:.02em;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+  .board{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .bcard{border:1px solid var(--line);border-radius:13px;padding:14px 15px;background:var(--card);}
+  .bcard .bt{font-weight:600;font-size:14px;display:flex;justify-content:space-between;align-items:center;}
+  .bcard .bd{font-size:12.5px;color:var(--ink3);margin-top:5px;line-height:1.5;}
+  .tag{font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:99px;}
+  .tag.done{background:rgba(16,185,129,.12);color:var(--emer);}
+  .tag.det{background:rgba(139,147,248,.14);color:var(--indigo);}
+  .tag.later{background:var(--card2);color:var(--ink3);}
+  .foot{display:flex;justify-content:space-between;align-items:center;margin-top:26px;}
+  .btn{font-size:14px;font-weight:600;border-radius:11px;padding:11px 20px;cursor:pointer;border:1px solid var(--line2);background:transparent;color:var(--ink);transition:.15s;}
+  .btn:hover{background:var(--card2);}
+  .btn.pri{background:var(--emer);color:var(--emer-d);border-color:var(--emer);}
+  .btn.pri:hover{background:#28c793;}
+  .btn.ghost{border:none;color:var(--ink3);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .skip{font-size:12.5px;color:var(--ink3);text-decoration:none;}
+  .ing{display:flex;gap:10px;align-items:center;padding:9px 0;font-size:14px;color:var(--ink2);opacity:0;transform:translateY(4px);transition:.4s;}
+  .ing.show{opacity:1;transform:none;color:var(--ink);}
+  .ing .ok{color:var(--emer);font-weight:700;}
+  .muted{color:var(--ink3);font-size:12.5px;}
+  .hd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;}
+  .step{display:none;} .step.active{display:block;animation:fade .35s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media(max-width:560px){.tiles,.grid3,.board{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">MeritBooks</div>
+  <div class="bar" id="bar"></div>
+
+  <!-- 0 · Source -->
+  <section class="step active" data-step="0">
+    <h1>Let's set up Artistry Homes.</h1>
+    <p class="sub">First question — and almost the only one: where do your books live today? Connect them or drop your files, and we'll bring everything over. You review, you don't re-enter.</p>
+    <div class="tiles">
+      <div class="tile" onclick="pick(this,true)"><div class="ic">qb</div><div><div class="t">QuickBooks</div><div class="d">Connect &amp; import</div></div></div>
+      <div class="tile" onclick="pick(this,true)"><div class="ic">X</div><div><div class="t">Xero</div><div class="d">Connect &amp; import</div></div></div>
+      <div class="tile" onclick="pick(this,true)"><div class="ic">S</div><div><div class="t">Sage</div><div class="d">Connect &amp; import</div></div></div>
+      <div class="tile" onclick="pick(this,true)"><div class="ic">⤒</div><div><div class="t">Upload files</div><div class="d">Trial balance / exports</div></div></div>
+      <div class="tile" onclick="pick(this,false)"><div class="ic">✦</div><div><div class="t">Start fresh</div><div class="d">New books, no import</div></div></div>
+    </div>
+    <p class="muted" style="margin-top:16px">Pick any source to continue — this prototype walks the QuickBooks path for a homebuilder.</p>
+  </section>
+
+  <!-- 1 · Ingesting -->
+  <section class="step" data-step="1">
+    <h1>Bringing your books over…</h1>
+    <p class="sub">We're reading Artistry's data and proposing a complete setup. This runs in the background — you can leave and we'll email you when it's ready to review.</p>
+    <div class="card">
+      <div class="ing" id="i0"><span class="ok">✓</span> Read chart of accounts — <span class="mono">214</span> accounts found</div>
+      <div class="ing" id="i1"><span class="ok">✓</span> Mapped <span class="mono">212</span> to MeritBooks roles &nbsp;·&nbsp; <span style="color:var(--amber)">2</span> need a look</div>
+      <div class="ing" id="i2"><span class="ok">✓</span> Pulled customers &amp; vendors — <span class="mono">146</span> customers, <span class="mono">83</span> vendors</div>
+      <div class="ing" id="i3"><span class="ok">✓</span> Pulled open A/R and A/P aging</div>
+      <div class="ing" id="i4"><span class="ok">✓</span> Loaded opening trial balance &nbsp;·&nbsp; found <span class="mono">3</span> bank accounts</div>
+      <div class="ing" id="i5"><span class="ok">✓</span> Detected <span class="mono">2</span> loans and <span class="mono">1</span> lease to import</div>
+    </div>
+  </section>
+
+  <!-- 2 · Company confirm -->
+  <section class="step" data-step="2">
+    <div class="hd"><h2>Confirm the company</h2><span class="muted">Everything below is pre-filled — just check it.</span></div>
+    <div class="aibar"><span class="lab">AI</span><span class="msg">You build homes, so I set revenue recognition to <b>accrual, % of costs incurred</b> — the contractor standard. Change it if your contracts work differently.</span></div>
+    <div class="card">
+      <div class="row"><span class="k">Legal name</span><span class="v">Artistry Homes, LLC</span></div>
+      <div class="row"><span class="k">EIN</span><span class="v mono">**-***4021</span></div>
+      <div class="row"><span class="k">Fiscal year start</span><span class="v">January</span></div>
+      <div class="row"><span class="k">Industry</span><span class="v">Residential homebuilder</span></div>
+      <div class="row"><span class="k">Basis</span><span class="v">Accrual</span></div>
+      <div class="row"><span class="k">Revenue recognition</span><span class="v">% of costs incurred <span class="chk">✓ detected</span></span></div>
+    </div>
+  </section>
+
+  <!-- 3 · COA review -->
+  <section class="step" data-step="3">
+    <div class="hd"><h2>Chart of accounts</h2><span class="muted"><span class="mono">212</span> mapped confidently · <span style="color:var(--amber)">2</span> need you</span></div>
+    <p class="sub" style="margin-bottom:14px">We matched your accounts to MeritBooks roles. Accept the confident ones in bulk; only the two ambiguous ones need a look.</p>
+    <div class="prop"><div><div class="p1"><span class="dot mid"></span>4150 · Draw Income</div><div class="p2">Why: name is ambiguous between Revenue and a contra-draw</div></div><span class="pill mid">Worth a look</span></div>
+    <div class="prop"><div><div class="p1"><span class="dot mid"></span>1450 · Costs in Excess</div><div class="p2">Proposed: Unbilled Receivable / Contract Asset (1180)</div></div><button class="accept" onclick="this.textContent='Accepted ✓';this.style.opacity=.6">Accept</button></div>
+    <div class="prop" style="opacity:.7"><div><div class="p1"><span class="dot hi"></span>4100 · Construction Revenue → <b>Revenue (contract)</b></div></div><span class="pill hi">High</span></div>
+    <div class="prop" style="opacity:.7"><div><div class="p1"><span class="dot hi"></span>1100 · Accounts Receivable → <b>A/R control</b></div></div><span class="pill hi">High</span></div>
+    <p class="muted" style="margin-top:6px">+ 208 more mapped at high confidence — <a href="#" class="skip" onclick="return false">accept all</a></p>
+  </section>
+
+  <!-- 4 · Tie-out -->
+  <section class="step" data-step="4">
+    <h2 style="margin-bottom:14px">Opening balances</h2>
+    <div class="tieout">
+      <div class="big">Balanced to the penny. ✓</div>
+      <div class="eq mono">$4,812,660.14 &nbsp;=&nbsp; $4,812,660.14</div>
+      <div class="muted" style="margin-top:10px">Total debits = total credits · Assets = Liabilities + Equity</div>
+    </div>
+    <p class="sub" style="margin-top:18px">Your opening books are correct. This posts as one balanced entry — <a href="#" class="skip" onclick="return false">review the journal entry</a>.</p>
+  </section>
+
+  <!-- 5 · Subledgers foot -->
+  <section class="step" data-step="5">
+    <div class="hd"><h2>Customers &amp; vendors</h2><span class="muted">Pulled with your books — and they foot.</span></div>
+    <p class="sub" style="margin-bottom:14px">The lists came over with the balances. We proved the detail matches the general ledger, so nothing is missing.</p>
+    <div class="card" style="margin-bottom:12px">
+      <div class="row"><span class="k">Customers imported</span><span class="v mono">146</span></div>
+      <div class="row"><span class="k">Open A/R detail</span><span class="v mono">$1,204,880</span></div>
+      <div class="row"><span class="k">A/R control (1100)</span><span class="v"><span class="mono">$1,204,880</span> <span class="chk">✓ foots</span></span></div>
+    </div>
+    <div class="card">
+      <div class="row"><span class="k">Vendors imported</span><span class="v mono">83</span></div>
+      <div class="row"><span class="k">Open A/P detail</span><span class="v mono">$687,204</span></div>
+      <div class="row"><span class="k">A/P control</span><span class="v"><span class="mono">$687,204</span> <span class="chk">✓ foots</span></span></div>
+    </div>
+  </section>
+
+  <!-- 6 · Jobs / WIP -->
+  <section class="step" data-step="6">
+    <div class="hd"><h2>Jobs &amp; WIP</h2><span class="muted">The part QuickBooks doesn't hold.</span></div>
+    <div class="aibar"><span class="lab">AI</span><span class="msg">Your contracts and cost budgets live in your job-cost system. Connect it or drop your WIP schedule &amp; contracts — I'll build the jobs, EAC, and over/under-billing, then tie it to your books.</span></div>
+    <div class="tiles" style="margin-bottom:14px">
+      <div class="tile" onclick="pick(this,true)"><div class="ic">⤒</div><div><div class="t">Drop WIP schedule</div><div class="d">CSV / PDF · we parse it</div></div></div>
+      <div class="tile" onclick="pick(this,true)"><div class="ic">◫</div><div><div class="t">Drop contracts</div><div class="d">Contract value + change orders</div></div></div>
+    </div>
+    <div class="card">
+      <div class="row"><span class="k">Lot 214 · Maple Grove</span><span class="v">earned <span class="mono">$412k</span> · billed <span class="mono">$380k</span> · <span style="color:var(--emer)">underbilled $32k</span></span></div>
+      <div class="row"><span class="k">Lot 118 · Cedar Ridge</span><span class="v">earned <span class="mono">$205k</span> · billed <span class="mono">$240k</span> · <span style="color:var(--amber)">overbilled $35k</span></span></div>
+      <div class="row"><span class="k">WIP ties to G/L</span><span class="v"><span class="chk">✓ unbilled → 1180 · billings-in-excess → 2410</span></span></div>
+    </div>
+  </section>
+
+  <!-- 7 · Setup Home board -->
+  <section class="step" data-step="7">
+    <div class="hd"><h2>You're ready to operate.</h2><span class="muted">The rest is optional — add anytime.</span></div>
+    <p class="sub" style="margin-bottom:16px">Your books are live and tied out. Here's everything else, on your setup board — add each when you're ready, or never if it doesn't apply. Nothing here blocks you.</p>
+    <div class="board">
+      <div class="bcard"><div class="bt">Debt &amp; loans <span class="tag det">Detected · review</span></div><div class="bd">We found 2 loans in your import — drop the agreements and we'll build the schedules + covenants.</div></div>
+      <div class="bcard"><div class="bt">Leases <span class="tag det">Detected · review</span></div><div class="bd">1 lease detected — drop the PDF for the ROU asset + liability.</div></div>
+      <div class="bcard"><div class="bt">Fixed assets <span class="tag later">Add later</span></div><div class="bd">Drop a register or capex invoices to build depreciation.</div></div>
+      <div class="bcard"><div class="bt">Equity / cap table <span class="tag later">Add later</span></div><div class="bd">Owners, units, contributions — drop the operating agreement.</div></div>
+      <div class="bcard"><div class="bt">Sales tax <span class="tag later">Add later</span></div><div class="bd">Register jurisdictions &amp; filing frequency.</div></div>
+      <div class="bcard"><div class="bt">Team <span class="tag done">Done ✓</span></div><div class="bd">You're set up. Invite more anytime.</div></div>
+    </div>
+  </section>
+
+  <!-- 8 · Live -->
+  <section class="step" data-step="8">
+    <div class="tieout" style="border-color:rgba(16,185,129,.3)">
+      <div class="big">Artistry Homes is live. 🎉</div>
+      <div class="muted" style="max-width:44ch;margin:0 auto">Books imported, balanced to the penny, subledgers footed, WIP tied out.</div>
+    </div>
+    <p class="sub" style="margin-top:18px">We'll drop you into Artistry's workspace. Your <b>Conversion Reconciliation</b> report is ready — opening balance sheet, A/R aging, A/P aging, and WIP, MeritBooks vs. QuickBooks, variance column all zero. That's what you hold next to QuickBooks during the parallel month.</p>
+  </section>
+
+  <div class="foot">
+    <button class="btn ghost" id="back" onclick="go(-1)">Back</button>
+    <div style="display:flex;gap:14px;align-items:center">
+      <a href="#" class="skip" id="skip" onclick="go(1);return false">Skip — add later</a>
+      <button class="btn pri" id="next" onclick="go(1)">Continue</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var cur=0, TOTAL=9, chose=false;
+  var bar=document.getElementById('bar');
+  for(var i=0;i<TOTAL;i++){var s=document.createElement('div');s.className='seg';bar.appendChild(s);}
+  var segs=bar.children;
+  function render(){
+    document.querySelectorAll('.step').forEach(function(el){el.classList.toggle('active', +el.dataset.step===cur);});
+    for(var i=0;i<TOTAL;i++){segs[i].classList.toggle('on', i<=cur);}
+    document.getElementById('back').style.visibility = cur===0?'hidden':'visible';
+    var next=document.getElementById('next'), skip=document.getElementById('skip');
+    next.textContent = cur===0?'Continue' : cur===4?'Looks right ✓' : cur===7?'Finish & go live' : cur===8?'Enter Artistry Homes':'Looks right ✓';
+    next.disabled = (cur===0 && !chose);
+    // skip only meaningful on optional-ish steps
+    skip.style.display = (cur>=5 && cur<=6)?'inline':'none';
+    if(cur===1) runIngest();
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  function go(d){ if(d>0 && cur===0 && !chose) return; cur=Math.max(0,Math.min(TOTAL-1,cur+d)); render(); }
+  function pick(el,ok){ el.parentNode.querySelectorAll('.tile').forEach(function(t){t.classList.remove('sel');}); el.classList.add('sel'); if(el.closest('[data-step="0"]')){chose=true; document.getElementById('next').disabled=false;} }
+  var ingRan=false;
+  function runIngest(){ if(ingRan) return; ingRan=true; for(var i=0;i<6;i++){ (function(k){ setTimeout(function(){ var n=document.getElementById('i'+k); if(n) n.classList.add('show'); },350+k*520); })(i);} }
+  render();
+</script>
+</body>
+</html>

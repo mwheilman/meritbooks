@@ -22,6 +22,7 @@
  */
 
 import type { ImportFieldDef } from '@/lib/import/definitions';
+import { subledgerControlBlockers, type SubledgerControlTie } from './reconciliation/tie-out';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CSV source shape
@@ -374,6 +375,52 @@ function centsAbs(n: number): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Extended tie-out (subledger→control & WIP→GL) — ADDITIVE to the base gate above.
+// The pure subledger/WIP tie MATH lives in ./reconciliation/tie-out.ts (cents-only,
+// role-resolved by the caller). This composer is what the go-live gate consumes: the
+// base tie-out blockers PLUS the subledger-control blockers. When no subledger detail
+// was imported the tie list is empty and this is identical to tieOutBlockers — so it
+// is a safe, backward-compatible drop-in for the gate.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Imported subledger / WIP detail totals staged alongside the opening TB (cents).
+ * Each is a magnitude in its account's normal orientation. Optional — a field is
+ * present only when that subledger was actually imported for this conversion. No
+ * schema change: this rides inside the existing `ai_decisions.proposed_output` JSON.
+ */
+export interface ImportedSubledgerDetail {
+  /** Σ open trade AR by customer (ties to AR_CONTROL / 1100). */
+  arOpenByCustomerCents?: number;
+  /** Σ open AP by vendor (ties to AP_CONTROL). */
+  apOpenByVendorCents?: number;
+  /** Σ retainage receivable detail (ties to RETAINAGE_RECEIVABLE). */
+  retainageReceivableCents?: number;
+  /** Σ retainage payable detail (ties to RETAINAGE_PAYABLE). */
+  retainagePayableCents?: number;
+  /** Σ job costs-to-date (ties to JOB_WIP asset). */
+  wipCostsToDateCents?: number;
+  /** Σ unbilled / costs & earnings in excess of billings (ties to UNBILLED_RECEIVABLE / 1180). */
+  unbilledCents?: number;
+  /** Σ billings in excess of costs & earnings (ties to DEFERRED_REVENUE / 2410). */
+  billingsInExcessCents?: number;
+}
+
+/**
+ * The go-live blocking predicate the gate consumes: the base opening-TB blockers plus
+ * the subledger→control / WIP→GL blockers. The subledger ties are computed by the
+ * caller (which resolves each control account BY ROLE and reads its balance in cents)
+ * and passed in — keeping this a pure composition. Empty `subledgerTies` ⇒ base gate.
+ */
+export function extendedTieOutBlockers(
+  tb: Omit<AssembledOpeningTb, 'balanceSheet'> & { balanceSheet?: BalanceSheetCheck },
+  subledgerTies: SubledgerControlTie[],
+  opts?: { plAcknowledged?: boolean },
+): string[] {
+  return [...tieOutBlockers(tb, opts), ...subledgerControlBlockers(subledgerTies)];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Persisted session shape (stored as ai_decisions.proposed_output JSON — reuses
 // the existing AI-decision staging table; no new migration this wave)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -397,6 +444,13 @@ export interface ConversionSessionData {
   sourceTotals: { debitCents: number; creditCents: number };
   /** The user confirmed a mid-year go-live (open income-statement balances are intended). */
   plAcknowledged?: boolean;
+  /**
+   * Imported subledger / WIP detail totals, when those subledgers were brought in for
+   * this conversion. Consumed by the extended go-live tie-out (subledger→control /
+   * WIP→GL) and the Conversion Reconciliation report. Optional — absent for a
+   * TB-only conversion. Rides inside this JSON; no schema change.
+   */
+  subledgerDetail?: ImportedSubledgerDetail;
   tiedOut: boolean;
   tiedOutBy: string | null;
   tiedOutAt: string | null;

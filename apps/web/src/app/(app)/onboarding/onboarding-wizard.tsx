@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   Building2, BookOpen, Scale, Landmark, Users, Rocket, Check, Loader2, AlertCircle,
   ArrowLeft, ArrowRight, Sparkles, Percent, CircleCheck, ChevronRight, Plus, ShieldCheck,
-  Plug,
+  Plug, Upload,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
@@ -13,6 +13,9 @@ import { PlaidLinkButton } from '@/components/integrations/plaid-link-button';
 import { ConnectErpStep } from '@/components/integrations/connect-erp-step';
 import ConversionClient from './conversion/conversion-client';
 import { ReadinessChecklist } from './readiness-checklist';
+import {
+  SourceTile, ProposalCard, TieOutBanner, SetupHomeBoard,
+} from '@/components/onboarding';
 import { ACTIVE_COMPANY_COOKIE } from '@/lib/company-scope';
 import type { OnboardingStepKey, OnboardingStatus } from '@/lib/onboarding/status';
 import { ONBOARDING_SECTIONS } from '@/lib/onboarding/sections/registry';
@@ -100,6 +103,10 @@ export function OnboardingWizard() {
   const [createdAccounts, setCreatedAccounts] = useState<number | null>(null);
   const [createdCompanyId, setCreatedCompanyId] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
+  // Source-first entry: which source the user chose on the opening screen. Drives the
+  // tailored copy + the forward route (connect / upload / start-fresh). Local-only —
+  // it steers the flow, it is not itself a persisted setup fact.
+  const [source, setSource] = useState<BookSource | null>(null);
 
   // Load status once → resume the saved/derived step.
   const loadStatus = useCallback(async () => {
@@ -190,9 +197,13 @@ export function OnboardingWizard() {
   // renders identically to before while being driven by the registry-derived STEPS.
   const stepBodies: Record<OnboardingStepKey, ReactNode> = {
     welcome: (
-      <WelcomeStep
+      <SourceStep
         meta={meta ?? null}
         entities={entities}
+        source={source}
+        onPickSource={setSource}
+        onGoTo={goTo}
+        onContinue={goNext}
         onCreated={async (r) => {
           setCreatedAccounts(r.accountCount);
           setCreatedCompanyId(r.locationId);
@@ -202,12 +213,18 @@ export function OnboardingWizard() {
       />
     ),
     coa: <CoaStep accountCount={createdAccounts ?? status?.counts.accounts ?? 0} />,
-    opening: <OpeningStep />,
+    opening: (
+      <OpeningStep
+        companyId={enterCompany?.id ?? null}
+        hasOpeningEntry={status?.hasOpeningEntry ?? false}
+      />
+    ),
     bank: <BankStep entities={entities} />,
     erp: <ErpStep onSkip={goNext} onDone={goNext} />,
     team: <TeamStep entities={entities} />,
     launch: (
       <LaunchStep
+        status={status}
         entities={entities}
         enterCompanyName={enterCompany?.name ?? null}
         accountCount={createdAccounts ?? status?.counts.accounts ?? 0}
@@ -277,14 +294,14 @@ export function OnboardingWizard() {
                 {finishing ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
                 {enterCompany ? `Finish & enter ${enterCompany.shortCode || enterCompany.name}` : 'Finish & go to dashboard'}
               </button>
+            ) : step === 'welcome' ? (
+              // The source-first entry step owns its own forward navigation (connect /
+              // upload / start-fresh), so the generic Continue is suppressed here.
+              <span />
             ) : (
               <button
                 onClick={goNext}
-                disabled={step === 'welcome' && entities.length === 0}
-                className={clsx('flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium transition-colors',
-                  step === 'welcome' && entities.length === 0
-                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                    : 'bg-brand-500 text-slate-900 hover:bg-brand-400')}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium transition-colors bg-brand-500 text-slate-900 hover:bg-brand-400"
               >
                 Continue <ArrowRight size={14} />
               </button>
@@ -336,12 +353,136 @@ function Stepper({
   );
 }
 
-// ── Step 1: Welcome / company identity ─────────────────────────────────────────
-function WelcomeStep({
-  meta, entities, onCreated,
+// ── Step 1: Source-first entry ("Where do your books live today?") ─────────────
+// The first thing onboarding asks is not a field, it's a SOURCE (design spec §1).
+// The choice steers the forward route: connect an ERP, upload a trial balance, or
+// start clean. Whatever the source, a company must exist to hold the book of record,
+// so we still confirm/create it — framed as confirm-not-configure.
+
+/** The sources a customer's books can live in today. */
+type BookSource = 'quickbooks' | 'xero' | 'sage' | 'upload' | 'fresh';
+
+interface SourceTileConfig {
+  kind: BookSource;
+  icon: ReactNode;
+  title: string;
+  subtitle: string;
+}
+
+const SOURCE_TILES: SourceTileConfig[] = [
+  { kind: 'quickbooks', icon: <span className="font-mono">qb</span>, title: 'QuickBooks', subtitle: 'Connect & import' },
+  { kind: 'xero', icon: <span className="font-mono">X</span>, title: 'Xero', subtitle: 'Connect & import' },
+  { kind: 'sage', icon: <span className="font-mono">S</span>, title: 'Sage', subtitle: 'Connect & import' },
+  { kind: 'upload', icon: <Upload size={16} />, title: 'Upload files', subtitle: 'Trial balance / exports' },
+  { kind: 'fresh', icon: <Sparkles size={16} />, title: 'Start fresh', subtitle: 'New books, no import' },
+];
+
+const ERP_SOURCES: BookSource[] = ['quickbooks', 'xero', 'sage'];
+const SOURCE_LABEL: Record<BookSource, string> = {
+  quickbooks: 'QuickBooks', xero: 'Xero', sage: 'Sage', upload: 'your files', fresh: 'a clean start',
+};
+
+/** Persist an explicit "no prior balances" so the readiness gate treats opening as met. */
+async function markOpeningSkipped() {
+  try {
+    await fetch('/api/onboarding/status', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ section: 'opening', status: 'skipped' }),
+    });
+  } catch { /* best-effort — the tie-out gate still governs any later import */ }
+}
+
+function SourceStep({
+  meta, entities, source, onPickSource, onCreated, onGoTo, onContinue,
 }: {
   meta: EntitiesMeta | null;
   entities: EntityRow[];
+  source: BookSource | null;
+  onPickSource: (s: BookSource) => void;
+  onCreated: (r: CreateEntityResult) => Promise<void>;
+  onGoTo: (step: OnboardingStepKey) => void;
+  onContinue: () => void;
+}) {
+  const hasCompany = entities.length > 0;
+  const companyName = entities[0]?.name;
+
+  // The forward action for the chosen source. Enabled only once a company exists.
+  const forward = useMemo(() => {
+    if (!source) return null;
+    if (ERP_SOURCES.includes(source)) {
+      return { label: `Connect ${SOURCE_LABEL[source]} & bring your books over`, run: () => onGoTo('erp') };
+    }
+    if (source === 'upload') {
+      return { label: 'Upload your trial balance', run: () => onGoTo('opening') };
+    }
+    // fresh — no import; record the explicit clean start, then continue.
+    return {
+      label: 'Start clean — no import',
+      run: async () => { await markOpeningSkipped(); onContinue(); },
+    };
+  }, [source, onGoTo, onContinue]);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-xl font-semibold text-white tracking-tight">Where do your books live today?</h2>
+        <p className="text-sm text-slate-400 mt-1.5 max-w-2xl">
+          First question — and almost the only one. Connect your system or drop your files and we&apos;ll bring
+          everything over. You review; you don&apos;t re-enter. Starting a brand-new business? Begin clean.
+        </p>
+      </div>
+
+      <div role="radiogroup" aria-label="Where your books live today" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {SOURCE_TILES.map((t) => (
+          <SourceTile
+            key={t.kind}
+            icon={t.icon}
+            title={t.title}
+            subtitle={t.subtitle}
+            selected={source === t.kind}
+            onSelect={() => onPickSource(t.kind)}
+          />
+        ))}
+      </div>
+
+      {source && (
+        <div className="space-y-4 pt-1">
+          {/* Confirm-or-create the company that will hold the book of record. */}
+          <CompanyConfirm meta={meta} entities={entities} source={source} onCreated={onCreated} />
+
+          {/* Source-tailored forward action — gated on a company existing. */}
+          {forward && (
+            <div className="rounded-xl border border-slate-800 bg-surface-900/60 px-4 py-3.5 flex items-center justify-between gap-3">
+              <p className="text-xs text-slate-500">
+                {hasCompany
+                  ? <>Next{companyName ? <> for <span className="text-slate-300">{companyName}</span></> : ''}: {ERP_SOURCES.includes(source) ? 'connect and we’ll propose a complete, tied-out setup.' : source === 'upload' ? 'drop your trial balance and tie out to the penny.' : 'your ledger starts empty — add anything later on your setup board.'}</>
+                  : 'Create your company above to continue.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => void forward.run()}
+                disabled={!hasCompany}
+                className={clsx('shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                  hasCompany ? 'bg-brand-500 text-slate-900 hover:bg-brand-400' : 'bg-slate-700 text-slate-500 cursor-not-allowed')}
+              >
+                {forward.label} <ArrowRight size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Company confirm/create — framed as confirm-not-configure (reuses /api/settings/entities) ──
+function CompanyConfirm({
+  meta, entities, source, onCreated,
+}: {
+  meta: EntitiesMeta | null;
+  entities: EntityRow[];
+  source: BookSource;
   onCreated: (r: CreateEntityResult) => Promise<void>;
 }) {
   const [showForm, setShowForm] = useState(entities.length === 0);
@@ -397,11 +538,13 @@ function WelcomeStep({
     <div className="space-y-4">
       <div className="card p-6 space-y-2">
         <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-          <Building2 size={18} className="text-brand-400" /> Your first company
+          <Building2 size={18} className="text-brand-400" />
+          {entities.length > 0 ? 'Your company' : source === 'fresh' ? 'Name your company' : 'Confirm your company'}
         </h2>
         <p className="text-xs text-slate-500">
-          Each company is its own book of record — its own general ledger, bank accounts, and statements.
-          Creating one generates three years of fiscal periods and seeds its chart of accounts.
+          {source === 'fresh'
+            ? 'Each company is its own book of record — its own general ledger, bank accounts, and statements. We generate three years of fiscal periods and seed the chart of accounts.'
+            : 'This company will hold the book of record we bring your data into. Confirm the details below — everything else comes from your import.'}
         </p>
       </div>
 
@@ -511,8 +654,9 @@ function WelcomeStep({
   );
 }
 
-// ── Step 2: Chart of accounts ──────────────────────────────────────────────────
+// ── Step 2: Chart of accounts (review, don't build) ────────────────────────────
 function CoaStep({ accountCount }: { accountCount: number }) {
+  const [accepted, setAccepted] = useState(false);
   return (
     <div className="space-y-4">
       <div className="card p-6 space-y-4">
@@ -527,11 +671,21 @@ function CoaStep({ accountCount }: { accountCount: number }) {
         </div>
 
         {accountCount > 0 ? (
-          <div className="rounded-xl border border-brand-500/20 bg-brand-500/5 p-6 text-center">
-            <CircleCheck className="w-10 h-10 mx-auto text-brand-400 mb-2" />
-            <p className="text-2xl font-mono font-semibold text-white">{accountCount}</p>
-            <p className="text-sm text-slate-400 mt-0.5">accounts ready</p>
-          </div>
+          <>
+            <ProposalCard
+              title={<>We set up a complete chart — <span className="font-mono tabular-nums">{accountCount}</span> accounts, every one role-mapped.</>}
+              subtitle="Why: a standardized, posting-engine-ready chart so your reports work on day one. Bringing your own? You map it onto this chart when you import opening balances — no re-keying."
+              confidence="high"
+              accepted={accepted}
+              onAccept={() => setAccepted(true)}
+              onEdit={() => { window.location.assign('/chart-of-accounts'); }}
+            />
+            <div className="rounded-xl border border-brand-500/20 bg-brand-500/5 p-6 text-center">
+              <CircleCheck className="w-10 h-10 mx-auto text-brand-400 mb-2" />
+              <p className="text-2xl font-mono font-semibold text-white tabular-nums">{accountCount}</p>
+              <p className="text-sm text-slate-400 mt-0.5">accounts ready</p>
+            </div>
+          </>
         ) : (
           <div className="rounded-xl border border-warning/25 bg-warning/5 p-5 text-sm text-warning-fg flex items-start gap-2">
             <AlertCircle size={16} className="shrink-0 mt-0.5" />
@@ -557,7 +711,33 @@ function CoaStep({ accountCount }: { accountCount: number }) {
 }
 
 // ── Step 3: Opening balances (reuses the historical-conversion pipeline) ────────
-function OpeningStep() {
+interface TbRow { total_debits: number | null; total_credits: number | null }
+
+function OpeningStep({ companyId, hasOpeningEntry }: { companyId: string | null; hasOpeningEntry: boolean }) {
+  // Crown the tie-out with the real, posted totals once opening balances exist. The
+  // books balance by construction (the DB trigger rejects an unbalanced entry), so
+  // summing the live trial balance is an HONEST "balanced to the penny" — no dollar
+  // is authored here, only read back. Degrade-safe: on any error the banner simply
+  // isn't shown and the conversion tool below (with its own live numbers) governs.
+  const [tbTotals, setTbTotals] = useState<{ debitsCents: number; creditsCents: number } | null>(null);
+
+  useEffect(() => {
+    if (!hasOpeningEntry || !companyId) { setTbTotals(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/gl/trial-balance?location_id=${encodeURIComponent(companyId)}`);
+        if (!res.ok) return;
+        const body = (await res.json()) as { data?: TbRow[] };
+        const rows = body.data ?? [];
+        const debitsCents = rows.reduce((s, r) => s + (r.total_debits ?? 0), 0);
+        const creditsCents = rows.reduce((s, r) => s + (r.total_credits ?? 0), 0);
+        if (!cancelled) setTbTotals({ debitsCents, creditsCents });
+      } catch { /* best-effort crown; conversion tool below still shows live numbers */ }
+    })();
+    return () => { cancelled = true; };
+  }, [hasOpeningEntry, companyId]);
+
   return (
     <div className="space-y-4">
       <div className="card p-6 space-y-2">
@@ -574,6 +754,16 @@ function OpeningStep() {
           Brand-new business with no history? Skip this — just continue, and your ledger starts clean.
         </div>
       </div>
+
+      {/* The "Balanced to the penny ✓" crown — shown once opening balances are posted. */}
+      {hasOpeningEntry && tbTotals && (
+        <TieOutBanner
+          state={tbTotals.debitsCents === tbTotals.creditsCents ? 'balanced' : 'off'}
+          debitsCents={tbTotals.debitsCents}
+          creditsCents={tbTotals.creditsCents}
+          note="Your opening books are posted and proven — total debits = total credits."
+        />
+      )}
 
       {/* The full, existing conversion flow — reused verbatim. */}
       <div className="card p-6">
@@ -790,8 +980,9 @@ function TeamStep({ entities }: { entities: EntityRow[] }) {
 
 // ── Step 7: Launch ─────────────────────────────────────────────────────────────
 function LaunchStep({
-  entities, enterCompanyName, accountCount, teamMembers, hasOpeningEntry, onRefresh,
+  status, entities, enterCompanyName, accountCount, teamMembers, hasOpeningEntry, onRefresh,
 }: {
+  status: OnboardingStatus | null;
   entities: EntityRow[];
   enterCompanyName: string | null;
   accountCount: number;
@@ -846,6 +1037,23 @@ function LaunchStep({
           receipts. Everything from onboarding remains editable in Settings.
         </div>
       </div>
+
+      {/* Setup Home board — the optional long tail. Everything here is add-anytime;
+          nothing blocks going live. Reachable again from the readiness checklist. */}
+      {status && (
+        <div className="card p-6 space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold text-white">Your setup board</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Your books are live and tied out. Here&apos;s everything else — add each when you&apos;re ready, or
+                never if it doesn&apos;t apply.
+              </p>
+            </div>
+          </div>
+          <SetupHomeBoard status={status} />
+        </div>
+      )}
     </div>
   );
 }

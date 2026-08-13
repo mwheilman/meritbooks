@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { postJournalEntry, type JournalEntryLineInput } from '@/lib/services/gl-posting';
-import { buildOpeningEntryLines, tieOutBlockers } from '@/lib/onboarding/conversion';
+import { buildOpeningEntryLines, extendedTieOutBlockers } from '@/lib/onboarding/conversion';
 import { loadSession, loadAccountIdByNumber, openingSourceRef } from '@/lib/onboarding/session';
+import { buildGateSubledgerTies } from '@/lib/onboarding/reconciliation/build';
 
 /**
  * POST /api/onboarding/conversion/:id/post — GO-LIVE: post the opening entry.
@@ -38,15 +39,19 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'Blocked: a person must tie out the opening trial balance before go-live.' }, { status: 409 });
   }
 
-  // GATE 2 — still balanced / mapped (re-checked at post time, never trusted stale).
-  const blockers = tieOutBlockers({
+  // GATE 2 — still balanced / mapped AND every imported subledger foots to its control
+  // account (extended tie-out, spec §4). Re-checked at post time, never trusted stale.
+  // The subledger→control ties resolve each control account BY ROLE; absent imported
+  // subledger detail the tie list is empty and this is exactly the base balance gate.
+  const subledgerTies = await buildGateSubledgerTies(supabase, orgId, data);
+  const blockers = extendedTieOutBlockers({
     openingBalances: data.openingBalances,
     balance: data.balance,
     balanceSheet: data.balanceSheet,
     unmapped: data.unmapped,
     unknownTargets: data.unknownTargets,
     sourceTotals: data.sourceTotals,
-  }, { plAcknowledged: data.plAcknowledged });
+  }, subledgerTies, { plAcknowledged: data.plAcknowledged });
   if (blockers.length > 0) {
     return NextResponse.json({ error: 'Blocked: the opening trial balance is no longer ready to post.', blockers }, { status: 409 });
   }
