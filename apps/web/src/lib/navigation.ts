@@ -126,8 +126,20 @@ export const navigation: NavGroup[] = [
       { label: 'Journal Entries', href: '/journal-entries', icon: BookOpen },
       { label: 'Chart of Accounts', href: '/chart-of-accounts', icon: Calculator },
       { label: 'Assets & Schedules', href: '/assets', icon: Building2 },
+      { label: 'Internal Invoices', href: '/internal-invoices', icon: ArrowLeftRight },
+      { label: 'Departments', href: '/departments', icon: Network },
+      { label: 'Tax', href: '/tax', icon: Scale },
+      { label: 'Documents', href: '/documents', icon: FileText },
       { label: 'Fiscal Periods', href: '/periods', icon: CalendarDays },
       { label: 'Close', href: '/close', icon: ClipboardCheck },
+    ],
+  },
+  {
+    label: 'Jobs & Costing',
+    items: [
+      { label: 'Jobs & Projects', href: '/jobs', icon: Briefcase },
+      { label: 'Job WIP Schedule', href: '/jobs/wip', icon: ClipboardCheck },
+      { label: 'Inventory', href: '/inventory', icon: Package },
     ],
   },
   {
@@ -146,21 +158,17 @@ export const navigation: NavGroup[] = [
       { label: 'Agents', href: '/agents', icon: Bot },
     ],
   },
+  // ── PRACTICE plane — oversight only (team, access, compliance, performance,
+  //    the roster of companies). Deliberately NO operational accounting: to see a
+  //    company's WIP/jobs a supervisor switches into that company's Books.
   {
-    label: 'Firm & Governance',
+    label: 'Team & Oversight',
     items: [
       { label: 'Entities', href: '/portfolio', icon: LayoutGrid },
-      { label: 'Jobs & Projects', href: '/jobs', icon: Briefcase },
-      { label: 'Job WIP Schedule', href: '/jobs/wip', icon: ClipboardCheck },
-      { label: 'Inventory', href: '/inventory', icon: Package },
-      { label: 'Internal Invoices', href: '/internal-invoices', icon: ArrowLeftRight },
-      { label: 'Departments', href: '/departments', icon: Network },
-      { label: 'Tax', href: '/tax', icon: Scale },
+      { label: 'Team & Access', href: '/team', icon: Users },
       { label: 'Compliance & Controls', href: '/compliance', icon: ShieldCheck },
       { label: 'Audit Trail', href: '/audit', icon: History },
       { label: 'Audit Requests (PBC)', href: '/pbc', icon: ClipboardList },
-      { label: 'Documents', href: '/documents', icon: FileText },
-      { label: 'Team & Access', href: '/team', icon: Users },
     ],
   },
   {

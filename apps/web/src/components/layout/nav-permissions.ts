@@ -86,12 +86,15 @@ export const NAV_HREF_FEATURE: Record<string, string> = {
   '/consolidation': 'reports',
   '/board-package': 'reports',
 
-  // Firm & Governance
+  // Jobs & Costing (Books, operational)
   '/jobs': 'jobs',
   '/jobs/wip': 'jobs',
   '/internal-invoices': 'intercompany',
+
+  // Team & Oversight (Practice, governance)
   '/compliance': 'compliance',
   '/audit': 'audit_trail',
+  '/pbc': 'compliance',
   '/team': 'team',
 
   // Settings & Admin

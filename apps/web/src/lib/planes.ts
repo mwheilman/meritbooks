@@ -32,22 +32,28 @@ export const PLANES: Record<Plane, PlaneDef> = {
     label: 'Book of Record',
     tagline: 'Day-to-day accounting',
     icon: Landmark,
+    // Operational accounting for ONE company at a time. No team/governance surfaces —
+    // those live in Practice. A supervisor sees a company's jobs/WIP by switching into
+    // that company's Books via the header company picker.
     groups: [
       'Home',
       'Payables',
       'Receivables',
       'Banking & Cash',
       'Accounting',
+      'Jobs & Costing',
       'Reporting & Analytics',
-      'Firm & Governance',
     ],
   },
   practice: {
     id: 'practice',
     label: 'Practice',
-    tagline: 'Team, clients & settings',
+    tagline: 'Team, oversight & settings',
     icon: Layers,
-    groups: ['Firm & Governance', 'Settings & Admin'],
+    // The supervisor's cockpit: supervise the team & their access, monitor performance,
+    // compliance/audit, and the roster of companies they oversee — plus firm settings.
+    // Deliberately NO operational accounting (no WIP/jobs/tax) — that's Books.
+    groups: ['Team & Oversight', 'Settings & Admin'],
   },
   platform: {
     id: 'platform',
@@ -66,9 +72,28 @@ export const PLANE_ORDER: Plane[] = ['books', 'practice', 'platform'];
  * requires the ability to administer the tenant (manage users / edit settings).
  * Platform requires the identity-layer platform-staff flag.
  */
+/** Roles whose JOB is to supervise a team / firm, so they get the Practice plane even
+ *  if they don't hold the raw canManageUsers flag (e.g. an Accounting Manager assigns
+ *  company access for specialists and monitors their performance). Operational-only
+ *  roles (accounting_specialist, check_processor, general_admin, business_user) do NOT
+ *  get Practice — they only ever see the Book-of-Record plane. */
+const PRACTICE_SUPERVISOR_ROLES: ReadonlyArray<NonNullable<MeUser['role']>> = [
+  'company_admin',
+  'cfo',
+  'merit_controller',
+  'assistant_cfo',
+  'accounting_manager',
+];
+
 export function availablePlanes(user: MeUser | null): Plane[] {
   const planes: Plane[] = ['books'];
-  if (user?.canManageUsers || user?.canEditSystemSettings || user?.role === 'company_admin') {
+  const supervises =
+    user?.canManageUsers ||
+    user?.canManageUsersDelegated ||
+    user?.canEditSystemSettings ||
+    user?.canEditAccountingSettings ||
+    (user?.role != null && PRACTICE_SUPERVISOR_ROLES.includes(user.role));
+  if (supervises) {
     planes.push('practice');
   }
   if (user?.isPlatformStaff) {
