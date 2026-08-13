@@ -6,7 +6,7 @@ import { Check, Circle, RefreshCw, Loader2, ArrowRight, ShieldCheck, CircleCheck
 import { clsx } from 'clsx';
 import type { OnboardingStatus, OnboardingStepKey } from '@/lib/onboarding/status';
 import {
-  ONBOARDING_SECTIONS,
+  WIZARD_FLOW_SECTIONS,
   readyToOperateCriteria,
   goLiveReady,
   type SectionDefinition,
@@ -31,10 +31,12 @@ import {
  * `onJump` so in-flow items advance the wizard step; standalone it deep-links.
  */
 
+// Only the inaugural WIZARD FLOW sections belong on this checklist — each maps to a
+// real wizard step (jumpable). The long-tail Setup-Home domains live on the board.
 /** The required domain sections, in flow order (required tone). */
-const REQUIRED_SECTIONS = ONBOARDING_SECTIONS.filter((s) => s.tone === 'required');
+const REQUIRED_SECTIONS = WIZARD_FLOW_SECTIONS.filter((s) => s.tone === 'required');
 /** The optional/recommended domain sections. */
-const OPTIONAL_SECTIONS = ONBOARDING_SECTIONS.filter((s) => s.tone !== 'required');
+const OPTIONAL_SECTIONS = WIZARD_FLOW_SECTIONS.filter((s) => s.tone !== 'required');
 
 function toneBadge(section: SectionDefinition): { label: string; cls: string } | null {
   if (section.tone === 'required') return { label: 'Required', cls: 'bg-amber-500/15 text-amber-300' };
@@ -129,7 +131,7 @@ export function ReadinessChecklist({
 
     if (jumpable) {
       return (
-        <button key={section.key} type="button" onClick={() => onJump!(section.key)} className={cls}>
+        <button key={section.key} type="button" onClick={() => onJump!(section.key as OnboardingStepKey)} className={cls}>
           {inner}
         </button>
       );

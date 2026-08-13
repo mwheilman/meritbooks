@@ -18,7 +18,7 @@ import {
 } from '@/components/onboarding';
 import { ACTIVE_COMPANY_COOKIE } from '@/lib/company-scope';
 import type { OnboardingStepKey, OnboardingStatus } from '@/lib/onboarding/status';
-import { ONBOARDING_SECTIONS } from '@/lib/onboarding/sections/registry';
+import { WIZARD_FLOW_SECTIONS } from '@/lib/onboarding/sections/registry';
 
 // ── Shared shapes ─────────────────────────────────────────────────────────────
 interface EntityRow {
@@ -71,7 +71,7 @@ const TEAM_ROLES: { value: string; label: string; desc: string }[] = [
 // the terminal `launch` step which is a flow step, not a setup domain. The values are
 // identical to what was hard-coded here, so the Stepper renders exactly as before.
 const STEPS: { key: OnboardingStepKey; label: string; icon: typeof Building2 }[] = [
-  ...ONBOARDING_SECTIONS.map((s) => ({ key: s.key as OnboardingStepKey, label: s.label, icon: s.icon })),
+  ...WIZARD_FLOW_SECTIONS.map((s) => ({ key: s.key as OnboardingStepKey, label: s.label, icon: s.icon })),
   { key: 'launch', label: 'Launch', icon: Rocket },
 ];
 

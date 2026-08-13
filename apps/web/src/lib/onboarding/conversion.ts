@@ -404,6 +404,11 @@ export interface ImportedSubledgerDetail {
   unbilledCents?: number;
   /** Σ billings in excess of costs & earnings (ties to DEFERRED_REVENUE / 2410). */
   billingsInExcessCents?: number;
+  /**
+   * Σ customer deposits captured with the opening WIP (ties to CUSTOMER_DEPOSITS / 2420
+   * — a LIABILITY, never revenue). Present only when the WIP import surfaced deposits.
+   */
+  customerDepositsCents?: number;
 }
 
 /**

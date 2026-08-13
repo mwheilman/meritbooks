@@ -30,13 +30,26 @@ import {
   Building2, BookOpen, Scale, Landmark, Plug, Users,
   type LucideIcon,
 } from 'lucide-react';
+// Long-tail Setup-Home domain sections (Wave-1). Each is authored file-disjoint; the
+// registry is where they are wired into the single source of truth. Their concrete
+// proposal generics are bridged to SectionDefinition<unknown> at registration (a
+// behavior-neutral cast — strictFunctionTypes makes `validate`'s param contravariant).
+import { arSection } from './ar';
+import { apSection } from './ap';
+import { WIP_SECTION } from './wip';
+import { debtSection } from './debt';
+import { leasesSection } from './leases';
+import { fixedAssetsSection } from './fixed-assets';
+import { EQUITY_SECTION } from './equity';
 
 /** How urgently a section is nudged. `required` gates go-live; the rest never nag. */
 export type SectionTone = 'required' | 'recommended' | 'optional';
 
 /** A stable domain identifier (proposals/commits key off this). */
 export type DomainKind =
-  | 'company' | 'chart_of_accounts' | 'opening_balances' | 'bank' | 'integrations' | 'team';
+  | 'company' | 'chart_of_accounts' | 'opening_balances' | 'bank' | 'integrations' | 'team'
+  // Long-tail Setup-Home domains (Wave-1).
+  | 'customers_ar' | 'vendors_ap' | 'jobs_wip' | 'debt' | 'leases' | 'fixed_assets' | 'equity';
 
 /** Where a section's facts can come from. Degrade-safe: `manual` always works. */
 export type ImportSource = 'erp' | 'document' | 'csv' | 'manual';
@@ -69,14 +82,19 @@ export interface SectionDefinition<TProposal = unknown> {
   icon: LucideIcon;
   tone: SectionTone;
   domainKind: DomainKind;
-  /** Import paths this domain accepts, best → fallback. */
-  importSources: ImportSource[];
+  /** Import paths this domain accepts, best → fallback. (readonly so `as const` section
+   *  objects — e.g. the equity descriptor — register without a copy.) */
+  importSources: readonly ImportSource[];
   /** True when a user may skip this section without blocking go-live. */
   skippable: boolean;
   /** Deep-link target when the section is surfaced outside the wizard flow. */
   href: string;
-  /** True when the section does not apply to this tenant (e.g. a domain a company never uses). */
-  notApplicable?: (status: OnboardingStatus) => boolean;
+  /**
+   * Whether the section does not apply to this tenant. Either a predicate over live
+   * status (flow/first-class sections — e.g. WIP is n/a off a %-completion method), or
+   * a static capability flag (`true` = "no debt / no leases" is a valid answer for the
+   * long-tail drop-and-parse domains). */
+  notApplicable?: boolean | ((status: OnboardingStatus) => boolean);
 
   /**
    * The single source of truth for this section's status. A live-count-derived
@@ -195,7 +213,29 @@ export const ONBOARDING_SECTIONS: readonly SectionDefinition[] = [
     // "Done" once at least one teammate beyond the founding user has been added.
     deriveStatus: (s) => resolveStatus('team', s, s.counts.teamMembers > 1),
   },
-] as const;
+  // ── Long-tail Setup-Home domains (Wave-1) ─────────────────────────────────────
+  // Registered here as the single source of truth for status; they do NOT render as
+  // wizard steps (see WIZARD_FLOW_SECTIONS) — they surface on the Setup Home board.
+  // The concrete-proposal generics are bridged to SectionDefinition<unknown> — a
+  // behavior-neutral cast forced only by `validate`'s contravariant parameter under
+  // strictFunctionTypes; the runtime object is unchanged.
+  arSection as SectionDefinition,
+  apSection as SectionDefinition,
+  WIP_SECTION as SectionDefinition,
+  debtSection,
+  leasesSection,
+  fixedAssetsSection,
+  EQUITY_SECTION as SectionDefinition,
+];
+
+/**
+ * The inaugural WIZARD FLOW sections, in flow order (company · COA · opening · bank ·
+ * connect-systems · team). These are the ones the Stepper renders (each has a body in
+ * the shell) and the readiness checklist treats as jumpable steps. The long-tail
+ * domains above are excluded — they live on the Setup Home board, never the flow. */
+const WIZARD_FLOW_KEYS: readonly SectionKey[] = ['welcome', 'coa', 'opening', 'bank', 'erp', 'team'];
+export const WIZARD_FLOW_SECTIONS: readonly SectionDefinition[] =
+  ONBOARDING_SECTIONS.filter((s) => WIZARD_FLOW_KEYS.includes(s.key));
 
 /** Look up a section definition by key. */
 export function getSection(key: SectionKey): SectionDefinition | undefined {

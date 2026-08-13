@@ -16,7 +16,7 @@
  */
 
 import type { OnboardingStatus } from '@/lib/onboarding/status';
-import { ONBOARDING_SECTIONS } from '@/lib/onboarding/sections/registry';
+import { WIZARD_FLOW_SECTIONS } from '@/lib/onboarding/sections/registry';
 import { SETUP_HOME_DOMAINS } from '@/lib/onboarding/sections/setup-home';
 import { SetupHomeCard } from './setup-home-card';
 import { ReadinessMeter } from './readiness-meter';
@@ -35,7 +35,10 @@ export interface SetupHomeBoardProps {
 }
 
 export function SetupHomeBoard({ status, className }: SetupHomeBoardProps) {
-  const optionalSections = ONBOARDING_SECTIONS.filter((s) => s.tone !== 'required');
+  // Only the FLOW sections render as registry cards here (bank / connect-systems /
+  // team). The long-tail Wave-1 domains come from SETUP_HOME_DOMAINS below, so they are
+  // not double-rendered even though they are now in ONBOARDING_SECTIONS.
+  const optionalSections = WIZARD_FLOW_SECTIONS.filter((s) => s.tone !== 'required');
 
   return (
     <div className={className}>

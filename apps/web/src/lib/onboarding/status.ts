@@ -62,8 +62,19 @@ export const ONBOARDING_STEPS: OnboardingStepKey[] = [
 // reads `done` even if the map was never written.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The domain sections the shell renders (the flow's `launch` step is terminal, not a domain). */
-export const SECTION_KEYS = ['welcome', 'coa', 'opening', 'bank', 'erp', 'team'] as const;
+/**
+ * The domain sections the shell renders (the flow's `launch` step is terminal, not a
+ * domain). The first six are the inaugural WIZARD FLOW steps; the remainder are the
+ * optional long-tail Setup-Home domains (AR/AP, jobs/WIP, debt, leases, fixed assets,
+ * equity). All are listed here so `normalizeSections` PRESERVES a persisted section /
+ * detection hint written under any of these keys (a key not in this list would be
+ * silently stripped on read).
+ */
+export const SECTION_KEYS = [
+  'welcome', 'coa', 'opening', 'bank', 'erp', 'team',
+  // Long-tail Setup-Home domains (Wave-1) — registered on the board, not the flow.
+  'customers_ar', 'vendors_ap', 'jobs_wip', 'debt', 'leases', 'fixed_assets', 'equity',
+] as const;
 export type SectionKey = (typeof SECTION_KEYS)[number];
 
 /** The lifecycle status of a single section. */
@@ -94,6 +105,24 @@ export interface OnboardingCounts {
   bankAccounts: number;
   /** Bank-feed transactions that have been categorized/approved — "first transaction categorized". */
   categorizedTransactions: number;
+  // ── Long-tail Setup-Home domain live counts (Wave-1). Each drives a board card's
+  //    done/detected derivation; all degrade to 0 when the table/count is unavailable.
+  /** Customer master rows (core.customers). */
+  customers: number;
+  /** Open trade receivables (invoices not paid/void/draft). Foots to the A/R control. */
+  openArInvoices: number;
+  /** Vendor master rows (core.vendors). */
+  vendors: number;
+  /** Open trade payables (bills not paid/void). Foots to the A/P control. */
+  openApBills: number;
+  /** Active debt instruments (loans). */
+  debts: number;
+  /** Lease agreements (ASC 842). */
+  leases: number;
+  /** Active fixed-asset records. */
+  fixedAssets: number;
+  /** Cap-table holders (core.equity_holders). */
+  equityHolders: number;
 }
 
 /** The (best-effort) durable progress flag stored on the org. */
@@ -124,6 +153,12 @@ export interface OnboardingStatus {
   /** The persisted per-section status map (empty when unset/absent). Derived `done`
    *  from live counts still wins over any stale value here — see the registry. */
   sections: SectionStatusMap;
+  /**
+   * The distinct revenue-recognition methods in use across this tenant's companies
+   * (core.locations.rev_rec_method). Used by the Jobs/WIP section's n/a gate: WIP only
+   * applies to a %-completion method. Undefined when unavailable — the WIP section then
+   * stays visible (the import route still enforces applicability). */
+  revRecMethods?: string[];
 }
 
 /** Read the org-level onboarding flags, degrading when the jsonb column is absent. */
@@ -246,8 +281,40 @@ export async function loadOnboardingStatus(
     ),
   ]);
 
-  const counts: OnboardingCounts = { entities, accounts, teamMembers, glEntries, bankAccounts, categorizedTransactions };
+  // Long-tail Setup-Home domain counts — all RLS-scoped and degrade-safe (a missing
+  // table/count yields 0, never throws, so the board simply shows "add later"). Schemas
+  // per the migrations: customers/vendors/equity_holders live in `core`; invoices/bills/
+  // debt_instruments/leases/fixed_assets in `public`.
+  const [customers, openArInvoices, vendors, openApBills, debts, leasesCount, fixedAssets, equityHolders] = await Promise.all([
+    safeCount(supabase.schema('core').from('customers').select('id', { count: 'exact', head: true })),
+    safeCount(
+      supabase.from('invoices').select('id', { count: 'exact', head: true })
+        .in('status', ['SENT', 'PARTIALLY_PAID', 'OVERDUE']),
+    ),
+    safeCount(supabase.schema('core').from('vendors').select('id', { count: 'exact', head: true })),
+    safeCount(
+      supabase.from('bills').select('id', { count: 'exact', head: true })
+        .in('status', ['PENDING', 'APPROVED', 'PARTIALLY_PAID', 'ON_HOLD']),
+    ),
+    safeCount(
+      supabase.from('debt_instruments').select('id', { count: 'exact', head: true }).eq('status', 'ACTIVE'),
+    ),
+    safeCount(supabase.from('leases').select('id', { count: 'exact', head: true })),
+    safeCount(
+      supabase.from('fixed_assets').select('id', { count: 'exact', head: true }).eq('status', 'ACTIVE'),
+    ),
+    safeCount(supabase.schema('core').from('equity_holders').select('id', { count: 'exact', head: true })),
+  ]);
+
+  const counts: OnboardingCounts = {
+    entities, accounts, teamMembers, glEntries, bankAccounts, categorizedTransactions,
+    customers, openArInvoices, vendors, openApBills,
+    debts, leases: leasesCount, fixedAssets, equityHolders,
+  };
   const hasOpeningEntry = openingCount > 0;
+
+  // Distinct rev-rec methods across the tenant's companies (drives the WIP n/a gate).
+  const revRecMethods = await safeRevRecMethods(supabase);
 
   const { setupComplete, flag, statePersisted } = await readOrgOnboarding(admin, orgId);
 
@@ -259,7 +326,30 @@ export async function loadOnboardingStatus(
   const currentStep = flag?.currentStep ?? deriveStep(counts, hasOpeningEntry);
   const sections = flag?.sections ?? {};
 
-  return { firstRun, complete, currentStep, counts, hasOpeningEntry, setupComplete, statePersisted, flag, sections };
+  return {
+    firstRun, complete, currentStep, counts, hasOpeningEntry, setupComplete,
+    statePersisted, flag, sections,
+    ...(revRecMethods ? { revRecMethods } : {}),
+  };
+}
+
+/**
+ * Best-effort distinct rev-rec methods across the tenant's companies. RLS-scoped,
+ * degrade-safe: any error (missing column/table) yields undefined so the WIP section
+ * stays visible and the import route governs applicability. Never throws.
+ */
+async function safeRevRecMethods(supabase: SupabaseClient): Promise<string[] | undefined> {
+  try {
+    const { data, error } = await supabase.schema('core').from('locations').select('rev_rec_method');
+    if (error || !data) return undefined;
+    const set = new Set<string>();
+    for (const row of data as Array<{ rev_rec_method: string | null }>) {
+      if (row.rev_rec_method) set.add(String(row.rev_rec_method));
+    }
+    return set.size > 0 ? [...set] : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Derive a sensible resume step from live tenant state (used when no flag is stored). */

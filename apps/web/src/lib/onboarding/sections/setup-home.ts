@@ -20,6 +20,15 @@
 import type { OnboardingStatus } from '@/lib/onboarding/status';
 import type { BoardCardStatus } from '@/components/onboarding/helpers';
 import { deriveBoardCardStatus } from '@/components/onboarding/helpers';
+// The real, live-state-deriving board descriptors exported by each Wave-1 section
+// module (they supersede the Wave-0 placeholders below).
+import { arBoardDescriptor } from './ar';
+import { apBoardDescriptor } from './ap';
+import { WIP_SETUP_HOME_DOMAIN } from './wip';
+import { debtBoardDescriptor } from './debt';
+import { leasesBoardDescriptor } from './leases';
+import { fixedAssetsBoardDescriptor } from './fixed-assets';
+import { EQUITY_BOARD_DOMAIN } from './equity';
 
 /** A long-tail domain shown on the Setup Home board. */
 export interface SetupHomeDomain {
@@ -42,48 +51,17 @@ export interface SetupHomeDomain {
  * neutral `add-later`. (Deeper per-domain detection lands with the domain sections.)
  */
 export const SETUP_HOME_DOMAINS: readonly SetupHomeDomain[] = [
-  {
-    key: 'customers_ar',
-    title: 'Customers & A/R',
-    description: 'Bring in your customer list and open receivables — they foot to the A/R control.',
-    href: '/customers',
-    deriveStatus: () => deriveBoardCardStatus({}),
-  },
-  {
-    key: 'vendors_ap',
-    title: 'Vendors & A/P',
-    description: 'Bring in vendors and open payables — they foot to the A/P control.',
-    href: '/vendors',
-    deriveStatus: () => deriveBoardCardStatus({}),
-  },
-  {
-    key: 'jobs_wip',
-    title: 'Jobs & WIP',
-    description: 'Contracts, budgets, costs-to-date — we build the schedule and tie it to the ledger.',
-    href: '/jobs',
-    deriveStatus: () => deriveBoardCardStatus({}),
-  },
-  {
-    key: 'debt',
-    title: 'Debt & loans',
-    description: 'Drop a loan agreement and we build the amortization schedule + covenants.',
-    href: '/debt',
-    deriveStatus: () => deriveBoardCardStatus({}),
-  },
-  {
-    key: 'leases',
-    title: 'Leases',
-    description: 'Drop a lease PDF for the ROU asset and lease liability (ASC 842).',
-    href: '/leases',
-    deriveStatus: () => deriveBoardCardStatus({}),
-  },
-  {
-    key: 'fixed_assets',
-    title: 'Fixed assets',
-    description: 'Drop a register or capex invoices to build depreciation.',
-    href: '/fixed-assets',
-    deriveStatus: () => deriveBoardCardStatus({}),
-  },
+  // Wave-1 domains — the real descriptors derive Done/Detected from live tenant state
+  // (counts) + the persisted detection hint, and deep-link to the onboarding section
+  // host that mounts each domain's ReviewComponent.
+  arBoardDescriptor,
+  apBoardDescriptor,
+  WIP_SETUP_HOME_DOMAIN,
+  debtBoardDescriptor,
+  leasesBoardDescriptor,
+  fixedAssetsBoardDescriptor,
+  EQUITY_BOARD_DOMAIN,
+  // Still-placeholder long-tail domains (no dedicated section module yet).
   {
     key: 'sales_tax',
     title: 'Sales tax',

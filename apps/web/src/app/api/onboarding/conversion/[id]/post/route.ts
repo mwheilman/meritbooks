@@ -3,9 +3,13 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { postJournalEntry, type JournalEntryLineInput } from '@/lib/services/gl-posting';
-import { buildOpeningEntryLines, extendedTieOutBlockers } from '@/lib/onboarding/conversion';
+import { buildOpeningEntryLines, extendedTieOutBlockers, type ConversionSessionData } from '@/lib/onboarding/conversion';
 import { loadSession, loadAccountIdByNumber, openingSourceRef } from '@/lib/onboarding/session';
 import { buildGateSubledgerTies } from '@/lib/onboarding/reconciliation/build';
+import { setDomainDetectedHint, type OnboardingDomainKey } from '@/lib/onboarding/import/domain-detection';
+import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
+import { createAdminSupabase } from '@/lib/supabase/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
  * POST /api/onboarding/conversion/:id/post — GO-LIVE: post the opening entry.
@@ -105,6 +109,12 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
 
   await markPosted(supabase, orgId, params.id, result.entry_id!, userId);
 
+  // Best-effort: an opening TB that carries a balance on a long-tail control account
+  // (a term loan, a lease liability/ROU asset) means that DOMAIN exists but its
+  // instrument/schedule isn't set up yet — flip the Setup Home card to "Detected ·
+  // review" so the user is nudged to complete it. Never blocks go-live (fully guarded).
+  await flagDetectedDomainsFromOpening(supabase, orgId, data).catch(() => { /* non-blocking */ });
+
   return NextResponse.json({
     ok: true,
     glEntryId: result.entry_id,
@@ -112,6 +122,49 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     lineCount: lines.length,
     totalDebitCents: data.balance.totalDebitCents,
   });
+}
+
+/**
+ * Detect long-tail domains from the just-posted opening trial balance and set their
+ * "Detected · review" board hint. A domain lights up when its control account (resolved
+ * BY ROLE — no hard-coded numbers) carries a non-zero opening balance:
+ *   • debt   ⇐ NOTES_PAYABLE (term loans)
+ *   • leases ⇐ LEASE_LIABILITY or ROU_ASSET (ASC 842)
+ * Fully degrade-safe: unresolved roles / write failures are swallowed. Uses the admin
+ * client to write onboarding_state (service-role-write, mirroring persistOnboardingProgress).
+ *
+ * NOTE (fixed_assets): there is no single fixed-asset ACCOUNT ROLE to key off yet, so
+ * fixed-asset detection from a TB is not wired here — see the integrator report for the
+ * exact seam needed (a FIXED_ASSET_COST role, or a category heuristic on the 15xx range).
+ */
+async function flagDetectedDomainsFromOpening(
+  supabase: SupabaseClient,
+  orgId: string,
+  data: ConversionSessionData,
+): Promise<void> {
+  const netByNumber = new Map<string, number>();
+  for (const b of data.openingBalances) {
+    netByNumber.set(b.targetAccountNumber, (b.debitCents || 0) - (b.creditCents || 0));
+  }
+  const roleHasBalance = async (role: AccountRoleKey): Promise<boolean> => {
+    try {
+      const ref = await resolveRole(supabase, orgId, role);
+      return Math.abs(netByNumber.get(ref.account_number) ?? 0) > 0;
+    } catch (e) {
+      if (e instanceof PostingError) return false;
+      throw e;
+    }
+  };
+
+  const admin = createAdminSupabase();
+  const detect = async (key: OnboardingDomainKey, roles: AccountRoleKey[]) => {
+    let hit = false;
+    for (const r of roles) { if (await roleHasBalance(r)) { hit = true; break; } }
+    if (hit) await setDomainDetectedHint(admin, orgId, key, { detected: true });
+  };
+
+  await detect('debt', ['NOTES_PAYABLE']);
+  await detect('leases', ['LEASE_LIABILITY', 'ROU_ASSET']);
 }
 
 async function markPosted(

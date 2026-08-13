@@ -82,6 +82,9 @@ export async function buildGateSubledgerTies(
     { metric: detail.wipCostsToDateCents, role: 'JOB_WIP', key: 'WIP_COSTS', label: 'WIP costs to date' },
     { metric: detail.unbilledCents, role: 'UNBILLED_RECEIVABLE', key: 'UNBILLED', label: 'Unbilled receivable (contract asset)' },
     { metric: detail.billingsInExcessCents, role: 'DEFERRED_REVENUE', key: 'BILLINGS_EXCESS', label: 'Billings in excess (contract liability)' },
+    // Σ customer deposits = CUSTOMER_DEPOSITS control (2420, a liability). Resolved BY
+    // ROLE like every other tie; absent detail adds no blocker (metric == null skips).
+    { metric: detail.customerDepositsCents, role: 'CUSTOMER_DEPOSITS', key: 'CUSTOMER_DEPOSITS', label: 'Customer deposits (liability)' },
   ];
 
   const ties: SubledgerControlTie[] = [];

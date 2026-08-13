@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import type { OnboardingStatus, SectionStatusMap } from '@/lib/onboarding/status';
 import {
   ONBOARDING_SECTIONS,
+  WIZARD_FLOW_SECTIONS,
   getSection,
   readyToOperateCriteria,
   goLiveReady,
@@ -29,6 +30,14 @@ function makeStatus(overrides: {
       glEntries: 0,
       bankAccounts: 0,
       categorizedTransactions: 0,
+      customers: 0,
+      openArInvoices: 0,
+      vendors: 0,
+      openApBills: 0,
+      debts: 0,
+      leases: 0,
+      fixedAssets: 0,
+      equityHolders: 0,
       ...(overrides.counts ?? {}),
     },
     hasOpeningEntry: overrides.hasOpeningEntry ?? false,
@@ -79,8 +88,21 @@ describe('section deriveStatus', () => {
     expect(getSection('team')!.deriveStatus(makeStatus({ counts: { teamMembers: 2 } }))).toBe('done');
   });
 
-  it('exposes exactly the expected domain sections in flow order', () => {
-    expect(ONBOARDING_SECTIONS.map((s) => s.key)).toEqual(['welcome', 'coa', 'opening', 'bank', 'erp', 'team']);
+  it('the WIZARD FLOW sections are exactly the six inaugural steps, in order', () => {
+    expect(WIZARD_FLOW_SECTIONS.map((s) => s.key)).toEqual(['welcome', 'coa', 'opening', 'bank', 'erp', 'team']);
+  });
+
+  it('the full registry ALSO carries the seven long-tail Setup-Home domains', () => {
+    expect(ONBOARDING_SECTIONS.map((s) => s.key)).toEqual([
+      'welcome', 'coa', 'opening', 'bank', 'erp', 'team',
+      'customers_ar', 'vendors_ap', 'jobs_wip', 'debt', 'leases', 'fixed_assets', 'equity',
+    ]);
+  });
+
+  it('every registered long-tail domain resolves via getSection', () => {
+    for (const key of ['customers_ar', 'vendors_ap', 'jobs_wip', 'debt', 'leases', 'fixed_assets', 'equity'] as const) {
+      expect(getSection(key)?.key).toBe(key);
+    }
   });
 });
 
