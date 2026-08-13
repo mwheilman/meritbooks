@@ -5,6 +5,7 @@ import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
+import { LEDGER_TH, LEDGER_TOTAL, figColor } from '@/lib/reports/ledger';
 
 interface ApAgingRow {
   vendorName: string;
@@ -104,16 +105,16 @@ export function ApAgingReport({ params }: { params: Record<string, string> }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-800">
-              <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Vendor / Bill</th>
-              <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Company</th>
-              <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24">Bill Date</th>
-              <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24">Due Date</th>
+              <th className={clsx('px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500', LEDGER_TH)}>Vendor / Bill</th>
+              <th className={clsx('px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500', LEDGER_TH)}>Company</th>
+              <th className={clsx('px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24', LEDGER_TH)}>Bill Date</th>
+              <th className={clsx('px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24', LEDGER_TH)}>Due Date</th>
               {BUCKET_ORDER.map((b) => (
-                <th key={b} className={clsx('px-3 py-2.5 text-right text-2xs font-semibold uppercase', BUCKET_TEXT[b], 'w-24')}>
+                <th key={b} className={clsx('px-3 py-2.5 text-right text-2xs font-semibold uppercase', BUCKET_TEXT[b], 'w-24', LEDGER_TH)}>
                   {b === 'CURRENT' ? 'Current' : b}
                 </th>
               ))}
-              <th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-28">Balance</th>
+              <th className={clsx('px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-28', LEDGER_TH)}>Balance</th>
             </tr>
           </thead>
           <tbody>
@@ -132,7 +133,7 @@ export function ApAgingReport({ params }: { params: Record<string, string> }) {
                       </td>
                     );
                   })}
-                  <td className="px-4 py-2 text-right text-xs font-mono font-semibold text-white">
+                  <td className={clsx('px-4 py-2 text-right text-xs font-mono font-semibold', figColor(vendorData.totalCents, 'text-white'))}>
                     {formatMoney(vendorData.totalCents)}
                   </td>
                 </tr>
@@ -150,14 +151,14 @@ export function ApAgingReport({ params }: { params: Record<string, string> }) {
                         {row.agingBucket === b ? formatMoney(row.balanceCents) : ''}
                       </td>
                     ))}
-                    <td className="px-4 py-1.5 text-right text-xs font-mono text-slate-300">{formatMoney(row.balanceCents)}</td>
+                    <td className={clsx('px-4 py-1.5 text-right text-xs font-mono', figColor(row.balanceCents, 'text-slate-300'))}>{formatMoney(row.balanceCents)}</td>
                   </tr>
                 ))}
               </React.Fragment>
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-slate-700 bg-slate-800/30">
+            <tr className={clsx(LEDGER_TOTAL, 'bg-slate-800/30')}>
               <td colSpan={4} className="px-4 py-2.5 text-sm font-semibold text-white">Total</td>
               {BUCKET_ORDER.map((b) => (
                 <td key={b} className={clsx('px-3 py-2.5 text-right text-xs font-mono font-semibold', BUCKET_TEXT[b])}>

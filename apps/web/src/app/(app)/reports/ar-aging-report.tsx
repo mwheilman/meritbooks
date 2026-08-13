@@ -5,6 +5,7 @@ import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { Loader2, AlertCircle, ChevronRight, Inbox } from 'lucide-react';
 import { clsx } from 'clsx';
+import { LEDGER_TH, LEDGER_TOTAL, LEDGER_SUBTOTAL, figColor } from '@/lib/reports/ledger';
 import {
   mergeArAging,
   AR_BUCKET_ORDER,
@@ -198,13 +199,13 @@ export function ArAgingReport({ params }: { params: Record<string, string> }) {
           </caption>
           <thead>
             <tr className="border-b border-slate-800">
-              <th scope="col" className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Customer</th>
+              <th scope="col" className={clsx('px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500', LEDGER_TH)}>Customer</th>
               {AR_BUCKET_ORDER.map((b) => (
-                <th key={b} scope="col" className={clsx('px-3 py-2.5 text-right text-2xs font-semibold uppercase w-24', BUCKET_TEXT[b])}>
+                <th key={b} scope="col" className={clsx('px-3 py-2.5 text-right text-2xs font-semibold uppercase w-24', BUCKET_TEXT[b], LEDGER_TH)}>
                   {b === 'CURRENT' ? 'Current' : b}
                 </th>
               ))}
-              <th scope="col" className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-28">Balance</th>
+              <th scope="col" className={clsx('px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-28', LEDGER_TH)}>Balance</th>
             </tr>
           </thead>
           <tbody>
@@ -224,19 +225,19 @@ export function ArAgingReport({ params }: { params: Record<string, string> }) {
                 total decompose into billed + unbilled and ties out. */}
             {splitAll && (
               <>
-                <tr className="border-t border-slate-800 bg-slate-900/40">
+                <tr className={clsx(LEDGER_SUBTOTAL, 'bg-slate-900/40')}>
                   <td className="px-4 py-2 pl-8 text-xs text-slate-400">Total Billed</td>
                   <BucketCells buckets={billedTotals} muted />
-                  <td className="px-4 py-2 text-right text-xs font-mono tabular-nums text-slate-300">{formatMoney(billedTotalCents)}</td>
+                  <td className={clsx('px-4 py-2 text-right text-xs font-mono tabular-nums', figColor(billedTotalCents, 'text-slate-300'))}>{formatMoney(billedTotalCents)}</td>
                 </tr>
                 <tr className="bg-slate-900/40">
                   <td className="px-4 py-2 pl-8 text-xs text-indigo-300">Total Unbilled (contract asset)</td>
                   <BucketCells buckets={unbilledTotals} muted />
-                  <td className="px-4 py-2 text-right text-xs font-mono tabular-nums text-slate-300">{formatMoney(unbilledTotalCents)}</td>
+                  <td className={clsx('px-4 py-2 text-right text-xs font-mono tabular-nums', figColor(unbilledTotalCents, 'text-slate-300'))}>{formatMoney(unbilledTotalCents)}</td>
                 </tr>
               </>
             )}
-            <tr className="border-t-2 border-slate-700 bg-slate-800/40">
+            <tr className={clsx(LEDGER_TOTAL, 'bg-slate-800/40')}>
               <td className="px-4 py-2.5 text-sm font-semibold text-white">Total Receivables</td>
               {AR_BUCKET_ORDER.map((b) => (
                 <td key={b} className={clsx('px-3 py-2.5 text-right text-xs font-mono tabular-nums font-semibold', BUCKET_TEXT[b])}>{formatMoney(combinedTotals[b])}</td>
@@ -285,7 +286,7 @@ function CustomerRows({ customer, open, onToggle, childOpen, onToggleChild }: {
           </button>
         </td>
         <BucketCells buckets={buckets} />
-        <td className="px-4 py-2 text-right text-xs font-mono tabular-nums font-semibold text-white">{formatMoney(totalCents)}</td>
+        <td className={clsx('px-4 py-2 text-right text-xs font-mono tabular-nums font-semibold', figColor(totalCents, 'text-white'))}>{formatMoney(totalCents)}</td>
       </tr>
 
       {open && (
@@ -309,7 +310,7 @@ function CustomerRows({ customer, open, onToggle, childOpen, onToggleChild }: {
               )}
             </td>
             <BucketCells buckets={billed.buckets} muted />
-            <td className="px-4 py-1.5 text-right text-xs font-mono tabular-nums text-slate-300">{formatMoney(billed.totalCents)}</td>
+            <td className={clsx('px-4 py-1.5 text-right text-xs font-mono tabular-nums', figColor(billed.totalCents, 'text-slate-300'))}>{formatMoney(billed.totalCents)}</td>
           </tr>
           {billedDetailOpen && billed.lines.map((line, i) => (
             <tr key={`${billedKey}-${line.invoiceNumber || 'inv'}-${i}`} className="hover:bg-slate-800/10 border-b border-slate-800/10">
@@ -322,7 +323,7 @@ function CustomerRows({ customer, open, onToggle, childOpen, onToggleChild }: {
                   {line.agingBucket === b ? formatMoney(line.balanceCents) : ''}
                 </td>
               ))}
-              <td className="px-4 py-1 text-right text-2xs font-mono tabular-nums text-slate-400">{formatMoney(line.balanceCents)}</td>
+              <td className={clsx('px-4 py-1 text-right text-2xs font-mono tabular-nums', figColor(line.balanceCents, 'text-slate-400'))}>{formatMoney(line.balanceCents)}</td>
             </tr>
           ))}
 
@@ -348,7 +349,7 @@ function CustomerRows({ customer, open, onToggle, childOpen, onToggleChild }: {
               )}
             </td>
             <BucketCells buckets={unbilled.buckets} muted />
-            <td className="px-4 py-1.5 text-right text-xs font-mono tabular-nums text-slate-300">{formatMoney(unbilled.totalCents)}</td>
+            <td className={clsx('px-4 py-1.5 text-right text-xs font-mono tabular-nums', figColor(unbilled.totalCents, 'text-slate-300'))}>{formatMoney(unbilled.totalCents)}</td>
           </tr>
           {unbilledDetailOpen && unbilled.jobs.map((job, i) => (
             <tr key={`${unbilledKey}-${job.jobLabel ?? 'job'}-${i}`} className="hover:bg-slate-800/10 border-b border-slate-800/10">
@@ -361,7 +362,7 @@ function CustomerRows({ customer, open, onToggle, childOpen, onToggleChild }: {
                   </td>
                 );
               })}
-              <td className="px-4 py-1 text-right text-2xs font-mono tabular-nums text-slate-400">{formatMoney(job.totalCents)}</td>
+              <td className={clsx('px-4 py-1 text-right text-2xs font-mono tabular-nums', figColor(job.totalCents, 'text-slate-400'))}>{formatMoney(job.totalCents)}</td>
             </tr>
           ))}
         </>

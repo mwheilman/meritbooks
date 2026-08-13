@@ -129,10 +129,6 @@ const config: Config = {
         brand: '10px', // --radius:    buttons, inputs
         'brand-lg': '14px', // --radius-lg: cards, panels
       },
-      boxShadow: {
-        'glow-sm': '0 0 10px -3px rgba(16, 185, 129, 0.3)',
-        'glow': '0 0 20px -5px rgba(16, 185, 129, 0.4)',
-      },
       keyframes: {
         'slide-up': {
           '0%': { transform: 'translateY(10px)', opacity: '0' },

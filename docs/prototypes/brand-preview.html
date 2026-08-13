@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>MeritBooks — branded UI preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --em:#10b981;--em-bright:#34d399;--em-deep:#059669;
+    --bg:#0A0F0D;--bg-alt:#0C120F;--surface:#121A16;--surface-2:#0E1512;--elevated:#18211C;
+    --hairline:#232C27;--hairline-2:#2C362F;
+    --text-hi:#EDF2EF;--text:#AEB8B2;--text-mid:#7E8983;--text-dim:#7C877F;--ink-on-em:#05221A;
+    --amber:#f59e0b;--red-fig:#f87171;--blue:#3b82f6;--indigo:#818cf8;--pos:#34d399;
+    --radius:10px;--radius-lg:14px;--radius-sm:7px;
+    --disp:"Plus Jakarta Sans",system-ui,sans-serif;--mono:"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--disp);-webkit-font-smoothing:antialiased;}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+  .eyebrow{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:var(--em);}
+  .app{display:grid;grid-template-columns:240px 1fr;min-height:100vh;}
+  /* Sidebar */
+  .side{background:var(--bg);border-right:1px solid var(--hairline);padding:18px 14px;}
+  .logo{display:flex;align-items:center;gap:10px;padding:4px 6px 20px;}
+  .logo svg{width:26px;height:26px;flex:0 0 auto;}
+  .logo .wm{font-weight:800;font-size:18px;letter-spacing:-.02em;color:var(--text-hi);}
+  .logo .wm b{color:var(--em);font-weight:800;}
+  .navlab{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--text-dim);padding:16px 8px 6px;}
+  .navi{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:var(--radius-sm);font-size:13.5px;color:var(--text);cursor:default;}
+  .navi:hover{background:var(--elevated);}
+  .navi.on{background:rgba(16,185,129,.10);color:var(--text-hi);box-shadow:inset 2px 0 0 var(--em);}
+  .navi .d{width:6px;height:6px;border-radius:2px;background:var(--text-dim);}
+  .navi.on .d{background:var(--em);}
+  /* Main */
+  .main{padding:22px 28px 60px;max-width:1080px;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
+  .chip{font-family:var(--mono);font-size:11.5px;padding:4px 10px;border-radius:var(--radius-sm);border:1px solid var(--hairline-2);color:var(--text-mid);}
+  .chip.em{background:rgba(16,185,129,.10);border-color:transparent;color:var(--em);}
+  .chip.amber{background:rgba(245,158,11,.12);border-color:transparent;color:var(--amber);}
+  h1{font-size:28px;font-weight:800;letter-spacing:-.02em;color:var(--text-hi);margin:6px 0 2px;}
+  .sub{color:var(--text-mid);font-size:14px;margin-bottom:20px;}
+  .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:22px;}
+  .kpi{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-lg);padding:16px 18px;}
+  .kpi .l{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);}
+  .kpi .v{font-family:var(--mono);font-size:24px;font-weight:600;color:var(--text-hi);margin-top:6px;}
+  .kpi .v.pos{color:var(--pos);}
+  .card{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-lg);padding:0;overflow:hidden;margin-bottom:20px;}
+  .card .hd{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--hairline);}
+  .card .hd h2{font-size:16px;font-weight:600;color:var(--text-hi);margin:0;}
+  /* Ledger table */
+  table{width:100%;border-collapse:collapse;}
+  thead th{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-mid);text-align:left;padding:9px 20px;border-bottom:1px solid var(--hairline);font-weight:500;}
+  thead th.num{text-align:right;}
+  tbody td{padding:11px 20px;font-size:13.5px;color:var(--text);border-bottom:1px solid var(--hairline);}
+  tbody tr:hover td{background:var(--elevated);}
+  td.acct{color:var(--text-hi);}
+  td.acct .sub{display:block;font-family:var(--mono);font-size:11px;color:var(--text-mid);margin-top:2px;}
+  td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;color:var(--text-hi);}
+  td.num.neg{color:var(--red-fig);}
+  tr.total td{border-bottom:none;color:var(--text-hi);font-weight:600;padding-top:14px;padding-bottom:14px;}
+  tr.total{box-shadow:inset 0 2px 0 var(--em), inset 0 -2px 0 var(--em);}
+  tr.total td.num{color:var(--text-hi);}
+  .inbal{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;color:var(--pos);}
+  .inbal .dot{width:8px;height:8px;border-radius:50%;background:var(--pos);}
+  /* Proposed panel */
+  .prop{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 20px;background:var(--surface-2);border:1px solid var(--hairline);border-radius:var(--radius-lg);margin-bottom:20px;}
+  .prop .l{font-size:13.5px;color:var(--text);}
+  .prop .l b{color:var(--text-hi);}
+  .conf{font-family:var(--mono);font-size:11.5px;padding:4px 10px;border-radius:var(--radius-sm);background:rgba(16,185,129,.10);color:var(--em);margin-right:10px;}
+  .btn{font-family:var(--disp);font-weight:600;font-size:13.5px;border-radius:var(--radius);cursor:pointer;border:1px solid var(--hairline-2);background:transparent;color:var(--text-hi);padding:10px 16px;transition:.15s cubic-bezier(.2,.6,.2,1);}
+  .btn:hover{background:var(--elevated);}
+  .btn.pri{background:var(--em);color:var(--ink-on-em);border-color:var(--em);}
+  .btn.pri:hover{background:var(--em-bright);}
+  /* Autonomy dial */
+  .seg{display:inline-flex;border:1px solid var(--hairline-2);border-radius:var(--radius);overflow:hidden;}
+  .seg > div{padding:8px 14px;font-size:12.5px;color:var(--text-mid);cursor:default;border-right:1px solid var(--hairline);}
+  .seg > div:last-child{border-right:none;}
+  .seg > div .sl{display:block;font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-top:2px;}
+  .seg > div.on{background:rgba(16,185,129,.10);color:var(--text-hi);box-shadow:inset 0 0 0 1px var(--em);}
+  .seg > div.on .sl{color:var(--em);}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+  .lab{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--text-dim);margin:22px 0 8px;}
+  .note{color:var(--text-dim);font-size:12px;margin-top:26px;border-top:1px solid var(--hairline);padding-top:14px;}
+  @media(max-width:820px){.app{grid-template-columns:1fr}.side{display:none}.kpis{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="side">
+    <div class="logo">
+      <svg viewBox="0 0 100 100" role="img" aria-label="MeritBooks">
+        <rect x="40" y="19" width="48" height="10" rx="2" fill="#10b981"/>
+        <rect x="24" y="35" width="64" height="10" rx="2" fill="#10b981"/>
+        <rect x="52" y="51" width="36" height="10" rx="2" fill="#10b981"/>
+        <rect x="16" y="66" width="72" height="4" rx="1" fill="#059669"/>
+        <rect x="16" y="76" width="72" height="4" rx="1" fill="#34d399"/>
+        <rect x="16" y="82" width="72" height="4" rx="1" fill="#34d399"/>
+      </svg>
+      <span class="wm">Merit<b>Books</b></span>
+    </div>
+    <div class="navlab">Home</div>
+    <div class="navi"><span class="d"></span>Dashboard</div>
+    <div class="navi"><span class="d"></span>Inbox</div>
+    <div class="navlab">Banking &amp; Cash</div>
+    <div class="navi on"><span class="d"></span>Bank Feed</div>
+    <div class="navi"><span class="d"></span>Reconciliation</div>
+    <div class="navi"><span class="d"></span>Cash Position</div>
+    <div class="navlab">Accounting</div>
+    <div class="navi"><span class="d"></span>Journal Entries</div>
+    <div class="navi"><span class="d"></span>Chart of Accounts</div>
+    <div class="navlab">Reporting</div>
+    <div class="navi"><span class="d"></span>Reports</div>
+    <div class="navi"><span class="d"></span>Board Package</div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="topbar">
+      <span class="chip em">Working in Artistry Homes</span>
+      <div class="row">
+        <span class="chip em">Live</span>
+        <span class="chip amber">Payroll · In sandbox</span>
+      </div>
+    </div>
+
+    <div class="eyebrow">General Ledger</div>
+    <h1>Trial Balance</h1>
+    <div class="sub">As of Aug 31, 2026 · accrual basis · <span class="inbal"><span class="dot"></span>In balance</span></div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="l">Total assets</div><div class="v">$4,812,660</div></div>
+      <div class="kpi"><div class="l">Net income (MTD)</div><div class="v pos">$182,940</div></div>
+      <div class="kpi"><div class="l">Cash</div><div class="v">$611,204</div></div>
+    </div>
+
+    <!-- Proposed vs posted -->
+    <div class="prop">
+      <div class="l"><b>Bank feed:</b> ACH from Cedar Ridge Builders → <b>Construction Revenue (4100)</b></div>
+      <div class="row"><span class="conf">94% · Auto-eligible</span><button class="btn pri">Approve &amp; post</button></div>
+    </div>
+
+    <!-- Ledger table -->
+    <div class="card">
+      <div class="hd"><h2>Trial balance</h2><span class="inbal"><span class="dot"></span>In balance</span></div>
+      <table>
+        <thead>
+          <tr><th>Account</th><th class="num">Debit ($)</th><th class="num">Credit ($)</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="acct">Operating bank<span class="sub">1000 · Artistry Homes</span></td><td class="num">611,204.18</td><td class="num">—</td></tr>
+          <tr><td class="acct">Accounts receivable<span class="sub">1100 · trade</span></td><td class="num">1,204,880.00</td><td class="num">—</td></tr>
+          <tr><td class="acct">Unbilled receivable<span class="sub">1180 · contract asset</span></td><td class="num">61,050.00</td><td class="num">—</td></tr>
+          <tr><td class="acct">Accounts payable<span class="sub">2000 · trade</span></td><td class="num">—</td><td class="num">687,204.00</td></tr>
+          <tr><td class="acct">Billings in excess<span class="sub">2410 · contract liability</span></td><td class="num">—</td><td class="num">35,000.00</td></tr>
+          <tr><td class="acct">Retainage adjustment<span class="sub">1150 · prior-period</span></td><td class="num neg">(4,454.42)</td><td class="num">—</td></tr>
+          <tr><td class="acct">Construction revenue<span class="sub">4100</span></td><td class="num">—</td><td class="num">3,982,660.00</td></tr>
+          <tr class="total"><td>Total</td><td class="num">4,812,660.14</td><td class="num">4,812,660.14</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Components -->
+    <div class="lab">Autonomy — auto-post is off by default</div>
+    <div class="seg">
+      <div class="on">Suggest<span class="sl">review all</span></div>
+      <div>Auto-eligible<span class="sl">≥ 95%</span></div>
+      <div>Full auto<span class="sl">off</span></div>
+    </div>
+
+    <div class="lab">Actions</div>
+    <div class="row">
+      <button class="btn pri">Approve &amp; post</button>
+      <button class="btn">Flag for review</button>
+      <button class="btn">Export</button>
+    </div>
+
+    <div class="note">Preview only — exact brand tokens (emerald #10b981 on #0A0F0D), Plus Jakarta Sans + JetBrains Mono figures, the six-bar "Total" mark, and the ledger double-rule total. This is the target look for every financial screen.</div>
+  </main>
+</div>
+</body>
+</html>

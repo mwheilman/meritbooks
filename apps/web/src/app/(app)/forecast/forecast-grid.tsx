@@ -98,7 +98,7 @@ function ForecastChart({ weeks }: { weeks: ForecastWeek[] }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Projected weekly ending balance">
       {/* zero baseline */}
-      <line x1={padL} y1={zeroY} x2={W - padR} y2={zeroY} stroke="#475569" strokeWidth={1} strokeDasharray="3 3" />
+      <line x1={padL} y1={zeroY} x2={W - padR} y2={zeroY} stroke="#2C362F" strokeWidth={1} strokeDasharray="3 3" />
       {/* net bars */}
       {weeks.map((w, i) => {
         const barX = padL + slot * i + slot * 0.28;
@@ -137,7 +137,7 @@ function ForecastChart({ weeks }: { weeks: ForecastWeek[] }) {
           y={H - 10}
           textAnchor="middle"
           fontSize={9}
-          fill="#64748b"
+          fill="#7E8983"
           fontFamily="var(--font-mono, monospace)"
         >
           W{w.weekNumber}

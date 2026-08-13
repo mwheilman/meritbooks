@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>MeritBooks — branded app preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --em:#10b981;--em-bright:#34d399;--em-deep:#059669;
+    --bg:#0A0F0D;--surface:#121A16;--surface-2:#0E1512;--elevated:#18211C;
+    --hairline:#232C27;--hairline-2:#2C362F;
+    --text-hi:#EDF2EF;--text:#AEB8B2;--text-mid:#7E8983;--text-dim:#7C877F;--ink-on-em:#05221A;
+    --amber:#f59e0b;--red-fig:#f87171;--blue:#3b82f6;--indigo:#818cf8;--pos:#34d399;
+    --radius:10px;--radius-lg:14px;--radius-sm:7px;
+    --disp:"Plus Jakarta Sans",system-ui,sans-serif;--mono:"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--disp);-webkit-font-smoothing:antialiased;}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+  .app{display:grid;grid-template-columns:236px 1fr;min-height:100vh;}
+  .side{background:var(--bg);border-right:1px solid var(--hairline);padding:18px 12px;position:sticky;top:0;height:100vh;overflow:auto;}
+  .logo{display:flex;align-items:center;gap:10px;padding:4px 6px 16px;}
+  .logo svg{width:24px;height:24px;flex:0 0 auto;}
+  .logo .wm{font-weight:800;font-size:17px;letter-spacing:-.02em;color:var(--text-hi);}
+  .logo .wm b{color:var(--em);}
+  .plane{display:flex;gap:4px;margin:0 4px 6px;border:1px solid var(--hairline-2);border-radius:var(--radius-sm);padding:3px;}
+  .plane div{flex:1;text-align:center;font-family:var(--mono);font-size:10px;padding:5px;border-radius:5px;color:var(--text-mid);cursor:default;}
+  .plane div.on{background:rgba(16,185,129,.12);color:var(--em);}
+  .navlab{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--text-dim);padding:14px 8px 5px;}
+  .navi{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:var(--radius-sm);font-size:13px;color:var(--text);cursor:pointer;}
+  .navi:hover{background:var(--elevated);}
+  .navi.on{background:rgba(16,185,129,.10);color:var(--text-hi);box-shadow:inset 2px 0 0 var(--em);}
+  .navi .d{width:6px;height:6px;border-radius:2px;background:var(--text-dim);}
+  .navi.on .d{background:var(--em);}
+  .main{padding:22px 30px 70px;max-width:1120px;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+  .chip{font-family:var(--mono);font-size:11.5px;padding:4px 10px;border-radius:var(--radius-sm);border:1px solid var(--hairline-2);color:var(--text-mid);}
+  .chip.em{background:rgba(16,185,129,.10);border-color:transparent;color:var(--em);}
+  .chip.amber{background:rgba(245,158,11,.12);border-color:transparent;color:var(--amber);}
+  .chip.blue{background:rgba(59,130,246,.12);border-color:transparent;color:var(--blue);}
+  .eyebrow{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:var(--em);}
+  h1{font-size:26px;font-weight:800;letter-spacing:-.02em;color:var(--text-hi);margin:6px 0 2px;}
+  .sub{color:var(--text-mid);font-size:13.5px;margin-bottom:18px;}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;}
+  .kpi{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-lg);padding:14px 16px;}
+  .kpi .l{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);}
+  .kpi .v{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--text-hi);margin-top:5px;}
+  .kpi .v.pos{color:var(--pos);}.kpi .v.neg{color:var(--red-fig);}
+  .card{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:18px;}
+  .card .hd{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--hairline);}
+  .card .hd h2{font-size:15px;font-weight:600;color:var(--text-hi);margin:0;}
+  table{width:100%;border-collapse:collapse;}
+  thead th{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-mid);text-align:left;padding:9px 18px;border-bottom:1px solid var(--hairline);font-weight:500;}
+  thead th.num{text-align:right;}
+  tbody td{padding:10px 18px;font-size:13px;color:var(--text);border-bottom:1px solid var(--hairline);}
+  tbody tr:hover td{background:var(--elevated);}
+  td.acct{color:var(--text-hi);}
+  td.acct .s{display:block;font-family:var(--mono);font-size:11px;color:var(--text-mid);margin-top:2px;}
+  td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;color:var(--text-hi);}
+  td.num.neg{color:var(--red-fig);}
+  td.dim{color:var(--text-mid);}
+  tr.sub td{color:var(--text-mid);font-weight:600;background:var(--surface-2);font-size:12px;text-transform:uppercase;letter-spacing:.05em;font-family:var(--mono);}
+  tr.total td{border-bottom:none;color:var(--text-hi);font-weight:600;padding-top:13px;padding-bottom:13px;}
+  tr.total{box-shadow:inset 0 2px 0 var(--em), inset 0 -2px 0 var(--em);}
+  tr.subtotal td{border-top:1px solid var(--em-deep);color:var(--text-hi);font-weight:600;}
+  .inbal{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11.5px;color:var(--pos);}
+  .inbal .dot{width:8px;height:8px;border-radius:50%;background:var(--pos);}
+  .btn{font-family:var(--disp);font-weight:600;font-size:13px;border-radius:var(--radius);cursor:pointer;border:1px solid var(--hairline-2);background:transparent;color:var(--text-hi);padding:9px 15px;transition:.15s cubic-bezier(.2,.6,.2,1);}
+  .btn:hover{background:var(--elevated);}
+  .btn.pri{background:var(--em);color:var(--ink-on-em);border-color:var(--em);}.btn.pri:hover{background:var(--em-bright);}
+  .btn.sm{padding:6px 11px;font-size:12px;}
+  .conf{font-family:var(--mono);font-size:11px;padding:3px 9px;border-radius:var(--radius-sm);background:rgba(16,185,129,.10);color:var(--em);}
+  .conf.mid{background:rgba(245,158,11,.12);color:var(--amber);}
+  .bar{height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden;width:70px;display:inline-block;vertical-align:middle;}
+  .bar>i{display:block;height:100%;background:var(--em);}
+  .bar.mid>i{background:var(--amber);}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .queues{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;}
+  .q{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-lg);padding:14px 16px;}
+  .q .n{font-family:var(--mono);font-size:26px;font-weight:600;color:var(--text-hi);}
+  .q .t{font-size:12.5px;color:var(--text-mid);margin-top:2px;}
+  .q.hot .n{color:var(--amber);}
+  .st{font-family:var(--mono);font-size:11px;padding:3px 9px;border-radius:var(--radius-sm);}
+  .st.paid{background:rgba(16,185,129,.10);color:var(--em);}
+  .st.open{background:rgba(59,130,246,.12);color:var(--blue);}
+  .st.over{background:rgba(248,113,113,.12);color:var(--red-fig);}
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .tile{border:1px solid var(--hairline-2);border-radius:var(--radius);padding:16px;display:flex;align-items:center;gap:11px;cursor:default;}
+  .tile:hover{background:var(--elevated);}
+  .tile .ic{width:30px;height:30px;border-radius:8px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:600;font-size:12px;color:var(--text-hi);}
+  .tieout{text-align:center;padding:28px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.05);border-radius:var(--radius-lg);}
+  .tieout .b{font-size:20px;font-weight:700;color:var(--em);margin-bottom:8px;}
+  .tieout .e{font-family:var(--mono);font-size:19px;color:var(--text-hi);}
+  .board{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .bc{border:1px solid var(--hairline);border-radius:var(--radius);padding:13px 15px;background:var(--surface);}
+  .bc .bt{font-weight:600;font-size:13.5px;color:var(--text-hi);display:flex;justify-content:space-between;}
+  .bc .bd{font-size:12px;color:var(--text-dim);margin-top:5px;}
+  .tag{font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:999px;}
+  .tag.done{background:rgba(16,185,129,.12);color:var(--em);}.tag.det{background:rgba(129,140,248,.14);color:var(--indigo);}.tag.later{background:var(--surface-2);color:var(--text-dim);}
+  .lab{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--text-dim);margin:20px 0 8px;}
+  .meter{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden;}
+  .meter>i{display:block;height:100%;background:var(--em);}
+  .rag-g{color:var(--pos);}.rag-a{color:var(--amber);}.rag-r{color:var(--red-fig);}
+  .screen{display:none;} .screen.on{display:block;animation:f .3s ease;}
+  @keyframes f{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media(max-width:900px){.kpis,.queues{grid-template-columns:repeat(2,1fr)}.tiles,.board{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">
+      <svg viewBox="0 0 100 100" role="img" aria-label="MeritBooks"><rect x="40" y="19" width="48" height="10" rx="2" fill="#10b981"/><rect x="24" y="35" width="64" height="10" rx="2" fill="#10b981"/><rect x="52" y="51" width="36" height="10" rx="2" fill="#10b981"/><rect x="16" y="66" width="72" height="4" rx="1" fill="#059669"/><rect x="16" y="76" width="72" height="4" rx="1" fill="#34d399"/><rect x="16" y="82" width="72" height="4" rx="1" fill="#34d399"/></svg>
+      <span class="wm">Merit<b>Books</b></span>
+    </div>
+    <div class="plane"><div class="on">Books</div><div>Practice</div></div>
+    <div class="navlab">Home</div>
+    <div class="navi on" data-s="dashboard"><span class="d"></span>Dashboard</div>
+    <div class="navi" data-s="onboarding"><span class="d"></span>Get started</div>
+    <div class="navlab">Banking &amp; Cash</div>
+    <div class="navi" data-s="bankfeed"><span class="d"></span>Bank Feed</div>
+    <div class="navi" data-s="recon"><span class="d"></span>Reconciliation</div>
+    <div class="navlab">Receivables</div>
+    <div class="navi" data-s="invoices"><span class="d"></span>Invoices</div>
+    <div class="navi" data-s="araging"><span class="d"></span>AR Aging</div>
+    <div class="navlab">Accounting</div>
+    <div class="navi" data-s="tb"><span class="d"></span>Trial Balance</div>
+    <div class="navlab">Reporting</div>
+    <div class="navi" data-s="pnl"><span class="d"></span>Profit &amp; Loss</div>
+    <div class="navlab">Practice</div>
+    <div class="navi" data-s="team"><span class="d"></span>Team performance</div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <span class="chip em" id="ctx">Working in Artistry Homes</span>
+      <div class="row"><span class="chip em">Live</span><span class="chip amber">Payroll · In sandbox</span></div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <section class="screen on" id="dashboard">
+      <div class="eyebrow">Home</div><h1>Artistry Homes</h1>
+      <div class="sub">Your book of record at a glance · Aug 2026 · <span class="inbal"><span class="dot"></span>Close on track</span></div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Cash</div><div class="v">$611,204</div></div>
+        <div class="kpi"><div class="l">AR (billed+unbilled)</div><div class="v">$1,265,930</div></div>
+        <div class="kpi"><div class="l">AP</div><div class="v">$687,204</div></div>
+        <div class="kpi"><div class="l">Net income MTD</div><div class="v pos">$182,940</div></div>
+      </div>
+      <div class="queues">
+        <div class="q hot"><div class="n">12</div><div class="t">To review — bank feed</div></div>
+        <div class="q"><div class="n">3</div><div class="t">Needs attention</div></div>
+        <div class="q"><div class="n">5</div><div class="t">AI proposals</div></div>
+        <div class="q"><div class="n">2</div><div class="t">Draft journal entries</div></div>
+      </div>
+      <div class="card"><div class="hd"><h2>Waiting on you</h2><span class="chip">Sarah · Accounting Specialist</span></div>
+      <table><tbody>
+        <tr><td class="acct">Categorize 12 bank transactions<span class="s">Bank Feed</span></td><td class="num"><span class="conf">9 auto-eligible</span></td><td class="num"><button class="btn sm pri">Open</button></td></tr>
+        <tr><td class="acct">Approve unbilled-revenue accrual<span class="s">Rev-rec · 3 jobs</span></td><td class="num">$61,050.00</td><td class="num"><button class="btn sm">Review</button></td></tr>
+        <tr><td class="acct">Reconcile operating account<span class="s">1000 · through Aug 31</span></td><td class="num"><span class="conf mid">1 unmatched</span></td><td class="num"><button class="btn sm">Open</button></td></tr>
+      </tbody></table></div>
+    </section>
+
+    <!-- BANK FEED -->
+    <section class="screen" id="bankfeed">
+      <div class="eyebrow">Banking &amp; Cash</div><h1>Bank Feed</h1>
+      <div class="sub">AI-categorized, sorted by confidence · <span class="mono">12</span> to review · auto-post <b style="color:var(--text-hi)">off</b></div>
+      <div class="row" style="margin-bottom:14px"><button class="btn pri sm">Approve all ≥ 90% (9)</button><button class="btn sm">Select vendor</button></div>
+      <div class="card"><table>
+        <thead><tr><th>Date</th><th>Vendor</th><th>GL account</th><th>Confidence</th><th class="num">Amount ($)</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="mono dim">08/29</td><td class="acct">Cedar Ridge Builders</td><td>Construction Revenue<span class="s" style="font-family:var(--mono);font-size:11px;color:var(--text-mid)">4100</span></td><td><span class="bar"><i style="width:94%"></i></span> <span class="conf">94%</span></td><td class="num pos">+42,500.00</td><td><button class="btn sm pri">Post</button></td></tr>
+          <tr><td class="mono dim">08/28</td><td class="acct">Menards</td><td>Job Materials · Lot 214</td><td><span class="bar"><i style="width:88%"></i></span> <span class="conf">88%</span></td><td class="num neg">(1,204.19)</td><td><button class="btn sm">Post</button></td></tr>
+          <tr><td class="mono dim">08/28</td><td class="acct">Unknown ACH</td><td class="dim">Needs a look</td><td><span class="bar mid"><i style="width:52%"></i></span> <span class="conf mid">52%</span></td><td class="num neg">(880.00)</td><td><button class="btn sm">Edit</button></td></tr>
+          <tr><td class="mono dim">08/27</td><td class="acct">Iowa Utilities</td><td>Utilities · Overhead</td><td><span class="bar"><i style="width:96%"></i></span> <span class="conf">96%</span></td><td class="num neg">(612.44)</td><td><button class="btn sm pri">Post</button></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- TRIAL BALANCE -->
+    <section class="screen" id="tb">
+      <div class="eyebrow">General Ledger</div><h1>Trial Balance</h1>
+      <div class="sub">As of Aug 31, 2026 · accrual · <span class="inbal"><span class="dot"></span>In balance</span></div>
+      <div class="card"><div class="hd"><h2>Trial balance</h2><span class="inbal"><span class="dot"></span>In balance</span></div>
+      <table><thead><tr><th>Account</th><th class="num">Debit ($)</th><th class="num">Credit ($)</th></tr></thead><tbody>
+        <tr><td class="acct">Operating bank<span class="s">1000 · Artistry Homes</span></td><td class="num">611,204.18</td><td class="num dim">—</td></tr>
+        <tr><td class="acct">Accounts receivable<span class="s">1100 · trade</span></td><td class="num">1,204,880.00</td><td class="num dim">—</td></tr>
+        <tr><td class="acct">Unbilled receivable<span class="s">1180 · contract asset</span></td><td class="num">61,050.00</td><td class="num dim">—</td></tr>
+        <tr><td class="acct">Accounts payable<span class="s">2000 · trade</span></td><td class="num dim">—</td><td class="num">687,204.00</td></tr>
+        <tr><td class="acct">Billings in excess<span class="s">2410 · contract liability</span></td><td class="num dim">—</td><td class="num">35,000.00</td></tr>
+        <tr><td class="acct">Retainage adjustment<span class="s">1150 · prior-period</span></td><td class="num neg">(4,454.42)</td><td class="num dim">—</td></tr>
+        <tr><td class="acct">Construction revenue<span class="s">4100</span></td><td class="num dim">—</td><td class="num">3,982,660.00</td></tr>
+        <tr class="total"><td>Total</td><td class="num">4,812,660.14</td><td class="num">4,812,660.14</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <!-- P&L -->
+    <section class="screen" id="pnl">
+      <div class="eyebrow">Reporting</div><h1>Profit &amp; Loss</h1>
+      <div class="sub">Aug 2026 · accrual · vs. prior month</div>
+      <div class="card"><table>
+        <thead><tr><th>Account</th><th class="num">This month ($)</th><th class="num">Prior ($)</th><th class="num">Var ($)</th></tr></thead><tbody>
+        <tr class="sub"><td colspan="4">Revenue</td></tr>
+        <tr><td class="acct">Construction revenue<span class="s">4100</span></td><td class="num">982,660.00</td><td class="num">910,400.00</td><td class="num pos">+72,260.00</td></tr>
+        <tr><td class="acct">Change orders<span class="s">4150</span></td><td class="num">44,000.00</td><td class="num">31,000.00</td><td class="num pos">+13,000.00</td></tr>
+        <tr class="subtotal"><td>Total revenue</td><td class="num">1,026,660.00</td><td class="num">941,400.00</td><td class="num pos">+85,260.00</td></tr>
+        <tr class="sub"><td colspan="4">Cost of revenue</td></tr>
+        <tr><td class="acct">Job materials<span class="s">5010</span></td><td class="num neg">(512,300.00)</td><td class="num neg">(486,900.00)</td><td class="num neg">(25,400.00)</td></tr>
+        <tr><td class="acct">Subcontractors<span class="s">5020</span></td><td class="num neg">(214,120.00)</td><td class="num neg">(198,400.00)</td><td class="num neg">(15,720.00)</td></tr>
+        <tr class="subtotal"><td>Gross profit</td><td class="num">300,240.00</td><td class="num">256,100.00</td><td class="num pos">+44,140.00</td></tr>
+        <tr><td class="acct">Operating expenses<span class="s">6000-series</span></td><td class="num neg">(117,300.00)</td><td class="num neg">(112,800.00)</td><td class="num neg">(4,500.00)</td></tr>
+        <tr class="total"><td>Net income</td><td class="num">182,940.00</td><td class="num">143,300.00</td><td class="num pos">+39,640.00</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <!-- AR AGING -->
+    <section class="screen" id="araging">
+      <div class="eyebrow">Receivables</div><h1>AR Aging</h1>
+      <div class="sub">As of Aug 31, 2026 · billed + unbilled · <span class="mono">expand to split</span></div>
+      <div class="card"><table>
+        <thead><tr><th>Customer</th><th class="num">Current</th><th class="num">1–30</th><th class="num">31–60</th><th class="num">90+</th><th class="num">Total ($)</th></tr></thead><tbody>
+        <tr><td class="acct">▸ Cedar Ridge Builders</td><td class="num">73,900.00</td><td class="num">18,200.00</td><td class="num dim">—</td><td class="num dim">—</td><td class="num">92,100.00</td></tr>
+        <tr style="background:var(--surface-2)"><td class="dim" style="padding-left:34px;font-size:12px">Billed (invoiced)</td><td class="num dim">42,500.00</td><td class="num dim">18,200.00</td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">60,700.00</td></tr>
+        <tr style="background:var(--surface-2)"><td style="padding-left:34px;font-size:12px;color:var(--indigo)">Unbilled (1180)</td><td class="num" style="color:var(--indigo)">31,400.00</td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td><td class="num" style="color:var(--indigo)">31,400.00</td></tr>
+        <tr><td class="acct">▸ Meadowbrook Dev</td><td class="num">42,150.00</td><td class="num">5,200.00</td><td class="num dim">—</td><td class="num dim">—</td><td class="num">47,350.00</td></tr>
+        <tr><td class="acct">▸ Harborview HOA</td><td class="num">8,900.00</td><td class="num dim">—</td><td class="num dim">—</td><td class="num neg">3,200.00</td><td class="num">18,850.00</td></tr>
+        <tr class="total"><td>Total receivables</td><td class="num">124,950.00</td><td class="num">45,400.00</td><td class="num">9,800.00</td><td class="num">3,200.00</td><td class="num">190,100.00</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <!-- INVOICES -->
+    <section class="screen" id="invoices">
+      <div class="eyebrow">Receivables</div><h1>Invoices</h1>
+      <div class="sub"><span class="mono">146</span> customers · <span class="mono">$1.20M</span> open</div>
+      <div class="card"><table>
+        <thead><tr><th>Invoice</th><th>Customer</th><th>Due</th><th>Status</th><th class="num">Balance ($)</th></tr></thead><tbody>
+        <tr><td class="mono acct">INV-2041</td><td>Cedar Ridge Builders</td><td class="mono dim">Sep 15</td><td><span class="st open">Open</span></td><td class="num">42,500.00</td></tr>
+        <tr><td class="mono acct">INV-2038</td><td>Meadowbrook Dev</td><td class="mono dim">Sep 02</td><td><span class="st open">Open</span></td><td class="num">27,300.00</td></tr>
+        <tr><td class="mono acct">INV-1994</td><td>Harborview HOA</td><td class="mono dim">Jul 20</td><td><span class="st over">Overdue</span></td><td class="num neg">3,200.00</td></tr>
+        <tr><td class="mono acct">INV-1990</td><td>Summit Mechanical</td><td class="mono dim">Aug 01</td><td><span class="st paid">Paid</span></td><td class="num dim">—</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <!-- RECONCILIATION -->
+    <section class="screen" id="recon">
+      <div class="eyebrow">Banking &amp; Cash</div><h1>Reconciliation</h1>
+      <div class="sub">Operating · 1000 · through Aug 31, 2026</div>
+      <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
+        <div class="kpi"><div class="l">Statement balance</div><div class="v">$611,204.18</div></div>
+        <div class="kpi"><div class="l">Book balance</div><div class="v">$611,204.18</div></div>
+        <div class="kpi"><div class="l">Difference</div><div class="v pos">$0.00</div></div>
+      </div>
+      <div class="card"><div class="hd"><h2>Outstanding items</h2><span class="inbal"><span class="dot"></span>Reconciled</span></div>
+      <table><thead><tr><th>Date</th><th>Description</th><th>Status</th><th class="num">Amount ($)</th></tr></thead><tbody>
+        <tr><td class="mono dim">08/30</td><td class="acct">Check #4021 · Menards</td><td><span class="st open">Uncleared</span></td><td class="num neg">(1,204.19)</td></tr>
+        <tr><td class="mono dim">08/29</td><td class="acct">Deposit · Cedar Ridge</td><td><span class="st paid">Cleared</span></td><td class="num pos">42,500.00</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <!-- ONBOARDING -->
+    <section class="screen" id="onboarding">
+      <div class="eyebrow">Get started</div><h1>Set up Artistry Homes</h1>
+      <div class="sub">Connect your books or drop your files — you review, you don't re-enter.</div>
+      <div class="tiles" style="margin-bottom:16px">
+        <div class="tile"><span class="ic">qb</span><div><div style="color:var(--text-hi);font-weight:600;font-size:13.5px">QuickBooks</div><div style="font-size:11px;color:var(--text-dim)">Connect &amp; import</div></div></div>
+        <div class="tile"><span class="ic">⤒</span><div><div style="color:var(--text-hi);font-weight:600;font-size:13.5px">Upload files</div><div style="font-size:11px;color:var(--text-dim)">Trial balance</div></div></div>
+        <div class="tile"><span class="ic">✦</span><div><div style="color:var(--text-hi);font-weight:600;font-size:13.5px">Start fresh</div><div style="font-size:11px;color:var(--text-dim)">New books</div></div></div>
+      </div>
+      <div class="tieout" style="margin-bottom:16px"><div class="b">Balanced to the penny. ✓</div><div class="e mono">$4,812,660.14 = $4,812,660.14</div></div>
+      <div class="lab">Setup home — add anytime</div>
+      <div class="board">
+        <div class="bc"><div class="bt">Jobs &amp; WIP <span class="tag done">Done ✓</span></div><div class="bd">3 open jobs imported · WIP ties to 1180/2410.</div></div>
+        <div class="bc"><div class="bt">Debt &amp; loans <span class="tag det">Detected · review</span></div><div class="bd">2 loans found — drop the agreements.</div></div>
+        <div class="bc"><div class="bt">Fixed assets <span class="tag later">Add later</span></div><div class="bd">Drop a register or capex invoices.</div></div>
+        <div class="bc"><div class="bt">Equity / cap table <span class="tag later">Add later</span></div><div class="bd">Owners, units, contributions.</div></div>
+      </div>
+    </section>
+
+    <!-- TEAM PERFORMANCE (Practice) -->
+    <section class="screen" id="team">
+      <div class="eyebrow">Practice · Oversight</div><h1>Team performance</h1>
+      <div class="sub">Your team across all companies · last 30 days</div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Items processed</div><div class="v">1,284</div></div>
+        <div class="kpi"><div class="l">$ processed</div><div class="v">$8.4M</div></div>
+        <div class="kpi"><div class="l">Close on-time</div><div class="v pos">92%</div></div>
+        <div class="kpi"><div class="l">Filings on-time</div><div class="v pos">100%</div></div>
+      </div>
+      <div class="card"><div class="hd"><h2>By person</h2><span class="chip">vs. target</span></div>
+      <table><thead><tr><th>Member</th><th>Role</th><th class="num">Items</th><th class="num">$ processed</th><th class="num">Cycle</th><th>vs target</th></tr></thead><tbody>
+        <tr><td class="acct">Sarah Lin</td><td class="dim">Specialist</td><td class="num">612</td><td class="num">3,940,000</td><td class="num">1.2d</td><td><span class="mono rag-g">● on track</span></td></tr>
+        <tr><td class="acct">Marco Diaz</td><td class="dim">Specialist</td><td class="num">431</td><td class="num">2,610,000</td><td class="num">1.8d</td><td><span class="mono rag-a">● watch</span></td></tr>
+        <tr><td class="acct">Priya N.</td><td class="dim">AP clerk</td><td class="num">241</td><td class="num">1,850,000</td><td class="num">2.6d</td><td><span class="mono rag-r">● behind</span></td></tr>
+      </tbody></table></div>
+    </section>
+
+  </main>
+</div>
+<script>
+  var navs=document.querySelectorAll('.navi[data-s]');
+  var ctx=document.getElementById('ctx');
+  navs.forEach(function(n){ n.addEventListener('click',function(){
+    navs.forEach(function(x){x.classList.remove('on')}); n.classList.add('on');
+    var s=n.getAttribute('data-s');
+    document.querySelectorAll('.screen').forEach(function(sc){sc.classList.toggle('on', sc.id===s)});
+    ctx.textContent = (s==='team')?'Practice — all companies' : 'Working in Artistry Homes';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }); });
+</script>
+</body>
+</html>

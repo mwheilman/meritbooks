@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { PageHeader, EmptyState } from '@/components/ui';
+import { ProposedChip } from '@/components/brand';
 
 interface ProposedLine { account_label?: string; account_number?: string; debit_cents?: number; credit_cents?: number; memo?: string | null }
 interface ProposedOutput {
@@ -106,7 +107,9 @@ export default function AiDecisionsPage() {
                     <span className="text-2xs font-mono uppercase tracking-wide text-slate-500 shrink-0">{d.feature.replace(/_/g, ' ')}</span>
                     <span className="text-sm text-slate-200 truncate flex-1">{d.input_summary}</span>
                     {d.clarifying_question && <HelpCircle size={14} className="text-amber-400 shrink-0" />}
-                    {d.confidence != null && <span className="text-2xs text-slate-500 shrink-0">{(d.confidence * 100).toFixed(0)}%</span>}
+                    {d.confidence != null && (
+                      <ProposedChip confidence={d.confidence} showLabel={false} className="shrink-0" />
+                    )}
                     <span className={clsx('inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-2xs font-medium shrink-0', badge.cls)}>
                       <Icon size={11} /> {badge.label}
                     </span>

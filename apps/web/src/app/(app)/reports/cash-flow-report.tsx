@@ -3,6 +3,8 @@
 import { AlertCircle, Loader2, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
+import { clsx } from 'clsx';
+import { LEDGER_TH, LEDGER_TOTAL, LEDGER_SUBTOTAL } from '@/lib/reports/ledger';
 
 interface CashFlowItem { label: string; amountCents: number }
 interface CashFlowResponse {
@@ -19,7 +21,7 @@ function CfLine({ label, amount, indent, bold }: { label: string; amount: number
   return (
     <tr className="hover:bg-slate-800/20 transition-colors">
       <td className={`px-6 py-1.5 text-sm ${indent ? 'pl-12' : ''} ${bold ? 'font-semibold text-white' : 'text-slate-300'}`}>{label}</td>
-      <td className={`px-6 py-1.5 text-right font-mono tabular-nums text-sm ${bold ? 'font-semibold text-white' : amount < 0 ? 'text-red-400' : 'text-slate-300'}`}>
+      <td className={`px-6 py-1.5 text-right font-mono tabular-nums text-sm ${bold ? 'font-semibold text-white' : amount < 0 ? 'text-red-fig' : 'text-slate-300'}`}>
         {amount !== 0 ? formatMoney(amount) : '—'}
       </td>
     </tr>
@@ -29,12 +31,12 @@ function CfLine({ label, amount, indent, bold }: { label: string; amount: number
 function SectionTotal({ label, amount }: { label: string; amount: number }) {
   const Icon = amount > 0 ? TrendingUp : amount < 0 ? TrendingDown : Minus;
   return (
-    <tr className="bg-slate-800/30">
+    <tr className={clsx(LEDGER_SUBTOTAL, 'bg-slate-800/30')}>
       <td className="px-6 py-2 text-sm font-semibold text-white flex items-center gap-2">
-        <Icon size={14} className={amount > 0 ? 'text-emerald-400' : amount < 0 ? 'text-red-400' : 'text-slate-500'} />
+        <Icon size={14} className={amount > 0 ? 'text-emerald-400' : amount < 0 ? 'text-red-fig' : 'text-slate-500'} />
         {label}
       </td>
-      <td className={`px-6 py-2 text-right font-mono tabular-nums text-sm font-semibold ${amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+      <td className={`px-6 py-2 text-right font-mono tabular-nums text-sm font-semibold ${amount >= 0 ? 'text-emerald-400' : 'text-red-fig'}`}>
         {formatMoney(amount)}
       </td>
     </tr>
@@ -63,8 +65,8 @@ export function CashFlowReport({ startDate, endDate, locationId }: { startDate: 
       <table className="w-full">
         <thead>
           <tr className="border-b border-slate-800/50">
-            <th className="px-6 py-2.5 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Description</th>
-            <th className="px-6 py-2.5 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Amount</th>
+            <th className={clsx('px-6 py-2.5 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500', LEDGER_TH)}>Description</th>
+            <th className={clsx('px-6 py-2.5 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500', LEDGER_TH)}>Amount</th>
           </tr>
         </thead>
         <tbody>
@@ -119,7 +121,7 @@ export function CashFlowReport({ startDate, endDate, locationId }: { startDate: 
           <tr className="border-t-2 border-slate-700"><td colSpan={2} className="h-1" /></tr>
           <CfLine label="Net Change in Cash" amount={data.netChangeCents} bold />
           <CfLine label="Beginning Cash Balance" amount={data.beginningCashCents} />
-          <tr className="bg-emerald-500/[0.04]">
+          <tr className={clsx(LEDGER_TOTAL, 'bg-emerald-500/[0.04]')}>
             <td className="px-6 py-3 text-base font-semibold text-white">Ending Cash Balance</td>
             <td className="px-6 py-3 text-right text-lg font-mono tabular-nums font-semibold text-emerald-400">
               {formatMoney(data.endingCashCents)}

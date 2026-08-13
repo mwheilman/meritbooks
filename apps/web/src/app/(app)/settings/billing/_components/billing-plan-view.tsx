@@ -13,6 +13,7 @@
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
 import { clsx } from 'clsx';
+import { BuildStatusBadge } from '@/components/brand';
 import {
   Loader2,
   AlertCircle,
@@ -271,7 +272,18 @@ export function BillingPlanView() {
             <CreditCard size={18} className="text-slate-400" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-white">Billing activation coming soon</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold text-white">Billing activation coming soon</h3>
+              <BuildStatusBadge
+                status={billingActivated ? 'live' : 'development'}
+                label={billingActivated ? 'Live billing' : 'Live billing — in development'}
+                title={
+                  billingActivated
+                    ? 'Automated billing is switched on for this account.'
+                    : 'Automated billing and invoicing are not switched on for this account yet — no charge is created from this page.'
+                }
+              />
+            </div>
             <p className="text-sm text-slate-400 mt-1 max-w-2xl">
               Your plan and cost above are calculated automatically. Automated billing and invoicing
               aren&apos;t switched on for your account yet — you won&apos;t be charged through this page. To

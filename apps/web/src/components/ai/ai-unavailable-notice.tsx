@@ -12,6 +12,7 @@
  */
 
 import { Sparkles } from 'lucide-react';
+import { BuildStatusBadge } from '@/components/brand';
 
 /** Default copy, mirrored from AI_UNAVAILABLE_MESSAGE in lib/ai/gateway (server). */
 const DEFAULT_MESSAGE = 'AI is temporarily unavailable — try again later.';
@@ -34,7 +35,14 @@ export function AiUnavailableNotice({
     >
       <Sparkles size={16} className="mt-0.5 shrink-0 text-indigo-400" />
       <div>
-        <p className="text-slate-200">{message || DEFAULT_MESSAGE}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-slate-200">{message || DEFAULT_MESSAGE}</p>
+          <BuildStatusBadge
+            status="degraded"
+            label="AI paused"
+            title="AI features are temporarily unavailable — the deterministic parts of this screen keep working."
+          />
+        </div>
         {hint && <p className="mt-1 text-slate-400">{hint}</p>}
       </div>
     </div>

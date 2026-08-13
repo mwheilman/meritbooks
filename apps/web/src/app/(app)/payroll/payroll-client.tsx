@@ -19,6 +19,7 @@ import {
   PlugZap,
 } from 'lucide-react';
 import { PageHeader, EmptyState } from '@/components/ui';
+import { BuildStatusBadge } from '@/components/brand';
 import { useQuery } from '@/hooks';
 import { useMe } from '@/lib/hooks/use-me';
 import { formatMoney } from '@meritbooks/shared';
@@ -176,14 +177,18 @@ export function PayrollClient() {
                 calculate real taxes, withhold, file, or move any money. Use it to preview the workflow only.
               </p>
             )}
-            <span
-              className={clsx(
-                'mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium',
-                providerReady ? 'bg-indigo-500/10 text-indigo-300' : 'bg-amber-500/10 text-amber-300',
-              )}
-            >
-              <Info size={10} /> {providerReady ? 'Provider connected' : 'Provider not connected — estimate only'}
-            </span>
+            {providerReady ? (
+              <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2 py-0.5 text-2xs font-medium text-indigo-300">
+                <Info size={10} /> Provider connected
+              </span>
+            ) : (
+              <BuildStatusBadge
+                status="sandbox"
+                label="Sandbox — estimate only"
+                title="No payroll provider is connected — the in-app run wizard produces a non-binding estimate, not filed payroll and no money movement."
+                className="mt-2"
+              />
+            )}
           </div>
         </div>
       </div>

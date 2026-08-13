@@ -16,6 +16,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Loader2, AlertTriangle, HelpCircle, Check, Tags, Inbox } from 'lucide-react';
 import { addToast } from '@/hooks/use-toast';
 import { AiUnavailableNotice } from '@/components/ai/ai-unavailable-notice';
+import { ProposedChip, ApprovePostButton } from '@/components/brand';
 
 interface Candidate {
   transactionId: string;
@@ -145,7 +146,10 @@ export function CategorizePanel({ prompt, onDone }: { prompt: string; onDone: ()
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-slate-200">{r.description}</p>
-                  <p className="text-2xs text-slate-500">{r.transactionDate}{r.confidence != null ? ` · AI ${(r.confidence * 100).toFixed(0)}%` : ''}{r.source === 'user-named' ? ' · you named the account' : ''}</p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                    <p className="text-2xs text-slate-500">{r.transactionDate}{r.source === 'user-named' ? ' · you named the account' : ''}</p>
+                    {r.confidence != null && <ProposedChip confidence={r.confidence} />}
+                  </div>
                 </div>
                 <span className="font-mono text-sm text-slate-200">${fmt(r.amountCents)}</span>
               </div>
@@ -158,13 +162,12 @@ export function CategorizePanel({ prompt, onDone }: { prompt: string; onDone: ()
                   <option value="">Select a GL account…</option>
                   {usableAccounts.map((a) => <option key={a.id} value={a.id}>{a.accountNumber} · {a.name}</option>)}
                 </select>
-                <button
+                <ApprovePostButton
                   onClick={() => approveOne(r.transactionId)}
-                  disabled={busy[r.transactionId] || !chosen[r.transactionId]}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40 transition-colors"
-                >
-                  {busy[r.transactionId] ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve
-                </button>
+                  busy={busy[r.transactionId]}
+                  disabled={!chosen[r.transactionId]}
+                  size="sm"
+                />
               </div>
             </div>
           ))}

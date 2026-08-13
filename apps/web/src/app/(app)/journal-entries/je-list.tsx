@@ -157,15 +157,15 @@ export function JournalEntryList() {
           <table className="w-full min-w-[900px]">
             <thead>
               <tr className="border-b border-slate-800">
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Entry #</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Source</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Memo</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Company</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Type</th>
-                <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Debits</th>
-                <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">Lines</th>
-                <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Entry #</th>
+                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Date</th>
+                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Source</th>
+                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Memo</th>
+                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Company</th>
+                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Type</th>
+                <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Debits</th>
+                <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Lines</th>
+                <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Status</th>
                 <th className="px-2 w-8"></th>
               </tr>
             </thead>

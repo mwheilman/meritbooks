@@ -1,9 +1,10 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { Check, Flag, Pencil, Receipt, FileText, Link2, HelpCircle, Inbox, AlertCircle, Loader2, ArrowUp, ArrowDown, Sparkles, Search, X, Copy, Zap, Info } from 'lucide-react';
+import { Check, Flag, Pencil, Receipt, FileText, Link2, HelpCircle, Inbox, AlertCircle, Loader2, ArrowUp, ArrowDown, Sparkles, Search, X, Copy, Info } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ConfidenceBar, EmptyState, TableSkeleton } from '@/components/ui';
+import { ProposedChip } from '@/components/brand';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useDebounce } from '@/hooks';
 import type { BankFeedRow, JobSearchResult } from '@meritbooks/shared';
@@ -661,10 +662,10 @@ export function BankFeedList({
                       )}
                       {autoEligible && (
                         <span
-                          className="inline-flex items-center text-emerald-400"
-                          title="Meets the AI auto-approve bar (confidence ≥ 85% and amount ≤ $10,000). Vendor trust is confirmed on approve."
+                          title="Meets the AI auto-approve bar (confidence ≥ 85% and amount ≤ $10,000). Vendor trust is confirmed on approve — the engine posts the entry."
+                          className="shrink-0"
                         >
-                          <Zap size={11} />
+                          <ProposedChip showPercent={false} label="Auto-eligible" tone="emerald" />
                         </span>
                       )}
                       <button

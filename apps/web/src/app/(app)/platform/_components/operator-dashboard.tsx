@@ -619,7 +619,7 @@ function SignupChart({ trend }: { trend: SignupPoint[] }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Tenant growth by month">
-      <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="#334155" strokeWidth={1} />
+      <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="#232C27" strokeWidth={1} />
       {trend.map((t, i) => {
         const h = t.newTenants > 0 ? Math.max(2, (t.newTenants / maxCum) * innerH) : 0;
         const x = padL + slot * i + slot * 0.28;
@@ -628,7 +628,7 @@ function SignupChart({ trend }: { trend: SignupPoint[] }) {
         return (
           <g key={t.month}>
             {h > 0 && (
-              <rect x={x} y={by} width={w} height={h} rx={2} fill="#6366f1" opacity={0.35}>
+              <rect x={x} y={by} width={w} height={h} rx={2} fill="#818cf8" opacity={0.35}>
                 <title>{`${monthLabel(t.month)} — +${t.newTenants} new · ${t.cumulativeTenants} total`}</title>
               </rect>
             )}
@@ -637,7 +637,7 @@ function SignupChart({ trend }: { trend: SignupPoint[] }) {
               y={H - 9}
               textAnchor="middle"
               fontSize={9}
-              fill="#64748b"
+              fill="#7E8983"
               fontFamily="var(--font-mono, monospace)"
             >
               {monthLabel(t.month)}
@@ -652,7 +652,7 @@ function SignupChart({ trend }: { trend: SignupPoint[] }) {
           cx={padL + slot * i + slot / 2}
           cy={y(t.cumulativeTenants)}
           r={2.5}
-          fill="#a5b4fc"
+          fill="#818cf8"
         >
           <title>{`${monthLabel(t.month)} — ${t.cumulativeTenants} tenants`}</title>
         </circle>

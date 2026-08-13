@@ -155,7 +155,7 @@ function NetIncomeChart({ entities, highlightId }: { entities: EntityRow[]; high
           style={{ minWidth: 520 }}
         >
           {/* zero axis */}
-          <line x1={zeroX} y1={padT} x2={zeroX} y2={H - padB} stroke="#334155" strokeWidth={1} />
+          <line x1={zeroX} y1={padT} x2={zeroX} y2={H - padB} stroke="#232C27" strokeWidth={1} />
           {sorted.map((e, i) => {
             const y = padT + i * rowH;
             const cy = y + rowH / 2;
@@ -163,7 +163,7 @@ function NetIncomeChart({ entities, highlightId }: { entities: EntityRow[]; high
             const len = (Math.abs(ni) / maxAbs) * (plotW / 2 - 6);
             const positive = ni >= 0;
             const barX = positive ? zeroX : zeroX - len;
-            const fill = ni > 0 ? '#10b981' : ni < 0 ? '#ef4444' : '#475569';
+            const fill = ni > 0 ? '#10b981' : ni < 0 ? '#ef4444' : '#2C362F';
             const isFocus = highlightId != null && e.locationId === highlightId;
             const dim = highlightId != null && !isFocus;
             return (
@@ -175,7 +175,7 @@ function NetIncomeChart({ entities, highlightId }: { entities: EntityRow[]; high
                   dominantBaseline="central"
                   fontSize={12}
                   fontWeight={isFocus ? 600 : 400}
-                  fill={isFocus ? '#ffffff' : '#cbd5e1'}
+                  fill={isFocus ? '#EDF2EF' : '#AEB8B2'}
                   opacity={dim ? 0.5 : 1}
                 >
                   {clip(e.name, 30)}
@@ -196,7 +196,7 @@ function NetIncomeChart({ entities, highlightId }: { entities: EntityRow[]; high
                   dominantBaseline="central"
                   fontSize={11}
                   fontFamily="'JetBrains Mono', monospace"
-                  fill={ni >= 0 ? '#6ee7b7' : '#fca5a5'}
+                  fill={ni >= 0 ? '#34d399' : '#f87171'}
                   opacity={dim ? 0.4 : 1}
                 >
                   {formatMoney(ni, { compact: true })}

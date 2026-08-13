@@ -288,7 +288,7 @@ function TrendChart({ trend, throughMonth }: { trend: TrendPoint[]; throughMonth
       <div className="overflow-x-auto">
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Revenue and net income by month" style={{ minWidth: 560 }}>
           {/* zero line for net income */}
-          <line x1={padL} y1={niY(0)} x2={W - padR} y2={niY(0)} stroke="#1e293b" strokeWidth={1} />
+          <line x1={padL} y1={niY(0)} x2={W - padR} y2={niY(0)} stroke="#232C27" strokeWidth={1} />
           {trend.map((t, i) => {
             const x = padL + slot * i + slot / 2;
             const bh = padT + plotH - revY(t.revenueCents);
@@ -301,10 +301,10 @@ function TrendChart({ trend, throughMonth }: { trend: TrendPoint[]; throughMonth
                   width={barW}
                   height={Math.max(0, bh)}
                   rx={2}
-                  fill={isFuture ? '#1e40af' : '#10b981'}
+                  fill={isFuture ? '#3b82f6' : '#10b981'}
                   opacity={isFuture ? 0.35 : 0.75}
                 />
-                <text x={x} y={H - 8} textAnchor="middle" fontSize={10} fill="#64748b">{t.label}</text>
+                <text x={x} y={H - 8} textAnchor="middle" fontSize={10} fill="#7E8983">{t.label}</text>
               </g>
             );
           })}
@@ -356,7 +356,7 @@ function MarginTrend({ trend }: { trend: TrendPoint[] }) {
             t.grossMarginPct === null ? null : (
               <g key={t.label}>
                 <circle cx={padL + slot * i + slot / 2} cy={y(t.grossMarginPct)} r={2.5} fill="#10b981" />
-                <text x={padL + slot * i + slot / 2} y={H - 6} textAnchor="middle" fontSize={10} fill="#64748b">{t.label}</text>
+                <text x={padL + slot * i + slot / 2} y={H - 6} textAnchor="middle" fontSize={10} fill="#7E8983">{t.label}</text>
               </g>
             ),
           )}

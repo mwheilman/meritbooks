@@ -19,6 +19,7 @@ import { formatMoney } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { PageHeader } from '@/components/ui';
+import { AutonomyDial } from '@/components/brand';
 
 // ── Types (mirror GET /api/autonomy) ────────────────────────────────────────────
 
@@ -177,26 +178,16 @@ function FeatureCard({
 
       {editing && (
         <div className="mt-4 space-y-3 border-t border-slate-800 pt-4">
-          <div className="grid gap-2 sm:grid-cols-3">
-            {MODE_ORDER.map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={clsx(
-                  'rounded-lg border px-3 py-2 text-left text-xs transition-colors',
-                  mode === m
-                    ? 'border-emerald-500/50 bg-emerald-500/10 text-white'
-                    : 'border-slate-700 bg-slate-800/30 text-slate-400 hover:text-slate-200',
-                )}
-              >
-                <span className="block font-medium">{MODE_META[m].label}</span>
-                <span className="mt-0.5 block text-[10px] leading-tight text-slate-500">
-                  {MODE_META[m].blurb}
-                </span>
-              </button>
-            ))}
-          </div>
+          <AutonomyDial
+            ariaLabel={`Autonomy level for ${feature.label}`}
+            value={mode}
+            onChange={(m) => setMode(m)}
+            options={MODE_ORDER.map((m) => ({
+              value: m,
+              label: MODE_META[m].label,
+              sublabel: MODE_META[m].blurb,
+            }))}
+          />
 
           {mode === 'AUTO_UNDER_LIMIT' && (
             <div>

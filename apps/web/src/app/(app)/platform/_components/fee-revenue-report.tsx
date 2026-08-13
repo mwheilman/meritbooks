@@ -279,7 +279,7 @@ export function FeeRevenueReport() {
               </p>
               <div className="flex items-center gap-3 text-[10px] text-slate-500">
                 <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 bg-indigo-500 inline-block rounded-sm" /> Fee earned
+                  <span className="w-2.5 h-2.5 bg-indigo-400 inline-block rounded-sm" /> Fee earned
                 </span>
               </div>
             </div>
@@ -455,7 +455,7 @@ function TrendChart({ trend }: { trend: TrendPoint[] }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Fee revenue by month">
-      <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="#334155" strokeWidth={1} />
+      <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="#232C27" strokeWidth={1} />
       {trend.map((t, i) => {
         const h = Math.max(1, barH(t.feeCents));
         const x = padL + slot * i + slot * 0.2;
@@ -463,7 +463,7 @@ function TrendChart({ trend }: { trend: TrendPoint[] }) {
         const y = padT + innerH - h;
         return (
           <g key={t.month}>
-            <rect x={x} y={y} width={w} height={h} rx={2} fill="#6366f1" opacity={0.85}>
+            <rect x={x} y={y} width={w} height={h} rx={2} fill="#818cf8" opacity={0.85}>
               <title>{`${monthLabel(t.month)} — ${(t.feeCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} · ${t.paymentCount} payments`}</title>
             </rect>
             <text
@@ -471,7 +471,7 @@ function TrendChart({ trend }: { trend: TrendPoint[] }) {
               y={H - 9}
               textAnchor="middle"
               fontSize={9}
-              fill="#64748b"
+              fill="#7E8983"
               fontFamily="var(--font-mono, monospace)"
             >
               {monthLabel(t.month)}
