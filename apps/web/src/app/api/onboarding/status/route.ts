@@ -8,7 +8,12 @@ import {
   loadOnboardingStatus,
   persistOnboardingProgress,
   ONBOARDING_STEPS,
+  SECTION_KEYS,
+  SECTION_STATUS_VALUES,
   type OnboardingStepKey,
+  type OnboardingProgressPatch,
+  type SectionKey,
+  type SectionStatusValue,
 } from '@/lib/onboarding/status';
 
 /**
@@ -47,6 +52,9 @@ export async function GET() {
 interface PatchBody {
   currentStep?: string;
   complete?: boolean;
+  /** Per-section transition: `{ section: 'opening', status: 'done' }`. */
+  section?: string;
+  status?: string;
 }
 
 export async function PATCH(req: NextRequest) {
@@ -73,7 +81,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const patch: { currentStep?: OnboardingStepKey; complete?: boolean } = {};
+  const patch: OnboardingProgressPatch = {};
   if (typeof body.currentStep === 'string') {
     if (!(ONBOARDING_STEPS as string[]).includes(body.currentStep)) {
       return NextResponse.json({ error: `Unknown step "${body.currentStep}"` }, { status: 422 });
@@ -82,8 +90,26 @@ export async function PATCH(req: NextRequest) {
   }
   if (typeof body.complete === 'boolean') patch.complete = body.complete;
 
-  if (patch.currentStep === undefined && patch.complete === undefined) {
-    return NextResponse.json({ error: 'Provide currentStep and/or complete' }, { status: 400 });
+  // Per-section transition ({ section, status }). Both must be present and valid;
+  // guarded by the SAME settings_acct:edit + preparer capability checks above.
+  if (body.section !== undefined || body.status !== undefined) {
+    if (typeof body.section !== 'string' || !(SECTION_KEYS as readonly string[]).includes(body.section)) {
+      return NextResponse.json({ error: `Unknown section "${String(body.section)}"` }, { status: 422 });
+    }
+    if (typeof body.status !== 'string' || !(SECTION_STATUS_VALUES as readonly string[]).includes(body.status)) {
+      return NextResponse.json({ error: `Unknown section status "${String(body.status)}"` }, { status: 422 });
+    }
+    patch.sections = {
+      [body.section as SectionKey]: {
+        status: body.status as SectionStatusValue,
+        updatedAt: new Date().toISOString(),
+        updatedBy: userId,
+      },
+    };
+  }
+
+  if (patch.currentStep === undefined && patch.complete === undefined && patch.sections === undefined) {
+    return NextResponse.json({ error: 'Provide currentStep, complete, and/or a { section, status }' }, { status: 400 });
   }
 
   const admin = createAdminSupabase();

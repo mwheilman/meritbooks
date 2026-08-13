@@ -45,6 +45,45 @@ export const ONBOARDING_STEPS: OnboardingStepKey[] = [
   'launch',
 ];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-section status map (Wave-0 foundation for the SectionDefinition framework).
+//
+// The onboarding shell is being generalized so every setup DOMAIN (company, chart
+// of accounts, opening balances, bank, integrations, team, and — in later waves —
+// AR/AP, debt, leases, jobs/WIP, …) is a self-describing section. Each section has
+// a lifecycle status persisted here, alongside the flow's currentStep/complete
+// flags, inside the SAME `core.organizations.onboarding_state` jsonb column (no new
+// migration — the column already exists). This only WIDENS the shape the normalizer
+// reads/writes; it stays degrade-safe exactly like the flow flags do.
+//
+// IMPORTANT: the persisted section status is a HINT, not the truth. `deriveStatus`
+// in the section registry always lets a live-count-derived `done` win over stale
+// stored state — so a section that is actually satisfied (e.g. a company exists)
+// reads `done` even if the map was never written.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The domain sections the shell renders (the flow's `launch` step is terminal, not a domain). */
+export const SECTION_KEYS = ['welcome', 'coa', 'opening', 'bank', 'erp', 'team'] as const;
+export type SectionKey = (typeof SECTION_KEYS)[number];
+
+/** The lifecycle status of a single section. */
+export const SECTION_STATUS_VALUES = ['not_started', 'in_progress', 'done', 'skipped', 'n_a'] as const;
+export type SectionStatusValue = (typeof SECTION_STATUS_VALUES)[number];
+
+/** One entry in the persisted per-section status map. */
+export interface SectionStateEntry {
+  status: SectionStatusValue;
+  /** ISO timestamp of the last transition. */
+  updatedAt: string;
+  /** Clerk user id that made the transition, when known. */
+  updatedBy?: string;
+  /** The staged proposal (ai_decisions row) this status refers to, when relevant. */
+  proposalId?: string;
+}
+
+/** The persisted per-section status map, keyed by section key. */
+export type SectionStatusMap = Partial<Record<SectionKey, SectionStateEntry>>;
+
 /** Live tenant counts that drive first-run detection and step derivation. */
 export interface OnboardingCounts {
   entities: number;
@@ -62,6 +101,8 @@ export interface OnboardingStateFlag {
   currentStep?: OnboardingStepKey;
   complete?: boolean;
   updatedAt?: string;
+  /** Per-section lifecycle status (Wave-0 widening; absent on legacy rows). */
+  sections?: SectionStatusMap;
 }
 
 export interface OnboardingStatus {
@@ -80,6 +121,9 @@ export interface OnboardingStatus {
   statePersisted: boolean;
   /** The stored flag, when the column exists. */
   flag: OnboardingStateFlag | null;
+  /** The persisted per-section status map (empty when unset/absent). Derived `done`
+   *  from live counts still wins over any stale value here — see the registry. */
+  sections: SectionStatusMap;
 }
 
 /** Read the org-level onboarding flags, degrading when the jsonb column is absent. */
@@ -127,7 +171,35 @@ function normalizeFlag(raw: unknown): OnboardingStateFlag | null {
   }
   if (typeof obj.complete === 'boolean') flag.complete = obj.complete;
   if (typeof obj.updatedAt === 'string') flag.updatedAt = obj.updatedAt;
+  const sections = normalizeSections(obj.sections);
+  if (sections) flag.sections = sections;
   return flag;
+}
+
+/**
+ * Coerce an unknown jsonb value into a typed per-section status map. Unknown section
+ * keys and unknown status values are dropped rather than trusted, so a malformed or
+ * future-shaped blob can never corrupt the map or throw. Returns undefined when there
+ * is nothing valid to keep.
+ */
+export function normalizeSections(raw: unknown): SectionStatusMap | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const src = raw as Record<string, unknown>;
+  const out: SectionStatusMap = {};
+  for (const key of SECTION_KEYS) {
+    const entry = src[key];
+    if (!entry || typeof entry !== 'object') continue;
+    const e = entry as Record<string, unknown>;
+    if (typeof e.status !== 'string' || !(SECTION_STATUS_VALUES as readonly string[]).includes(e.status)) continue;
+    const normalized: SectionStateEntry = {
+      status: e.status as SectionStatusValue,
+      updatedAt: typeof e.updatedAt === 'string' ? e.updatedAt : new Date(0).toISOString(),
+    };
+    if (typeof e.updatedBy === 'string') normalized.updatedBy = e.updatedBy;
+    if (typeof e.proposalId === 'string') normalized.proposalId = e.proposalId;
+    out[key] = normalized;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /** A best-effort head-count that returns 0 on any error (status must never throw). */
@@ -185,8 +257,9 @@ export async function loadOnboardingStatus(
   const firstRun = !complete;
 
   const currentStep = flag?.currentStep ?? deriveStep(counts, hasOpeningEntry);
+  const sections = flag?.sections ?? {};
 
-  return { firstRun, complete, currentStep, counts, hasOpeningEntry, setupComplete, statePersisted, flag };
+  return { firstRun, complete, currentStep, counts, hasOpeningEntry, setupComplete, statePersisted, flag, sections };
 }
 
 /** Derive a sensible resume step from live tenant state (used when no flag is stored). */
@@ -197,15 +270,50 @@ export function deriveStep(counts: OnboardingCounts, hasOpeningEntry: boolean): 
   return 'launch';
 }
 
+/** A patch applied to the persisted onboarding state. */
+export interface OnboardingProgressPatch {
+  currentStep?: OnboardingStepKey;
+  complete?: boolean;
+  /** Per-section status transitions, MERGED (by key) into the existing map. */
+  sections?: SectionStatusMap;
+}
+
+/**
+ * Merge a progress patch into the existing onboarding state flag. Pure and total,
+ * so the read-merge-write below is unit-testable without a DB. Section entries are
+ * merged BY KEY (a patch for one section never drops the others); the flow flags
+ * (currentStep/complete) are overwritten only when present in the patch, so writing
+ * a section status can never clobber the resume step and vice-versa.
+ */
+export function mergeOnboardingState(
+  prev: OnboardingStateFlag | null,
+  patch: OnboardingProgressPatch,
+  now: string = new Date().toISOString(),
+): OnboardingStateFlag {
+  const base = prev ?? {};
+  const merged: OnboardingStateFlag = {
+    ...base,
+    ...(patch.currentStep ? { currentStep: patch.currentStep } : {}),
+    ...(patch.complete !== undefined ? { complete: patch.complete } : {}),
+    updatedAt: now,
+  };
+  if (patch.sections) {
+    merged.sections = { ...(base.sections ?? {}), ...patch.sections };
+  }
+  return merged;
+}
+
 /**
  * Persist onboarding progress. ALWAYS writes the durable `setup_complete` flag on
- * completion; ADDITIONALLY writes the rich `onboarding_state` jsonb when that
- * column exists. Returns whether the rich column persisted.
+ * completion; ADDITIONALLY read-merge-writes the rich `onboarding_state` jsonb when
+ * that column exists (so the flow flags and the per-section status map coexist and a
+ * single-field patch never clobbers the rest). Returns whether the rich column
+ * persisted. Degrade-safe: an absent column simply yields statePersisted=false.
  */
 export async function persistOnboardingProgress(
   admin: SupabaseClient,
   orgId: string,
-  patch: { currentStep?: OnboardingStepKey; complete?: boolean },
+  patch: OnboardingProgressPatch,
 ): Promise<{ statePersisted: boolean }> {
   // On completion, always flip the always-present provisioning flag (durable).
   if (patch.complete === true) {
@@ -216,17 +324,14 @@ export async function persistOnboardingProgress(
       .eq('id', orgId);
   }
 
-  // Attempt the rich jsonb write; degrade silently if the column is absent.
-  const state: OnboardingStateFlag = {
-    ...(patch.currentStep ? { currentStep: patch.currentStep } : {}),
-    ...(patch.complete !== undefined ? { complete: patch.complete } : {}),
-    updatedAt: new Date().toISOString(),
-  };
+  // Read the existing state (degrade-safe) so we merge rather than overwrite.
+  const { flag } = await readOrgOnboarding(admin, orgId);
+  const merged = mergeOnboardingState(flag, patch);
 
   const { error } = await admin
     .schema('core')
     .from('organizations')
-    .update({ onboarding_state: state })
+    .update({ onboarding_state: merged })
     .eq('id', orgId);
 
   return { statePersisted: !error };

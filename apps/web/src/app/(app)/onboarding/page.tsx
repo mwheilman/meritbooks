@@ -1,5 +1,7 @@
+import { redirect } from 'next/navigation';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { requirePreparerCapabilityPage } from '@/lib/team/admin-scope-guard';
+import { resolveOnboardingFlow } from '@/lib/onboarding/flow';
 import { OnboardingWizard } from './onboarding-wizard';
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +21,19 @@ export const dynamic = 'force-dynamic';
  * to Team instead. Fail-open: absent/unrestricted scope keeps full access — no
  * lockout, including before the admin_scope migration lands.
  */
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams?: { [key: string]: string | string[] | undefined };
+}) {
+  // COMPANY-STATE ROUTER: decide the flow from the company's state, not the user's
+  // role. A brand-new member on an already-live company is sent to the guided tour
+  // instead of a setup surface they'd be bounced out of. `setup`/`live` fall through
+  // to the existing guards below, so first-run and admin behavior is unchanged.
+  // Fail-safe (unresolved org / any error) resolves to `live` — never the tour.
+  const flow = await resolveOnboardingFlow(searchParams);
+  if (flow === 'tour') redirect('/onboarding/tour');
+
   await requirePagePermission('settings_acct', 'edit');
   await requirePreparerCapabilityPage('/team');
   return <OnboardingWizard />;

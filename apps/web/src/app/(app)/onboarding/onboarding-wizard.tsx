@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   Building2, BookOpen, Scale, Landmark, Users, Rocket, Check, Loader2, AlertCircle,
@@ -15,6 +15,7 @@ import ConversionClient from './conversion/conversion-client';
 import { ReadinessChecklist } from './readiness-checklist';
 import { ACTIVE_COMPANY_COOKIE } from '@/lib/company-scope';
 import type { OnboardingStepKey, OnboardingStatus } from '@/lib/onboarding/status';
+import { ONBOARDING_SECTIONS } from '@/lib/onboarding/sections/registry';
 
 // ── Shared shapes ─────────────────────────────────────────────────────────────
 interface EntityRow {
@@ -62,13 +63,12 @@ const TEAM_ROLES: { value: string; label: string; desc: string }[] = [
   { value: 'business_user', label: 'Business User', desc: 'Read-only dashboards and reports' },
 ];
 
+// The wizard flow is now DRIVEN BY THE SECTION REGISTRY: the ordered domain sections
+// come from `ONBOARDING_SECTIONS` (single source of truth for key/label/icon), plus
+// the terminal `launch` step which is a flow step, not a setup domain. The values are
+// identical to what was hard-coded here, so the Stepper renders exactly as before.
 const STEPS: { key: OnboardingStepKey; label: string; icon: typeof Building2 }[] = [
-  { key: 'welcome', label: 'Company', icon: Building2 },
-  { key: 'coa', label: 'Chart of Accounts', icon: BookOpen },
-  { key: 'opening', label: 'Opening Balances', icon: Scale },
-  { key: 'bank', label: 'Bank Feed', icon: Landmark },
-  { key: 'erp', label: 'Connect Systems', icon: Plug },
-  { key: 'team', label: 'Team', icon: Users },
+  ...ONBOARDING_SECTIONS.map((s) => ({ key: s.key as OnboardingStepKey, label: s.label, icon: s.icon })),
   { key: 'launch', label: 'Launch', icon: Rocket },
 ];
 
@@ -184,6 +184,40 @@ export function OnboardingWizard() {
     }
   }, [enterCompany]);
 
+  // GENERIC SHELL: each registered section (+ the terminal launch step) maps to its
+  // body here, and the shell renders the one for the active step. The existing step
+  // components are WRAPPED unchanged — no step's logic is rebuilt — so the wizard
+  // renders identically to before while being driven by the registry-derived STEPS.
+  const stepBodies: Record<OnboardingStepKey, ReactNode> = {
+    welcome: (
+      <WelcomeStep
+        meta={meta ?? null}
+        entities={entities}
+        onCreated={async (r) => {
+          setCreatedAccounts(r.accountCount);
+          setCreatedCompanyId(r.locationId);
+          await refetchMeta();
+          await loadStatus();
+        }}
+      />
+    ),
+    coa: <CoaStep accountCount={createdAccounts ?? status?.counts.accounts ?? 0} />,
+    opening: <OpeningStep />,
+    bank: <BankStep entities={entities} />,
+    erp: <ErpStep onSkip={goNext} onDone={goNext} />,
+    team: <TeamStep entities={entities} />,
+    launch: (
+      <LaunchStep
+        entities={entities}
+        enterCompanyName={enterCompany?.name ?? null}
+        accountCount={createdAccounts ?? status?.counts.accounts ?? 0}
+        teamMembers={status?.counts.teamMembers ?? 0}
+        hasOpeningEntry={status?.hasOpeningEntry ?? false}
+        onRefresh={loadStatus}
+      />
+    ),
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
       {/* Header */}
@@ -221,35 +255,7 @@ export function OnboardingWizard() {
         </div>
       ) : (
         <>
-          {step === 'welcome' && (
-            <WelcomeStep
-              meta={meta ?? null}
-              entities={entities}
-              onCreated={async (r) => {
-                setCreatedAccounts(r.accountCount);
-                setCreatedCompanyId(r.locationId);
-                await refetchMeta();
-                await loadStatus();
-              }}
-            />
-          )}
-          {step === 'coa' && (
-            <CoaStep accountCount={createdAccounts ?? status?.counts.accounts ?? 0} />
-          )}
-          {step === 'opening' && <OpeningStep />}
-          {step === 'bank' && <BankStep entities={entities} />}
-          {step === 'erp' && <ErpStep onSkip={goNext} onDone={goNext} />}
-          {step === 'team' && <TeamStep entities={entities} />}
-          {step === 'launch' && (
-            <LaunchStep
-              entities={entities}
-              enterCompanyName={enterCompany?.name ?? null}
-              accountCount={createdAccounts ?? status?.counts.accounts ?? 0}
-              teamMembers={status?.counts.teamMembers ?? 0}
-              hasOpeningEntry={status?.hasOpeningEntry ?? false}
-              onRefresh={loadStatus}
-            />
-          )}
+          {stepBodies[step]}
 
           {/* Nav */}
           <div className="flex items-center justify-between pt-2">
