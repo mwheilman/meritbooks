@@ -1,8 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { requireAuth } from '@/lib/api-handler';
+import { requireAuth, requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
 import { createInvoice } from '@/lib/invoices/create-invoice';
@@ -20,8 +19,14 @@ const querySchema = z.object({
 });
 
 export async function GET(request: Request) {
-  const authResult = await auth().catch(() => ({ userId: null as string | null, orgId: null as string | null }));
-  const supabase = createAdminSupabase();
+  // TENANT ISOLATION: resolve the caller's org and run every query through the
+  // RLS-scoped (Clerk-token) client, then filter explicitly by org_id. The list
+  // AND the status counts must share the same org + company scope, or the tab
+  // counts diverge from the rows (and, on the admin client, leak other tenants).
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const { searchParams } = new URL(request.url);
   const raw = Object.fromEntries(searchParams.entries());
@@ -47,6 +52,7 @@ export async function GET(request: Request) {
     .order('invoice_date', { ascending: false })
     .range(from, to);
 
+  query = query.eq('org_id', orgId);
   if (params.location_id) query = query.eq('location_id', params.location_id);
   if (params.customer_id) query = query.eq('customer_id', params.customer_id);
   if (params.status && params.status !== 'ALL') query = query.eq('status', params.status);
@@ -58,10 +64,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Status counts
-  const { data: allInvoices } = await supabase
+  // Status counts — scoped to the SAME org + company as the list (but across all
+  // statuses, so every tab shows its own total). Without matching the list scope
+  // the tab counts and KPI cards disagree with the rows shown below them.
+  let countsQuery = supabase
     .from('invoices')
-    .select('status, total_cents, balance_cents');
+    .select('status, total_cents, balance_cents')
+    .eq('org_id', orgId);
+  if (params.location_id) countsQuery = countsQuery.eq('location_id', params.location_id);
+  if (params.customer_id) countsQuery = countsQuery.eq('customer_id', params.customer_id);
+  if (params.search) countsQuery = countsQuery.or(`invoice_number.ilike.%${params.search}%,memo.ilike.%${params.search}%`);
+  const { data: allInvoices } = await countsQuery;
 
   const counts: Record<string, { count: number; totalCents: number; balanceCents: number }> = {
     ALL: { count: 0, totalCents: 0, balanceCents: 0 },
@@ -144,7 +157,7 @@ export async function GET(request: Request) {
   });
 
   // Group reporting (home) currency, so the client can flag foreign-currency rows.
-  const homeCurrency = authResult.orgId ? await getHomeCurrency(supabase, authResult.orgId) : 'USD';
+  const homeCurrency = await getHomeCurrency(supabase, orgId);
 
   return NextResponse.json({
     data: invoices,

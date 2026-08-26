@@ -1,11 +1,12 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 
 export async function GET() {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const { data, error } = await supabase
     .schema('core').from('employees')
@@ -23,6 +24,7 @@ export async function GET() {
       annual_salary_cents,
       department:departments(id, name, code)
     `)
+    .eq('org_id', orgId)
     .order('last_name')
     .order('first_name');
 

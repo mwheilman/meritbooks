@@ -1,7 +1,8 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase, createServerSupabase } from '@/lib/supabase/server';
+import { createServerSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
 
 /** Depreciation methods the enum accepts (migration 001 + 079). The book methods
@@ -12,8 +13,11 @@ const DEPRECIATION_METHODS = [
 ] as const;
 
 export async function GET(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
   const { searchParams } = new URL(request.url);
   const locationId = searchParams.get('location_id');
   const status = searchParams.get('status');
@@ -35,6 +39,7 @@ export async function GET(request: Request) {
       depreciation_account:accounts!fixed_assets_depreciation_expense_account_id_fkey(account_number, name),
       accum_dep_account:accounts!fixed_assets_accumulated_depreciation_account_id_fkey(account_number, name)
     `)
+    .eq('org_id', orgId)
     .order('name');
 
   if (locationId) query = query.eq('location_id', locationId);

@@ -1,11 +1,13 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 
 export async function GET(request: Request) {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
   const { searchParams } = new URL(request.url);
   const year = parseInt(searchParams.get('year') ?? String(new Date().getFullYear()), 10);
 
@@ -13,6 +15,7 @@ export async function GET(request: Request) {
   const { data: obligations, error: oblError } = await supabase
     .from('compliance_obligations')
     .select('id, name, frequency, jurisdiction')
+    .eq('org_id', orgId)
     .order('name');
 
   if (oblError) return NextResponse.json({ error: oblError.message }, { status: 500 });
@@ -29,6 +32,7 @@ export async function GET(request: Request) {
       due_date, status, filed_amount_cents, expected_amount_cents,
       filed_by, filed_at, notes
     `)
+    .eq('org_id', orgId)
     .eq('period_year', year)
     .order('due_date');
 

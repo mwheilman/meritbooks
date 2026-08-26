@@ -1,12 +1,13 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
 
 export async function GET() {
-  await auth().catch(() => null);
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const { data, error } = await supabase
     .from('recurring_templates')
@@ -16,6 +17,7 @@ export async function GET() {
       last_generated_at, created_at,
       location_id
     `)
+    .eq('org_id', orgId)
     .order('next_run_date', { ascending: true, nullsFirst: false });
 
   if (error) {
