@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { parseLoanDocument, DEBT_EXTRACT_FEATURE } from '@/lib/debt/parse-loan';
+import { resolveUploadedFile } from '@/lib/uploads/resolve-upload';
 
 /**
  * POST /api/debt/parse — DROP-AND-PARSE loan extraction.
@@ -24,8 +25,6 @@ import { parseLoanDocument, DEBT_EXTRACT_FEATURE } from '@/lib/debt/parse-loan';
  * TRANSIENT — decoded and extracted in-request, never persisted.
  */
 
-const MAX_BYTES = 10 * 1024 * 1024;
-const ALLOWED = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 export async function POST(request: Request): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
@@ -41,30 +40,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  let base64Data: string;
-  let mediaType: string;
-  let fileName: string;
-  try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-    if (!file) return NextResponse.json({ error: 'No file provided', code: 'NO_FILE' }, { status: 400 });
-
-    fileName = file.name || 'document';
-    mediaType = file.type || 'application/octet-stream';
-    if (!ALLOWED.includes(mediaType)) {
-      return NextResponse.json(
-        { error: `Unsupported file type: ${mediaType}. Upload a PDF, JPEG, PNG, or WebP.`, code: 'BAD_FILE_TYPE' },
-        { status: 400 },
-      );
-    }
-    if (file.size > MAX_BYTES) {
-      return NextResponse.json({ error: 'File too large. Maximum 10MB.', code: 'FILE_TOO_LARGE' }, { status: 400 });
-    }
-    const buffer = await file.arrayBuffer();
-    base64Data = Buffer.from(buffer).toString('base64');
-  } catch {
-    return NextResponse.json({ error: 'Failed to read uploaded file', code: 'UPLOAD_ERROR' }, { status: 400 });
-  }
+  // Accepts BOTH a multipart file (small) and a JSON { storagePath } pointing at a
+  // file the browser uploaded directly to storage (large — up to 15MB, bypassing the
+  // ~4.5MB serverless body limit). resolveUploadedFile enforces org-scoped paths.
+  const resolved = await resolveUploadedFile(request, orgId);
+  if (resolved instanceof NextResponse) return resolved;
+  const { base64Data, mediaType, fileName } = resolved;
 
   const result = await parseLoanDocument({ supabase, anthropicApiKey: apiKey }, { orgId, userId, base64Data, mediaType });
 

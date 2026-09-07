@@ -6,6 +6,7 @@ import {
   UploadCloud, Loader2, X, Sparkles, AlertTriangle, Info, FileText,
 } from 'lucide-react';
 import { DebtForm, type DebtFormInitial } from './debt-form';
+import { uploadForParse } from '@/lib/uploads/client-upload';
 
 type Frequency = 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
 
@@ -56,18 +57,21 @@ export function DebtParseReview({ onClose, onConfirmed }: { onClose: () => void;
   const parse = useCallback(async (file: File) => {
     setError(null);
     if (!ALLOWED.includes(file.type)) { setError('Unsupported file type. Upload a PDF, JPEG, PNG, or WebP.'); return; }
-    // Vercel rejects request bodies larger than ~4.5MB at the edge (before the
-    // function runs), so cap here with a clear message rather than let the upload
-    // fail with a cryptic error.
-    if (file.size > 4 * 1024 * 1024) {
-      setError('That file is larger than 4MB. Please upload a smaller PDF, or export/scan it at a lower resolution.');
+    if (file.size > 15 * 1024 * 1024) {
+      setError('That file is larger than 15MB. Please upload a smaller PDF or scan.');
       return;
     }
     setPhase('parsing');
-    const formData = new FormData();
-    formData.append('file', file);
     try {
-      const res = await fetch('/api/debt/parse', { method: 'POST', body: formData });
+      // Upload the file DIRECTLY to storage (bypasses the ~4.5MB serverless body
+      // limit), then parse it by path — so large scanned loan docs work.
+      const up = await uploadForParse(file);
+      if ('error' in up) { setError(up.error); setPhase('upload'); return; }
+      const res = await fetch('/api/debt/parse', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ storagePath: up.storagePath }),
+      });
       // Read as text first so a non-JSON response (e.g. an edge 413 for an
       // oversized body, or an auth redirect) yields a clear message instead of a
       // raw JSON-parse exception.
@@ -183,7 +187,7 @@ export function DebtParseReview({ onClose, onConfirmed }: { onClose: () => void;
               <>
                 <UploadCloud className="w-10 h-10 text-slate-500 mb-3" />
                 <p className="text-sm text-slate-200 font-medium">Drop a loan / promissory note here</p>
-                <p className="text-[11px] text-slate-500 mt-1">or click to browse · PDF, PNG, JPEG · up to 4MB</p>
+                <p className="text-[11px] text-slate-500 mt-1">or click to browse · PDF, PNG, JPEG · up to 15MB</p>
               </>
             )}
           </div>
