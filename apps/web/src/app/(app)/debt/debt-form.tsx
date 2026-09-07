@@ -61,7 +61,6 @@ export interface DebtFormInitial {
 
 interface LocationOption { id: string; name: string }
 interface AccountOption { id: string; accountNumber: string; name: string; accountType: string; isBankAccount?: boolean }
-interface CovenantOption { covenant: { id: string; loan_name: string; covenant_type: string } }
 
 const FREQUENCIES: { value: Frequency; label: string }[] = [
   { value: 'MONTHLY', label: 'Monthly' },
@@ -93,7 +92,6 @@ export function DebtForm({
   const [origination, setOrigination] = useState(initial?.origination_date ?? '');
   const [maturity, setMaturity] = useState(initial?.maturity_date ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
-  const [covenantId, setCovenantId] = useState('');
   const [covenants, setCovenants] = useState<FormCovenant[]>(() =>
     (initial?.proposedCovenants ?? [])
       .filter((c) => c.threshold != null)
@@ -120,8 +118,6 @@ export function DebtForm({
   const locations = locData ?? [];
   const { data: acctData } = useQuery<{ data: AccountOption[] }>('/api/accounts');
   const accounts = acctData?.data ?? [];
-  const { data: covData } = useQuery<{ data: CovenantOption[] }>('/api/covenants');
-  const covenantOptions = covData?.data ?? [];
 
   const liabilityAccts = useMemo(() => accounts.filter((a) => a.accountType === 'LIABILITY'), [accounts]);
   const cashAccts = useMemo(() => accounts.filter((a) => a.isBankAccount || a.accountType === 'ASSET'), [accounts]);
@@ -157,7 +153,7 @@ export function DebtForm({
       origination_date: origination || null,
       maturity_date: maturity || null,
       status: 'ACTIVE',
-      loan_covenant_id: covenantId || null,
+      loan_covenant_id: null,
       covenants: covenants
         .filter((c) => c.threshold.trim() !== '' && Number.isFinite(Number(c.threshold)))
         .map((c) => ({
@@ -191,24 +187,24 @@ export function DebtForm({
       <div className="grid grid-cols-12 gap-3">
         <div className="col-span-6">
           <label className={label}>Loan name</label>
-          <input className={clsx(inputCls, lowFlag('loan_name'))} value={loanName} onChange={(e) => setLoanName(e.target.value)} placeholder="Term Loan A" />
+          <input className={clsx(inputCls, lowFlag('loan_name'))} value={loanName} onChange={(e) => setLoanName(e.target.value)} placeholder="e.g. Term Loan A" />
         </div>
         <div className="col-span-3">
           <label className={label}>Lender</label>
-          <input className={inputCls} value={lender ?? ''} onChange={(e) => setLender(e.target.value)} placeholder="Northwest Bank" />
+          <input className={inputCls} value={lender ?? ''} onChange={(e) => setLender(e.target.value)} placeholder="e.g. Northwest Bank" />
         </div>
         <div className="col-span-3">
           <label className={label}>Facility</label>
-          <input className={inputCls} value={facility ?? ''} onChange={(e) => setFacility(e.target.value)} placeholder="$5M Senior Secured" />
+          <input className={inputCls} value={facility ?? ''} onChange={(e) => setFacility(e.target.value)} placeholder="e.g. $5M Senior Secured" />
         </div>
 
         <div className="col-span-3">
           <label className={label}>Principal ($)</label>
-          <input className={clsx(inputCls, lowFlag('principal'))} type="number" step="0.01" value={principal} onChange={(e) => setPrincipal(e.target.value)} placeholder="5000000" />
+          <input className={clsx(inputCls, lowFlag('principal'))} type="number" step="0.01" value={principal} onChange={(e) => setPrincipal(e.target.value)} placeholder="e.g. 5,000,000" />
         </div>
         <div className="col-span-2">
           <label className={label}>Rate (% / yr)</label>
-          <input className={clsx(inputCls, lowFlag('interest_rate'))} type="number" step="0.001" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="7.5" />
+          <input className={clsx(inputCls, lowFlag('interest_rate'))} type="number" step="0.001" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="e.g. 7.5" />
         </div>
         <div className="col-span-2">
           <label className={label}>Rate type</label>
@@ -233,7 +229,7 @@ export function DebtForm({
 
         <div className="col-span-3">
           <label className={label}>Term (# periods)</label>
-          <input className={clsx(inputCls, lowFlag('term_periods'))} type="number" step="1" value={term} onChange={(e) => setTerm(e.target.value)} placeholder="60" />
+          <input className={clsx(inputCls, lowFlag('term_periods'))} type="number" step="1" value={term} onChange={(e) => setTerm(e.target.value)} placeholder="e.g. 60" />
         </div>
         <div className="col-span-3">
           <label className={label}>Fixed payment ($, optional)</label>
@@ -255,22 +251,14 @@ export function DebtForm({
             {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
         </div>
-        {covenants.length > 0 ? (
-          <div className="col-span-6 flex items-end">
-            <p className="text-[11px] text-slate-400 pb-1.5 flex items-center gap-1.5">
-              <ShieldCheck size={13} className="text-indigo-400 shrink-0" />
-              The covenant{covenants.length > 1 ? 's' : ''} below will be created and linked to this loan automatically.
-            </p>
-          </div>
-        ) : (
-          <div className="col-span-6">
-            <label className={label}>Link to an existing covenant (optional)</label>
-            <select className={inputCls} value={covenantId} onChange={(e) => setCovenantId(e.target.value)}>
-              <option value="">None</option>
-              {covenantOptions.map((c) => <option key={c.covenant.id} value={c.covenant.id}>{c.covenant.loan_name} · {c.covenant.covenant_type}</option>)}
-            </select>
-          </div>
-        )}
+        <div className="col-span-6 flex items-end">
+          <p className="text-[11px] text-slate-400 pb-1.5 flex items-center gap-1.5">
+            <ShieldCheck size={13} className="text-indigo-400 shrink-0" />
+            {covenants.length > 0
+              ? <>The covenant{covenants.length > 1 ? 's' : ''} below will be created and linked to this loan automatically.</>
+              : <>Add any financial covenant in the Covenants section below — it&rsquo;s created and linked when you save.</>}
+          </p>
+        </div>
       </div>
 
       <div className="rounded-lg border border-indigo-500/25 bg-indigo-500/[0.04] p-3">
