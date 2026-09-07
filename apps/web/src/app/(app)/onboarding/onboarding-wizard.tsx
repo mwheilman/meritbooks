@@ -13,6 +13,7 @@ import { PlaidLinkButton } from '@/components/integrations/plaid-link-button';
 import { ConnectErpStep } from '@/components/integrations/connect-erp-step';
 import ConversionClient from './conversion/conversion-client';
 import { ReadinessChecklist } from './readiness-checklist';
+import { SmartIntake } from './smart-intake';
 import {
   SourceTile, ProposalCard, TieOutBanner, SetupHomeBoard,
 } from '@/components/onboarding';
@@ -470,6 +471,15 @@ function SourceStep({
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {hasCompany && (
+        <div className="pt-1">
+          <div className="flex items-center gap-3 text-2xs text-slate-600 mb-3">
+            <span className="h-px flex-1 bg-slate-800" /> or <span className="h-px flex-1 bg-slate-800" />
+          </div>
+          <SmartIntake />
         </div>
       )}
     </div>
