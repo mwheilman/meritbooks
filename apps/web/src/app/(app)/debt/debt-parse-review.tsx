@@ -95,6 +95,14 @@ export function DebtParseReview({ onClose, onConfirmed }: { onClose: () => void;
     }
   }, []);
 
+  const reset = useCallback(() => {
+    setPhase('upload');
+    setInitial(null);
+    setMeta(null);
+    setSnippet(null);
+    setError(null);
+  }, []);
+
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragOver(false);
@@ -174,6 +182,13 @@ export function DebtParseReview({ onClose, onConfirmed }: { onClose: () => void;
                   <AlertTriangle size={11} /> review highlighted fields
                 </span>
               )}
+              <button
+                type="button"
+                onClick={reset}
+                className="ml-auto inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300"
+              >
+                <UploadCloud size={12} /> Upload a different document
+              </button>
             </div>
             {meta?.documentNote && (
               <div className="mb-3 flex items-start gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-[11px] text-slate-400">

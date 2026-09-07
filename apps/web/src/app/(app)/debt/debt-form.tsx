@@ -255,13 +255,22 @@ export function DebtForm({
             {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
         </div>
-        <div className="col-span-6">
-          <label className={label}>Link to covenant (optional)</label>
-          <select className={inputCls} value={covenantId} onChange={(e) => setCovenantId(e.target.value)}>
-            <option value="">None</option>
-            {covenantOptions.map((c) => <option key={c.covenant.id} value={c.covenant.id}>{c.covenant.loan_name} · {c.covenant.covenant_type}</option>)}
-          </select>
-        </div>
+        {covenants.length > 0 ? (
+          <div className="col-span-6 flex items-end">
+            <p className="text-[11px] text-slate-400 pb-1.5 flex items-center gap-1.5">
+              <ShieldCheck size={13} className="text-indigo-400 shrink-0" />
+              The covenant{covenants.length > 1 ? 's' : ''} below will be created and linked to this loan automatically.
+            </p>
+          </div>
+        ) : (
+          <div className="col-span-6">
+            <label className={label}>Link to an existing covenant (optional)</label>
+            <select className={inputCls} value={covenantId} onChange={(e) => setCovenantId(e.target.value)}>
+              <option value="">None</option>
+              {covenantOptions.map((c) => <option key={c.covenant.id} value={c.covenant.id}>{c.covenant.loan_name} · {c.covenant.covenant_type}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border border-indigo-500/25 bg-indigo-500/[0.04] p-3">
