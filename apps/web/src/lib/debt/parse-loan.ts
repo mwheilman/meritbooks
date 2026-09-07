@@ -33,6 +33,29 @@ export type RateType = 'FIXED' | 'VARIABLE';
  * WHOLE DOLLARS as the model reads them (the confirm path converts to cents);
  * fields the model could not determine are null for the human to complete.
  */
+/** Financial covenant types the parser can propose (mirrors lib/covenants/schema). */
+export type CovenantType =
+  | 'DSCR' | 'FCCR' | 'LEVERAGE' | 'CURRENT_RATIO' | 'MIN_LIQUIDITY' | 'TNW' | 'CUSTOM';
+export type CovenantDirection = 'MIN' | 'MAX';
+export type CovenantFrequency = 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
+
+/**
+ * A covenant the model detected in the loan document — proposed for review and,
+ * on confirm, created + linked to the loan in the same step (no re-upload).
+ */
+export interface ProposedCovenant {
+  covenant_type: CovenantType;
+  /** The numeric threshold (e.g. 1.10 for a 1.10:1 DSCR, or dollars for MIN_LIQUIDITY). */
+  threshold: number | null;
+  /** MIN = must stay at/above; MAX = must stay at/below. Defaulted by type. */
+  direction: CovenantDirection;
+  test_frequency: CovenantFrequency;
+  /** Short human label (e.g. "Debt Service Coverage Ratio"). */
+  label: string | null;
+  /** Verbatim excerpt stating the covenant, for traceability. */
+  snippet: string | null;
+}
+
 export interface ProposedLoan {
   loan_name: string;
   lender: string | null;
@@ -53,6 +76,8 @@ export interface ProposedLoan {
   maturity_date: string | null;
   notes: string | null;
   snippet: string | null;
+  /** Financial covenants detected in the document (may be empty). */
+  covenants: ProposedCovenant[];
   confidence: Record<string, number>;
   lowConfidenceFields: string[];
 }
@@ -162,7 +187,60 @@ interface RawLoan {
   maturity_date?: unknown;
   notes?: unknown;
   snippet?: unknown;
+  covenants?: unknown;
   confidence?: unknown;
+}
+
+const COVENANT_TYPE_SET: readonly CovenantType[] = [
+  'DSCR', 'FCCR', 'LEVERAGE', 'CURRENT_RATIO', 'MIN_LIQUIDITY', 'TNW', 'CUSTOM',
+];
+
+/** Covenant types where the borrower must stay AT OR ABOVE the threshold. */
+const MIN_TYPES: readonly CovenantType[] = ['DSCR', 'FCCR', 'CURRENT_RATIO', 'MIN_LIQUIDITY', 'TNW'];
+
+function mapCovenantType(raw: unknown): CovenantType {
+  const s = String(raw ?? '').toUpperCase().replace(/[^A-Z]/g, '');
+  if (s.includes('DSCR') || s.includes('DEBTSERVICE')) return 'DSCR';
+  if (s.includes('FCCR') || s.includes('FIXEDCHARGE')) return 'FCCR';
+  if (s.includes('LEVERAGE') || s.includes('DEBTTOEBITDA') || s.includes('DEBTEBITDA')) return 'LEVERAGE';
+  if (s.includes('CURRENTRATIO')) return 'CURRENT_RATIO';
+  if (s.includes('LIQUIDITY') || s.includes('MINCASH')) return 'MIN_LIQUIDITY';
+  if (s.includes('TANGIBLENETWORTH') || s === 'TNW' || s.includes('NETWORTH')) return 'TNW';
+  if (COVENANT_TYPE_SET.includes(s as CovenantType)) return s as CovenantType;
+  return 'CUSTOM';
+}
+
+function mapCovenantFrequency(raw: unknown): CovenantFrequency {
+  const s = String(raw ?? '').toUpperCase();
+  if (s.startsWith('MONTH')) return 'MONTHLY';
+  if (s.startsWith('ANNUAL') || s.startsWith('YEAR')) return 'ANNUAL';
+  return 'QUARTERLY';
+}
+
+/** Normalize the model's loose covenant array; drops entries with no numeric threshold. */
+export function normalizeCovenants(raw: unknown): ProposedCovenant[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ProposedCovenant[] = [];
+  for (const item of raw.slice(0, 10)) {
+    const r = (item ?? {}) as Record<string, unknown>;
+    const covenant_type = mapCovenantType(r.covenant_type ?? r.type ?? r.name);
+    const threshold = toNumberOrNull(r.threshold ?? r.value ?? r.ratio ?? r.minimum ?? r.maximum);
+    if (threshold === null) continue; // a covenant with no testable number isn't actionable
+    const dirRaw = String(r.direction ?? '').toUpperCase();
+    const direction: CovenantDirection =
+      dirRaw === 'MIN' || dirRaw === 'MAX'
+        ? (dirRaw as CovenantDirection)
+        : MIN_TYPES.includes(covenant_type) ? 'MIN' : 'MAX';
+    out.push({
+      covenant_type,
+      threshold,
+      direction,
+      test_frequency: mapCovenantFrequency(r.test_frequency ?? r.frequency),
+      label: toStringOrNull(r.label ?? r.name),
+      snippet: toStringOrNull(r.snippet),
+    });
+  }
+  return out;
 }
 
 /**
@@ -228,6 +306,7 @@ export function normalizeLoanExtraction(raw: unknown): ProposedLoan {
     maturity_date: toIsoDate(l.maturity_date),
     notes: toStringOrNull(l.notes),
     snippet: toStringOrNull(l.snippet),
+    covenants: normalizeCovenants(l.covenants),
     confidence,
     lowConfidenceFields: Array.from(new Set(low)),
   };
@@ -254,6 +333,16 @@ Return ONLY valid JSON (no markdown, no prose) with this exact shape:
     "maturity_date": "YYYY-MM-DD or null",
     "notes": "string or null — anything material (prepayment penalty, guaranty, collateral, rate index)",
     "snippet": "string — a short VERBATIM excerpt stating the principal/rate/term, for traceability",
+    "covenants": [
+      {
+        "covenant_type": "DSCR | FCCR | LEVERAGE | CURRENT_RATIO | MIN_LIQUIDITY | TNW | CUSTOM — the financial covenant the document imposes",
+        "threshold": number or null — the tested value (e.g. 1.10 for a 1.10:1 DSCR minimum; a DOLLAR amount for MIN_LIQUIDITY/TNW),
+        "direction": "MIN | MAX — MIN if the borrower must stay at/above the number (DSCR, current ratio, liquidity, net worth); MAX if at/below (leverage / debt-to-EBITDA)",
+        "test_frequency": "MONTHLY | QUARTERLY | ANNUAL — how often it is tested",
+        "label": "string or null — the covenant's name as written (e.g. 'Debt Service Coverage Ratio')",
+        "snippet": "string — a short VERBATIM excerpt stating this covenant"
+      }
+    ],
     "confidence": {
       "loan_name": number 0-1,
       "principal": number 0-1,
@@ -268,6 +357,7 @@ Return ONLY valid JSON (no markdown, no prose) with this exact shape:
 
 Rules:
 - If a field is not stated in the document, use null and set its confidence to 0. NEVER invent a value.
+- COVENANTS: include every financial covenant the document imposes (DSCR/FCCR minimums, leverage/debt-to-EBITDA maximums, current-ratio, minimum liquidity/cash, tangible net worth). Extract the exact tested number as \`threshold\`. If the document imposes no financial covenants, return an empty array [].
 - Principal and payment in WHOLE DOLLARS. Interest rate as a percent number (not a decimal fraction).
 - If the document defines MORE than one loan, extract the primary/largest and note the others in document_note.`;
 

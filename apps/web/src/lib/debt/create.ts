@@ -127,5 +127,46 @@ export async function createDebtInstrument(
     }
   }
 
+  // Create + link any covenants proposed from the document, in the SAME step —
+  // no separate re-upload or manual merge. Best-effort: a covenant failure never
+  // unwinds a successfully-created loan (the loan is the system of record). The
+  // first covenant is linked via the instrument's loan_covenant_id unless the
+  // user explicitly chose an existing covenant above.
+  const covenants = input.covenants ?? [];
+  if (covenants.length > 0) {
+    const covRows = covenants.map((c) => ({
+      org_id: orgId,
+      location_id: input.location_id ?? null,
+      loan_name: input.loan_name,
+      facility: input.facility ?? null,
+      lender_name: input.lender ?? null,
+      covenant_type: c.covenant_type,
+      threshold: c.threshold,
+      direction: c.direction,
+      test_frequency: c.test_frequency,
+      warn_headroom_pct: 0.1,
+      measurement: {},
+      status: 'ACTIVE',
+      effective_date: input.origination_date ?? null,
+      maturity_date: input.maturity_date ?? null,
+      notes: c.notes ?? c.label ?? null,
+      created_by_user: userId,
+    }));
+    try {
+      const { data: createdCovs, error: covErr } = await db
+        .from('loan_covenants')
+        .insert(covRows)
+        .select('id');
+      if (covErr) {
+        console.error('[debt/create] covenant create failed (non-fatal):', covErr.message);
+      } else if (!input.loan_covenant_id && createdCovs && createdCovs.length > 0) {
+        const primaryId = (createdCovs[0] as { id: string }).id;
+        await db.from('debt_instruments').update({ loan_covenant_id: primaryId }).eq('id', instrumentId);
+      }
+    } catch (e) {
+      console.error('[debt/create] covenant create threw (non-fatal):', e instanceof Error ? e.message : e);
+    }
+  }
+
   return { id: instrumentId, schedule };
 }

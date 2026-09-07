@@ -31,6 +31,25 @@ const debtShape = z
     maturity_date: dateStr,
     status: z.enum(['ACTIVE', 'PAID_OFF', 'CLOSED', 'INACTIVE']).default('ACTIVE'),
     loan_covenant_id: z.string().uuid().nullish(),
+    /**
+     * Covenants to CREATE and link to this loan in the same step (from the
+     * drop-and-parse review). Each becomes a `loan_covenants` row; the first is
+     * linked via the instrument's `loan_covenant_id` when none is chosen above.
+     */
+    covenants: z
+      .array(
+        z.object({
+          covenant_type: z.enum(['DSCR', 'FCCR', 'LEVERAGE', 'CURRENT_RATIO', 'MIN_LIQUIDITY', 'TNW', 'CUSTOM']),
+          threshold: z.number().finite(),
+          direction: z.enum(['MIN', 'MAX']).default('MIN'),
+          test_frequency: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUAL']).default('QUARTERLY'),
+          label: z.string().max(200).nullish(),
+          notes: z.string().max(2000).nullish(),
+        }),
+      )
+      .max(10)
+      .optional()
+      .default([]),
     liability_account_id: z.string().uuid().nullish(),
     interest_expense_account_id: z.string().uuid().nullish(),
     interest_payable_account_id: z.string().uuid().nullish(),

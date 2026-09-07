@@ -6,11 +6,38 @@ import { dollarsToCents } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ShieldCheck } from 'lucide-react';
 
 type Frequency = 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
 type RateType = 'FIXED' | 'VARIABLE';
 type Method = 'AMORTIZING' | 'INTEREST_ONLY';
+type CovType = 'DSCR' | 'FCCR' | 'LEVERAGE' | 'CURRENT_RATIO' | 'MIN_LIQUIDITY' | 'TNW' | 'CUSTOM';
+type CovDir = 'MIN' | 'MAX';
+type CovFreq = 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
+
+/** A covenant proposed by the parser (numbers as parsed). */
+export interface ProposedCovenantInit {
+  covenant_type: CovType;
+  threshold: number | null;
+  direction: CovDir;
+  test_frequency: CovFreq;
+  label: string | null;
+}
+
+/** Covenant row as the form edits it (threshold kept as a string while typing). */
+interface FormCovenant {
+  covenant_type: CovType;
+  threshold: string;
+  direction: CovDir;
+  test_frequency: CovFreq;
+  label: string | null;
+}
+
+const COV_TYPES: CovType[] = ['DSCR', 'FCCR', 'LEVERAGE', 'CURRENT_RATIO', 'MIN_LIQUIDITY', 'TNW', 'CUSTOM'];
+const COV_TYPE_LABEL: Record<CovType, string> = {
+  DSCR: 'DSCR', FCCR: 'FCCR', LEVERAGE: 'Leverage', CURRENT_RATIO: 'Current ratio',
+  MIN_LIQUIDITY: 'Min liquidity', TNW: 'Tangible net worth', CUSTOM: 'Custom',
+};
 
 /** Initial values, in the units the FORM uses (dollars for money). */
 export interface DebtFormInitial {
@@ -28,6 +55,7 @@ export interface DebtFormInitial {
   origination_date?: string | null;
   maturity_date?: string | null;
   notes?: string | null;
+  proposedCovenants?: ProposedCovenantInit[];
   lowConfidenceFields?: string[];
 }
 
@@ -66,6 +94,22 @@ export function DebtForm({
   const [maturity, setMaturity] = useState(initial?.maturity_date ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [covenantId, setCovenantId] = useState('');
+  const [covenants, setCovenants] = useState<FormCovenant[]>(() =>
+    (initial?.proposedCovenants ?? [])
+      .filter((c) => c.threshold != null)
+      .map((c) => ({
+        covenant_type: c.covenant_type,
+        threshold: c.threshold != null ? String(c.threshold) : '',
+        direction: c.direction,
+        test_frequency: c.test_frequency,
+        label: c.label ?? null,
+      })),
+  );
+  const updateCov = (i: number, patch: Partial<FormCovenant>) =>
+    setCovenants((cs) => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  const removeCov = (i: number) => setCovenants((cs) => cs.filter((_, j) => j !== i));
+  const addCov = () =>
+    setCovenants((cs) => [...cs, { covenant_type: 'DSCR', threshold: '', direction: 'MIN', test_frequency: 'QUARTERLY', label: null }]);
   const [liabilityAcct, setLiabilityAcct] = useState('');
   const [cashAcct, setCashAcct] = useState('');
   const [interestExpAcct, setInterestExpAcct] = useState('');
@@ -77,7 +121,7 @@ export function DebtForm({
   const { data: acctData } = useQuery<{ data: AccountOption[] }>('/api/accounts');
   const accounts = acctData?.data ?? [];
   const { data: covData } = useQuery<{ data: CovenantOption[] }>('/api/covenants');
-  const covenants = covData?.data ?? [];
+  const covenantOptions = covData?.data ?? [];
 
   const liabilityAccts = useMemo(() => accounts.filter((a) => a.accountType === 'LIABILITY'), [accounts]);
   const cashAccts = useMemo(() => accounts.filter((a) => a.isBankAccount || a.accountType === 'ASSET'), [accounts]);
@@ -114,6 +158,15 @@ export function DebtForm({
       maturity_date: maturity || null,
       status: 'ACTIVE',
       loan_covenant_id: covenantId || null,
+      covenants: covenants
+        .filter((c) => c.threshold.trim() !== '' && Number.isFinite(Number(c.threshold)))
+        .map((c) => ({
+          covenant_type: c.covenant_type,
+          threshold: Number(c.threshold),
+          direction: c.direction,
+          test_frequency: c.test_frequency,
+          label: c.label,
+        })),
       liability_account_id: liabilityAcct || null,
       cash_account_id: cashAcct || null,
       interest_expense_account_id: interestExpAcct || null,
@@ -206,9 +259,70 @@ export function DebtForm({
           <label className={label}>Link to covenant (optional)</label>
           <select className={inputCls} value={covenantId} onChange={(e) => setCovenantId(e.target.value)}>
             <option value="">None</option>
-            {covenants.map((c) => <option key={c.covenant.id} value={c.covenant.id}>{c.covenant.loan_name} · {c.covenant.covenant_type}</option>)}
+            {covenantOptions.map((c) => <option key={c.covenant.id} value={c.covenant.id}>{c.covenant.loan_name} · {c.covenant.covenant_type}</option>)}
           </select>
         </div>
+      </div>
+
+      <div className="rounded-lg border border-indigo-500/25 bg-indigo-500/[0.04] p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={14} className="text-indigo-400" />
+            <span className="text-xs font-medium text-slate-200">
+              Covenants{covenants.length > 0 ? ` · ${covenants.length}` : ''}
+            </span>
+          </div>
+          <button type="button" onClick={addCov} className="text-[11px] text-indigo-400 hover:text-indigo-300">
+            + Add covenant
+          </button>
+        </div>
+        {covenants.length === 0 ? (
+          <p className="text-[11px] text-slate-500">
+            No covenants detected. Add one if this loan carries a financial covenant (DSCR, leverage, liquidity…).
+          </p>
+        ) : (
+          <>
+            <p className="text-[11px] text-slate-500 mb-2">
+              Detected in the document — review, then they&rsquo;re created and linked to this loan when you save. No second upload.
+            </p>
+            <div className="space-y-2">
+              {covenants.map((c, i) => (
+                <div key={i} className="grid grid-cols-12 gap-2 items-end">
+                  <div className="col-span-3">
+                    <label className={label}>Type</label>
+                    <select className={inputCls} value={c.covenant_type} onChange={(e) => updateCov(i, { covenant_type: e.target.value as CovType })}>
+                      {COV_TYPES.map((t) => <option key={t} value={t}>{COV_TYPE_LABEL[t]}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className={label}>Direction</label>
+                    <select className={inputCls} value={c.direction} onChange={(e) => updateCov(i, { direction: e.target.value as CovDir })}>
+                      <option value="MIN">Min (≥)</option>
+                      <option value="MAX">Max (≤)</option>
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className={label}>Threshold</label>
+                    <input className={inputCls} type="number" step="0.01" value={c.threshold} onChange={(e) => updateCov(i, { threshold: e.target.value })} placeholder="1.10" />
+                  </div>
+                  <div className="col-span-3">
+                    <label className={label}>Tested</label>
+                    <select className={inputCls} value={c.test_frequency} onChange={(e) => updateCov(i, { test_frequency: e.target.value as CovFreq })}>
+                      <option value="MONTHLY">Monthly</option>
+                      <option value="QUARTERLY">Quarterly</option>
+                      <option value="ANNUAL">Annual</option>
+                    </select>
+                  </div>
+                  <div className="col-span-2 flex justify-end">
+                    <button type="button" onClick={() => removeCov(i)} className="text-[11px] text-slate-500 hover:text-red-400 px-2 py-1.5" aria-label="Remove covenant">
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <details className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">

@@ -9,6 +9,15 @@ import { DebtForm, type DebtFormInitial } from './debt-form';
 
 type Frequency = 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
 
+export interface ProposedCovenant {
+  covenant_type: 'DSCR' | 'FCCR' | 'LEVERAGE' | 'CURRENT_RATIO' | 'MIN_LIQUIDITY' | 'TNW' | 'CUSTOM';
+  threshold: number | null;
+  direction: 'MIN' | 'MAX';
+  test_frequency: 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
+  label: string | null;
+  snippet: string | null;
+}
+
 interface ProposedLoan {
   loan_name: string;
   lender: string | null;
@@ -24,6 +33,7 @@ interface ProposedLoan {
   maturity_date: string | null;
   notes: string | null;
   snippet: string | null;
+  covenants?: ProposedCovenant[];
   lowConfidenceFields: string[];
 }
 
@@ -75,6 +85,7 @@ export function DebtParseReview({ onClose, onConfirmed }: { onClose: () => void;
         origination_date: l.origination_date,
         maturity_date: l.maturity_date,
         notes: l.notes,
+        proposedCovenants: l.covenants ?? [],
         lowConfidenceFields: l.lowConfidenceFields,
       });
       setPhase('review');
