@@ -130,6 +130,38 @@ export default function ConversionClient() {
     }
   }, []);
 
+  // DROP-AND-PARSE: a PDF/image trial balance is read by AI into the SAME
+  // { mapping, rows } the CSV path produces, then flows through the identical
+  // map → tie-out → post steps. AI only reads the document; it never posts.
+  const [parsing, setParsing] = useState(false);
+  const onDocFile = useCallback(async (file: File) => {
+    setError('');
+    setParsing(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/onboarding/import/tb', { method: 'POST', body: fd });
+      const data = (await res.json()) as {
+        mapping?: Record<string, string>;
+        rows?: Record<string, string>[];
+        error?: string;
+      };
+      if (!res.ok) { setError(data.error ?? 'Could not read that trial balance.'); return; }
+      const rows = data.rows ?? [];
+      if (rows.length === 0) { setError('No account rows were found in that document. Try a clearer scan or a CSV.'); return; }
+      const mapping = data.mapping ?? {};
+      const headers = Object.keys(rows[0] ?? {});
+      setCsv({ headers, rows });
+      setColMapping(mapping);
+      setFileName(file.name);
+      setStep('map');
+    } catch {
+      setError('Could not read that trial balance. Try a clearer PDF/image, or upload a CSV.');
+    } finally {
+      setParsing(false);
+    }
+  }, []);
+
   const setupComplete = !!companyId && !!asOfDate;
   const mappingComplete = useMemo(
     () => CONVERSION_SOURCE_FIELDS.filter((f) => f.required).every((f) => colMapping[f.key] && colMapping[f.key] !== NONE),
@@ -248,6 +280,7 @@ export default function ConversionClient() {
         <SetupStep
           companies={companies} companyId={companyId} setCompanyId={setCompanyId}
           asOfDate={asOfDate} setAsOfDate={setAsOfDate} setupComplete={setupComplete} onFile={onFile}
+          onDocFile={onDocFile} parsing={parsing}
         />
       )}
 
@@ -274,10 +307,11 @@ export default function ConversionClient() {
 
 // ───────────────────────────── STEP 1: SETUP ─────────────────────────────
 function SetupStep({
-  companies, companyId, setCompanyId, asOfDate, setAsOfDate, setupComplete, onFile,
+  companies, companyId, setCompanyId, asOfDate, setAsOfDate, setupComplete, onFile, onDocFile, parsing,
 }: {
   companies: Company[]; companyId: string; setCompanyId: (v: string) => void;
   asOfDate: string; setAsOfDate: (v: string) => void; setupComplete: boolean; onFile: (f: File) => void;
+  onDocFile: (f: File) => void; parsing: boolean;
 }) {
   return (
     <div className="space-y-5">
@@ -305,6 +339,28 @@ function SetupStep({
         <Upload size={28} className="mx-auto mb-3 text-slate-500" />
         <p className="text-sm text-slate-300 font-medium">Drop a trial balance CSV here or click to browse</p>
         <p className="text-xs text-slate-500 mt-1">First row must be column headers: an account column, and debit / credit columns.</p>
+      </label>
+
+      <div className="flex items-center gap-3 text-2xs text-slate-600">
+        <span className="h-px flex-1 bg-slate-800" /> or <span className="h-px flex-1 bg-slate-800" />
+      </div>
+
+      <label className={`block rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors ${setupComplete && !parsing ? 'cursor-pointer border-indigo-500/30 hover:border-indigo-500/60 bg-indigo-500/[0.04]' : 'border-slate-800 bg-surface-900/40 cursor-not-allowed opacity-60'}`}>
+        <input type="file" accept=".pdf,image/*" className="hidden" disabled={!setupComplete || parsing}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onDocFile(f); e.target.value = ''; }} />
+        {parsing ? (
+          <>
+            <Loader2 size={24} className="mx-auto mb-2 text-indigo-400 animate-spin" />
+            <p className="text-sm text-slate-300">Reading your trial balance…</p>
+            <p className="text-2xs text-slate-500 mt-1">AI extracts each account and its debit/credit — you tie out and post.</p>
+          </>
+        ) : (
+          <>
+            <Sparkles size={22} className="mx-auto mb-2 text-indigo-400" />
+            <p className="text-sm text-slate-300 font-medium">…or drop a PDF / image of your trial balance</p>
+            <p className="text-2xs text-slate-500 mt-1">No spreadsheet? Drop the report straight from your prior system — AI reads it.</p>
+          </>
+        )}
       </label>
       {!setupComplete && <p className="text-2xs text-slate-500">Pick a company and an as-of date to enable the upload.</p>}
 
