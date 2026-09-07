@@ -56,20 +56,37 @@ export function DebtParseReview({ onClose, onConfirmed }: { onClose: () => void;
   const parse = useCallback(async (file: File) => {
     setError(null);
     if (!ALLOWED.includes(file.type)) { setError('Unsupported file type. Upload a PDF, JPEG, PNG, or WebP.'); return; }
-    if (file.size > 10 * 1024 * 1024) { setError('File too large. Maximum 10MB.'); return; }
+    // Vercel rejects request bodies larger than ~4.5MB at the edge (before the
+    // function runs), so cap here with a clear message rather than let the upload
+    // fail with a cryptic error.
+    if (file.size > 4 * 1024 * 1024) {
+      setError('That file is larger than 4MB. Please upload a smaller PDF, or export/scan it at a lower resolution.');
+      return;
+    }
     setPhase('parsing');
     const formData = new FormData();
     formData.append('file', file);
     try {
       const res = await fetch('/api/debt/parse', { method: 'POST', body: formData });
-      const body = (await res.json()) as ParseResponse | { error: string };
-      if (!res.ok || 'error' in body) {
-        setError('error' in body ? body.error : 'Failed to parse document');
+      // Read as text first so a non-JSON response (e.g. an edge 413 for an
+      // oversized body, or an auth redirect) yields a clear message instead of a
+      // raw JSON-parse exception.
+      const raw = await res.text();
+      let body: (ParseResponse & { error?: string }) | { error?: string } | null = null;
+      try { body = raw ? JSON.parse(raw) : null; } catch { body = null; }
+      if (!res.ok || !body) {
+        setError(
+          res.status === 413
+            ? 'That file is too large to upload (over ~4.5MB). Please use a smaller PDF.'
+            : (body && 'error' in body && body.error) || `Upload failed (${res.status}). Please try again.`,
+        );
         setPhase('upload');
         return;
       }
-      const l = body.loan;
-      setMeta(body.meta);
+      if ('error' in body && body.error) { setError(body.error); setPhase('upload'); return; }
+      const parsed = body as ParseResponse;
+      const l = parsed.loan;
+      setMeta(parsed.meta);
       setSnippet(l.snippet);
       setInitial({
         loan_name: l.loan_name,
@@ -166,7 +183,7 @@ export function DebtParseReview({ onClose, onConfirmed }: { onClose: () => void;
               <>
                 <UploadCloud className="w-10 h-10 text-slate-500 mb-3" />
                 <p className="text-sm text-slate-200 font-medium">Drop a loan / promissory note here</p>
-                <p className="text-[11px] text-slate-500 mt-1">or click to browse · PDF, PNG, JPEG · up to 10MB</p>
+                <p className="text-[11px] text-slate-500 mt-1">or click to browse · PDF, PNG, JPEG · up to 4MB</p>
               </>
             )}
           </div>
