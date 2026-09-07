@@ -6,6 +6,7 @@ import { Loader2, AlertCircle, Building2, Save, Copy, Wand2, Info } from 'lucide
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks';
 import { formatMoney, dollarsToCents, centsToDollars } from '@meritbooks/shared';
+import { BudgetImport } from './budget-import';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const PERIODS = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -172,6 +173,12 @@ export function BudgetEntryGrid({ locationId, locationName, fiscalYear, departme
           FY {fiscalYear} · {locationName}{departmentId ? ' · department' : ' · company-level'} · monthly budget in dollars
         </p>
         <div className="flex items-center gap-2">
+          <BudgetImport
+            locationId={locationId}
+            fiscalYear={fiscalYear}
+            departmentId={departmentId}
+            onImported={load}
+          />
           <button onClick={copyPriorYear} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 border border-slate-700 text-slate-300 hover:border-slate-600">
             <Copy size={12} /> Copy FY {fiscalYear - 1}
           </button>

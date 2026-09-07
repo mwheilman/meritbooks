@@ -14,6 +14,7 @@ import { ConnectErpStep } from '@/components/integrations/connect-erp-step';
 import ConversionClient from './conversion/conversion-client';
 import { ReadinessChecklist } from './readiness-checklist';
 import { SmartIntake } from './smart-intake';
+import { FormationIntake } from './formation-intake';
 import {
   SourceTile, ProposalCard, TieOutBanner, SetupHomeBoard,
 } from '@/components/onboarding';
@@ -480,6 +481,9 @@ function SourceStep({
             <span className="h-px flex-1 bg-slate-800" /> or <span className="h-px flex-1 bg-slate-800" />
           </div>
           <SmartIntake />
+          <div className="mt-3">
+            <FormationIntake companyId={entities[0]?.id ?? null} />
+          </div>
         </div>
       )}
     </div>
