@@ -57,6 +57,7 @@ export async function GET() {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
 
   const sinceIso = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 

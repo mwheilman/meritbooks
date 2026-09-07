@@ -42,7 +42,7 @@ export async function GET() {
         ? db.schema('core').from('locations').select('id, name').in('id', locIds)
         : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
       glIds.length
-        ? db.from('accounts').select('id, account_number, name').in('id', glIds)
+        ? db.from('accounts').select('id, account_number, name').eq('org_id', orgId).in('id', glIds)
         : Promise.resolve({ data: [] as Array<{ id: string; account_number: string; name: string }> }),
       db.from('accounts')
         .select('id, account_number, name, account_type, company_location_id')

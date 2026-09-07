@@ -25,6 +25,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .from('recurring_invoice_templates')
     .select('id, name, frequency, interval_count, start_date, next_run_date, end_date, occurrences_remaining, is_active, auto_send, template_data, last_generated_at, last_invoice_id, customer_id, location_id, created_at')
     .eq('id', params.id)
+    .eq('org_id', orgId)
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

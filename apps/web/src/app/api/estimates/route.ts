@@ -42,6 +42,7 @@ export async function GET(request: Request) {
        subtotal_cents, tax_cents, total_cents, currency, notes,
        customer_id, location_id, job_id, converted_invoice_id, converted_at, created_at`,
     )
+    .eq('org_id', orgId)
     .order('estimate_date', { ascending: false });
 
   if (locationId) query = query.eq('location_id', locationId);

@@ -17,7 +17,8 @@ import { z } from 'zod';
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const supabase = ctx.supabase;
+  const { supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
   const { searchParams } = new URL(request.url);
   const locationId = searchParams.get('location_id');
   const status = searchParams.get('approval_status'); // PENDING, APPROVED, REJECTED
@@ -57,6 +58,7 @@ export async function GET(request: Request) {
         )
       )
     `)
+    .eq('org_id', orgId)
     .order('account_number');
 
   if (locationId) {

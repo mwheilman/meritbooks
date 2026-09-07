@@ -27,6 +27,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
        subtotal_cents, tax_cents, total_cents, currency, notes,
        customer_id, location_id, job_id, converted_invoice_id, converted_at, created_at`,
     )
+    .eq('org_id', orgId)
     .eq('id', params.id)
     .maybeSingle();
 

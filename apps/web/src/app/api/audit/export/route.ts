@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, userId, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
 
   const guard = await requirePermission(userId, 'audit_trail', 'view');
   if (!guard.ok) return guard.response;

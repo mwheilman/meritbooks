@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { bookInternalInvoice, type ChargeMethod } from '@/lib/services/internal-invoices';
@@ -12,7 +13,15 @@ const actionSchema = z.object({
 });
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
-  const supabase = createAdminSupabase();
+  // TENANT ISOLATION: resolve the caller's org and read through the RLS-scoped
+  // client, constraining the row to the caller's org_id. Previously this fetched
+  // by primary key on the admin client with no org filter — any tenant could read
+  // another tenant's internal invoice (and its lines) by guessing an id.
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
   const { data, error } = await supabase
     .from('internal_invoices')
     .select(`
@@ -23,6 +32,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       lines:internal_invoice_lines(id, line_number, description, amount_cents)
     `)
     .eq('id', params.id)
+    .eq('org_id', orgId)
     .single();
   if (error || !data) return NextResponse.json({ error: 'Invoice not found', code: 'NOT_FOUND' }, { status: 404 });
 

@@ -37,6 +37,7 @@ export async function GET(request: Request) {
       subtotal_cents, tax_cents, total_cents, applied_amount_cents,
       customer_id, location_id, invoice_id, gl_entry_id, created_at
     `)
+    .eq('org_id', orgId)
     .order('credit_date', { ascending: false });
 
   if (invoiceId) query = query.eq('invoice_id', invoiceId);

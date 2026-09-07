@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { requireAuth } from '@/lib/api-handler';
+import { requireAuth, requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
@@ -30,9 +30,10 @@ const jeCreateSchema = z.object({
 
 // GET — query journal entries (already exists, re-export for combined route)
 export async function GET(request: Request) {
-  const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
@@ -58,7 +59,8 @@ export async function GET(request: Request) {
       created_at,
       location_id,
       gl_entry_lines(debit_cents, credit_cents)
-    `, { count: 'exact' });
+    `, { count: 'exact' })
+    .eq('org_id', orgId);
 
   if (locationId) query = query.eq('location_id', locationId);
   if (status && status !== 'all') query = query.eq('status', status);
@@ -108,7 +110,7 @@ export async function GET(request: Request) {
   const countStatuses = ['DRAFT', 'PENDING', 'POSTED', 'VOIDED'] as const;
   const statusCounts: Record<string, number> = {};
   for (const s of countStatuses) {
-    let q = supabase.from('gl_entries').select('id', { count: 'exact', head: true }).eq('status', s);
+    let q = supabase.from('gl_entries').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('status', s);
     if (locationId) q = q.eq('location_id', locationId);
     const { count: c } = await q;
     statusCounts[s] = c ?? 0;
