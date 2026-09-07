@@ -21,7 +21,7 @@ import { logAction } from '@/lib/trust/action-log';
 import { scoreToTier, getTierPolicy } from '@/lib/trust/score-tier';
 import { suggestAccountForVendor, boostConfidenceWithMemory } from '@/lib/learning/vendor-memory';
 
-export const CATEGORIZE_MODEL = 'claude-sonnet-4-20250514';
+export const CATEGORIZE_MODEL = 'claude-sonnet-4-6';
 export const CATEGORIZE_FEATURE = 'CATEGORIZATION';
 
 /** Shared normalization — must match between matching and learning. */

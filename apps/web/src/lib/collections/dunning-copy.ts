@@ -89,7 +89,7 @@ export function deterministicDunningDraft(stageKey: DunningStageKey, f: DunningF
  * tone. Feature bucket DUNNING_DRAFT.
  */
 export const DUNNING_DRAFT_FEATURE = 'DUNNING_DRAFT';
-export const DUNNING_DRAFT_MODEL = 'claude-sonnet-4-20250514';
+export const DUNNING_DRAFT_MODEL = 'claude-sonnet-4-6';
 
 export function dunningSystemPrompt(): string {
   return (

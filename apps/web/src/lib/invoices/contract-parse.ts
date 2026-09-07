@@ -30,7 +30,7 @@ import type { RevRecMethod } from '@/lib/services/rev-rec';
 import type { RecurringFrequency } from '@/lib/invoices/recurring-invoices';
 
 export const CONTRACT_EXTRACT_FEATURE = 'CONTRACT_EXTRACT';
-export const CONTRACT_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const CONTRACT_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 /** How the contract bills. Drives whether we propose invoice(s) or a recurring schedule. */
 export type BillingKind = 'ONE_TIME' | 'MILESTONE' | 'RECURRING';

@@ -11,7 +11,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { runAiGateway } from '@meritbooks/core-ai';
 
-export const BILL_PARSE_MODEL = 'claude-sonnet-4-20250514';
+export const BILL_PARSE_MODEL = 'claude-sonnet-4-6';
 export const BILL_PARSE_FEATURE = 'BILL_PARSE';
 
 interface ParsedBillLine {

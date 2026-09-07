@@ -30,7 +30,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { runAiGateway } from '@meritbooks/core-ai';
 
 export const COI_EXTRACT_FEATURE = 'COI_EXTRACT';
-export const COI_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const COI_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 /** Coverage lines a COI can carry, normalized to a constrained enum. */
 export const COVERAGE_TYPE_VALUES = [

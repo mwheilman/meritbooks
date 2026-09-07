@@ -24,7 +24,7 @@ import { runAiGateway } from '@meritbooks/core-ai';
 import type { AmortizationMethod, PaymentFrequency } from './amortization';
 
 export const DEBT_EXTRACT_FEATURE = 'DEBT_EXTRACT';
-export const DEBT_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const DEBT_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 export type RateType = 'FIXED' | 'VARIABLE';
 

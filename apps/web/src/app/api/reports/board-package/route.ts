@@ -53,7 +53,7 @@ const schema = z.object({
 });
 type Params = z.infer<typeof schema>;
 
-const EXEC_MODEL = 'claude-sonnet-4-20250514';
+const EXEC_MODEL = 'claude-sonnet-4-6';
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');

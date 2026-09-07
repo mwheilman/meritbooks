@@ -30,7 +30,7 @@ export const AP_POLICY_DOMAIN: PolicyDomainConfig<ApPolicyRuleset> = {
   schema: apPolicyRulesetSchema,
   defaultRuleset: DEFAULT_AP_RULESET,
   extractFeature: 'AP_POLICY_EXTRACT',
-  extractModel: 'claude-sonnet-4-20250514',
+  extractModel: 'claude-sonnet-4-6',
 };
 
 export async function loadActiveApPolicy(

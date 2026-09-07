@@ -23,7 +23,7 @@ import { runAiGateway } from '@meritbooks/core-ai';
 import { STANDARD_M_LINES, findMLine, type MLineDef } from './book-tax';
 
 export const BOOK_TAX_TAG_FEATURE = 'BOOK_TAX_TAG';
-const TAG_MODEL = 'claude-3-5-haiku-latest';
+const TAG_MODEL = 'claude-haiku-4-5-20251001';
 
 export interface CandidateAccount {
   id: string;

@@ -23,7 +23,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { runAiGateway } from '@meritbooks/core-ai';
 
 export const COVENANT_EXTRACT_FEATURE = 'COVENANT_EXTRACT';
-export const COVENANT_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const COVENANT_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 export const COVENANT_TYPE_VALUES = [
   'DSCR',

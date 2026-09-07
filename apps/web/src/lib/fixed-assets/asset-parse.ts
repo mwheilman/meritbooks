@@ -25,7 +25,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { runAiGateway } from '@meritbooks/core-ai';
 
 export const ASSET_EXTRACT_FEATURE = 'ASSET_EXTRACT';
-export const ASSET_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const ASSET_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 /**
  * Default capitalization threshold: the IRS de-minimis safe harbor without an

@@ -20,7 +20,7 @@ import { runAiGateway } from '@meritbooks/core-ai';
 import { BILLING_CADENCES, type BillingCadence } from './detect';
 
 export const SUBSCRIPTION_EXTRACT_FEATURE = 'SUBSCRIPTION_EXTRACT';
-export const SUBSCRIPTION_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const SUBSCRIPTION_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 /** Exact terms proposed from an agreement, mapped onto `subscriptions` fields. */
 export interface ProposedTerms {

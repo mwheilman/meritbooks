@@ -23,7 +23,7 @@ import { runAiGateway } from '@meritbooks/core-ai';
 import type { LeaseClassification, LeaseFrequency, PaymentTiming } from './schedule';
 
 export const LEASE_EXTRACT_FEATURE = 'LEASE_EXTRACT';
-export const LEASE_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const LEASE_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 const LOW_CONFIDENCE = 0.6;
 

@@ -22,7 +22,7 @@ import type { ProposedJob } from './types';
 import { normalizeWipExtraction } from './normalize';
 
 export const WIP_EXTRACT_FEATURE = 'WIP_EXTRACT';
-export const WIP_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const WIP_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 export type ParseWipResult =
   | {

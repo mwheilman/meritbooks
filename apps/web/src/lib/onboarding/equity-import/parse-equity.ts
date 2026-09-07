@@ -24,7 +24,7 @@ import { normalizeEquityExtraction } from './normalize';
 import type { ProposedCapTable } from './types';
 
 export const EQUITY_EXTRACT_FEATURE = 'EQUITY_EXTRACT';
-export const EQUITY_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const EQUITY_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 export type ParseEquityResult =
   | {

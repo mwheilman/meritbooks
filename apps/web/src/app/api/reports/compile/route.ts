@@ -37,7 +37,7 @@ import {
  * POST /api/reports/compile/pdf from the confirmed specs.
  */
 
-const COMPILER_MODEL = 'claude-sonnet-4-20250514';
+const COMPILER_MODEL = 'claude-sonnet-4-6';
 
 interface GatewayMeta {
   status: string;

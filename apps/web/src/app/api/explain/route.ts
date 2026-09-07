@@ -32,7 +32,7 @@ import {
  *      the panel always renders something truthful.
  */
 
-export const EXPLAIN_MODEL = 'claude-sonnet-4-20250514';
+export const EXPLAIN_MODEL = 'claude-sonnet-4-6';
 export const EXPLAIN_FEATURE = 'OBJECT_EXPLAIN';
 
 const schema = z.object({

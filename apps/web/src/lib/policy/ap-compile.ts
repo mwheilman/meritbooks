@@ -38,7 +38,7 @@ import {
 } from './ap-schema';
 
 export const AP_POLICY_EXTRACT_FEATURE = 'AP_POLICY_EXTRACT';
-export const AP_POLICY_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const AP_POLICY_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 // ---------------------------------------------------------------------------
 // Pure normalizer (no gateway, no DB) — unit-tested

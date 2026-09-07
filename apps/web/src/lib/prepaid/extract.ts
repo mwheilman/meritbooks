@@ -18,7 +18,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { runAiGateway } from '@meritbooks/core-ai';
 
 export const PREPAID_EXTRACT_FEATURE = 'PREPAID_EXTRACT';
-export const PREPAID_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const PREPAID_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 /** One proposed prepaid, ready to seed the setup form. Blank fields => human fills. */
 export interface ProposedPrepaid {

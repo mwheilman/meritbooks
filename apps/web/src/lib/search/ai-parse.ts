@@ -19,7 +19,7 @@ import { runAiGateway } from '@meritbooks/core-ai';
 import { ALL_SEARCH_TYPES, type SearchType } from './types';
 
 export const SEARCH_PARSE_FEATURE = 'SEARCH_PARSE';
-export const SEARCH_PARSE_MODEL = 'claude-sonnet-4-20250514';
+export const SEARCH_PARSE_MODEL = 'claude-sonnet-4-6';
 
 export interface AiSearchIntent {
   /** Object types the question is about, or null if unspecified. */

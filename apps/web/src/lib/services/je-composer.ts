@@ -64,7 +64,7 @@ export interface ComposerResult {
 }
 
 /** Default model requested; the gateway may substitute (degrade) under budget policy. */
-export const COMPOSER_MODEL = 'claude-sonnet-4-20250514';
+export const COMPOSER_MODEL = 'claude-sonnet-4-6';
 export const COMPOSER_FEATURE = 'JE_COMPOSER';
 
 /** Pure: build the composer prompt from a description + the real COA. */

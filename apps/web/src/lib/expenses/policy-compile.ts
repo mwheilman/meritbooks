@@ -31,7 +31,7 @@ import {
 } from './policy-schema';
 
 export const EXPENSE_POLICY_EXTRACT_FEATURE = 'EXPENSE_POLICY_EXTRACT';
-export const EXPENSE_POLICY_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const EXPENSE_POLICY_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 export type CompilePolicyResult =
   | {

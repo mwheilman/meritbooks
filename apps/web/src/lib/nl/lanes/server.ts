@@ -14,7 +14,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { runAiGateway, type GatewayResponse } from '@meritbooks/core-ai';
 import type { LaneModelCall } from './extract';
 
-export const NL_LANE_MODEL = 'claude-sonnet-4-20250514';
+export const NL_LANE_MODEL = 'claude-sonnet-4-6';
 
 export interface LaneGateway {
   /** The injected model call the pure extractors consume. Throws on budget block. */

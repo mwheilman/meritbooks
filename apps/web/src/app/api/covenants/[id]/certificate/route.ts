@@ -23,7 +23,7 @@ import { BAND_LABEL } from '@/lib/covenants/compute';
  */
 
 const FEATURE = 'COVENANT_DRIFT';
-const MODEL = 'claude-sonnet-4-20250514';
+const MODEL = 'claude-sonnet-4-6';
 
 const SELECT =
   'id, location_id, loan_name, facility, lender_name, covenant_type, threshold, direction, ' +

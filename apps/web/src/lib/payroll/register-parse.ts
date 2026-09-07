@@ -44,7 +44,7 @@ import { runAiGateway } from '@meritbooks/core-ai';
 import type { AccountRoleKey } from '@/lib/posting/account-roles';
 
 export const PAYROLL_REGISTER_EXTRACT_FEATURE = 'PAYROLL_REGISTER_EXTRACT';
-export const PAYROLL_REGISTER_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const PAYROLL_REGISTER_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 // ---------------------------------------------------------------------------
 // Types

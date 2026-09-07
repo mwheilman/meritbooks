@@ -46,7 +46,7 @@ import {
 } from '@/lib/controls/duplicate-payments';
 
 export const PAYMENT_FRAUD_FEATURE = 'PAYMENT_FRAUD';
-export const PAYMENT_FRAUD_MODEL = 'claude-sonnet-4-20250514';
+export const PAYMENT_FRAUD_MODEL = 'claude-sonnet-4-6';
 
 /** A payment at/above this is "large" for first-time / round-dollar escalation.
  *  Mirrors the money Business Rule auto-approve ceiling ($10,000). */

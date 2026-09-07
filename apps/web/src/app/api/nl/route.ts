@@ -48,7 +48,7 @@ import {
  * Gated by existing auth only (any authenticated member) per the MVP scope.
  */
 
-const NL_MODEL = 'claude-sonnet-4-20250514';
+const NL_MODEL = 'claude-sonnet-4-6';
 const NL_FEATURE = 'NL_ROUTER';
 
 const contextSchema = z

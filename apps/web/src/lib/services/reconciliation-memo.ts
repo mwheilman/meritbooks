@@ -10,7 +10,7 @@ import { formatMoney } from '@meritbooks/shared';
 
 export const RECON_MEMO_FEATURE = 'RECON_MEMO';
 // Match the flux-narrative seam: a phrasing task, not a reasoning-over-ledger task.
-export const RECON_MEMO_MODEL = 'claude-sonnet-4-20250514';
+export const RECON_MEMO_MODEL = 'claude-sonnet-4-6';
 
 /** Every deterministic figure the memo describes. All amounts are bigint cents. */
 export interface ReconMemoFacts {

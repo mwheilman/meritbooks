@@ -27,7 +27,7 @@ import type {
   TargetAccount,
 } from './conversion';
 
-const CONVERSION_MAP_MODEL = 'claude-sonnet-4-20250514';
+const CONVERSION_MAP_MODEL = 'claude-sonnet-4-6';
 
 const SYSTEM_MAP =
   'You are an accounting-systems migration assistant. You are mapping a company\'s ' +

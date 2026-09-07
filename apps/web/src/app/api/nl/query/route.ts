@@ -28,7 +28,7 @@ import {
  */
 
 const NL_FEATURE = 'NL_QUERY';
-const NL_MODEL = 'claude-sonnet-4-20250514';
+const NL_MODEL = 'claude-sonnet-4-6';
 
 const schema = z.object({
   prompt: z.string().min(2).max(2000),

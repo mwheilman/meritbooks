@@ -50,7 +50,7 @@ import {
  * route holds no Anthropic key beyond handing it to the gateway.
  */
 
-const NL_MODEL = 'claude-sonnet-4-20250514';
+const NL_MODEL = 'claude-sonnet-4-6';
 const NL_FEATURE = 'NL_SCENARIO';
 
 // ── Driver validation (mirrors /api/budgets/scenarios) ───────────────────────

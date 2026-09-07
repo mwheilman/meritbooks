@@ -33,7 +33,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { runAiGateway } from '@meritbooks/core-ai';
 
 export const W9_EXTRACT_FEATURE = 'W9_EXTRACT';
-export const W9_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const W9_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 /** Federal tax classification (Form W-9 line 3), normalized to a constrained enum. */
 export const W9_ENTITY_TYPE_VALUES = [

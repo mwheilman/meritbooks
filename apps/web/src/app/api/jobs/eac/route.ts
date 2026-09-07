@@ -26,7 +26,7 @@ import { computeEac, rollupEac, type EacInput, type EacResult, type EacMethod } 
  */
 
 const JOB_EAC_FEATURE = 'JOB_EAC';
-const JOB_EAC_MODEL = 'claude-sonnet-4-20250514';
+const JOB_EAC_MODEL = 'claude-sonnet-4-6';
 
 const OPEN_STATUSES = ['ACTIVE', 'ON_HOLD', 'COMPLETE'];
 

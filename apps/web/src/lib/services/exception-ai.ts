@@ -25,7 +25,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { runAiGateway } from '@meritbooks/core-ai';
 import { predictException, type ExceptionTreatment } from '../posting/exception-predictor';
 
-export const EXCEPTION_MODEL = 'claude-sonnet-4-20250514';
+export const EXCEPTION_MODEL = 'claude-sonnet-4-6';
 export const EXCEPTION_FEATURE = 'EXCEPTION_PREDICTION';
 
 /** Maps a treatment to the GATE 2 provisioning entry point that creates its schedule. */

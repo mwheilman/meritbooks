@@ -27,7 +27,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { runAiGateway } from '@meritbooks/core-ai';
 
 export const INSURANCE_EXTRACT_FEATURE = 'INSURANCE_EXTRACT';
-export const INSURANCE_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const INSURANCE_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 /** Coverage lines the tenant's own register recognizes, normalized to a constrained enum. */
 export const COVERAGE_TYPE_VALUES = [

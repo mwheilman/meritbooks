@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
       org_id: orgId,
       location_id: company.id,
       feature: CONVERSION_FEATURE,
-      model_requested: aiUsed ? 'claude-sonnet-4-20250514' : null,
+      model_requested: aiUsed ? 'claude-sonnet-4-6' : null,
       correlation_id: correlationId,
       input_summary: `Historical conversion — ${company.name} (${company.short_code}) opening balances as of ${body.asOfDate}: ${sources.length} source accounts, ${sourceLines.length} rows`.slice(0, 2000),
       proposed_output: data,

@@ -26,7 +26,7 @@ import {
  */
 
 const DOSSIER_FEATURE = 'CUSTOMER_RISK_SUMMARY';
-const DOSSIER_MODEL = 'claude-sonnet-4-20250514';
+const DOSSIER_MODEL = 'claude-sonnet-4-6';
 
 function extractText(result: unknown): string | null {
   if (!Array.isArray(result)) return null;

@@ -33,7 +33,7 @@ import { runAiGateway } from '@meritbooks/core-ai';
 import { dollarsToCents } from '@meritbooks/shared';
 
 export const STATEMENT_EXTRACT_FEATURE = 'STATEMENT_EXTRACT';
-export const STATEMENT_EXTRACT_MODEL = 'claude-sonnet-4-20250514';
+export const STATEMENT_EXTRACT_MODEL = 'claude-sonnet-4-6';
 
 /** Bank-account types the target account can have (migration 005 CHECK). */
 export const STATEMENT_ACCOUNT_TYPES = ['CHECKING', 'SAVINGS', 'CREDIT_CARD', 'LINE_OF_CREDIT'] as const;
