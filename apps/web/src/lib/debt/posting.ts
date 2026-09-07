@@ -220,7 +220,9 @@ export async function recordDebtOrigination(db: DB, args: RecordDebtOriginationA
     memo,
     source_module: SOURCE_MODULE,
     source_ref: sourceRef,
-    created_by: args.userId ?? null,
+    // gl_entries.created_by is uuid; Clerk ids are text → write null (canon §2).
+    // Human attribution lives on debt_instruments.created_by_user (text) + audit_log.
+    created_by: null,
     lines,
   });
   if (!je.success || !je.entry_id) throw new PostingError(je.error ?? 'Failed to post loan origination');
