@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { recognizeRun } from '@/lib/services/rev-rec';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 function asOfFrom(url: string): string {
   const v = new URL(url).searchParams.get('as_of');
@@ -36,6 +37,11 @@ export async function POST(request: Request) {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId: id, userId } = ctx;
   if (!id) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — a non-preview run posts recognition entries to the GL. Same gate as
+  // rev-rec/accrue-unbilled POST: journal_entries:post.
+  const guard = await requirePermission(userId, 'journal_entries', 'post');
+  if (!guard.ok) return guard.response;
 
   let body: { as_of?: string; location_id?: string | null } = {};
   try { body = await request.json(); } catch { /* empty body ok */ }

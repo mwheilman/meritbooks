@@ -25,6 +25,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 import { postJournalEntry, type JournalEntryLineInput } from '@/lib/services/gl-posting';
 import { PostingError, getAccountRef, resolveRole, type AccountRef } from '@/lib/posting/account-roles';
 import { resolveDebtAccounts } from './accounts';
@@ -106,13 +107,17 @@ async function loadSchedule(db: DB, orgId: string, id: string): Promise<DbSchedu
 
 /** The set of DEBT source_refs already posted (non-voided) for this instrument. */
 async function loadPostedRefs(db: DB, orgId: string, id: string): Promise<Set<string>> {
-  const { data } = await db
-    .from('gl_entries')
-    .select('source_ref, status')
-    .eq('org_id', orgId)
-    .eq('source_module', SOURCE_MODULE)
-    .neq('status', 'VOIDED')
-    .like('source_ref', `debt:%:${id}:%`);
+  const { data } = await fetchAll(
+    () =>
+      db
+        .from('gl_entries')
+        .select('source_ref, status')
+        .eq('org_id', orgId)
+        .eq('source_module', SOURCE_MODULE)
+        .neq('status', 'VOIDED')
+        .like('source_ref', `debt:%:${id}:%`),
+    { label: 'debt posted-refs gl_entries' },
+  );
   const refs = new Set<string>();
   for (const e of (data ?? []) as { source_ref: string | null }[]) if (e.source_ref) refs.add(e.source_ref);
   return refs;

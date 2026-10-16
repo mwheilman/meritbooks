@@ -16,6 +16,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
 type DB = SupabaseClient;
 
@@ -159,16 +160,20 @@ export async function deferredRollforward(
 
   // All POSTED 2410 lines up to and including the period end. We bucket in JS by
   // whether they fall before the period (beginning balance) or inside it.
-  let q = db
-    .from('gl_entry_lines')
-    .select('debit_cents, credit_cents, location_id, gl_entries!inner(entry_date, status)')
-    .eq('org_id', orgId)
-    .eq('account_id', account.id)
-    .eq('gl_entries.status', 'POSTED')
-    .lte('gl_entries.entry_date', args.period.end);
-  if (args.locationId) q = q.eq('location_id', args.locationId);
+  // Paged: the full 2410 history easily exceeds PostgREST's 1,000-row cap.
+  const buildLinesQuery = () => {
+    let q = db
+      .from('gl_entry_lines')
+      .select('debit_cents, credit_cents, location_id, gl_entries!inner(entry_date, status)')
+      .eq('org_id', orgId)
+      .eq('account_id', account.id)
+      .eq('gl_entries.status', 'POSTED')
+      .lte('gl_entries.entry_date', args.period.end);
+    if (args.locationId) q = q.eq('location_id', args.locationId);
+    return q;
+  };
 
-  const { data, error } = await q;
+  const { data, error } = await fetchAll(buildLinesQuery, { label: 'rev-rec deferred rollforward gl_entry_lines' });
   if (error) throw new Error(error.message);
   const lines = (data ?? []) as unknown as DeferredLine[];
 
@@ -286,15 +291,20 @@ export async function recognitionWaterfallAndMethods(
   orgId: string,
   args: { locationId?: string | null; period: RevRecPeriod },
 ): Promise<{ waterfall: RecognitionWaterfall; methodSummary: MethodSummary }> {
-  let q = db
-    .from('revenue_recognition_runs')
-    .select('job_id, location_id, as_of_date, method, contract_value_cents, earned_to_date_cents, recognized_delta_cents, pct_recognized')
-    .eq('org_id', orgId)
-    .lte('as_of_date', args.period.end)
-    .order('as_of_date', { ascending: true });
-  if (args.locationId) q = q.eq('location_id', args.locationId);
+  // Paged (jobs × months of runs easily exceeds the 1,000-row cap). Chronological
+  // order kept; `id` appended as a unique tie-breaker.
+  const buildRunsQuery = () => {
+    let q = db
+      .from('revenue_recognition_runs')
+      .select('job_id, location_id, as_of_date, method, contract_value_cents, earned_to_date_cents, recognized_delta_cents, pct_recognized')
+      .eq('org_id', orgId)
+      .lte('as_of_date', args.period.end)
+      .order('as_of_date', { ascending: true });
+    if (args.locationId) q = q.eq('location_id', args.locationId);
+    return q;
+  };
 
-  const { data, error } = await q;
+  const { data, error } = await fetchAll(buildRunsQuery, { label: 'rev-rec waterfall revenue_recognition_runs' });
   if (error) throw new Error(error.message);
   const runs = (data ?? []) as RunRow[];
 
@@ -350,11 +360,16 @@ export async function recognitionWaterfallAndMethods(
   const jobIds = [...jobs.keys()];
   const jobMeta = new Map<string, { job_number: string | null; name: string | null; contract_amount_cents: number | null }>();
   if (jobIds.length > 0) {
-    const { data: meta } = await db
-      .schema('core')
-      .from('jobs')
-      .select('id, job_number, name, contract_amount_cents')
-      .in('id', jobIds);
+    const { data: meta } = await fetchAllIn(
+      jobIds,
+      (chunk) =>
+        db
+          .schema('core')
+          .from('jobs')
+          .select('id, job_number, name, contract_amount_cents')
+          .in('id', chunk),
+      { label: 'rev-rec waterfall jobs' },
+    );
     for (const m of (meta ?? []) as Array<{ id: string; job_number: string | null; name: string | null; contract_amount_cents: number | null }>) {
       jobMeta.set(m.id, { job_number: m.job_number, name: m.name, contract_amount_cents: m.contract_amount_cents });
     }

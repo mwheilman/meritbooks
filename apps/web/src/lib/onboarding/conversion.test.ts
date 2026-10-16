@@ -9,6 +9,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { tieSubledgerToControl } from './reconciliation/tie-out';
+import { preGoLiveStatus, defaultStatus } from '@/lib/services/fiscal-periods';
 import {
   applyMapping,
   validateOpeningBalance,
@@ -16,6 +18,18 @@ import {
   buildOpeningEntryLines,
   tieOutBlockers,
   distinctSourceAccounts,
+  extendedTieOutBlockers,
+  subledgerTieBlockersInDollars,
+  defaultCutoverDate,
+  takeoverDate,
+  cutoverExplanation,
+  hardClosedPeriodMessage,
+  isIsoDate,
+  applyMappingChanges,
+  matchStrength,
+  withMapping,
+  STRONG_MATCH_THRESHOLD,
+  type ConversionSessionData,
   type SourceLine,
   type MappingTable,
   type TargetAccount,
@@ -238,5 +252,154 @@ describe('distinctSourceAccounts (no balances leave this function)', () => {
     expect(distinct[0]).toEqual({ sourceAccount: 'CASH', sourceName: 'Cash in Bank' });
     // The returned shape has exactly two keys — no debit/credit can leak to the AI.
     expect(Object.keys(distinct[0]).sort()).toEqual(['sourceAccount', 'sourceName']);
+  });
+});
+
+describe('blocker messages are in DOLLARS, never raw cents (FPB principle 6)', () => {
+  it('out-of-balance message uses formatted dollars', () => {
+    const map: MappingTable = { ...fullMapping };
+    delete map.AP;
+    const tb = applyMapping(balancedSource, map, targets);
+    const msg = tieOutBlockers(tb).join(' ');
+    expect(msg).toContain('$150.00'); // debits
+    expect(msg).toContain('$120.00'); // credits
+    expect(msg).toContain('$30.00'); // difference
+    expect(msg.toLowerCase()).not.toContain('cents');
+  });
+
+  it('mid-year P&L message uses dollars', () => {
+    const src: SourceLine[] = [
+      { sourceAccount: 'CASH', sourceName: null, debitCents: 1_200_000, creditCents: 0 },
+      { sourceAccount: 'EQ', sourceName: null, debitCents: 0, creditCents: 800_000 },
+      { sourceAccount: 'REV', sourceName: null, debitCents: 0, creditCents: 400_000 },
+    ];
+    const map: MappingTable = {
+      CASH: { targetAccountNumber: '1000', confidence: 1, source: 'human' },
+      EQ: { targetAccountNumber: '3000', confidence: 1, source: 'human' },
+      REV: { targetAccountNumber: '4000', confidence: 1, source: 'human' },
+    };
+    const msg = tieOutBlockers(applyMapping(src, map, targets)).join(' ');
+    expect(msg).toContain('$4,000.00');
+    expect(msg.toLowerCase()).not.toContain('cents');
+  });
+
+  it('extended (subledger → control) blockers are included, in dollars', () => {
+    const tb = applyMapping(balancedSource, fullMapping, targets);
+    const ar = tieSubledgerToControl('AR', 'Accounts Receivable (open, by customer)', 'AR_CONTROL', 5_100, 5_000);
+    const ok = tieSubledgerToControl('AP', 'Accounts Payable', 'AP_CONTROL', 3_000, 3_000);
+    const blockers = extendedTieOutBlockers(tb, [ar, ok]);
+    expect(blockers).toHaveLength(1);
+    expect(blockers[0]).toContain('$51.00');
+    expect(blockers[0]).toContain('$50.00');
+    expect(blockers[0]).toContain('$1.00');
+    expect(blockers[0]).toContain('Accounts Receivable');
+    expect(blockers[0].toLowerCase()).not.toContain('cents');
+    expect(subledgerTieBlockersInDollars([ok])).toEqual([]);
+  });
+});
+
+describe('cutover date (FPB B1)', () => {
+  it('defaults to the last day of the previous month', () => {
+    expect(defaultCutoverDate(new Date(2026, 9, 16))).toBe('2026-09-30');
+    expect(defaultCutoverDate(new Date(2026, 0, 5))).toBe('2025-12-31');
+    expect(defaultCutoverDate(new Date(2028, 2, 1))).toBe('2028-02-29');
+  });
+
+  it('takeover is the next day, with plain copy', () => {
+    expect(takeoverDate('2026-09-30')).toBe('2026-10-01');
+    expect(takeoverDate('2025-12-31')).toBe('2026-01-01');
+    expect(cutoverExplanation('2026-09-30')).toBe(
+      'MeritBooks takes over on October 1, 2026. Everything before that stays exactly as it was in your old system.',
+    );
+  });
+
+  it('isIsoDate rejects impossible dates', () => {
+    expect(isIsoDate('2026-09-30')).toBe(true);
+    expect(isIsoDate('2026-02-30')).toBe(false);
+    expect(isIsoDate('09/30/2026')).toBe(false);
+  });
+
+  it('locked-month message names the month and how to reopen it', () => {
+    const msg = hardClosedPeriodMessage({ asOfDate: '2026-09-30', companyName: 'Heritage Interiors' });
+    expect(msg).toContain('September 2026 is locked for Heritage Interiors');
+    expect(msg).toContain('Fiscal Periods');
+    expect(msg).toContain('Reopen');
+  });
+
+  it('pre-go-live periods are SOFT_CLOSE before the current month, never HARD_CLOSE', () => {
+    const now = new Date(Date.UTC(2026, 9, 16)); // Oct 2026
+    expect(preGoLiveStatus(2025, 6, now)).toBe('SOFT_CLOSE');
+    expect(preGoLiveStatus(2026, 9, now)).toBe('SOFT_CLOSE');
+    expect(preGoLiveStatus(2026, 10, now)).toBe('OPEN');
+    for (let m = 1; m <= 12; m++) expect(preGoLiveStatus(2025, m, now)).not.toBe('HARD_CLOSE');
+    // The default (existing callers) is unchanged.
+    expect(defaultStatus(2025, 6, now)).toBe('HARD_CLOSE');
+  });
+});
+
+describe('mapping edits (batched + accept strong matches)', () => {
+  const nums = new Set(targets.map((t) => t.accountNumber));
+  const suggested: MappingTable = {
+    CASH: { targetAccountNumber: '1000', confidence: 0.99, source: 'heuristic' },
+    AR: { targetAccountNumber: '1100', confidence: 0.9, source: 'ai' },
+    AP: { targetAccountNumber: '2000', confidence: 0.6, source: 'ai' },
+    EQ: { targetAccountNumber: null, confidence: null, source: 'unmapped' },
+  };
+
+  it('matchStrength speaks plainly', () => {
+    expect(matchStrength(suggested.CASH)).toBe('strong');
+    expect(matchStrength(suggested.AR)).toBe('strong'); // exactly at the threshold
+    expect(matchStrength(suggested.AP)).toBe('check');
+    expect(matchStrength(suggested.EQ)).toBe('missing');
+    expect(matchStrength({ targetAccountNumber: '1000', confidence: 1, source: 'human' })).toBe('confirmed');
+    expect(STRONG_MATCH_THRESHOLD).toBe(0.9);
+  });
+
+  it('accepts only suggestions at/above the threshold', () => {
+    const r = applyMappingChanges(suggested, [], nums, { acceptSuggestedAtOrAbove: 0.9 });
+    expect(r.error).toBeNull();
+    expect(r.accepted).toBe(2);
+    expect(r.targetsChanged).toBe(0);
+    expect(r.mapping.CASH.source).toBe('human');
+    expect(r.mapping.AR.source).toBe('human');
+    expect(r.mapping.AP.source).toBe('ai'); // 60% stays for a person to check
+  });
+
+  it('applies many changes at once and counts target changes', () => {
+    const r = applyMappingChanges(suggested, [
+      { sourceAccount: 'AP', target: '2000' }, // same target → confirm, not a change
+      { sourceAccount: 'EQ', target: '3000' },
+      { sourceAccount: 'NOT_IN_FILE', target: '1000' }, // ignored
+    ], nums);
+    expect(r.targetsChanged).toBe(1);
+    expect(r.mapping.AP.source).toBe('human');
+    expect(r.mapping.EQ.targetAccountNumber).toBe('3000');
+    expect('NOT_IN_FILE' in r.mapping).toBe(false);
+  });
+
+  it('rejects the whole batch when a target is not in the chart (nothing half-applied)', () => {
+    const r = applyMappingChanges(suggested, [
+      { sourceAccount: 'EQ', target: '3000' },
+      { sourceAccount: 'AP', target: '9999' },
+    ], nums);
+    expect(r.error).toMatch(/9999/);
+    expect(r.mapping).toBe(suggested);
+  });
+
+  it('withMapping re-assembles and clears the tie-out only when asked', () => {
+    const base: ConversionSessionData = {
+      kind: 'ONBOARDING_CONVERSION', companyId: 'c', companyShortCode: 'HI', asOfDate: '2026-09-30',
+      sourceLines: balancedSource, mapping: suggested,
+      ...applyMapping(balancedSource, suggested, targets),
+      plAcknowledged: true, tiedOut: true, tiedOutBy: 'u', tiedOutAt: 't',
+    };
+    const r = applyMappingChanges(suggested, [{ sourceAccount: 'EQ', target: '3000' }], nums);
+    const next = withMapping(base, r.mapping, targets, { resetTieOut: r.targetsChanged > 0 });
+    expect(next.balance.balanced).toBe(true);
+    expect(next.unmapped).toEqual([]);
+    expect(next.tiedOut).toBe(false);
+    expect(next.plAcknowledged).toBe(false);
+    const kept = withMapping(base, suggested, targets, { resetTieOut: false });
+    expect(kept.tiedOut).toBe(true);
   });
 });

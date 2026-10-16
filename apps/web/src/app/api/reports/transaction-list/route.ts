@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
@@ -15,24 +16,33 @@ export async function GET(request: Request) {
   const endDate = searchParams.get('end_date') ?? new Date().toISOString().slice(0, 10);
   const mode = searchParams.get('mode') ?? 'detail';
 
-  // Get posted GL entries in range
-  let entriesQ = supabase.from('gl_entries').select('id, entry_number, entry_date, memo, source_module').eq('status', 'POSTED').gte('entry_date', startDate).lte('entry_date', endDate);
-  if (locationId) entriesQ = entriesQ.eq('location_id', locationId);
-  const { data: entries } = await entriesQ;
+  // Get posted GL entries in range — paged (PostgREST caps a response at 1,000 rows).
+  const { data: entries } = await fetchAll(() => {
+    let entriesQ = supabase.from('gl_entries').select('id, entry_number, entry_date, memo, source_module').eq('status', 'POSTED').gte('entry_date', startDate).lte('entry_date', endDate);
+    if (locationId) entriesQ = entriesQ.eq('location_id', locationId);
+    return entriesQ;
+  }, { label: 'transaction-list gl_entries' });
 
   if (!entries || entries.length === 0) {
     return NextResponse.json({ period: { startDate, endDate }, mode, data: [], summary: { totalDebits: 0, totalCredits: 0, entryCount: 0 } });
   }
 
-  let linesQ = supabase
-    .from('gl_entry_lines')
-    .select(`
-      id, gl_entry_id, debit_cents, credit_cents, memo,
-      account:accounts!gl_entry_lines_account_id_fkey(account_number, name, account_type)
-    `)
-    .in('gl_entry_id', entries.map((e) => e.id));
-  if (accountId) linesQ = linesQ.eq('account_id', accountId);
-  const { data: lines } = await linesQ;
+  // Lines for those entries: id list chunked + each chunk paged (output is sorted below).
+  const { data: lines } = await fetchAllIn(
+    entries.map((e) => e.id as string),
+    (chunk) => {
+      let linesQ = supabase
+        .from('gl_entry_lines')
+        .select(`
+          id, gl_entry_id, debit_cents, credit_cents, memo,
+          account:accounts!gl_entry_lines_account_id_fkey(account_number, name, account_type)
+        `)
+        .in('gl_entry_id', chunk);
+      if (accountId) linesQ = linesQ.eq('account_id', accountId);
+      return linesQ;
+    },
+    { label: 'transaction-list gl_entry_lines' },
+  );
 
   const entryLookup = new Map(entries.map((e) => [e.id, e]));
 

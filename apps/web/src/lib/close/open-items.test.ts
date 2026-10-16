@@ -39,6 +39,9 @@ function makeClient(resolve: (q: RecordedQuery) => unknown[]): SupabaseClient {
     const builder: Record<string, unknown> = {
       select: () => builder,
       limit: () => builder,
+      // fetchAll() appends .order() and pages with .range(); one short page here.
+      order: () => builder,
+      range: () => Promise.resolve({ data: resolve(q), error: null }),
       in: (col: string) => {
         q.filters.push({ op: 'in', col });
         return builder;

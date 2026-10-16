@@ -16,6 +16,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchCoreMap } from '@/lib/stitch-core';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 import {
   fetchIncomeStatement,
   fetchBalanceSheet,
@@ -85,19 +86,21 @@ async function fetchTrialBalanceModel(
   supabase: SupabaseClient,
   scope: { asOfDate: string; locationIds: string[] },
 ): Promise<{ data: TBRow[] }> {
-  let query = supabase
-    .from('gl_entry_lines')
-    .select(`
-      debit_cents, credit_cents, location_id,
-      accounts!inner( account_number, name, display_order ),
-      gl_entries!inner( entry_date, status )
-    `)
-    .eq('gl_entries.status', 'POSTED')
-    .lte('gl_entries.entry_date', scope.asOfDate);
-  if (scope.locationIds.length === 1) query = query.eq('location_id', scope.locationIds[0]);
-  else if (scope.locationIds.length > 1) query = query.in('location_id', scope.locationIds);
-
-  const { data, error } = await query;
+  // Paged: PostgREST caps a response at 1,000 rows (a TB over all history passes that fast).
+  const { data, error } = await fetchAll(() => {
+    let query = supabase
+      .from('gl_entry_lines')
+      .select(`
+        debit_cents, credit_cents, location_id,
+        accounts!inner( account_number, name, display_order ),
+        gl_entries!inner( entry_date, status )
+      `)
+      .eq('gl_entries.status', 'POSTED')
+      .lte('gl_entries.entry_date', scope.asOfDate);
+    if (scope.locationIds.length === 1) query = query.eq('location_id', scope.locationIds[0]);
+    else if (scope.locationIds.length > 1) query = query.in('location_id', scope.locationIds);
+    return query;
+  }, { label: 'report-pack trial-balance gl_entry_lines' });
   if (error) throw new Error(error.message);
 
   const map = new Map<string, { name: string; order: number; debits: number; credits: number }>();
@@ -134,16 +137,18 @@ async function fetchSalesByCustomerModel(
   scope: { startDate: string; endDate: string; locationIds: string[] },
   meta: ExportMeta,
 ): Promise<StatementModel> {
-  let invQ = supabase
-    .from('invoices')
-    .select('id, customer_id, location_id, status, invoice_date')
-    .gte('invoice_date', scope.startDate)
-    .lte('invoice_date', scope.endDate)
-    .not('status', 'in', '("VOIDED","DRAFT")');
-  if (scope.locationIds.length === 1) invQ = invQ.eq('location_id', scope.locationIds[0]);
-  else if (scope.locationIds.length > 1) invQ = invQ.in('location_id', scope.locationIds);
-
-  const { data: invoicesRaw, error: invErr } = await invQ;
+  // Paged (PostgREST caps a response at 1,000 rows).
+  const { data: invoicesRaw, error: invErr } = await fetchAll(() => {
+    let invQ = supabase
+      .from('invoices')
+      .select('id, customer_id, location_id, status, invoice_date')
+      .gte('invoice_date', scope.startDate)
+      .lte('invoice_date', scope.endDate)
+      .not('status', 'in', '("VOIDED","DRAFT")');
+    if (scope.locationIds.length === 1) invQ = invQ.eq('location_id', scope.locationIds[0]);
+    else if (scope.locationIds.length > 1) invQ = invQ.in('location_id', scope.locationIds);
+    return invQ;
+  }, { label: 'sales-by-customer invoices' });
   if (invErr) throw new Error(invErr.message);
   const invoices = (invoicesRaw ?? []) as Array<Record<string, unknown>>;
 
@@ -168,10 +173,11 @@ async function fetchSalesByCustomerModel(
     invToCust.set(i.id as string, (c as { name?: string } | null)?.name ?? 'Unknown customer');
   }
 
-  const { data: lines, error: lineErr } = await supabase
-    .from('invoice_lines')
-    .select('invoice_id, amount_cents')
-    .in('invoice_id', invIds);
+  const { data: lines, error: lineErr } = await fetchAllIn(
+    invIds,
+    (chunk) => supabase.from('invoice_lines').select('invoice_id, amount_cents').in('invoice_id', chunk),
+    { label: 'sales-by-customer invoice_lines' },
+  );
   if (lineErr) throw new Error(lineErr.message);
 
   const perCustomer = new Map<string, { salesCents: number; invoiceSet: Set<string> }>();

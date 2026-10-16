@@ -6,6 +6,8 @@ import { createDebtSchema, type CreateDebtInput } from '@/lib/debt/schema';
 import { createDebtInstrument } from '@/lib/debt/create';
 import { AmortizationError } from '@/lib/debt/amortization';
 import { PostingError } from '@/lib/posting/account-roles';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { listSessions } from '@/lib/onboarding/session';
 
 /**
  * /api/debt
@@ -16,6 +18,14 @@ import { PostingError } from '@/lib/posting/account-roles';
  * POST — confirm/create an instrument. `apiHandler` enforces auth + Zod; the create
  *        service generates the amortization schedule deterministically and persists
  *        it. RLS enforces org isolation.
+ *        - NEW loan: posts the origination JE → guarded by journal_entries:post.
+ *        - EXISTING loan (B9, `existing_loan: true`): forward schedule from the current
+ *          balance as of cutover, NO origination entry (the opening TB carries it) →
+ *          an onboarding/setup action, guarded by settings_acct:edit.
+ *
+ * GET also returns `meta.onboarding` — whether this org is onboarding / has posted
+ * opening balances and the cutover date — so the Add-loan form can default to
+ * "This loan already exists" with the right as-of date.
  */
 
 // PostgREST aliases map the EXISTING migration-008 columns to the feature field
@@ -88,8 +98,12 @@ export async function GET(request: Request): Promise<NextResponse> {
   const data = rows.map((inst) => {
     const lines = linesByInstrument.get(inst.id) ?? [];
     // Current balance = the balance after the most recent past-or-today period; if
-    // no period has elapsed yet, the full original principal is still outstanding.
-    let currentBalanceCents = inst.principal_cents;
+    // no period has elapsed yet, the schedule's OPENING balance is still outstanding
+    // (balance after period 1 + period 1's principal — exact for new loans and for
+    // existing loans brought over at their cutover balance).
+    let currentBalanceCents = lines.length > 0
+      ? lines[0].principal_balance_cents + lines[0].principal_cents
+      : inst.principal_cents;
     let nextPayment: ScheduleLine | null = null;
     for (const l of lines) {
       if (l.period_date && l.period_date <= today) {
@@ -116,18 +130,51 @@ export async function GET(request: Request): Promise<NextResponse> {
     };
   });
 
-  return NextResponse.json({ data });
+  return NextResponse.json({ data, meta: { onboarding: await onboardingHint(supabase, ctx.orgId) } });
+}
+
+/**
+ * Whether new loans should default to EXISTING-loan mode (B9): true while the org is
+ * onboarding (a conversion session exists) or once opening balances are posted. The
+ * cutover date is the posted session's as-of date (else the newest session's).
+ * Best-effort — any failure just means "default to a new loan".
+ */
+async function onboardingHint(
+  supabase: ApiContext['supabase'],
+  orgId: string | null,
+): Promise<{ defaultExistingLoan: boolean; openingBalancesPosted: boolean; cutoverDate: string | null }> {
+  if (!orgId) return { defaultExistingLoan: false, openingBalancesPosted: false, cutoverDate: null };
+  try {
+    const sessions = await listSessions(supabase, orgId);
+    const posted = sessions.find((x) => x.posted) ?? null;
+    const latest = sessions[0] ?? null;
+    return {
+      defaultExistingLoan: sessions.length > 0,
+      openingBalancesPosted: !!posted,
+      cutoverDate: posted?.asOfDate ?? latest?.asOfDate ?? null,
+    };
+  } catch {
+    return { defaultExistingLoan: false, openingBalancesPosted: false, cutoverDate: null };
+  }
 }
 
 export const POST = apiHandler(
   createDebtSchema,
   async (body: CreateDebtInput, ctx: ApiContext): Promise<NextResponse> => {
     if (!ctx.orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+    // A new loan posts an origination JE (money on the ledger); an existing loan brought
+    // over at its balance posts nothing and is an onboarding/setup action.
+    const guard = body.existing_loan
+      ? await requirePermission(ctx.userId, 'settings_acct', 'edit')
+      : await requirePermission(ctx.userId, 'journal_entries', 'post');
+    if (!guard.ok) return guard.response;
     try {
       const result = await createDebtInstrument(ctx.supabase, ctx.orgId, ctx.userId, body);
       return NextResponse.json(
         {
           id: result.id,
+          existing_loan: result.existingLoan,
+          origination_posted: result.originationPosted,
           schedule: {
             periods: result.schedule.periods,
             regular_payment_cents: result.schedule.regularPaymentCents,

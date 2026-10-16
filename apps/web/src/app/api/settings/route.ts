@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 export async function GET() {
   const ctx = await requireAuthedContext();
@@ -78,7 +79,12 @@ const updateSchema = z.object({
 export async function PATCH(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
+
+  // Authorize — org accounting settings (fiscal-year start, AI auto-approve
+  // threshold / max, chase policy) are controls; gate on settings_acct:edit.
+  const guard = await requirePermission(userId, 'settings_acct', 'edit');
+  if (!guard.ok) return guard.response;
 
   const raw = await request.json();
   const result = updateSchema.safeParse(raw);

@@ -6,6 +6,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { createDebtSchema } from '@/lib/debt/schema';
 import { previewRefinance, confirmRefinance } from '@/lib/debt/lifecycle';
 import { PostingError } from '@/lib/posting/account-roles';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/debt/[id]/refinance — refinance the loan into a NEW instrument.
@@ -17,8 +18,8 @@ import { PostingError } from '@/lib/posting/account-roles';
  *                         close the old instrument, and cross-link old<->new.
  *
  * The new-loan terms reuse the create schema. Money-movement note: this posts to the
- * GL, so a dedicated `debt` (or GL-posting) permission SHOULD gate it — REPORTED to
- * the lead; today it gates on authed org context + RLS like the accrual/payment path.
+ * GL, so confirm is gated on journal_entries:post (no
+ * dedicated `debt` key exists yet); preview writes nothing.
  */
 const bodySchema = z.object({
   action: z.enum(['preview', 'confirm']).default('preview'),
@@ -47,6 +48,9 @@ export async function POST(request: Request, { params }: Params): Promise<NextRe
 
   try {
     if (action === 'confirm') {
+      // Authorize — confirm posts the debt-rollover entry to the GL.
+    const guard = await requirePermission(userId, 'journal_entries', 'post');
+    if (!guard.ok) return guard.response;
       const result = await confirmRefinance(supabase, orgId, userId, params.id, new_loan);
       return NextResponse.json({ ok: true, action, result });
     }

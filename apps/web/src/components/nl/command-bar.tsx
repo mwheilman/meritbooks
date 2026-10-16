@@ -5,7 +5,7 @@
  *
  * Mounted ONCE in (app)/layout.tsx → omnipresent on every authenticated screen.
  * Open with ⌘K / Ctrl-K (or "/" when not typing in a field). It classifies a
- * plain-English prompt via POST /api/nl/route and renders the routed lane in a
+ * plain-English prompt via POST /api/nl and renders the routed lane in a
  * unified result panel. It posts nothing itself — the processing lane routes
  * approval through the existing gated engine routes.
  *
@@ -156,7 +156,7 @@ export function CommandBar() {
     setPhase({ kind: 'loading' });
     setActiveIdx(-1);
     try {
-      const res = await fetch('/api/nl/route', {
+      const res = await fetch('/api/nl', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: q }),

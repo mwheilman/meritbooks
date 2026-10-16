@@ -7,6 +7,7 @@ import {
   type ReforecastMethod,
 } from '@/lib/budget/reforecast';
 import type { AccountType } from '@/lib/budget/drivers';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rolling reforecast — closed-month ACTUALS + projected open months, measured
@@ -47,18 +48,22 @@ export async function GET(request: Request) {
     : defaultClosed;
 
   // ── Budgets by account × month ──
-  let budgetQ = supabase
-    .from('budgets')
-    .select(
-      `account_id, amount_cents, period_number,
-       account:accounts!budgets_account_id_fkey(account_number, name, account_type)`
-    )
-    .eq('fiscal_year', fiscalYear);
-  if (locationIds.length === 1) budgetQ = budgetQ.eq('location_id', locationIds[0]);
-  else if (locationIds.length > 1) budgetQ = budgetQ.in('location_id', locationIds);
-  if (departmentId) budgetQ = budgetQ.eq('department_id', departmentId);
+  // Paged: an annual budget (accounts × 12 periods × entities) passes PostgREST's 1,000-row cap.
+  const buildBudgetQ = () => {
+    let budgetQ = supabase
+      .from('budgets')
+      .select(
+        `account_id, amount_cents, period_number,
+         account:accounts!budgets_account_id_fkey(account_number, name, account_type)`
+      )
+      .eq('fiscal_year', fiscalYear);
+    if (locationIds.length === 1) budgetQ = budgetQ.eq('location_id', locationIds[0]);
+    else if (locationIds.length > 1) budgetQ = budgetQ.in('location_id', locationIds);
+    if (departmentId) budgetQ = budgetQ.eq('department_id', departmentId);
+    return budgetQ;
+  };
 
-  const { data: budgetData, error: budgetErr } = await budgetQ;
+  const { data: budgetData, error: budgetErr } = await fetchAll(buildBudgetQ, { label: 'reforecast budgets' });
   if (budgetErr) return NextResponse.json({ error: budgetErr.message }, { status: 500 });
 
   interface AcctMeta {
@@ -96,16 +101,21 @@ export async function GET(request: Request) {
   }
 
   // ── Actuals from posted GL, bucketed by month ──
-  let entriesQ = supabase
-    .from('gl_entries')
-    .select('id, entry_date')
-    .eq('status', 'POSTED')
-    .gte('entry_date', `${fiscalYear}-01-01`)
-    .lte('entry_date', `${fiscalYear}-12-31`);
-  if (locationIds.length === 1) entriesQ = entriesQ.eq('location_id', locationIds[0]);
-  else if (locationIds.length > 1) entriesQ = entriesQ.in('location_id', locationIds);
+  // Paged + chunked: PostgREST caps a response at 1,000 rows and a long
+  // `.in(gl_entry_id, …)` list overflows the URL.
+  const buildEntriesQ = () => {
+    let entriesQ = supabase
+      .from('gl_entries')
+      .select('id, entry_date')
+      .eq('status', 'POSTED')
+      .gte('entry_date', `${fiscalYear}-01-01`)
+      .lte('entry_date', `${fiscalYear}-12-31`);
+    if (locationIds.length === 1) entriesQ = entriesQ.eq('location_id', locationIds[0]);
+    else if (locationIds.length > 1) entriesQ = entriesQ.in('location_id', locationIds);
+    return entriesQ;
+  };
 
-  const { data: entries, error: entryErr } = await entriesQ;
+  const { data: entries, error: entryErr } = await fetchAll(buildEntriesQ, { label: 'reforecast gl_entries' });
   if (entryErr) return NextResponse.json({ error: entryErr.message }, { status: 500 });
 
   const monthByEntry = new Map<string, number>(); // entryId → month index 0..11
@@ -116,16 +126,21 @@ export async function GET(request: Request) {
   const entryIds = Array.from(monthByEntry.keys());
 
   if (entryIds.length > 0) {
-    let linesQ = supabase
-      .from('gl_entry_lines')
-      .select(
-        `gl_entry_id, account_id, debit_cents, credit_cents,
-         account:accounts!gl_entry_lines_account_id_fkey(account_number, name, account_type)`
-      )
-      .in('gl_entry_id', entryIds);
-    if (departmentId) linesQ = linesQ.eq('department_id', departmentId);
-
-    const { data: lines, error: lineErr } = await linesQ;
+    const { data: lines, error: lineErr } = await fetchAllIn(
+      entryIds,
+      (chunk) => {
+        let linesQ = supabase
+          .from('gl_entry_lines')
+          .select(
+            `gl_entry_id, account_id, debit_cents, credit_cents,
+             account:accounts!gl_entry_lines_account_id_fkey(account_number, name, account_type)`
+          )
+          .in('gl_entry_id', chunk);
+        if (departmentId) linesQ = linesQ.eq('department_id', departmentId);
+        return linesQ;
+      },
+      { label: 'reforecast gl_entry_lines' },
+    );
     if (lineErr) return NextResponse.json({ error: lineErr.message }, { status: 500 });
 
     for (const line of lines ?? []) {

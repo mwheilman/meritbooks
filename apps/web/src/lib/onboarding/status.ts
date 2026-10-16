@@ -132,13 +132,264 @@ export interface OnboardingStateFlag {
   updatedAt?: string;
   /** Per-section lifecycle status (Wave-0 widening; absent on legacy rows). */
   sections?: SectionStatusMap;
+  /** Per-COMPANY explicit choices, keyed by core.locations.id (W2 widening). */
+  companies?: CompanyStateMap;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-company first-run (W2 — FPB-onboarding §2 principle 7, §4 B6).
+//
+// "First run" is a property of each COMPANY, not of the org: a company is LIVE once
+// its opening balances are POSTED or its owner EXPLICITLY chose "Start fresh with no
+// history". The only explicit choice we persist is that start-fresh; "posted" is
+// always read back from the ledger (never trusted from a flag). The choice lives in
+// the same `core.organizations.onboarding_state` jsonb (no migration), under
+// `companies[<locationId>]`.
+//
+// GRANDFATHERING (keeps established tenants out of the wizard): in an org that was
+// already established before per-company tracking (setup_complete / complete flag),
+// a company that already has POSTED ledger activity is a live book of record even
+// without an OPENING_BALANCE entry (seeded / imported / long-running books).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The explicit per-company opening choice. `none` records an undo of `fresh`. */
+export type CompanyOpeningChoice = 'fresh' | 'none';
+
+/** One persisted per-company entry. */
+export interface CompanyStateEntry {
+  opening: CompanyOpeningChoice;
+  updatedAt: string;
+  updatedBy?: string;
+}
+
+/** Persisted per-company choices, keyed by location id. */
+export type CompanyStateMap = Record<string, CompanyStateEntry>;
+
+/** The honest opening-balance state of one company, as shown in the wizard. */
+export type CompanyOpeningState = 'not_started' | 'started_fresh' | 'posted';
+
+/** One company's onboarding picture. */
+export interface CompanyOnboarding {
+  id: string;
+  name: string;
+  shortCode: string;
+  createdAt: string | null;
+  opening: CompanyOpeningState;
+  /** Has any POSTED ledger activity. */
+  hasActivity: boolean;
+  /** Live = opening posted OR start-fresh chosen OR grandfathered (see above). */
+  live: boolean;
+}
+
+/** Inputs for the pure liveness rule. */
+export interface CompanyLivenessInput {
+  openingPosted: boolean;
+  startedFresh: boolean;
+  hasActivity: boolean;
+  /** The org was established before per-company tracking (grandfathering applies). */
+  legacyEstablished: boolean;
+}
+
+/** The honest opening state. A posted entry always wins over a start-fresh choice. */
+export function companyOpeningState(i: Pick<CompanyLivenessInput, 'openingPosted' | 'startedFresh'>): CompanyOpeningState {
+  if (i.openingPosted) return 'posted';
+  if (i.startedFresh) return 'started_fresh';
+  return 'not_started';
+}
+
+/** Pure per-company liveness rule. */
+export function isCompanyLive(i: CompanyLivenessInput): boolean {
+  if (i.openingPosted || i.startedFresh) return true;
+  return i.legacyEstablished && i.hasActivity;
+}
+
+/** How long a not-live company in an ESTABLISHED org still pulls the router into
+ *  onboarding. Older dormant entities (no books, never chosen) never bounce a
+ *  returning admin; a newly-added company does. */
+export const NEW_COMPANY_WINDOW_DAYS = 30;
+
+/**
+ * Should the root router send this tenant into onboarding? Pure.
+ *  - No companies yet → yes (the first thing to do is create one).
+ *  - Not established → yes when any company is not live (first run).
+ *  - Established → only when a not-live company was added recently (a dormant
+ *    legacy entity never traps an established tenant in the wizard).
+ */
+export function needsOnboarding(
+  companies: Pick<CompanyOnboarding, 'live' | 'createdAt'>[],
+  legacyEstablished: boolean,
+  now: Date = new Date(),
+): boolean {
+  if (companies.length === 0) return true;
+  const pending = companies.filter((c) => !c.live);
+  if (pending.length === 0) return false;
+  if (!legacyEstablished) return true;
+  const windowMs = NEW_COMPANY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  return pending.some((c) => {
+    if (!c.createdAt) return false;
+    const t = new Date(c.createdAt).getTime();
+    return Number.isFinite(t) && now.getTime() - t <= windowMs;
+  });
+}
+
+/** Coerce an unknown jsonb value into a typed per-company map (defensive, total). */
+export function normalizeCompanies(raw: unknown): CompanyStateMap | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const out: CompanyStateMap = {};
+  for (const [id, entry] of Object.entries(raw as Record<string, unknown>)) {
+    if (!id || !entry || typeof entry !== 'object') continue;
+    const e = entry as Record<string, unknown>;
+    if (e.opening !== 'fresh' && e.opening !== 'none') continue;
+    const normalized: CompanyStateEntry = {
+      opening: e.opening,
+      updatedAt: typeof e.updatedAt === 'string' ? e.updatedAt : new Date(0).toISOString(),
+    };
+    if (typeof e.updatedBy === 'string') normalized.updatedBy = e.updatedBy;
+    out[id] = normalized;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** A best-effort "does at least one row exist" probe. Never throws; errors → false. */
+async function safeExists(
+  q: PromiseLike<{ data: unknown[] | null; error: unknown }>,
+): Promise<boolean> {
+  try {
+    const { data, error } = await q;
+    if (error) return false;
+    return Array.isArray(data) && data.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Raw per-company ledger facts (read from the DB; never from a flag). */
+export interface CompanyProbe {
+  id: string;
+  name: string;
+  shortCode: string;
+  createdAt: string | null;
+  hasActivity: boolean;
+  openingPosted: boolean;
+}
+
+/**
+ * Probe every active company's ledger facts for an org. `db` may be the RLS-scoped
+ * client or the admin client — every query is ALSO filtered by `org_id` explicitly,
+ * so it is correct either way. Cheap: one locations read, then per company one
+ * indexed limit-1 probe on gl_entries(org_id, location_id), plus a second limit-1
+ * opening probe only for companies that have activity. Never throws.
+ */
+export async function probeCompanies(db: SupabaseClient, orgId: string): Promise<CompanyProbe[]> {
+  let rows: Array<{ id: string; name: string | null; short_code: string | null; created_at: string | null }> = [];
+  try {
+    const { data, error } = await db
+      .schema('core')
+      .from('locations')
+      .select('id, name, short_code, created_at')
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+      .order('name');
+    if (error || !data) return [];
+    rows = data as typeof rows;
+  } catch {
+    return [];
+  }
+
+  return Promise.all(rows.map(async (r) => {
+    const hasActivity = await safeExists(
+      db.from('gl_entries').select('id').eq('org_id', orgId).eq('location_id', r.id).eq('status', 'POSTED').limit(1),
+    );
+    const openingPosted = hasActivity
+      ? await safeExists(
+        db.from('gl_entries').select('id')
+          .eq('org_id', orgId).eq('location_id', r.id)
+          .eq('source_module', 'OPENING_BALANCE').eq('status', 'POSTED').limit(1),
+      )
+      : false;
+    return {
+      id: r.id,
+      name: r.name ?? 'Company',
+      shortCode: r.short_code ?? '',
+      createdAt: r.created_at,
+      hasActivity,
+      openingPosted,
+    };
+  }));
+}
+
+/** Combine ledger probes + persisted choices into the per-company picture. Pure. */
+export function buildCompanyOnboarding(
+  probes: CompanyProbe[],
+  choices: CompanyStateMap | undefined,
+  established: boolean,
+): CompanyOnboarding[] {
+  return probes.map((p) => {
+    const input: CompanyLivenessInput = {
+      openingPosted: p.openingPosted,
+      startedFresh: choices?.[p.id]?.opening === 'fresh',
+      hasActivity: p.hasActivity,
+      legacyEstablished: established,
+    };
+    return {
+      id: p.id,
+      name: p.name,
+      shortCode: p.shortCode,
+      createdAt: p.createdAt,
+      opening: companyOpeningState(input),
+      hasActivity: p.hasActivity,
+      live: isCompanyLive(input),
+    };
+  });
+}
+
+/**
+ * Was this org already ESTABLISHED (so grandfathering applies)? The always-present
+ * `setup_complete` flag, an explicit `complete` flag, or real posted ledger activity
+ * anywhere in the org (seeded / imported tenants may never have set either flag).
+ * Pure.
+ */
+export function isLegacyEstablished(
+  setupComplete: boolean,
+  flag: OnboardingStateFlag | null,
+  orgHasPostedActivity = false,
+): boolean {
+  return setupComplete || flag?.complete === true || orgHasPostedActivity;
+}
+
+/**
+ * The root router's status read: org flags + per-company liveness. Returns whether
+ * the caller should be sent into onboarding. Degrade-safe: any failure resolves to
+ * "not needed" (never trap a user in the wizard).
+ */
+export async function loadRouterOnboarding(
+  db: SupabaseClient,
+  admin: SupabaseClient,
+  orgId: string,
+): Promise<{ needsOnboarding: boolean; companies: CompanyOnboarding[] }> {
+  try {
+    const [{ setupComplete, flag }, probes] = await Promise.all([
+      readOrgOnboarding(admin, orgId),
+      probeCompanies(db, orgId),
+    ]);
+    const established = isLegacyEstablished(setupComplete, flag, probes.some((p) => p.hasActivity));
+    const companies = buildCompanyOnboarding(probes, flag?.companies, established);
+    return { needsOnboarding: needsOnboarding(companies, established), companies };
+  } catch {
+    return { needsOnboarding: false, companies: [] };
+  }
 }
 
 export interface OnboardingStatus {
-  /** True when the tenant has never gone live (no GL activity) and is not flagged complete. */
+  /** True while onboarding still has work: no company yet, or (per company) a company
+   *  that is not live — see `needsOnboarding`. */
   firstRun: boolean;
-  /** True once onboarding is finished (explicit flag) OR the tenant has posted GL activity. */
+  /** The inverse of firstRun: every company is live (posted / started fresh / grandfathered). */
   complete: boolean;
+  /** Per-company onboarding picture (W2). Optional so hand-built fixtures still type. */
+  companies?: CompanyOnboarding[];
+  /** The org was established before per-company tracking (grandfathering applies). */
+  legacyEstablished?: boolean;
   /** The step the wizard should open on (saved flag wins; else derived from counts). */
   currentStep: OnboardingStepKey;
   counts: OnboardingCounts;
@@ -208,6 +459,8 @@ function normalizeFlag(raw: unknown): OnboardingStateFlag | null {
   if (typeof obj.updatedAt === 'string') flag.updatedAt = obj.updatedAt;
   const sections = normalizeSections(obj.sections);
   if (sections) flag.sections = sections;
+  const companies = normalizeCompanies(obj.companies);
+  if (companies) flag.companies = companies;
   return flag;
 }
 
@@ -316,19 +569,28 @@ export async function loadOnboardingStatus(
   // Distinct rev-rec methods across the tenant's companies (drives the WIP n/a gate).
   const revRecMethods = await safeRevRecMethods(supabase);
 
-  const { setupComplete, flag, statePersisted } = await readOrgOnboarding(admin, orgId);
+  const [{ setupComplete, flag, statePersisted }, probes] = await Promise.all([
+    readOrgOnboarding(admin, orgId),
+    probeCompanies(supabase, orgId),
+  ]);
 
-  // Complete when explicitly flagged, OR when the tenant already has GL activity
-  // (an established book of record is not "first run" regardless of the flag).
-  const complete = flag?.complete === true || glEntries > 0;
-  const firstRun = !complete;
+  // PER-COMPANY first run (W2). A company is live once its opening balances are
+  // posted or its owner explicitly chose "start fresh"; an ESTABLISHED org's
+  // companies with real posted activity are grandfathered live. `firstRun` is the
+  // router predicate; `complete` means every company is live.
+  const established = isLegacyEstablished(
+    setupComplete, flag, glEntries > 0 || probes.some((p) => p.hasActivity),
+  );
+  const companies = buildCompanyOnboarding(probes, flag?.companies, established);
+  const firstRun = needsOnboarding(companies, established);
+  const complete = companies.length > 0 && companies.every((c) => c.live);
 
   const currentStep = flag?.currentStep ?? deriveStep(counts, hasOpeningEntry);
-  const sections = flag?.sections ?? {};
+  const sections = honestSections(flag?.sections ?? {}, companies);
 
   return {
     firstRun, complete, currentStep, counts, hasOpeningEntry, setupComplete,
-    statePersisted, flag, sections,
+    statePersisted, flag, sections, companies, legacyEstablished: established,
     ...(revRecMethods ? { revRecMethods } : {}),
   };
 }
@@ -352,6 +614,32 @@ async function safeRevRecMethods(supabase: SupabaseClient): Promise<string[] | u
   }
 }
 
+/**
+ * Make the org-level `opening` section hint HONEST against the per-company truth
+ * (FPB §2 principle 7 — skipped is never shown as done, and a stale "skipped" from a
+ * source-picker click can never satisfy the go-live gate). Pure.
+ *  - Every company live and at least one started fresh → `skipped` (an explicit
+ *    clean start; a posted entry still drives `done` via hasOpeningEntry).
+ *  - Otherwise a stored `skipped`/`n_a` is dropped (some company has neither posted
+ *    balances nor an explicit start-fresh choice), falling back to `in_progress`
+ *    when some company has made progress.
+ */
+export function honestSections(stored: SectionStatusMap, companies: CompanyOnboarding[]): SectionStatusMap {
+  if (companies.length === 0) return stored;
+  const out: SectionStatusMap = { ...stored };
+  const allLive = companies.every((c) => c.live);
+  const anyFresh = companies.some((c) => c.opening === 'started_fresh');
+  const anyProgress = companies.some((c) => c.opening !== 'not_started');
+  const prev = stored.opening;
+  if (allLive && anyFresh) {
+    out.opening = { status: 'skipped', updatedAt: prev?.updatedAt ?? new Date(0).toISOString(), ...(prev?.updatedBy ? { updatedBy: prev.updatedBy } : {}) };
+  } else if (!allLive && (prev?.status === 'skipped' || prev?.status === 'n_a' || prev?.status === 'done')) {
+    if (anyProgress) out.opening = { status: 'in_progress', updatedAt: prev.updatedAt };
+    else delete out.opening;
+  }
+  return out;
+}
+
 /** Derive a sensible resume step from live tenant state (used when no flag is stored). */
 export function deriveStep(counts: OnboardingCounts, hasOpeningEntry: boolean): OnboardingStepKey {
   if (counts.entities === 0) return 'welcome';
@@ -366,6 +654,8 @@ export interface OnboardingProgressPatch {
   complete?: boolean;
   /** Per-section status transitions, MERGED (by key) into the existing map. */
   sections?: SectionStatusMap;
+  /** Per-company choices, MERGED (by company id) into the existing map. */
+  companies?: CompanyStateMap;
 }
 
 /**
@@ -389,6 +679,9 @@ export function mergeOnboardingState(
   };
   if (patch.sections) {
     merged.sections = { ...(base.sections ?? {}), ...patch.sections };
+  }
+  if (patch.companies) {
+    merged.companies = { ...(base.companies ?? {}), ...patch.companies };
   }
   return merged;
 }

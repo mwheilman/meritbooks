@@ -21,8 +21,9 @@
  * mapping application can be unit-tested against fixed fixtures.
  */
 
+import { formatMoney } from '@meritbooks/shared';
 import type { ImportFieldDef } from '@/lib/import/definitions';
-import { subledgerControlBlockers, type SubledgerControlTie } from './reconciliation/tie-out';
+import type { SubledgerControlTie } from './reconciliation/tie-out';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CSV source shape
@@ -36,18 +37,18 @@ import { subledgerControlBlockers, type SubledgerControlTie } from './reconcilia
 export const CONVERSION_SOURCE_FIELDS: ImportFieldDef[] = [
   {
     key: 'source_account',
-    label: 'Source Account',
+    label: 'Account',
     type: 'text',
     required: true,
     aliases: ['account', 'acct', 'account number', 'account code', 'gl', 'number', 'code'],
-    help: 'The account number/code as it appears in your prior system.',
+    help: 'The account number (or name, if your old system has no numbers).',
   },
   {
     key: 'source_name',
-    label: 'Source Account Name',
+    label: 'Account name',
     type: 'text',
     aliases: ['name', 'account name', 'description', 'label', 'title'],
-    help: 'The account name from your prior system — helps the AI map it correctly.',
+    help: 'Optional, but it helps us match each account correctly.',
   },
   {
     key: 'debit_cents',
@@ -63,12 +64,12 @@ export const CONVERSION_SOURCE_FIELDS: ImportFieldDef[] = [
   },
   {
     key: 'amount_cents',
-    label: 'Signed Balance',
+    label: 'Balance (one column)',
     type: 'money',
     aliases: ['ending balance', 'net balance', 'signed balance'],
     help:
-      'Optional — only if your file has ONE signed balance column instead of separate ' +
-      'Debit / Credit columns. Positive = debit, negative = credit.',
+      'Only if your file has ONE balance column instead of separate Debit and Credit ' +
+      'columns. Positive = debit, negative = credit.',
   },
 ];
 
@@ -336,20 +337,31 @@ export function tieOutBlockers(
   tb: Omit<AssembledOpeningTb, 'balanceSheet'> & { balanceSheet?: BalanceSheetCheck },
   opts?: { plAcknowledged?: boolean },
 ): string[] {
+  // Every amount in a blocker is shown in DOLLARS (formatMoney) — never raw cents
+  // (FPB principle 6). Wording is plain English for a non-accountant owner.
   const blockers: string[] = [];
   if (tb.openingBalances.length < 2) {
-    blockers.push('An opening entry needs at least two accounts with balances.');
+    blockers.push('We need at least two accounts with balances to build your opening entry.');
   }
   if (!tb.balance.balanced) {
+    const heavier = tb.balance.differenceCents > 0 ? 'debits' : 'credits';
     blockers.push(
-      `Out of balance by ${centsAbs(tb.balance.differenceCents)} — debits ${tb.balance.totalDebitCents} vs credits ${tb.balance.totalCreditCents} (cents).`,
+      `Your debits (${dollars(tb.balance.totalDebitCents)}) and credits (${dollars(tb.balance.totalCreditCents)}) ` +
+      `are ${dollars(Math.abs(tb.balance.differenceCents))} apart — ${heavier} are higher. They must be equal. ` +
+      'This usually means an account is missing from the file or was left without a MeritBooks account.',
     );
   }
   if (tb.unmapped.length > 0) {
-    blockers.push(`${tb.unmapped.length} source account(s) with balances are not mapped: ${tb.unmapped.slice(0, 8).join(', ')}${tb.unmapped.length > 8 ? '…' : ''}.`);
+    blockers.push(
+      `${plural(tb.unmapped.length, 'account')} from your file still need a MeritBooks account: ` +
+      `${listPreview(tb.unmapped)}. Pick one under “Becomes this account”.`,
+    );
   }
   if (tb.unknownTargets.length > 0) {
-    blockers.push(`${tb.unknownTargets.length} mapped account(s) do not exist in this chart of accounts: ${tb.unknownTargets.slice(0, 8).join(', ')}${tb.unknownTargets.length > 8 ? '…' : ''}.`);
+    blockers.push(
+      `${plural(tb.unknownTargets.length, 'chosen account')} no longer exist in your chart of accounts: ` +
+      `${listPreview(tb.unknownTargets)}. Choose a different account for each.`,
+    );
   }
   // Balance-sheet identity gate: assets must equal liabilities + equity. When the
   // difference is exactly the open income-statement net, it's a mid-year go-live the
@@ -357,21 +369,66 @@ export function tieOutBlockers(
   const bs = tb.balanceSheet;
   if (bs && tb.balance.balanced && !bs.standalone) {
     if (bs.untyped.length > 0) {
-      blockers.push(`${bs.untyped.length} account(s) could not be classified by type — check the chart of accounts: ${bs.untyped.slice(0, 8).join(', ')}${bs.untyped.length > 8 ? '…' : ''}.`);
+      blockers.push(
+        `${plural(bs.untyped.length, 'account')} could not be classified as an asset, liability, equity, income or expense ` +
+        `account: ${listPreview(bs.untyped)}. Check their type in the chart of accounts.`,
+      );
     }
     if (bs.plNetCents !== 0 && !opts?.plAcknowledged) {
       blockers.push(
-        `Balance sheet does not stand alone — income-statement accounts carry ${centsAbs(bs.plNetCents)} (cents) of open balances. ` +
-        'A year-end opening balance normally has none (prior P&L is closed to retained earnings). ' +
-        'Confirm this is an intended mid-year go-live to proceed.',
+        `Your balance sheet doesn’t stand on its own: income and expense accounts still carry ${dollars(Math.abs(bs.plNetCents))} for this year. ` +
+        'That is normal when you switch mid-year — tick the “mid-year switch” box below to confirm. ' +
+        '(At a year-end switch these are usually zero because last year’s profit has moved into retained earnings.)',
       );
     }
   }
   return blockers;
 }
 
-function centsAbs(n: number): string {
-  return String(Math.abs(n));
+/** Cents → "$1,234.56" for user-facing messages (never raw cents). */
+function dollars(cents: number): string {
+  return formatMoney(cents);
+}
+
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? '' : 's'}`;
+}
+
+function listPreview(items: string[], max = 8): string {
+  return `${items.slice(0, max).join(', ')}${items.length > max ? `, and ${items.length - max} more` : ''}`;
+}
+
+/**
+ * Plain-English, DOLLAR-denominated blockers for subledger→control ties (the go-live
+ * gate's extended checks). Mirrors `subledgerControlBlockers` (which stays cents-based
+ * for its other callers) but is what the conversion screens and gate show users.
+ */
+export function subledgerTieBlockersInDollars(ties: SubledgerControlTie[]): string[] {
+  const out: string[] = [];
+  for (const t of ties) {
+    if (t.ties) continue;
+    const control = humanizeRole(t.controlRole);
+    out.push(
+      `${t.label}: your detail list adds up to ${dollars(t.subledgerCents)}, but the ${control} balance in your ` +
+      `trial balance is ${dollars(t.controlCents)} — ${dollars(Math.abs(t.varianceCents))} apart. ` +
+      'Fix the detail list or the trial balance so they match before going live.',
+    );
+  }
+  return out;
+}
+
+function humanizeRole(role: string): string {
+  const known: Record<string, string> = {
+    AR_CONTROL: 'Accounts Receivable',
+    AP_CONTROL: 'Accounts Payable',
+    RETAINAGE_RECEIVABLE: 'Retainage Receivable',
+    RETAINAGE_PAYABLE: 'Retainage Payable',
+    JOB_WIP: 'Work in Progress',
+    UNBILLED_RECEIVABLE: 'Unbilled Receivable',
+    DEFERRED_REVENUE: 'Deferred Revenue',
+    CUSTOMER_DEPOSITS: 'Customer Deposits',
+  };
+  return known[role] ?? role.toLowerCase().replace(/_/g, ' ');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -422,7 +479,7 @@ export function extendedTieOutBlockers(
   subledgerTies: SubledgerControlTie[],
   opts?: { plAcknowledged?: boolean },
 ): string[] {
-  return [...tieOutBlockers(tb, opts), ...subledgerControlBlockers(subledgerTies)];
+  return [...tieOutBlockers(tb, opts), ...subledgerTieBlockersInDollars(subledgerTies)];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -432,6 +489,15 @@ export function extendedTieOutBlockers(
 
 export const CONVERSION_KIND = 'ONBOARDING_CONVERSION' as const;
 export const CONVERSION_FEATURE = 'CONVERSION_MAP' as const;
+
+export interface ConversionIntakeNotes {
+  fileName?: string | null;
+  aiUsed: boolean;
+  aiError: string | null;
+  excluded: { row: number; reason: string }[];
+  excludedCount: number;
+  zeroRows: number;
+}
 
 export interface ConversionSessionData {
   kind: typeof CONVERSION_KIND;
@@ -456,6 +522,12 @@ export interface ConversionSessionData {
    * TB-only conversion. Rides inside this JSON; no schema change.
    */
   subledgerDetail?: ImportedSubledgerDetail;
+  /**
+   * What happened when the file was read (kept so a reloaded review screen still shows
+   * it): whether AI suggested matches, and the rows set aside as totals/blank lines.
+   * Optional — absent on sessions staged before this shipped.
+   */
+  intake?: ConversionIntakeNotes;
   tiedOut: boolean;
   tiedOutBy: string | null;
   tiedOutAt: string | null;
@@ -498,4 +570,187 @@ export function buildOpeningEntryLines(
     });
   }
   return { lines, missing };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cutover date (FPB §2.3 / B1) — "when we take over". Default = last day of the
+// previous month; plain-English copy. Never suggests prior year-end.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function pad2(n: number): string { return n < 10 ? `0${n}` : String(n); }
+
+/** True for a real calendar date in YYYY-MM-DD form. */
+export function isIsoDate(s: string | null | undefined): s is string {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+/**
+ * The default "opening balances as of" date: the LAST DAY OF THE PREVIOUS MONTH,
+ * in the user's own calendar (local date parts). Oct 16 → Sep 30; Jan 5 → Dec 31.
+ */
+export function defaultCutoverDate(now: Date = new Date()): string {
+  const last = new Date(now.getFullYear(), now.getMonth(), 0); // day 0 = last day of prior month
+  return `${last.getFullYear()}-${pad2(last.getMonth() + 1)}-${pad2(last.getDate())}`;
+}
+
+/** The first day MeritBooks owns: the day after the opening-balance date (ISO). */
+export function takeoverDate(asOfDate: string): string {
+  const [y, m, d] = asOfDate.split('-').map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  return `${next.getUTCFullYear()}-${pad2(next.getUTCMonth() + 1)}-${pad2(next.getUTCDate())}`;
+}
+
+/** "2026-10-01" → "October 1, 2026" (timezone-safe). */
+export function formatLongDate(iso: string): string {
+  if (!isIsoDate(iso)) return iso;
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', {
+    timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric',
+  });
+}
+
+/** "2026-09-30" → "September 2026" (timezone-safe). */
+export function formatMonthYear(iso: string): string {
+  if (!isIsoDate(iso)) return iso;
+  const [y, m] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' });
+}
+
+/** The one-line cutover explanation shown next to the date picker. */
+export function cutoverExplanation(asOfDate: string): string {
+  if (!isIsoDate(asOfDate)) return 'Pick the date your old system’s balances are as of.';
+  return `MeritBooks takes over on ${formatLongDate(takeoverDate(asOfDate))}. ` +
+    'Everything before that stays exactly as it was in your old system.';
+}
+
+/**
+ * The 409 shown when the cutover month is HARD-CLOSED (locked). Plain English with
+ * the exact steps to reopen it — no dead end.
+ */
+export function hardClosedPeriodMessage(opts: { asOfDate: string; companyName: string }): string {
+  const month = formatMonthYear(opts.asOfDate);
+  const year = opts.asOfDate.slice(0, 4);
+  return (
+    `${month} is locked for ${opts.companyName}, so we can't post opening balances dated ` +
+    `${formatLongDate(opts.asOfDate)} into it. To unlock it: open Accounting → Fiscal Periods ` +
+    `(/periods), pick ${year}, click the locked ${month} square for ${opts.companyName}, choose ` +
+    `“Reopen”, and give a short reason such as “Posting opening balances”. Then come back here and press Post again.`
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mapping edits — batched human changes + "accept all strong suggestions".
+// Pure so the rules (target must exist; only file accounts; accept threshold) are
+// unit-testable. The route persists the result in ONE write.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A suggestion at or above this confidence is shown as a "Strong match". */
+export const STRONG_MATCH_THRESHOLD = 0.9;
+
+export type MatchStrength = 'confirmed' | 'strong' | 'check' | 'missing';
+
+/** How sure we are about one mapping, in the words the screen shows. */
+export function matchStrength(m: AccountMapping | undefined | null): MatchStrength {
+  if (!m || !m.targetAccountNumber) return 'missing';
+  if (m.source === 'human') return 'confirmed';
+  if ((m.confidence ?? 0) >= STRONG_MATCH_THRESHOLD) return 'strong';
+  return 'check';
+}
+
+export interface MappingChange {
+  sourceAccount: string;
+  /** Target account number, or null to clear the mapping. */
+  target: string | null;
+}
+
+export interface MappingChangeResult {
+  mapping: MappingTable;
+  /** Number of source accounts whose TARGET changed (balances move → re-tie-out). */
+  targetsChanged: number;
+  /** Number of suggestions accepted (target unchanged, now person-confirmed). */
+  accepted: number;
+  /** Set when a change is invalid; the mapping is returned unchanged. */
+  error: string | null;
+}
+
+/**
+ * Apply a batch of person-made mapping changes, then (optionally) accept every
+ * remaining AI/auto suggestion at or above `acceptSuggestedAtOrAbove`. Unknown
+ * source accounts are ignored; a target not in the chart of accounts rejects the
+ * whole batch (nothing half-applied).
+ */
+export function applyMappingChanges(
+  current: MappingTable,
+  changes: MappingChange[],
+  targetNumbers: Set<string>,
+  opts: { acceptSuggestedAtOrAbove?: number } = {},
+): MappingChangeResult {
+  const mapping: MappingTable = { ...current };
+  let targetsChanged = 0;
+  let accepted = 0;
+
+  for (const c of changes) {
+    if (!(c.sourceAccount in mapping)) continue; // only accounts that exist in this file
+    const target = c.target ? c.target.trim() : null;
+    if (target && !targetNumbers.has(target)) {
+      return { mapping: current, targetsChanged: 0, accepted: 0, error: `Account ${target} is not in this chart of accounts.` };
+    }
+    const before = mapping[c.sourceAccount]?.targetAccountNumber ?? null;
+    if (before !== target) targetsChanged++;
+    mapping[c.sourceAccount] = target
+      ? { targetAccountNumber: target, confidence: 1, source: 'human', reasoning: 'Chosen by a person.' }
+      : { targetAccountNumber: null, confidence: null, source: 'unmapped' };
+  }
+
+  const threshold = opts.acceptSuggestedAtOrAbove;
+  if (threshold != null) {
+    for (const [src, m] of Object.entries(mapping)) {
+      if (m.source !== 'ai' && m.source !== 'heuristic') continue;
+      if (!m.targetAccountNumber || !targetNumbers.has(m.targetAccountNumber)) continue;
+      if ((m.confidence ?? 0) < threshold) continue;
+      mapping[src] = {
+        targetAccountNumber: m.targetAccountNumber,
+        confidence: 1,
+        source: 'human',
+        reasoning: `Suggested match (${Math.round((m.confidence ?? 0) * 100)}%) accepted by a person.`,
+      };
+      accepted++;
+    }
+  }
+
+  return { mapping, targetsChanged, accepted, error: null };
+}
+
+/**
+ * Fold a new mapping into the session: re-assemble the opening TB in code. When any
+ * TARGET changed, the balances moved, so the tie-out and mid-year acknowledgment are
+ * cleared (a changed TB must be re-checked).
+ */
+export function withMapping(
+  data: ConversionSessionData,
+  mapping: MappingTable,
+  targets: TargetAccount[],
+  opts: { resetTieOut: boolean },
+): ConversionSessionData {
+  const assembled = applyMapping(data.sourceLines, mapping, targets);
+  const next: ConversionSessionData = {
+    ...data,
+    mapping,
+    openingBalances: assembled.openingBalances,
+    balance: assembled.balance,
+    balanceSheet: assembled.balanceSheet,
+    unmapped: assembled.unmapped,
+    unknownTargets: assembled.unknownTargets,
+    sourceTotals: assembled.sourceTotals,
+  };
+  if (opts.resetTieOut) {
+    next.plAcknowledged = false;
+    next.tiedOut = false;
+    next.tiedOutBy = null;
+    next.tiedOutAt = null;
+  }
+  return next;
 }

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { generateYear, setPeriodStatus, type PeriodStatus } from '@/lib/services/fiscal-periods';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { gatherHardCloseGate } from '@/lib/close/readiness';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 interface PeriodRow { id: string; location_id: string; period_year: number; period_month: number; status: PeriodStatus; closed_at: string | null }
 
@@ -72,8 +73,12 @@ const genSchema = z.object({
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — generating a fiscal year is close/period administration.
+  const guard = await requirePermission(userId, 'close_mgmt', 'manage');
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try { raw = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
@@ -114,6 +119,11 @@ export async function PATCH(request: Request) {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId: actor } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — changing a period's status (OPEN / SOFT_CLOSE / HARD_CLOSE, incl.
+  // re-opening a closed period) is a close-management action, not a member action.
+  const guard = await requirePermission(actor, 'close_mgmt', 'manage');
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try { raw = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }

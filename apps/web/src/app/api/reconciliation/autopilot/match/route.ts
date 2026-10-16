@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { logAction, logHumanAction } from '@/lib/trust/action-log';
 import { toMatchConfidence } from '@/lib/services/reconciliation-match';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/reconciliation/autopilot/match
@@ -55,6 +56,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — accepting/rejecting an AI reconciliation match clears or flags a
+  // bank line on the reconciliation; gate on reconciliation:reconcile.
+  const guard = await requirePermission(userId, 'reconciliation', 'reconcile');
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try {

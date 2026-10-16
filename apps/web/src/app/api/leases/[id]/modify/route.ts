@@ -6,6 +6,7 @@ import { modifyLeaseSchema } from '@/lib/leases/schema';
 import { previewModification, confirmRemeasurement } from '@/lib/leases/modify-posting';
 import { PostingError } from '@/lib/posting/account-roles';
 import { LeaseInputError } from '@/lib/leases/schedule';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/leases/[id]/modify — remeasure a lease for a modification (ASC 842).
@@ -42,6 +43,9 @@ export async function POST(request: Request, { params }: Params): Promise<NextRe
       const preview = await previewModification(ctx.supabase, ctx.orgId, params.id, input);
       return NextResponse.json({ data: preview }, { status: 200 });
     }
+    // Authorize — confirm posts the remeasurement/write-off entry to the GL.
+    const guard = await requirePermission(ctx.userId, 'journal_entries', 'post');
+    if (!guard.ok) return guard.response;
     const result = await confirmRemeasurement(ctx.supabase, ctx.orgId, ctx.userId, params.id, input, 'MOD');
     return NextResponse.json({ data: result }, { status: result.applied ? 201 : 200 });
   } catch (e) {

@@ -7,6 +7,7 @@ import { resolveOrgId } from '@/lib/posting/lifecycle';
 import { previewAssetDisposal, recordAssetDisposal, type DisposeAssetInput } from '@/lib/posting/asset-disposal';
 import { PostingError } from '@/lib/posting/account-roles';
 import type { PaymentRail } from '@/lib/posting/transaction-types';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/fixed-assets/dispose
@@ -46,6 +47,17 @@ export async function POST(request: Request) {
   }
   if (!preview && !disposalDate) {
     return NextResponse.json({ error: 'disposalDate is required to post a disposal' }, { status: 422 });
+  }
+
+  // Authorize — a confirmed disposal posts the gain/loss entry to the GL and marks
+  // the asset DISPOSED. Same gate as the other fixed-asset/intangible posting routes
+  // (intangibles/impair, intangibles/amortize): fixed_assets:create. Preview posts
+  // nothing and stays open to any authed member.
+  if (!preview) {
+    const userId = (a as { userId?: string | null } | null)?.userId ?? null;
+    if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const guard = await requirePermission(userId, 'fixed_assets', 'create');
+    if (!guard.ok) return guard.response;
   }
 
   const supabase = await createServerSupabase();

@@ -1,12 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { dollarsToCents } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { Loader2, ShieldCheck, History } from 'lucide-react';
 
 type Frequency = 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
 type RateType = 'FIXED' | 'VARIABLE';
@@ -69,14 +69,48 @@ const FREQUENCIES: { value: Frequency; label: string }[] = [
   { value: 'ANNUAL', label: 'Annual' },
 ];
 
+/** Onboarding hint served by GET /api/debt (`meta.onboarding`). */
+interface DebtListMeta {
+  meta?: { onboarding?: { defaultExistingLoan: boolean; openingBalancesPosted: boolean; cutoverDate: string | null } };
+}
+
+const MONTHS_PER: Record<Frequency, number> = { MONTHLY: 1, QUARTERLY: 3, SEMIANNUAL: 6, ANNUAL: 12 };
+
+/** Last day of the prior month (the FPB default cutover), YYYY-MM-DD. */
+function defaultCutover(): string {
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Whole months from a to b (partial month not counted); null on bad input. Mirrors lib/debt/create.ts. */
+function wholeMonths(a: string, b: string): number | null {
+  const ma = /^(\d{4})-(\d{2})-(\d{2})$/.exec(a);
+  const mb = /^(\d{4})-(\d{2})-(\d{2})$/.exec(b);
+  if (!ma || !mb) return null;
+  let m = (Number(mb[1]) - Number(ma[1])) * 12 + (Number(mb[2]) - Number(ma[2]));
+  if (Number(mb[3]) < Number(ma[3])) m -= 1;
+  return m;
+}
+
 export function DebtForm({
   initial,
   onSaved,
   onClose,
+  existingDefault,
+  cutoverDate,
 }: {
   initial: DebtFormInitial | null;
   onSaved: () => void;
   onClose: () => void;
+  /**
+   * B9: start in "This loan already exists" mode. Leave undefined to let the form
+   * decide from the org's onboarding state (GET /api/debt meta): ON while onboarding or
+   * once opening balances are posted — unless the loan originated after the cutover.
+   */
+  existingDefault?: boolean;
+  /** The cutover (as-of) date for an existing loan's balance; defaults to the org's, else last month-end. */
+  cutoverDate?: string | null;
 }) {
   const [loanName, setLoanName] = useState(initial?.loan_name ?? '');
   const [lender, setLender] = useState(initial?.lender ?? '');
@@ -114,6 +148,41 @@ export function DebtForm({
   const [interestPayAcct, setInterestPayAcct] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // ── B9 existing-loan mode ────────────────────────────────────────────────
+  const needHint = existingDefault === undefined || cutoverDate === undefined;
+  const { data: hintData } = useQuery<DebtListMeta>(needHint ? '/api/debt' : null, undefined, { scope: false });
+  const hint = hintData?.meta?.onboarding ?? null;
+  const [existing, setExisting] = useState<boolean>(existingDefault ?? false);
+  const [asOf, setAsOf] = useState<string>(cutoverDate ?? defaultCutover());
+  const [balance, setBalance] = useState<string>('');
+  const [remaining, setRemaining] = useState<string>('');
+  const touched = useRef(false);
+  useEffect(() => {
+    if (touched.current) return;
+    const cut = cutoverDate ?? hint?.cutoverDate ?? null;
+    if (cut) setAsOf(cut);
+    const wanted = existingDefault ?? hint?.defaultExistingLoan ?? false;
+    // A loan that originated AFTER the cutover is new money, not an opening balance.
+    const originatedAfterCutover = !!(cut && initial?.origination_date && initial.origination_date > cut);
+    setExisting(wanted && !originatedAfterCutover);
+  }, [existingDefault, cutoverDate, hint, initial?.origination_date]);
+
+  /** Preview of payments left, derived the same way the server does. */
+  const derivedRemaining = useMemo<number | null>(() => {
+    if (!existing) return null;
+    if (remaining && Number(remaining) > 0) return Number(remaining);
+    const mpp = MONTHS_PER[frequency];
+    if (term && Number(term) > 0 && origination) {
+      const m = wholeMonths(origination, asOf);
+      return m == null ? null : Number(term) - Math.max(0, Math.floor(m / mpp));
+    }
+    if (maturity) {
+      const m = wholeMonths(asOf, maturity);
+      return m == null ? null : Math.ceil(m / mpp);
+    }
+    return null;
+  }, [existing, remaining, frequency, term, origination, asOf, maturity]);
+
   const { data: locData } = useQuery<LocationOption[]>('/api/locations');
   const locations = locData ?? [];
   const { data: acctData } = useQuery<{ data: AccountOption[] }>('/api/accounts');
@@ -127,14 +196,30 @@ export function DebtForm({
 
   async function submit() {
     if (!loanName.trim()) { addToast('error', 'Loan name is required'); return; }
-    const principalNum = Number(principal);
+    const balanceNum = balance ? Number(balance) : NaN;
+    const remainingNum = remaining ? Number(remaining) : null;
+    if (existing) {
+      if (!Number.isFinite(balanceNum) || balanceNum <= 0) { addToast('error', 'Enter the balance you still owe on this loan'); return; }
+      if (!asOf) { addToast('error', 'Enter the date that balance is as of'); return; }
+    }
+    // Existing mode: the original amount is optional (defaults to the balance still owed).
+    const principalNum = principal ? Number(principal) : (existing ? balanceNum : NaN);
     if (!Number.isFinite(principalNum) || principalNum <= 0) { addToast('error', 'Enter the original principal'); return; }
     const rateNum = Number(rate);
     if (!Number.isFinite(rateNum) || rateNum < 0) { addToast('error', 'Enter a valid interest rate'); return; }
     const termNum = term ? Number(term) : null;
     const paymentNum = payment ? Number(payment) : null;
-    if (!termNum && !paymentNum) { addToast('error', 'Enter a term (number of periods) or a fixed payment'); return; }
-    if (method === 'INTEREST_ONLY' && !termNum) { addToast('error', 'Interest-only loans need a term'); return; }
+    if (existing) {
+      if (!remainingNum && !termNum && !paymentNum && !maturity) {
+        addToast('error', 'Enter the payments left, the maturity date, or the regular payment'); return;
+      }
+      if (derivedRemaining != null && derivedRemaining <= 0) {
+        addToast('error', 'By the as-of date this loan’s term has ended — enter the payments left'); return;
+      }
+    } else {
+      if (!termNum && !paymentNum) { addToast('error', 'Enter a term (number of periods) or a fixed payment'); return; }
+      if (method === 'INTEREST_ONLY' && !termNum) { addToast('error', 'Interest-only loans need a term'); return; }
+    }
 
     setSaving(true);
     const payload = {
@@ -168,14 +253,23 @@ export function DebtForm({
       interest_expense_account_id: interestExpAcct || null,
       interest_payable_account_id: interestPayAcct || null,
       notes: notes.trim() || null,
+      existing_loan: existing,
+      current_balance_cents: existing ? dollarsToCents(balanceNum) : null,
+      balance_as_of_date: existing ? asOf : null,
+      remaining_periods: existing && remainingNum ? remainingNum : null,
     };
-    const res = await api.post<{ id: string; schedule: { periods: number } }>('/api/debt', payload);
+    const res = await api.post<{ id: string; existing_loan?: boolean; schedule: { periods: number } }>('/api/debt', payload);
     setSaving(false);
     if (res.error) {
       addToast('error', res.error.error);
       return;
     }
-    addToast('success', `Loan added · ${res.data?.schedule.periods ?? 0}-period schedule generated`);
+    addToast(
+      'success',
+      existing
+        ? `Loan brought over · ${res.data?.schedule.periods ?? 0} payments scheduled · nothing posted (your opening balances already include it)`
+        : `Loan added · ${res.data?.schedule.periods ?? 0}-period schedule generated`,
+    );
     onSaved();
   }
 
@@ -184,6 +278,51 @@ export function DebtForm({
 
   return (
     <div className="space-y-4">
+      <div className={clsx('rounded-lg border p-3', existing ? 'border-sky-500/30 bg-sky-500/[0.05]' : 'border-slate-800 bg-slate-950/40')}>
+        <label className="flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-sky-500 focus:ring-sky-500/50"
+            checked={existing}
+            onChange={(e) => { touched.current = true; setExisting(e.target.checked); }}
+          />
+          <span>
+            <span className="flex items-center gap-1.5 text-xs font-medium text-slate-200">
+              <History size={13} className="text-sky-400" /> This loan already exists — I&rsquo;m bringing over its current balance
+            </span>
+            <span className="block text-[11px] text-slate-500 mt-0.5">
+              {existing
+                ? <>We start from what you still owe and build the remaining payments from there. Nothing is posted — your opening balances already include this loan.</>
+                : <>Leave off for new money you just borrowed — we&rsquo;ll record the loan proceeds (cash in, loan payable).</>}
+            </span>
+          </span>
+        </label>
+        {existing && (
+          <div className="grid grid-cols-12 gap-3 mt-3">
+            <div className="col-span-4">
+              <label className={label}>Balance still owed ($)</label>
+              <input className={inputCls} type="number" step="0.01" min="0" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="e.g. 3,412,950.18" aria-required />
+            </div>
+            <div className="col-span-4">
+              <label className={label}>As of</label>
+              <input className={inputCls} type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} aria-required />
+            </div>
+            <div className="col-span-4">
+              <label className={label}>Payments left (optional)</label>
+              <input className={inputCls} type="number" step="1" min="1" value={remaining} onChange={(e) => setRemaining(e.target.value)}
+                placeholder={derivedRemaining != null && derivedRemaining > 0 ? `${derivedRemaining} (from the term)` : 'from term or maturity'} />
+            </div>
+            <p className="col-span-12 text-[11px] text-slate-500">
+              {derivedRemaining != null && derivedRemaining > 0
+                ? <>{derivedRemaining} {frequency.toLowerCase()} payments left after {asOf || 'the as-of date'}.</>
+                : derivedRemaining != null
+                  ? <span className="text-amber-400">The term has already run out by {asOf} — enter the payments left.</span>
+                  : <>Tip: the as-of date is your cutover — the day before MeritBooks takes over.</>}
+            </p>
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-12 gap-3">
         <div className="col-span-6">
           <label className={label}>Loan name</label>
@@ -199,7 +338,7 @@ export function DebtForm({
         </div>
 
         <div className="col-span-3">
-          <label className={label}>Principal ($)</label>
+          <label className={label}>{existing ? 'Original amount ($, optional)' : 'Principal ($)'}</label>
           <input className={clsx(inputCls, lowFlag('principal'))} type="number" step="0.01" value={principal} onChange={(e) => setPrincipal(e.target.value)} placeholder="e.g. 5,000,000" />
         </div>
         <div className="col-span-2">
@@ -228,7 +367,7 @@ export function DebtForm({
         </div>
 
         <div className="col-span-3">
-          <label className={label}>Term (# periods)</label>
+          <label className={label}>{existing ? 'Original term (# periods)' : 'Term (# periods)'}</label>
           <input className={clsx(inputCls, lowFlag('term_periods'))} type="number" step="1" value={term} onChange={(e) => setTerm(e.target.value)} placeholder="e.g. 60" />
         </div>
         <div className="col-span-3">
@@ -365,7 +504,7 @@ export function DebtForm({
         <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
         <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
           {saving && <Loader2 size={14} className="animate-spin" />}
-          Create loan &amp; generate schedule
+          {existing ? <>Bring over loan &amp; build schedule</> : <>Create loan &amp; generate schedule</>}
         </button>
       </div>
     </div>

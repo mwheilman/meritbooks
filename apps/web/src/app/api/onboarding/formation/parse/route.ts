@@ -4,11 +4,13 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { parseFormationDocument, FORMATION_EXTRACT_FEATURE } from '@/lib/onboarding/formation/parse-formation';
+import { resolveUploadedFile } from '@/lib/uploads/resolve-upload';
 
 /**
  * POST /api/onboarding/formation/parse — DROP-AND-PARSE formation extraction.
  *
- * Accepts an uploaded formation document (multipart `file`: EIN letter, articles of
+ * Accepts a formation document (multipart `file`, or JSON `{ storagePath }` for a file
+ * already in storage — the Smart Intake handoff): EIN letter, articles of
  * organization / incorporation, certificate of formation, or operating agreement),
  * runs it through the Core AI gateway (feature FORMATION_EXTRACT, metered + budget-
  * capped per tenant), and returns the PROPOSED legal record mapped to the
@@ -23,11 +25,9 @@ import { parseFormationDocument, FORMATION_EXTRACT_FEATURE } from '@/lib/onboard
  *
  * Access: authenticated org context (fail-closed — 400 when there is no org). RLS
  * enforces tenant isolation on both the gateway metering and the audit write. The
- * document is TRANSIENT — decoded and extracted in-request, never persisted.
+ * document is read in-request; nothing about it is persisted here. With AI off this
+ * returns 503 NO_API_KEY and the UI offers manual entry (FPB principle 10).
  */
-
-const MAX_BYTES = 10 * 1024 * 1024;
-const ALLOWED = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 export async function POST(request: Request): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
@@ -43,30 +43,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  let base64Data: string;
-  let mediaType: string;
-  let fileName: string;
-  try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-    if (!file) return NextResponse.json({ error: 'No file provided', code: 'NO_FILE' }, { status: 400 });
-
-    fileName = file.name || 'document';
-    mediaType = file.type || 'application/octet-stream';
-    if (!ALLOWED.includes(mediaType)) {
-      return NextResponse.json(
-        { error: `Unsupported file type: ${mediaType}. Upload a PDF, JPEG, PNG, or WebP.`, code: 'BAD_FILE_TYPE' },
-        { status: 400 },
-      );
-    }
-    if (file.size > MAX_BYTES) {
-      return NextResponse.json({ error: 'File too large. Maximum 10MB.', code: 'FILE_TOO_LARGE' }, { status: 400 });
-    }
-    const buffer = await file.arrayBuffer();
-    base64Data = Buffer.from(buffer).toString('base64');
-  } catch {
-    return NextResponse.json({ error: 'Failed to read uploaded file', code: 'UPLOAD_ERROR' }, { status: 400 });
-  }
+  // Accepts BOTH a multipart `file` (small, the original shape) and JSON
+  // `{ storagePath }` — a file already uploaded ONCE via uploadForParse (e.g. handed
+  // over by Smart Intake, so the user never re-uploads). resolveUploadedFile enforces
+  // the org-scoped `intake/{orgId}/` prefix and the PDF/image type list.
+  const resolved = await resolveUploadedFile(request, orgId);
+  if (resolved instanceof NextResponse) return resolved;
+  const { base64Data, mediaType, fileName } = resolved;
 
   const result = await parseFormationDocument(
     { supabase, anthropicApiKey: apiKey },

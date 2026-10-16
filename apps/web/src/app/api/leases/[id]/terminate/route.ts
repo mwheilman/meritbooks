@@ -6,6 +6,7 @@ import { terminateLeaseSchema } from '@/lib/leases/schema';
 import { previewTermination, confirmTermination } from '@/lib/leases/modify-posting';
 import { PostingError } from '@/lib/posting/account-roles';
 import { LeaseInputError } from '@/lib/leases/schedule';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/leases/[id]/terminate — early termination (ASC 842).
@@ -37,6 +38,9 @@ export async function POST(request: Request, { params }: Params): Promise<NextRe
       const preview = await previewTermination(ctx.supabase, ctx.orgId, params.id, parsed.data.penalty_cents);
       return NextResponse.json({ data: preview }, { status: 200 });
     }
+    // Authorize — confirm posts the remeasurement/write-off entry to the GL.
+    const guard = await requirePermission(ctx.userId, 'journal_entries', 'post');
+    if (!guard.ok) return guard.response;
     const result = await confirmTermination(ctx.supabase, ctx.orgId, ctx.userId, params.id, parsed.data.penalty_cents);
     return NextResponse.json({ data: result }, { status: result.applied ? 201 : 200 });
   } catch (e) {

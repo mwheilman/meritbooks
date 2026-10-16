@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
 import { z } from 'zod';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 const schema = z.object({
   location_id: z.string().optional(),
@@ -29,48 +30,52 @@ export const GET = apiQueryHandler(
     }
 
     // Query all GL entry lines for the full year
-    let query = ctx.supabase
-      .from('gl_entry_lines')
-      .select(`
-        account_id,
-        debit_cents,
-        credit_cents,
-        gl_entry_id,
-        accounts!inner(
-          account_number,
-          name,
-          account_type,
-          account_groups!inner(
+    // Paged: PostgREST caps responses at 1,000 rows — an unpaged read silently truncates.
+    const buildQuery = () => {
+      let query = ctx.supabase
+        .from('gl_entry_lines')
+        .select(`
+          account_id,
+          debit_cents,
+          credit_cents,
+          gl_entry_id,
+          accounts!inner(
+            account_number,
             name,
-            display_order,
-            account_sub_types!inner(
-              account_types!inner(
-                normal_balance,
-                display_order
+            account_type,
+            account_groups!inner(
+              name,
+              display_order,
+              account_sub_types!inner(
+                account_types!inner(
+                  normal_balance,
+                  display_order
+                )
               )
             )
+          ),
+          gl_entries!inner(
+            id,
+            entry_date,
+            status
           )
-        ),
-        gl_entries!inner(
-          id,
-          entry_date,
-          status
-        )
-      `)
-      .eq('gl_entries.status', 'POSTED')
-      .gte('gl_entries.entry_date', `${year}-01-01`)
-      .lte('gl_entries.entry_date', `${year}-12-31`)
-      .in('accounts.account_type', ['REVENUE', 'COGS', 'OPEX', 'OTHER']);
+        `)
+        .eq('gl_entries.status', 'POSTED')
+        .gte('gl_entries.entry_date', `${year}-01-01`)
+        .lte('gl_entries.entry_date', `${year}-12-31`)
+        .in('accounts.account_type', ['REVENUE', 'COGS', 'OPEX', 'OTHER']);
 
-    if (locationIds.length === 1) {
-      query = query.eq('location_id', locationIds[0]);
-    } else if (locationIds.length > 1) {
-      query = query.in('location_id', locationIds);
-    }
-    if (params.department_id) query = query.eq('department_id', params.department_id);
-    if (params.class_id) query = query.eq('class_id', params.class_id);
+      if (locationIds.length === 1) {
+        query = query.eq('location_id', locationIds[0]);
+      } else if (locationIds.length > 1) {
+        query = query.in('location_id', locationIds);
+      }
+      if (params.department_id) query = query.eq('department_id', params.department_id);
+      if (params.class_id) query = query.eq('class_id', params.class_id);
+      return query;
+    };
 
-    const { data, error } = await query;
+    const { data, error } = await fetchAll(buildQuery, { label: 'pnl-by-month gl_entry_lines' });
 
     if (error) {
       console.error('[pnl-by-month] Query error:', error);

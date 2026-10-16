@@ -2,14 +2,17 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { fetchAll } from '@/lib/supabase/fetch-all';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * /api/debt/[id]
  *
  * GET    — one instrument with its full amortization schedule and, when linked, a
  *          thin read-only summary of its covenant. RLS scopes to the org.
- * DELETE — remove an instrument (schedule lines cascade). Posted GL entries are NOT
- *          reversed here — a posted accrual/payment is voided from the ledger.
+ * DELETE — remove an instrument (schedule lines cascade). Gated on
+ *          journal_entries:post and REFUSED (409) once any non-voided GL entry
+ *          references it — void those entries first (mirrors leases).
  *
  * Dynamic-param routes can't use apiHandler (it only forwards the request).
  */
@@ -50,12 +53,17 @@ export async function GET(_request: Request, { params }: Params): Promise<NextRe
 
   // Which periods already posted an accrual / payment? Read the source_ref guards.
   const refs = new Set<string>();
-  const { data: entries } = await supabase
-    .from('gl_entries')
-    .select('source_ref, status')
-    .eq('source_module', 'DEBT')
-    .neq('status', 'VOIDED')
-    .like('source_ref', `debt:%:${params.id}:%`);
+  // Paged: a long-dated loan's accrual + payment entries can pass PostgREST's 1,000-row cap.
+  const { data: entries } = await fetchAll(
+    () =>
+      supabase
+        .from('gl_entries')
+        .select('source_ref, status')
+        .eq('source_module', 'DEBT')
+        .neq('status', 'VOIDED')
+        .like('source_ref', `debt:%:${params.id}:%`),
+    { label: 'debt-detail gl_entries' },
+  );
   for (const e of (entries ?? []) as { source_ref: string | null }[]) {
     if (e.source_ref) refs.add(e.source_ref);
   }
@@ -91,8 +99,42 @@ export async function GET(_request: Request, { params }: Params): Promise<NextRe
 export async function DELETE(_request: Request, { params }: Params): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
+  const { supabase, orgId, userId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
 
-  const { error } = await ctx.supabase.from('debt_instruments').delete().eq('id', params.id);
+  // Authorize (security MEDIUM) — an instrument drives GL postings (origination,
+  // accruals, payments, payoff); removing it is gated like creating a new loan
+  // (journal_entries:post). Fails closed.
+  const guard = await requirePermission(userId, 'journal_entries', 'post');
+  if (!guard.ok) return guard.response;
+
+  const { data: inst } = await supabase
+    .from('debt_instruments')
+    .select('id')
+    .eq('id', params.id)
+    .eq('org_id', orgId)
+    .maybeSingle<{ id: string }>();
+  if (!inst) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
+
+  // Mirror leases: refuse once ANY non-voided GL entry references this instrument
+  // (origination / accrual / payment / payoff / refinance refs all embed its id),
+  // so posted entries are never orphaned from their source.
+  const { count: postedCount, error: postedErr } = await supabase
+    .from('gl_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .eq('source_module', 'DEBT')
+    .neq('status', 'VOIDED')
+    .like('source_ref', `debt:%${params.id}%`);
+  if (postedErr) return NextResponse.json({ error: postedErr.message, code: 'INTERNAL_ERROR' }, { status: 500 });
+  if ((postedCount ?? 0) > 0) {
+    return NextResponse.json(
+      { error: 'This loan has posted GL entries and cannot be deleted. Void the entries first.', code: 'HAS_POSTINGS' },
+      { status: 409 },
+    );
+  }
+
+  const { error } = await supabase.from('debt_instruments').delete().eq('id', params.id).eq('org_id', orgId);
   if (error) return NextResponse.json({ error: error.message, code: 'DELETE_FAILED' }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

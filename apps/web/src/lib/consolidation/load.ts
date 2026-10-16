@@ -18,6 +18,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 import {
   consolidate,
   entityNetIncomeCents,
@@ -341,19 +342,20 @@ export async function loadConsolidated(
   }
 
   // POSTED entries through the as-of date (BS cumulative; P&L filtered later).
-  const { data: entriesRaw } = await supabase
+  // Previously: an entry-id list (`.limit(50000)` — but PostgREST caps every
+  // response at 1,000 rows, so only the first 1,000 entries were ever seen) fed a
+  // chunked `.in(gl_entry_id)` line read whose chunks were themselves capped at
+  // 1,000 lines. Now: an exact entry COUNT (for `scanned.entries`) plus ONE paged
+  // line read inner-joined to gl_entries on the same filters — the identical row
+  // set, with the entry date carried on the embed.
+  const { count: entryCount } = await supabase
     .from('gl_entries')
-    .select('id, entry_date')
+    .select('id', { count: 'exact', head: true })
     .eq('org_id', orgId)
     .eq('status', 'POSTED')
-    .lte('entry_date', endDate)
-    .limit(50000);
-  const entries = (entriesRaw ?? []) as Array<{ id: string; entry_date: string }>;
-  const entryDate = new Map<string, string>();
-  for (const e of entries) entryDate.set(e.id, e.entry_date);
-  const entryIds = entries.map((e) => e.id);
+    .lte('entry_date', endDate);
 
-  // Line load in chunks, joined to the account for type/flag.
+  // Line load (paged), joined to the account for type/flag and the entry for date.
   interface LineRow {
     gl_entry_id: string;
     account_id: string;
@@ -366,46 +368,51 @@ export async function loadConsolidated(
       account_type: AccountType;
       is_eliminating: boolean;
     } | null;
+    gl_entries: { entry_date: string } | null;
   }
   const balancesByKey = new Map<string, EntityAccountBalance>();
   let lineCount = 0;
-  for (let i = 0; i < entryIds.length; i += 500) {
-    const slice = entryIds.slice(i, i + 500);
-    const { data: lines } = await supabase
-      .from('gl_entry_lines')
-      .select(
-        `gl_entry_id, account_id, location_id, debit_cents, credit_cents,
-         accounts!inner(account_number, name, account_type, is_eliminating)`,
-      )
-      .in('gl_entry_id', slice);
-    for (const raw of (lines ?? []) as unknown as LineRow[]) {
-      const acct = raw.accounts;
-      if (!acct) continue;
-      const type = acct.account_type;
-      const date = entryDate.get(raw.gl_entry_id);
-      if (!date) continue;
-      // P&L accounts only count WITHIN the period; BS accrue cumulatively.
-      const isPnl = !BALANCE_SHEET_TYPES.has(type);
-      if (isPnl && date < startDate) continue;
-      const entityId = raw.location_id;
-      if (scope && !scope.has(entityId)) continue;
-      lineCount += 1;
-      const natural = naturalBalance(type, N(raw.debit_cents), N(raw.credit_cents));
-      const key = `${entityId}:${acct.account_number}`;
-      const existing = balancesByKey.get(key);
-      if (existing) {
-        existing.naturalBalanceCents += natural;
-      } else {
-        balancesByKey.set(key, {
-          entityId,
-          accountNumber: acct.account_number,
-          accountName: acct.name,
-          accountType: type,
-          isEliminating: Boolean(acct.is_eliminating),
-          role: roleByAccountId.get(raw.account_id) ?? null,
-          naturalBalanceCents: natural,
-        });
-      }
+  const { data: lines } = await fetchAll(
+    () =>
+      supabase
+        .from('gl_entry_lines')
+        .select(
+          `gl_entry_id, account_id, location_id, debit_cents, credit_cents,
+           accounts!inner(account_number, name, account_type, is_eliminating),
+           gl_entries!inner(entry_date)`,
+        )
+        .eq('gl_entries.org_id', orgId)
+        .eq('gl_entries.status', 'POSTED')
+        .lte('gl_entries.entry_date', endDate),
+    { label: 'consolidation gl_entry_lines' },
+  );
+  for (const raw of (lines ?? []) as unknown as LineRow[]) {
+    const acct = raw.accounts;
+    if (!acct) continue;
+    const type = acct.account_type;
+    const date = raw.gl_entries?.entry_date;
+    if (!date) continue;
+    // P&L accounts only count WITHIN the period; BS accrue cumulatively.
+    const isPnl = !BALANCE_SHEET_TYPES.has(type);
+    if (isPnl && date < startDate) continue;
+    const entityId = raw.location_id;
+    if (scope && !scope.has(entityId)) continue;
+    lineCount += 1;
+    const natural = naturalBalance(type, N(raw.debit_cents), N(raw.credit_cents));
+    const key = `${entityId}:${acct.account_number}`;
+    const existing = balancesByKey.get(key);
+    if (existing) {
+      existing.naturalBalanceCents += natural;
+    } else {
+      balancesByKey.set(key, {
+        entityId,
+        accountNumber: acct.account_number,
+        accountName: acct.name,
+        accountType: type,
+        isEliminating: Boolean(acct.is_eliminating),
+        role: roleByAccountId.get(raw.account_id) ?? null,
+        naturalBalanceCents: natural,
+      });
     }
   }
 
@@ -485,7 +492,7 @@ export async function loadConsolidated(
     entityMeta: scopedMeta,
     ownershipTableAvailable,
     intercompanyRolesResolved,
-    scanned: { entries: entries.length, lines: lineCount },
+    scanned: { entries: entryCount ?? 0, lines: lineCount },
     fx: {
       reportingCurrency: fxCtx.reportingCurrency,
       fxRatesAvailable: fxCtx.fxRatesAvailable,

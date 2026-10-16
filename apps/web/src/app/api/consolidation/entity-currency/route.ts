@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler, requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * Entity functional-currency editor API (GATE 11a — multi-currency, migration 133).
@@ -93,6 +94,10 @@ export const POST = apiHandler(upsertSchema, async (body: UpsertBody, ctx) => {
   if (!ctx.orgId) {
     return NextResponse.json({ error: 'No organization in session', code: 'NO_ORG' }, { status: 400 });
   }
+  // Authorize — an entity's functional currency (activates ASC 830 translation) changes the consolidated financial statements; it is
+  // accounting configuration, gated on settings_acct:edit.
+  const guard = await requirePermission(ctx.userId, 'settings_acct', 'edit');
+  if (!guard.ok) return guard.response;
   const raw = body.functional_currency;
   const value = raw && raw.length === 3 ? raw.toUpperCase() : null; // '' / null / absent → clear
 

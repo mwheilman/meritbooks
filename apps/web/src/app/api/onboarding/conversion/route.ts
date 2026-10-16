@@ -15,7 +15,9 @@ import {
   type ConversionSessionData,
 } from '@/lib/onboarding/conversion';
 import { proposeMapping } from '@/lib/onboarding/mapping-ai';
-import { loadTargetAccounts, listSessions } from '@/lib/onboarding/session';
+import { loadTargetAccounts, listSessions, buildSessionView } from '@/lib/onboarding/session';
+import { isIsoDate } from '@/lib/onboarding/conversion';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/onboarding/conversion — start a historical-books conversion.
@@ -34,6 +36,13 @@ interface CreateBody {
   asOfDate: string;
   mapping: Record<string, string>;
   rows: Record<string, string>[];
+  /**
+   * Optional original file row number for each entry in `rows` (spreadsheet imports
+   * skip title rows, so "row i + 2" would point at the wrong line). Same length as rows.
+   */
+  rowNumbers?: number[];
+  /** Optional original file name, shown back on the review screen. */
+  fileName?: string;
 }
 
 const MAX_ROWS = 20000;
@@ -44,6 +53,10 @@ export async function POST(req: NextRequest) {
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
+  // Staging an opening entry is journal-entry preparation work (posting needs 'post').
+  const guard = await requirePermission(userId, 'journal_entries', 'create');
+  if (!guard.ok) return guard.response;
+
   let body: CreateBody;
   try {
     body = (await req.json()) as CreateBody;
@@ -51,14 +64,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  if (!body.companyId) return NextResponse.json({ error: 'Select a company to convert into' }, { status: 400 });
-  if (!body.asOfDate) return NextResponse.json({ error: 'Select the opening-balance as-of date' }, { status: 400 });
+  if (!body.companyId) return NextResponse.json({ error: 'Choose which company these balances belong to.' }, { status: 400 });
+  if (!isIsoDate(body.asOfDate)) return NextResponse.json({ error: 'Choose the date your balances are as of (for example, the last day of last month).' }, { status: 400 });
   if (!Array.isArray(body.rows) || body.rows.length === 0) {
-    return NextResponse.json({ error: 'No rows to convert' }, { status: 400 });
+    return NextResponse.json({ error: 'Your file has no account rows to bring in.' }, { status: 400 });
   }
   if (body.rows.length > MAX_ROWS) {
-    return NextResponse.json({ error: `Conversion is limited to ${MAX_ROWS} rows per file` }, { status: 400 });
+    return NextResponse.json({ error: `That file has more than ${MAX_ROWS.toLocaleString()} rows — split it into smaller files.` }, { status: 400 });
   }
+  const rowNumbers = Array.isArray(body.rowNumbers) && body.rowNumbers.length === body.rows.length ? body.rowNumbers : null;
 
   // Resolve the target company (location).
   const { data: loc } = await supabase
@@ -67,7 +81,7 @@ export async function POST(req: NextRequest) {
     .eq('id', body.companyId)
     .eq('org_id', orgId)
     .maybeSingle();
-  if (!loc) return NextResponse.json({ error: 'Selected company not found' }, { status: 400 });
+  if (!loc) return NextResponse.json({ error: 'We couldn\'t find that company. Pick it again from the list.' }, { status: 400 });
   const company = loc as { id: string; short_code: string; name: string };
 
   // Coerce uploaded rows to SourceLine (balances come straight from the file).
@@ -84,7 +98,7 @@ export async function POST(req: NextRequest) {
   const hasAmountColumn = !!body.mapping?.amount_cents;
 
   body.rows.forEach((raw, i) => {
-    const rowNum = i + 2;
+    const rowNum = rowNumbers ? Number(rowNumbers[i]) || i + 2 : i + 2;
     const rec: Record<string, string | number | boolean | null> = {};
     let ok = true;
     for (const field of CONVERSION_SOURCE_FIELDS) {
@@ -97,7 +111,7 @@ export async function POST(req: NextRequest) {
     if (!ok) return;
 
     const account = String(rec.source_account ?? '').trim();
-    if (!account) { excluded.push({ row: rowNum, reason: 'No account code — excluded (looks like a blank or section row).' }); return; }
+    if (!account) { excluded.push({ row: rowNum, reason: 'No account on this row — skipped (looks like a blank or section heading).' }); return; }
 
     let debit = Number(rec.debit_cents ?? 0);
     let credit = Number(rec.credit_cents ?? 0);
@@ -115,7 +129,7 @@ export async function POST(req: NextRequest) {
 
     if (debit > 0 && credit > 0) {
       // A real trial-balance line is a debit XOR a credit; both filled ⇒ a totals row.
-      excluded.push({ row: rowNum, reason: `Row has both a debit and a credit (account ${account}) — excluded as a subtotal/total row.` });
+      excluded.push({ row: rowNum, reason: `Has both a debit and a credit (${account}) — skipped as a subtotal or total row.` });
       return;
     }
     if (debit === 0 && credit === 0) { zeroRows++; return; } // zero balance — nothing to post
@@ -129,13 +143,14 @@ export async function POST(req: NextRequest) {
   });
 
   if (rowErrors.length > 0) {
-    return NextResponse.json({ error: 'The file has invalid rows', errors: rowErrors.slice(0, 200), excluded: excluded.slice(0, 200) }, { status: 422 });
+    const first = rowErrors.slice(0, 3).map((e) => `row ${e.row}: ${e.message}`).join('; ');
+    return NextResponse.json({ error: `Some rows couldn't be read (${first}${rowErrors.length > 3 ? `, and ${rowErrors.length - 3} more` : ''}).`, errors: rowErrors.slice(0, 200), excluded: excluded.slice(0, 200) }, { status: 422 });
   }
   if (sourceLines.length === 0) {
     return NextResponse.json({
       error: excluded.length > 0
-        ? 'No usable account rows — every row was excluded as a total/summary or blank line. Check that Debit/Credit (or Signed Balance) columns are mapped.'
-        : 'No usable rows in the file',
+        ? 'We couldn\'t find any account balances — every row looked like a total or a blank line. Check that the Debit and Credit (or Balance) columns are matched.'
+        : 'Every account in your file has a zero balance, so there is nothing to bring in.',
       excluded: excluded.slice(0, 200),
     }, { status: 422 });
   }
@@ -143,7 +158,7 @@ export async function POST(req: NextRequest) {
   // Load COA targets and propose the mapping (AI never sees a balance).
   const targets = await loadTargetAccounts(supabase, orgId);
   if (targets.length === 0) {
-    return NextResponse.json({ error: 'This company has no chart of accounts yet — seed the COA before converting.' }, { status: 400 });
+    return NextResponse.json({ error: 'Your MeritBooks chart of accounts is empty. Set up your accounts first (Accounting → Chart of Accounts), then come back.' }, { status: 400 });
   }
 
   const sources = distinctSourceAccounts(sourceLines);
@@ -171,6 +186,14 @@ export async function POST(req: NextRequest) {
     unknownTargets: assembled.unknownTargets,
     sourceTotals: assembled.sourceTotals,
     plAcknowledged: false,
+    intake: {
+      fileName: typeof body.fileName === 'string' ? body.fileName.slice(0, 200) : null,
+      aiUsed,
+      aiError,
+      excluded: excluded.slice(0, 200),
+      excludedCount: excluded.length,
+      zeroRows,
+    },
     tiedOut: false,
     tiedOutBy: null,
     tiedOutAt: null,
@@ -194,23 +217,18 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (insErr || !inserted) {
-    return NextResponse.json({ error: `Could not stage the conversion: ${insErr?.message ?? 'unknown'}` }, { status: 500 });
+    return NextResponse.json({ error: `We couldn't save your upload: ${insErr?.message ?? 'unknown error'}. Please try again.` }, { status: 500 });
   }
 
-  return NextResponse.json({
-    id: (inserted as { id: string }).id,
-    company: { id: company.id, shortCode: company.short_code, name: company.name },
-    asOfDate: body.asOfDate,
-    sourceCount: sources.length,
-    aiUsed,
-    aiError,
-    plAcknowledged: false,
-    // Non-silent report of what the parser set aside, so nothing disappears quietly.
-    excluded: excluded.slice(0, 200),
-    excludedCount: excluded.length,
-    zeroRows,
-    ...assembled,
-  });
+  // Return the SAME view the review screen loads via GET — including every go-live
+  // blocker (FPB B8) — so the first render is never more optimistic than the gate.
+  const id = (inserted as { id: string }).id;
+  try {
+    const view = await buildSessionView(supabase, orgId, { id, status: 'PROPOSED', postedGlEntryId: null }, data);
+    return NextResponse.json({ ...view, sourceCount: sources.length });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Saved, but could not load the review' , id }, { status: 500 });
+  }
 }
 
 export async function GET() {

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
 import { z } from 'zod';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 const querySchema = z.object({
   location_id: z.string().optional(),
@@ -66,7 +67,10 @@ export async function GET(request: Request) {
     ? params.location_ids.split(",").filter(Boolean)
     : (params.location_id && params.location_id !== "all" ? [params.location_id] : []);
 
-  // Posted entries in the period (RLS scopes to this org).
+  // Posted entries in the period (RLS scopes to this org). Only an EXISTENCE probe
+  // now — the period's lines are read below by joining to gl_entries with the
+  // same filters, paged, instead of an unbounded id list (PostgREST caps any
+  // response at 1,000 rows, which silently truncated both the id list and lines).
   let entriesQ = supabase
     .from('gl_entries')
     .select('id')
@@ -76,7 +80,7 @@ export async function GET(request: Request) {
   if (locFilter.length === 1) entriesQ = entriesQ.eq("location_id", locFilter[0]);
   else if (locFilter.length > 1) entriesQ = entriesQ.in("location_id", locFilter);
 
-  const { data: entryIds } = await entriesQ;
+  const { data: entryIds } = await entriesQ.limit(1);
   if (!entryIds || entryIds.length === 0) {
     return NextResponse.json({
       period: { startDate: params.start_date, endDate: params.end_date },
@@ -120,10 +124,20 @@ export async function GET(request: Request) {
     ? await resolveRoleIds(supabase, orgId, ['AP_CONTROL', 'RETAINAGE_PAYABLE', 'ACCRUED_EXPENSES'])
     : new Set<string>();
 
-  const { data: lines } = await supabase
-    .from('gl_entry_lines')
-    .select('account_id, debit_cents, credit_cents')
-    .in('gl_entry_id', entryIds.map((e: { id: string }) => e.id));
+  // Every line of a POSTED entry in the period — identical row set to the old
+  // `.in('gl_entry_id', <period entry ids>)`, expressed as an inner join on the
+  // same entry filters so it can be paged.
+  const { data: lines } = await fetchAll(() => {
+    let q = supabase
+      .from('gl_entry_lines')
+      .select('account_id, debit_cents, credit_cents, gl_entries!inner(id)')
+      .eq('gl_entries.status', 'POSTED')
+      .gte('gl_entries.entry_date', params.start_date)
+      .lte('gl_entries.entry_date', params.end_date);
+    if (locFilter.length === 1) q = q.eq('gl_entries.location_id', locFilter[0]);
+    else if (locFilter.length > 1) q = q.in('gl_entries.location_id', locFilter);
+    return q;
+  }, { label: 'cash-flow period gl_entry_lines' });
 
   // Accumulators. Asset movements are stored as (debit − credit) = increase in the
   // asset; liability/equity movements as (credit − debit) = increase in the balance.
@@ -200,24 +214,23 @@ export async function GET(request: Request) {
   // Beginning cash: running balance of cash/equivalent accounts before start_date.
   let beginningCash = 0;
   if (cashIds.size > 0) {
-    let priorQ = supabase
-      .from('gl_entries')
-      .select('id')
-      .eq('status', 'POSTED')
-      .lt('entry_date', params.start_date);
-    if (locFilter.length === 1) priorQ = priorQ.eq("location_id", locFilter[0]);
-    else if (locFilter.length > 1) priorQ = priorQ.in("location_id", locFilter);
-
-    const { data: priorEntries } = await priorQ;
-    if (priorEntries && priorEntries.length > 0) {
-      const { data: cashLines } = await supabase
+    // Cash-account lines of every POSTED entry before start_date (all history), via
+    // an inner join on the same entry filters, paged — the old unbounded id list of
+    // all prior entries was capped at 1,000 rows and understated beginning cash.
+    const cashIdList = Array.from(cashIds);
+    const { data: cashLines } = await fetchAll(() => {
+      let q = supabase
         .from('gl_entry_lines')
-        .select('account_id, debit_cents, credit_cents')
-        .in('gl_entry_id', priorEntries.map((e: { id: string }) => e.id))
-        .in('account_id', Array.from(cashIds));
-      for (const cl of cashLines ?? []) {
-        beginningCash += Number(cl.debit_cents ?? 0) - Number(cl.credit_cents ?? 0);
-      }
+        .select('account_id, debit_cents, credit_cents, gl_entries!inner(id)')
+        .eq('gl_entries.status', 'POSTED')
+        .lt('gl_entries.entry_date', params.start_date)
+        .in('account_id', cashIdList);
+      if (locFilter.length === 1) q = q.eq('gl_entries.location_id', locFilter[0]);
+      else if (locFilter.length > 1) q = q.in('gl_entries.location_id', locFilter);
+      return q;
+    }, { label: 'cash-flow beginning-cash gl_entry_lines' });
+    for (const cl of cashLines ?? []) {
+      beginningCash += Number(cl.debit_cents ?? 0) - Number(cl.credit_cents ?? 0);
     }
   }
 

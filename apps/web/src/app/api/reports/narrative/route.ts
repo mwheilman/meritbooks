@@ -24,6 +24,7 @@ import {
   type BudgetInputRow,
 } from '@/lib/reports/variance-cash';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
 /**
  * POST /api/reports/narrative — AI flux / variance auto-narrative (M7).
@@ -155,20 +156,24 @@ async function fetchPnlLines(
   dims?: Dimensions,
 ): Promise<VarianceLine[]> {
   const locationIds = resolveLocationIds(dims);
-  let query = supabase
-    .from('gl_entry_lines')
-    .select(SELECT)
-    .eq('gl_entries.status', 'POSTED')
-    .gte('gl_entries.entry_date', startDate)
-    .lte('gl_entries.entry_date', endDate)
-    .in('accounts.account_type', ['REVENUE', 'COGS', 'OPEX', 'OTHER']);
+  // Paged: PostgREST caps responses at 1,000 rows — an unpaged read silently truncates.
+  const buildQuery = () => {
+    let query = supabase
+      .from('gl_entry_lines')
+      .select(SELECT)
+      .eq('gl_entries.status', 'POSTED')
+      .gte('gl_entries.entry_date', startDate)
+      .lte('gl_entries.entry_date', endDate)
+      .in('accounts.account_type', ['REVENUE', 'COGS', 'OPEX', 'OTHER']);
 
-  if (locationIds.length === 1) query = query.eq('location_id', locationIds[0]);
-  else if (locationIds.length > 1) query = query.in('location_id', locationIds);
-  if (dims?.department_id) query = query.eq('department_id', dims.department_id);
-  if (dims?.class_id) query = query.eq('class_id', dims.class_id);
+    if (locationIds.length === 1) query = query.eq('location_id', locationIds[0]);
+    else if (locationIds.length > 1) query = query.in('location_id', locationIds);
+    if (dims?.department_id) query = query.eq('department_id', dims.department_id);
+    if (dims?.class_id) query = query.eq('class_id', dims.class_id);
+    return query;
+  };
 
-  const { data, error } = await query;
+  const { data, error } = await fetchAll(buildQuery, { label: 'narrative P&L gl_entry_lines' });
   if (error) throw new Error(error.message);
   return aggregate((data ?? []) as unknown as JoinedLine[]);
 }
@@ -180,17 +185,21 @@ async function fetchBsLines(
   dims?: Dimensions,
 ): Promise<VarianceLine[]> {
   const locationIds = resolveLocationIds(dims);
-  let query = supabase
-    .from('gl_entry_lines')
-    .select(SELECT)
-    .eq('gl_entries.status', 'POSTED')
-    .lte('gl_entries.entry_date', asOfDate)
-    .in('accounts.account_type', ['ASSET', 'LIABILITY', 'EQUITY']);
+  // Paged: PostgREST caps responses at 1,000 rows — an unpaged read silently truncates.
+  const buildQuery = () => {
+    let query = supabase
+      .from('gl_entry_lines')
+      .select(SELECT)
+      .eq('gl_entries.status', 'POSTED')
+      .lte('gl_entries.entry_date', asOfDate)
+      .in('accounts.account_type', ['ASSET', 'LIABILITY', 'EQUITY']);
 
-  if (locationIds.length === 1) query = query.eq('location_id', locationIds[0]);
-  else if (locationIds.length > 1) query = query.in('location_id', locationIds);
+    if (locationIds.length === 1) query = query.eq('location_id', locationIds[0]);
+    else if (locationIds.length > 1) query = query.in('location_id', locationIds);
+    return query;
+  };
 
-  const { data, error } = await query;
+  const { data, error } = await fetchAll(buildQuery, { label: 'narrative balance-sheet gl_entry_lines' });
   if (error) throw new Error(error.message);
   return aggregate((data ?? []) as unknown as JoinedLine[]);
 }
@@ -226,16 +235,18 @@ async function fetchCashFlowSnapshot(
   dims?: Dimensions,
 ) {
   const locationIds = resolveLocationIds(dims);
-  let entriesQ = supabase
-    .from('gl_entries')
-    .select('id')
-    .eq('status', 'POSTED')
-    .gte('entry_date', startDate)
-    .lte('entry_date', endDate);
-  if (locationIds.length === 1) entriesQ = entriesQ.eq('location_id', locationIds[0]);
-  else if (locationIds.length > 1) entriesQ = entriesQ.in('location_id', locationIds);
-
-  const { data: entryRows, error: entriesErr } = await entriesQ;
+  // Paged: PostgREST caps a response at 1,000 rows.
+  const { data: entryRows, error: entriesErr } = await fetchAll(() => {
+    let entriesQ = supabase
+      .from('gl_entries')
+      .select('id')
+      .eq('status', 'POSTED')
+      .gte('entry_date', startDate)
+      .lte('entry_date', endDate);
+    if (locationIds.length === 1) entriesQ = entriesQ.eq('location_id', locationIds[0]);
+    else if (locationIds.length > 1) entriesQ = entriesQ.in('location_id', locationIds);
+    return entriesQ;
+  }, { label: 'narrative cash-flow gl_entries' });
   if (entriesErr) throw new Error(entriesErr.message);
   const entryIds = (entryRows ?? []).map((e: { id: string }) => e.id);
 
@@ -265,13 +276,15 @@ async function fetchCashFlowSnapshot(
 
   let lines: CashFlowInputLine[] = [];
   if (entryIds.length > 0) {
-    let linesQ = supabase
-      .from('gl_entry_lines')
-      .select('account_id, debit_cents, credit_cents')
-      .in('gl_entry_id', entryIds);
-    if (dims?.department_id) linesQ = linesQ.eq('department_id', dims.department_id);
-    if (dims?.class_id) linesQ = linesQ.eq('class_id', dims.class_id);
-    const { data: lineRows, error: linesErr } = await linesQ;
+    const { data: lineRows, error: linesErr } = await fetchAllIn(entryIds, (chunk) => {
+      let linesQ = supabase
+        .from('gl_entry_lines')
+        .select('account_id, debit_cents, credit_cents')
+        .in('gl_entry_id', chunk);
+      if (dims?.department_id) linesQ = linesQ.eq('department_id', dims.department_id);
+      if (dims?.class_id) linesQ = linesQ.eq('class_id', dims.class_id);
+      return linesQ;
+    }, { label: 'narrative cash-flow gl_entry_lines' });
     if (linesErr) throw new Error(linesErr.message);
     lines = (lineRows ?? []).map((l) => ({
       account_id: l.account_id as string,
@@ -293,16 +306,18 @@ async function fetchBudgetRows(
 ): Promise<BudgetInputRow[]> {
   const locationIds = resolveLocationIds(dims);
 
-  let budgetQ = supabase
-    .from('budgets')
-    .select('account_id, amount_cents, period_number, account:accounts!budgets_account_id_fkey(account_number, name, account_type)')
-    .eq('fiscal_year', fiscalYear);
-  if (locationIds.length === 1) budgetQ = budgetQ.eq('location_id', locationIds[0]);
-  else if (locationIds.length > 1) budgetQ = budgetQ.in('location_id', locationIds);
-  if (dims?.department_id) budgetQ = budgetQ.eq('department_id', dims.department_id);
-  if (periodNumber > 0) budgetQ = budgetQ.eq('period_number', periodNumber);
-
-  const { data: budgetData, error: budgetErr } = await budgetQ;
+  // Paged: a full-year budget (accounts x 12 periods x entities) easily passes 1,000 rows.
+  const { data: budgetData, error: budgetErr } = await fetchAll(() => {
+    let budgetQ = supabase
+      .from('budgets')
+      .select('account_id, amount_cents, period_number, account:accounts!budgets_account_id_fkey(account_number, name, account_type)')
+      .eq('fiscal_year', fiscalYear);
+    if (locationIds.length === 1) budgetQ = budgetQ.eq('location_id', locationIds[0]);
+    else if (locationIds.length > 1) budgetQ = budgetQ.in('location_id', locationIds);
+    if (dims?.department_id) budgetQ = budgetQ.eq('department_id', dims.department_id);
+    if (periodNumber > 0) budgetQ = budgetQ.eq('period_number', periodNumber);
+    return budgetQ;
+  }, { label: 'narrative budgets' });
   if (budgetErr) throw new Error(budgetErr.message);
 
   interface BudgetAcct { account_number: string; name: string; account_type: string }
@@ -327,24 +342,28 @@ async function fetchBudgetRows(
     actualEnd = `${fiscalYear}-${pad(periodNumber)}-${pad(lastDay)}`;
   }
 
-  let entriesQ = supabase
-    .from('gl_entries')
-    .select('id')
-    .eq('status', 'POSTED')
-    .gte('entry_date', actualStart)
-    .lte('entry_date', actualEnd);
-  if (locationIds.length === 1) entriesQ = entriesQ.eq('location_id', locationIds[0]);
-  else if (locationIds.length > 1) entriesQ = entriesQ.in('location_id', locationIds);
-  const { data: entries, error: entriesErr } = await entriesQ;
+  const { data: entries, error: entriesErr } = await fetchAll(() => {
+    let entriesQ = supabase
+      .from('gl_entries')
+      .select('id')
+      .eq('status', 'POSTED')
+      .gte('entry_date', actualStart)
+      .lte('entry_date', actualEnd);
+    if (locationIds.length === 1) entriesQ = entriesQ.eq('location_id', locationIds[0]);
+    else if (locationIds.length > 1) entriesQ = entriesQ.in('location_id', locationIds);
+    return entriesQ;
+  }, { label: 'narrative budget-actuals gl_entries' });
   if (entriesErr) throw new Error(entriesErr.message);
   const entryIds = (entries ?? []).map((e: { id: string }) => e.id);
 
   const actualMap = new Map<string, number>();
   if (entryIds.length > 0) {
-    let linesQ = supabase.from('gl_entry_lines').select('account_id, debit_cents, credit_cents').in('gl_entry_id', entryIds);
-    if (dims?.department_id) linesQ = linesQ.eq('department_id', dims.department_id);
-    if (dims?.class_id) linesQ = linesQ.eq('class_id', dims.class_id);
-    const { data: lineRows, error: linesErr } = await linesQ;
+    const { data: lineRows, error: linesErr } = await fetchAllIn(entryIds, (chunk) => {
+      let linesQ = supabase.from('gl_entry_lines').select('account_id, debit_cents, credit_cents').in('gl_entry_id', chunk);
+      if (dims?.department_id) linesQ = linesQ.eq('department_id', dims.department_id);
+      if (dims?.class_id) linesQ = linesQ.eq('class_id', dims.class_id);
+      return linesQ;
+    }, { label: 'narrative budget-actuals gl_entry_lines' });
     if (linesErr) throw new Error(linesErr.message);
     for (const line of lineRows ?? []) {
       const id = line.account_id as string;

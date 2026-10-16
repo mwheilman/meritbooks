@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { computeGlCashBalanceCents } from '@/lib/services/reconciliation-gl';
 import { z } from 'zod';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * GET /api/reconciliation
@@ -151,8 +152,12 @@ const startRecSchema = z.object({
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — opening a bank reconciliation is a reconciliation action.
+  const guard = await requirePermission(userId, 'reconciliation', 'reconcile');
+  if (!guard.ok) return guard.response;
 
   try {
     const raw = await request.json();

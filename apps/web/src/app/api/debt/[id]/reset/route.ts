@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { previewReset, confirmReset } from '@/lib/debt/lifecycle';
 import { PostingError } from '@/lib/posting/account-roles';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/debt/[id]/reset — variable-rate reset.
@@ -31,7 +32,7 @@ interface Params {
 export async function POST(request: Request, { params }: Params): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
 
   let raw: unknown;
@@ -52,6 +53,14 @@ export async function POST(request: Request, { params }: Params): Promise<NextRe
     mode,
     resetDate: reset_date ?? null,
   };
+
+  // Authorize (security MEDIUM) — confirm PERSISTS a recomputed schedule that every
+  // future accrual/payment posting reads, so it is a GL-preparation write
+  // (journal_entries:create). Preview writes nothing and needs only a session.
+  if (action === 'confirm') {
+    const guard = await requirePermission(userId, 'journal_entries', 'create');
+    if (!guard.ok) return guard.response;
+  }
 
   try {
     const result = action === 'confirm' ? await confirmReset(supabase, args) : await previewReset(supabase, args);

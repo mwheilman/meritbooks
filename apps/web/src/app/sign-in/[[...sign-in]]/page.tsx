@@ -15,7 +15,12 @@ export default function SignInPage() {
             AI-native accounting platform
           </p>
         </div>
-        <SignIn afterSignInUrl="/dashboard" />
+        {/* One front door (FPB-onboarding B6): land on the root router, which sends the
+            user to their next unfinished thing (org setup → onboarding → dashboard).
+            `fallback` (not `force`) so a deep link that bounced to sign-in still returns
+            the user to the page they asked for. `signUpUrl` points Clerk's "Sign up"
+            footer link at our own /sign-up page (invite-aware), not the hosted portal. */}
+        <SignIn fallbackRedirectUrl="/" signUpFallbackRedirectUrl="/" signUpUrl="/sign-up" />
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { computeArTieOut } from '@/lib/controls/cash-application';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 /**
  * GET /api/cash-application/tie-out
@@ -52,10 +53,17 @@ export async function GET(request: Request): Promise<NextResponse> {
   // 1. Subledger — Σ open invoice balances from v_ar_aging.
   // `> 0` defensively drops WRITTEN_OFF (balance 0) rows from the subledger Σ
   // even before the v_ar_aging view is re-created to exclude that status.
-  let arQ = supabase.from('v_ar_aging').select('balance_cents, location_id').gt('balance_cents', 0);
-  if (locFilter.length === 1) arQ = arQ.eq('location_id', locFilter[0]);
-  else if (locFilter.length > 1) arQ = arQ.in('location_id', locFilter);
-  const { data: arData, error: arErr } = await arQ;
+  // Paged: PostgREST caps a response at 1,000 rows — a truncated Σ would fake a variance.
+  const buildArQ = () => {
+    let arQ = supabase.from('v_ar_aging').select('balance_cents, location_id').gt('balance_cents', 0);
+    if (locFilter.length === 1) arQ = arQ.eq('location_id', locFilter[0]);
+    else if (locFilter.length > 1) arQ = arQ.in('location_id', locFilter);
+    return arQ;
+  };
+  const { data: arData, error: arErr } = await fetchAll(buildArQ, {
+    orderBy: 'invoice_id',
+    label: 'ar-tie-out v_ar_aging',
+  });
   if (arErr) {
     console.error('[cash-application/tie-out] AR aging failed:', arErr.message);
     return NextResponse.json({ error: 'Failed to load AR subledger', code: 'INTERNAL_ERROR' }, { status: 500 });
@@ -87,10 +95,17 @@ export async function GET(request: Request): Promise<NextResponse> {
     });
   }
 
-  let tbQ = supabase.from('v_trial_balance').select('net_balance, location_id').eq('account_id', arAccountId);
-  if (locFilter.length === 1) tbQ = tbQ.eq('location_id', locFilter[0]);
-  else if (locFilter.length > 1) tbQ = tbQ.in('location_id', locFilter);
-  const { data: tbData, error: tbErr } = await tbQ;
+  const controlAccountId = arAccountId;
+  const buildTbQ = () => {
+    let tbQ = supabase.from('v_trial_balance').select('net_balance, location_id').eq('account_id', controlAccountId);
+    if (locFilter.length === 1) tbQ = tbQ.eq('location_id', locFilter[0]);
+    else if (locFilter.length > 1) tbQ = tbQ.in('location_id', locFilter);
+    return tbQ;
+  };
+  const { data: tbData, error: tbErr } = await fetchAll(buildTbQ, {
+    orderBy: ['org_id', 'location_id', 'account_id'],
+    label: 'ar-tie-out v_trial_balance',
+  });
   if (tbErr) {
     console.error('[cash-application/tie-out] trial balance failed:', tbErr.message);
     return NextResponse.json({ error: 'Failed to load GL control balance', code: 'INTERNAL_ERROR' }, { status: 500 });

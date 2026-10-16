@@ -24,6 +24,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 import { postJournalEntry } from '../services/gl-posting';
 import { buildAmortizationSchedule, evenPerPeriodCents } from '../prepaid/schedule';
 
@@ -336,11 +337,15 @@ export async function getInsuranceTieOut(
 
   const glByAccount = new Map<string, number>();
   if (acctIds.length > 0) {
-    const { data, error } = await db
-      .from('v_trial_balance')
-      .select('account_id, net_balance')
-      .eq('org_id', orgId)
-      .in('account_id', acctIds);
+    const { data, error } = await fetchAll(
+      () =>
+        db
+          .from('v_trial_balance')
+          .select('account_id, net_balance')
+          .eq('org_id', orgId)
+          .in('account_id', acctIds),
+      { orderBy: ['org_id', 'location_id', 'account_id'], label: 'insurance tie-out v_trial_balance' },
+    );
     if (error) throw new InsuranceAmortizationError(error.message);
     for (const r of (data ?? []) as { account_id: string; net_balance: unknown }[]) {
       glByAccount.set(r.account_id, (glByAccount.get(r.account_id) ?? 0) + num(r.net_balance));

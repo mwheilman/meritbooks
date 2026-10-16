@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { seedChartOfAccounts } from '@/lib/services/coa-seed';
+import { createCompany, REV_REC_METHODS } from '@/lib/companies/create-company';
 import { z } from 'zod';
 
 /**
@@ -13,18 +14,15 @@ import { z } from 'zod';
  *        report compiler and fiscal-period engine key off, plus the org's
  *        inherited base currency (per-entity currency is not yet a column — see
  *        the entity setup wizard note; entities inherit `organizations.home_currency`).
- * POST — the Entity Setup Wizard: create a new company, auto-generate its fiscal
- *        periods (prior/current/next calendar year), and ensure the tenant's chart
+ * POST — the Entity Setup Wizard: create a new company via the single
+ *        company-creation path (`lib/companies/create-company.ts` — fiscal periods
+ *        for prior/current/next calendar year, prior months SOFT_CLOSE; short code
+ *        derived from the name when omitted), and ensure the tenant's chart
  *        of accounts is seeded from the standard template (idempotent — reuses the
  *        single shared `seedChartOfAccounts` path, never a duplicated template).
  *
  * RLS-scoped throughout (createServerSupabase); gated on `settings_acct:edit`.
  */
-
-const REV_REC_METHODS = [
-  'POINT_OF_SALE', 'AS_BILLED', 'PCT_COSTS_INCURRED', 'PCT_COMPLETE', 'COMPLETED_CONTRACT',
-  'MILESTONE', 'RATABLY', 'SUBSCRIPTION', 'CASH',
-] as const;
 
 export async function GET() {
   const authResult = await requireAuth();
@@ -42,6 +40,7 @@ export async function GET() {
   const { data: locations, error } = await supabase
     .schema('core').from('locations')
     .select('id, name, short_code, industry, fiscal_year_start_month, rev_rec_method, is_active, created_at')
+    .eq('org_id', orgId)
     .order('name');
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -63,8 +62,9 @@ export async function GET() {
 }
 
 const createSchema = z.object({
-  name: z.string().min(1).max(200),
-  short_code: z.string().min(1).max(10).regex(/^[A-Z0-9]+$/, 'Short code must be uppercase letters/numbers'),
+  name: z.string().trim().min(1).max(200),
+  // Optional: when omitted, createCompany derives a unique code from the name.
+  short_code: z.string().trim().max(10).regex(/^[A-Z0-9]*$/, 'Short code must be uppercase letters/numbers').optional(),
   industry: z.string().max(100).optional(),
   fiscal_year_start_month: z.coerce.number().int().min(1).max(12).default(1),
   rev_rec_method: z.enum(REV_REC_METHODS).default('POINT_OF_SALE'),
@@ -91,64 +91,18 @@ export async function POST(request: Request) {
 
   const supabase = await createServerSupabase();
 
-  // Reject duplicate short_code within the tenant (also enforced by the unique
-  // (org_id, short_code) constraint — this returns a friendlier 409).
-  const { data: existing } = await supabase
-    .schema('core').from('locations')
-    .select('id')
-    .eq('short_code', body.short_code)
-    .maybeSingle();
-  if (existing) {
-    return NextResponse.json({ error: `Short code "${body.short_code}" already exists` }, { status: 409 });
-  }
-
-  // 1. Create the entity.
-  const { data: location, error: locErr } = await supabase
-    .schema('core').from('locations')
-    .insert({
-      org_id: orgId,
-      name: body.name,
-      short_code: body.short_code,
-      industry: body.industry ?? null,
-      fiscal_year_start_month: body.fiscal_year_start_month,
-      rev_rec_method: body.rev_rec_method,
-    })
-    .select('id')
-    .single();
-
-  if (locErr) return NextResponse.json({ error: locErr.message }, { status: 500 });
-
-  // 2. Auto-generate fiscal periods (prior + current + next calendar year).
-  //    Mirrors the onboarding setup path so numbering/statuses never fork.
-  const now = new Date();
-  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
-  const periods = years.flatMap((year) =>
-    Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0);
-      const periodDate = new Date(year, month - 1, 15);
-      const isBeforeCurrentMonth = periodDate < new Date(now.getFullYear(), now.getMonth(), 1);
-      const status = year < now.getFullYear() ? 'HARD_CLOSE' : isBeforeCurrentMonth ? 'SOFT_CLOSE' : 'OPEN';
-      return {
-        org_id: orgId,
-        location_id: location.id,
-        period_year: year,
-        period_month: month,
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: endDate.toISOString().split('T')[0],
-        status,
-      };
-    }),
-  );
-
-  let periodsCreated = 0;
-  const { error: periodErr } = await supabase.from('fiscal_periods').insert(periods);
-  if (periodErr) {
-    console.error('[entities] fiscal period error:', periodErr.message);
-    // Non-fatal — the entity exists; periods can be regenerated from /periods.
-  } else {
-    periodsCreated = periods.length;
-  }
+  // 1+2. Create the entity and its fiscal periods through the single
+  //      company-creation path (duplicate name/short code → 409; prior months
+  //      SOFT_CLOSE, current/future OPEN).
+  const created = await createCompany(supabase, {
+    orgId,
+    name: body.name,
+    shortCode: body.short_code || null,
+    industry: body.industry ?? null,
+    fiscalYearStartMonth: body.fiscal_year_start_month,
+    revRecMethod: body.rev_rec_method,
+  });
+  if (!created.ok) return NextResponse.json({ error: created.error }, { status: created.status });
 
   // 3. Ensure the tenant's chart of accounts exists (idempotent, self-healing,
   //    non-destructive). All entities in the org share the org-scoped COA, so
@@ -163,7 +117,13 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json(
-    { success: true, locationId: location.id, periodsCreated, accountCount },
+    {
+      success: true,
+      locationId: created.locationId,
+      shortCode: created.shortCode,
+      periodsCreated: created.periodsCreated,
+      accountCount,
+    },
     { status: 201 },
   );
 }

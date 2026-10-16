@@ -7,6 +7,7 @@ import { createAdminSupabase } from '@/lib/supabase/server';
 import { resolveActor } from '@/lib/trust/actor';
 import type { ActorType, Tier } from '@/lib/trust/action-log';
 import { buildSalesTaxCalendar } from '@/lib/tax/sales-tax-calendar';
+import { fetchAllIn } from '@/lib/supabase/fetch-all';
 import {
   resolveWorkActions,
   resolveTargets,
@@ -297,11 +298,17 @@ export async function GET(req: Request) {
   const allPostIds = glPostSubjects.map((p) => p.subjectId);
   if (allPostIds.length > 0) {
     const ids = Array.from(new Set(allPostIds)).slice(0, MAX_ROWS);
-    const { data: lines } = await supabase
-      .from('gl_entry_lines')
-      .select('gl_entry_id, debit_cents')
-      .in('gl_entry_id', ids)
-      .limit(MAX_ROWS * 4);
+    // Chunked + paged (the former `.limit(MAX_ROWS * 4)` was silently capped at
+    // PostgREST's 1,000 rows, and a 5,000-id `.in()` overflows the URL).
+    const { data: lines } = await fetchAllIn(
+      ids,
+      (chunk) =>
+        supabase
+          .from('gl_entry_lines')
+          .select('gl_entry_id, debit_cents')
+          .in('gl_entry_id', chunk),
+      { label: 'team-performance gl_entry_lines' },
+    );
     for (const l of (lines ?? []) as Array<{ gl_entry_id: string; debit_cents: number | null }>) {
       glDebitByEntry.set(l.gl_entry_id, (glDebitByEntry.get(l.gl_entry_id) ?? 0) + Number(l.debit_cents ?? 0));
     }
@@ -333,11 +340,15 @@ export async function GET(req: Request) {
   const reworkedOriginalIds = new Set<string>();
   if (allPostIds.length > 0) {
     const ids = Array.from(new Set(allPostIds)).slice(0, MAX_ROWS);
-    const { data: reversals } = await supabase
-      .from('gl_entries')
-      .select('reversal_of_id')
-      .in('reversal_of_id', ids)
-      .limit(MAX_ROWS);
+    const { data: reversals } = await fetchAllIn(
+      ids,
+      (chunk) =>
+        supabase
+          .from('gl_entries')
+          .select('reversal_of_id')
+          .in('reversal_of_id', chunk),
+      { label: 'team-performance reversal gl_entries' },
+    );
     for (const rv of (reversals ?? []) as Array<{ reversal_of_id: string | null }>) {
       if (rv.reversal_of_id) reworkedOriginalIds.add(rv.reversal_of_id);
     }

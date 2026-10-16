@@ -55,15 +55,46 @@ const debtShape = z
     interest_payable_account_id: z.string().uuid().nullish(),
     cash_account_id: z.string().uuid().nullish(),
     notes: z.string().max(2000).nullish(),
+    /**
+     * B9 — EXISTING-LOAN mode ("This loan already exists — I'm bringing over its current
+     * balance"). The opening trial balance already carries the liability, so NO
+     * origination entry is posted; the forward schedule is built from the current
+     * balance as of the cutover date. Default false = today's new-loan behavior.
+     */
+    existing_loan: z.boolean().default(false),
+    /** Existing mode: principal still owed as of `balance_as_of_date` (cents). */
+    current_balance_cents: z.number().int().positive('Current balance must be greater than zero').nullish(),
+    /** Existing mode: the as-of (cutover) date the current balance is stated at. */
+    balance_as_of_date: dateStr,
+    /** Existing mode: payments left after the as-of date (derived from term/maturity when blank). */
+    remaining_periods: z.number().int().positive().max(1200).nullish(),
   })
-  .refine((v) => v.amortization_method !== 'INTEREST_ONLY' || (v.term_periods ?? 0) > 0, {
-    message: 'Interest-only loans require a term (number of periods)',
-    path: ['term_periods'],
+  .refine((v) => !v.existing_loan || (v.current_balance_cents ?? 0) > 0, {
+    message: 'Enter the balance still owed on this loan',
+    path: ['current_balance_cents'],
   })
-  .refine((v) => (v.term_periods ?? 0) > 0 || (v.payment_cents ?? 0) > 0, {
-    message: 'Provide a term (number of periods) or a fixed payment so the schedule can be built',
-    path: ['term_periods'],
-  });
+  .refine((v) => !v.existing_loan || !!v.balance_as_of_date, {
+    message: 'Enter the date that balance is as of (your cutover date)',
+    path: ['balance_as_of_date'],
+  })
+  .refine(
+    (v) => v.amortization_method !== 'INTEREST_ONLY'
+      || (v.term_periods ?? 0) > 0
+      || (v.existing_loan && ((v.remaining_periods ?? 0) > 0 || !!v.maturity_date)),
+    {
+      message: 'Interest-only loans require a term (number of periods)',
+      path: ['term_periods'],
+    },
+  )
+  .refine(
+    (v) => (v.term_periods ?? 0) > 0
+      || (v.payment_cents ?? 0) > 0
+      || (v.existing_loan && ((v.remaining_periods ?? 0) > 0 || !!v.maturity_date)),
+    {
+      message: 'Provide a term (number of periods) or a fixed payment so the schedule can be built',
+      path: ['term_periods'],
+    },
+  );
 
 /** The fully-parsed debt create payload (defaults applied). */
 export type CreateDebtInput = z.infer<typeof debtShape>;

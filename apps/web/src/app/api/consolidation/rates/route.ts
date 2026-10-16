@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler, requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * FX-rate editor API (GATE 11a — multi-currency, migration 089).
@@ -86,6 +87,10 @@ export const POST = apiHandler(upsertSchema, async (body: UpsertBody, ctx) => {
   if (!ctx.orgId) {
     return NextResponse.json({ error: 'No organization in session', code: 'NO_ORG' }, { status: 400 });
   }
+  // Authorize — FX translation rates changes the consolidated financial statements; it is
+  // accounting configuration, gated on settings_acct:edit.
+  const guard = await requirePermission(ctx.userId, 'settings_acct', 'edit');
+  if (!guard.ok) return guard.response;
   const from = body.from_currency.toUpperCase();
   const to = body.to_currency.toUpperCase();
   if (from === to) {
@@ -125,10 +130,12 @@ export const POST = apiHandler(upsertSchema, async (body: UpsertBody, ctx) => {
 export async function DELETE(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) {
     return NextResponse.json({ error: 'No organization in session', code: 'NO_ORG' }, { status: 400 });
   }
+  const guard = await requirePermission(userId, 'settings_acct', 'edit');
+  if (!guard.ok) return guard.response;
   const id = new URL(request.url).searchParams.get('id');
   if (!id) {
     return NextResponse.json({ error: 'id is required', code: 'MISSING_ID' }, { status: 400 });

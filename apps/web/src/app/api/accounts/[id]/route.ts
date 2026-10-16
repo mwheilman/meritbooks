@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 /**
  * GET /api/accounts/[id] — account record for the detail drawer/peek:
@@ -21,14 +22,19 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if (error || !a) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
 
   // Lines for this account with their (public) entry — filter POSTED in JS.
-  const { data: lineRows } = await supabase
-    .from('gl_entry_lines')
-    .select(`
-      debit_cents, credit_cents, memo,
-      entry:gl_entries!gl_entry_lines_gl_entry_id_fkey(id, entry_number, entry_date, status, memo)
-    `)
-    .eq('account_id', params.id)
-    .limit(2000);
+  // Paged: these lines drive the account BALANCE, so the former `.limit(2000)`
+  // (silently capped at PostgREST's 1,000 rows) understated busy accounts.
+  const { data: lineRows } = await fetchAll(
+    () =>
+      supabase
+        .from('gl_entry_lines')
+        .select(`
+          debit_cents, credit_cents, memo,
+          entry:gl_entries!gl_entry_lines_gl_entry_id_fkey(id, entry_number, entry_date, status, memo)
+        `)
+        .eq('account_id', params.id),
+    { label: 'account-detail gl_entry_lines' },
+  );
 
   const lines = (lineRows ?? []) as Array<Record<string, any>>;
   let balanceCents = 0;

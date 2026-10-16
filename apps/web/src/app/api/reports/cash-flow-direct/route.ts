@@ -10,6 +10,7 @@ import {
   type DirectRoleTag,
 } from '@/lib/forecast/cash-flow-direct';
 import { z } from 'zod';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
 /**
  * GET /api/reports/cash-flow-direct?start_date=&end_date=&location_ids=
@@ -127,16 +128,18 @@ export async function GET(request: Request) {
   }
 
   // ── Posted entries in the period (RLS scopes to this org) ──
-  let entriesQ = supabase
-    .from('gl_entries')
-    .select('id')
-    .eq('status', 'POSTED')
-    .gte('entry_date', params.start_date)
-    .lte('entry_date', params.end_date);
-  if (locFilter.length === 1) entriesQ = entriesQ.eq('location_id', locFilter[0]);
-  else if (locFilter.length > 1) entriesQ = entriesQ.in('location_id', locFilter);
-
-  const { data: entryRows } = await entriesQ;
+  // Paged: PostgREST caps a response at 1,000 rows (silent truncation otherwise).
+  const { data: entryRows } = await fetchAll(() => {
+    let entriesQ = supabase
+      .from('gl_entries')
+      .select('id')
+      .eq('status', 'POSTED')
+      .gte('entry_date', params.start_date)
+      .lte('entry_date', params.end_date);
+    if (locFilter.length === 1) entriesQ = entriesQ.eq('location_id', locFilter[0]);
+    else if (locFilter.length > 1) entriesQ = entriesQ.in('location_id', locFilter);
+    return entriesQ;
+  }, { label: 'cash-flow-direct period gl_entries' });
   const entryIds = (entryRows ?? []).map((e: { id: string }) => e.id);
 
   const emptyResult = () =>
@@ -156,18 +159,19 @@ export async function GET(request: Request) {
 
   if (entryIds.length === 0) return emptyResult();
 
-  // ── Fetch lines in chunks (bounded IN lists) ──
+  // ── Fetch lines in chunks (bounded IN lists), each chunk fully paged ──
+  // (A 500-entry chunk can hold >1,000 lines; the old per-chunk read was capped.)
   interface LineRow { gl_entry_id: string; account_id: string; debit_cents: number | string | null; credit_cents: number | string | null }
-  const lines: LineRow[] = [];
-  const CHUNK = 500;
-  for (let i = 0; i < entryIds.length; i += CHUNK) {
-    const slice = entryIds.slice(i, i + CHUNK);
-    const { data: l } = await supabase
-      .from('gl_entry_lines')
-      .select('gl_entry_id, account_id, debit_cents, credit_cents')
-      .in('gl_entry_id', slice);
-    if (l) lines.push(...(l as LineRow[]));
-  }
+  const { data: lineRows } = await fetchAllIn<LineRow>(
+    entryIds,
+    (slice) =>
+      supabase
+        .from('gl_entry_lines')
+        .select('gl_entry_id, account_id, debit_cents, credit_cents')
+        .in('gl_entry_id', slice),
+    { label: 'cash-flow-direct period gl_entry_lines' },
+  );
+  const lines: LineRow[] = lineRows ?? [];
 
   // Group by entry so we only classify entries that actually MOVE cash.
   const byEntry = new Map<string, LineRow[]>();
@@ -211,26 +215,24 @@ export async function GET(request: Request) {
   // ── Beginning cash: running cash balance before the period start ──
   let beginningCash = 0;
   if (cashIds.size > 0) {
-    let priorQ = supabase
-      .from('gl_entries')
-      .select('id')
-      .eq('status', 'POSTED')
-      .lt('entry_date', params.start_date);
-    if (locFilter.length === 1) priorQ = priorQ.eq('location_id', locFilter[0]);
-    else if (locFilter.length > 1) priorQ = priorQ.in('location_id', locFilter);
-    const { data: priorEntries } = await priorQ;
-    const priorIds = (priorEntries ?? []).map((e: { id: string }) => e.id);
+    // Cash-account lines of every POSTED entry before start_date — the same row
+    // set as the old "all prior entry ids → lines" two-step, expressed as an
+    // inner join on the same entry filters and paged (the old prior-entries read
+    // was capped at 1,000 rows, understating beginning cash).
     const cashIdArr = Array.from(cashIds);
-    for (let i = 0; i < priorIds.length; i += CHUNK) {
-      const slice = priorIds.slice(i, i + CHUNK);
-      const { data: cashLines } = await supabase
+    const { data: cashLines } = await fetchAll(() => {
+      let q = supabase
         .from('gl_entry_lines')
-        .select('debit_cents, credit_cents')
-        .in('gl_entry_id', slice)
+        .select('debit_cents, credit_cents, gl_entries!inner(id)')
+        .eq('gl_entries.status', 'POSTED')
+        .lt('gl_entries.entry_date', params.start_date)
         .in('account_id', cashIdArr);
-      for (const cl of cashLines ?? []) {
-        beginningCash += Number(cl.debit_cents ?? 0) - Number(cl.credit_cents ?? 0);
-      }
+      if (locFilter.length === 1) q = q.eq('gl_entries.location_id', locFilter[0]);
+      else if (locFilter.length > 1) q = q.in('gl_entries.location_id', locFilter);
+      return q;
+    }, { label: 'cash-flow-direct beginning-cash gl_entry_lines' });
+    for (const cl of cashLines ?? []) {
+      beginningCash += Number(cl.debit_cents ?? 0) - Number(cl.credit_cents ?? 0);
     }
   }
 

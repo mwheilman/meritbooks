@@ -14,6 +14,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
 import { fetchCoreMap } from '@/lib/stitch-core';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 import type {
   IncomeStatementPayload,
   BalanceSheetPayload,
@@ -59,18 +60,21 @@ export async function fetchIncomeStatement(
   supabase: SupabaseClient,
   scope: { startDate: string; endDate: string; locationIds: string[]; basis: 'accrual' | 'cash' },
 ): Promise<IncomeStatementPayload> {
-  let query = applyLoc(
-    supabase
-      .from('gl_entry_lines')
-      .select(IS_SELECT)
-      .eq('gl_entries.status', 'POSTED')
-      .gte('gl_entries.entry_date', scope.startDate)
-      .lte('gl_entries.entry_date', scope.endDate)
-      .in('accounts.account_type', ['REVENUE', 'COGS', 'OPEX', 'OTHER']),
-    scope.locationIds,
+  // Paged: PostgREST caps a response at 1,000 rows (silent truncation otherwise).
+  const { data, error } = await fetchAll(
+    () =>
+      applyLoc(
+        supabase
+          .from('gl_entry_lines')
+          .select(IS_SELECT)
+          .eq('gl_entries.status', 'POSTED')
+          .gte('gl_entries.entry_date', scope.startDate)
+          .lte('gl_entries.entry_date', scope.endDate)
+          .in('accounts.account_type', ['REVENUE', 'COGS', 'OPEX', 'OTHER']),
+        scope.locationIds,
+      ),
+    { label: 'board-package income-statement gl_entry_lines' },
   );
-
-  const { data, error } = await query;
   if (error) throw new Error(error.message);
   let rows = (data ?? []) as unknown as Record<string, unknown>[];
 
@@ -79,11 +83,16 @@ export async function fetchIncomeStatement(
     const entryIds = [
       ...new Set(rows.map((line) => (line.gl_entries as Record<string, unknown>).id as string)),
     ];
-    const { data: bankTxns } = await supabase
-      .from('bank_transactions')
-      .select('gl_entry_id')
-      .in('gl_entry_id', entryIds)
-      .in('status', ['APPROVED', 'CATEGORIZED', 'RECONCILED']);
+    const { data: bankTxns } = await fetchAllIn(
+      entryIds,
+      (chunk) =>
+        supabase
+          .from('bank_transactions')
+          .select('gl_entry_id')
+          .in('gl_entry_id', chunk)
+          .in('status', ['APPROVED', 'CATEGORIZED', 'RECONCILED']),
+      { label: 'board-package cash-basis bank_transactions' },
+    );
     const cashEntryIds = new Set((bankTxns ?? []).map((t) => t.gl_entry_id as string));
     rows = rows.filter((line) => cashEntryIds.has((line.gl_entries as Record<string, unknown>).id as string));
   }
@@ -192,16 +201,19 @@ export async function fetchBalanceSheet(
   supabase: SupabaseClient,
   scope: { asOfDate: string; locationIds: string[] },
 ): Promise<BalanceSheetPayload> {
-  let query = applyLoc(
-    supabase
-      .from('gl_entry_lines')
-      .select(IS_SELECT)
-      .eq('gl_entries.status', 'POSTED')
-      .lte('gl_entries.entry_date', scope.asOfDate)
-      .in('accounts.account_type', ['ASSET', 'LIABILITY', 'EQUITY']),
-    scope.locationIds,
+  const { data, error } = await fetchAll(
+    () =>
+      applyLoc(
+        supabase
+          .from('gl_entry_lines')
+          .select(IS_SELECT)
+          .eq('gl_entries.status', 'POSTED')
+          .lte('gl_entries.entry_date', scope.asOfDate)
+          .in('accounts.account_type', ['ASSET', 'LIABILITY', 'EQUITY']),
+        scope.locationIds,
+      ),
+    { label: 'board-package balance-sheet gl_entry_lines' },
   );
-  const { data, error } = await query;
   if (error) throw new Error(error.message);
 
   interface Acc {
@@ -332,11 +344,14 @@ export async function fetchCashFlow(
     endingCashCents: 0,
   };
 
-  let entriesQ = applyLoc(
-    supabase.from('gl_entries').select('id').eq('status', 'POSTED').gte('entry_date', scope.startDate).lte('entry_date', scope.endDate),
-    scope.locationIds,
+  const { data: entryIds } = await fetchAll(
+    () =>
+      applyLoc(
+        supabase.from('gl_entries').select('id').eq('status', 'POSTED').gte('entry_date', scope.startDate).lte('entry_date', scope.endDate),
+        scope.locationIds,
+      ),
+    { label: 'board-package cash-flow gl_entries' },
   );
-  const { data: entryIds } = await entriesQ;
   if (!entryIds || entryIds.length === 0) return empty;
 
   const { data: accts } = await supabase.from('accounts').select('id, account_type, account_sub_type, is_bank_account, name');
@@ -356,10 +371,15 @@ export async function fetchCashFlow(
   const arIds = orgId ? await resolveRoleIds(supabase, orgId, ['AR_CONTROL', 'UNBILLED_RECEIVABLE', 'RETAINAGE_RECEIVABLE', 'ALLOWANCE_DOUBTFUL']) : new Set<string>();
   const apIds = orgId ? await resolveRoleIds(supabase, orgId, ['AP_CONTROL', 'RETAINAGE_PAYABLE', 'ACCRUED_EXPENSES']) : new Set<string>();
 
-  const { data: lines } = await supabase
-    .from('gl_entry_lines')
-    .select('account_id, debit_cents, credit_cents')
-    .in('gl_entry_id', entryIds.map((e: { id: string }) => e.id));
+  const { data: lines } = await fetchAllIn(
+    entryIds.map((e: { id: string }) => e.id),
+    (chunk) =>
+      supabase
+        .from('gl_entry_lines')
+        .select('account_id, debit_cents, credit_cents')
+        .in('gl_entry_id', chunk),
+    { label: 'board-package cash-flow gl_entry_lines' },
+  );
 
   let revenue = 0, cogs = 0, opex = 0, otherIncome = 0, otherExpense = 0, depreciation = 0;
   let arChange = 0, otherCurrentAssetChange = 0, apChange = 0, otherCurrentLiabChange = 0;
@@ -399,19 +419,22 @@ export async function fetchCashFlow(
 
   let beginningCash = 0;
   if (cashIds.size > 0) {
-    let priorQ = applyLoc(
-      supabase.from('gl_entries').select('id').eq('status', 'POSTED').lt('entry_date', scope.startDate),
-      scope.locationIds,
-    );
-    const { data: priorEntries } = await priorQ;
-    if (priorEntries && priorEntries.length > 0) {
-      const { data: cashLines } = await supabase
+    // Cash-account lines of every POSTED entry before the period (entry-location
+    // scoped, as before) — inner join on the same entry filters, paged. The old
+    // all-history entry-id list was capped at 1,000 rows (understated cash).
+    const cashIdList = Array.from(cashIds);
+    const { data: cashLines } = await fetchAll(() => {
+      let q = supabase
         .from('gl_entry_lines')
-        .select('account_id, debit_cents, credit_cents')
-        .in('gl_entry_id', priorEntries.map((e: { id: string }) => e.id))
-        .in('account_id', Array.from(cashIds));
-      for (const cl of cashLines ?? []) beginningCash += Number(cl.debit_cents ?? 0) - Number(cl.credit_cents ?? 0);
-    }
+        .select('account_id, debit_cents, credit_cents, gl_entries!inner(id)')
+        .eq('gl_entries.status', 'POSTED')
+        .lt('gl_entries.entry_date', scope.startDate)
+        .in('account_id', cashIdList);
+      if (scope.locationIds.length === 1) q = q.eq('gl_entries.location_id', scope.locationIds[0]);
+      else if (scope.locationIds.length > 1) q = q.in('gl_entries.location_id', scope.locationIds);
+      return q;
+    }, { label: 'board-package beginning-cash gl_entry_lines' });
+    for (const cl of cashLines ?? []) beginningCash += Number(cl.debit_cents ?? 0) - Number(cl.credit_cents ?? 0);
   }
 
   return {
@@ -547,16 +570,20 @@ async function fetchCashAsOfSeries(
   if (orgId) for (const id of await resolveRoleIds(supabase, orgId, ['CASH_ON_HAND', 'UNDEPOSITED_FUNDS', 'OPERATING_BANK'])) cashIds.add(id);
   if (cashIds.size === 0) return asOfDates.map(() => 0);
 
-  const q = applyLoc(
-    supabase
-      .from('gl_entry_lines')
-      .select('debit_cents, credit_cents, gl_entries!inner(entry_date, status)')
-      .eq('gl_entries.status', 'POSTED')
-      .lte('gl_entries.entry_date', maxDate)
-      .in('account_id', Array.from(cashIds)),
-    locationIds,
+  const cashIdList = Array.from(cashIds);
+  const { data: lines } = await fetchAll(
+    () =>
+      applyLoc(
+        supabase
+          .from('gl_entry_lines')
+          .select('debit_cents, credit_cents, gl_entries!inner(entry_date, status)')
+          .eq('gl_entries.status', 'POSTED')
+          .lte('gl_entries.entry_date', maxDate)
+          .in('account_id', cashIdList),
+        locationIds,
+      ),
+    { label: 'board-package cash series gl_entry_lines' },
   );
-  const { data: lines } = await q;
   const rows = (lines ?? []) as unknown as Array<{ debit_cents: number; credit_cents: number; gl_entries: { entry_date: string } }>;
 
   return asOfDates.map((asOf) => {

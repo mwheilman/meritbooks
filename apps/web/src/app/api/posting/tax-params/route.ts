@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { resolveOrgId } from '@/lib/posting/lifecycle';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * Tax-year statutory params (Section 179 cap/phase-out, bonus %).
@@ -54,6 +55,12 @@ export async function POST(request: Request) {
   }
   const taxYear = Number(body.tax_year);
   if (!Number.isInteger(taxYear)) return NextResponse.json({ error: 'tax_year (integer) is required' }, { status: 422 });
+
+  // Authorize — overriding/confirming statutory tax-year params (Section 179 cap,
+  // bonus %) drives tax depreciation; accounting configuration → settings_acct:edit.
+  if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  const guard = await requirePermission(userId, 'settings_acct', 'edit');
+  if (!guard.ok) return guard.response;
 
   const supabase = createAdminSupabase();
   try {

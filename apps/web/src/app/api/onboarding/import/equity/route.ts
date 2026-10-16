@@ -18,6 +18,7 @@ import {
   type OwnershipBasis,
   type ProposedCapTable,
 } from '@/lib/onboarding/equity-import';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * /api/onboarding/import/equity — the equity / cap-table onboarding endpoint.
@@ -194,6 +195,12 @@ export async function PUT(request: Request): Promise<NextResponse> {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+
+  // Authorize — committing the cap table persists equity holders AND writes the
+  // consolidation ownership edge (same table as consolidation/ownership); gate on
+  // settings_acct:edit like that route. (POST only PROPOSES and stays open.)
+  const guard = await requirePermission(userId, 'settings_acct', 'edit');
+  if (!guard.ok) return guard.response;
 
   let body: CommitBody;
   try {

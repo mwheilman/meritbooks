@@ -64,6 +64,7 @@ import {
   type AutonomyGovernance,
 } from '@/lib/autonomy/disposition';
 import { formatMoney } from '@meritbooks/shared';
+import { fetchAllIn, FETCH_ALL_PAGE_SIZE } from '@/lib/supabase/fetch-all';
 
 export const CUTOFF_ERROR_FEATURE = 'CUTOFF_ERROR';
 
@@ -501,21 +502,31 @@ export async function scanCutoffErrors(
 
   // 1. Load the recent posted-entry population (the cut-off risk surface).
   let entries: GlEntryRow[] = [];
+  // The most recent `limit` entries. `limit` defaults to 2,000 (route max 5,000)
+  // — above PostgREST's 1,000-row response cap — so read it in bounded `.range()`
+  // pages with a unique `id` tie-breaker rather than one silently-capped `.limit()`.
   try {
-    let q = supabase
-      .from('gl_entries')
-      .select('id, entry_number, entry_date, fiscal_period_id, location_id, source_module, memo, status')
-      .eq('status', 'POSTED')
-      .order('entry_date', { ascending: false })
-      .limit(limit);
-    if (opts.sinceDate) q = q.gte('entry_date', opts.sinceDate);
-    const { data, error } = await q;
-    if (error) {
-      console.warn('[controls/cutoff] entry load failed:', error.message);
-      summary.errors += 1;
-      return summary;
+    const loaded: GlEntryRow[] = [];
+    for (let from = 0; from < limit; from += FETCH_ALL_PAGE_SIZE) {
+      const to = Math.min(from + FETCH_ALL_PAGE_SIZE, limit) - 1;
+      let q = supabase
+        .from('gl_entries')
+        .select('id, entry_number, entry_date, fiscal_period_id, location_id, source_module, memo, status')
+        .eq('status', 'POSTED')
+        .order('entry_date', { ascending: false })
+        .order('id', { ascending: true });
+      if (opts.sinceDate) q = q.gte('entry_date', opts.sinceDate);
+      const { data, error } = await q.range(from, to);
+      if (error) {
+        console.warn('[controls/cutoff] entry load failed:', error.message);
+        summary.errors += 1;
+        return summary;
+      }
+      const page = (data ?? []) as GlEntryRow[];
+      for (const e of page) loaded.push(e);
+      if (page.length < to - from + 1) break;
     }
-    entries = (data ?? []) as GlEntryRow[];
+    entries = loaded;
   } catch (e) {
     console.warn('[controls/cutoff] entry load threw:', e instanceof Error ? e.message : e);
     summary.errors += 1;
@@ -535,10 +546,15 @@ export async function scanCutoffErrors(
 
   try {
     const [{ data: lineData }, { data: acctData }, { data: perData }] = await Promise.all([
-      supabase
-        .from('gl_entry_lines')
-        .select('gl_entry_id, account_id, debit_cents, credit_cents')
-        .in('gl_entry_id', entryIds.slice(0, 5000)),
+      fetchAllIn(
+        entryIds.slice(0, 5000),
+        (chunk) =>
+          supabase
+            .from('gl_entry_lines')
+            .select('gl_entry_id, account_id, debit_cents, credit_cents')
+            .in('gl_entry_id', chunk),
+        { label: 'controls/cutoff gl_entry_lines' },
+      ),
       supabase.from('accounts').select('id, name, account_type'),
       supabase.from('fiscal_periods').select('id, location_id, period_year, period_month, status'),
     ]);
@@ -871,10 +887,16 @@ async function loadDocDates(
   out: Map<string, { dateISO: string; table: string; id: string }>,
 ): Promise<void> {
   try {
-    const { data } = await supabase
-      .from(table)
-      .select(`id, gl_entry_id, ${dateCol}`)
-      .in('gl_entry_id', entryIds.slice(0, 5000));
+    // Up to 5,000 linked documents — paged per id-chunk past the 1,000-row cap.
+    const { data } = await fetchAllIn(
+      entryIds.slice(0, 5000),
+      (chunk) =>
+        supabase
+          .from(table)
+          .select(`id, gl_entry_id, ${dateCol}`)
+          .in('gl_entry_id', chunk),
+      { label: `controls/cutoff ${table} dates` },
+    );
     for (const row of (data ?? []) as unknown as Array<Record<string, unknown>>) {
       const glId = row.gl_entry_id as string | null;
       const dt = row[dateCol] as string | null;

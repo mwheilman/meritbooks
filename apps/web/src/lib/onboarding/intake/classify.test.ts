@@ -19,11 +19,23 @@ describe('INTAKE_ROUTES', () => {
     }
   });
 
-  it('routes FORMATION_DOC and UNKNOWN with no parser (parseEndpoint null)', () => {
-    expect(INTAKE_ROUTES.FORMATION_DOC.parseEndpoint).toBeNull();
-    expect(INTAKE_ROUTES.FORMATION_DOC.route).toBe('/onboarding');
+  it('routes formation docs (articles, EIN letter, operating agreement) to the formation parser', () => {
+    for (const t of ['FORMATION_DOC', 'EIN_LETTER', 'OPERATING_AGREEMENT'] as const) {
+      expect(INTAKE_ROUTES[t]).toMatchObject({ route: '/onboarding', parseEndpoint: '/api/onboarding/formation/parse' });
+    }
     expect(INTAKE_ROUTES.UNKNOWN.parseEndpoint).toBeNull();
     expect(INTAKE_ROUTES.UNKNOWN.route).toBe('/onboarding');
+  });
+
+  it('routes the onboarding spreadsheets to their importers', () => {
+    expect(INTAKE_ROUTES.BUDGET).toMatchObject({ route: '/budgets', parseEndpoint: '/api/budgets/import' });
+    expect(INTAKE_ROUTES.GENERAL_LEDGER.parseEndpoint).toBe('/api/onboarding/import/tb');
+    expect(INTAKE_ROUTES.CUSTOMER_LIST.parseEndpoint).toBe('/api/onboarding/import/ar');
+    expect(INTAKE_ROUTES.AR_AGING.parseEndpoint).toBe('/api/onboarding/import/ar');
+    expect(INTAKE_ROUTES.VENDOR_LIST.parseEndpoint).toBe('/api/onboarding/import/ap');
+    expect(INTAKE_ROUTES.AP_AGING.parseEndpoint).toBe('/api/onboarding/import/ap');
+    expect(INTAKE_ROUTES.ORG_CHART.parseEndpoint).toBeNull();
+    expect(INTAKE_ROUTES.EXPENSE_POLICY.parseEndpoint).toBeNull();
   });
 
   it('routes each specific type to its documented destination + parser', () => {
@@ -44,10 +56,6 @@ describe('INTAKE_ROUTES', () => {
       route: '/invoices',
       parseEndpoint: '/api/invoices/parse-contract',
     });
-    expect(INTAKE_ROUTES.OPERATING_AGREEMENT).toMatchObject({
-      route: '/onboarding',
-      parseEndpoint: '/api/onboarding/import/equity',
-    });
     expect(INTAKE_ROUTES.INSURANCE_POLICY).toMatchObject({ route: '/insurance', parseEndpoint: '/api/insurance/parse' });
     expect(INTAKE_ROUTES.PREPAID).toMatchObject({ route: '/prepaids', parseEndpoint: '/api/prepaid/parse' });
     expect(INTAKE_ROUTES.SUBSCRIPTION).toMatchObject({
@@ -58,7 +66,7 @@ describe('INTAKE_ROUTES', () => {
       route: '/payroll',
       parseEndpoint: '/api/payroll/import-register',
     });
-    expect(INTAKE_ROUTES.WIP_SCHEDULE).toMatchObject({ route: '/jobs', parseEndpoint: '/api/onboarding/import/wip' });
+    expect(INTAKE_ROUTES.WIP_SCHEDULE).toMatchObject({ route: '/onboarding/sections/jobs-wip', parseEndpoint: '/api/onboarding/import/wip' });
   });
 });
 
@@ -132,11 +140,18 @@ describe('normalizeClassification', () => {
     expect(c.parseEndpoint).toBeNull();
   });
 
-  it('routes FORMATION_DOC to onboarding with no parser', () => {
+  it('routes FORMATION_DOC to onboarding with the formation parser', () => {
     const c = normalizeClassification({ doc_type: 'FORMATION_DOC', confidence: 0.9 });
     expect(c.docType).toBe('FORMATION_DOC');
     expect(c.route).toBe('/onboarding');
-    expect(c.parseEndpoint).toBeNull();
+    expect(c.parseEndpoint).toBe('/api/onboarding/formation/parse');
+  });
+
+  it('accepts the v2 onboarding types from the model', () => {
+    expect(normalizeClassification({ doc_type: 'budget', confidence: 0.9 }).docType).toBe('BUDGET');
+    expect(normalizeClassification({ doc_type: 'EIN letter', confidence: 0.9 }).docType).toBe('EIN_LETTER');
+    expect(normalizeClassification({ doc_type: 'org chart', confidence: 0.9 }).docType).toBe('ORG_CHART');
+    expect(normalizeClassification({ doc_type: 'AR_AGING', confidence: 0.9 }).docType).toBe('AR_AGING');
   });
 
   it('never throws on empty / garbage input and defaults to UNKNOWN', () => {

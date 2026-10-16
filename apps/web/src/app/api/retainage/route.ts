@@ -3,6 +3,11 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 import { getRetainageRegister, releaseRetainage } from '@/lib/services/retainage';
+import {
+  requireMoneyMovement,
+  PAYMENTS_EXECUTE,
+  AP_DISBURSEMENT_RELEASE_FEATURE,
+} from '@/lib/rbac/payments-permission';
 
 // ─── GET: retainage register (held / released / outstanding per bill) ─────────
 export async function GET() {
@@ -28,7 +33,19 @@ const releaseSchema = z.object({
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
+
+  // Authorize — releasing retainage PAYS the subcontractor (DR Retainage Payable /
+  // CR Operating bank). It is AP money-out, so it carries the same gate as releasing
+  // an AP disbursement batch: the granular `ap_disbursement_release` key, degrading
+  // to the coarse `payments` superset, then to checks:create. Fails closed.
+  const guard = await requireMoneyMovement(
+    userId,
+    PAYMENTS_EXECUTE,
+    { feature: 'checks', action: 'create' },
+    AP_DISBURSEMENT_RELEASE_FEATURE,
+  );
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try {

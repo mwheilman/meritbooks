@@ -2,27 +2,38 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import {
-  applyMapping,
-  tieOutBlockers,
-  type MappingTable,
+  applyMappingChanges,
+  withMapping,
   type ConversionSessionData,
+  type MappingChange,
 } from '@/lib/onboarding/conversion';
-import { loadSession, saveSessionData, loadTargetAccounts } from '@/lib/onboarding/session';
+import {
+  loadSession,
+  saveSessionData,
+  loadTargetAccounts,
+  buildSessionView,
+  computeGateBlockers,
+} from '@/lib/onboarding/session';
 
 /**
- * GET  /api/onboarding/conversion/:id — the full staged session.
- * PATCH /api/onboarding/conversion/:id — human edits: remap accounts, or tie out.
+ * GET  /api/onboarding/conversion/:id — the full staged session, as the review screen
+ *      shows it: EVERY go-live blocker (base TB + subledger→control ties — the exact
+ *      predicate the post route enforces, FPB B8), in dollars, plus the cutover-month
+ *      state.
+ * PATCH /api/onboarding/conversion/:id — person edits: remap accounts (legacy
+ *      per-row path; the screen now uses …/:id/mapping for batched saves), the
+ *      mid-year acknowledgment, or "the numbers match" (tie-out).
  *
- * Any mapping edit re-runs the deterministic assembly and clears the tie-out
- * (a changed TB must be re-reviewed). Tie-out is REFUSED unless the opening TB is
- * balanced, ≥2 lines, fully mapped, and every target exists — the blocking gate.
+ * Any target change re-runs the deterministic assembly and clears the tie-out (a
+ * changed TB must be re-checked). Tie-out is REFUSED while any gate blocker remains.
  */
 
 interface PatchBody {
   /** sourceAccount -> target account number (null clears the mapping). */
   mappingUpdates?: Record<string, string | null>;
-  /** true to tie out (go-live enabling), false to reopen. */
+  /** true to confirm the numbers match (enables go-live), false to reopen. */
   tieOut?: boolean;
   /** Acknowledge a mid-year go-live (open income-statement balances are intended). */
   acknowledgePl?: boolean;
@@ -37,21 +48,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const session = await loadSession(supabase, orgId, params.id);
   if (!session) return NextResponse.json({ error: 'Conversion session not found' }, { status: 404 });
 
-  return NextResponse.json({
-    id: session.id,
-    status: session.status,
-    posted: !!session.postedGlEntryId,
-    postedGlEntryId: session.postedGlEntryId,
-    blockers: tieOutBlockers({
-      openingBalances: session.data.openingBalances,
-      balance: session.data.balance,
-      balanceSheet: session.data.balanceSheet,
-      unmapped: session.data.unmapped,
-      unknownTargets: session.data.unknownTargets,
-      sourceTotals: session.data.sourceTotals,
-    }, { plAcknowledged: session.data.plAcknowledged }),
-    ...session.data,
-  });
+  try {
+    const view = await buildSessionView(supabase, orgId, session, session.data);
+    return NextResponse.json(view);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not load the conversion' }, { status: 500 });
+  }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -60,10 +62,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
+  // Editing / attesting the opening entry is journal-entry preparation work.
+  const guard = await requirePermission(userId, 'journal_entries', 'create');
+  if (!guard.ok) return guard.response;
+
   const session = await loadSession(supabase, orgId, params.id);
   if (!session) return NextResponse.json({ error: 'Conversion session not found' }, { status: 404 });
   if (session.postedGlEntryId) {
-    return NextResponse.json({ error: 'This conversion has already been posted and is locked.' }, { status: 409 });
+    return NextResponse.json({ error: 'These opening balances are already posted and locked.' }, { status: 409 });
   }
 
   let body: PatchBody;
@@ -73,78 +79,43 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const targets = await loadTargetAccounts(supabase, orgId);
-  const targetNumbers = new Set(targets.map((t) => t.accountNumber));
-  const data: ConversionSessionData = { ...session.data };
+  let data: ConversionSessionData = { ...session.data };
 
-  // ── Human remap ────────────────────────────────────────────────────────────
-  if (body.mappingUpdates && Object.keys(body.mappingUpdates).length > 0) {
-    const mapping: MappingTable = { ...data.mapping };
-    for (const [src, target] of Object.entries(body.mappingUpdates)) {
-      if (!(src in mapping)) continue; // only accounts that exist in this file
-      if (target && !targetNumbers.has(target)) {
-        return NextResponse.json({ error: `Account ${target} is not in this chart of accounts` }, { status: 422 });
+  try {
+    // ── Person remap (legacy per-row) ────────────────────────────────────────
+    if (body.mappingUpdates && Object.keys(body.mappingUpdates).length > 0) {
+      const targets = await loadTargetAccounts(supabase, orgId);
+      const changes: MappingChange[] = Object.entries(body.mappingUpdates).map(([sourceAccount, target]) => ({ sourceAccount, target }));
+      const res = applyMappingChanges(data.mapping, changes, new Set(targets.map((t) => t.accountNumber)));
+      if (res.error) return NextResponse.json({ error: res.error }, { status: 422 });
+      data = withMapping(data, res.mapping, targets, { resetTieOut: res.targetsChanged > 0 });
+    }
+
+    // ── Mid-year go-live acknowledgment (unblocks the balance-sheet identity gate) ──
+    if (typeof body.acknowledgePl === 'boolean') {
+      data.plAcknowledged = body.acknowledgePl;
+      if (!body.acknowledgePl) { data.tiedOut = false; data.tiedOutBy = null; data.tiedOutAt = null; }
+    }
+
+    // ── "The numbers match" (tie-out) — the SAME predicate the post route enforces ──
+    if (body.tieOut === true) {
+      const { blockers } = await computeGateBlockers(supabase, orgId, data);
+      if (blockers.length > 0) {
+        return NextResponse.json({ error: 'The numbers are not ready to confirm yet.', blockers }, { status: 422 });
       }
-      mapping[src] = target
-        ? { targetAccountNumber: target, confidence: 1, source: 'human', reasoning: 'Mapped by a person.' }
-        : { targetAccountNumber: null, confidence: null, source: 'unmapped' };
+      data.tiedOut = true;
+      data.tiedOutBy = userId;
+      data.tiedOutAt = new Date().toISOString();
+    } else if (body.tieOut === false) {
+      data.tiedOut = false;
+      data.tiedOutBy = null;
+      data.tiedOutAt = null;
     }
-    const assembled = applyMapping(data.sourceLines, mapping, targets);
-    data.mapping = mapping;
-    data.openingBalances = assembled.openingBalances;
-    data.balance = assembled.balance;
-    data.balanceSheet = assembled.balanceSheet;
-    data.unmapped = assembled.unmapped;
-    data.unknownTargets = assembled.unknownTargets;
-    data.sourceTotals = assembled.sourceTotals;
-    // A changed TB must be re-tied-out and re-acknowledged.
-    data.plAcknowledged = false;
-    data.tiedOut = false;
-    data.tiedOutBy = null;
-    data.tiedOutAt = null;
+
+    await saveSessionData(supabase, orgId, params.id, data);
+    const view = await buildSessionView(supabase, orgId, session, data);
+    return NextResponse.json(view);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not update the conversion' }, { status: 500 });
   }
-
-  // ── Mid-year go-live acknowledgment (unblocks the balance-sheet identity gate) ──
-  if (typeof body.acknowledgePl === 'boolean') {
-    data.plAcknowledged = body.acknowledgePl;
-  }
-
-  // ── Tie-out toggle (the blocking gate) ───────────────────────────────────────
-  if (body.tieOut === true) {
-    const blockers = tieOutBlockers({
-      openingBalances: data.openingBalances,
-      balance: data.balance,
-      balanceSheet: data.balanceSheet,
-      unmapped: data.unmapped,
-      unknownTargets: data.unknownTargets,
-      sourceTotals: data.sourceTotals,
-    }, { plAcknowledged: data.plAcknowledged });
-    if (blockers.length > 0) {
-      return NextResponse.json({ error: 'Opening trial balance is not ready to tie out', blockers }, { status: 422 });
-    }
-    data.tiedOut = true;
-    data.tiedOutBy = userId;
-    data.tiedOutAt = new Date().toISOString();
-  } else if (body.tieOut === false) {
-    data.tiedOut = false;
-    data.tiedOutBy = null;
-    data.tiedOutAt = null;
-  }
-
-  await saveSessionData(supabase, orgId, params.id, data);
-
-  return NextResponse.json({
-    id: params.id,
-    status: session.status,
-    posted: false,
-    blockers: tieOutBlockers({
-      openingBalances: data.openingBalances,
-      balance: data.balance,
-      balanceSheet: data.balanceSheet,
-      unmapped: data.unmapped,
-      unknownTargets: data.unknownTargets,
-      sourceTotals: data.sourceTotals,
-    }, { plAcknowledged: data.plAcknowledged }),
-    ...data,
-  });
 }

@@ -42,6 +42,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
 /** The visual grouping a readiness item belongs to. */
 export type ReadinessGroup =
@@ -128,22 +129,31 @@ async function detectOpeningBalances(
   orgId: string,
 ): Promise<OpeningDetection | null> {
   try {
-    const { data: entries, error } = await supabase
-      .from('gl_entries')
-      .select('id')
-      .eq('org_id', orgId)
-      .eq('source_module', 'OPENING_BALANCE');
+    const { data: entries, error } = await fetchAll(
+      () =>
+        supabase
+          .from('gl_entries')
+          .select('id')
+          .eq('org_id', orgId)
+          .eq('source_module', 'OPENING_BALANCE'),
+      { label: 'readiness opening gl_entries' },
+    );
 
     if (error) return null;
     const ids = (entries ?? []).map((e) => (e as { id: string }).id);
     if (ids.length === 0) return { done: false, tiedOut: undefined };
 
     // Sum the opening entries' lines to confirm the aggregate ties out.
-    const { data: lines, error: linesError } = await supabase
-      .from('gl_entry_lines')
-      .select('debit_cents, credit_cents')
-      .eq('org_id', orgId)
-      .in('gl_entry_id', ids);
+    const { data: lines, error: linesError } = await fetchAllIn(
+      ids,
+      (chunk) =>
+        supabase
+          .from('gl_entry_lines')
+          .select('debit_cents, credit_cents')
+          .eq('org_id', orgId)
+          .in('gl_entry_id', chunk),
+      { label: 'readiness opening gl_entry_lines' },
+    );
 
     if (linesError || !lines) return { done: true, tiedOut: undefined };
 

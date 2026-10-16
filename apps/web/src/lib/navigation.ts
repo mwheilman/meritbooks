@@ -175,6 +175,7 @@ export const navigation: NavGroup[] = [
     label: 'Settings & Admin',
     items: [
       { label: 'Get Started', href: '/onboarding', icon: Sparkles },
+      { label: 'Many Companies', href: '/onboarding/portfolio', icon: Building2 },
       { label: 'Plan & Billing', href: '/settings/billing', icon: CreditCard },
       { label: 'Payments', href: '/settings/payments', icon: CreditCard },
       { label: 'Approval Workflows', href: '/settings/approvals', icon: ClipboardCheck },

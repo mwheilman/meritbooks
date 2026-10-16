@@ -38,13 +38,42 @@ export function defaultStatus(year: number, month: number, now: Date = new Date(
   return 'OPEN';
 }
 
+/**
+ * Status for a month generated for a company that is being CONVERTED onto MeritBooks
+ * (a pre-go-live year). Months before the current month are SOFT_CLOSE (postable —
+ * opening balances and catch-up entries must be able to land there); the current
+ * month and later are OPEN. NEVER HARD_CLOSE: a brand-new book has nothing to lock
+ * yet, and a hard-closed cutover month would block the opening entry (FPB B1).
+ */
+export function preGoLiveStatus(year: number, month: number, now: Date = new Date()): PeriodStatus {
+  if (year < now.getUTCFullYear()) return 'SOFT_CLOSE';
+  if (year === now.getUTCFullYear() && month < now.getUTCMonth() + 1) return 'SOFT_CLOSE';
+  return 'OPEN';
+}
+
 export interface GenerateResult { locationId: string; created: number; skipped: number }
+
+export interface GenerateYearOptions {
+  /**
+   * Optional per-month status override. Defaults to `defaultStatus` (prior years
+   * HARD_CLOSE) so existing callers are unchanged; onboarding passes
+   * `preGoLiveStatus` so a conversion year is never hard-closed.
+   */
+  statusFor?: (year: number, month: number, now: Date) => PeriodStatus;
+}
 
 /**
  * Generate the 12 monthly periods for a location + year. Idempotent: existing
  * months are left untouched; only missing ones are inserted.
  */
-export async function generateYear(db: DB, orgId: string, locationId: string, year: number): Promise<GenerateResult> {
+export async function generateYear(
+  db: DB,
+  orgId: string,
+  locationId: string,
+  year: number,
+  opts: GenerateYearOptions = {},
+): Promise<GenerateResult> {
+  const statusFor = opts.statusFor ?? defaultStatus;
   const { data: existing } = await db
     .from('fiscal_periods')
     .select('period_month')
@@ -66,7 +95,7 @@ export async function generateYear(db: DB, orgId: string, locationId: string, ye
       period_month: month,
       start_date,
       end_date,
-      status: defaultStatus(year, month, now),
+      status: statusFor(year, month, now),
     });
   }
 

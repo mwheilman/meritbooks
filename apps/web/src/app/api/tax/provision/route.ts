@@ -8,6 +8,7 @@ import {
   proposeProvision,
   postProvision,
 } from '@/lib/tax/provision-service';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * Income Tax Provision (ASC 740).
@@ -85,6 +86,15 @@ export const POST = apiHandler(postSchema, async (body, ctx) => {
   if (!ctx.orgId) {
     return NextResponse.json({ error: 'No organization found', code: 'NO_ORG' }, { status: 400 });
   }
+
+  // Authorize — 'propose' stages a provision (journal_entries:create); 'post' books
+  // the balanced provision JE to the GL (journal_entries:post).
+  const guard = await requirePermission(
+    ctx.userId,
+    'journal_entries',
+    body.action === 'post' ? 'post' : 'create',
+  );
+  if (!guard.ok) return guard.response;
 
   try {
     if (body.action === 'propose') {

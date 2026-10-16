@@ -4,8 +4,9 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { resolveMigrationProvider } from '@/lib/integrations/erp/resolve-provider';
+import { sampleImportRequestBlock } from '@/lib/onboarding/sample-guard';
 import {
-  getMigrationProvider,
   getMigrationProviderDef,
   isMigrationProviderId,
   trialBalanceToConversionInput,
@@ -60,7 +61,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unknown migration provider', code: 'NOT_FOUND' }, { status: 404 });
   }
   const def = getMigrationProviderDef(erpId);
-  const provider = getMigrationProvider(erpId, { mock: !!useFixture });
+
+  // B3: sample data never reaches a real company's books in production.
+  const sampleBlock = sampleImportRequestBlock(useFixture, { orgId: guard.orgId });
+  if (sampleBlock) return NextResponse.json(sampleBlock, { status: 403 });
+
+  // Org-aware: live only for THIS org's connected QBO; never an implicit mock.
+  const { provider } = await resolveMigrationProvider(erpId, { orgId: guard.orgId, mock: !!useFixture });
 
   // Pull the trial balance — the opening-balances feed for the conversion pipeline.
   const tb = await provider.fetchTrialBalance();

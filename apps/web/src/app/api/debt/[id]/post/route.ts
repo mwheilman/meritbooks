@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { recordInterestAccrual, recordDebtPayment } from '@/lib/debt/posting';
 import { PostingError } from '@/lib/posting/account-roles';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/debt/[id]/post — record a period's interest accrual OR scheduled payment.
@@ -14,8 +15,7 @@ import { PostingError } from '@/lib/posting/account-roles';
  *
  * Accounts resolve BY ROLE; the entry carries a stable source_ref and is guarded
  * against a double post (idempotent). Money-movement note: this posts to the GL, so
- * a dedicated `debt` (or GL-posting) permission SHOULD gate it — REPORTED to the
- * lead; today it mirrors the covenant/JE paths and gates on authed org context + RLS.
+ * it is gated on journal_entries:post (no dedicated `debt` key exists yet).
  */
 
 const bodySchema = z.object({
@@ -45,6 +45,11 @@ export async function POST(request: Request, { params }: Params): Promise<NextRe
     return NextResponse.json({ error: 'Validation failed', code: 'VALIDATION_ERROR' }, { status: 422 });
   }
   const { period, kind, entry_date } = parsed.data;
+
+  // Authorize — both kinds post a balanced entry to the GL (accrual, or payment
+  // DR interest/debt CR cash). Gate on journal_entries:post.
+  const guard = await requirePermission(userId, 'journal_entries', 'post');
+  if (!guard.ok) return guard.response;
 
   try {
     const result =

@@ -98,6 +98,81 @@ export function inviteAcceptUrl(token: string): string {
   return `${appBaseUrl()}/sign-up?invite=${encodeURIComponent(token)}`;
 }
 
+/** A token as minted by generateInviteToken (64 lowercase hex chars). */
+export function isWellFormedInviteToken(token: string | null | undefined): token is string {
+  return typeof token === 'string' && /^[0-9a-f]{64}$/.test(token);
+}
+
+/** Max length of the free-text "what you're being asked to finish" invite context. */
+export const INVITE_CONTEXT_MAX = 200;
+
+/** Trim + collapse whitespace + cap the invite context; empty → null. */
+export function normalizeInviteContext(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const v = raw.replace(/\s+/g, ' ').trim().slice(0, INVITE_CONTEXT_MAX);
+  return v.length > 0 ? v : null;
+}
+
+/** Exactly which env vars are missing for invite email (for an honest UI message). */
+export function inviteEmailNotConfiguredMessage(missing: { provider: boolean; from: boolean }): string {
+  const vars = [missing.provider ? 'RESEND_API_KEY' : null, missing.from ? 'INVOICE_FROM_EMAIL' : null]
+    .filter(Boolean)
+    .join(' and ');
+  return `Invite saved — but email isn't configured (${vars} not set), so nothing was sent. Copy the invite link and send it yourself.`;
+}
+
+/**
+ * Public, token-keyed preview of an invitation for the /sign-up page ("You've been
+ * invited to Acme as Accounting Manager"). The token IS the credential (it arrived by
+ * email to that address), so this reveals only what that email already contained.
+ */
+export type InvitationPreview =
+  | { state: 'valid'; email: string; orgName: string; roleLabel: string; firstName: string | null; expiresAt: string }
+  | { state: 'expired' | 'revoked' | 'accepted'; orgName: string }
+  | { state: 'not_found' };
+
+export async function previewInvitationByToken(
+  admin: SupabaseClient,
+  token: string,
+): Promise<InvitationPreview> {
+  if (!isWellFormedInviteToken(token)) return { state: 'not_found' };
+  try {
+    const { data, error } = await admin
+      .schema(INVITATIONS_SCHEMA)
+      .from(INVITATIONS_TABLE)
+      .select('org_id, email, role, first_name, status, expires_at')
+      .eq('token', token)
+      .maybeSingle();
+    if (error || !data) return { state: 'not_found' };
+    const row = data as Pick<InvitationRow, 'org_id' | 'email' | 'role' | 'first_name' | 'status' | 'expires_at'>;
+
+    const { data: org } = await admin
+      .schema('core')
+      .from('organizations')
+      .select('name')
+      .eq('id', row.org_id)
+      .maybeSingle();
+    const orgName = ((org as { name?: string } | null)?.name ?? '').trim() || 'your team';
+
+    if (row.status === 'accepted') return { state: 'accepted', orgName };
+    if (row.status === 'revoked') return { state: 'revoked', orgName };
+    if (row.status === 'expired' || new Date(row.expires_at).getTime() < Date.now()) {
+      return { state: 'expired', orgName };
+    }
+    return {
+      state: 'valid',
+      email: row.email,
+      orgName,
+      roleLabel: roleLabelFor(row.role),
+      firstName: row.first_name,
+      expiresAt: row.expires_at,
+    };
+  } catch {
+    // Degrade-safe (table not migrated / transient error): plain sign-up still works.
+    return { state: 'not_found' };
+  }
+}
+
 export function roleLabelFor(role: string): string {
   return ROLE_DEFINITIONS[role as UserRole]?.label ?? role;
 }
@@ -123,9 +198,23 @@ export function buildInvitationEmail(params: {
   roleLabel: string;
   acceptUrl: string;
   email: string;
+  /** Optional: what the inviter asked them to finish (e.g. "Opening balances for Acme"). */
+  context?: string | null;
 }): { subject: string; html: string; text: string } {
   const { orgName, roleLabel, acceptUrl, email } = params;
-  const subject = `You've been invited to ${orgName} on MeritBooks`;
+  const context = normalizeInviteContext(params.context);
+  const subject = context
+    ? `You've been invited to ${orgName} on MeritBooks — ${context}`
+    : `You've been invited to ${orgName} on MeritBooks`;
+  const contextHtml = context
+    ? `
+          <tr><td style="padding:16px 32px 0 32px;">
+            <div style="border:1px solid #1f2937;background:#0b0f14;border-radius:8px;padding:12px 14px;">
+              <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#64748b;font-weight:600;">Waiting for you</div>
+              <div style="margin-top:4px;font-size:14px;line-height:1.5;color:#ffffff;">${escapeHtml(context)}</div>
+            </div>
+          </td></tr>`
+    : '';
 
   const html = `<!doctype html>
 <html>
@@ -143,7 +232,7 @@ export function buildInvitationEmail(params: {
               <strong style="color:#10b981;">${escapeHtml(roleLabel)}</strong>. Accept your invitation to
               set up your login and start working the books.
             </p>
-          </td></tr>
+          </td></tr>${contextHtml}
           <tr><td style="padding:24px 32px 8px 32px;">
             <a href="${acceptUrl}" style="display:inline-block;background:#10b981;color:#04120b;text-decoration:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:8px;">Accept invitation</a>
           </td></tr>
@@ -163,6 +252,7 @@ export function buildInvitationEmail(params: {
     `You've been invited to ${orgName} on MeritBooks.`,
     ``,
     `Role: ${roleLabel}`,
+    ...(context ? [`Waiting for you: ${context}`] : []),
     `Accept your invitation: ${acceptUrl}`,
     ``,
     `Sign up with ${email} — your role is tied to that address.`,

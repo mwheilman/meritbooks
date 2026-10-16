@@ -1,71 +1,55 @@
-'use client';
+export const dynamic = 'force-dynamic';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
+import { redirect } from 'next/navigation';
+import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api-handler';
+import { createAuthedServerSupabase } from '@/lib/supabase/authed';
+import { createAdminSupabase } from '@/lib/supabase/server';
+import { resolveFrontDoor } from '@/lib/onboarding/flow';
 
 /**
- * Root router. Sends the user to the right first surface:
- *   - Org not yet provisioned (setup_complete = false) → /setup (org creation).
- *   - Org provisioned but tenant has never gone live (no GL activity / opening
- *     entry and not flagged onboarded) → /onboarding (the unified first-run wizard).
- *   - Otherwise → /dashboard.
+ * Root router — "one front door" (FPB-onboarding §2 principle 1, §4 B6).
  *
- * The first-run signal comes from /api/onboarding/status (firstRun). It is derived
- * from real GL activity, so an established tenant is never bounced back into the
- * wizard. Any lookup failure falls back to /dashboard (never traps the user).
+ * Sign-in lands here and the user is sent to their NEXT UNFINISHED THING, decided on
+ * the server in one pass (no client round-trips, no flash):
+ *   - Not signed in                        → /sign-in
+ *   - No resolvable organization           → /setup (create the organization — or,
+ *                                            for an existing member whose session has
+ *                                            no active org, re-activate it)
+ *   - The org's SETUP OWNER, with a company
+ *     that is not yet live                 → /onboarding (per-company first run)
+ *   - An INVITEE / member who can't run
+ *     setup, first login (tour not seen)   → /onboarding/tour
+ *   - Otherwise                            → /dashboard
+ * (Decision: lib/onboarding/front-door.ts — shared with the dashboard first-run redirect.)
+ *
+ * The org is the SAME one every API route resolves (requireAuth → resolveTenantOrgId,
+ * claim-first, no first-org fallback). Liveness is per company (lib/onboarding/status
+ * `loadRouterOnboarding`): opening balances posted, an explicit start-fresh choice, or
+ * — in an established org — real posted books. Any failure degrades to /dashboard;
+ * the router can never trap a user.
  */
-export default function RootPage() {
-  const router = useRouter();
-  const [checking, setChecking] = useState(true);
+export default async function RootPage() {
+  let destination = '/dashboard';
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function route() {
-      try {
-        const setupRes = await fetch('/api/setup');
-        const setup = (await setupRes.json()) as { setupComplete?: boolean };
-
-        if (!setup.setupComplete) {
-          if (!cancelled) router.replace('/setup');
-          return;
-        }
-
-        // Setup done — check whether the tenant still needs first-run onboarding.
-        try {
-          const statusRes = await fetch('/api/onboarding/status');
-          const status = (await statusRes.json()) as { firstRun?: boolean; orgResolved?: boolean };
-          if (!cancelled && status.firstRun === true && status.orgResolved !== false) {
-            router.replace('/onboarding');
-            return;
-          }
-        } catch {
-          /* onboarding status is best-effort; fall through to dashboard */
-        }
-
-        if (!cancelled) router.replace('/dashboard');
-      } catch {
-        if (!cancelled) router.replace('/dashboard');
-      } finally {
-        if (!cancelled) setChecking(false);
+  try {
+    const authed = await requireAuth();
+    if (authed instanceof NextResponse) {
+      destination = '/sign-in';
+    } else if (!authed.orgId) {
+      destination = '/setup';
+    } else {
+      const db = await createAuthedServerSupabase();
+      if (db) {
+        destination = await resolveFrontDoor({
+          db, admin: createAdminSupabase(), orgId: authed.orgId, clerkUserId: authed.userId,
+        });
       }
     }
-
-    void route();
-    return () => { cancelled = true; };
-  }, [router]);
-
-  if (checking) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-slate-950">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mx-auto mb-3" />
-          <p className="text-sm text-slate-500">Loading MeritBooks...</p>
-        </div>
-      </div>
-    );
+  } catch {
+    destination = '/dashboard';
   }
 
-  return null;
+  // redirect() throws a control-flow signal — keep it outside the try.
+  redirect(destination);
 }

@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { resolveOrgId } from '@/lib/posting/lifecycle';
 import { updateBankAccount } from '@/lib/money/plaid-feed';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * PATCH /api/bank-accounts/:id
@@ -39,6 +40,15 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
   const parsed = schema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: 'Validation failed' }, { status: 422 });
+
+  // Authorize — re-pointing the bank account at a different GL cash account changes
+  // where all of its activity posts (accounting configuration → settings_acct:edit);
+  // a label-only rename is an in-feed edit (bank_feed:edit).
+  const guard =
+    parsed.data.gl_account_id !== undefined
+      ? await requirePermission(userId, 'settings_acct', 'edit')
+      : await requirePermission(userId, 'bank_feed', 'edit');
+  if (!guard.ok) return guard.response;
 
   const db = createAdminSupabase();
   try {

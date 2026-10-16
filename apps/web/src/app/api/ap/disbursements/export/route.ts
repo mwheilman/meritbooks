@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requireMoneyMovement, PAYMENTS_EXECUTE, AP_DISBURSEMENT_RELEASE_FEATURE } from '@/lib/rbac/payments-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { assembleApprovedBatch } from '@/lib/ap/assemble-batch';
 import { buildDisbursementBatch } from '@/lib/ap/disbursement-batch';
@@ -11,6 +12,23 @@ import {
   type NachaConfig,
   type NachaVendorInstruction,
 } from '@/lib/ap/disbursement-export';
+
+/**
+ * Authorize (security MEDIUM): the export file IS the payment instruction the bank
+ * executes, and it carries vendor names, amounts and remittance detail — so both
+ * the download (GET) and the EXPORTED marker (POST) are gated exactly like
+ * releasing the batch: the granular `ap_disbursement_release` money-movement key,
+ * degrading to the coarse `payments` superset, then to checks:create (the same
+ * chain as /api/ap/disbursements/release). Fails closed.
+ */
+function requireExportAuthority(userId: string) {
+  return requireMoneyMovement(
+    userId,
+    PAYMENTS_EXECUTE,
+    { feature: 'checks', action: 'create' },
+    AP_DISBURSEMENT_RELEASE_FEATURE,
+  );
+}
 
 /**
  * GET /api/ap/disbursements/export?format=csv|nacha — download the payment FILE.
@@ -30,8 +48,11 @@ import {
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  const guard = await requireExportAuthority(userId);
+  if (!guard.ok) return guard.response;
 
   const url = new URL(request.url);
   const format = (url.searchParams.get('format') ?? 'csv').toLowerCase();
@@ -111,6 +132,9 @@ export async function POST(request: Request) {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  const guard = await requireExportAuthority(userId);
+  if (!guard.ok) return guard.response;
 
   let format = 'csv';
   try {

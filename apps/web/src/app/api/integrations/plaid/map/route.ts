@@ -11,6 +11,7 @@ import {
   ignorePendingAccount,
   syncAllPlaidItems,
 } from '@/lib/money/plaid-feed';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * GET /api/integrations/plaid/map
@@ -70,6 +71,10 @@ export async function POST(request: Request) {
   const a = await auth().catch(() => null);
   const userId = (a as { userId?: string | null } | null)?.userId ?? null;
   if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  // Authorize — mapping a linked bank account to an entity + GL cash account (or
+  // ignoring it) decides where bank activity posts; accounting configuration.
+  const guard = await requirePermission(userId, 'settings_acct', 'edit');
+  if (!guard.ok) return guard.response;
   // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
   // first-org lookup stays only as a transitional fallback when no claim.
   const claimOrgId =

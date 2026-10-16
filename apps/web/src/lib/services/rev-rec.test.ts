@@ -89,6 +89,8 @@ function makeFake(cfg: FakeConfig, cap: Captured): SupabaseClient {
     chain.delete = () => { state.op = 'delete'; return chain; };
     chain.single = async () => resolve(state);
     chain.maybeSingle = async () => resolve(state);
+    // fetchAll() pages with .range(); fixtures are < 1 page, so one call returns all.
+    chain.range = async () => resolve(state);
     chain.then = (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
       Promise.resolve(resolve(state)).then(res, rej);
     return chain;

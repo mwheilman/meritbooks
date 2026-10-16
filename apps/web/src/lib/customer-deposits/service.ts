@@ -21,6 +21,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 import {
   postJournalEntry,
   type JournalEntryLineInput,
@@ -557,13 +558,19 @@ export async function getDepositsGlBalanceCents(
   locationId?: string,
 ): Promise<number> {
   const account = await resolveRole(db, orgId, 'CUSTOMER_DEPOSITS', locationId);
-  let q = db
-    .from('v_trial_balance')
-    .select('net_balance, location_id')
-    .eq('org_id', orgId)
-    .eq('account_id', account.id);
-  if (locationId) q = q.eq('location_id', locationId);
-  const { data, error } = await q;
+  const build = () => {
+    let q = db
+      .from('v_trial_balance')
+      .select('net_balance, location_id')
+      .eq('org_id', orgId)
+      .eq('account_id', account.id);
+    if (locationId) q = q.eq('location_id', locationId);
+    return q;
+  };
+  const { data, error } = await fetchAll(build, {
+    orderBy: ['org_id', 'location_id', 'account_id'],
+    label: 'customer-deposits v_trial_balance',
+  });
   if (error) throw new PostingError(error.message);
   return (data ?? []).reduce((s, r) => s + toNum((r as { net_balance: unknown }).net_balance), 0);
 }

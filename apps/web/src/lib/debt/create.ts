@@ -13,16 +13,22 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   buildAmortizationSchedule,
   AmortizationError,
+  MONTHS_PER_PERIOD,
+  type AmortizationInput,
   type AmortizationSchedule,
 } from './amortization';
 import type { CreateDebtInput } from './schema';
-import { recordDebtOrigination } from './posting';
+import { recordDebtOrigination, EXISTING_LOAN_MARKER } from './posting';
 
 type DB = SupabaseClient;
 
 export interface CreateDebtResult {
   id: string;
   schedule: AmortizationSchedule;
+  /** True when the loan was brought over at its current balance (no origination entry). */
+  existingLoan: boolean;
+  /** True when an origination JE was posted. */
+  originationPosted: boolean;
 }
 
 export interface CreateDebtOptions {
@@ -34,6 +40,112 @@ export interface CreateDebtOptions {
   postOrigination?: boolean;
 }
 
+// ── B9: existing-loan mode ──────────────────────────────────────────────────
+
+/** Whole months from `a` to `b` (YYYY-MM-DD); a partial month does not count. Null on a bad date. */
+export function wholeMonthsBetween(a: string, b: string): number | null {
+  const ma = /^(\d{4})-(\d{2})-(\d{2})$/.exec(a);
+  const mb = /^(\d{4})-(\d{2})-(\d{2})$/.exec(b);
+  if (!ma || !mb) return null;
+  let months = (Number(mb[1]) - Number(ma[1])) * 12 + (Number(mb[2]) - Number(ma[2]));
+  if (Number(mb[3]) < Number(ma[3])) months -= 1;
+  return months;
+}
+
+function fmtDollars(cents: number): string {
+  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+export interface ExistingLoanPlan {
+  /** The forward schedule input — principal = the balance still owed at the as-of date. */
+  scheduleInput: AmortizationInput;
+  /** Payments left after the as-of date (null → payment-driven, derived by the schedule). */
+  remainingPeriods: number | null;
+  /** How the remaining count was found, for the audit note. */
+  remainingBasis: 'entered' | 'term' | 'maturity' | 'payment';
+  /** Audit note preserving the loan's original facts (amount, origination, term). */
+  note: string;
+}
+
+/**
+ * PURE: plan an EXISTING loan being brought over at its current balance (B9).
+ *
+ * The opening trial balance already carries this liability, so MeritBooks starts the
+ * loan AT the cutover: the forward schedule amortizes the CURRENT balance from the
+ * as-of date over the payments that remain. Remaining payments come from (in order):
+ * the user's entry → original term minus whole periods already elapsed since
+ * origination → periods left to maturity → the fixed payment (schedule runs to payoff).
+ *
+ * Throws AmortizationError when the loan has no payments left as of the cutover or
+ * nothing can size the schedule — before anything is written.
+ */
+export function planExistingLoan(input: CreateDebtInput): ExistingLoanPlan {
+  const balance = input.current_balance_cents ?? 0;
+  const asOf = input.balance_as_of_date ?? null;
+  if (!input.existing_loan || balance <= 0 || !asOf) {
+    throw new AmortizationError('An existing loan needs its current balance and the date it is as of');
+  }
+  const mpp = MONTHS_PER_PERIOD[input.payment_frequency];
+
+  let remaining: number | null = null;
+  let basis: ExistingLoanPlan['remainingBasis'] = 'payment';
+  if (input.remaining_periods && input.remaining_periods > 0) {
+    remaining = input.remaining_periods;
+    basis = 'entered';
+  } else if (input.term_periods && input.term_periods > 0 && input.origination_date) {
+    const elapsedMonths = wholeMonthsBetween(input.origination_date, asOf);
+    if (elapsedMonths == null) throw new AmortizationError('Origination date is not a valid date');
+    const elapsedPeriods = Math.max(0, Math.floor(elapsedMonths / mpp));
+    remaining = input.term_periods - elapsedPeriods;
+    basis = 'term';
+    if (remaining <= 0) {
+      throw new AmortizationError('By the cutover date this loan’s term has already ended — enter the payments left or the maturity date');
+    }
+  } else if (input.maturity_date) {
+    const monthsLeft = wholeMonthsBetween(asOf, input.maturity_date);
+    if (monthsLeft == null) throw new AmortizationError('Maturity date is not a valid date');
+    remaining = Math.ceil(monthsLeft / mpp);
+    basis = 'maturity';
+    if (remaining <= 0) throw new AmortizationError('The maturity date is on or before the cutover date');
+  } else if (input.term_periods && input.term_periods > 0 && !input.payment_cents) {
+    // A term with no origination date: treat it as the payments still left.
+    remaining = input.term_periods;
+    basis = 'entered';
+  }
+
+  if (remaining == null && !(input.payment_cents && input.payment_cents > 0)) {
+    throw new AmortizationError('Enter the payments left, the maturity date, or the regular payment so the schedule can be built');
+  }
+  if (input.amortization_method === 'INTEREST_ONLY' && remaining == null) {
+    throw new AmortizationError('Interest-only loans need the payments left or the maturity date');
+  }
+
+  const original = input.principal_cents;
+  const facts = [
+    `brought over at its balance of ${fmtDollars(balance)} as of ${asOf}`,
+    original && original !== balance ? `original amount ${fmtDollars(original)}` : null,
+    input.origination_date ? `originated ${input.origination_date}` : null,
+    input.term_periods ? `original term ${input.term_periods} payments` : null,
+    remaining != null ? `${remaining} payments left` : null,
+  ].filter(Boolean).join('; ');
+  const note = `${EXISTING_LOAN_MARKER} Existing loan — ${facts}. No origination entry posted: the opening trial balance carries this liability.`;
+
+  return {
+    scheduleInput: {
+      principalCents: balance,
+      annualRatePercent: input.interest_rate,
+      frequency: input.payment_frequency,
+      method: input.amortization_method,
+      termPeriods: remaining,
+      paymentCents: input.payment_cents ?? null,
+      originationDate: asOf,
+    },
+    remainingPeriods: remaining,
+    remainingBasis: basis,
+    note,
+  };
+}
+
 export async function createDebtInstrument(
   db: DB,
   orgId: string,
@@ -41,16 +153,37 @@ export async function createDebtInstrument(
   input: CreateDebtInput,
   opts: CreateDebtOptions = {},
 ): Promise<CreateDebtResult> {
+  // B9: an EXISTING loan (bringing over its current balance) starts at the cutover —
+  // the forward schedule amortizes the current balance, and NO origination entry is
+  // posted (the opening trial balance already carries the liability).
+  const existing = input.existing_loan ? planExistingLoan(input) : null;
+
   // Build the schedule FIRST — if the terms are impossible, fail before any write.
-  const schedule = buildAmortizationSchedule({
-    principalCents: input.principal_cents,
-    annualRatePercent: input.interest_rate,
-    frequency: input.payment_frequency,
-    method: input.amortization_method,
-    termPeriods: input.term_periods ?? null,
-    paymentCents: input.payment_cents ?? null,
-    originationDate: input.origination_date ?? null,
-  });
+  const schedule = buildAmortizationSchedule(
+    existing
+      ? existing.scheduleInput
+      : {
+          principalCents: input.principal_cents,
+          annualRatePercent: input.interest_rate,
+          frequency: input.payment_frequency,
+          method: input.amortization_method,
+          termPeriods: input.term_periods ?? null,
+          paymentCents: input.payment_cents ?? null,
+          originationDate: input.origination_date ?? null,
+        },
+  );
+
+  // In existing mode MeritBooks' register starts at the cutover: original_amount_cents
+  // (the register's opening principal, read by the summary / payoff / tie-out paths)
+  // and the schedule anchor are the as-of balance + date, so every consumer that
+  // derives a balance from the row agrees with the opening trial balance. The loan's
+  // TRUE original amount, origination date and term are preserved in the notes.
+  const openingPrincipal = existing ? existing.scheduleInput.principalCents : input.principal_cents;
+  const anchorDate = existing ? (input.balance_as_of_date ?? null) : (input.origination_date ?? null);
+  const termPeriods = existing ? (existing.remainingPeriods ?? schedule.periods) : (input.term_periods ?? schedule.periods);
+  const notes = existing
+    ? [existing.note, input.notes?.trim() || null].filter(Boolean).join('\n').slice(0, 2000)
+    : (input.notes ?? null);
 
   const { data: inst, error: instError } = await db
     .from('debt_instruments')
@@ -67,16 +200,16 @@ export async function createDebtInstrument(
       name: input.loan_name,
       lender: input.lender ?? null,
       facility: input.facility ?? null,
-      original_amount_cents: input.principal_cents,
-      current_balance_cents: input.principal_cents,
+      original_amount_cents: openingPrincipal,
+      current_balance_cents: openingPrincipal,
       interest_rate: input.interest_rate,
       rate_type: input.rate_type,
       amortization_method: input.amortization_method,
       payment_frequency: input.payment_frequency,
       compounding: input.compounding,
-      term_periods: input.term_periods ?? schedule.periods,
+      term_periods: termPeriods,
       monthly_payment_cents: input.payment_cents ?? schedule.regularPaymentCents,
-      origination_date: input.origination_date ?? null,
+      origination_date: anchorDate,
       maturity_date: input.maturity_date ?? null,
       status: input.status,
       loan_covenant_id: input.loan_covenant_id ?? null,
@@ -84,7 +217,7 @@ export async function createDebtInstrument(
       gl_interest_account_id: input.interest_expense_account_id ?? null,
       interest_payable_account_id: input.interest_payable_account_id ?? null,
       cash_account_id: input.cash_account_id ?? null,
-      notes: input.notes ?? null,
+      notes,
       created_by_user: userId,
     })
     .select('id')
@@ -117,7 +250,7 @@ export async function createDebtInstrument(
   // principal (idempotent per instrument). Fail CLOSED — if the GL can't accept the
   // opening entry (e.g. no fiscal period), roll the whole instrument back rather than
   // leave a subledger register that can never tie to the GL control account.
-  if (opts.postOrigination !== false) {
+  if (opts.postOrigination !== false && !existing) {
     try {
       await recordDebtOrigination(db, { orgId, instrumentId, userId });
     } catch (e) {
@@ -147,7 +280,7 @@ export async function createDebtInstrument(
       warn_headroom_pct: 0.1,
       measurement: {},
       status: 'ACTIVE',
-      effective_date: input.origination_date ?? null,
+      effective_date: input.origination_date ?? input.balance_as_of_date ?? null,
       maturity_date: input.maturity_date ?? null,
       notes: c.notes ?? c.label ?? null,
       created_by_user: userId,
@@ -168,5 +301,10 @@ export async function createDebtInstrument(
     }
   }
 
-  return { id: instrumentId, schedule };
+  return {
+    id: instrumentId,
+    schedule,
+    existingLoan: !!existing,
+    originationPosted: opts.postOrigination !== false && !existing,
+  };
 }

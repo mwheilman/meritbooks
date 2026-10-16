@@ -5,6 +5,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { getImportType, type ImportFieldDef } from '@/lib/import/definitions';
 import { coerceValue } from '@/lib/import/csv';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { createCompany } from '@/lib/companies/create-company';
+import { seedChartOfAccounts } from '@/lib/services/coa-seed';
 
 type Cell = string | number | boolean | null;
 type Row = Record<string, string>;
@@ -77,8 +80,27 @@ export async function POST(req: NextRequest) {
     const errors: RowError[] = [];
     const dryRun = body.dryRun === true;
 
+    // Authorization (security HIGH): a dry-run preview only reads, so it needs
+    // import:view; a COMMIT writes master data / sub-ledgers / the GL, so it needs
+    // import:run. Ledger imports (trial balance, GL history) write POSTED journal
+    // entries straight to the book of record, so they additionally require the
+    // same journal_entries:post grant as manual JE posting — import must not be a
+    // side door around the posting permission.
+    const importGuard = await requirePermission(ctx.userId, 'import', dryRun ? 'view' : 'run');
+    if (!importGuard.ok) return importGuard.response;
+    if (!dryRun && (def.key === 'trial_balance' || def.key === 'gl_history')) {
+      const postGuard = await requirePermission(ctx.userId, 'journal_entries', 'post');
+      if (!postGuard.ok) return postGuard.response;
+    }
+
     // ── MASTER DATA → CORE ───────────────────────────────────────────────
     if (def.target === 'core') {
+      // Creating companies mutates accounting configuration — same gate as
+      // Settings → Entities (POST /api/settings/entities).
+      if (def.key === 'entities') {
+        const guard = await requirePermission(ctx.userId, 'settings_acct', 'edit');
+        if (!guard.ok) return guard.response;
+      }
       return await importMasterData(supabase, def.key, def.fields, body, orgId, errors, dryRun);
     }
 
@@ -154,10 +176,54 @@ async function importMasterData(
     return NextResponse.json({ ok: true, inserted: 0, skipped, errors: [], destination: `core.${table}` });
   }
 
+  // Companies go through the single company-creation path so each one is born
+  // with its fiscal periods (a bare locations insert left imported companies with
+  // NO periods, so every later post to them failed). One at a time — a failure is
+  // reported per company and never strands the rest.
+  if (key === 'entities') {
+    return await importCompanies(supabase, toInsert, orgId, skipped);
+  }
+
   const { error } = await supabase.schema('core').from(table).insert(toInsert);
   if (error) return NextResponse.json({ ok: false, inserted: 0, skipped, errors: [{ row: 0, message: error.message }] }, { status: 500 });
 
   return NextResponse.json({ ok: true, inserted: toInsert.length, skipped, errors: [], destination: `core.${table}` });
+}
+
+/** Create imported companies via createCompany (location + fiscal periods), then seed the org COA once. */
+async function importCompanies(
+  supabase: SupabaseClient,
+  rows: Record<string, Cell>[],
+  orgId: string,
+  skippedSoFar: number
+) {
+  let inserted = 0;
+  let skipped = skippedSoFar;
+  const failures: RowError[] = [];
+  for (const r of rows) {
+    const res = await createCompany(supabase, {
+      orgId,
+      name: String(r.name ?? ''),
+      shortCode: r.short_code != null ? String(r.short_code) : null,
+      industry: r.industry != null ? String(r.industry) : null,
+      fiscalYearStartMonth: Number(r.fiscal_year_start_month ?? 1),
+    });
+    if (res.ok) inserted++;
+    else if (res.status === 409) skipped++; // already exists (same name or code) — dedupe, as before
+    else failures.push({ row: 0, message: `${String(r.name ?? '')}: ${res.error}` });
+  }
+  if (inserted > 0) {
+    try {
+      await seedChartOfAccounts(supabase, orgId); // org-scoped + idempotent
+    } catch (e) {
+      console.error('[import] COA seed error:', e instanceof Error ? e.message : e);
+    }
+  }
+  const ok = failures.length === 0;
+  return NextResponse.json(
+    { ok, inserted, skipped, errors: failures.slice(0, 200), destination: 'core.locations' },
+    { status: ok ? 200 : inserted > 0 ? 207 : 500 }
+  );
 }
 
 function buildCoreRow(key: string, rec: Record<string, Cell>, orgId: string): Record<string, Cell> {
@@ -348,6 +414,13 @@ async function importTrialBalance(
     errors.push({ row: 0, message: `Trial balance is out of balance: debits ${(totalDebit / 100).toFixed(2)} vs credits ${(totalCredit / 100).toFixed(2)}` });
   }
 
+  // Period lock (canon Rule F): OPEN / SOFT_CLOSE accept postings, HARD_CLOSE
+  // refuses. Checked before the dry-run return so the preview surfaces it too.
+  const period = await resolveFiscalPeriod(supabase, orgId, location.id, asOf);
+  if (period?.status === 'HARD_CLOSE') {
+    errors.push({ row: 0, message: hardClosedMessage(asOf) });
+  }
+
   const dest = 'public.gl_entries (opening balance)';
   if (dryRun || errors.length > 0) {
     return NextResponse.json({
@@ -364,10 +437,10 @@ async function importTrialBalance(
     return NextResponse.json({ ok: true, inserted: 0, skipped: 0, errors: [], destination: dest });
   }
 
-  const fiscalPeriodId = await resolveFiscalPeriod(supabase, orgId, location.id, asOf);
-  if (!fiscalPeriodId) {
+  if (!period) {
     return NextResponse.json({ ok: false, inserted: 0, skipped: 0, errors: [{ row: 0, message: `No fiscal period exists for ${asOf} on this company` }] }, { status: 422 });
   }
+  const fiscalPeriodId = period.id;
 
   const entryNumber = `OB-${location.short_code}-${asOf.replace(/-/g, '')}`;
   const { data: entry, error: entryErr } = await supabase.from('gl_entries').insert({
@@ -385,7 +458,10 @@ async function importTrialBalance(
   }).select('id').single();
 
   if (entryErr || !entry) {
-    return NextResponse.json({ ok: false, inserted: 0, skipped: 0, errors: [{ row: 0, message: entryErr?.message ?? 'Failed to create entry' }] }, { status: 500 });
+    // The DB period lock (migration 152) is the backstop if the period was
+    // hard-closed between the check above and this insert.
+    const closed = /hard-closed/i.test(entryErr?.message ?? '');
+    return NextResponse.json({ ok: false, inserted: 0, skipped: 0, errors: [{ row: 0, message: closed ? hardClosedMessage(asOf) : (entryErr?.message ?? 'Failed to create entry') }] }, { status: closed ? 422 : 500 });
   }
 
   const lineRows = lines.map((l, idx) => ({
@@ -450,6 +526,22 @@ async function importGlHistory(
     }
   }
 
+  // Period lock (canon Rule F): resolve each entry's period once (cached per
+  // month) and refuse the whole import if any entry lands in a HARD_CLOSE
+  // period — all-or-nothing, surfaced in the dry-run preview too.
+  const periodByMonth = new Map<string, FiscalPeriodRef | null>();
+  const periodOf = async (isoDate: string): Promise<FiscalPeriodRef | null> => {
+    const key = isoDate.slice(0, 7);
+    if (!periodByMonth.has(key)) periodByMonth.set(key, await resolveFiscalPeriod(supabase, orgId, location.id, isoDate));
+    return periodByMonth.get(key) ?? null;
+  };
+  for (const g of groups.values()) {
+    const p = await periodOf(g.date);
+    if (p?.status === 'HARD_CLOSE') {
+      errors.push({ row: 0, message: `Entry "${g.ref}": ${hardClosedMessage(g.date)}` });
+    }
+  }
+
   const dest = 'public.gl_entries';
   if (dryRun || errors.length > 0) {
     return NextResponse.json({
@@ -469,8 +561,9 @@ async function importGlHistory(
   let inserted = 0;
   const failures: RowError[] = [];
   for (const g of groups.values()) {
-    const fiscalPeriodId = await resolveFiscalPeriod(supabase, orgId, location.id, g.date);
-    if (!fiscalPeriodId) { failures.push({ row: 0, message: `No fiscal period for ${g.date} (entry ${g.ref})` }); continue; }
+    const period = await periodOf(g.date);
+    if (!period) { failures.push({ row: 0, message: `No fiscal period for ${g.date} (entry ${g.ref})` }); continue; }
+    const fiscalPeriodId = period.id;
 
     const { data: entry, error: entryErr } = await supabase.from('gl_entries').insert({
       org_id: orgId,
@@ -540,21 +633,28 @@ async function buildAccountMap(supabase: SupabaseClient, orgId: string) {
   return new Map((data ?? []).map((a) => [String((a as { account_number: string }).account_number), (a as { id: string }).id]));
 }
 
+interface FiscalPeriodRef { id: string; status: 'OPEN' | 'SOFT_CLOSE' | 'HARD_CLOSE' }
+
+/** User-facing refusal for an import dated into a hard-closed period. */
+function hardClosedMessage(isoDate: string): string {
+  return `The fiscal period for ${isoDate} is hard-closed, so nothing can be posted to it. Reopen the period (with a reason) to import into it, then close it again.`;
+}
+
 async function resolveFiscalPeriod(
   supabase: SupabaseClient,
   orgId: string,
   locationId: string,
   isoDate: string
-): Promise<string | null> {
+): Promise<FiscalPeriodRef | null> {
   const [y, m] = isoDate.split('-').map(Number);
   const { data } = await supabase
     .from('fiscal_periods')
-    .select('id')
+    .select('id, status')
     .eq('org_id', orgId)
     .eq('location_id', locationId)
     .eq('period_year', y)
     .eq('period_month', m)
     .limit(1)
     .single();
-  return (data as { id: string } | null)?.id ?? null;
+  return (data as FiscalPeriodRef | null) ?? null;
 }

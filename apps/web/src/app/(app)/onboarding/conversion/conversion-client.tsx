@@ -1,172 +1,99 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import {
-  Upload, ArrowRight, ArrowLeft, Check, AlertTriangle, Loader2, FileSpreadsheet,
-  CircleCheck, Sparkles, ShieldCheck, Scale, ListChecks, Lock, FileText, Filter,
+  Upload, ArrowRight, ArrowLeft, AlertTriangle, Loader2, FileSpreadsheet,
+  CircleCheck, Sparkles, CalendarDays, Info, Building2,
 } from 'lucide-react';
 import { formatMoney } from '@meritbooks/shared';
-import { parseCsv, autoMap, type ParsedCsv } from '@/lib/import/csv';
 import {
   CONVERSION_SOURCE_FIELDS,
-  type SourceLine,
-  type MappingTable,
-  type OpeningBalanceLine,
-  type BalanceCheck,
-  type BalanceSheetCheck,
-  type MappingSource,
+  cutoverExplanation,
+  defaultCutoverDate,
+  formatLongDate,
+  isIsoDate,
 } from '@/lib/onboarding/conversion';
+import { parseAccountingAmount } from '@/lib/import/spreadsheet';
+import { displayNameFromStoragePath } from '@/lib/uploads/paths';
+import { ReviewStep } from './review-step';
+import { TrialBalanceExportSteps } from './export-steps';
+import {
+  NONE,
+  type CoaAccount,
+  type Company,
+  type LoadedFile,
+  type PostResult,
+  type SessionView,
+  type Step,
+  type TbImportResponse,
+} from './types';
 
-interface Company { id: string; name: string; short_code: string }
-interface CoaAccount { accountNumber: string; name: string; accountType: string }
-
-interface Session {
-  id: string;
-  status: string;
-  posted: boolean;
-  postedGlEntryId?: string | null;
-  blockers?: string[];
-  companyId?: string;
-  companyShortCode: string;
-  asOfDate: string;
-  sourceLines: SourceLine[];
-  mapping: MappingTable;
-  openingBalances: OpeningBalanceLine[];
-  balance: BalanceCheck;
-  balanceSheet?: BalanceSheetCheck;
-  unmapped: string[];
-  unknownTargets: string[];
-  sourceTotals: { debitCents: number; creditCents: number };
-  plAcknowledged?: boolean;
-  tiedOut: boolean;
-  tiedOutBy: string | null;
-  tiedOutAt: string | null;
-  aiUsed?: boolean;
-  aiError?: string | null;
-  excluded?: { row: number; reason: string }[];
-  excludedCount?: number;
-  zeroRows?: number;
+/**
+ * Historical conversion — "bring your opening balances over".
+ *
+ * Optional prefill (the onboarding wizard passes these so the user is never asked
+ * twice): `defaultCompanyId` skips the company picker; `defaultAsOfDate` replaces the
+ * default cutover (last day of the previous month).
+ */
+export interface ConversionClientProps {
+  defaultCompanyId?: string | null;
+  defaultAsOfDate?: string | null;
+  /**
+   * Smart Intake handoff (FPB §5): a trial balance / GL file the user ALREADY dropped,
+   * by storage path (`intake/{orgId}/…`). Read straight from storage — never re-upload.
+   */
+  initialStoragePath?: string | null;
+  /**
+   * Open straight into REVIEW for an already-staged session (e.g. the wizard's live
+   * QuickBooks pull staged one). Falls back to the `?sessionId=` query param.
+   */
+  initialSessionId?: string | null;
 }
 
-interface PostResult { ok: boolean; glEntryId?: string; entryNumber?: string; lineCount?: number; totalDebitCents?: number; alreadyPosted?: boolean }
+/** Plain-English failure for a file that is a GL detail export rather than a TB. */
+const GL_DETAIL_CODE = 'GL_DETAIL_NOT_TB';
 
-type Step = 'setup' | 'map' | 'review' | 'done';
-const NONE = '__none__';
+const ACCEPT = '.xlsx,.xlsm,.csv,.pdf,image/*,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/pdf';
 
-export default function ConversionClient() {
+export default function ConversionClient({
+  defaultCompanyId = null, defaultAsOfDate = null, initialStoragePath = null, initialSessionId = null,
+}: ConversionClientProps = {}) {
+  const initialDate = isIsoDate(defaultAsOfDate) ? defaultAsOfDate : defaultCutoverDate();
   const [step, setStep] = useState<Step>('setup');
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [companyId, setCompanyId] = useState('');
-  const [asOfDate, setAsOfDate] = useState('');
-  const [csv, setCsv] = useState<ParsedCsv | null>(null);
-  const [fileName, setFileName] = useState('');
+  const [companiesState, setCompaniesState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [companyId, setCompanyId] = useState(defaultCompanyId ?? '');
+  const [pickCompany, setPickCompany] = useState(!defaultCompanyId);
+  const [asOfDate, setAsOfDate] = useState(initialDate);
+  const [file, setFile] = useState<LoadedFile | null>(null);
   const [colMapping, setColMapping] = useState<Record<string, string>>({});
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<SessionView | null>(null);
   const [coa, setCoa] = useState<CoaAccount[]>([]);
   const [posted, setPosted] = useState<PostResult | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    fetch('/api/locations')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setCompanies(Array.isArray(d) ? d : []))
-      .catch(() => setCompanies([]));
-  }, []);
-
-  // Hydrate directly into REVIEW when arriving with a staged ?sessionId — the path a
-  // direct-API migration takes after it pulls + maps the prior books and stages the
-  // same conversion session the CSV path stages. Same review, tie-out, and post UI.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const sessionId = new URLSearchParams(window.location.search).get('sessionId');
-    if (!sessionId) return;
-    let cancelled = false;
-    (async () => {
-      setBusy(true);
-      setError('');
-      try {
-        const r = await fetch(`/api/onboarding/conversion/${encodeURIComponent(sessionId)}`);
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.error ?? 'Could not load that conversion session');
-        if (cancelled) return;
-        const s = data as Session;
-        if (s.companyId) {
-          setCompanyId(s.companyId);
-          await loadCoa(s.companyId);
-        }
-        setSession(s);
-        setStep('review');
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load the conversion session');
-      } finally {
-        if (!cancelled) setBusy(false);
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const reset = useCallback(() => {
-    setStep('setup'); setCompanyId(''); setAsOfDate(''); setCsv(null); setFileName('');
-    setColMapping({}); setSession(null); setPosted(null); setError('');
-  }, []);
-
-  const onFile = useCallback(async (file: File) => {
-    setError('');
-    try {
-      const text = await file.text();
-      const parsed = parseCsv(text);
-      if (parsed.headers.length === 0 || parsed.rows.length === 0) {
-        setError('That file has no data rows. The first line must be column headers.');
-        return;
-      }
-      setCsv(parsed);
-      setFileName(file.name);
-      setColMapping(autoMap(parsed.headers, CONVERSION_SOURCE_FIELDS));
-      setStep('map');
-    } catch {
-      setError('Could not read that file. Please upload a .csv file.');
-    }
-  }, []);
-
-  // DROP-AND-PARSE: a PDF/image trial balance is read by AI into the SAME
-  // { mapping, rows } the CSV path produces, then flows through the identical
-  // map → tie-out → post steps. AI only reads the document; it never posts.
-  const [parsing, setParsing] = useState(false);
-  const onDocFile = useCallback(async (file: File) => {
-    setError('');
-    setParsing(true);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch('/api/onboarding/import/tb', { method: 'POST', body: fd });
-      const data = (await res.json()) as {
-        mapping?: Record<string, string>;
-        rows?: Record<string, string>[];
-        error?: string;
-      };
-      if (!res.ok) { setError(data.error ?? 'Could not read that trial balance.'); return; }
-      const rows = data.rows ?? [];
-      if (rows.length === 0) { setError('No account rows were found in that document. Try a clearer scan or a CSV.'); return; }
-      const mapping = data.mapping ?? {};
-      const headers = Object.keys(rows[0] ?? {});
-      setCsv({ headers, rows });
-      setColMapping(mapping);
-      setFileName(file.name);
-      setStep('map');
-    } catch {
-      setError('Could not read that trial balance. Try a clearer PDF/image, or upload a CSV.');
-    } finally {
-      setParsing(false);
-    }
-  }, []);
-
-  const setupComplete = !!companyId && !!asOfDate;
-  const mappingComplete = useMemo(
-    () => CONVERSION_SOURCE_FIELDS.filter((f) => f.required).every((f) => colMapping[f.key] && colMapping[f.key] !== NONE),
-    [colMapping],
+  const [reading, setReading] = useState(false);
+  const [hydrating, setHydrating] = useState(false);
+  const [error, setError] = useState<{ message: string; details?: string[] } | null>(null);
+  const [notice, setNotice] = useState('');
+  // The Smart Intake file waiting to be read (cleared once we've tried it).
+  const [pendingIntake, setPendingIntake] = useState<string | null>(
+    initialStoragePath && initialStoragePath.startsWith('intake/') ? initialStoragePath : null,
   );
+
+  const loadCompanies = useCallback(async () => {
+    setCompaniesState('loading');
+    try {
+      const r = await fetch('/api/locations');
+      if (!r.ok) throw new Error();
+      const d: unknown = await r.json();
+      setCompanies(Array.isArray(d) ? (d as Company[]) : []);
+      setCompaniesState('ready');
+    } catch {
+      setCompaniesState('error');
+    }
+  }, []);
+  useEffect(() => { void loadCompanies(); }, [loadCompanies]);
 
   const loadCoa = useCallback(async (locId: string) => {
     try {
@@ -174,119 +101,235 @@ export default function ConversionClient() {
       if (!r.ok) return;
       const j = (await r.json()) as { data?: CoaAccount[] };
       setCoa((j.data ?? []).filter((a) => a.accountNumber));
-    } catch { /* non-fatal — dropdowns fall back to text */ }
+    } catch { /* non-fatal — dropdowns fall back to the current value */ }
   }, []);
 
-  // STEP: analyze — POST to create the session (AI proposes the mapping).
+  // Resume straight into REVIEW with ?sessionId (direct-API migrations stage the same session).
+  useEffect(() => {
+    const sessionId = initialSessionId ?? new URLSearchParams(window.location.search).get('sessionId');
+    if (!sessionId) return;
+    let cancelled = false;
+    (async () => {
+      setHydrating(true);
+      try {
+        const r = await fetch(`/api/onboarding/conversion/${encodeURIComponent(sessionId)}`);
+        const data = (await r.json()) as SessionView & { error?: string };
+        if (!r.ok) throw new Error(data.error ?? 'We could not load that conversion.');
+        if (cancelled) return;
+        setCompanyId(data.companyId);
+        setAsOfDate(data.asOfDate);
+        await loadCoa(data.companyId);
+        setSession(data);
+        setStep('review');
+      } catch (e) {
+        if (!cancelled) setError({ message: e instanceof Error ? e.message : 'We could not load that conversion.' });
+      } finally {
+        if (!cancelled) setHydrating(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [loadCoa, initialSessionId]);
+
+  const reset = useCallback(() => {
+    setStep('setup'); setFile(null); setColMapping({}); setSession(null); setPosted(null); setError(null); setNotice('');
+    if (!defaultCompanyId) setCompanyId('');
+    setAsOfDate(initialDate);
+  }, [defaultCompanyId, initialDate]);
+
+  // One drop zone for everything: Excel/CSV are read on the server deterministically
+  // (QuickBooks title rows, blank headers, TOTAL rows); PDFs/photos are read by AI.
+  // Shared reader for both ingress shapes: a dropped File (multipart) or a Smart Intake
+  // storage path (JSON { storagePath } — the file is already in storage).
+  const readTb = useCallback(async (input: { file: File } | { storagePath: string }, fileName: string) => {
+    setError(null); setNotice(''); setReading(true);
+    try {
+      let res: Response;
+      if ('file' in input) {
+        const fd = new FormData();
+        fd.append('file', input.file);
+        res = await fetch('/api/onboarding/import/tb', { method: 'POST', body: fd });
+      } else {
+        res = await fetch('/api/onboarding/import/tb', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storagePath: input.storagePath }),
+        });
+      }
+      const data = (await res.json()) as TbImportResponse;
+      if (!res.ok) {
+        setError(data.code === GL_DETAIL_CODE
+          ? { message: data.error ?? 'This is a General Ledger report, not a trial balance. Export the Trial Balance instead.', details: ['Tip: the steps below show exactly where to find the Trial Balance in QuickBooks Online.'] }
+          : { message: data.error ?? 'We could not read that file.' });
+        return;
+      }
+      const rows = data.rows ?? [];
+      if (rows.length === 0) { setError({ message: 'We didn’t find any account rows in that file. Try the Excel export of your trial balance.' }); return; }
+      const headers = data.headers ?? Object.keys(rows[0] ?? {});
+      const loaded: LoadedFile = {
+        fileName,
+        headers,
+        rows,
+        rowNumbers: Array.isArray(data.rowNumbers) && data.rowNumbers.length === rows.length ? data.rowNumbers : null,
+        recognized: data.source === 'spreadsheet' || data.source == null,
+        asOfDateHint: isIsoDate(data.asOfDateHint ?? null) ? (data.asOfDateHint as string) : null,
+        notice: data.notice ?? null,
+        skipped: (data.dropped ?? []).map((d) => ({ row: d.row ?? null, reason: d.reason ?? d.snippet ?? 'Skipped' })),
+        titleLines: data.detected?.titleLines ?? [],
+      };
+      setFile(loaded);
+      setColMapping(data.mapping ?? {});
+      setStep('map');
+    } catch {
+      setError({ message: 'We could not read that file. Try an Excel (.xlsx) or CSV export of your trial balance.' });
+    } finally {
+      setReading(false);
+    }
+  }, []);
+
+  const onFile = useCallback((f: File) => readTb({ file: f }, f.name), [readTb]);
+
+  // Smart Intake handoff: once a company is chosen, read the file the user already
+  // dropped — straight from storage, no second upload.
+  useEffect(() => {
+    if (!pendingIntake || !companyId || hydrating || step !== 'setup') return;
+    const path = pendingIntake;
+    setPendingIntake(null);
+    void readTb({ storagePath: path }, displayNameFromStoragePath(path));
+  }, [pendingIntake, companyId, hydrating, step, readTb]);
+
+  const mappingComplete = useMemo(
+    () => CONVERSION_SOURCE_FIELDS.filter((f) => f.required).every((f) => colMapping[f.key] && colMapping[f.key] !== NONE)
+      && ['debit_cents', 'credit_cents', 'amount_cents'].some((k) => colMapping[k] && colMapping[k] !== NONE),
+    [colMapping],
+  );
+
   const analyze = async () => {
-    if (!csv) return;
-    setBusy(true); setError('');
+    if (!file) return;
+    setBusy(true); setError(null);
     const cleanMapping: Record<string, string> = {};
     Object.entries(colMapping).forEach(([k, v]) => { if (v && v !== NONE) cleanMapping[k] = v; });
     try {
       const res = await fetch('/api/onboarding/conversion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId, asOfDate, mapping: cleanMapping, rows: csv.rows }),
+        body: JSON.stringify({
+          companyId, asOfDate, mapping: cleanMapping, rows: file.rows,
+          rowNumbers: file.rowNumbers ?? undefined, fileName: file.fileName,
+        }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Could not analyze the file');
+      const data = (await res.json()) as SessionView & { error?: string; errors?: { row: number; message: string }[] };
+      if (!res.ok) {
+        setError({ message: data.error ?? 'We could not match your accounts.', details: data.errors?.slice(0, 10).map((e) => `Row ${e.row}: ${e.message}`) });
+        return;
+      }
       await loadCoa(companyId);
-      setSession(data as Session);
+      setSession(data);
       setStep('review');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Analysis failed');
+    } catch {
+      setError({ message: 'We could not match your accounts. Check your connection and try again.' });
     } finally { setBusy(false); }
   };
 
-  // Human remap → PATCH.
-  const remap = async (sourceAccount: string, target: string) => {
-    if (!session) return;
-    setBusy(true); setError('');
+  /** Shared PATCH/POST → SessionView handler with all-blockers error display. */
+  const callSession = async (url: string, method: 'PATCH' | 'POST', body: unknown): Promise<boolean> => {
+    if (!session) return false;
+    setBusy(true); setError(null); setNotice('');
     try {
-      const res = await fetch(`/api/onboarding/conversion/${session.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mappingUpdates: { [sourceAccount]: target === NONE ? null : target } }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Could not update the mapping');
-      setSession(data as Session);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Remap failed');
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = (await res.json()) as SessionView & { error?: string; blockers?: string[]; saved?: { targetsChanged: number; accepted: number } };
+      if (!res.ok) { setError({ message: data.error ?? 'That didn’t save.', details: data.blockers }); return false; }
+      setSession(data);
+      if (data.saved) {
+        const parts: string[] = [];
+        if (data.saved.accepted) parts.push(`${data.saved.accepted} strong match${data.saved.accepted === 1 ? '' : 'es'} accepted`);
+        if (data.saved.targetsChanged) parts.push(`${data.saved.targetsChanged} account${data.saved.targetsChanged === 1 ? '' : 's'} changed`);
+        setNotice(parts.length ? `Saved — ${parts.join(', ')}.` : 'Saved.');
+      }
+      return true;
+    } catch {
+      setError({ message: 'That didn’t save. Check your connection and try again.' });
+      return false;
     } finally { setBusy(false); }
   };
 
-  const toggleTieOut = async (tieOut: boolean) => {
-    if (!session) return;
-    setBusy(true); setError('');
-    try {
-      const res = await fetch(`/api/onboarding/conversion/${session.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tieOut }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error((data.blockers?.[0] as string) ?? data.error ?? 'Could not tie out');
-      setSession(data as Session);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Tie-out failed');
-    } finally { setBusy(false); }
+  const saveMapping = (changes: Record<string, string | null>, acceptStrong: boolean) => {
+    if (!session) return Promise.resolve(false);
+    return callSession(`/api/onboarding/conversion/${session.id}/mapping`, 'POST', {
+      changes: Object.entries(changes).map(([sourceAccount, target]) => ({ sourceAccount, target })),
+      ...(acceptStrong ? { acceptSuggestedAtOrAbove: 0.9 } : {}),
+    });
   };
-
-  // Acknowledge a mid-year go-live (open income-statement balances are intended).
-  const ackPl = async (acknowledgePl: boolean) => {
-    if (!session) return;
-    setBusy(true); setError('');
-    try {
-      const res = await fetch(`/api/onboarding/conversion/${session.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acknowledgePl }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Could not update acknowledgment');
-      setSession(data as Session);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed');
-    } finally { setBusy(false); }
-  };
+  const toggleTieOut = (tieOut: boolean) => { if (session) void callSession(`/api/onboarding/conversion/${session.id}`, 'PATCH', { tieOut }); };
+  const ackPl = (acknowledgePl: boolean) => { if (session) void callSession(`/api/onboarding/conversion/${session.id}`, 'PATCH', { acknowledgePl }); };
 
   const goLive = async () => {
     if (!session) return;
-    setBusy(true); setError('');
+    setBusy(true); setError(null);
     try {
       const res = await fetch(`/api/onboarding/conversion/${session.id}/post`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error((data.blockers?.[0] as string) ?? data.error ?? 'Could not post the opening entry');
-      setPosted(data as PostResult);
+      const data = (await res.json()) as PostResult & { error?: string; blockers?: string[] };
+      if (!res.ok) { setError({ message: data.error ?? 'We could not post the opening balances.', details: data.blockers }); return; }
+      setPosted(data);
       setStep('done');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Posting failed');
+    } catch {
+      setError({ message: 'We could not post the opening balances. Check your connection and try again.' });
     } finally { setBusy(false); }
   };
+
+  const company = companies.find((c) => c.id === companyId) ?? null;
 
   return (
     <div className="max-w-4xl mx-auto pb-16">
       <Stepper step={step} />
 
-      {error && (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-          <AlertTriangle size={16} className="mt-0.5 shrink-0" /> <span>{error}</span>
+      <div aria-live="assertive">
+        {error && (
+          <div role="alert" className="mb-4 flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <div>
+              <p>{error.message}</p>
+              {error.details && error.details.length > 0 && (
+                <ul className="mt-1.5 list-disc pl-4 space-y-0.5 text-xs text-rose-200/90">
+                  {error.details.map((d, i) => <li key={i}>{d}</li>)}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      <div aria-live="polite">
+        {notice && <div className="mb-4 rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300">{notice}</div>}
+      </div>
+
+      {hydrating && (
+        <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-surface-900 px-4 py-6 text-sm text-slate-400">
+          <Loader2 size={16} className="animate-spin" /> Loading your conversion…
         </div>
       )}
 
-      {step === 'setup' && (
+      {!hydrating && step === 'setup' && pendingIntake && !companyId && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-500/25 bg-blue-500/5 px-4 py-2.5 text-sm text-blue-200" role="status">
+          <Info size={15} className="mt-0.5 shrink-0" />
+          <span>
+            We have <span className="font-medium text-white">{displayNameFromStoragePath(pendingIntake)}</span> from your drop.
+            Choose the company it belongs to and we&apos;ll read it — no need to upload it again.
+          </span>
+        </div>
+      )}
+
+      {!hydrating && step === 'setup' && (
         <SetupStep
-          companies={companies} companyId={companyId} setCompanyId={setCompanyId}
-          asOfDate={asOfDate} setAsOfDate={setAsOfDate} setupComplete={setupComplete} onFile={onFile}
-          onDocFile={onDocFile} parsing={parsing}
+          companies={companies} companiesState={companiesState} onRetryCompanies={loadCompanies}
+          companyId={companyId} setCompanyId={setCompanyId} company={company}
+          pickCompany={pickCompany} onChangeCompany={() => setPickCompany(true)}
+          asOfDate={asOfDate} setAsOfDate={setAsOfDate} onFile={onFile} reading={reading}
         />
       )}
 
-      {step === 'map' && csv && (
+      {step === 'map' && file && (
         <MapStep
-          csv={csv} fileName={fileName} colMapping={colMapping} setColMapping={setColMapping}
+          file={file} asOfDate={asOfDate} onUseFileDate={(d) => setAsOfDate(d)}
+          colMapping={colMapping} setColMapping={setColMapping}
           mappingComplete={mappingComplete} busy={busy} onBack={() => setStep('setup')} onAnalyze={analyze}
         />
       )}
@@ -294,353 +337,225 @@ export default function ConversionClient() {
       {step === 'review' && session && (
         <ReviewStep
           session={session} coa={coa} busy={busy}
-          onBack={() => setStep('map')} onRemap={remap} onTieOut={toggleTieOut} onPost={goLive} onAckPl={ackPl}
+          onBack={() => setStep(file ? 'map' : 'setup')} onSaveMapping={saveMapping}
+          onTieOut={toggleTieOut} onPost={goLive} onAckPl={ackPl}
         />
       )}
 
-      {step === 'done' && posted && (
-        <DoneStep posted={posted} onReset={reset} />
-      )}
+      {step === 'done' && posted && <DoneStep posted={posted} onReset={reset} />}
     </div>
   );
 }
 
-// ───────────────────────────── STEP 1: SETUP ─────────────────────────────
+// ───────────────────────────── STEP 1: COMPANY, DATE, FILE ─────────────────────────────
 function SetupStep({
-  companies, companyId, setCompanyId, asOfDate, setAsOfDate, setupComplete, onFile, onDocFile, parsing,
+  companies, companiesState, onRetryCompanies, companyId, setCompanyId, company, pickCompany, onChangeCompany,
+  asOfDate, setAsOfDate, onFile, reading,
 }: {
-  companies: Company[]; companyId: string; setCompanyId: (v: string) => void;
-  asOfDate: string; setAsOfDate: (v: string) => void; setupComplete: boolean; onFile: (f: File) => void;
-  onDocFile: (f: File) => void; parsing: boolean;
+  companies: Company[]; companiesState: 'loading' | 'ready' | 'error'; onRetryCompanies: () => void;
+  companyId: string; setCompanyId: (v: string) => void; company: Company | null;
+  pickCompany: boolean; onChangeCompany: () => void;
+  asOfDate: string; setAsOfDate: (v: string) => void; onFile: (f: File) => void; reading: boolean;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const ready = !!companyId && isIsoDate(asOfDate) && !reading;
+
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-slate-400 mb-1">Company to convert</label>
-          <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white">
-            <option value="">Select a company…</option>
-            {companies.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.short_code})</option>)}
-          </select>
-          {companies.length === 0 && <p className="text-2xs text-amber-400 mt-1">No companies yet — import Companies/Entities first.</p>}
+          <label htmlFor="conv-company" className="block text-xs font-medium text-slate-400 mb-1">Which company?</label>
+          {!pickCompany ? (
+            <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm">
+              <span className="flex items-center gap-2 text-white">
+                <Building2 size={14} className="text-slate-500" />
+                {company ? `${company.name} (${company.short_code})` : companiesState === 'loading' ? 'Loading…' : 'Selected company'}
+              </span>
+              <button type="button" onClick={onChangeCompany} className="text-2xs text-slate-400 hover:text-slate-200 underline-offset-2 hover:underline">Change</button>
+            </div>
+          ) : companiesState === 'error' ? (
+            <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs text-rose-300">
+              We couldn&apos;t load your companies. <button type="button" onClick={onRetryCompanies} className="underline">Try again</button>
+            </div>
+          ) : (
+            <select id="conv-company" value={companyId} onChange={(e) => setCompanyId(e.target.value)} disabled={companiesState === 'loading'}
+              className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white disabled:opacity-60">
+              <option value="">{companiesState === 'loading' ? 'Loading companies…' : 'Choose a company…'}</option>
+              {companies.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.short_code})</option>)}
+            </select>
+          )}
+          {pickCompany && companiesState === 'ready' && companies.length === 0 && (
+            <p className="text-2xs text-amber-400 mt-1">
+              No companies yet — <Link href="/onboarding" className="underline">add your company first</Link>.
+            </p>
+          )}
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-400 mb-1">Opening balances as of</label>
-          <input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white" />
-          <p className="text-2xs text-slate-500 mt-1">Usually the day before your first live day (e.g. prior year-end).</p>
+          <label htmlFor="conv-asof" className="block text-xs font-medium text-slate-400 mb-1">Opening balances as of</label>
+          <div className="relative">
+            <CalendarDays size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input id="conv-asof" type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)}
+              className="w-full rounded-lg border border-slate-700 bg-surface-900 pl-9 pr-3 py-2 text-sm text-white" />
+          </div>
+          <p className="text-2xs text-slate-400 mt-1">{cutoverExplanation(asOfDate)}</p>
         </div>
       </div>
 
-      <label className={`block rounded-xl border-2 border-dashed px-6 py-12 text-center transition-colors ${setupComplete ? 'cursor-pointer border-slate-700 hover:border-brand-500/60 bg-surface-900' : 'border-slate-800 bg-surface-900/40 cursor-not-allowed opacity-60'}`}>
-        <input type="file" accept=".csv,text/csv" className="hidden" disabled={!setupComplete}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
-        <Upload size={28} className="mx-auto mb-3 text-slate-500" />
-        <p className="text-sm text-slate-300 font-medium">Drop a trial balance CSV here or click to browse</p>
-        <p className="text-xs text-slate-500 mt-1">First row must be column headers: an account column, and debit / credit columns.</p>
-      </label>
-
-      <div className="flex items-center gap-3 text-2xs text-slate-600">
-        <span className="h-px flex-1 bg-slate-800" /> or <span className="h-px flex-1 bg-slate-800" />
+      <div>
+        <input ref={inputRef} id="conv-file" type="file" accept={ACCEPT} className="sr-only" disabled={!ready}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ''; }} />
+        <label
+          htmlFor="conv-file"
+          onDragOver={(e) => { if (ready) { e.preventDefault(); setDragOver(true); } }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (ready && f) onFile(f); }}
+          onKeyDown={(e) => { if (ready && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); inputRef.current?.click(); } }}
+          tabIndex={ready ? 0 : -1}
+          aria-disabled={!ready}
+          className={`block rounded-xl border-2 border-dashed px-6 py-12 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+            ready ? `cursor-pointer ${dragOver ? 'border-brand-500 bg-brand-500/5' : 'border-slate-700 hover:border-brand-500/60 bg-surface-900'}` : 'border-slate-800 bg-surface-900/40 cursor-not-allowed opacity-60'}`}
+        >
+          {reading ? (
+            <>
+              <Loader2 size={26} className="mx-auto mb-3 text-brand-400 animate-spin" />
+              <p className="text-sm text-slate-300 font-medium">Reading your file…</p>
+            </>
+          ) : (
+            <>
+              <Upload size={28} className="mx-auto mb-3 text-slate-500" />
+              <p className="text-sm text-slate-200 font-medium">Drop your account balances (trial balance) here, or click to choose a file</p>
+              <p className="text-xs text-slate-500 mt-1">Excel (.xlsx), CSV, or PDF — straight from your old system, title rows and all.</p>
+            </>
+          )}
+        </label>
+        {!companyId && <p className="text-2xs text-slate-500 mt-2">Choose a company first.</p>}
       </div>
 
-      <label className={`block rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors ${setupComplete && !parsing ? 'cursor-pointer border-indigo-500/30 hover:border-indigo-500/60 bg-indigo-500/[0.04]' : 'border-slate-800 bg-surface-900/40 cursor-not-allowed opacity-60'}`}>
-        <input type="file" accept=".pdf,image/*" className="hidden" disabled={!setupComplete || parsing}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onDocFile(f); e.target.value = ''; }} />
-        {parsing ? (
-          <>
-            <Loader2 size={24} className="mx-auto mb-2 text-indigo-400 animate-spin" />
-            <p className="text-sm text-slate-300">Reading your trial balance…</p>
-            <p className="text-2xs text-slate-500 mt-1">AI extracts each account and its debit/credit — you tie out and post.</p>
-          </>
-        ) : (
-          <>
-            <Sparkles size={22} className="mx-auto mb-2 text-indigo-400" />
-            <p className="text-sm text-slate-300 font-medium">…or drop a PDF / image of your trial balance</p>
-            <p className="text-2xs text-slate-500 mt-1">No spreadsheet? Drop the report straight from your prior system — AI reads it.</p>
-          </>
-        )}
-      </label>
-      {!setupComplete && <p className="text-2xs text-slate-500">Pick a company and an as-of date to enable the upload.</p>}
-
-      <div className="rounded-lg border border-slate-800 bg-surface-900/60 px-4 py-3">
-        <p className="text-2xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Expected columns</p>
-        <div className="flex flex-wrap gap-1.5">
-          {CONVERSION_SOURCE_FIELDS.map((f) => (
-            <span key={f.key} className="inline-flex items-center rounded-md bg-slate-800 px-2 py-0.5 text-2xs text-slate-300">
-              {f.label}{f.required && <span className="text-rose-400 ml-0.5">*</span>}
-            </span>
-          ))}
-        </div>
-      </div>
+      <TrialBalanceExportSteps asOfDate={asOfDate} />
     </div>
   );
 }
 
-// ───────────────────────────── STEP 2: MAP COLUMNS ─────────────────────────────
+// ───────────────────────────── STEP 2: CHECK COLUMNS ─────────────────────────────
 function MapStep({
-  csv, fileName, colMapping, setColMapping, mappingComplete, busy, onBack, onAnalyze,
+  file, asOfDate, onUseFileDate, colMapping, setColMapping, mappingComplete, busy, onBack, onAnalyze,
 }: {
-  csv: ParsedCsv; fileName: string; colMapping: Record<string, string>;
-  setColMapping: (fn: (m: Record<string, string>) => Record<string, string>) => void;
+  file: LoadedFile; asOfDate: string; onUseFileDate: (d: string) => void;
+  colMapping: Record<string, string>; setColMapping: (fn: (m: Record<string, string>) => Record<string, string>) => void;
   mappingComplete: boolean; busy: boolean; onBack: () => void; onAnalyze: () => void;
 }) {
+  const preview = file.rows.slice(0, 6);
+  const dateMismatch = file.asOfDateHint && file.asOfDateHint !== asOfDate;
+  const totals = useMemo(() => sumDollarColumns(file.rows, colMapping), [file.rows, colMapping]);
+
   return (
     <div>
-      <BackBtn onClick={onBack} label="Change company or file" />
-      <div className="flex items-center gap-2 text-sm text-slate-400 mb-4">
-        <FileSpreadsheet size={15} /> <span className="text-slate-300">{fileName}</span>
-        <span className="text-slate-600">·</span> <span>{csv.rows.length} rows</span>
-      </div>
-      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Match your columns</p>
-      <div className="rounded-xl border border-slate-800 divide-y divide-slate-800 overflow-hidden">
-        {CONVERSION_SOURCE_FIELDS.map((f) => (
-          <div key={f.key} className="flex items-center gap-3 px-4 py-2.5 bg-surface-900">
-            <div className="w-1/2">
-              <span className="text-sm text-slate-200">{f.label}</span>
-              {f.required && <span className="text-rose-400 ml-1">*</span>}
-              {f.help && <p className="text-2xs text-slate-500">{f.help}</p>}
-            </div>
-            <ArrowRight size={14} className="text-slate-600 shrink-0" />
-            <select value={colMapping[f.key] || NONE}
-              onChange={(e) => setColMapping((m) => ({ ...m, [f.key]: e.target.value }))}
-              className="flex-1 rounded-lg border border-slate-700 bg-surface-950 px-2.5 py-1.5 text-sm text-white">
-              <option value={NONE}>— Not mapped —</option>
-              {csv.headers.map((h) => <option key={h} value={h}>{h}</option>)}
-            </select>
-          </div>
-        ))}
-      </div>
-      <button disabled={!mappingComplete || busy} onClick={onAnalyze}
-        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-        {busy ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-        Analyze &amp; propose account mapping
+      <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 mb-4 transition-colors">
+        <ArrowLeft size={13} /> Choose a different file
       </button>
-      <p className="text-2xs text-slate-500 mt-2">AI proposes the account mapping only. It never sees or changes a single balance — every figure comes straight from your file.</p>
-    </div>
-  );
-}
 
-// ───────────────────────────── STEP 3: REVIEW + TIE-OUT ─────────────────────────────
-interface SourceRow { sourceAccount: string; sourceName: string | null; debitCents: number; creditCents: number }
-
-function ReviewStep({
-  session, coa, busy, onBack, onRemap, onTieOut, onPost, onAckPl,
-}: {
-  session: Session; coa: CoaAccount[]; busy: boolean;
-  onBack: () => void; onRemap: (src: string, target: string) => void;
-  onTieOut: (v: boolean) => void; onPost: () => void; onAckPl: (v: boolean) => void;
-}) {
-  // Aggregate source lines per source account (client-side, for the mapping table).
-  const sourceRows: SourceRow[] = useMemo(() => {
-    const map = new Map<string, SourceRow>();
-    for (const l of session.sourceLines) {
-      const key = l.sourceAccount;
-      const cur = map.get(key) ?? { sourceAccount: key, sourceName: l.sourceName, debitCents: 0, creditCents: 0 };
-      cur.debitCents += l.debitCents || 0;
-      cur.creditCents += l.creditCents || 0;
-      if (!cur.sourceName && l.sourceName) cur.sourceName = l.sourceName;
-      map.set(key, cur);
-    }
-    return [...map.values()]
-      .filter((r) => r.debitCents !== 0 || r.creditCents !== 0)
-      .sort((a, b) => a.sourceAccount.localeCompare(b.sourceAccount));
-  }, [session.sourceLines]);
-
-  const blockers = session.blockers ?? [];
-  const readyToTieOut = blockers.length === 0 && !session.tiedOut;
-  const bal = session.balance;
-
-  return (
-    <div>
-      <BackBtn onClick={onBack} label="Re-map columns" />
-
-      {/* Opening TB summary + balance check */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <SummaryStat label="Opening accounts" value={String(session.openingBalances.length)} tone="muted" mono />
-        <SummaryStat label="Total debits" value={formatMoney(bal.totalDebitCents)} tone="ok" mono />
-        <SummaryStat label="Total credits" value={formatMoney(bal.totalCreditCents)} tone="ok" mono />
+      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400 mb-1">
+        <FileSpreadsheet size={15} /> <span className="text-slate-200">{file.fileName}</span>
+        <span className="text-slate-600">·</span> <span>{file.rows.length} account row{file.rows.length === 1 ? '' : 's'} found</span>
+        {totals && <><span className="text-slate-600">·</span><span className="font-mono">Debits {formatMoney(totals.debit)} · Credits {formatMoney(totals.credit)}</span></>}
       </div>
+      {file.titleLines.length > 0 && <p className="text-2xs text-slate-500 mb-3">Report: {file.titleLines.slice(0, 3).join(' · ')}</p>}
 
-      <BalanceBanner balance={bal} />
-
-      {/* Book vs source reconciliation */}
-      <div className="mt-3 rounded-xl border border-slate-800 bg-surface-900 px-4 py-3">
-        <p className="text-2xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Book vs source reconciliation</p>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
-          <ReconLine label="Source file debits" value={session.sourceTotals.debitCents} />
-          <ReconLine label="Booked debits" value={bal.totalDebitCents} />
-          <ReconLine label="Source file credits" value={session.sourceTotals.creditCents} />
-          <ReconLine label="Booked credits" value={bal.totalCreditCents} />
+      {dateMismatch && file.asOfDateHint && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-2.5 text-sm text-amber-200">
+          <span>Your file says its balances are as of <strong>{formatLongDate(file.asOfDateHint)}</strong>, but you chose {formatLongDate(asOfDate)}.</span>
+          <button type="button" onClick={() => onUseFileDate(file.asOfDateHint as string)}
+            className="rounded-md border border-amber-500/40 px-2.5 py-1 text-xs hover:bg-amber-500/10">Use {formatLongDate(file.asOfDateHint)}</button>
         </div>
-      </div>
-
-      {/* Excluded rows (non-silent): totals / subtotal / blank rows the parser set aside */}
-      {(session.excludedCount ?? 0) > 0 && (
-        <div className="mt-3 rounded-xl border border-slate-800 bg-surface-900/60 px-4 py-3">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Filter size={14} className="text-slate-400" />
-            <p className="text-2xs font-semibold uppercase tracking-wider text-slate-500">
-              {session.excludedCount} row{session.excludedCount === 1 ? '' : 's'} excluded as totals/summary
-              {session.zeroRows ? ` · ${session.zeroRows} zero-balance row${session.zeroRows === 1 ? '' : 's'} skipped` : ''}
-            </p>
-          </div>
-          <ul className="space-y-0.5 max-h-28 overflow-y-auto">
-            {(session.excluded ?? []).slice(0, 20).map((e, i) => (
-              <li key={i} className="text-2xs text-slate-500">
-                <span className="font-mono text-slate-600">Row {e.row}</span> — {e.reason}
-              </li>
-            ))}
-          </ul>
-          <p className="text-2xs text-slate-600 mt-1.5">Nothing was dropped silently. If a real account was excluded, add a Debit/Credit (or Signed Balance) value for it and re-upload.</p>
+      )}
+      {file.notice && (
+        <div className="mb-3 flex items-start gap-2 rounded-lg border border-blue-500/25 bg-blue-500/5 px-4 py-2.5 text-xs text-blue-200">
+          <Info size={14} className="mt-0.5 shrink-0" /> <span>{file.notice} Match the columns below instead.</span>
         </div>
       )}
 
-      {/* Balance-sheet identity — Assets = Liabilities + Equity */}
-      {session.balanceSheet && <BalanceSheetPanel bs={session.balanceSheet} />}
-
-      {/* What's left to tie out */}
-      <div className="mt-4 rounded-xl border border-slate-800 bg-surface-900 px-4 py-3">
-        <div className="flex items-center gap-2 mb-2">
-          <ListChecks size={15} className="text-brand-400" />
-          <p className="text-sm font-semibold text-white">What&apos;s left to tie out</p>
-        </div>
-        {blockers.length === 0 ? (
-          <p className="text-sm text-emerald-300 flex items-center gap-2"><Check size={15} /> Nothing outstanding — the opening trial balance is ready to tie out.</p>
-        ) : (
-          <ul className="space-y-1.5">
-            {blockers.map((b, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-amber-200/90">
-                <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-400" /> <span>{b}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* AI mapping notice — degrade-safe: mapping is always completable by hand */}
-      {session.aiError && (
-        <div className="mt-3 flex items-start gap-2 rounded-lg border border-slate-700 bg-surface-900/60 px-4 py-2.5 text-xs text-slate-300">
-          <Sparkles size={14} className="mt-0.5 shrink-0 text-slate-500" />
-          <span>
-            {session.aiError} Accounts matched by number/name are set automatically; use the
-            &ldquo;Maps to&rdquo; dropdown on each remaining row to map it yourself. AI is a convenience, not a
-            requirement — you can complete the entire mapping manually.
-          </span>
-        </div>
-      )}
-
-      {/* Mapping table */}
-      <p className="mt-5 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-        Account mapping <span className="text-slate-600 normal-case font-normal">— AI proposes, you confirm. Balances shown are your file&apos;s numbers.</span>
-      </p>
-      <div className="rounded-xl border border-slate-800 overflow-hidden">
-        <table className="w-full text-sm">
+      {/* Preview */}
+      <div className="rounded-xl border border-slate-800 overflow-x-auto mb-4">
+        <table className="w-full text-xs">
           <thead>
             <tr className="bg-surface-950 text-2xs uppercase tracking-wider text-slate-500">
-              <th className="text-left font-medium px-3 py-2">Source account</th>
-              <th className="text-right font-medium px-3 py-2">Debit</th>
-              <th className="text-right font-medium px-3 py-2">Credit</th>
-              <th className="text-left font-medium px-3 py-2">Maps to (MeritBooks COA)</th>
-              <th className="text-left font-medium px-3 py-2">Basis</th>
+              {file.headers.map((h) => <th key={h} scope="col" className="text-left font-medium px-3 py-2 whitespace-nowrap">{h}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
-            {sourceRows.map((r) => {
-              const m = session.mapping[r.sourceAccount];
-              const target = m?.targetAccountNumber ?? NONE;
-              const unmapped = !m?.targetAccountNumber;
-              return (
-                <tr key={r.sourceAccount} className={`bg-surface-900 ${unmapped ? 'ring-1 ring-inset ring-amber-500/20' : ''}`}>
-                  <td className="px-3 py-2">
-                    <div className="font-mono text-slate-200">{r.sourceAccount}</div>
-                    {r.sourceName && <div className="text-2xs text-slate-500">{r.sourceName}</div>}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-slate-300">{r.debitCents ? formatMoney(r.debitCents) : <span className="text-slate-600">—</span>}</td>
-                  <td className="px-3 py-2 text-right font-mono text-slate-300">{r.creditCents ? formatMoney(r.creditCents) : <span className="text-slate-600">—</span>}</td>
-                  <td className="px-3 py-2">
-                    <select value={target} disabled={busy || session.posted}
-                      onChange={(e) => onRemap(r.sourceAccount, e.target.value)}
-                      className={`w-full rounded-md border px-2 py-1 text-xs text-white bg-surface-950 ${unmapped ? 'border-amber-500/40' : 'border-slate-700'}`}>
-                      <option value={NONE}>— Unmapped —</option>
-                      {coa.length === 0 && m?.targetAccountNumber && (
-                        <option value={m.targetAccountNumber}>{m.targetAccountNumber}</option>
-                      )}
-                      {coa.map((a) => (
-                        <option key={a.accountNumber} value={a.accountNumber}>{a.accountNumber} — {a.name}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-3 py-2"><MappingBadge source={m?.source ?? 'unmapped'} confidence={m?.confidence ?? null} /></td>
-                </tr>
-              );
-            })}
+            {preview.map((r, i) => (
+              <tr key={i} className="bg-surface-900">
+                {file.headers.map((h) => <td key={h} className="px-3 py-1.5 text-slate-300 whitespace-nowrap">{r[h] || <span className="text-slate-700">—</span>}</td>)}
+              </tr>
+            ))}
           </tbody>
         </table>
+        {file.rows.length > preview.length && <p className="bg-surface-950 px-3 py-1.5 text-2xs text-slate-500">…and {file.rows.length - preview.length} more</p>}
       </div>
 
-      {/* Opening journal-entry preview — the EXACT balanced entry that will post */}
-      <OpeningEntryPreview lines={session.openingBalances} bal={bal} companyShortCode={session.companyShortCode} asOfDate={session.asOfDate} />
-
-      {/* Mid-year go-live acknowledgment — only when the balance sheet doesn't stand alone */}
-      {session.balanceSheet && !session.balanceSheet.standalone && session.balanceSheet.plNetCents !== 0 && (
-        <label className="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 cursor-pointer">
-          <input
-            type="checkbox"
-            className="mt-0.5 accent-amber-500"
-            checked={!!session.plAcknowledged}
-            disabled={busy || session.posted}
-            onChange={(e) => onAckPl(e.target.checked)}
-          />
-          <span className="text-xs text-amber-200/90">
-            I understand this is a <span className="font-medium">mid-year go-live</span> — income-statement accounts carry{' '}
-            <span className="font-mono">{formatMoney(Math.abs(session.balanceSheet.plNetCents))}</span> of open balances that
-            will post as current-year activity (normally the prior year&apos;s P&amp;L is closed into retained earnings).
-          </span>
-        </label>
+      {file.skipped.length > 0 && (
+        <details className="mb-4 rounded-lg border border-slate-800 bg-surface-900/60 px-4 py-2.5">
+          <summary className="cursor-pointer text-xs text-slate-400">{file.skipped.length} row{file.skipped.length === 1 ? '' : 's'} skipped (totals, headings, notes)</summary>
+          <ul className="mt-1.5 space-y-0.5 max-h-32 overflow-y-auto">
+            {file.skipped.slice(0, 40).map((d, i) => (
+              <li key={i} className="text-2xs text-slate-500">{d.row != null && <span className="font-mono text-slate-600">Row {d.row} — </span>}{d.reason}</li>
+            ))}
+          </ul>
+        </details>
       )}
 
-      {/* Tie-out + go-live gate */}
-      <div className="mt-6 rounded-xl border border-slate-800 bg-surface-900 p-4">
-        {!session.tiedOut ? (
-          <div className="flex items-start gap-3">
-            <ShieldCheck size={18} className="mt-0.5 shrink-0 text-brand-400" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-white">Tie-out gate</p>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Go-live is blocked until a person confirms the opening trial balance is reconciled to the prior books.
-              </p>
-              <button disabled={!readyToTieOut || busy} onClick={() => onTieOut(true)}
-                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                {busy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-                Mark opening trial balance tied out
-              </button>
-              {!readyToTieOut && <p className="text-2xs text-slate-500 mt-2">Resolve everything under &ldquo;What&apos;s left to tie out&rdquo; first.</p>}
+      <details open={!file.recognized || !mappingComplete} className="rounded-xl border border-slate-800 bg-surface-900">
+        <summary className="cursor-pointer px-4 py-2.5 text-sm text-slate-300">
+          {file.recognized && mappingComplete ? 'We matched your columns automatically — open to change them' : 'Tell us which column is which'}
+        </summary>
+        <div className="divide-y divide-slate-800 border-t border-slate-800">
+          {CONVERSION_SOURCE_FIELDS.map((f) => (
+            <div key={f.key} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 py-2.5">
+              <label htmlFor={`col-${f.key}`} className="sm:w-1/2">
+                <span className="text-sm text-slate-200">{f.label}</span>
+                {f.required && <span className="text-rose-400 ml-1">*</span>}
+                {f.help && <span className="block text-2xs text-slate-500">{f.help}</span>}
+              </label>
+              <ArrowRight size={14} className="hidden sm:block text-slate-600 shrink-0" />
+              <select id={`col-${f.key}`} value={colMapping[f.key] || NONE}
+                onChange={(e) => setColMapping((m) => ({ ...m, [f.key]: e.target.value }))}
+                className="flex-1 rounded-lg border border-slate-700 bg-surface-950 px-2.5 py-1.5 text-sm text-white">
+                <option value={NONE}>— Not in my file —</option>
+                {file.headers.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
             </div>
-          </div>
-        ) : (
-          <div>
-            <div className="flex items-center gap-2 text-sm text-emerald-300">
-              <ShieldCheck size={16} /> <span className="font-medium">Tied out</span>
-              {session.tiedOutAt && <span className="text-2xs text-slate-500">· {new Date(session.tiedOutAt).toLocaleString()}</span>}
-            </div>
-            <div className="mt-3 flex items-center gap-3">
-              <button disabled={busy || session.posted} onClick={onPost}
-                className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                {busy ? <Loader2 size={16} className="animate-spin" /> : <Scale size={16} />}
-                Post opening balances &amp; go live
-              </button>
-              <button disabled={busy || session.posted} onClick={() => onTieOut(false)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.03] disabled:opacity-40 transition-colors">
-                <Lock size={13} /> Reopen for edits
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      </details>
+
+      <button type="button" disabled={!mappingComplete || busy} onClick={onAnalyze}
+        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+        {busy ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+        Match my accounts
+      </button>
+      {!mappingComplete && <p className="text-2xs text-amber-300/90 mt-2">Choose the account column and either Debit/Credit or a single Balance column.</p>}
+      <p className="text-2xs text-slate-500 mt-2">We suggest which MeritBooks account each of yours becomes. We never change an amount — every number comes straight from your file.</p>
     </div>
   );
+}
+
+/** Debit/credit totals of the mapped dollar columns, in cents, for a quick sanity line. */
+function sumDollarColumns(rows: Record<string, string>[], mapping: Record<string, string>): { debit: number; credit: number } | null {
+  const d = mapping.debit_cents && mapping.debit_cents !== NONE ? mapping.debit_cents : null;
+  const c = mapping.credit_cents && mapping.credit_cents !== NONE ? mapping.credit_cents : null;
+  if (!d || !c) return null;
+  const toCents = (v: string | undefined): number => {
+    const p = parseAccountingAmount(v ?? '');
+    return p.ok ? p.cents : 0;
+  };
+  let debit = 0; let credit = 0;
+  for (const r of rows) {
+    const dv = toCents(r[d]); const cv = toCents(r[c]);
+    if (dv < 0) credit += -dv; else debit += dv;
+    if (cv < 0) debit += -cv; else credit += cv;
+  }
+  return { debit, credit };
 }
 
 // ───────────────────────────── STEP 4: DONE ─────────────────────────────
@@ -650,179 +565,45 @@ function DoneStep({ posted, onReset }: { posted: PostResult; onReset: () => void
       <div className="mx-auto mb-4 h-14 w-14 rounded-full bg-brand-500/15 flex items-center justify-center">
         <CircleCheck size={30} className="text-brand-400" />
       </div>
-      <h2 className="text-lg font-semibold text-white">{posted.alreadyPosted ? 'Already live' : 'Conversion complete — you are live'}</h2>
-      <p className="text-sm text-slate-400 mt-1">
-        Opening balances posted as one balanced journal entry
+      <h2 className="text-lg font-semibold text-white">{posted.alreadyPosted ? 'Already live' : 'You’re live'}</h2>
+      <p className="text-sm text-slate-400 mt-1 max-w-xl mx-auto">
+        Your opening balances were posted as one balanced journal entry
         {posted.entryNumber ? <> (<span className="font-mono text-slate-300">{posted.entryNumber}</span>)</> : ''}
         {posted.lineCount ? ` across ${posted.lineCount} accounts` : ''}
-        {posted.totalDebitCents != null ? ` totaling ${formatMoney(posted.totalDebitCents)}` : ''}.
-        MeritBooks now owns this company&apos;s general ledger.
+        {posted.totalDebitCents != null ? `, totaling ${formatMoney(posted.totalDebitCents)}` : ''}.
+        From here on, MeritBooks keeps this company&apos;s books.
       </p>
-      <button onClick={onReset}
-        className="mt-6 inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-white/[0.03] transition-colors">
-        Convert another company
-      </button>
+      {(posted.periodsCreated ?? 0) > 0 && (
+        <p className="text-2xs text-slate-500 mt-2">We also set up {posted.periodsCreated} accounting month{posted.periodsCreated === 1 ? '' : 's'} for this company.</p>
+      )}
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+        <Link href="/journal-entries" className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-400 transition-colors">
+          See the opening entry
+        </Link>
+        <button type="button" onClick={onReset}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-white/[0.03] transition-colors">
+          Convert another company
+        </button>
+      </div>
     </div>
   );
 }
 
-// ───────────────────────────── small pieces ─────────────────────────────
 function Stepper({ step }: { step: Step }) {
   const steps: { k: Step; label: string }[] = [
-    { k: 'setup', label: 'Upload' }, { k: 'map', label: 'Columns' },
-    { k: 'review', label: 'Review & tie out' }, { k: 'done', label: 'Go live' },
+    { k: 'setup', label: 'Upload' }, { k: 'map', label: 'Check columns' },
+    { k: 'review', label: 'Check the numbers match' }, { k: 'done', label: 'Go live' },
   ];
   const idx = steps.findIndex((s) => s.k === step);
   return (
-    <div className="flex items-center gap-2 mb-6">
+    <ol className="flex flex-wrap items-center gap-2 mb-6" aria-label="Progress">
       {steps.map((s, i) => (
-        <div key={s.k} className="flex items-center gap-2">
+        <li key={s.k} className="flex items-center gap-2" aria-current={i === idx ? 'step' : undefined}>
           <span className={`flex h-6 w-6 items-center justify-center rounded-full text-2xs font-semibold ${i <= idx ? 'bg-brand-500 text-white' : 'bg-slate-800 text-slate-500'}`}>{i + 1}</span>
           <span className={`text-xs ${i <= idx ? 'text-slate-200' : 'text-slate-500'}`}>{s.label}</span>
           {i < steps.length - 1 && <span className="w-6 h-px bg-slate-800" />}
-        </div>
+        </li>
       ))}
-    </div>
-  );
-}
-
-function BalanceBanner({ balance }: { balance: BalanceCheck }) {
-  if (balance.balanced) {
-    return (
-      <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-        <Scale size={16} /> <span>In balance — debits equal credits ({formatMoney(balance.totalDebitCents)}).</span>
-      </div>
-    );
-  }
-  const diff = Math.abs(balance.differenceCents);
-  const side = balance.differenceCents > 0 ? 'debits exceed credits' : 'credits exceed debits';
-  return (
-    <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-      <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-      <span>Out of balance by <span className="font-mono font-semibold">{formatMoney(diff)}</span> — {side}. This blocks go-live until it&apos;s resolved.</span>
-    </div>
-  );
-}
-
-function BalanceSheetPanel({ bs }: { bs: BalanceSheetCheck }) {
-  const le = bs.liabilitiesCents + bs.equityCents;
-  const ties = bs.standalone;
-  return (
-    <div className={`mt-3 rounded-xl border px-4 py-3 ${ties ? 'border-slate-800 bg-surface-900' : 'border-amber-500/30 bg-amber-500/5'}`}>
-      <div className="flex items-center gap-2 mb-2">
-        <Scale size={14} className={ties ? 'text-brand-400' : 'text-amber-400'} />
-        <p className="text-2xs font-semibold uppercase tracking-wider text-slate-500">Balance sheet identity — assets = liabilities + equity</p>
-      </div>
-      <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
-        <ReconLine label="Total assets" value={bs.assetsCents} />
-        <ReconLine label="Liabilities + equity" value={le} />
-      </div>
-      {ties ? (
-        <p className="mt-2 text-2xs text-emerald-300 flex items-center gap-1.5"><Check size={12} /> The balance sheet ties on its own — no open income-statement balances.</p>
-      ) : (
-        <p className="mt-2 text-2xs text-amber-300/90 flex items-start gap-1.5">
-          <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-          <span>
-            Income-statement accounts carry <span className="font-mono">{formatMoney(Math.abs(bs.plNetCents))}</span> of open balances
-            (a mid-year go-live). A year-end opening balance normally has none. Acknowledge below to proceed.
-          </span>
-        </p>
-      )}
-    </div>
-  );
-}
-
-function OpeningEntryPreview({
-  lines, bal, companyShortCode, asOfDate,
-}: {
-  lines: OpeningBalanceLine[]; bal: BalanceCheck; companyShortCode: string; asOfDate: string;
-}) {
-  if (lines.length === 0) return null;
-  return (
-    <div className="mt-6">
-      <div className="flex items-center gap-2 mb-2">
-        <FileText size={15} className="text-brand-400" />
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-          Opening entry preview
-          <span className="text-slate-600 normal-case font-normal"> — the exact balanced journal entry that will post</span>
-        </p>
-      </div>
-      <div className="rounded-xl border border-slate-800 overflow-hidden">
-        <div className="flex items-center justify-between bg-surface-950 px-3 py-2 text-2xs text-slate-500">
-          <span>Opening balance (historical conversion) — <span className="font-mono text-slate-400">{companyShortCode}</span> as of <span className="font-mono text-slate-400">{asOfDate}</span></span>
-          <span>{lines.length} line{lines.length === 1 ? '' : 's'}</span>
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-surface-950 text-2xs uppercase tracking-wider text-slate-500">
-              <th className="text-left font-medium px-3 py-2">Account</th>
-              <th className="text-right font-medium px-3 py-2">Debit</th>
-              <th className="text-right font-medium px-3 py-2">Credit</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800">
-            {lines.map((l) => (
-              <tr key={l.targetAccountNumber} className="bg-surface-900">
-                <td className="px-3 py-1.5">
-                  <span className="font-mono text-slate-200">{l.targetAccountNumber}</span>
-                  {l.targetName && <span className="text-slate-400"> — {l.targetName}</span>}
-                </td>
-                <td className="px-3 py-1.5 text-right font-mono text-emerald-300">{l.debitCents ? formatMoney(l.debitCents) : <span className="text-slate-700">—</span>}</td>
-                <td className="px-3 py-1.5 text-right font-mono text-rose-300">{l.creditCents ? formatMoney(l.creditCents) : <span className="text-slate-700">—</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="bg-surface-950 border-t border-slate-700 text-sm font-semibold">
-              <td className="px-3 py-2 text-slate-300">Total</td>
-              <td className="px-3 py-2 text-right font-mono text-emerald-300">{formatMoney(bal.totalDebitCents)}</td>
-              <td className="px-3 py-2 text-right font-mono text-rose-300">{formatMoney(bal.totalCreditCents)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function ReconLine({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-slate-400">{label}</span>
-      <span className="font-mono text-slate-200">{formatMoney(value)}</span>
-    </div>
-  );
-}
-
-function MappingBadge({ source, confidence }: { source: MappingSource; confidence: number | null }) {
-  const cfg: Record<MappingSource, { label: string; cls: string }> = {
-    ai: { label: 'AI', cls: 'bg-indigo-500/15 text-indigo-300' },
-    heuristic: { label: 'Auto', cls: 'bg-blue-500/15 text-blue-300' },
-    human: { label: 'You', cls: 'bg-emerald-500/15 text-emerald-300' },
-    unmapped: { label: 'Unmapped', cls: 'bg-amber-500/15 text-amber-300' },
-  };
-  const c = cfg[source];
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-2xs font-medium ${c.cls}`}>
-      {c.label}{confidence != null && source !== 'human' ? ` ${Math.round(confidence * 100)}%` : ''}
-    </span>
-  );
-}
-
-function SummaryStat({ label, value, tone, mono }: { label: string; value: string; tone: 'ok' | 'bad' | 'muted'; mono?: boolean }) {
-  const color = tone === 'ok' ? 'text-brand-400' : tone === 'bad' ? 'text-rose-400' : 'text-slate-200';
-  return (
-    <div className="rounded-xl border border-slate-800 bg-surface-900 px-4 py-3">
-      <p className={`text-xl font-semibold ${mono ? 'font-mono' : ''} ${color}`}>{value}</p>
-      <p className="text-2xs text-slate-500 mt-0.5">{label}</p>
-    </div>
-  );
-}
-
-function BackBtn({ onClick, label }: { onClick: () => void; label: string }) {
-  return (
-    <button onClick={onClick} className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 mb-4 transition-colors">
-      <ArrowLeft size={13} /> {label}
-    </button>
+    </ol>
   );
 }

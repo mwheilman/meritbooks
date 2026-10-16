@@ -25,6 +25,15 @@ import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { formatMoney } from '@meritbooks/shared';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
+import { fetchAll } from '@/lib/supabase/fetch-all';
+
+/** Stable unique paging key for the AP/AR aging views (one row per open document). */
+function agingOrderKey(view: 'v_ap_aging' | 'v_ar_aging'): string {
+  return view === 'v_ap_aging' ? 'bill_id' : 'invoice_id';
+}
+
+/** Stable unique paging key for v_trial_balance (one row per org/location/account). */
+const TB_ORDER_KEY = ['org_id', 'location_id', 'account_id'] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared types
@@ -118,10 +127,11 @@ async function aggregateByType(
     locationId?: string;
   },
 ): Promise<Map<string, number>> {
-  let query = supabase
-    .from('gl_entry_lines')
-    .select(
-      `
+  const build = () => {
+    let query = supabase
+      .from('gl_entry_lines')
+      .select(
+        `
       debit_cents,
       credit_cents,
       location_id,
@@ -135,15 +145,17 @@ async function aggregateByType(
       ),
       gl_entries!inner( entry_date, status )
     `,
-    )
-    .eq('gl_entries.status', 'POSTED')
-    .lte('gl_entries.entry_date', opts.endDate)
-    .in('accounts.account_type', opts.accountTypes);
+      )
+      .eq('gl_entries.status', 'POSTED')
+      .lte('gl_entries.entry_date', opts.endDate)
+      .in('accounts.account_type', opts.accountTypes);
 
-  if (opts.startDate) query = query.gte('gl_entries.entry_date', opts.startDate);
-  if (opts.locationId) query = query.eq('location_id', opts.locationId);
+    if (opts.startDate) query = query.gte('gl_entries.entry_date', opts.startDate);
+    if (opts.locationId) query = query.eq('location_id', opts.locationId);
+    return query;
+  };
 
-  const { data, error } = await query;
+  const { data, error } = await fetchAll(build, { label: 'nl aggregateByType gl_entry_lines' });
   if (error) throw new Error(error.message);
 
   // net cents per account_type
@@ -191,15 +203,18 @@ async function aggregateBySubType(
   supabase: SupabaseClient,
   opts: { subTypes: string[]; endDate: string; locationId?: string },
 ): Promise<Map<string, number>> {
-  let query = supabase
-    .from('gl_entry_lines')
-    .select('debit_cents, credit_cents, location_id, accounts!inner( account_sub_type ), gl_entries!inner( entry_date, status )')
-    .eq('gl_entries.status', 'POSTED')
-    .lte('gl_entries.entry_date', opts.endDate)
-    .in('accounts.account_sub_type', opts.subTypes);
-  if (opts.locationId) query = query.eq('location_id', opts.locationId);
+  const build = () => {
+    let query = supabase
+      .from('gl_entry_lines')
+      .select('debit_cents, credit_cents, location_id, accounts!inner( account_sub_type ), gl_entries!inner( entry_date, status )')
+      .eq('gl_entries.status', 'POSTED')
+      .lte('gl_entries.entry_date', opts.endDate)
+      .in('accounts.account_sub_type', opts.subTypes);
+    if (opts.locationId) query = query.eq('location_id', opts.locationId);
+    return query;
+  };
 
-  const { data, error } = await query;
+  const { data, error } = await fetchAll(build, { label: 'nl aggregateBySubType gl_entry_lines' });
   if (error) throw new Error(error.message);
 
   const totals = new Map<string, number>();
@@ -236,12 +251,15 @@ async function resolveCashCents(
   }
   if (accountIds.length === 0) return { rows: [], totalCents: 0, mapped: false };
 
-  let query = ctx.supabase
-    .from('v_trial_balance')
-    .select('account_number, account_name, net_balance, account_id')
-    .in('account_id', accountIds);
-  if (locationId) query = query.eq('location_id', locationId);
-  const { data, error } = await query;
+  const build = () => {
+    let query = ctx.supabase
+      .from('v_trial_balance')
+      .select('account_number, account_name, net_balance, account_id')
+      .in('account_id', accountIds);
+    if (locationId) query = query.eq('location_id', locationId);
+    return query;
+  };
+  const { data, error } = await fetchAll(build, { orderBy: TB_ORDER_KEY, label: 'nl cash v_trial_balance' });
   if (error) throw new Error(error.message);
 
   const rows = (data ?? []).map((r) => {
@@ -261,9 +279,12 @@ async function sumAgingTotals(
   view: 'v_ap_aging' | 'v_ar_aging',
   locationId?: string,
 ): Promise<{ total: number; overdue: number }> {
-  let q = supabase.from(view).select('aging_bucket, balance_cents').gt('balance_cents', 0);
-  if (locationId) q = q.eq('location_id', locationId);
-  const { data, error } = await q;
+  const build = () => {
+    let q = supabase.from(view).select('aging_bucket, balance_cents').gt('balance_cents', 0);
+    if (locationId) q = q.eq('location_id', locationId);
+    return q;
+  };
+  const { data, error } = await fetchAll(build, { orderBy: agingOrderKey(view), label: `nl ${view} totals` });
   if (error) throw new Error(error.message);
   let total = 0;
   let overdue = 0;
@@ -281,9 +302,12 @@ async function topByParty(
   supabase: SupabaseClient,
   opts: { view: 'v_ap_aging' | 'v_ar_aging'; nameCol: 'vendor_name' | 'customer_name'; locationId?: string; limit: number },
 ): Promise<Array<{ name: string; balanceCents: number; openItems: number }>> {
-  let q = supabase.from(opts.view).select(`${opts.nameCol}, balance_cents`).gt('balance_cents', 0);
-  if (opts.locationId) q = q.eq('location_id', opts.locationId);
-  const { data, error } = await q;
+  const build = () => {
+    let q = supabase.from(opts.view).select(`${opts.nameCol}, balance_cents`).gt('balance_cents', 0);
+    if (opts.locationId) q = q.eq('location_id', opts.locationId);
+    return q;
+  };
+  const { data, error } = await fetchAll(build, { orderBy: agingOrderKey(opts.view), label: `nl ${opts.view} by party` });
   if (error) throw new Error(error.message);
   const m = new Map<string, { balanceCents: number; openItems: number }>();
   for (const raw of data ?? []) {
@@ -310,13 +334,17 @@ async function sumByDepartment(
   supabase: SupabaseClient,
   opts: { accountTypes: string[]; startDate: string; endDate: string; direction: 'REVENUE' | 'EXPENSE' },
 ): Promise<Array<{ department: string; amountCents: number }>> {
-  const { data, error } = await supabase
-    .from('v_gl_detail')
-    .select('account_type, debit_cents, credit_cents, department_name, entry_date, entry_status')
-    .eq('entry_status', 'POSTED')
-    .gte('entry_date', opts.startDate)
-    .lte('entry_date', opts.endDate)
-    .in('account_type', opts.accountTypes);
+  const { data, error } = await fetchAll(
+    () =>
+      supabase
+        .from('v_gl_detail')
+        .select('account_type, debit_cents, credit_cents, department_name, entry_date, entry_status')
+        .eq('entry_status', 'POSTED')
+        .gte('entry_date', opts.startDate)
+        .lte('entry_date', opts.endDate)
+        .in('account_type', opts.accountTypes),
+    { orderBy: ['org_id', 'entry_number', 'line_number'], label: 'nl sumByDepartment v_gl_detail' },
+  );
   if (error) throw new Error(error.message);
   const m = new Map<string, number>();
   for (const raw of data ?? []) {
@@ -341,14 +369,20 @@ async function monthlyTrend(
   supabase: SupabaseClient,
   opts: { accountTypes: string[]; startDate: string; endDate: string; locationId?: string },
 ): Promise<Array<{ period: string; amountCents: number }>> {
-  let q = supabase
-    .from('v_income_statement')
-    .select('fiscal_year, fiscal_month, amount_cents, account_type, entry_date, location_id')
-    .gte('entry_date', opts.startDate)
-    .lte('entry_date', opts.endDate)
-    .in('account_type', opts.accountTypes);
-  if (opts.locationId) q = q.eq('location_id', opts.locationId);
-  const { data, error } = await q;
+  const build = () => {
+    let q = supabase
+      .from('v_income_statement')
+      .select('fiscal_year, fiscal_month, amount_cents, account_type, entry_date, location_id')
+      .gte('entry_date', opts.startDate)
+      .lte('entry_date', opts.endDate)
+      .in('account_type', opts.accountTypes);
+    if (opts.locationId) q = q.eq('location_id', opts.locationId);
+    return q;
+  };
+  const { data, error } = await fetchAll(build, {
+    orderBy: ['org_id', 'location_id', 'account_number', 'entry_date'],
+    label: 'nl monthlyTrend v_income_statement',
+  });
   if (error) throw new Error(error.message);
   const m = new Map<string, number>();
   for (const raw of data ?? []) {
@@ -530,16 +564,19 @@ const trialBalance = defineMetric({
   paramHint: 'location_id? (uuid)',
   paramsSchema: z.object({ location_id: locationId }),
   async execute(ctx, params) {
-    let query = ctx.supabase
-      .from('v_trial_balance')
-      .select('account_number, account_name, account_type, total_debits, total_credits, net_balance');
-    if (params.location_id) query = query.eq('location_id', params.location_id);
+    const build = () => {
+      let query = ctx.supabase
+        .from('v_trial_balance')
+        .select('account_number, account_name, account_type, total_debits, total_credits, net_balance');
+      if (params.location_id) query = query.eq('location_id', params.location_id);
+      return query
+        .order('type_order')
+        .order('sub_type_order')
+        .order('group_order')
+        .order('account_order');
+    };
 
-    const { data, error } = await query
-      .order('type_order')
-      .order('sub_type_order')
-      .order('group_order')
-      .order('account_order');
+    const { data, error } = await fetchAll(build, { orderBy: TB_ORDER_KEY, label: 'nl trial_balance v_trial_balance' });
     if (error) throw new Error(error.message);
 
     const rows = (data ?? []).map((r) => {
@@ -577,9 +614,12 @@ async function agingExecutor(
 ): Promise<NlResult> {
   // `> 0` defensively excludes WRITTEN_OFF/settled (balance 0) rows from aging
   // before the v_ar_aging view is re-created to drop WRITTEN_OFF.
-  let query = ctx.supabase.from(opts.view).select('aging_bucket, balance_cents').gt('balance_cents', 0);
-  if (opts.locationId) query = query.eq('location_id', opts.locationId);
-  const { data, error } = await query;
+  const build = () => {
+    let query = ctx.supabase.from(opts.view).select('aging_bucket, balance_cents').gt('balance_cents', 0);
+    if (opts.locationId) query = query.eq('location_id', opts.locationId);
+    return query;
+  };
+  const { data, error } = await fetchAll(build, { orderBy: agingOrderKey(opts.view), label: `nl ${opts.view} aging` });
   if (error) throw new Error(error.message);
 
   const bucketOrder = ['CURRENT', '1-30', '31-60', '61-90', '90+'];

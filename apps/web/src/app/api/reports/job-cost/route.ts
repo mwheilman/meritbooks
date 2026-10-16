@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { fetchAllIn } from '@/lib/supabase/fetch-all';
 
 /**
  * GET /api/reports/job-cost?start_date&end_date&location_ids — cross-job cost ledger.
@@ -67,11 +68,20 @@ export async function GET(request: Request) {
   const glLineIds = rows.map((r) => r.gl_entry_line_id).filter(Boolean) as string[];
   const sourceByLine = new Map<string, string>();
   if (glLineIds.length > 0) {
-    const { data: glLines } = await supabase.from('gl_entry_lines').select('id, gl_entry_id').in('id', glLineIds);
+    // Chunked: up to 500 ids would overflow a single `.in()` URL.
+    const { data: glLines } = await fetchAllIn(
+      glLineIds,
+      (chunk) => supabase.from('gl_entry_lines').select('id, gl_entry_id').in('id', chunk),
+      { label: 'job-cost gl_entry_lines' },
+    );
     const entryIds = [...new Set((glLines ?? []).map((l) => (l as { gl_entry_id: string }).gl_entry_id))];
     const moduleById = new Map<string, string | null>();
     if (entryIds.length > 0) {
-      const { data: ge } = await supabase.from('gl_entries').select('id, source_module').in('id', entryIds);
+      const { data: ge } = await fetchAllIn(
+        entryIds,
+        (chunk) => supabase.from('gl_entries').select('id, source_module').in('id', chunk),
+        { label: 'job-cost gl_entries' },
+      );
       for (const e of ge ?? []) moduleById.set((e as { id: string }).id, (e as { source_module: string | null }).source_module);
     }
     for (const l of glLines ?? []) {

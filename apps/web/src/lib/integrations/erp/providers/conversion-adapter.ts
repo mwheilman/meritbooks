@@ -16,6 +16,7 @@
  */
 
 import { CONVERSION_SOURCE_FIELDS } from '@/lib/onboarding/conversion';
+import { SAMPLE_SOURCE_NAME_PREFIX, isFixtureTrialBalance } from '@/lib/onboarding/sample-guard';
 import type { ProviderTrialBalanceRow } from './types';
 
 /** Stable synthetic column headers for the generated "CSV-shaped" rows. */
@@ -52,19 +53,38 @@ export function conversionMapping(): Record<string, string> {
   };
 }
 
+export interface TrialBalanceToConversionOptions {
+  /**
+   * The rows are SAMPLE (fixture) data. When true every account name is stamped with
+   * SAMPLE_SOURCE_NAME_PREFIX so the staged session is marked — visibly in the review
+   * and detectably by the go-live guard (lib/onboarding/sample-guard.ts, FPB B3).
+   * Defaults to fingerprinting the rows against the shipped fixtures, so a fixture
+   * pull is marked even if the caller forgets to say so.
+   */
+  sample?: boolean;
+}
+
+/** Stamp the sample marker on a name (idempotent). */
+function markSampleName(name: string | null): string {
+  const base = (name ?? '').trim();
+  return base.startsWith(SAMPLE_SOURCE_NAME_PREFIX) ? base : `${SAMPLE_SOURCE_NAME_PREFIX}${base}`;
+}
+
 /**
  * Turn a provider's normalized trial balance into the exact `{ mapping, rows }` the
  * existing conversion route accepts. Pure and total — unit-testable against fixtures.
  */
 export function trialBalanceToConversionInput(
   rows: ProviderTrialBalanceRow[],
+  opts: TrialBalanceToConversionOptions = {},
 ): ConversionInput {
+  const sample = opts.sample ?? isFixtureTrialBalance(rows);
   const outRows: Record<string, string>[] = rows
     // Drop rows with no account code (defensive — a real TB line always has one).
     .filter((r) => r.accountCode && r.accountCode.trim().length > 0)
     .map((r) => ({
       [CONVERSION_HEADERS.account]: r.accountCode.trim(),
-      [CONVERSION_HEADERS.name]: r.accountName ?? '',
+      [CONVERSION_HEADERS.name]: sample ? markSampleName(r.accountName) : (r.accountName ?? ''),
       [CONVERSION_HEADERS.debit]: centsToDecimalString(r.debitCents),
       [CONVERSION_HEADERS.credit]: centsToDecimalString(r.creditCents),
     }));

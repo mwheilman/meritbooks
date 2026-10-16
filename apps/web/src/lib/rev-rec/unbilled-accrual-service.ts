@@ -18,6 +18,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAllIn } from '@/lib/supabase/fetch-all';
 import { computeWipJob } from '@/lib/jobcost/wip';
 import { resolveRole, type AccountRef } from '@/lib/posting/account-roles';
 import { postJournalEntry } from '@/lib/services/gl-posting';
@@ -121,14 +122,19 @@ async function loadContractAssetByJob(
 ): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (jobIds.length === 0) return out;
-  const { data } = await db
-    .from('gl_entry_lines')
-    .select('debit_cents, credit_cents, job_id, gl_entries!inner(entry_date, status)')
-    .eq('org_id', orgId)
-    .eq('account_id', unbilledAccountId)
-    .in('job_id', jobIds)
-    .eq('gl_entries.status', 'POSTED')
-    .lte('gl_entries.entry_date', asOf);
+  const { data } = await fetchAllIn(
+    jobIds,
+    (chunk) =>
+      db
+        .from('gl_entry_lines')
+        .select('debit_cents, credit_cents, job_id, gl_entries!inner(entry_date, status)')
+        .eq('org_id', orgId)
+        .eq('account_id', unbilledAccountId)
+        .in('job_id', chunk)
+        .eq('gl_entries.status', 'POSTED')
+        .lte('gl_entries.entry_date', asOf),
+    { label: 'unbilled-accrual contract-asset gl_entry_lines' },
+  );
   for (const l of (data ?? []) as Array<{ debit_cents: number | null; credit_cents: number | null; job_id: string | null }>) {
     if (!l.job_id) continue;
     const bal = (out.get(l.job_id) ?? 0) + Number(l.debit_cents ?? 0) - Number(l.credit_cents ?? 0);
@@ -141,12 +147,17 @@ async function loadContractAssetByJob(
 async function loadExistingAccrualRefs(db: DB, orgId: string, refs: string[]): Promise<Set<string>> {
   const out = new Set<string>();
   if (refs.length === 0) return out;
-  const { data } = await db
-    .from('gl_entries')
-    .select('source_ref')
-    .eq('org_id', orgId)
-    .eq('status', 'POSTED')
-    .in('source_ref', refs);
+  const { data } = await fetchAllIn(
+    refs,
+    (chunk) =>
+      db
+        .from('gl_entries')
+        .select('source_ref')
+        .eq('org_id', orgId)
+        .eq('status', 'POSTED')
+        .in('source_ref', chunk),
+    { label: 'unbilled-accrual existing-refs gl_entries' },
+  );
   for (const r of (data ?? []) as { source_ref: string | null }[]) {
     if (r.source_ref) out.add(r.source_ref);
   }

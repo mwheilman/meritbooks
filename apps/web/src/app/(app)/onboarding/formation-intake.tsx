@@ -1,15 +1,22 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
-import { UploadCloud, Loader2, Sparkles, AlertTriangle, ScrollText, Plus, X, Check } from 'lucide-react';
+import { UploadCloud, Loader2, Sparkles, AlertTriangle, ScrollText, Plus, X, Check, PencilLine, FileText } from 'lucide-react';
 import { addToast } from '@/hooks/use-toast';
+import { uploadForParse } from '@/lib/uploads/client-upload';
+import { displayNameFromStoragePath } from '@/lib/uploads/paths';
 
 /**
  * FORMATION INTAKE — drop the EIN letter / articles of organization / operating
  * agreement; AI proposes the company's legal record; you review and confirm. On
  * confirm it upserts core.company_legal_records for the company. AI only reads the
  * document; the human confirms — nothing is stored until then.
+ *
+ * Smart Intake handoff (FPB §5): pass `initialStoragePath` (a file already uploaded
+ * once via uploadForParse) and the review starts immediately — no re-upload. Works with
+ * AI off (principle 10): if the document can't be read, "Fill it in by hand" opens the
+ * same review form empty.
  */
 
 type EntityType = 'LLC' | 'C_CORP' | 'S_CORP' | 'PARTNERSHIP' | 'SOLE_PROP' | 'NONPROFIT' | 'OTHER';
@@ -37,9 +44,21 @@ interface ProposedFormation {
 
 const ALLOWED = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-export function FormationIntake({ companyId }: { companyId: string | null }) {
-  const [phase, setPhase] = useState<'upload' | 'parsing' | 'review'>('upload');
+export interface FormationIntakeProps {
+  companyId: string | null;
+  /** A file already in storage (Smart Intake handoff) — parsed on mount, no re-upload. */
+  initialStoragePath?: string | null;
+  /** Fired after the legal record is saved. */
+  onSaved?: (legalName: string) => void;
+  /** Hide the header card chrome (when embedded inside a Smart Intake card). */
+  embedded?: boolean;
+}
+
+export function FormationIntake({ companyId, initialStoragePath = null, onSaved, embedded = false }: FormationIntakeProps) {
+  const [phase, setPhase] = useState<'upload' | 'parsing' | 'review'>(initialStoragePath ? 'parsing' : 'upload');
   const [error, setError] = useState<string | null>(null);
+  const [canManual, setCanManual] = useState(false);
+  const [sourceName, setSourceName] = useState<string | null>(initialStoragePath ? displayNameFromStoragePath(initialStoragePath) : null);
   const [dragOver, setDragOver] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedName, setSavedName] = useState<string | null>(null);
@@ -55,32 +74,75 @@ export function FormationIntake({ companyId }: { companyId: string | null }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [low, setLow] = useState<string[]>([]);
 
-  const parse = useCallback(async (file: File) => {
+  const applyProposal = useCallback((f: ProposedFormation) => {
+    setLegalName(f.legal_name ?? '');
+    setEntityType(f.entity_type ?? '');
+    setEin(f.ein ?? '');
+    setFormationState(f.formation_state ?? '');
+    setFormationDate(f.formation_date ?? '');
+    setRegisteredAgent(f.registered_agent ?? '');
+    setMembers(f.members ?? []);
+    setLow(f.lowConfidenceFields ?? []);
+  }, []);
+
+  /** Parse a file that is already in storage (Smart Intake handoff or a fresh upload). */
+  const parseByPath = useCallback(async (storagePath: string) => {
     setError(null);
-    if (!ALLOWED.includes(file.type)) { setError('Unsupported file — PDF or image only.'); return; }
-    if (file.size > 10 * 1024 * 1024) { setError('File too large (max 10MB).'); return; }
+    setCanManual(false);
     setPhase('parsing');
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch('/api/onboarding/formation/parse', { method: 'POST', body: fd });
-      const body = (await res.json()) as { formation?: ProposedFormation; error?: string };
-      if (!res.ok || !body.formation) { setError(body.error ?? 'Could not read that document.'); setPhase('upload'); return; }
-      const f = body.formation;
-      setLegalName(f.legal_name ?? '');
-      setEntityType(f.entity_type ?? '');
-      setEin(f.ein ?? '');
-      setFormationState(f.formation_state ?? '');
-      setFormationDate(f.formation_date ?? '');
-      setRegisteredAgent(f.registered_agent ?? '');
-      setMembers(f.members ?? []);
-      setLow(f.lowConfidenceFields ?? []);
+      const res = await fetch('/api/onboarding/formation/parse', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ storagePath }),
+      });
+      const raw = await res.text();
+      let body: { formation?: ProposedFormation; error?: string; code?: string } | null = null;
+      try { body = raw ? JSON.parse(raw) : null; } catch { body = null; }
+      if (!res.ok || !body?.formation) {
+        const aiOff = res.status === 503 || body?.code === 'NO_API_KEY' || res.status === 429;
+        setError(aiOff
+          ? 'Automatic reading is unavailable right now. Fill in the details by hand — it takes a minute.'
+          : body?.error ?? 'We couldn’t read that document.');
+        setCanManual(true);
+        setPhase('upload');
+        return;
+      }
+      applyProposal(body.formation);
       setPhase('review');
     } catch {
       setError('Network error reading the document.');
+      setCanManual(true);
       setPhase('upload');
     }
-  }, []);
+  }, [applyProposal]);
+
+  const parse = useCallback(async (file: File) => {
+    setError(null);
+    if (!ALLOWED.includes(file.type)) { setError('Unsupported file — PDF or image only.'); return; }
+    if (file.size > 15 * 1024 * 1024) { setError('File too large (max 15MB).'); return; }
+    setSourceName(file.name);
+    setPhase('parsing');
+    // Upload once to storage (no serverless body limit), then parse by path.
+    const up = await uploadForParse(file);
+    if ('error' in up) { setError(up.error); setPhase('upload'); return; }
+    await parseByPath(up.storagePath);
+  }, [parseByPath]);
+
+  const startManual = useCallback(() => {
+    applyProposal({ legal_name: null, entity_type: null, ein: null, formation_state: null, formation_date: null, registered_agent: null, members: [] });
+    setError(null);
+    setPhase('review');
+  }, [applyProposal]);
+
+  // Smart Intake handoff: read the already-uploaded file once on mount / when it changes.
+  const startedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialStoragePath || startedFor.current === initialStoragePath) return;
+    startedFor.current = initialStoragePath;
+    setSourceName(displayNameFromStoragePath(initialStoragePath));
+    void parseByPath(initialStoragePath);
+  }, [initialStoragePath, parseByPath]);
 
   async function save() {
     if (!legalName.trim()) { addToast('error', 'Legal name is required'); return; }
@@ -104,6 +166,7 @@ export function FormationIntake({ companyId }: { companyId: string | null }) {
       if (!res.ok) { addToast('error', body.error ?? 'Could not save the legal record'); return; }
       addToast('success', 'Company legal record saved');
       setSavedName(legalName.trim());
+      onSaved?.(legalName.trim());
       setPhase('upload');
     } finally {
       setSaving(false);
@@ -115,8 +178,8 @@ export function FormationIntake({ companyId }: { companyId: string | null }) {
   const label = 'block text-[10px] text-slate-500 mb-1 uppercase tracking-wide';
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-surface-900/60 p-4 space-y-3">
-      <div className="flex items-center gap-2">
+    <div className={clsx('space-y-3', !embedded && 'rounded-xl border border-slate-800 bg-surface-900/60 p-4')}>
+      <div className={clsx('flex items-center gap-2', embedded && 'hidden')}>
         <ScrollText size={15} className="text-brand-400" />
         <div>
           <p className="text-sm font-medium text-white">Company legal record</p>
@@ -131,14 +194,38 @@ export function FormationIntake({ companyId }: { companyId: string | null }) {
         )}
       </div>
 
+      {embedded && savedName && (
+        <p className="inline-flex items-center gap-1 text-[11px] text-emerald-400" role="status">
+          <Check size={12} /> {savedName} legal record saved
+        </p>
+      )}
+
       {error && (
-        <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] text-red-300">
-          <AlertTriangle size={13} className="mt-0.5 shrink-0" /> {error}
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200" role="alert">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span className="flex-1">{error}</span>
+          {canManual && (
+            <button type="button" onClick={startManual}
+              className="shrink-0 inline-flex items-center gap-1 rounded-md border border-amber-500/40 px-2 py-0.5 text-amber-100 hover:bg-amber-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50">
+              <PencilLine size={11} /> Fill it in by hand
+            </button>
+          )}
         </div>
       )}
 
-      {(phase === 'upload' || phase === 'parsing') && (
+      {sourceName && phase !== 'upload' && (
+        <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
+          <FileText size={12} className="text-indigo-400" /> <span className="truncate">{sourceName}</span>
+        </p>
+      )}
+
+      {/* Embedded with a handed-over file: never invite a re-upload (FPB §5) — manual entry is the fallback. */}
+      {(phase === 'upload' || phase === 'parsing') && !(embedded && phase === 'upload' && (savedName || initialStoragePath)) && (
         <div
+          role="button"
+          tabIndex={phase === 'upload' ? 0 : -1}
+          aria-label="Drop or choose a formation document"
+          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && phase === 'upload') { e.preventDefault(); fileInput.current?.click(); } }}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) void parse(f); }}
@@ -158,6 +245,12 @@ export function FormationIntake({ companyId }: { companyId: string | null }) {
               <p className="text-[10px] text-slate-500 mt-1">EIN letter · articles · operating agreement · PDF/image</p></>
           )}
         </div>
+      )}
+
+      {phase === 'upload' && !canManual && !savedName && (
+        <button type="button" onClick={startManual} className="text-[11px] text-slate-500 hover:text-slate-300 inline-flex items-center gap-1">
+          <PencilLine size={11} /> No document handy? Enter the details by hand
+        </button>
       )}
 
       {phase === 'review' && (

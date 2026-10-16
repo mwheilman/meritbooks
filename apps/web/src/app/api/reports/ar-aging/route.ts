@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 import {
   buildUnbilledAging,
   type UnbilledContribution,
@@ -50,17 +51,21 @@ async function computeUnbilled(
   }
 
   // Net debit balance on 1180, line by line, POSTED and dated on/before as-of.
-  let q = db
-    .from('gl_entry_lines')
-    .select('debit_cents, credit_cents, job_id, gl_entries!inner(entry_date, status)')
-    .eq('org_id', orgId)
-    .eq('account_id', unbilledAccountId)
-    .eq('gl_entries.status', 'POSTED')
-    .lte('gl_entries.entry_date', asOf);
-  if (locFilter.length === 1) q = q.eq('location_id', locFilter[0]);
-  else if (locFilter.length > 1) q = q.in('location_id', locFilter);
+  // Paged: PostgREST caps a response at 1,000 rows.
+  const buildQ = () => {
+    let q = db
+      .from('gl_entry_lines')
+      .select('debit_cents, credit_cents, job_id, gl_entries!inner(entry_date, status)')
+      .eq('org_id', orgId)
+      .eq('account_id', unbilledAccountId)
+      .eq('gl_entries.status', 'POSTED')
+      .lte('gl_entries.entry_date', asOf);
+    if (locFilter.length === 1) q = q.eq('location_id', locFilter[0]);
+    else if (locFilter.length > 1) q = q.in('location_id', locFilter);
+    return q;
+  };
 
-  const { data, error } = await q;
+  const { data, error } = await fetchAll(buildQ, { label: 'ar-aging unbilled gl_entry_lines' });
   if (error) throw new Error(error.message);
   const lines = (data ?? []) as GlLineRow[];
   if (lines.length === 0) return EMPTY_UNBILLED;
@@ -125,11 +130,15 @@ export async function GET(request: Request) {
   // Defensive: exclude WRITTEN_OFF (and any settled) rows. A written-off invoice
   // has balance_cents = 0 (paid advanced to total), so `> 0` drops it from the
   // aging even before the v_ar_aging view is re-created to exclude WRITTEN_OFF.
-  let query = supabase.from('v_ar_aging').select('*').gt('balance_cents', 0);
-  if (locFilter.length === 1) query = query.eq('location_id', locFilter[0]);
-  else if (locFilter.length > 1) query = query.in('location_id', locFilter);
+  // Paged: PostgREST caps a response at 1,000 rows.
+  const buildQuery = () => {
+    let query = supabase.from('v_ar_aging').select('*').gt('balance_cents', 0);
+    if (locFilter.length === 1) query = query.eq('location_id', locFilter[0]);
+    else if (locFilter.length > 1) query = query.in('location_id', locFilter);
+    return query;
+  };
 
-  const { data, error } = await query;
+  const { data, error } = await fetchAll(buildQuery, { orderBy: 'invoice_id', label: 'ar-aging v_ar_aging' });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const buckets: Record<string, { count: number; totalCents: number }> = {

@@ -14,6 +14,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
 import type { ConversionSessionData } from '../conversion';
 import {
@@ -127,7 +128,10 @@ export interface ReconciliationBuildResult {
 }
 
 async function sumAgingView(db: DB, view: 'v_ar_aging' | 'v_ap_aging', locationId: string): Promise<number> {
-  const { data } = await db.from(view).select('balance_cents').eq('location_id', locationId).gt('balance_cents', 0);
+  const { data } = await fetchAll(
+    () => db.from(view).select('balance_cents').eq('location_id', locationId).gt('balance_cents', 0),
+    { orderBy: view === 'v_ap_aging' ? 'bill_id' : 'invoice_id', label: `conversion recon ${view}` },
+  );
   let total = 0;
   for (const r of (data ?? []) as { balance_cents: number | null }[]) total += Number(r.balance_cents ?? 0);
   return total;
@@ -147,10 +151,14 @@ export async function buildConversionReconciliation(
   const locationId = data.companyId;
 
   // Live GL trial balance for this company (debit-positive net per account).
-  const { data: tbRows } = await db
-    .from('v_trial_balance')
-    .select('account_number, account_name, total_debits, total_credits')
-    .eq('location_id', locationId);
+  const { data: tbRows } = await fetchAll(
+    () =>
+      db
+        .from('v_trial_balance')
+        .select('account_number, account_name, total_debits, total_credits')
+        .eq('location_id', locationId),
+    { orderBy: ['org_id', 'location_id', 'account_id'], label: 'conversion recon v_trial_balance' },
+  );
   const glNetByNumber = new Map<string, { name: string; net: number }>();
   for (const r of (tbRows ?? []) as { account_number: string; account_name: string | null; total_debits: number | null; total_credits: number | null }[]) {
     const num = String(r.account_number);

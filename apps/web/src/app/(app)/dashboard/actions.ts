@@ -1,6 +1,7 @@
 'use server';
 
 import { createAuthedServerSupabase } from '@/lib/supabase/authed';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 /**
  * Dashboard = the ONE consolidated, cross-company landing on the processing side.
@@ -174,7 +175,10 @@ export async function getWorkboard(): Promise<Workboard> {
       .eq('is_active', true)
       .limit(ROW_CAP),
     supabase.from('ai_decisions').select('location_id').eq('status', 'PROPOSED').limit(ROW_CAP),
-    supabase.from('gl_entries').select('location_id').eq('status', 'DRAFT').limit(ROW_CAP),
+    // Paged: `.limit(ROW_CAP)` alone is silently capped at PostgREST's 1,000 rows.
+    fetchAll(() => supabase.from('gl_entries').select('location_id').eq('status', 'DRAFT'), {
+      label: 'dashboard draft gl_entries',
+    }),
     supabase
       .from('fiscal_periods')
       .select('location_id, status')

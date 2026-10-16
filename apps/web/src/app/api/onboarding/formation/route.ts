@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { ENTITY_TYPES } from '@/lib/onboarding/formation/parse-formation';
 
 /**
@@ -107,6 +108,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+
+  // Writing the company's legal record is an onboarding/setup action.
+  const guard = await requirePermission(userId, 'settings_acct', 'edit');
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try {

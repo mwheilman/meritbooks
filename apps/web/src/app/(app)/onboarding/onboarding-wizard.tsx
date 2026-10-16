@@ -1,26 +1,39 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect, type ReactNode } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
-  Building2, BookOpen, Scale, Landmark, Users, Rocket, Check, Loader2, AlertCircle,
-  ArrowLeft, ArrowRight, Sparkles, Percent, CircleCheck, ChevronRight, Plus, ShieldCheck,
-  Plug, Upload,
+  Building2, BookOpen, Scale, Landmark, Rocket, Check, Loader2, AlertCircle,
+  ArrowLeft, ArrowRight, Sparkles, Percent, CircleCheck, Plus, ShieldCheck,
+  Plug, Upload, LayoutGrid,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { PlaidLinkButton } from '@/components/integrations/plaid-link-button';
 import { ConnectErpStep } from '@/components/integrations/connect-erp-step';
+import { InviteHelper } from '@/components/onboarding/invite-helper';
 import ConversionClient from './conversion/conversion-client';
 import { ReadinessChecklist } from './readiness-checklist';
 import { SmartIntake } from './smart-intake';
 import { FormationIntake } from './formation-intake';
-import {
-  SourceTile, ProposalCard, TieOutBanner, SetupHomeBoard,
-} from '@/components/onboarding';
+import { SourceTile, ProposalCard, TieOutBanner } from '@/components/onboarding';
 import { ACTIVE_COMPANY_COOKIE } from '@/lib/company-scope';
-import type { OnboardingStepKey, OnboardingStatus } from '@/lib/onboarding/status';
+import type { CompanyOnboarding, OnboardingStepKey, OnboardingStatus, SectionStatusValue } from '@/lib/onboarding/status';
 import { WIZARD_FLOW_SECTIONS } from '@/lib/onboarding/sections/registry';
+import {
+  stepDisplayState, pickActiveCompanyId, findCompany, canFinish, opensOnBoard,
+  type StepDisplayState,
+} from '@/lib/onboarding/wizard-progress';
+import { lastDayOfPreviousMonth } from '@/lib/onboarding/org-setup';
+import { WizardStepper } from './wizard-stepper';
+import { TeamStep } from './team-step';
+import { LaunchStep } from './launch-step';
+import { SetupBoardView } from './setup-board-view';
+import { OpeningChoice, recordOpeningChoice } from './opening-choice';
+import {
+  QuickBooksConnectPanel, GuidedExportPanel, isQboReturnCode, type QboReturnCode,
+} from './books-source-panel';
 
 // ── Shared shapes ─────────────────────────────────────────────────────────────
 interface EntityRow {
@@ -56,26 +69,6 @@ const REV_REC_METHODS: { value: string; label: string; help: string }[] = [
   { value: 'CASH', label: 'Cash basis', help: 'Recognize revenue only when the payment lands.' },
 ];
 
-const TEAM_ROLES: { value: string; label: string; desc: string }[] = [
-  { value: 'company_admin', label: 'Admin', desc: 'Full access to everything' },
-  { value: 'cfo', label: 'CFO', desc: 'Financial oversight; approves COA changes' },
-  { value: 'merit_controller', label: 'Controller', desc: 'Owns the close and controls' },
-  { value: 'assistant_cfo', label: 'Assistant CFO', desc: 'Financial oversight support' },
-  { value: 'accounting_manager', label: 'Accounting Manager', desc: 'Day-to-day accounting, review' },
-  { value: 'accounting_specialist', label: 'Accounting Specialist', desc: 'Data entry, categorize, receipts' },
-  { value: 'check_processor', label: 'Check Processor', desc: 'Print and manage checks only' },
-  { value: 'general_admin', label: 'General Admin', desc: 'Administrative access' },
-  { value: 'business_user', label: 'Business User', desc: 'Read-only dashboards and reports' },
-];
-
-// The wizard flow is now DRIVEN BY THE SECTION REGISTRY: the ordered domain sections
-// come from `ONBOARDING_SECTIONS` (single source of truth for key/label/icon), plus
-// the terminal `launch` step which is a flow step, not a setup domain. The values are
-// identical to what was hard-coded here, so the Stepper renders exactly as before.
-const STEPS: { key: OnboardingStepKey; label: string; icon: typeof Building2 }[] = [
-  ...WIZARD_FLOW_SECTIONS.map((s) => ({ key: s.key as OnboardingStepKey, label: s.label, icon: s.icon })),
-  { key: 'launch', label: 'Launch', icon: Rocket },
-];
 
 const inputCls = 'w-full px-3 py-2 bg-surface-900 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50';
 const labelCls = 'block text-xs text-slate-500 mb-1.5 font-medium';
@@ -95,49 +88,151 @@ function writeActiveCompanyCookie(id: string) {
   }
 }
 
+
+// The wizard flow is DRIVEN BY THE SECTION REGISTRY: the ordered domain sections come
+// from `WIZARD_FLOW_SECTIONS` (single source of truth for key/label/icon), plus the
+// terminal `launch` step which is a flow step, not a setup domain.
+const STEPS: { key: OnboardingStepKey; label: string; icon: typeof Building2 }[] = [
+  ...WIZARD_FLOW_SECTIONS.map((s) => ({ key: s.key as OnboardingStepKey, label: s.label, icon: s.icon })),
+  { key: 'launch', label: 'Launch', icon: Rocket },
+];
+
+/** Optional steps: moving past one without finishing records it as Skipped. */
+const SKIPPABLE_STEPS: ReadonlySet<OnboardingStepKey> = new Set<OnboardingStepKey>(['bank', 'erp', 'team']);
+
+/** What the bookkeeper would be finishing, per step (InviteHelper context). */
+const STEP_TASK: Record<OnboardingStepKey, string> = {
+  welcome: 'Company setup',
+  coa: 'Chart of accounts review',
+  opening: 'Opening balances',
+  bank: 'Bank connection',
+  erp: 'Connecting existing systems',
+  team: 'Team invitations',
+  launch: 'Go-live review',
+};
+
+/** The role an invited bookkeeper gets — one that can run onboarding (settings_acct:edit). */
+const BOOKKEEPER_ROLE = 'accounting_manager';
+
+/** Persist a section transition (best-effort; never blocks navigation). */
+function persistSection(section: OnboardingStepKey, status: SectionStatusValue) {
+  void fetch('/api/onboarding/status', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ section, status }),
+  }).catch(() => { /* best-effort */ });
+}
+
+type WizardView = 'steps' | 'board';
+
+/** A `?step=` value from the URL, when it names a real wizard step. */
+function parseStepParam(v: string | null): OnboardingStepKey | null {
+  if (!v) return null;
+  return STEPS.some((s) => s.key === v) ? (v as OnboardingStepKey) : null;
+}
+
+/** A Smart Intake storage path from `?intake=` (the TB route re-validates the org prefix). */
+function parseIntakeParam(v: string | null): string | null {
+  return v && v.startsWith('intake/') && !v.includes('..') ? v : null;
+}
+
+/** Drop the one-shot OAuth return params (`qbo`, `qbo_reason`) so a refresh doesn't replay the message. */
+function stripQboParams() {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('qbo') && !url.searchParams.has('qbo_reason')) return;
+    url.searchParams.delete('qbo');
+    url.searchParams.delete('qbo_reason');
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  } catch { /* non-fatal */ }
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 export function OnboardingWizard() {
-  const { data: meta, isLoading: metaLoading, refetch: refetchMeta } = useQuery<EntitiesMeta>('/api/settings/entities');
+  const {
+    data: meta, isLoading: metaLoading, error: metaError, refetch: refetchMeta,
+  } = useQuery<EntitiesMeta>('/api/settings/entities');
 
-  const [step, setStep] = useState<OnboardingStepKey>('welcome');
+  // Deep links: `?step=opening&intake=<path>` (Smart Intake handoff), `?sessionId=`,
+  // and the QuickBooks OAuth return `?qbo=<code>&qbo_reason=…`.
+  const searchParams = useSearchParams();
+  const urlStep = parseStepParam(searchParams?.get('step') ?? null);
+  const urlIntake = parseIntakeParam(searchParams?.get('intake') ?? null);
+  const urlQboRaw = searchParams?.get('qbo') ?? null;
+  const urlQbo: QboReturnCode | null = isQboReturnCode(urlQboRaw) ? urlQboRaw : null;
+  const urlQboReason = searchParams?.get('qbo_reason') ?? null;
+  // Where the URL asked to open (wins over the saved step on the FIRST status load).
+  const urlOpenStep = useRef<OnboardingStepKey | null>(urlStep ?? (urlQbo ? 'welcome' : null));
+
+  const [step, setStep] = useState<OnboardingStepKey>(urlOpenStep.current ?? 'welcome');
+  const [view, setView] = useState<WizardView>('steps');
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
+  const [statusError, setStatusError] = useState(false);
   const [createdAccounts, setCreatedAccounts] = useState<number | null>(null);
-  const [createdCompanyId, setCreatedCompanyId] = useState<string | null>(null);
+  const [preferredCompanyId, setPreferredCompanyId] = useState<string | null>(null);
+  // Furthest step index reached — steps before it that aren't done read "Skipped".
+  const [furthest, setFurthest] = useState(0);
+  const [skippedSteps, setSkippedSteps] = useState<Set<OnboardingStepKey>>(() => new Set());
   const [finishing, setFinishing] = useState(false);
-  // Source-first entry: which source the user chose on the opening screen. Drives the
-  // tailored copy + the forward route (connect / upload / start-fresh). Local-only —
+  // Source-first entry: which source the user chose on the opening screen. Local-only —
   // it steers the flow, it is not itself a persisted setup fact.
-  const [source, setSource] = useState<BookSource | null>(null);
+  const [source, setSource] = useState<BookSource | null>(urlQbo ? 'quickbooks' : null);
+  // Smart Intake handoff + a session staged by the live QuickBooks pull → the Opening step.
+  const [intakePath, setIntakePath] = useState<string | null>(urlIntake);
+  const [stagedSessionId, setStagedSessionId] = useState<string | null>(null);
+  const [qboReturn, setQboReturn] = useState<{ code: QboReturnCode; reason: string | null } | null>(
+    urlQbo ? { code: urlQbo, reason: urlQboReason } : null,
+  );
+  const initialized = useRef(false);
 
-  // Load status once → resume the saved/derived step.
+  // Load status → on the FIRST load decide where to open: the setup board on a return
+  // visit after go-live, else resume the saved/derived step.
   const loadStatus = useCallback(async () => {
     try {
       const res = await fetch('/api/onboarding/status');
-      if (res.ok) {
-        const s = (await res.json()) as OnboardingStatus & { orgResolved?: boolean };
-        setStatus(s);
-        if (!statusLoaded && s.currentStep && !s.complete) setStep(s.currentStep);
+      if (!res.ok) throw new Error('status unavailable');
+      const s = (await res.json()) as OnboardingStatus & { orgResolved?: boolean };
+      setStatus(s);
+      setStatusError(false);
+      if (!initialized.current) {
+        initialized.current = true;
+        const stored = new Set<OnboardingStepKey>();
+        SKIPPABLE_STEPS.forEach((k) => { if (s.sections?.[k as keyof typeof s.sections]?.status === 'skipped') stored.add(k); });
+        setSkippedSteps(stored);
+        if (urlOpenStep.current) {
+          // A deep link (Smart Intake handoff / OAuth return) chose the step — honor it.
+          setFurthest((f) => Math.max(f, STEPS.findIndex((x) => x.key === urlOpenStep.current)));
+        } else if (opensOnBoard(s)) {
+          setView('board');
+        } else if (s.currentStep) {
+          setStep(s.currentStep);
+          setFurthest(Math.max(0, STEPS.findIndex((x) => x.key === s.currentStep)));
+        }
       }
     } catch {
-      /* status is best-effort; the wizard still runs from step 1 */
+      setStatusError(true);
     } finally {
       setStatusLoaded(true);
     }
-  }, [statusLoaded]);
+  }, []);
 
   useEffect(() => { void loadStatus(); }, [loadStatus]);
 
-  const entities = meta?.entities ?? [];
+  const entities = useMemo(() => meta?.entities ?? [], [meta]);
   const stepIndex = STEPS.findIndex((s) => s.key === step);
 
-  // The company the user will ENTER on finish: the one created in this session,
-  // else the tenant's single/first company. Onboarding then pins it and drops the
-  // user into that company's workspace so processing is already company-scoped.
-  const enterCompany = useMemo(
-    () => entities.find((e) => e.id === createdCompanyId) ?? entities[0] ?? null,
-    [entities, createdCompanyId],
-  );
+  // The company the wizard is working on (per-company onboarding): the one just
+  // created / explicitly picked, else the first not-yet-live company, else the first.
+  const activeCompanyId = useMemo(() => {
+    const list = status?.companies && status.companies.length > 0
+      ? status.companies
+      : entities.map((e) => ({ id: e.id, live: false }));
+    return pickActiveCompanyId(list, preferredCompanyId);
+  }, [status, entities, preferredCompanyId]);
+  const activeCompany: CompanyOnboarding | null = findCompany(status, activeCompanyId);
+  const activeEntity = entities.find((e) => e.id === activeCompanyId) ?? null;
+  const activeName = activeCompany?.name ?? activeEntity?.name ?? null;
 
   // Persist the step as the user advances (degrade-safe; never blocks navigation).
   const persistStep = useCallback((next: OnboardingStepKey) => {
@@ -149,93 +244,155 @@ export function OnboardingWizard() {
   }, []);
 
   const goTo = useCallback((next: OnboardingStepKey) => {
+    setView('steps');
     setStep(next);
+    setFurthest((f) => Math.max(f, STEPS.findIndex((s) => s.key === next)));
     persistStep(next);
   }, [persistStep]);
 
+  // In-page navigation to a deep link (e.g. a Smart Intake card's "Use for opening
+  // balances" while already on /onboarding) — react to the new query string.
+  const lastUrlKey = useRef(`${urlStep ?? ''}|${urlIntake ?? ''}`);
+  useEffect(() => {
+    const key = `${urlStep ?? ''}|${urlIntake ?? ''}`;
+    if (key === lastUrlKey.current) return;
+    lastUrlKey.current = key;
+    if (urlIntake) { setIntakePath(urlIntake); setStagedSessionId(null); }
+    if (urlStep) goTo(urlStep);
+  }, [urlStep, urlIntake, goTo]);
+
+  // OAuth return: show the message once, on the QuickBooks tile, then clean the URL.
+  useEffect(() => {
+    if (!urlQbo) return;
+    setQboReturn({ code: urlQbo, reason: urlQboReason });
+    setSource('quickbooks');
+    setView('steps');
+    setStep('welcome');
+    stripQboParams();
+  }, [urlQbo, urlQboReason]);
+
+  /** The REAL status of a step — never "done" because the user clicked past it. */
+  const stepStatus = useCallback((key: OnboardingStepKey): SectionStatusValue => {
+    if (!status) return 'not_started';
+    if (key === 'launch') return status.flag?.complete === true && canFinish(activeCompany) ? 'done' : 'not_started';
+    if (key === 'opening') {
+      // Per company: posted = done; an explicit fresh start skipped the import.
+      if (activeCompany?.opening === 'posted') return 'done';
+      if (activeCompany?.opening === 'started_fresh') return 'skipped';
+      return 'not_started';
+    }
+    const section = WIZARD_FLOW_SECTIONS.find((s) => s.key === key);
+    const derived = section ? section.deriveStatus(status) : 'not_started';
+    if (derived !== 'done' && skippedSteps.has(key)) return 'skipped';
+    return derived;
+  }, [status, activeCompany, skippedSteps]);
+
+  const stepStates = useMemo(() => {
+    const out = {} as Record<OnboardingStepKey, StepDisplayState>;
+    STEPS.forEach((s, i) => {
+      out[s.key] = stepDisplayState({ isCurrent: view === 'steps' && s.key === step, status: stepStatus(s.key), passed: i < furthest });
+    });
+    return out;
+  }, [step, view, furthest, stepStatus]);
+
   const goNext = useCallback(() => {
+    // Moving past an optional step without finishing it records it as SKIPPED.
+    if (SKIPPABLE_STEPS.has(step) && stepStatus(step) !== 'done') {
+      persistSection(step, 'skipped');
+      setSkippedSteps((prev) => new Set(prev).add(step));
+    }
     const ni = Math.min(stepIndex + 1, STEPS.length - 1);
     goTo(STEPS[ni].key);
-  }, [stepIndex, goTo]);
+  }, [step, stepIndex, stepStatus, goTo]);
 
   const goBack = useCallback(() => {
     const pi = Math.max(stepIndex - 1, 0);
     goTo(STEPS[pi].key);
   }, [stepIndex, goTo]);
 
+  const finishAllowed = canFinish(activeCompany);
+
   const finish = useCallback(async () => {
+    if (!canFinish(activeCompany)) {
+      addToast('error', 'Post opening balances or choose “Start fresh with no history” first.');
+      return;
+    }
     setFinishing(true);
     try {
-      await fetch('/api/onboarding/status', {
+      const res = await fetch('/api/onboarding/status', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ complete: true, currentStep: 'launch' }),
       });
+      if (!res.ok) throw new Error('finish failed');
 
-      // Pin the freshly-created company as ACTIVE and drop the user straight into
-      // its workspace, so they land already company-scoped (the control that
-      // processing happens inside exactly one company). A hard navigation forces
-      // the app shell + providers to re-init from the cookie with the new company
-      // now present in /api/me — avoiding a stale-locations reconcile that would
-      // otherwise reset the scope to consolidated.
-      if (enterCompany) {
-        writeActiveCompanyCookie(enterCompany.id);
-        addToast('success', `You are live — entering ${enterCompany.name}.`);
+      // Pin the company as ACTIVE and drop the user straight into its workspace (a
+      // hard navigation so the app shell re-inits from the cookie).
+      if (activeCompany) {
+        writeActiveCompanyCookie(activeCompany.id);
+        addToast('success', `${activeCompany.name} is live — let’s get to work.`);
         window.location.assign('/bank-feed');
         return;
       }
-
       addToast('success', 'You are live — your book of record is set up.');
       window.location.assign('/dashboard');
     } catch {
       addToast('error', 'Could not finish onboarding. Please try again.');
       setFinishing(false);
     }
-  }, [enterCompany]);
+  }, [activeCompany]);
 
-  // GENERIC SHELL: each registered section (+ the terminal launch step) maps to its
-  // body here, and the shell renders the one for the active step. The existing step
-  // components are WRAPPED unchanged — no step's logic is rebuilt — so the wizard
-  // renders identically to before while being driven by the registry-derived STEPS.
+  // GENERIC SHELL: each registered section (+ the terminal launch step) maps to its body.
   const stepBodies: Record<OnboardingStepKey, ReactNode> = {
     welcome: (
       <SourceStep
         meta={meta ?? null}
         entities={entities}
+        activeCompany={activeCompany}
+        activeCompanyId={activeCompanyId}
         source={source}
         onPickSource={setSource}
+        qboReturn={qboReturn}
+        onDismissQboReturn={() => setQboReturn(null)}
+        onStaged={(sessionId) => { setStagedSessionId(sessionId); setIntakePath(null); goTo('opening'); }}
         onGoTo={goTo}
         onContinue={goNext}
+        onStatusChanged={loadStatus}
         onCreated={async (r) => {
           setCreatedAccounts(r.accountCount);
-          setCreatedCompanyId(r.locationId);
+          setPreferredCompanyId(r.locationId);
           await refetchMeta();
           await loadStatus();
         }}
       />
     ),
-    coa: <CoaStep accountCount={createdAccounts ?? status?.counts.accounts ?? 0} />,
+    coa: <CoaStep accountCount={createdAccounts ?? status?.counts?.accounts ?? 0} />,
     opening: (
       <OpeningStep
-        companyId={enterCompany?.id ?? null}
-        hasOpeningEntry={status?.hasOpeningEntry ?? false}
+        company={activeCompany}
+        companyId={activeCompanyId}
+        intakePath={intakePath}
+        sessionId={stagedSessionId}
+        onChanged={loadStatus}
       />
     ),
     bank: <BankStep entities={entities} />,
     erp: <ErpStep onSkip={goNext} onDone={goNext} />,
-    team: <TeamStep entities={entities} />,
+    team: <TeamStep companies={entities.map((e) => ({ id: e.id, name: e.name, shortCode: e.shortCode }))} />,
     launch: (
       <LaunchStep
         status={status}
-        entities={entities}
-        enterCompanyName={enterCompany?.name ?? null}
-        accountCount={createdAccounts ?? status?.counts.accounts ?? 0}
-        teamMembers={status?.counts.teamMembers ?? 0}
-        hasOpeningEntry={status?.hasOpeningEntry ?? false}
+        company={activeCompany}
+        accountCount={createdAccounts ?? status?.counts?.accounts ?? 0}
+        skippedSteps={skippedSteps}
         onRefresh={loadStatus}
+        onGoTo={goTo}
+        onOpenBoard={() => setView('board')}
       />
     ),
   };
+
+  const loading = metaLoading || !statusLoaded;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
@@ -243,43 +400,108 @@ export function OnboardingWizard() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-white tracking-tight flex items-center gap-2">
-            <Sparkles size={20} className="text-brand-400" /> Set up your book of record
+            <Sparkles size={20} className="text-brand-400" /> Set up your books
           </h1>
           <p className="text-sm text-slate-400 mt-1 max-w-2xl">
-            A guided path from an empty tenant to a live general ledger — create your company, load a chart of
-            accounts, bring in opening balances that tie out, connect your bank, and invite your team.
+            Connect or drop what you have — we build your books, you approve them. Every step can be handed to your
+            bookkeeper, and nothing here is ever marked done until it really is.
           </p>
         </div>
-        <Link href="/dashboard" className="shrink-0 text-xs text-slate-500 hover:text-slate-300 transition-colors mt-1">
-          Skip for now
-        </Link>
+        <div className="shrink-0 flex flex-col items-end gap-2 mt-1">
+          <button
+            type="button"
+            onClick={() => setView((v) => (v === 'board' ? 'steps' : 'board'))}
+            aria-pressed={view === 'board'}
+            className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+              view === 'board' ? 'border-brand-500/40 bg-brand-500/10 text-brand-300' : 'border-slate-700 text-slate-300 hover:border-slate-500')}
+          >
+            <LayoutGrid size={13} /> {view === 'board' ? 'Back to guided steps' : 'Setup board'}
+          </button>
+          {/* ?stay=1 — the dashboard's first-run redirect never bounces you back here. */}
+          <Link href="/dashboard?stay=1" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+            Go to dashboard
+          </Link>
+        </div>
       </div>
 
-      {status?.complete && (
-        <div className="flex items-center gap-2 rounded-lg border border-brand-500/30 bg-brand-500/10 px-4 py-2.5 text-sm text-brand-300">
-          <CircleCheck size={15} /> This tenant is already live. You can revisit any step to add companies, balances, banks, or teammates.
+      {statusError && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-warning/25 bg-warning/5 px-4 py-2.5 text-sm text-warning-fg" role="status">
+          <span className="flex items-center gap-2"><AlertCircle size={15} /> We couldn&apos;t load your setup progress — what you see may be out of date.</span>
+          <button type="button" onClick={() => void loadStatus()} className="text-xs underline hover:no-underline">Retry</button>
         </div>
       )}
 
-      {/* First-run readiness checklist — live status + deep-links to what's left */}
-      <ReadinessChecklist onJump={goTo} compact />
-
-      {/* Progress */}
-      <Stepper step={step} stepIndex={stepIndex} onJump={(k, i) => { if (i <= stepIndex) goTo(k); }} />
-
-      {/* Body */}
-      {metaLoading || !statusLoaded ? (
-        <div className="card p-6 flex items-center justify-center py-20">
-          <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
+      {metaError && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger-fg" role="alert">
+          <span className="flex items-center gap-2"><AlertCircle size={15} /> We couldn&apos;t load your companies.</span>
+          <button type="button" onClick={() => void refetchMeta()} className="text-xs underline hover:no-underline">Retry</button>
         </div>
+      )}
+
+      {/* Which company we're setting up (per-company onboarding). */}
+      {entities.length > 1 && (
+        <div className="flex items-center gap-2 text-sm">
+          <label htmlFor="wizard-company" className="text-slate-500">Setting up</label>
+          <select
+            id="wizard-company"
+            value={activeCompanyId ?? ''}
+            onChange={(e) => setPreferredCompanyId(e.target.value || null)}
+            className="px-2.5 py-1.5 bg-surface-900 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-brand-500/50"
+          >
+            {entities.map((e) => {
+              const c = findCompany(status, e.id);
+              return <option key={e.id} value={e.id}>{e.name}{c?.live ? ' — live' : ''}</option>;
+            })}
+          </select>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="card p-6 flex items-center justify-center py-20" aria-busy="true">
+          <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
+          <span className="sr-only">Loading your setup</span>
+        </div>
+      ) : view === 'board' ? (
+        <SetupBoardView
+          status={status}
+          onBackToSteps={() => setView('steps')}
+          onSetUpCompany={(id) => { setPreferredCompanyId(id); goTo('opening'); }}
+          onAddCompany={() => { setSource(null); goTo('welcome'); }}
+        />
       ) : (
         <>
+          {status?.complete && (
+            <div className="flex items-center gap-2 rounded-lg border border-brand-500/30 bg-brand-500/10 px-4 py-2.5 text-sm text-brand-300">
+              <CircleCheck size={15} /> Every company is live. Revisit any step to add companies, balances, banks, or teammates.
+            </div>
+          )}
+
+          {/* Books-health checklist — live status + jumps to what's left. */}
+          <ReadinessChecklist onJump={goTo} compact />
+
+          {/* Honest progress — skipped reads Skipped; every step is jumpable. */}
+          <WizardStepper steps={STEPS} states={stepStates} onJump={goTo} />
+
+          {/* Step header — every step can be delegated. */}
+          <div className="flex items-center justify-between gap-3 border-b border-slate-800/60 pb-3">
+            <p className="text-xs text-slate-500">
+              Step {stepIndex + 1} of {STEPS.length}
+              {activeName ? <> · <span className="text-slate-300">{activeName}</span></> : null}
+            </p>
+            <InviteHelper
+              context={`${STEP_TASK[step]}${activeName ? ` for ${activeName}` : ''}`}
+              companyId={activeCompanyId}
+              defaultRole={BOOKKEEPER_ROLE}
+              compact
+            />
+          </div>
+
           {stepBodies[step]}
 
           {/* Nav */}
           <div className="flex items-center justify-between pt-2">
             {stepIndex > 0 ? (
-              <button onClick={goBack} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/50 transition-colors">
+              <button type="button" onClick={goBack} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/50 transition-colors">
                 <ArrowLeft size={14} /> Back
               </button>
             ) : (
@@ -287,70 +509,39 @@ export function OnboardingWizard() {
             )}
 
             {step === 'launch' ? (
-              <button
-                onClick={finish}
-                disabled={finishing}
-                className={clsx('flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors',
-                  finishing ? 'bg-slate-700 text-slate-500' : 'bg-brand-500 text-slate-900 hover:bg-brand-400')}
-              >
-                {finishing ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
-                {enterCompany ? `Finish & enter ${enterCompany.shortCode || enterCompany.name}` : 'Finish & go to dashboard'}
-              </button>
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  type="button"
+                  onClick={() => void finish()}
+                  disabled={finishing || !finishAllowed}
+                  aria-describedby={!finishAllowed ? 'finish-blocked' : undefined}
+                  className={clsx('flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors',
+                    finishing || !finishAllowed ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-slate-900 hover:bg-brand-400')}
+                >
+                  {finishing ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
+                  {activeCompany ? `Finish & enter ${activeCompany.shortCode || activeCompany.name}` : 'Finish'}
+                </button>
+                {!finishAllowed && (
+                  <p id="finish-blocked" className="text-[11px] text-slate-500">
+                    Post opening balances or choose “Start fresh with no history” to finish.
+                  </p>
+                )}
+              </div>
             ) : step === 'welcome' ? (
-              // The source-first entry step owns its own forward navigation (connect /
-              // upload / start-fresh), so the generic Continue is suppressed here.
+              // The source-first entry step owns its own forward navigation.
               <span />
             ) : (
               <button
+                type="button"
                 onClick={goNext}
                 className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium transition-colors bg-brand-500 text-slate-900 hover:bg-brand-400"
               >
-                Continue <ArrowRight size={14} />
+                {SKIPPABLE_STEPS.has(step) && stepStatus(step) !== 'done' ? 'Skip for now' : 'Continue'} <ArrowRight size={14} />
               </button>
             )}
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-// ── Progress indicator ────────────────────────────────────────────────────────
-function Stepper({
-  step, stepIndex, onJump,
-}: {
-  step: OnboardingStepKey;
-  stepIndex: number;
-  onJump: (key: OnboardingStepKey, index: number) => void;
-}) {
-  return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      {STEPS.map((s, i) => {
-        const Icon = s.icon;
-        const active = s.key === step;
-        const done = i < stepIndex;
-        const reachable = i <= stepIndex;
-        return (
-          <div key={s.key} className="flex items-center gap-1.5">
-            <button
-              onClick={() => onJump(s.key, i)}
-              disabled={!reachable}
-              className={clsx('flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors',
-                active ? 'bg-brand-500/10 text-brand-300 font-medium'
-                  : done ? 'text-brand-400/80 hover:bg-slate-800/50'
-                    : 'text-slate-500 cursor-default')}
-            >
-              <span className={clsx('flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold shrink-0',
-                active ? 'bg-brand-500 text-slate-900' : done ? 'bg-brand-500/80 text-slate-900' : 'bg-slate-800 text-slate-500')}>
-                {done ? <Check size={12} /> : i + 1}
-              </span>
-              <span className="hidden sm:inline">{s.label}</span>
-              <Icon size={14} className="sm:hidden" />
-            </button>
-            {i < STEPS.length - 1 && <ChevronRight size={13} className="text-slate-700" />}
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -373,57 +564,67 @@ interface SourceTileConfig {
 
 const SOURCE_TILES: SourceTileConfig[] = [
   { kind: 'quickbooks', icon: <span className="font-mono">qb</span>, title: 'QuickBooks', subtitle: 'Connect & import' },
-  { kind: 'xero', icon: <span className="font-mono">X</span>, title: 'Xero', subtitle: 'Connect & import' },
-  { kind: 'sage', icon: <span className="font-mono">S</span>, title: 'Sage', subtitle: 'Connect & import' },
+  { kind: 'xero', icon: <span className="font-mono">X</span>, title: 'Xero', subtitle: 'One-minute export' },
+  { kind: 'sage', icon: <span className="font-mono">S</span>, title: 'Sage', subtitle: 'One-minute export' },
   { kind: 'upload', icon: <Upload size={16} />, title: 'Upload files', subtitle: 'Trial balance / exports' },
   { kind: 'fresh', icon: <Sparkles size={16} />, title: 'Start fresh', subtitle: 'New books, no import' },
 ];
 
 const ERP_SOURCES: BookSource[] = ['quickbooks', 'xero', 'sage'];
-const SOURCE_LABEL: Record<BookSource, string> = {
-  quickbooks: 'QuickBooks', xero: 'Xero', sage: 'Sage', upload: 'your files', fresh: 'a clean start',
-};
-
-/** Persist an explicit "no prior balances" so the readiness gate treats opening as met. */
-async function markOpeningSkipped() {
-  try {
-    await fetch('/api/onboarding/status', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ section: 'opening', status: 'skipped' }),
-    });
-  } catch { /* best-effort — the tie-out gate still governs any later import */ }
-}
 
 function SourceStep({
-  meta, entities, source, onPickSource, onCreated, onGoTo, onContinue,
+  meta, entities, activeCompany, activeCompanyId, source, onPickSource, qboReturn, onDismissQboReturn, onStaged,
+  onCreated, onGoTo, onContinue, onStatusChanged,
 }: {
   meta: EntitiesMeta | null;
   entities: EntityRow[];
+  activeCompany: CompanyOnboarding | null;
+  activeCompanyId: string | null;
   source: BookSource | null;
   onPickSource: (s: BookSource) => void;
+  qboReturn: { code: QboReturnCode; reason: string | null } | null;
+  onDismissQboReturn: () => void;
+  onStaged: (sessionId: string) => void;
   onCreated: (r: CreateEntityResult) => Promise<void>;
   onGoTo: (step: OnboardingStepKey) => void;
   onContinue: () => void;
+  onStatusChanged: () => Promise<void>;
 }) {
   const hasCompany = entities.length > 0;
-  const companyName = entities[0]?.name;
+  const companyName = activeCompany?.name ?? entities.find((e) => e.id === activeCompanyId)?.name ?? entities[0]?.name;
+  const [savingFresh, setSavingFresh] = useState(false);
+  // Default cutover (FPB §2.3): the last day of the prior month.
+  const cutoverDate = useMemo(() => lastDayOfPreviousMonth(), []);
 
   // The forward action for the chosen source. Enabled only once a company exists.
+  // QuickBooks / Xero / Sage get their own panel below (connect, or the guided export).
   const forward = useMemo(() => {
     if (!source) return null;
-    if (ERP_SOURCES.includes(source)) {
-      return { label: `Connect ${SOURCE_LABEL[source]} & bring your books over`, run: () => onGoTo('erp') };
-    }
+    if (ERP_SOURCES.includes(source)) return null;
     if (source === 'upload') {
       return { label: 'Upload your trial balance', run: () => onGoTo('opening') };
     }
-    // fresh — no import; record the explicit clean start, then continue.
+    // fresh — an EXPLICIT, per-company "no prior history" choice. On a revisit it never
+    // overwrites the truth: posted balances stay posted; an existing fresh start stays.
+    if (activeCompany?.opening === 'posted') {
+      return { label: 'Continue — opening balances are already posted', run: () => onContinue() };
+    }
+    if (activeCompany?.opening === 'started_fresh') {
+      return { label: 'Continue — starting fresh', run: () => onContinue() };
+    }
     return {
-      label: 'Start clean — no import',
-      run: async () => { await markOpeningSkipped(); onContinue(); },
+      label: 'Start fresh with no history',
+      run: async () => {
+        if (!activeCompanyId) return;
+        setSavingFresh(true);
+        const r = await recordOpeningChoice(activeCompanyId, 'fresh');
+        setSavingFresh(false);
+        if (!r.ok) { addToast('error', r.error ?? 'Could not save that choice.'); return; }
+        await onStatusChanged();
+        onContinue();
+      },
     };
-  }, [source, onGoTo, onContinue]);
+  }, [source, activeCompany, activeCompanyId, onGoTo, onContinue, onStatusChanged]);
 
   return (
     <div className="space-y-5">
@@ -433,6 +634,12 @@ function SourceStep({
           First question — and almost the only one. Connect your system or drop your files and we&apos;ll bring
           everything over. You review; you don&apos;t re-enter. Starting a brand-new business? Begin clean.
         </p>
+        <Link
+          href="/onboarding/portfolio"
+          className="mt-2 inline-flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300 underline-offset-2 hover:underline"
+        >
+          Setting up several companies? Onboard them all at once <ArrowRight size={12} />
+        </Link>
       </div>
 
       <div role="radiogroup" aria-label="Where your books live today" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -458,34 +665,54 @@ function SourceStep({
             <div className="rounded-xl border border-slate-800 bg-surface-900/60 px-4 py-3.5 flex items-center justify-between gap-3">
               <p className="text-xs text-slate-500">
                 {hasCompany
-                  ? <>Next{companyName ? <> for <span className="text-slate-300">{companyName}</span></> : ''}: {ERP_SOURCES.includes(source) ? 'connect and we’ll propose a complete, tied-out setup.' : source === 'upload' ? 'drop your trial balance and tie out to the penny.' : 'your ledger starts empty — add anything later on your setup board.'}</>
+                  ? <>Next{companyName ? <> for <span className="text-slate-300">{companyName}</span></> : ''}: {source === 'upload' ? 'drop your trial balance and tie out to the penny.' : 'the books start at zero — no balances carried over. You can still import history later.'}</>
                   : 'Create your company above to continue.'}
               </p>
               <button
                 type="button"
                 onClick={() => void forward.run()}
-                disabled={!hasCompany}
+                disabled={!hasCompany || savingFresh}
                 className={clsx('shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                  hasCompany ? 'bg-brand-500 text-slate-900 hover:bg-brand-400' : 'bg-slate-700 text-slate-500 cursor-not-allowed')}
+                  hasCompany && !savingFresh ? 'bg-brand-500 text-slate-900 hover:bg-brand-400' : 'bg-slate-700 text-slate-500 cursor-not-allowed')}
               >
-                {forward.label} <ArrowRight size={14} />
+                {savingFresh && <Loader2 size={14} className="animate-spin" />} {forward.label} <ArrowRight size={14} />
               </button>
             </div>
+          )}
+
+          {/* QuickBooks: connect + live pull when the platform has Intuit keys, else the
+              guided one-minute export. Xero / Sage: guided export → upload. */}
+          {source === 'quickbooks' && (
+            <QuickBooksConnectPanel
+              companyId={hasCompany ? activeCompanyId : null}
+              companyName={companyName ?? null}
+              defaultCutoverDate={cutoverDate}
+              returnCode={qboReturn?.code ?? null}
+              returnReason={qboReturn?.reason ?? null}
+              onDismissReturn={onDismissQboReturn}
+              onStaged={onStaged}
+              onUpload={() => onGoTo('opening')}
+            />
+          )}
+          {(source === 'xero' || source === 'sage') && (
+            <GuidedExportPanel system={source} cutoverDate={cutoverDate} hasCompany={hasCompany} onUpload={() => onGoTo('opening')} />
           )}
         </div>
       )}
 
-      {hasCompany && (
-        <div className="pt-1">
-          <div className="flex items-center gap-3 text-2xs text-slate-600 mb-3">
-            <span className="h-px flex-1 bg-slate-800" /> or <span className="h-px flex-1 bg-slate-800" />
-          </div>
-          <SmartIntake />
-          <div className="mt-3">
-            <FormationIntake companyId={entities[0]?.id ?? null} />
-          </div>
+      {/* "Drop everything you have" — one drop zone for every document (FPB principle 5).
+          Each file is uploaded once and handed to the right parser by storage path. */}
+      <div className="pt-1">
+        <div className="flex items-center gap-3 text-2xs text-slate-600 mb-3">
+          <span className="h-px flex-1 bg-slate-800" /> {source ? 'and' : 'or'} drop your files <span className="h-px flex-1 bg-slate-800" />
         </div>
-      )}
+        <SmartIntake companyId={activeCompanyId ?? undefined} cutoverDate={cutoverDate} />
+        {hasCompany && (
+          <div className="mt-3">
+            <FormationIntake companyId={activeCompanyId ?? entities[0]?.id ?? null} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -577,7 +804,7 @@ function CompanyConfirm({
                     <p className="text-[11px] text-slate-500 font-mono">{e.shortCode}{e.industry ? ` · ${e.industry}` : ''}</p>
                   </div>
                 </div>
-                <span className="flex items-center gap-1 text-[11px] text-brand-400"><Check size={12} /> Ready</span>
+                <span className="flex items-center gap-1 text-[11px] text-slate-400"><Check size={12} /> Created</span>
               </div>
             ))}
           </div>
@@ -727,16 +954,28 @@ function CoaStep({ accountCount }: { accountCount: number }) {
 // ── Step 3: Opening balances (reuses the historical-conversion pipeline) ────────
 interface TbRow { total_debits: number | null; total_credits: number | null }
 
-function OpeningStep({ companyId, hasOpeningEntry }: { companyId: string | null; hasOpeningEntry: boolean }) {
-  // Crown the tie-out with the real, posted totals once opening balances exist. The
-  // books balance by construction (the DB trigger rejects an unbalanced entry), so
-  // summing the live trial balance is an HONEST "balanced to the penny" — no dollar
-  // is authored here, only read back. Degrade-safe: on any error the banner simply
-  // isn't shown and the conversion tool below (with its own live numbers) governs.
+function OpeningStep({
+  company, companyId, intakePath, sessionId, onChanged,
+}: {
+  company: CompanyOnboarding | null;
+  companyId: string | null;
+  /** A TB / GL file already dropped in Smart Intake (storage path) — read, never re-upload. */
+  intakePath: string | null;
+  /** A session already staged (live QuickBooks pull) — open straight into review. */
+  sessionId: string | null;
+  onChanged: () => Promise<void>;
+}) {
+  const posted = company?.opening === 'posted';
+  // Default cutover (FPB §2.3): MeritBooks takes over from the last day of the prior month.
+  const defaultAsOfDate = useMemo(() => lastDayOfPreviousMonth(), []);
+
+  // Crown the tie-out with the real, posted totals once THIS company's opening balances
+  // exist. The books balance by construction (the DB trigger rejects an unbalanced
+  // entry), so summing the live trial balance is an HONEST "balanced to the penny".
   const [tbTotals, setTbTotals] = useState<{ debitsCents: number; creditsCents: number } | null>(null);
 
   useEffect(() => {
-    if (!hasOpeningEntry || !companyId) { setTbTotals(null); return; }
+    if (!posted || !companyId) { setTbTotals(null); return; }
     let cancelled = false;
     (async () => {
       try {
@@ -750,27 +989,27 @@ function OpeningStep({ companyId, hasOpeningEntry }: { companyId: string | null;
       } catch { /* best-effort crown; conversion tool below still shows live numbers */ }
     })();
     return () => { cancelled = true; };
-  }, [hasOpeningEntry, companyId]);
+  }, [posted, companyId]);
 
   return (
     <div className="space-y-4">
-      <div className="card p-6 space-y-2">
+      <div className="card p-6 space-y-3">
         <h2 className="text-lg font-semibold text-white flex items-center gap-2">
           <Scale size={18} className="text-brand-400" /> Opening balances
         </h2>
         <p className="text-xs text-slate-500">
-          Upload your prior trial balance. AI proposes how each account maps onto your chart — it never sees or
-          changes a balance — then you tie out and post one balanced opening entry. Go-live is blocked until
-          debits equal credits and a person has confirmed the tie-out.
+          Upload your trial balance as of the day before MeritBooks takes over. AI proposes how each account maps onto
+          your chart — it never sees or changes a balance — then you tie out and post one balanced opening entry.
         </p>
-        <div className="flex items-center gap-2 text-[11px] text-slate-500 pt-1">
+        <div className="flex items-center gap-2 text-[11px] text-slate-500">
           <ShieldCheck size={13} className="text-brand-400" />
-          Brand-new business with no history? Skip this — just continue, and your ledger starts clean.
+          Going live needs either posted opening balances or your explicit choice to start fresh.
         </div>
+        <OpeningChoice company={company} onChanged={onChanged} />
       </div>
 
-      {/* The "Balanced to the penny ✓" crown — shown once opening balances are posted. */}
-      {hasOpeningEntry && tbTotals && (
+      {/* The "Balanced to the penny" crown — shown once opening balances are posted. */}
+      {posted && tbTotals && (
         <TieOutBanner
           state={tbTotals.debitsCents === tbTotals.creditsCents ? 'balanced' : 'off'}
           debitsCents={tbTotals.debitsCents}
@@ -779,9 +1018,16 @@ function OpeningStep({ companyId, hasOpeningEntry }: { companyId: string | null;
         />
       )}
 
-      {/* The full, existing conversion flow — reused verbatim. */}
+      {/* The full conversion flow, prefilled with this company and the default cutover. */}
       <div className="card p-6">
-        <ConversionClient />
+        {/* Keyed by company + handoff so switching company or a new handoff re-seeds the prefill. */}
+        <ConversionClient
+          key={`${companyId ?? 'none'}|${intakePath ?? ''}|${sessionId ?? ''}`}
+          defaultCompanyId={companyId}
+          defaultAsOfDate={defaultAsOfDate}
+          initialStoragePath={posted ? null : intakePath}
+          initialSessionId={sessionId}
+        />
       </div>
     </div>
   );
@@ -841,233 +1087,6 @@ function ErpStep({ onSkip, onDone }: { onSkip: () => void; onDone: () => void })
       <div className="card p-6">
         <ConnectErpStep embedded onSkip={onSkip} onDone={onDone} />
       </div>
-    </div>
-  );
-}
-
-// ── Step 6: Invite team ────────────────────────────────────────────────────────
-interface TeamMember { id: string; firstName: string; lastName: string; email: string | null; roleLabel: string; isActive: boolean }
-interface TeamMembersResponse { data: TeamMember[]; summary: { total: number; active: number; invited: number } }
-
-function TeamStep({ entities }: { entities: EntityRow[] }) {
-  const { data, isLoading, error, refetch } = useQuery<TeamMembersResponse>('/api/team/members');
-  const members = data?.data ?? [];
-
-  const [email, setEmail] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [role, setRole] = useState('accounting_specialist');
-  const [companyIds, setCompanyIds] = useState<string[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState('');
-
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-
-  const invite = useCallback(async () => {
-    setSubmitting(true);
-    setFormError('');
-    try {
-      const res = await fetch('/api/team/members', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim(),
-          firstName: firstName.trim() || undefined,
-          lastName: lastName.trim() || undefined,
-          role,
-          companyIds,
-        }),
-      });
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        setFormError(body.error ?? 'Could not add that member');
-      } else {
-        addToast('success', `${email.trim()} added — they finish sign-in on first login.`);
-        setEmail(''); setFirstName(''); setLastName(''); setRole('accounting_specialist'); setCompanyIds([]);
-        await refetch();
-      }
-    } catch {
-      setFormError('Network error adding the member');
-    } finally {
-      setSubmitting(false);
-    }
-  }, [email, firstName, lastName, role, companyIds, refetch]);
-
-  return (
-    <div className="space-y-4">
-      <div className="card p-6 space-y-5">
-        <div>
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <Users size={18} className="text-brand-400" /> Invite your team
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Add teammates with a role and (for scoped roles) company access. They claim the invite by signing in
-            with the same email. Optional — you can do this later in Team &amp; Access.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <label className={labelCls}>Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} placeholder="teammate@company.com" />
-          </div>
-          <div>
-            <label className={labelCls}>First name <span className="text-slate-600">(optional)</span></label>
-            <input value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputCls} />
-          </div>
-          <div>
-            <label className={labelCls}>Last name <span className="text-slate-600">(optional)</span></label>
-            <input value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputCls} />
-          </div>
-          <div className="col-span-2">
-            <label className={labelCls}>Role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value)} className={inputCls}>
-              {TEAM_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-            </select>
-            <p className="text-[10px] text-slate-600 mt-1">{TEAM_ROLES.find((r) => r.value === role)?.desc}</p>
-          </div>
-          {entities.length > 1 && (
-            <div className="col-span-2">
-              <label className={labelCls}>Company access <span className="text-slate-600">(leave empty for all)</span></label>
-              <div className="flex flex-wrap gap-2">
-                {entities.map((e) => {
-                  const on = companyIds.includes(e.id);
-                  return (
-                    <button
-                      key={e.id}
-                      type="button"
-                      onClick={() => setCompanyIds((p) => on ? p.filter((x) => x !== e.id) : [...p, e.id])}
-                      className={clsx('px-2.5 py-1 rounded-lg text-xs border transition-colors',
-                        on ? 'bg-brand-500/10 border-brand-500/30 text-brand-300' : 'bg-surface-900 border-slate-700 text-slate-500 hover:text-slate-300')}
-                    >
-                      {e.shortCode || e.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {formError && (
-          <div className="p-3 rounded-lg bg-danger/10 border border-danger/30 text-sm text-danger-fg flex items-center gap-2">
-            <AlertCircle size={15} /> {formError}
-          </div>
-        )}
-
-        <button
-          onClick={invite}
-          disabled={!emailValid || submitting}
-          className={clsx('flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-            !emailValid || submitting ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-slate-900 hover:bg-brand-400')}
-        >
-          {submitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add member
-        </button>
-      </div>
-
-      {/* Current roster */}
-      <div className="card p-5">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Team ({members.length})</p>
-        {isLoading ? (
-          <div className="flex items-center gap-2 text-sm text-slate-500 py-4"><Loader2 size={14} className="animate-spin" /> Loading team…</div>
-        ) : error ? (
-          <div className="text-xs text-slate-500 py-2">Team roster isn&apos;t available with your permissions — that&apos;s fine, you can skip this step.</div>
-        ) : members.length === 0 ? (
-          <div className="text-sm text-slate-500 py-4">No teammates yet. Add one above, or continue and invite people later.</div>
-        ) : (
-          <div className="space-y-1.5">
-            {members.map((m) => (
-              <div key={m.id} className="flex items-center justify-between rounded-lg bg-surface-900 border border-slate-800 px-3 py-2">
-                <div>
-                  <p className="text-sm text-white">{[m.firstName, m.lastName].filter(Boolean).join(' ') || m.email || 'Member'}</p>
-                  <p className="text-[11px] text-slate-500">{m.email ?? '—'}</p>
-                </div>
-                <span className="text-[11px] text-slate-400">{m.roleLabel}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Step 7: Launch ─────────────────────────────────────────────────────────────
-function LaunchStep({
-  status, entities, enterCompanyName, accountCount, teamMembers, hasOpeningEntry, onRefresh,
-}: {
-  status: OnboardingStatus | null;
-  entities: EntityRow[];
-  enterCompanyName: string | null;
-  accountCount: number;
-  teamMembers: number;
-  hasOpeningEntry: boolean;
-  onRefresh: () => Promise<void>;
-}) {
-  useEffect(() => { void onRefresh(); }, [onRefresh]);
-
-  const rows: { icon: typeof Building2; label: string; value: string; done: boolean }[] = [
-    { icon: Building2, label: 'Companies', value: `${entities.length} created`, done: entities.length > 0 },
-    { icon: BookOpen, label: 'Chart of accounts', value: `${accountCount} accounts`, done: accountCount > 0 },
-    { icon: Scale, label: 'Opening balances', value: hasOpeningEntry ? 'Posted — you are live' : 'None (clean start)', done: true },
-    { icon: Users, label: 'Team', value: teamMembers > 0 ? `${teamMembers} member${teamMembers === 1 ? '' : 's'}` : 'Just you (invite later)', done: true },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <div className="card p-6 space-y-5">
-        <div className="text-center">
-          <div className="mx-auto mb-3 h-14 w-14 rounded-full bg-brand-500/15 flex items-center justify-center">
-            <Rocket size={28} className="text-brand-400" />
-          </div>
-          <h2 className="text-xl font-semibold text-white">You&apos;re ready to launch</h2>
-          <p className="text-sm text-slate-400 mt-1">
-            Here&apos;s what&apos;s set up. Finishing marks onboarding complete
-            {enterCompanyName ? <> and drops you into <span className="text-brand-300 font-medium">{enterCompanyName}</span> to start processing.</> : ' and opens your dashboard.'}
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          {rows.map((r) => {
-            const Icon = r.icon;
-            return (
-              <div key={r.label} className="flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-900 border border-slate-800">
-                <div className={clsx('h-8 w-8 rounded-lg flex items-center justify-center shrink-0',
-                  r.done ? 'bg-brand-500/10' : 'bg-slate-800')}>
-                  <Icon size={15} className={r.done ? 'text-brand-400' : 'text-slate-500'} />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-white font-medium">{r.label}</p>
-                  <p className="text-xs text-slate-500">{r.value}</p>
-                </div>
-                {r.done && <Check size={16} className="text-brand-400 shrink-0" />}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="rounded-lg border border-slate-800 bg-surface-900/60 px-4 py-3 text-xs text-slate-400">
-          After launch: connect more banks, invite additional teammates, and start capturing bills, invoices, and
-          receipts. Everything from onboarding remains editable in Settings.
-        </div>
-      </div>
-
-      {/* Setup Home board — the optional long tail. Everything here is add-anytime;
-          nothing blocks going live. Reachable again from the readiness checklist. */}
-      {status && (
-        <div className="card p-6 space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-base font-semibold text-white">Your setup board</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Your books are live and tied out. Here&apos;s everything else — add each when you&apos;re ready, or
-                never if it doesn&apos;t apply.
-              </p>
-            </div>
-          </div>
-          <SetupHomeBoard status={status} />
-        </div>
-      )}
     </div>
   );
 }

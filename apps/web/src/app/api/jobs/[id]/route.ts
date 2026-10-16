@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 import { z } from 'zod';
 
 const JOB_SELECT = `
@@ -49,11 +50,16 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const estimatedCost = Number(j.estimated_cost_cents ?? 0) || budgetTotal;
 
   // ── Committed vs cleared from the cost/billing seam (job_cost_attributions) ──
-  const { data: attrs } = await supabase
-    .from('job_cost_attributions')
-    .select('lifecycle, cost_type, amount_cents')
-    .eq('org_id', orgId)
-    .eq('job_id', params.id);
+  // Paged: a summed read must not stop at PostgREST's 1,000-row cap on a large job.
+  const { data: attrs } = await fetchAll(
+    () =>
+      supabase
+        .from('job_cost_attributions')
+        .select('lifecycle, cost_type, amount_cents')
+        .eq('org_id', orgId)
+        .eq('job_id', params.id),
+    { label: 'job-detail job_cost_attributions' },
+  );
 
   let committedCents = 0;
   let clearedCents = 0;

@@ -6,10 +6,9 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { getImportType } from '@/lib/import/definitions';
 import { coerceValue } from '@/lib/import/csv';
-import {
-  getMigrationProvider,
-  isMigrationProviderId,
-} from '@/lib/integrations/erp/providers';
+import { isMigrationProviderId } from '@/lib/integrations/erp/providers';
+import { resolveMigrationProvider } from '@/lib/integrations/erp/resolve-provider';
+import { sampleImportRequestBlock } from '@/lib/onboarding/sample-guard';
 import {
   buildArProposal,
   customerNameKey,
@@ -20,6 +19,7 @@ import {
   type ArImportProposal,
 } from '@/lib/onboarding/import/ar';
 import { attachSubledgerDetail } from '@/lib/onboarding/import/subledger-session';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 /**
  * POST /api/onboarding/import/ar — Customers & Open A/R section.
@@ -96,7 +96,11 @@ export async function POST(req: NextRequest) {
     if (!body.erpId || !isMigrationProviderId(body.erpId)) {
       return NextResponse.json({ error: 'Unknown migration provider' }, { status: 400 });
     }
-    const provider = getMigrationProvider(body.erpId, { mock: !!body.useFixture });
+    // B3: sample data never reaches a real company's books in production.
+    const sampleBlock = sampleImportRequestBlock(body.useFixture, { orgId });
+    if (sampleBlock) return NextResponse.json(sampleBlock, { status: 403 });
+    // Org-aware: live only for THIS org's connected QBO; never an implicit mock.
+    const { provider } = await resolveMigrationProvider(body.erpId, { orgId, mock: !!body.useFixture });
     const [custRes, arRes] = await Promise.all([provider.fetchCustomers(), provider.fetchOpenAR()]);
     if (!custRes.connected || !arRes.connected) {
       const reason = !custRes.connected ? custRes.reason : (arRes as { reason: string }).reason;
@@ -287,12 +291,19 @@ function coerceRows(
 }
 
 async function loadCustomerKeys(supabase: SupabaseClient, orgId: string): Promise<Set<string>> {
-  const { data } = await supabase.schema('core').from('customers').select('name').eq('org_id', orgId);
+  // Paged: a dedupe set built from a truncated read would let duplicates through.
+  const { data } = await fetchAll(
+    () => supabase.schema('core').from('customers').select('name').eq('org_id', orgId),
+    { label: 'onboarding-ar customer keys' },
+  );
   return new Set((data ?? []).map((r) => customerNameKey(String((r as { name: string }).name))));
 }
 
 async function loadCustomerIdByKey(supabase: SupabaseClient, orgId: string): Promise<Map<string, string>> {
-  const { data } = await supabase.schema('core').from('customers').select('id, name').eq('org_id', orgId);
+  const { data } = await fetchAll(
+    () => supabase.schema('core').from('customers').select('id, name').eq('org_id', orgId),
+    { label: 'onboarding-ar customer ids' },
+  );
   const map = new Map<string, string>();
   for (const r of (data ?? []) as Array<{ id: string; name: string }>) {
     map.set(customerNameKey(r.name), r.id);
@@ -301,12 +312,18 @@ async function loadCustomerIdByKey(supabase: SupabaseClient, orgId: string): Pro
 }
 
 async function loadInvoiceNumbers(supabase: SupabaseClient, orgId: string): Promise<Set<string>> {
-  const { data } = await supabase.from('invoices').select('invoice_number').eq('org_id', orgId);
+  const { data } = await fetchAll(
+    () => supabase.from('invoices').select('invoice_number').eq('org_id', orgId),
+    { label: 'onboarding-ar invoice numbers' },
+  );
   return new Set((data ?? []).map((r) => String((r as { invoice_number: string }).invoice_number).toLowerCase()));
 }
 
 async function sumArAging(supabase: SupabaseClient, locationId: string): Promise<number> {
-  const { data } = await supabase.from('v_ar_aging').select('balance_cents').eq('location_id', locationId).gt('balance_cents', 0);
+  const { data } = await fetchAll(
+    () => supabase.from('v_ar_aging').select('balance_cents').eq('location_id', locationId).gt('balance_cents', 0),
+    { orderBy: 'invoice_id', label: 'onboarding-ar v_ar_aging' },
+  );
   let total = 0;
   for (const r of (data ?? []) as Array<{ balance_cents: number | string | null }>) total += Number(r.balance_cents ?? 0);
   return total;

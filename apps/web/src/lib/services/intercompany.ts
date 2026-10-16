@@ -27,6 +27,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry, voidJournalEntry, type JournalEntryLineInput } from './gl-posting';
 import { resolveRole, getAccountRef, PostingError } from '@/lib/posting/account-roles';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
 type DB = SupabaseClient;
 
@@ -376,12 +377,18 @@ export async function getIntercompanyOverview(db: DB, orgId: string): Promise<Ic
   const entityById = new Map(entities.map((e) => [e.id, e]));
 
   // Transactions
-  const { data: txnRows } = await db
-    .from('intercompany_transactions')
-    .select('id, ic_number, nature, transaction_date, from_location_id, to_location_id, amount_cents, memo, status, from_entry_id, to_entry_id')
-    .eq('org_id', orgId)
-    .order('transaction_date', { ascending: false })
-    .order('created_at', { ascending: false });
+  // Paged — these rows are summed into pair balances, so a 1,000-row cap would
+  // silently misstate them. Display order kept; `id` appended as tie-breaker.
+  const { data: txnRows } = await fetchAll(
+    () =>
+      db
+        .from('intercompany_transactions')
+        .select('id, ic_number, nature, transaction_date, from_location_id, to_location_id, amount_cents, memo, status, from_entry_id, to_entry_id')
+        .eq('org_id', orgId)
+        .order('transaction_date', { ascending: false })
+        .order('created_at', { ascending: false }),
+    { label: 'intercompany transactions' },
+  );
 
   const txns = txnRows ?? [];
 
@@ -393,10 +400,11 @@ export async function getIntercompanyOverview(db: DB, orgId: string): Promise<Ic
   ];
   const entryNumberById = new Map<string, string>();
   if (entryIds.length > 0) {
-    const { data: entryRows } = await db
-      .from('gl_entries')
-      .select('id, entry_number')
-      .in('id', entryIds);
+    const { data: entryRows } = await fetchAllIn(
+      entryIds,
+      (chunk) => db.from('gl_entries').select('id, entry_number').in('id', chunk),
+      { label: 'intercompany gl_entries (numbers)' },
+    );
     for (const e of entryRows ?? []) entryNumberById.set(e.id as string, e.entry_number as string);
   }
 
@@ -451,29 +459,39 @@ export async function getIntercompanyOverview(db: DB, orgId: string): Promise<Ic
     const icAr = await resolveRole(db, orgId, 'INTERCOMPANY_AR');
     const icAp = await resolveRole(db, orgId, 'INTERCOMPANY_AP');
 
-    // Only count lines on POSTED entries.
-    const { data: postedEntries } = await db
-      .from('gl_entries')
-      .select('id')
-      .eq('org_id', orgId)
-      .eq('status', 'POSTED');
+    // Only count lines on POSTED entries. Every read here is paged — these are
+    // summed into the group tie, so a 1,000-row cap would misstate it.
+    const { data: postedEntries } = await fetchAll(
+      () => db.from('gl_entries').select('id').eq('org_id', orgId).eq('status', 'POSTED'),
+      { label: 'intercompany posted gl_entries' },
+    );
     const postedIds = (postedEntries ?? []).map((e: Record<string, unknown>) => e.id as string);
 
     if (postedIds.length > 0) {
-      const { data: arLines } = await db
-        .from('gl_entry_lines')
-        .select('debit_cents, credit_cents')
-        .eq('account_id', icAr.id)
-        .in('gl_entry_id', postedIds);
+      const { data: arLines } = await fetchAllIn(
+        postedIds,
+        (chunk) =>
+          db
+            .from('gl_entry_lines')
+            .select('debit_cents, credit_cents')
+            .eq('account_id', icAr.id)
+            .in('gl_entry_id', chunk),
+        { label: 'intercompany IC-AR gl_entry_lines' },
+      );
       totalReceivableCents = (arLines ?? []).reduce(
         (s: number, l: Record<string, unknown>) => s + Number(l.debit_cents ?? 0) - Number(l.credit_cents ?? 0),
         0,
       );
-      const { data: apLines } = await db
-        .from('gl_entry_lines')
-        .select('debit_cents, credit_cents')
-        .eq('account_id', icAp.id)
-        .in('gl_entry_id', postedIds);
+      const { data: apLines } = await fetchAllIn(
+        postedIds,
+        (chunk) =>
+          db
+            .from('gl_entry_lines')
+            .select('debit_cents, credit_cents')
+            .eq('account_id', icAp.id)
+            .in('gl_entry_id', chunk),
+        { label: 'intercompany IC-AP gl_entry_lines' },
+      );
       totalPayableCents = (apLines ?? []).reduce(
         (s: number, l: Record<string, unknown>) => s + Number(l.credit_cents ?? 0) - Number(l.debit_cents ?? 0),
         0,

@@ -18,7 +18,8 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { resolveOrgId, recordCustomerPayment } from '../posting/lifecycle';
+import { recordCustomerPayment } from '../posting/lifecycle';
+import { assertSandboxAllowed } from './sandbox-guard';
 import { resolveRole } from '../posting/account-roles';
 import { postTransaction, type PostingFacts } from '../posting/posting-templates';
 import { createSchedule, runDueSchedules } from '../posting/schedule-engine';
@@ -32,6 +33,7 @@ import { runTaxDepreciation, bookTaxDifference } from '../posting/tax-depreciati
 import { proposePosting } from '../posting/intake';
 import { approveBill, payBill, voidBill } from '../services/bill-ap';
 import { postJournalEntry } from '../services/gl-posting';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 type DB = SupabaseClient;
 
@@ -55,12 +57,17 @@ function openDate(): string {
 
 /** Net balance (debits − credits) of an account across POSTED entries only. */
 async function accountBalance(db: DB, orgId: string, accountId: string): Promise<number> {
-  const { data, error } = await db
-    .from('gl_entry_lines')
-    .select('debit_cents, credit_cents, gl_entries!inner(status)')
-    .eq('org_id', orgId)
-    .eq('account_id', accountId)
-    .eq('gl_entries.status', 'POSTED');
+  // Paged — an account's posted history can exceed PostgREST's 1,000-row cap.
+  const { data, error } = await fetchAll(
+    () =>
+      db
+        .from('gl_entry_lines')
+        .select('debit_cents, credit_cents, gl_entries!inner(status)')
+        .eq('org_id', orgId)
+        .eq('account_id', accountId)
+        .eq('gl_entries.status', 'POSTED'),
+    { label: 'posting-verify account balance gl_entry_lines' },
+  );
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as unknown as { debit_cents: number; credit_cents: number }[];
   return rows.reduce((s, l) => s + (l.debit_cents - l.credit_cents), 0);
@@ -136,18 +143,21 @@ async function createBill(db: DB, ctx: Ctx, vendorId: string, totalCents: number
   return billId;
 }
 
-export async function runPostingEngineChecks(db: DB, preferredOrgId?: string | null): Promise<PostingVerifyResult> {
+export async function runPostingEngineChecks(db: DB, orgId: string): Promise<PostingVerifyResult> {
   const checks: PostingCheck[] = [];
-  // Operational org = the caller's VERIFIED claim (matches RLS get_org_id());
-  // first-org lookup stays only as a transitional fallback when no claim.
-  const orgId = await resolveOrgId(db, preferredOrgId);
+  // Operational org = the caller's VERIFIED, sandbox-gated org, passed in by the
+  // route. NO first-org fallback (security HIGH: this posts real test entries).
+  if (!orgId) throw new Error('runPostingEngineChecks requires an explicit org id');
+  assertSandboxAllowed(); // posts real test entries — sandbox envs only
 
-  const { data: loc } = await db.schema('core').from('locations').select('id').limit(1).maybeSingle();
+  // Every lookup is scoped to THAT org (was an unscoped first-location read on the
+  // admin client, which could post test entries into another tenant's company).
+  const { data: loc } = await db.schema('core').from('locations').select('id').eq('org_id', orgId).order('short_code', { ascending: true }).limit(1).maybeSingle();
   const locationId = (loc as { id: string } | null)?.id;
   if (!locationId) {
     return { orgId, allPassed: false, checks: [{ check: 'prerequisite', pass: false, detail: 'No location found — seed the sandbox first.' }] };
   }
-  const { data: dept } = await db.schema('core').from('departments').select('id').eq('location_id', locationId).limit(1).maybeSingle();
+  const { data: dept } = await db.schema('core').from('departments').select('id').eq('org_id', orgId).eq('location_id', locationId).limit(1).maybeSingle();
   const departmentId = (dept as { id: string } | null)?.id;
 
   // 1. Roles resolve
@@ -656,11 +666,16 @@ export async function runPostingEngineChecks(db: DB, preferredOrgId?: string | n
 
   // 14. Trial balance ties.
   try {
-    const { data, error } = await db
-      .from('gl_entry_lines')
-      .select('debit_cents, credit_cents, gl_entries!inner(status)')
-      .eq('org_id', orgId)
-      .eq('gl_entries.status', 'POSTED');
+    // Paged — the whole org's posted lines; a 1,000-row cap would test a sample.
+    const { data, error } = await fetchAll(
+      () =>
+        db
+          .from('gl_entry_lines')
+          .select('debit_cents, credit_cents, gl_entries!inner(status)')
+          .eq('org_id', orgId)
+          .eq('gl_entries.status', 'POSTED'),
+      { label: 'posting-verify trial balance gl_entry_lines' },
+    );
     if (error) throw new Error(error.message);
     const rows = (data ?? []) as unknown as { debit_cents: number; credit_cents: number }[];
     const debits = rows.reduce((s, l) => s + l.debit_cents, 0);

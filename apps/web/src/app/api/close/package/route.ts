@@ -7,6 +7,7 @@ import { gatherReconciliationCloseStatus } from '@/lib/services/reconciliation-c
 import { gatherHardCloseGate } from '@/lib/close/readiness';
 import { workbookFromModels } from '@/lib/reports/export/xlsx';
 import { buildExportFilename, type StatementModel, type StmtRow } from '@/lib/reports/export/statement-model';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 /**
  * Close Package — a per-period, per-entity close binder a controller can hand to a
@@ -86,22 +87,32 @@ export async function GET(request: Request): Promise<NextResponse> {
   const period = periodRow as { id: string; status: string; closed_at: string | null } | null;
 
   // The four sections — read in parallel where independent.
+  // Ledger reads are paged (PostgREST caps a response at 1,000 rows); the caller
+  // order is kept and the view/table's unique key appended as a tie-breaker.
   const [tbRes, jeRes, recon, gateBundle] = await Promise.all([
-    supabase
-      .from('v_trial_balance')
-      .select('account_number, account_name, account_type, total_debits, total_credits')
-      .eq('location_id', locationId)
-      .order('type_order')
-      .order('sub_type_order')
-      .order('group_order')
-      .order('account_order'),
-    period
-      ? supabase
-          .from('gl_entries')
-          .select('entry_number, entry_date, memo, source_module, status, gl_entry_lines(debit_cents)')
+    fetchAll(
+      () =>
+        supabase
+          .from('v_trial_balance')
+          .select('account_number, account_name, account_type, total_debits, total_credits')
           .eq('location_id', locationId)
-          .eq('fiscal_period_id', period.id)
-          .order('entry_date')
+          .order('type_order')
+          .order('sub_type_order')
+          .order('group_order')
+          .order('account_order'),
+      { orderBy: ['org_id', 'location_id', 'account_id'], label: 'close-package v_trial_balance' },
+    ),
+    period
+      ? fetchAll(
+          () =>
+            supabase
+              .from('gl_entries')
+              .select('entry_number, entry_date, memo, source_module, status, gl_entry_lines(debit_cents)')
+              .eq('location_id', locationId)
+              .eq('fiscal_period_id', period.id)
+              .order('entry_date'),
+          { label: 'close-package gl_entries' },
+        )
       : Promise.resolve({ data: [] as JeRow[], error: null }),
     period
       ? gatherReconciliationCloseStatus(supabase, { locationId, fiscalPeriodId: period.id }).catch(() => null)

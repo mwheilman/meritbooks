@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
 import {
   getYearEndOverview,
@@ -67,6 +68,12 @@ export async function POST(request: Request) {
       isEmpty: comp.isEmpty,
     });
   }
+
+  // Authorize — run/reverse post (or reverse) the year-end closing entry to the GL
+  // and lock the fiscal year; that is a close-management action. Preview (above) is
+  // a read-only computation and stays open to any authed member.
+  const guard = await requirePermission(userId, 'close_mgmt', 'manage');
+  if (!guard.ok) return guard.response;
 
   if (body.action === 'run') {
     const res = await runYearEndClose(supabase, orgId, body.location_id, body.year, userId);

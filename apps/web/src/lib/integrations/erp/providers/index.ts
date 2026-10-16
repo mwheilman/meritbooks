@@ -4,6 +4,11 @@
  * `getMigrationProvider(id, { mock })` returns the right ConnectorProvider:
  *   • mock:true  → MockConnectorProvider (fixtures; exercisable now).
  *   • otherwise  → RealConnectorProvider (credential-gated; degrades safe).
+ *
+ * NOTE: this factory is org-blind, so its real adapter is never live. Routes that
+ * pull a tenant's books should use `resolveMigrationProvider` (../resolve-provider.ts),
+ * which returns the live QBO adapter for a connected org and refuses sample data in
+ * production.
  */
 
 import { MockConnectorProvider } from './mock';
@@ -31,6 +36,13 @@ export {
 } from './conversion-adapter';
 export { MockConnectorProvider } from './mock';
 export { RealConnectorProvider } from './real';
+export type { LiveRawSource, RealProviderOptions } from './real';
+export {
+  selectMigrationProvider,
+  isProductionRuntime,
+  type ProviderSelection,
+  type ProviderSelectionInput,
+} from './selection';
 
 export interface GetProviderOptions {
   /** Use the fixture-backed mock adapter instead of the credential-gated real one. */

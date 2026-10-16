@@ -4,8 +4,10 @@
  * The onboarding surface a user gets is decided by the COMPANY's state, never by the
  * user self-selecting (design spec §2):
  *
- *   - Company not yet set up (no GL activity / not flagged complete) → FULL SETUP.
- *     Whoever runs the inaugural login runs it — admin OR delegated staff.
+ *   - Company not yet set up (no GL activity / not flagged complete) → FULL SETUP for
+ *     anyone who can run it (admin OR delegated staff). A member who CAN'T run setup
+ *     (an invitee joining a company someone else is setting up) gets the tour, then
+ *     the dashboard — never a setup surface the page guard would bounce them out of.
  *   - Already-live company + a member who cannot run setup (a brand-new teammate) →
  *     a guided TOUR, never a setup surface they'd be bounced out of.
  *   - Otherwise (a live company + someone who CAN run setup, e.g. an admin revisiting
@@ -21,14 +23,26 @@
  * first-run signal the status route derives — no new schema, no new source of truth.
  */
 
-import { auth } from '@clerk/nextjs/server';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveTenantOrgId } from '@/lib/rbac/resolve-tenant';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { effectivePermission } from '@/lib/rbac/resolve-permissions';
+import { hasSeenTour } from '@/app/(app)/onboarding/tour/tour-seen';
+import { loadRouterOnboarding } from './status';
+import {
+  decideFrontDoor,
+  decideOnboardingFlow,
+  isSetupOwner,
+  type CallerOnboardingRole,
+  type FrontDoorDestination,
+} from './front-door';
 
-/** The three flows the onboarding route can resolve to. Only `tour` redirects. */
-export type OnboardingFlow = 'setup' | 'tour' | 'live';
+/**
+ * The flows the onboarding route can resolve to. `tour` and `dashboard` redirect;
+ * `setup` / `live` render the wizard behind its page guards.
+ */
+export type OnboardingFlow = 'setup' | 'tour' | 'live' | 'dashboard';
 
 /** Query overrides accepted by the onboarding route (Next.js searchParams shape). */
 export interface OnboardingFlowSearchParams {
@@ -102,6 +116,90 @@ async function callerCanRunSetup(admin: SupabaseClient, orgId: string, clerkUser
 }
 
 /**
+ * Who is this caller in the org's onboarding? (see lib/onboarding/front-door.ts)
+ *   canRunSetup    — settings_acct:edit
+ *   isInvitee      — joined by accepting a core.membership_invitations row
+ *   ownsOnboarding — named onboarding owner of a company (practice_assignments
+ *                    function 'onboarding' → their employee row)
+ * Best-effort: a missing table/column reads as "not an invitee / owns nothing", which
+ * keeps pre-invitation tenants behaving exactly as before.
+ */
+export async function loadCallerOnboardingRole(
+  admin: SupabaseClient,
+  orgId: string,
+  clerkUserId: string,
+): Promise<CallerOnboardingRole> {
+  const [canRunSetup, isInvitee, ownsOnboarding] = await Promise.all([
+    callerCanRunSetup(admin, orgId, clerkUserId),
+    (async () => {
+      try {
+        const { data, error } = await admin
+          .schema('core').from('membership_invitations')
+          .select('id').eq('org_id', orgId).eq('status', 'accepted').eq('accepted_clerk_id', clerkUserId)
+          .limit(1);
+        return !error && Array.isArray(data) && data.length > 0;
+      } catch {
+        return false;
+      }
+    })(),
+    (async () => {
+      try {
+        const { data: emp } = await admin
+          .schema('core').from('employees')
+          .select('id').eq('org_id', orgId).eq('clerk_user_id', clerkUserId).eq('is_active', true).maybeSingle();
+        const empId = (emp as { id?: unknown } | null)?.id;
+        if (typeof empId !== 'string') return false;
+        const { data, error } = await admin
+          .schema('core').from('practice_assignments')
+          .select('id').eq('org_id', orgId).eq('function', 'onboarding').eq('assignee_employee_id', empId)
+          .limit(1);
+        return !error && Array.isArray(data) && data.length > 0;
+      } catch {
+        return false;
+      }
+    })(),
+  ]);
+  return { canRunSetup, isInvitee, ownsOnboarding };
+}
+
+/** Has this Clerk user seen the first-login tour? (Clerk publicMetadata; false on any error.) */
+export async function readHasSeenTour(clerkUserId: string): Promise<boolean> {
+  try {
+    const client = await clerkClient();
+    const user = await client.users.getUser(clerkUserId);
+    return hasSeenTour(user.publicMetadata as Record<string, unknown> | null);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * THE front-door decision (root router + dashboard first-run redirect share it, so the
+ * logic never forks). Setup owners go to onboarding while a company isn't live, else
+ * the dashboard; invitees / members who can't run setup get the tour once, then the
+ * dashboard. Degrade-safe: any failure → '/dashboard' (never trap a user).
+ */
+export async function resolveFrontDoor(opts: {
+  db: SupabaseClient;
+  orgId: string;
+  clerkUserId: string;
+  admin?: SupabaseClient;
+}): Promise<FrontDoorDestination> {
+  try {
+    const admin = opts.admin ?? createAdminSupabase();
+    const [{ needsOnboarding }, role] = await Promise.all([
+      loadRouterOnboarding(opts.db, admin, opts.orgId),
+      loadCallerOnboardingRole(admin, opts.orgId, opts.clerkUserId),
+    ]);
+    // Only a non-owner can be sent to the tour — skip the Clerk read for owners.
+    const seen = isSetupOwner(role) ? true : await readHasSeenTour(opts.clerkUserId);
+    return decideFrontDoor({ ...role, needsOnboarding, hasSeenTour: seen });
+  } catch {
+    return '/dashboard';
+  }
+}
+
+/**
  * The "brand-new member" signal, best-effort. Returns the age (ms) of the caller's
  * membership in this org, or null when it can't be derived. Exposed for later waves;
  * the Wave-0 tour gate does NOT depend on it (see `resolveOnboardingFlow`).
@@ -151,16 +249,17 @@ export async function resolveOnboardingFlow(sp?: OnboardingFlowSearchParams): Pr
     // Fail-safe: unresolved org → treated as complete/live; never trap in tour or setup.
     if (!orgId) return 'live';
 
-    // Company not set up → full setup, regardless of who is logging in.
-    const live = await isCompanyLive(admin, orgId);
-    if (!live) return 'setup';
-
-    // Live company. Explicit ?tour=1 always shows the tour. Otherwise: a caller who
-    // CANNOT run setup (a brand-new teammate) gets the tour; anyone who can (an admin
-    // revisiting) falls through to the wizard exactly as today.
-    if (tourForced) return 'tour';
-    const canRunSetup = await callerCanRunSetup(admin, orgId, clerkUserId);
-    return canRunSetup ? 'live' : 'tour';
+    const [live, canRunSetup] = await Promise.all([
+      isCompanyLive(admin, orgId),
+      callerCanRunSetup(admin, orgId, clerkUserId),
+    ]);
+    // A caller who CAN run setup gets the wizard (setup while not live, else as an
+    // admin revisiting). A caller who CAN'T — e.g. an invitee joining a company that's
+    // still being set up by someone else — is never routed into setup (the page guard
+    // would only bounce them): they get the tour, or the dashboard once it's seen.
+    // Explicit ?tour=1 on a live company always shows the tour.
+    const seen = canRunSetup || tourForced ? true : await readHasSeenTour(clerkUserId);
+    return decideOnboardingFlow({ companyLive: live, canRunSetup, hasSeenTour: seen, tourForced });
   } catch {
     // Any failure degrades to `live` — the router can only ADD the tour branch, never
     // trap a user. The wizard's own page guards then govern.

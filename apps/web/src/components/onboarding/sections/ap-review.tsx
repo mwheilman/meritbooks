@@ -3,7 +3,7 @@
 /**
  * Vendors & A/P — section ReviewComponent (client). Payables mirror of ar-review.tsx.
  *
- * Pick a SOURCE (sample ERP pull / CSV / manual), we normalize to a proposal, the
+ * Pick a SOURCE (connected-system pull / CSV / manual), we normalize to a proposal, the
  * human reviews (bulk-accept; edit ambiguous), and commit writes real vendors + open
  * bills and foots Σ open A/P to the A/P control (the tie-out lights up). All states,
  * keyboard accessible, tabular-nums, degrade-safe.
@@ -12,7 +12,7 @@
  * company. Calls POST /api/onboarding/import/ap (action preview|commit).
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Store, UploadCloud, PencilLine, Loader2, CheckCircle2, AlertTriangle, Trash2, Plus } from 'lucide-react';
 import { formatMoney } from '@meritbooks/shared';
 import { api } from '@/lib/api-client';
@@ -22,12 +22,22 @@ import { SourceTile } from '@/components/onboarding/source-tile';
 import { ProposalCard } from '@/components/onboarding/proposal-card';
 import { DropZone } from '@/components/onboarding/drop-zone';
 import { TieOutBanner } from '@/components/onboarding/tie-out-banner';
+import { ConnectedSystemFallback, SampleDataBanner, SampleDataLink } from '@/components/onboarding/connected-system-fallback';
+import { sampleImportsEnabledClient } from '@/lib/onboarding/sample-guard';
 import type { ApImportProposal, RawApParty, RawApOpenItem } from '@/lib/onboarding/import/ap';
 
 export interface ApReviewProps {
   companyId: string;
   companyName?: string;
   onCommitted?: (openApCents: number) => void;
+  /**
+   * Smart Intake handoff (FPB §5, additive): a CSV/XLSX ALREADY uploaded once via
+   * uploadForParse. On mount it is read server-side (POST /api/onboarding/intake/read)
+   * and previewed exactly as if dropped here — the user never re-uploads.
+   */
+  initialStoragePath?: string | null;
+  /** Which slot the handed-over file fills (default: the open-items file). */
+  initialKind?: 'vendors' | 'open_ap';
 }
 
 type SourceKind = 'erp' | 'csv' | 'manual';
@@ -47,7 +57,7 @@ interface CommitResponse {
   subledgerAttached: boolean;
 }
 
-export function ApReviewComponent({ companyId, companyName, onCommitted }: ApReviewProps) {
+export function ApReviewComponent({ companyId, companyName, onCommitted, initialStoragePath = null, initialKind = 'open_ap' }: ApReviewProps) {
   const [source, setSource] = useState<SourceKind | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +65,10 @@ export function ApReviewComponent({ companyId, companyName, onCommitted }: ApRev
   const [committing, setCommitting] = useState(false);
   const [committed, setCommitted] = useState<CommitResponse | null>(null);
   const [lastPayload, setLastPayload] = useState<Record<string, unknown> | null>(null);
+  // B3: the Connected-system tile does a REAL pull; when there's no live connection we
+  // show guided export steps + the CSV drop zones (never silently sample data).
+  const [erpFallback, setErpFallback] = useState<string | null>(null);
+  const sampleEnabled = sampleImportsEnabledClient();
 
   const [manualParties, setManualParties] = useState<RawApParty[]>([]);
   const [manualItems, setManualItems] = useState<RawApOpenItem[]>([]);
@@ -69,6 +83,11 @@ export function ApReviewComponent({ companyId, companyName, onCommitted }: ApRev
     });
     setLoading(false);
     if (err) { setError(err.error); return; }
+    if (data && data.connected === false && payload.source === 'erp' && payload.useFixture !== true) {
+      setErpFallback(data.reason ?? '');
+      setSource('csv');
+      return;
+    }
     if (data && data.connected === false) {
       setError(data.reason ?? 'That system is not connected yet. Upload a CSV or enter payables manually.');
       return;
@@ -76,16 +95,20 @@ export function ApReviewComponent({ companyId, companyName, onCommitted }: ApRev
     if (data?.proposal) { setProposal(data.proposal); setLastPayload(payload); }
   }, [companyId]);
 
-  const onErpSample = useCallback(() => {
+  // Real pull from the connected system (never fixtures). Not connected ⇒ guided export.
+  const onErpPull = useCallback(() => {
     setSource('erp');
-    void preview({ source: 'erp', erpId: 'quickbooks', useFixture: true });
+    void preview({ source: 'erp', erpId: 'quickbooks' });
   }, [preview]);
 
-  const onCsv = useCallback(async (kind: 'vendors' | 'open_ap', files: File[]) => {
-    const file = files[0];
-    if (!file) return;
-    const text = await file.text();
-    const { headers, rows } = parseCsv(text);
+  // Demo-only: fixture data, offered solely where sample imports are enabled (B3).
+  const onSampleData = useCallback(() => {
+    if (!sampleEnabled) return;
+    setSource('erp');
+    void preview({ source: 'erp', erpId: 'quickbooks', useFixture: true });
+  }, [preview, sampleEnabled]);
+
+  const previewRows = useCallback(async (kind: 'vendors' | 'open_ap', headers: string[], rows: Record<string, string>[]) => {
     const def = getImportType(kind);
     if (!def) return;
     const mapping = autoMap(headers, def.fields);
@@ -96,6 +119,33 @@ export function ApReviewComponent({ companyId, companyName, onCommitted }: ApRev
       await preview({ source: 'csv', billRows: rows, billMapping: mapping });
     }
   }, [preview]);
+
+  const onCsv = useCallback(async (kind: 'vendors' | 'open_ap', files: File[]) => {
+    const file = files[0];
+    if (!file) return;
+    const text = await file.text();
+    const { headers, rows } = parseCsv(text);
+    await previewRows(kind, headers, rows);
+  }, [previewRows]);
+
+  // Smart Intake handoff: read the already-uploaded file once and preview it.
+  const intakeStarted = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialStoragePath || intakeStarted.current === initialStoragePath) return;
+    intakeStarted.current = initialStoragePath;
+    setSource('csv');
+    setLoading(true);
+    setError(null);
+    void (async () => {
+      const { data, error: err } = await api.post<{ headers: string[]; rows: Record<string, string>[] }>(
+        '/api/onboarding/intake/read',
+        { storagePath: initialStoragePath },
+      );
+      setLoading(false);
+      if (err || !data) { setError(err?.error ?? 'We couldn’t read that file. Drop it below as a CSV instead.'); return; }
+      await previewRows(initialKind, data.headers, data.rows);
+    })();
+  }, [initialStoragePath, initialKind, previewRows]);
 
   const onManualPreview = useCallback(() => {
     void preview({ source: 'manual', parties: manualParties, openItems: manualItems });
@@ -146,10 +196,11 @@ export function ApReviewComponent({ companyId, companyName, onCommitted }: ApRev
           foot them to your A/P control — you just confirm.
         </p>
         <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Choose a source for vendors and A/P">
-          <SourceTile icon={<Store size={18} />} title="Connected system" subtitle="Pull from QuickBooks/Xero/Sage" selected={false} onSelect={onErpSample} />
+          <SourceTile icon={<Store size={18} />} title="Connected system" subtitle="Pull from QuickBooks/Xero/Sage" selected={false} onSelect={onErpPull} />
           <SourceTile icon={<UploadCloud size={18} />} title="Upload CSV" subtitle="Vendors &amp; open A/P" selected={false} onSelect={() => setSource('csv')} />
           <SourceTile icon={<PencilLine size={18} />} title="Enter manually" subtitle="Add a few by hand" selected={false} onSelect={() => setSource('manual')} />
         </div>
+        {sampleEnabled && <SampleDataLink onClick={onSampleData} label="Try the flow with demo QuickBooks payables" />}
       </div>
     );
   }
@@ -158,11 +209,13 @@ export function ApReviewComponent({ companyId, companyName, onCommitted }: ApRev
     <div className="space-y-4">
       <button
         type="button"
-        onClick={() => { setSource(null); setProposal(null); setError(null); }}
+        onClick={() => { setSource(null); setProposal(null); setError(null); setErpFallback(null); }}
         className="text-xs text-slate-500 hover:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 rounded"
       >
         ← Choose a different source
       </button>
+
+      {source === 'csv' && !proposal && erpFallback !== null && <ConnectedSystemFallback kind="ap" />}
 
       {source === 'csv' && !proposal && (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -192,6 +245,8 @@ export function ApReviewComponent({ companyId, companyName, onCommitted }: ApRev
           <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden /> {error}
         </div>
       )}
+
+      {proposal && lastPayload?.useFixture === true && <SampleDataBanner />}
 
       {proposal && <ApProposalReview proposal={proposal} committing={committing} onCommit={commit} />}
     </div>

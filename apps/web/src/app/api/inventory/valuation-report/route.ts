@@ -9,6 +9,7 @@ import {
   computeGlTieOut,
   type ValuationItemInput,
 } from '@/lib/inventory/stock-valuation';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 /**
  * GET /api/inventory/valuation-report — the stock-valuation report.
@@ -130,11 +131,16 @@ export async function GET(request: Request) {
 
   let glCents = 0;
   if (resolvable) {
-    const { data: glLines, error: glErr } = await supabase
-      .from('gl_entry_lines')
-      .select('debit_cents, credit_cents, gl_entries!inner(status)')
-      .in('account_id', Array.from(assetAccountIds))
-      .eq('gl_entries.status', 'POSTED');
+    // Paged: PostgREST caps a response at 1,000 rows.
+    const { data: glLines, error: glErr } = await fetchAll(
+      () =>
+        supabase
+          .from('gl_entry_lines')
+          .select('debit_cents, credit_cents, gl_entries!inner(status)')
+          .in('account_id', Array.from(assetAccountIds))
+          .eq('gl_entries.status', 'POSTED'),
+      { label: 'inventory-valuation gl_entry_lines' },
+    );
     if (glErr && !isMissingTable(glErr)) {
       return NextResponse.json({ error: glErr.message, code: 'QUERY_ERROR' }, { status: 500 });
     }
@@ -146,14 +152,18 @@ export async function GET(request: Request) {
   const tie = computeGlTieOut(report.summary.totalValueCents, glCents);
 
   // --- Realized COGS (posted ISSUE / ADJUST movements) -----------------------
-  let cogsQuery = supabase
-    .from('inventory_movements')
-    .select('cogs_cents, movement_date')
-    .eq('status', 'POSTED')
-    .in('movement_type', ['ISSUE', 'ADJUST']);
-  if (cogsFrom && DATE_RE.test(cogsFrom)) cogsQuery = cogsQuery.gte('movement_date', cogsFrom);
-  if (cogsTo && DATE_RE.test(cogsTo)) cogsQuery = cogsQuery.lte('movement_date', cogsTo);
-  const { data: cogsRows } = await cogsQuery;
+  // Paged: a summed movement read must not stop at PostgREST's 1,000-row cap.
+  const buildCogsQuery = () => {
+    let cogsQuery = supabase
+      .from('inventory_movements')
+      .select('cogs_cents, movement_date')
+      .eq('status', 'POSTED')
+      .in('movement_type', ['ISSUE', 'ADJUST']);
+    if (cogsFrom && DATE_RE.test(cogsFrom)) cogsQuery = cogsQuery.gte('movement_date', cogsFrom);
+    if (cogsTo && DATE_RE.test(cogsTo)) cogsQuery = cogsQuery.lte('movement_date', cogsTo);
+    return cogsQuery;
+  };
+  const { data: cogsRows } = await fetchAll(buildCogsQuery, { label: 'inventory-valuation inventory_movements' });
   const realizedCents = (cogsRows ?? []).reduce(
     (s: number, m: { cogs_cents: number | string }) => s + Number(m.cogs_cents ?? 0),
     0,

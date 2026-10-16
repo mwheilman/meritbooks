@@ -21,7 +21,30 @@ import { createAdminSupabase } from '@/lib/supabase/server';
 
 export const DOCUMENTS_BUCKET = 'documents';
 export const UPLOAD_MAX_BYTES = 15 * 1024 * 1024; // 15MB, well above the doc set we see
-const ALLOWED = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+/** The DEFAULT accepted types — what the AI document parsers (debt, formation…) can read. */
+export const PARSEABLE_DOC_TYPES: readonly string[] = [
+  'application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+];
+/** Spreadsheet / plain-text types the deterministic importers (budget, AR/AP, TB) read. */
+export const SPREADSHEET_TYPES: readonly string[] = [
+  'text/csv',
+  'text/plain',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
+/** Everything Smart Intake can open server-side (documents + spreadsheets). */
+export const INTAKE_READABLE_TYPES: readonly string[] = [...PARSEABLE_DOC_TYPES, ...SPREADSHEET_TYPES];
+
+const ALLOWED = PARSEABLE_DOC_TYPES;
+
+export interface ResolveUploadOptions {
+  /**
+   * Media types this caller accepts. Defaults to PDF/images (the original behavior,
+   * so existing callers like debt parse are unchanged). Pass SPREADSHEET_TYPES or
+   * INTAKE_READABLE_TYPES to also accept CSV / XLSX / TXT.
+   */
+  allowedTypes?: readonly string[];
+}
 
 export interface ResolvedUpload {
   base64Data: string;
@@ -32,9 +55,13 @@ export interface ResolvedUpload {
   storagePath: string | null;
 }
 
-function mediaTypeFromName(name: string): string {
+/** Media type from a file name's extension ('application/octet-stream' when unknown). */
+export function mediaTypeFromName(name: string): string {
   const ext = name.toLowerCase().split('.').pop() ?? '';
   if (ext === 'pdf') return 'application/pdf';
+  if (ext === 'csv') return 'text/csv';
+  if (ext === 'txt' || ext === 'tsv') return 'text/plain';
+  if (ext === 'xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
   if (ext === 'png') return 'image/png';
   if (ext === 'webp') return 'image/webp';
@@ -42,10 +69,32 @@ function mediaTypeFromName(name: string): string {
   return 'application/octet-stream';
 }
 
+/**
+ * Pick the effective media type. Spreadsheet/text files are resolved by EXTENSION first
+ * (browsers report a .csv as `application/vnd.ms-excel` on Windows, which would be
+ * mis-read as a workbook); PDFs/images keep the original reported-type-first rule so
+ * the default (PDF/image) behavior is byte-for-byte unchanged.
+ */
+export function pickMediaType(reported: string | null | undefined, name: string, allowed: readonly string[]): string {
+  const byName = mediaTypeFromName(name);
+  if (SPREADSHEET_TYPES.includes(byName) && allowed.includes(byName)) return byName;
+  if (reported && allowed.includes(reported)) return reported;
+  return byName;
+}
+
+function unsupportedMessage(mediaType: string, allowed: readonly string[]): string {
+  const sheets = allowed.some((t) => SPREADSHEET_TYPES.includes(t));
+  return sheets
+    ? `Unsupported file type: ${mediaType}. Upload a PDF, image, CSV, or .xlsx file.`
+    : `Unsupported file type: ${mediaType}. Upload a PDF, JPEG, PNG, or WebP.`;
+}
+
 export async function resolveUploadedFile(
   request: Request,
   orgId: string,
+  opts: ResolveUploadOptions = {},
 ): Promise<ResolvedUpload | NextResponse> {
+  const allowed = opts.allowedTypes ?? ALLOWED;
   const contentType = request.headers.get('content-type') ?? '';
 
   // ── Large-file path: JSON { storagePath } ──────────────────────────────────
@@ -73,9 +122,9 @@ export async function resolveUploadedFile(
     if (sizeBytes > UPLOAD_MAX_BYTES) {
       return NextResponse.json({ error: 'File too large. Maximum 15MB.', code: 'FILE_TOO_LARGE' }, { status: 400 });
     }
-    const mediaType = data.type && ALLOWED.includes(data.type) ? data.type : mediaTypeFromName(storagePath);
-    if (!ALLOWED.includes(mediaType)) {
-      return NextResponse.json({ error: `Unsupported file type: ${mediaType}.`, code: 'BAD_FILE_TYPE' }, { status: 400 });
+    const mediaType = pickMediaType(data.type, storagePath, allowed);
+    if (!allowed.includes(mediaType)) {
+      return NextResponse.json({ error: unsupportedMessage(mediaType, allowed), code: 'BAD_FILE_TYPE' }, { status: 400 });
     }
     const buffer = Buffer.from(await data.arrayBuffer());
     const fileName = storagePath.split('/').pop() ?? 'document';
@@ -87,9 +136,11 @@ export async function resolveUploadedFile(
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     if (!file) return NextResponse.json({ error: 'No file provided', code: 'NO_FILE' }, { status: 400 });
-    const mediaType = file.type || mediaTypeFromName(file.name);
-    if (!ALLOWED.includes(mediaType)) {
-      return NextResponse.json({ error: `Unsupported file type: ${mediaType}. Upload a PDF, JPEG, PNG, or WebP.`, code: 'BAD_FILE_TYPE' }, { status: 400 });
+    const mediaType = allowed === ALLOWED
+      ? (file.type || mediaTypeFromName(file.name))
+      : pickMediaType(file.type, file.name || '', allowed);
+    if (!allowed.includes(mediaType)) {
+      return NextResponse.json({ error: unsupportedMessage(mediaType, allowed), code: 'BAD_FILE_TYPE' }, { status: 400 });
     }
     if (file.size > UPLOAD_MAX_BYTES) {
       return NextResponse.json({ error: 'File too large. Maximum 15MB.', code: 'FILE_TOO_LARGE' }, { status: 400 });

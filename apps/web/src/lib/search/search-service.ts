@@ -12,6 +12,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 import { formatMoney } from '@meritbooks/shared';
 import { fetchCoreMap } from '../stitch-core';
 import { computeScore, deriveFieldMatches, type FieldValue } from './rank';
@@ -385,10 +386,16 @@ async function searchJournalEntries(a: RunSearchArgs, parsed: ParsedQuery, nowMs
   if (!entries) return [];
 
   // One batched lines query to compute each entry's debit total for display.
-  const { data: lines } = await a.supabase
-    .from('gl_entry_lines')
-    .select('gl_entry_id, debit_cents')
-    .in('gl_entry_id', ids);
+  // Paged: <= FETCH_PER_TYPE entries, but large (payroll/import) JEs can carry
+  // enough lines to exceed the 1,000-row response cap and understate totals.
+  const { data: lines } = await fetchAll(
+    () =>
+      a.supabase
+        .from('gl_entry_lines')
+        .select('gl_entry_id, debit_cents')
+        .in('gl_entry_id', ids),
+    { label: 'search JE totals gl_entry_lines' },
+  );
   const totals = new Map<string, number>();
   for (const l of (lines ?? []) as Array<{ gl_entry_id: string; debit_cents: number }>) {
     totals.set(l.gl_entry_id, (totals.get(l.gl_entry_id) ?? 0) + Number(l.debit_cents));

@@ -36,6 +36,7 @@ import {
   type EntityAccountBalance,
 } from '@/lib/consolidation/consolidate';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 import { gatherHardCloseGate, type BoardPeriodStatus } from '@/lib/close/readiness';
 
 const num = (v: number | string | null | undefined): number => {
@@ -204,6 +205,9 @@ async function loadEntityTrialBalance(
       .eq('gl_entries.status', 'POSTED')
       .lte('gl_entries.entry_date', endDate)
       .order('account_id', { ascending: true })
+      // Unique tie-breaker: `account_id` alone is non-unique, so without it
+      // consecutive .range() pages could overlap or skip lines.
+      .order('id', { ascending: true })
       .range(from, from + PAGE - 1);
 
     if (error || !data || data.length === 0) break;
@@ -299,24 +303,32 @@ async function loadOverdue(
 ): Promise<{ totalCents: number; items: OverdueItem[] }> {
   const isAr = view === 'v_ar_aging';
 
-  // Literal per-view selects (matches the proven board.ts pattern).
+  // Literal per-view selects (matches the proven board.ts pattern). Paged: every
+  // overdue row is summed into `totalCents`, so a row cap would understate it.
+  // Largest-first order kept; the view's unique key is appended as tie-breaker.
   const { data } = isAr
-    ? await supabase
-        .from('v_ar_aging')
-        .select('invoice_id, invoice_number, customer_name, balance_cents, aging_bucket, due_date')
-        .eq('location_id', locationId)
-        .neq('aging_bucket', 'CURRENT')
-        .gt('balance_cents', 0)
-        .order('balance_cents', { ascending: false })
-        .limit(ROW_CAP)
-    : await supabase
-        .from('v_ap_aging')
-        .select('bill_id, bill_number, vendor_name, balance_cents, aging_bucket, due_date')
-        .eq('location_id', locationId)
-        .neq('aging_bucket', 'CURRENT')
-        .gt('balance_cents', 0)
-        .order('balance_cents', { ascending: false })
-        .limit(ROW_CAP);
+    ? await fetchAll(
+        () =>
+          supabase
+            .from('v_ar_aging')
+            .select('invoice_id, invoice_number, customer_name, balance_cents, aging_bucket, due_date')
+            .eq('location_id', locationId)
+            .neq('aging_bucket', 'CURRENT')
+            .gt('balance_cents', 0)
+            .order('balance_cents', { ascending: false }),
+        { orderBy: 'invoice_id', label: 'portfolio/entity overdue v_ar_aging' },
+      )
+    : await fetchAll(
+        () =>
+          supabase
+            .from('v_ap_aging')
+            .select('bill_id, bill_number, vendor_name, balance_cents, aging_bucket, due_date')
+            .eq('location_id', locationId)
+            .neq('aging_bucket', 'CURRENT')
+            .gt('balance_cents', 0)
+            .order('balance_cents', { ascending: false }),
+        { orderBy: 'bill_id', label: 'portfolio/entity overdue v_ap_aging' },
+      );
 
   const rows = (data ?? []) as unknown as Record<string, unknown>[];
   const items: OverdueItem[] = rows.map((r) => ({

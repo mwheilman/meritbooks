@@ -68,7 +68,7 @@ const API_ROOT = path.resolve(
  * a new route that needs the tenant must take it from the authenticated
  * context, not from whichever org sorts first.
  */
-const FIRST_ORG_LOOKUP_BUDGET = 5;
+const FIRST_ORG_LOOKUP_BUDGET = 0; // 2026-10-16: setup + event workers now resolve the caller's org
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -83,7 +83,19 @@ function walk(dir: string, out: string[] = []): string[] {
 function routesUsingFirstOrg(): string[] {
   return walk(API_ROOT).filter((f) => {
     const src = fs.readFileSync(f, 'utf8');
-    return /from\(['"]organizations['"]\)/.test(src) && /limit\(1\)/.test(src);
+    // Look at each `.from('organizations')` query CHAIN (up to the statement's
+    // end) rather than the whole file: a chain that takes `.limit(1)` WITHOUT
+    // pinning the row to a known org (`.eq('id', …)`) is a first-org lookup.
+    // A file-level match produced false positives on routes that read
+    // organizations by id and had an unrelated `.limit(1)` elsewhere.
+    const re = /from\(['"]organizations['"]\)([\s\S]{0,600}?);/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(src)) !== null) {
+      const chain = m[1];
+      if (/\.(insert|update|upsert|delete)\(/.test(chain)) continue; // a write returning its row, not a lookup
+      if (/limit\(1\)|\.single\(\)|maybeSingle\(\)/.test(chain) && !/\.eq\(\s*['"]id['"]/.test(chain)) return true;
+    }
+    return false;
   });
 }
 

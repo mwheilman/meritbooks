@@ -18,6 +18,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry, voidJournalEntry, type JournalEntryLineInput } from './gl-posting';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 type DB = SupabaseClient;
 
@@ -56,16 +57,22 @@ export async function computeYearEndClose(
   const closeDate = `${year}-12-31`;
   const yearStart = `${year}-01-01`;
 
-  // POSTED, non-CLOSING entries for this entity within the fiscal year.
-  const { data: entries } = await db
-    .from('gl_entries')
-    .select('id')
-    .eq('org_id', orgId)
-    .eq('location_id', locationId)
-    .eq('status', 'POSTED')
-    .neq('entry_type', 'CLOSING')
-    .gte('entry_date', yearStart)
-    .lte('entry_date', closeDate);
+  // POSTED, non-CLOSING entries for this entity within the fiscal year. Paged —
+  // a year easily exceeds PostgREST's 1,000-row cap, and a truncated population
+  // would post a wrong closing entry.
+  const { data: entries } = await fetchAll(
+    () =>
+      db
+        .from('gl_entries')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('location_id', locationId)
+        .eq('status', 'POSTED')
+        .neq('entry_type', 'CLOSING')
+        .gte('entry_date', yearStart)
+        .lte('entry_date', closeDate),
+    { label: 'year-end-close gl_entries' },
+  );
 
   const entryIds = (entries ?? []).map((e: Record<string, unknown>) => e.id as string);
 
@@ -79,16 +86,21 @@ export async function computeYearEndClose(
     };
   }
 
-  // P&L lines in those entries. Chunk the IN list to stay well under limits.
+  // P&L lines in those entries. Chunk the IN list to stay well under limits, and
+  // page every chunk (a chunk's lines can exceed the 1,000-row response cap).
   const agg = new Map<string, { number: string; name: string; type: string; net: number }>();
   const chunkSize = 200;
   for (let i = 0; i < entryIds.length; i += chunkSize) {
     const chunk = entryIds.slice(i, i + chunkSize);
-    const { data: lines } = await db
-      .from('gl_entry_lines')
-      .select('account_id, debit_cents, credit_cents, accounts!inner(account_number, name, account_type)')
-      .in('gl_entry_id', chunk)
-      .in('accounts.account_type', PL_TYPES);
+    const { data: lines } = await fetchAll(
+      () =>
+        db
+          .from('gl_entry_lines')
+          .select('account_id, debit_cents, credit_cents, accounts!inner(account_number, name, account_type)')
+          .in('gl_entry_id', chunk)
+          .in('accounts.account_type', PL_TYPES),
+      { label: 'year-end-close gl_entry_lines' },
+    );
     for (const l of lines ?? []) {
       const acct = (l as Record<string, unknown>).accounts as unknown as { account_number: string; name: string; account_type: string };
       const id = (l as Record<string, unknown>).account_id as string;

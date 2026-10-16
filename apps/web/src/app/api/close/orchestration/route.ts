@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
 import { resolveActor } from '@/lib/trust/actor';
 import { logHumanAction } from '@/lib/trust/action-log';
@@ -60,6 +61,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+
+  // Authorize — a manual close-task sign-off (incl. the final 'reviewed' task) feeds
+  // the HARD_CLOSE gate; it is a close-management action.
+  const guard = await requirePermission(userId, 'close_mgmt', 'manage');
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try {

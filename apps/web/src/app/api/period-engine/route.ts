@@ -8,6 +8,7 @@ import { runDueSchedules } from '@/lib/posting/schedule-engine';
 import { runDepreciation } from '@/lib/posting/depreciation-engine';
 import { runTaxDepreciation } from '@/lib/posting/tax-depreciation';
 import { runDueRecurring } from '@/lib/posting/recurring-engine';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/period-engine { action, asOf? }
@@ -20,6 +21,15 @@ import { runDueRecurring } from '@/lib/posting/recurring-engine';
  */
 export async function POST(request: Request) {
   const a = await auth().catch(() => null);
+  const userId = (a as { userId?: string | null } | null)?.userId ?? null;
+  if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+
+  // Authorize — every engine here posts due periods to the GL (recurring JEs,
+  // prepaid/insurance schedules, depreciation). Same gate as the per-schedule
+  // run routes (prepaid/run, insurance/schedules/run): journal_entries:post.
+  const guard = await requirePermission(userId, 'journal_entries', 'post');
+  if (!guard.ok) return guard.response;
+
   // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
   // first-org lookup stays only as a transitional fallback when no claim.
   const claimOrgId =

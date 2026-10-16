@@ -12,6 +12,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 import {
   buildForecast,
   type ForecastCashflowItem,
@@ -115,14 +116,17 @@ async function fetchEntryIds(
   supabase: SupabaseClient,
   opts: { start?: string; end: string; locationId?: string | null },
 ): Promise<string[]> {
-  let q = supabase
-    .from('gl_entries')
-    .select('id')
-    .eq('status', 'POSTED')
-    .lte('entry_date', opts.end);
-  if (opts.start) q = q.gte('entry_date', opts.start);
-  if (opts.locationId) q = q.eq('location_id', opts.locationId);
-  const { data, error } = await q;
+  const build = () => {
+    let q = supabase
+      .from('gl_entries')
+      .select('id')
+      .eq('status', 'POSTED')
+      .lte('entry_date', opts.end);
+    if (opts.start) q = q.gte('entry_date', opts.start);
+    if (opts.locationId) q = q.eq('location_id', opts.locationId);
+    return q;
+  };
+  const { data, error } = await fetchAll(build, { label: 'covenants gl_entries' });
   if (error) throw new Error(error.message);
   return (data ?? []).map((e: { id: string }) => e.id as string);
 }
@@ -133,21 +137,22 @@ async function sumLinesByAccount(
   entryIds: string[],
 ): Promise<Map<string, LineSum>> {
   const sums = new Map<string, LineSum>();
-  const CHUNK = 500;
-  for (let i = 0; i < entryIds.length; i += CHUNK) {
-    const slice = entryIds.slice(i, i + CHUNK);
-    const { data, error } = await supabase
-      .from('gl_entry_lines')
-      .select('account_id, debit_cents, credit_cents')
-      .in('gl_entry_id', slice);
-    if (error) throw new Error(error.message);
-    for (const l of data ?? []) {
-      const id = l.account_id as string;
-      const cur = sums.get(id) ?? { debit: 0, credit: 0 };
-      cur.debit += Number(l.debit_cents ?? 0);
-      cur.credit += Number(l.credit_cents ?? 0);
-      sums.set(id, cur);
-    }
+  const { data, error } = await fetchAllIn(
+    entryIds,
+    (chunk) =>
+      supabase
+        .from('gl_entry_lines')
+        .select('account_id, debit_cents, credit_cents')
+        .in('gl_entry_id', chunk),
+    { label: 'covenants gl_entry_lines' },
+  );
+  if (error) throw new Error(error.message);
+  for (const l of data ?? []) {
+    const id = l.account_id as string;
+    const cur = sums.get(id) ?? { debit: 0, credit: 0 };
+    cur.debit += Number(l.debit_cents ?? 0);
+    cur.credit += Number(l.credit_cents ?? 0);
+    sums.set(id, cur);
   }
   return sums;
 }

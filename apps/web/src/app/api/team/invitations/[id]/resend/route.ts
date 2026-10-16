@@ -15,6 +15,7 @@ import {
   inviteAcceptUrl,
   buildInvitationEmail,
   type InvitationRow,
+  inviteEmailNotConfiguredMessage,
 } from '@/lib/team/invitations';
 
 /**
@@ -67,7 +68,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const provider = resolveEmailProvider();
   const from = resolveFromAddress();
   if (!provider || !from) {
-    emailError = 'Email is not configured. Share the link manually.';
+    emailError = inviteEmailNotConfiguredMessage({ provider: !provider, from: !from });
   } else {
     const { data: org } = await supabase
       .schema('core')

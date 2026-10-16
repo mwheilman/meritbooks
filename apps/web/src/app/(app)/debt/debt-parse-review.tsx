@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import {
-  UploadCloud, Loader2, X, Sparkles, AlertTriangle, Info, FileText,
+  UploadCloud, Loader2, X, Sparkles, AlertTriangle, Info, FileText, PencilLine,
 } from 'lucide-react';
 import { DebtForm, type DebtFormInitial } from './debt-form';
 import { uploadForParse } from '@/lib/uploads/client-upload';
+import { displayNameFromStoragePath } from '@/lib/uploads/paths';
 
 type Frequency = 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
 
@@ -45,49 +46,62 @@ interface ParseResponse {
 
 const ALLOWED = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-export function DebtParseReview({ onClose, onConfirmed }: { onClose: () => void; onConfirmed: () => void }) {
-  const [phase, setPhase] = useState<'upload' | 'parsing' | 'review'>('upload');
+export interface DebtParseReviewProps {
+  onClose: () => void;
+  onConfirmed: () => void;
+  /**
+   * Smart Intake handoff (FPB §5): a loan document ALREADY uploaded once via
+   * uploadForParse. Parsing starts immediately on open — the user never re-uploads.
+   */
+  initialStoragePath?: string | null;
+  /** B9: default the confirm form to "This loan already exists" (undefined → org's onboarding state). */
+  existingDefault?: boolean;
+  /** B9: the cutover (as-of) date for an existing loan's balance. */
+  cutoverDate?: string | null;
+}
+
+export function DebtParseReview({
+  onClose, onConfirmed, initialStoragePath = null, existingDefault, cutoverDate,
+}: DebtParseReviewProps) {
+  const [phase, setPhase] = useState<'upload' | 'parsing' | 'review'>(initialStoragePath ? 'parsing' : 'upload');
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [canManual, setCanManual] = useState(false);
   const [meta, setMeta] = useState<ParseResponse['meta'] | null>(null);
   const [initial, setInitial] = useState<DebtFormInitial | null>(null);
   const [snippet, setSnippet] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const parse = useCallback(async (file: File) => {
+  /** Parse a loan document that is already in storage (fresh upload or Smart Intake handoff). */
+  const parseByPath = useCallback(async (storagePath: string) => {
     setError(null);
-    if (!ALLOWED.includes(file.type)) { setError('Unsupported file type. Upload a PDF, JPEG, PNG, or WebP.'); return; }
-    if (file.size > 15 * 1024 * 1024) {
-      setError('That file is larger than 15MB. Please upload a smaller PDF or scan.');
-      return;
-    }
+    setCanManual(false);
     setPhase('parsing');
     try {
-      // Upload the file DIRECTLY to storage (bypasses the ~4.5MB serverless body
-      // limit), then parse it by path — so large scanned loan docs work.
-      const up = await uploadForParse(file);
-      if ('error' in up) { setError(up.error); setPhase('upload'); return; }
       const res = await fetch('/api/debt/parse', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ storagePath: up.storagePath }),
+        body: JSON.stringify({ storagePath }),
       });
       // Read as text first so a non-JSON response (e.g. an edge 413 for an
       // oversized body, or an auth redirect) yields a clear message instead of a
       // raw JSON-parse exception.
       const raw = await res.text();
-      let body: (ParseResponse & { error?: string }) | { error?: string } | null = null;
+      let body: (ParseResponse & { error?: string; code?: string }) | { error?: string; code?: string } | null = null;
       try { body = raw ? JSON.parse(raw) : null; } catch { body = null; }
-      if (!res.ok || !body) {
+      if (!res.ok || !body || ('error' in body && body.error)) {
+        const aiOff = res.status === 503 || res.status === 429 || (!!body && 'code' in body && body.code === 'NO_API_KEY');
         setError(
-          res.status === 413
-            ? 'That file is too large to upload (over ~4.5MB). Please use a smaller PDF.'
-            : (body && 'error' in body && body.error) || `Upload failed (${res.status}). Please try again.`,
+          aiOff
+            ? 'Automatic reading is unavailable right now. Enter the loan terms by hand — your file is kept.'
+            : res.status === 413
+              ? 'That file is too large to upload (over ~4.5MB). Please use a smaller PDF.'
+              : (body && 'error' in body && body.error) || `Upload failed (${res.status}). Please try again.`,
         );
+        setCanManual(true);
         setPhase('upload');
         return;
       }
-      if ('error' in body && body.error) { setError(body.error); setPhase('upload'); return; }
       const parsed = body as ParseResponse;
       const l = parsed.loan;
       setMeta(parsed.meta);
@@ -112,9 +126,41 @@ export function DebtParseReview({ onClose, onConfirmed }: { onClose: () => void;
       setPhase('review');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Network error');
+      setCanManual(true);
       setPhase('upload');
     }
   }, []);
+
+  const parse = useCallback(async (file: File) => {
+    setError(null);
+    if (!ALLOWED.includes(file.type)) { setError('Unsupported file type. Upload a PDF, JPEG, PNG, or WebP.'); return; }
+    if (file.size > 15 * 1024 * 1024) {
+      setError('That file is larger than 15MB. Please upload a smaller PDF or scan.');
+      return;
+    }
+    setPhase('parsing');
+    // Upload the file DIRECTLY to storage (bypasses the ~4.5MB serverless body
+    // limit), then parse it by path — so large scanned loan docs work.
+    const up = await uploadForParse(file);
+    if ('error' in up) { setError(up.error); setPhase('upload'); return; }
+    await parseByPath(up.storagePath);
+  }, [parseByPath]);
+
+  /** AI off / unreadable → the same confirm form, blank (FPB principle 10). */
+  const startManual = useCallback(() => {
+    setError(null);
+    setInitial({ lowConfidenceFields: [] });
+    setMeta(initialStoragePath ? { fileName: displayNameFromStoragePath(initialStoragePath), model: '', documentNote: null } : null);
+    setPhase('review');
+  }, [initialStoragePath]);
+
+  // Smart Intake handoff: parse the already-uploaded file once.
+  const startedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialStoragePath || startedFor.current === initialStoragePath) return;
+    startedFor.current = initialStoragePath;
+    void parseByPath(initialStoragePath);
+  }, [initialStoragePath, parseByPath]);
 
   const reset = useCallback(() => {
     setPhase('upload');
@@ -150,8 +196,15 @@ export function DebtParseReview({ onClose, onConfirmed }: { onClose: () => void;
         </div>
 
         {error && (
-          <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-            <AlertTriangle size={14} className="mt-0.5 shrink-0" /> {error}
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300" role="alert">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+            <span className="flex-1">{error}</span>
+            {canManual && (
+              <button type="button" onClick={startManual}
+                className="shrink-0 inline-flex items-center gap-1 rounded-md border border-red-400/40 px-2 py-0.5 text-red-100 hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50">
+                <PencilLine size={12} /> Enter terms by hand
+              </button>
+            )}
           </div>
         )}
 
@@ -180,7 +233,9 @@ export function DebtParseReview({ onClose, onConfirmed }: { onClose: () => void;
             {phase === 'parsing' ? (
               <>
                 <Loader2 className="w-9 h-9 text-indigo-400 animate-spin mb-3" />
-                <p className="text-sm text-slate-300">Reading the loan document and extracting terms…</p>
+                <p className="text-sm text-slate-300">
+                  Reading {initialStoragePath ? <span className="text-white">{displayNameFromStoragePath(initialStoragePath)}</span> : 'the loan document'} and extracting terms…
+                </p>
                 <p className="text-[11px] text-slate-500 mt-1">This can take 15-30 seconds for a long document.</p>
               </>
             ) : (
@@ -221,7 +276,7 @@ export function DebtParseReview({ onClose, onConfirmed }: { onClose: () => void;
                 &ldquo;{snippet}&rdquo;
               </p>
             )}
-            <DebtForm initial={initial} onClose={onClose} onSaved={onConfirmed} />
+            <DebtForm initial={initial} onClose={onClose} onSaved={onConfirmed} existingDefault={existingDefault} cutoverDate={cutoverDate} />
           </>
         )}
       </div>

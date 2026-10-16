@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { recordLeasePeriod } from '@/lib/leases/lease-posting';
 import { PostingError } from '@/lib/posting/account-roles';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/leases/[id]/record-period — the monthly "record this period" action.
@@ -23,6 +24,10 @@ export async function POST(_request: Request, { params }: Params): Promise<NextR
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
   if (!ctx.orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+
+  // Authorize — posts the next ASC 842 schedule line as a GL journal entry.
+  const guard = await requirePermission(ctx.userId, 'journal_entries', 'post');
+  if (!guard.ok) return guard.response;
 
   try {
     const result = await recordLeasePeriod(ctx.supabase, ctx.orgId, ctx.userId, params.id);

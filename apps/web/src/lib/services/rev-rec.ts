@@ -30,6 +30,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from './gl-posting';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
 type DB = SupabaseClient;
 
@@ -153,12 +154,18 @@ async function revenueAccount(db: DB, orgId: string): Promise<string | null> {
 
 /** Current deferred-revenue balance attributable to a job (credits − debits on 2410). */
 async function jobDeferredBalance(db: DB, orgId: string, jobId: string, deferredAcctId: string): Promise<number> {
-  const { data } = await db
-    .from('gl_entry_lines')
-    .select('debit_cents, credit_cents')
-    .eq('org_id', orgId)
-    .eq('account_id', deferredAcctId)
-    .eq('job_id', jobId);
+  // Paged — this balance caps the recognition delta that gets POSTED, so a
+  // 1,000-row-truncated read would corrupt the posting.
+  const { data } = await fetchAll(
+    () =>
+      db
+        .from('gl_entry_lines')
+        .select('debit_cents, credit_cents')
+        .eq('org_id', orgId)
+        .eq('account_id', deferredAcctId)
+        .eq('job_id', jobId),
+    { label: 'rev-rec job deferred gl_entry_lines' },
+  );
   let bal = 0;
   for (const l of (data ?? []) as { debit_cents: number; credit_cents: number }[]) {
     bal += Number(l.credit_cents ?? 0) - Number(l.debit_cents ?? 0);
@@ -358,11 +365,15 @@ export async function recognizeRun(
   orgId: string,
   args: { locationId?: string | null; asOf: string; runBy: string | null; preview?: boolean },
 ): Promise<RecognizeRunResult> {
-  let q = db.schema('core').from('jobs').select(JOB_SELECT)
-    .eq('org_id', orgId)
-    .in('status', ['ACTIVE', 'COMPLETE', 'ON_HOLD']);
-  if (args.locationId) q = q.eq('location_id', args.locationId);
-  const { data: jobs } = await q;
+  // Paged — past 1,000 jobs a single read would silently skip recognizing the rest.
+  const buildJobsQuery = () => {
+    let q = db.schema('core').from('jobs').select(JOB_SELECT)
+      .eq('org_id', orgId)
+      .in('status', ['ACTIVE', 'COMPLETE', 'ON_HOLD']);
+    if (args.locationId) q = q.eq('location_id', args.locationId);
+    return q;
+  };
+  const { data: jobs } = await fetchAll(buildJobsQuery, { label: 'rev-rec run jobs' });
 
   // Company defaults + per-company method maps (cache by location).
   const locIds = [...new Set((jobs ?? []).map((j) => (j as unknown as JobRevRecRow).location_id))];
@@ -390,7 +401,11 @@ export async function recognizeRun(
   // Enrich with job number/name for display.
   if (out.jobs.length > 0) {
     const ids = out.jobs.map((j) => j.jobId);
-    const { data: meta } = await db.schema('core').from('jobs').select('id, job_number, name').in('id', ids);
+    const { data: meta } = await fetchAllIn(
+      ids,
+      (chunk) => db.schema('core').from('jobs').select('id, job_number, name').in('id', chunk),
+      { label: 'rev-rec run job names' },
+    );
     const m = new Map((meta ?? []).map((x) => [(x as { id: string }).id, x as { job_number: string; name: string }]));
     out.jobs = out.jobs.map((j) => ({ ...j, jobNumber: m.get(j.jobId)?.job_number, jobName: m.get(j.jobId)?.name }));
   }

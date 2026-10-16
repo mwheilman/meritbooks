@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
 import { summarizeObligations, type ObligationItem } from '@/lib/cash/obligations';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 /**
  * GET /api/cash/obligations?location_id=<uuid>
@@ -96,12 +97,17 @@ export async function GET(request: Request): Promise<NextResponse> {
     // Which payment periods already posted? (source_ref guard, same as /api/debt/[id]).
     const paid = new Set<string>();
     if (lines.length > 0) {
-      const { data: entries } = await supabase
-        .from('gl_entries')
-        .select('source_ref')
-        .eq('source_module', 'DEBT')
-        .neq('status', 'VOIDED')
-        .like('source_ref', 'debt:payment:%');
+      // Paged: PostgREST caps a response at 1,000 rows.
+      const { data: entries } = await fetchAll(
+        () =>
+          supabase
+            .from('gl_entries')
+            .select('source_ref')
+            .eq('source_module', 'DEBT')
+            .neq('status', 'VOIDED')
+            .like('source_ref', 'debt:payment:%'),
+        { label: 'cash-obligations gl_entries' },
+      );
       for (const e of (entries ?? []) as { source_ref: string | null }[]) {
         if (e.source_ref) paid.add(e.source_ref);
       }

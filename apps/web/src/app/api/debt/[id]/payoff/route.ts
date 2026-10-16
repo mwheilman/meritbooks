@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { previewPayoff, confirmPayoff } from '@/lib/debt/lifecycle';
 import { PostingError } from '@/lib/posting/account-roles';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/debt/[id]/payoff — settle and close the loan.
@@ -15,8 +16,8 @@ import { PostingError } from '@/lib/posting/account-roles';
  *                         by ROLE (source_ref-guarded), mark PAID_OFF, zero the
  *                         schedule forward.
  *
- * Money-movement note: this posts cash out, so a dedicated `debt`/`payments` permission
- * SHOULD gate it — REPORTED to the lead; today it gates on authed org context + RLS.
+ * Money-movement note: this posts cash out, so confirm is gated on journal_entries:post
+ * (no dedicated `debt` key exists yet); preview writes nothing.
  */
 const bodySchema = z.object({
   action: z.enum(['preview', 'confirm']).default('preview'),
@@ -54,6 +55,9 @@ export async function POST(request: Request, { params }: Params): Promise<NextRe
 
   try {
     if (action === 'confirm') {
+      // Authorize — confirm posts the payoff (DR debt + interest / CR cash) to the GL.
+    const guard = await requirePermission(userId, 'journal_entries', 'post');
+    if (!guard.ok) return guard.response;
       const result = await confirmPayoff(supabase, args);
       return NextResponse.json({ ok: true, action, result });
     }

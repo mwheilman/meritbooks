@@ -13,6 +13,7 @@ import {
 } from '@/lib/tax/book-tax';
 import { deriveTaxAdjustmentsFromM1, type PerAccountTaxDifference } from '@/lib/reports/basis/derive-tax';
 import type { NormalBalance } from '@/lib/reports/basis/apply-adjustments';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 /**
  * DERIVE reporting-basis adjustments from the book-to-tax M-1 tags.
@@ -109,31 +110,35 @@ export async function POST(request: Request): Promise<NextResponse> {
     : `${period_year}-12-31`;
 
   // ── 1. P&L lines for the period (same scope as the income statement / M-1 report) ──
-  let query = supabase
-    .from('gl_entry_lines')
-    .select(`
-      account_id,
-      debit_cents,
-      credit_cents,
-      location_id,
-      accounts!inner(
-        account_type,
-        account_groups!inner(
-          account_sub_types!inner(
-            account_types!inner( normal_balance )
+  // Paged: PostgREST caps a response at 1,000 rows.
+  const buildQuery = () => {
+    let query = supabase
+      .from('gl_entry_lines')
+      .select(`
+        account_id,
+        debit_cents,
+        credit_cents,
+        location_id,
+        accounts!inner(
+          account_type,
+          account_groups!inner(
+            account_sub_types!inner(
+              account_types!inner( normal_balance )
+            )
           )
-        )
-      ),
-      gl_entries!inner( entry_date, status )
-    `)
-    .eq('gl_entries.status', 'POSTED')
-    .gte('gl_entries.entry_date', startDate)
-    .lte('gl_entries.entry_date', endDate)
-    .in('accounts.account_type', ['REVENUE', 'COGS', 'OPEX', 'OTHER']);
-  if (locationIds.length === 1) query = query.eq('location_id', locationIds[0]);
-  else if (locationIds.length > 1) query = query.in('location_id', locationIds);
+        ),
+        gl_entries!inner( entry_date, status )
+      `)
+      .eq('gl_entries.status', 'POSTED')
+      .gte('gl_entries.entry_date', startDate)
+      .lte('gl_entries.entry_date', endDate)
+      .in('accounts.account_type', ['REVENUE', 'COGS', 'OPEX', 'OTHER']);
+    if (locationIds.length === 1) query = query.eq('location_id', locationIds[0]);
+    else if (locationIds.length > 1) query = query.in('location_id', locationIds);
+    return query;
+  };
 
-  const { data: lines, error } = await query;
+  const { data: lines, error } = await fetchAll(buildQuery, { label: 'basis-derive gl_entry_lines' });
   if (error) return NextResponse.json({ error: error.message, code: 'QUERY_ERROR' }, { status: 500 });
 
   // ── 2. Tags ──

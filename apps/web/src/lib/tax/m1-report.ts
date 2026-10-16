@@ -16,6 +16,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 import {
   computeM1,
   resolveAccountDifferenceCents,
@@ -82,37 +83,39 @@ export async function buildM1Report(
   const locationIds = opts.locationIds ?? [];
 
   // ── 1. P&L lines (same shape as the income-statement route) ──────────────────
-  let query = supabase
-    .from('gl_entry_lines')
-    .select(`
-      id,
-      account_id,
-      debit_cents,
-      credit_cents,
-      location_id,
-      accounts!inner(
-        account_number,
-        name,
-        account_type,
-        account_groups!inner(
-          account_sub_types!inner(
-            account_types!inner(
-              normal_balance
+  const buildQuery = () => {
+    let query = supabase
+      .from('gl_entry_lines')
+      .select(`
+        id,
+        account_id,
+        debit_cents,
+        credit_cents,
+        location_id,
+        accounts!inner(
+          account_number,
+          name,
+          account_type,
+          account_groups!inner(
+            account_sub_types!inner(
+              account_types!inner(
+                normal_balance
+              )
             )
           )
-        )
-      ),
-      gl_entries!inner(entry_date, status)
-    `)
-    .eq('gl_entries.status', 'POSTED')
-    .gte('gl_entries.entry_date', startDate)
-    .lte('gl_entries.entry_date', endDate)
-    .in('accounts.account_type', ['REVENUE', 'COGS', 'OPEX', 'OTHER']);
+        ),
+        gl_entries!inner(entry_date, status)
+      `)
+      .eq('gl_entries.status', 'POSTED')
+      .gte('gl_entries.entry_date', startDate)
+      .lte('gl_entries.entry_date', endDate)
+      .in('accounts.account_type', ['REVENUE', 'COGS', 'OPEX', 'OTHER']);
 
-  if (locationIds.length === 1) query = query.eq('location_id', locationIds[0]);
-  else if (locationIds.length > 1) query = query.in('location_id', locationIds);
-
-  const { data: lines, error } = await query;
+    if (locationIds.length === 1) query = query.eq('location_id', locationIds[0]);
+    else if (locationIds.length > 1) query = query.in('location_id', locationIds);
+    return query;
+  };
+  const { data: lines, error } = await fetchAll(buildQuery, { label: 'm1-report gl_entry_lines' });
   if (error) throw new Error(error.message);
   const plLines = (lines ?? []) as unknown as Array<{
     id: string;

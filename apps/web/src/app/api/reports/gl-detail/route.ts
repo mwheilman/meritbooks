@@ -29,16 +29,28 @@ export async function GET(request: Request) {
   const from = (page - 1) * perPage;
   const to = from + perPage - 1;
 
+  // When a date range is given, the parent entry is filtered via an INNER embed
+  // (POSTED + date window + entry location) instead of a pre-fetched entry-id
+  // list: that list was an unpaged read capped at 1,000 rows by PostgREST, so
+  // busy periods silently lost lines and under-reported `total`.
+  const dateFiltered = Boolean(params.start_date || params.end_date);
+  const entryEmbed = dateFiltered
+    ? 'gl_entry:gl_entries!gl_entry_lines_gl_entry_id_fkey!inner'
+    : 'gl_entry:gl_entries!gl_entry_lines_gl_entry_id_fkey';
+
   let query = supabase
     .from('gl_entry_lines')
     .select(`
       id, line_number, debit_cents, credit_cents, memo, created_at,
       account:accounts!gl_entry_lines_account_id_fkey(id, account_number, name),
-      gl_entry:gl_entries!gl_entry_lines_gl_entry_id_fkey(
+      ${entryEmbed}(
         id, entry_number, entry_date, entry_type, memo, source_module, status, location_id
       )
     `, { count: 'exact' })
     .order('created_at', { ascending: false })
+    // Unique tie-breaker: lines of one entry share created_at, so without it
+    // consecutive pages could overlap or skip lines.
+    .order('id', { ascending: false })
     .range(from, to);
 
   // Filter by account
@@ -53,31 +65,15 @@ export async function GET(request: Request) {
     query = query.in('location_id', locFilter);
   }
 
-  // Filter by date range (on the parent gl_entry's entry_date)
-  // Since we can't filter on joined table fields easily in Supabase,
-  // we'll use a subquery approach via the gl_entries table
-  if (params.start_date || params.end_date) {
-    // Get entry IDs in the date range first
-    let entriesQ = supabase
-      .from('gl_entries')
-      .select('id')
-      .eq('status', 'POSTED');
-    
-    if (params.start_date) entriesQ = entriesQ.gte('entry_date', params.start_date);
-    if (params.end_date) entriesQ = entriesQ.lte('entry_date', params.end_date);
-    if (locFilter.length === 1) entriesQ = entriesQ.eq('location_id', locFilter[0]); else if (locFilter.length > 1) entriesQ = entriesQ.in('location_id', locFilter);
-
-    const { data: entryIds } = await entriesQ;
-    if (entryIds && entryIds.length > 0) {
-      query = query.in('gl_entry_id', entryIds.map((e) => e.id));
-    } else {
-      // No entries in range — return empty
-      return NextResponse.json({
-        data: [],
-        summary: { totalDebitCents: 0, totalCreditCents: 0, netCents: 0 },
-        pagination: { page, per_page: perPage, total: 0, total_pages: 0 },
-      });
-    }
+  // Filter by date range (on the parent gl_entry's entry_date) — same filters the
+  // old entry-id pre-query applied (POSTED, date window, entry location), now on
+  // the inner-joined parent. An empty match yields the same empty response shape.
+  if (dateFiltered) {
+    query = query.eq('gl_entry.status', 'POSTED');
+    if (params.start_date) query = query.gte('gl_entry.entry_date', params.start_date);
+    if (params.end_date) query = query.lte('gl_entry.entry_date', params.end_date);
+    if (locFilter.length === 1) query = query.eq('gl_entry.location_id', locFilter[0]);
+    else if (locFilter.length > 1) query = query.in('gl_entry.location_id', locFilter);
   }
 
   const { data, count, error } = await query;

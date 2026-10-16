@@ -38,6 +38,7 @@ import {
   decideDisposition,
   type AutonomyGovernance,
 } from '@/lib/autonomy/disposition';
+import { fetchAllIn, FETCH_ALL_PAGE_SIZE } from '@/lib/supabase/fetch-all';
 
 export const ANOMALOUS_JE_FEATURE = 'ANOMALOUS_JE';
 
@@ -459,33 +460,49 @@ export async function scanAnomalousJournalEntries(
     ANOMALOUS_JE_FEATURE,
   );
 
-  // 1. Load the posted MANUAL entry population (the risk surface).
-  let entryQuery = supabase
-    .from('gl_entries')
-    .select(
-      'id, entry_number, source_module, entry_type, entry_date, posted_at, created_at, memo, is_reversing, reversal_of_id, reversed_by_id, created_by',
-    )
-    .eq('status', 'POSTED')
-    .eq('source_module', 'MANUAL')
-    .order('entry_date', { ascending: false })
-    .limit(limit);
-  if (opts.sinceDate) entryQuery = entryQuery.gte('entry_date', opts.sinceDate);
+  // 1. Load the posted MANUAL entry population (the risk surface) — the most
+  // recent `limit` entries. `limit` may exceed PostgREST's 1,000-row response cap
+  // (the route allows up to 5,000), so read it in bounded `.range()` pages with a
+  // unique `id` tie-breaker instead of a single `.limit()` that would silently
+  // stop at 1,000.
+  const entries: GlEntryRow[] = [];
+  for (let from = 0; from < limit; from += FETCH_ALL_PAGE_SIZE) {
+    const to = Math.min(from + FETCH_ALL_PAGE_SIZE, limit) - 1;
+    let entryQuery = supabase
+      .from('gl_entries')
+      .select(
+        'id, entry_number, source_module, entry_type, entry_date, posted_at, created_at, memo, is_reversing, reversal_of_id, reversed_by_id, created_by',
+      )
+      .eq('status', 'POSTED')
+      .eq('source_module', 'MANUAL')
+      .order('entry_date', { ascending: false })
+      .order('id', { ascending: true });
+    if (opts.sinceDate) entryQuery = entryQuery.gte('entry_date', opts.sinceDate);
 
-  const { data: entryData, error: entryErr } = await entryQuery;
-  if (entryErr) {
-    console.warn('[controls/anomalous-je] entry load failed:', entryErr.message);
-    return result;
+    const { data: entryData, error: entryErr } = await entryQuery.range(from, to);
+    if (entryErr) {
+      console.warn('[controls/anomalous-je] entry load failed:', entryErr.message);
+      return result;
+    }
+    const page = (entryData ?? []) as GlEntryRow[];
+    for (const e of page) entries.push(e);
+    if (page.length < to - from + 1) break;
   }
-  const entries = (entryData ?? []) as GlEntryRow[];
   if (entries.length === 0) return result;
 
-  // 2. Load their lines + the org's accounts (RLS-scoped).
+  // 2. Load their lines (paged per id-chunk — up to `limit` entries' lines can far
+  // exceed the 1,000-row cap) + the org's accounts (RLS-scoped).
   const entryIds = entries.map((e) => e.id);
   const [{ data: lineData, error: lineErr }, { data: acctData, error: acctErr }] = await Promise.all([
-    supabase
-      .from('gl_entry_lines')
-      .select('gl_entry_id, account_id, debit_cents, credit_cents, memo')
-      .in('gl_entry_id', entryIds),
+    fetchAllIn(
+      entryIds,
+      (chunk) =>
+        supabase
+          .from('gl_entry_lines')
+          .select('gl_entry_id, account_id, debit_cents, credit_cents, memo')
+          .in('gl_entry_id', chunk),
+      { label: 'anomalous-je gl_entry_lines' },
+    ),
     supabase
       .from('accounts')
       .select('id, account_number, name, account_type, account_sub_type, is_control_account'),

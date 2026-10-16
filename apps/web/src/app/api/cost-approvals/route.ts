@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { createAttribution, approveAttribution, voidAttribution, overrideApprover } from '@/lib/services/cost-approval';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 // GET /api/cost-approvals?lifecycle=PENDING — the approval queue, enriched with job + company.
 export async function GET(request: Request) {
@@ -43,6 +44,14 @@ export async function POST(request: Request) {
   let body: Record<string, unknown>;
   try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   const action = String(body.action ?? '');
+
+  // Authorize — approve / void / override (re-route the approver) are approval
+  // decisions on a job-cost attribution; gate them on bills:approve (the AP approval
+  // authority). 'create' stays a data-entry action open to any authed member.
+  if (action === 'approve' || action === 'void' || action === 'override') {
+    const guard = await requirePermission(userId, 'bills', 'approve');
+    if (!guard.ok) return guard.response;
+  }
 
   try {
     if (action === 'create') {

@@ -44,6 +44,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { deriveConsolidationMethod, ownershipSumCheck } from './normalize';
 import type { OwnershipBasis, ProposedOwner } from './types';
@@ -220,30 +221,35 @@ export async function loadOpeningCapitalCents(
   }
 
   // Opening-balance GL lines for this account + entity. Sum credit − debit.
-  const { data: entries, error: entErr } = await supabase
-    .from('gl_entries')
-    .select('id')
-    .eq('org_id', orgId)
-    .eq('source_module', 'OPENING_BALANCE')
-    .limit(5000);
+  const { data: entries, error: entErr } = await fetchAll(
+    () =>
+      supabase
+        .from('gl_entries')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('source_module', 'OPENING_BALANCE'),
+    { label: 'equity-import opening gl_entries' },
+  );
   if (entErr || !entries || entries.length === 0) return null;
   const entryIds = (entries as Array<{ id: string }>).map((e) => e.id);
 
   let creditMinusDebit = 0;
   let sawAny = false;
-  for (let i = 0; i < entryIds.length; i += 500) {
-    const slice = entryIds.slice(i, i + 500);
-    const { data: lines, error } = await supabase
-      .from('gl_entry_lines')
-      .select('debit_cents, credit_cents')
-      .eq('account_id', capitalAccountId)
-      .eq('location_id', entityId)
-      .in('gl_entry_id', slice);
-    if (error) return null;
-    for (const l of (lines ?? []) as Array<{ debit_cents: number | string; credit_cents: number | string }>) {
-      sawAny = true;
-      creditMinusDebit += (Number(l.credit_cents) || 0) - (Number(l.debit_cents) || 0);
-    }
+  const { data: lines, error } = await fetchAllIn(
+    entryIds,
+    (chunk) =>
+      supabase
+        .from('gl_entry_lines')
+        .select('debit_cents, credit_cents')
+        .eq('account_id', capitalAccountId)
+        .eq('location_id', entityId)
+        .in('gl_entry_id', chunk),
+    { label: 'equity-import opening-capital gl_entry_lines' },
+  );
+  if (error) return null;
+  for (const l of (lines ?? []) as Array<{ debit_cents: number | string; credit_cents: number | string }>) {
+    sawAny = true;
+    creditMinusDebit += (Number(l.credit_cents) || 0) - (Number(l.debit_cents) || 0);
   }
 
   return sawAny ? creditMinusDebit : null;

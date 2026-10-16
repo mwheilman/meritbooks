@@ -29,10 +29,12 @@ export default async function OnboardingPage({
   // COMPANY-STATE ROUTER: decide the flow from the company's state, not the user's
   // role. A brand-new member on an already-live company is sent to the guided tour
   // instead of a setup surface they'd be bounced out of. `setup`/`live` fall through
-  // to the existing guards below, so first-run and admin behavior is unchanged.
+  // to the existing guards below. A member who can't run setup is never routed into
+  // setup (even while the company isn't live yet) — tour first time, then dashboard.
   // Fail-safe (unresolved org / any error) resolves to `live` — never the tour.
   const flow = await resolveOnboardingFlow(searchParams);
   if (flow === 'tour') redirect('/onboarding/tour');
+  if (flow === 'dashboard') redirect('/dashboard');
 
   await requirePagePermission('settings_acct', 'edit');
   await requirePreparerCapabilityPage('/team');

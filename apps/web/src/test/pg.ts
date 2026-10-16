@@ -36,6 +36,10 @@ const SUPABASE_STUBS = `
   create schema if not exists extensions;
   create schema if not exists storage;
 
+  create or replace function storage.foldername(name text) returns text[] language sql immutable as $sf$
+    select (string_to_array(name, '/'))[1:greatest(array_length(string_to_array(name, '/'), 1) - 1, 0)]
+  $sf$;
+
   create or replace function auth.jwt()  returns jsonb language sql stable as $$ select '{}'::jsonb $$;
   create or replace function auth.uid()  returns uuid  language sql stable as $$ select null::uuid $$;
   create or replace function auth.role() returns text  language sql stable as $$ select 'service_role'::text $$;

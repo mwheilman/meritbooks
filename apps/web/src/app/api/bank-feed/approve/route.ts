@@ -7,6 +7,7 @@ import { recordBillPayment } from '@/lib/posting/lifecycle';
 import { createAttribution } from '@/lib/services/cost-approval';
 import { learnVendorPattern } from '@/lib/services/categorization';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/bank-feed/approve
@@ -22,6 +23,11 @@ export const POST = apiHandler(
     // Canonical org id — the token's org_id claim (a real core.organizations.id),
     // which RLS also enforces. No lookup needed.
     const orgId = ctx.orgId ?? '';
+
+    // Authorize — approving posts a journal entry to the GL (and may settle a
+    // matched bill). Gate on bank_feed:approve.
+    const guard = await requirePermission(ctx.userId, 'bank_feed', 'approve');
+    if (!guard.ok) return guard.response;
 
     const { data: txn, error: txnErr } = await ctx.supabase
       .from('bank_transactions')

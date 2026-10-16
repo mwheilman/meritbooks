@@ -5,6 +5,7 @@ import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { emitDeptInvoiceIssue } from '@/lib/services/dept-invoice-events';
 import { z } from 'zod';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * Projects → Books seam entry point. Represents the Projects module emitting a
@@ -46,6 +47,17 @@ export async function POST(request: Request) {
   const { data: loc } = await supabase.schema('core').from('locations').select('org_id').eq('id', body.location_id).maybeSingle();
   const orgId = (loc as { org_id: string } | null)?.org_id ?? null;
   if (!orgId) return NextResponse.json({ error: 'Company not found' }, { status: 404 });
+
+  // Authorize — the emitted DEPT_INVOICE_ISSUE event is consumed into a BOOKED
+  // internal invoice (auto-posts the intercompany entry to the GL), so emitting it
+  // is an approval, not a draft: gate on invoices:approve (was invoices:create —
+  // security MEDIUM), and require the target company
+  // to belong to the caller's VERIFIED org (the org above is derived from the body's
+  // location_id via the admin client, so without this check any member of any
+  // tenant could inject an event into another tenant).
+  const guard = await requirePermission(userId, 'invoices', 'approve');
+  if (!guard.ok) return guard.response;
+  if (guard.orgId !== orgId) return NextResponse.json({ error: 'Company not found' }, { status: 404 });
 
   try {
     const eventId = await emitDeptInvoiceIssue(supabase, {

@@ -5,6 +5,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { getTierPolicy, scoreToTier, type Tier } from '@/lib/trust/score-tier';
 import { compositeMatchScore } from '@/lib/services/reconciliation-match';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
 /**
  * GET /api/reconciliation/autopilot
@@ -157,28 +158,35 @@ export async function GET(request: Request): Promise<NextResponse> {
   const uncleared = txns.filter((t) => !(t.status === 'POSTED' && t.gl_entry_id));
 
   // ── GL cash balance through period end (the book side) ───────────────────────
-  const { data: postedEntries } = await supabase
-    .from('gl_entries')
-    .select('id')
-    .eq('org_id', orgId)
-    .eq('location_id', account.location_id)
-    .eq('status', 'POSTED')
-    .lte('entry_date', period.end_date);
+  // Paged: PostgREST caps a response at 1,000 rows.
+  const { data: postedEntries } = await fetchAll(
+    () =>
+      supabase
+        .from('gl_entries')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('location_id', account.location_id)
+        .eq('status', 'POSTED')
+        .lte('entry_date', period.end_date),
+    { label: 'recon-autopilot gl_entries' },
+  );
   const postedIds = (postedEntries ?? []).map((e) => (e as { id: string }).id);
 
   let glCashBalanceCents = 0;
   if (postedIds.length > 0) {
-    // Chunk the IN() list defensively for accounts with long histories.
-    for (let i = 0; i < postedIds.length; i += 500) {
-      const slice = postedIds.slice(i, i + 500);
-      const { data: lines } = await supabase
-        .from('gl_entry_lines')
-        .select('debit_cents, credit_cents')
-        .eq('account_id', account.account_id)
-        .in('gl_entry_id', slice);
-      for (const l of lines ?? []) {
-        glCashBalanceCents += num((l as { debit_cents: number }).debit_cents) - num((l as { credit_cents: number }).credit_cents);
-      }
+    // Chunked + paged IN() list for accounts with long histories.
+    const { data: lines } = await fetchAllIn(
+      postedIds,
+      (slice) =>
+        supabase
+          .from('gl_entry_lines')
+          .select('debit_cents, credit_cents')
+          .eq('account_id', account.account_id)
+          .in('gl_entry_id', slice),
+      { label: 'recon-autopilot gl_entry_lines' },
+    );
+    for (const l of lines ?? []) {
+      glCashBalanceCents += num((l as { debit_cents: number }).debit_cents) - num((l as { credit_cents: number }).credit_cents);
     }
   }
 
@@ -186,10 +194,15 @@ export async function GET(request: Request): Promise<NextResponse> {
   const glEntryMap = new Map<string, { entryNumber: string; entryDate: string }>();
   const clearedGlIds = cleared.map((t) => t.gl_entry_id).filter((x): x is string => !!x);
   if (clearedGlIds.length > 0) {
-    const { data: glEntries } = await supabase
-      .from('gl_entries')
-      .select('id, entry_number, entry_date')
-      .in('id', clearedGlIds);
+    const { data: glEntries } = await fetchAllIn(
+      clearedGlIds,
+      (chunk) =>
+        supabase
+          .from('gl_entries')
+          .select('id, entry_number, entry_date')
+          .in('id', chunk),
+      { label: 'recon-autopilot cleared gl_entries' },
+    );
     for (const e of glEntries ?? []) {
       const row = e as { id: string; entry_number: string; entry_date: string };
       glEntryMap.set(row.id, { entryNumber: row.entry_number, entryDate: row.entry_date });

@@ -153,7 +153,7 @@ export async function POST(request: Request) {
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
-  const guard = await requirePermission(userId, 'receipts', 'create');
+  const guard = await requirePermission(userId, 'receipts', 'edit');
   if (!guard.ok) return guard.response;
 
   let raw: unknown;

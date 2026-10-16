@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { resolveOrgId } from '@/lib/posting/lifecycle';
 import { completePlaidLink } from '@/lib/money/plaid-feed';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/integrations/plaid/exchange
@@ -22,6 +23,10 @@ export async function POST(request: Request) {
   const a = await auth().catch(() => null);
   const userId = (a as { userId?: string | null } | null)?.userId ?? null;
   if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  // Authorize — exchanging the public token registers the bank connection
+  // (Vault secret) and upserts bank accounts; same gate as payments/connect.
+  const guard = await requirePermission(userId, 'settings_system', 'edit');
+  if (!guard.ok) return guard.response;
   // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
   // first-org lookup stays only as a transitional fallback when no claim.
   const claimOrgId =

@@ -190,6 +190,20 @@ export function ReadinessChecklist({
         </div>
       </div>
 
+      {/* Per-company go-live (W2): a company is live once its opening balances are
+          posted or its owner chose to start fresh — shown when there is more than one. */}
+      {(status.companies?.length ?? 0) > 1 && (
+        <p className="text-xs text-slate-500">
+          <span className="font-mono tabular-nums text-slate-300">
+            {status.companies!.filter((c) => c.live).length} of {status.companies!.length}
+          </span>{' '}
+          companies live
+          {status.companies!.some((c) => !c.live) && (
+            <> — still to go: {status.companies!.filter((c) => !c.live).map((c) => c.shortCode || c.name).join(', ')}</>
+          )}
+        </p>
+      )}
+
       {/* Required domain sections still to complete (company / COA / opening). */}
       {REQUIRED_SECTIONS.some((s) => s.deriveStatus(status) !== 'done') && (
         <div className="space-y-1.5">

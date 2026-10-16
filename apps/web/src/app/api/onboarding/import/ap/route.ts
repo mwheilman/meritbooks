@@ -6,10 +6,9 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { getImportType } from '@/lib/import/definitions';
 import { coerceValue } from '@/lib/import/csv';
-import {
-  getMigrationProvider,
-  isMigrationProviderId,
-} from '@/lib/integrations/erp/providers';
+import { isMigrationProviderId } from '@/lib/integrations/erp/providers';
+import { resolveMigrationProvider } from '@/lib/integrations/erp/resolve-provider';
+import { sampleImportRequestBlock } from '@/lib/onboarding/sample-guard';
 import {
   buildApProposal,
   vendorNameKey,
@@ -21,6 +20,7 @@ import {
   type ApImportProposal,
 } from '@/lib/onboarding/import/ap';
 import { attachSubledgerDetail } from '@/lib/onboarding/import/subledger-session';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 /**
  * POST /api/onboarding/import/ap — Vendors & Open A/P section (mirror of the AR route).
@@ -89,7 +89,11 @@ export async function POST(req: NextRequest) {
     if (!body.erpId || !isMigrationProviderId(body.erpId)) {
       return NextResponse.json({ error: 'Unknown migration provider' }, { status: 400 });
     }
-    const provider = getMigrationProvider(body.erpId, { mock: !!body.useFixture });
+    // B3: sample data never reaches a real company's books in production.
+    const sampleBlock = sampleImportRequestBlock(body.useFixture, { orgId });
+    if (sampleBlock) return NextResponse.json(sampleBlock, { status: 403 });
+    // Org-aware: live only for THIS org's connected QBO; never an implicit mock.
+    const { provider } = await resolveMigrationProvider(body.erpId, { orgId, mock: !!body.useFixture });
     const [venRes, apRes] = await Promise.all([provider.fetchVendors(), provider.fetchOpenAP()]);
     if (!venRes.connected || !apRes.connected) {
       const reason = !venRes.connected ? venRes.reason : (apRes as { reason: string }).reason;
@@ -268,12 +272,18 @@ function coerceRows(
 }
 
 async function loadVendorKeys(supabase: SupabaseClient, orgId: string): Promise<Set<string>> {
-  const { data } = await supabase.schema('core').from('vendors').select('name').eq('org_id', orgId);
+  const { data } = await fetchAll(
+    () => supabase.schema('core').from('vendors').select('name').eq('org_id', orgId),
+    { label: 'onboarding-ap vendor keys' },
+  );
   return new Set((data ?? []).map((r) => vendorNameKey(String((r as { name: string }).name))));
 }
 
 async function loadVendorIdByKey(supabase: SupabaseClient, orgId: string): Promise<Map<string, string>> {
-  const { data } = await supabase.schema('core').from('vendors').select('id, name').eq('org_id', orgId);
+  const { data } = await fetchAll(
+    () => supabase.schema('core').from('vendors').select('id, name').eq('org_id', orgId),
+    { label: 'onboarding-ap vendor ids' },
+  );
   const map = new Map<string, string>();
   for (const r of (data ?? []) as Array<{ id: string; name: string }>) {
     map.set(vendorNameKey(r.name), r.id);
@@ -284,13 +294,21 @@ async function loadVendorIdByKey(supabase: SupabaseClient, orgId: string): Promi
 /** Existing bill keys (vendorNameKey|#num or vendorNameKey|~amt@date) for dedupe. */
 async function loadBillKeys(supabase: SupabaseClient, orgId: string): Promise<Set<string>> {
   const nameById = new Map<string, string>();
-  const { data: vendors } = await supabase.schema('core').from('vendors').select('id, name').eq('org_id', orgId);
+  // Paged: a dedupe set built from a truncated read would let duplicates through.
+  const { data: vendors } = await fetchAll(
+    () => supabase.schema('core').from('vendors').select('id, name').eq('org_id', orgId),
+    { label: 'onboarding-ap core.vendors' },
+  );
   for (const v of (vendors ?? []) as Array<{ id: string; name: string }>) nameById.set(v.id, v.name);
 
-  const { data: bills } = await supabase
-    .from('bills')
-    .select('vendor_id, bill_number, total_cents, bill_date')
-    .eq('org_id', orgId);
+  const { data: bills } = await fetchAll(
+    () =>
+      supabase
+        .from('bills')
+        .select('vendor_id, bill_number, total_cents, bill_date')
+        .eq('org_id', orgId),
+    { label: 'onboarding-ap bills' },
+  );
   const keys = new Set<string>();
   for (const b of (bills ?? []) as Array<{ vendor_id: string; bill_number: string | null; total_cents: number; bill_date: string }>) {
     const name = nameById.get(b.vendor_id) ?? '';
@@ -300,7 +318,10 @@ async function loadBillKeys(supabase: SupabaseClient, orgId: string): Promise<Se
 }
 
 async function sumApAging(supabase: SupabaseClient, locationId: string): Promise<number> {
-  const { data } = await supabase.from('v_ap_aging').select('balance_cents').eq('location_id', locationId).gt('balance_cents', 0);
+  const { data } = await fetchAll(
+    () => supabase.from('v_ap_aging').select('balance_cents').eq('location_id', locationId).gt('balance_cents', 0),
+    { orderBy: 'bill_id', label: 'onboarding-ap v_ap_aging' },
+  );
   let total = 0;
   for (const r of (data ?? []) as Array<{ balance_cents: number | string | null }>) total += Number(r.balance_cents ?? 0);
   return total;

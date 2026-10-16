@@ -8,6 +8,7 @@ import { resolveActor } from '@/lib/trust/actor';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { canApprove } from '@/lib/money/approvals';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { computeGlCashBalanceCents } from '@/lib/services/reconciliation-gl';
 import {
   reconciliationDifferenceCents,
@@ -419,6 +420,13 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — every action here (start / toggle_line / finalize / unreconcile)
+  // mutates a bank reconciliation; finalize locks cleared lines and unreconcile
+  // unlocks them. Gate on reconciliation:reconcile. The finalize-with-override path
+  // below additionally requires a money approver (canApprove).
+  const guard = await requirePermission(userId, 'reconciliation', 'reconcile');
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try {

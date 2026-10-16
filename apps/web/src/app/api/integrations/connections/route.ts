@@ -12,6 +12,7 @@ import {
   CapabilityNotEntitledError,
 } from '@/lib/money/connections';
 import type { Capability, ProviderEnvironment } from '@/lib/money/providers/types';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * GET  /api/integrations/connections
@@ -62,6 +63,10 @@ export async function POST(request: Request) {
   const a = await auth().catch(() => null);
   const userId = (a as { userId?: string | null } | null)?.userId ?? null;
   if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  // Authorize — connecting/disconnecting a provider (secrets in Vault) is a
+  // system-integration setting; same gate as erp/connect and payments/connect.
+  const guard = await requirePermission(userId, 'settings_system', 'edit');
+  if (!guard.ok) return guard.response;
   // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
   // first-org lookup stays only as a transitional fallback when no claim.
   const claimOrgId =
@@ -109,6 +114,10 @@ export async function PATCH(request: Request) {
   const a = await auth().catch(() => null);
   const userId = (a as { userId?: string | null } | null)?.userId ?? null;
   if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  // Authorize — connecting/disconnecting a provider (secrets in Vault) is a
+  // system-integration setting; same gate as erp/connect and payments/connect.
+  const guard = await requirePermission(userId, 'settings_system', 'edit');
+  if (!guard.ok) return guard.response;
   // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
   // first-org lookup stays only as a transitional fallback when no claim.
   const claimOrgId =

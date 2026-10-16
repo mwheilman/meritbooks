@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
@@ -81,9 +81,31 @@ export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void
   const [mode, setMode] = useState<null | 'parse' | 'manual'>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState('0');
+  // Smart Intake handoff: `/debt?intake=<storagePath>` opens the loan review on the file
+  // the user already dropped — parsing starts immediately, no re-upload (FPB §5).
+  const [intakePath, setIntakePath] = useState<string | null>(null);
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get('intake');
+    if (p) { setIntakePath(p); setMode('parse'); }
+  }, []);
 
-  const { data, isLoading, error, refetch } = useQuery<{ data: Instrument[] }>('/api/debt', undefined, { key: refreshKey });
+  const { data, isLoading, error, refetch } = useQuery<{
+    data: Instrument[];
+    meta?: { onboarding?: { defaultExistingLoan: boolean; cutoverDate: string | null } };
+  }>('/api/debt', undefined, { key: refreshKey });
   const instruments = data?.data ?? [];
+  const onboardingHint = data?.meta?.onboarding;
+
+  function closeParse() {
+    setMode(null);
+    if (intakePath) {
+      setIntakePath(null);
+      // Drop the consumed `?intake=` so a refresh doesn't re-open the review.
+      const url = new URL(window.location.href);
+      url.searchParams.delete('intake');
+      window.history.replaceState(null, '', url.toString());
+    }
+  }
 
   function bump() {
     setRefreshKey((k) => String(Number(k) + 1));
@@ -213,7 +235,15 @@ export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void
         against cash — both by account role, source-ref-guarded against a double post. AI is used only to read the document.
       </p>
 
-      {mode === 'parse' && <DebtParseReview onClose={() => setMode(null)} onConfirmed={() => { setMode(null); bump(); }} />}
+      {mode === 'parse' && (
+        <DebtParseReview
+          initialStoragePath={intakePath}
+          existingDefault={onboardingHint ? onboardingHint.defaultExistingLoan : undefined}
+          cutoverDate={onboardingHint ? onboardingHint.cutoverDate : undefined}
+          onClose={closeParse}
+          onConfirmed={() => { closeParse(); bump(); }}
+        />
+      )}
 
       {mode === 'manual' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setMode(null)}>
@@ -222,7 +252,13 @@ export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void
               <h2 className="text-lg font-semibold text-white">Add a loan</h2>
               <button onClick={() => setMode(null)} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close"><X size={18} /></button>
             </div>
-            <DebtForm initial={null} onClose={() => setMode(null)} onSaved={() => { setMode(null); bump(); }} />
+            <DebtForm
+              initial={null}
+              existingDefault={onboardingHint ? onboardingHint.defaultExistingLoan : undefined}
+              cutoverDate={onboardingHint ? onboardingHint.cutoverDate : undefined}
+              onClose={() => setMode(null)}
+              onSaved={() => { setMode(null); bump(); }}
+            />
           </div>
         </div>
       )}

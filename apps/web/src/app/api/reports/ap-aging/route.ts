@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
@@ -11,11 +12,15 @@ export async function GET(request: Request) {
   const locationId = searchParams.get('location_id');
   const locFilter = locationIds ? locationIds.split(',').filter(Boolean) : (locationId && locationId !== 'all' ? [locationId] : []);
 
-  let query = supabase.from('v_ap_aging').select('*');
-  if (locFilter.length === 1) query = query.eq('location_id', locFilter[0]);
-  else if (locFilter.length > 1) query = query.in('location_id', locFilter);
+  // Paged: PostgREST caps a response at 1,000 rows.
+  const buildQuery = () => {
+    let query = supabase.from('v_ap_aging').select('*');
+    if (locFilter.length === 1) query = query.eq('location_id', locFilter[0]);
+    else if (locFilter.length > 1) query = query.in('location_id', locFilter);
+    return query;
+  };
 
-  const { data, error } = await query;
+  const { data, error } = await fetchAll(buildQuery, { orderBy: 'bill_id', label: 'ap-aging v_ap_aging' });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const buckets: Record<string, { count: number; totalCents: number }> = {

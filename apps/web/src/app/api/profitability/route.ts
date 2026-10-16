@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
 import { z } from 'zod';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 /**
  * Portfolio profitability board (Practice plane — accounting-firm-partner brief B9,
@@ -82,11 +83,16 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
   }
 
   // ── P&L rows for the period (RLS-scoped, security_invoker view) ──────────────
-  const { data: pl, error: plErr } = await ctx.supabase
-    .from('v_income_statement')
-    .select('location_id, account_type, amount_cents')
-    .gte('entry_date', startDate)
-    .lte('entry_date', endDate);
+  // Paged: PostgREST caps a response at 1,000 rows.
+  const { data: pl, error: plErr } = await fetchAll(
+    () =>
+      ctx.supabase
+        .from('v_income_statement')
+        .select('location_id, account_type, amount_cents')
+        .gte('entry_date', startDate)
+        .lte('entry_date', endDate),
+    { orderBy: ['org_id', 'location_id', 'account_number', 'entry_date'], label: 'profitability v_income_statement' },
+  );
   if (plErr) {
     console.error('[profitability] income-statement view error:', plErr);
     return NextResponse.json({ error: plErr.message, code: 'QUERY_ERROR' }, { status: 500 });

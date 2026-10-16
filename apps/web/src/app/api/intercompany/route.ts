@@ -7,6 +7,7 @@ import {
   voidIntercompany,
   getIntercompanyOverview,
 } from '@/lib/services/intercompany';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 // ─── GET: overview (entities, transactions, pair balances, group tie) ─────────
 export async function GET() {
@@ -43,7 +44,11 @@ const createSchema = z
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
+
+  // Authorize — posts the paired due-to/due-from intercompany entries to the GL.
+  const guard = await requirePermission(userId, 'intercompany', 'create');
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try {
@@ -92,7 +97,11 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
+
+  // Authorize — voiding reverses the posted intercompany entries in the GL.
+  const guard = await requirePermission(userId, 'intercompany', 'create');
+  if (!guard.ok) return guard.response;
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
   const reason = (searchParams.get('reason') ?? '').trim();

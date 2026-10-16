@@ -6,6 +6,7 @@ import { cpiResetSchema } from '@/lib/leases/schema';
 import { previewCpiReset, confirmRemeasurement, loadCarryingContext } from '@/lib/leases/modify-posting';
 import { PostingError } from '@/lib/posting/account-roles';
 import { LeaseInputError } from '@/lib/leases/schedule';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/leases/[id]/cpi — apply a CPI / index-based payment reset (ASC 842).
@@ -36,6 +37,9 @@ export async function POST(request: Request, { params }: Params): Promise<NextRe
       const preview = await previewCpiReset(ctx.supabase, ctx.orgId, params.id, parsed.data.payment_cents);
       return NextResponse.json({ data: preview }, { status: 200 });
     }
+    // Authorize — confirm posts the remeasurement/write-off entry to the GL.
+    const guard = await requirePermission(ctx.userId, 'journal_entries', 'post');
+    if (!guard.ok) return guard.response;
     // Resolve the CPI reset to concrete revised terms (original rate + same remaining term).
     const c = await loadCarryingContext(ctx.supabase, ctx.orgId, params.id);
     const result = await confirmRemeasurement(

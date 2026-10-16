@@ -291,11 +291,11 @@ export async function CompanyBoardGrid() {
         </div>
         <h3 className="text-sm font-medium text-slate-300">No companies yet</h3>
         <p className="mx-auto mt-1 mb-4 max-w-sm text-sm text-slate-500">
-          Set up your first company to start posting transactions and processing work. Onboarding
-          walks you through the chart of accounts, fiscal calendar, and opening balances.
+          Add your first company to start working. Connect QuickBooks or drop your files — we build
+          your books and you approve them. Brand-new business? Start fresh in a minute.
         </p>
         <Link href="/onboarding" className="btn-primary btn-sm">
-          Start onboarding
+          Set up your books
         </Link>
       </div>
     );

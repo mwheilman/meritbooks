@@ -84,6 +84,8 @@ function makeDb(fx: Partial<Fixtures>): any {
       in: () => b,
       order: () => b,
       limit: () => b,
+      // fetchAll() pages with .range(); fixtures are < 1 page, so one call returns all.
+      range: () => Promise.resolve(listResult),
       maybeSingle: () => Promise.resolve({ data: accounts, error: null }),
       then: (onF: (v: unknown) => unknown, onR?: (e: unknown) => unknown) =>
         Promise.resolve(listResult).then(onF, onR),

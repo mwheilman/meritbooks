@@ -1,7 +1,6 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import {
   getSandboxStatus,
@@ -10,37 +9,43 @@ import {
   runSandboxRoundTrip,
 } from '@/lib/services/sandbox';
 import { runPostingEngineChecks } from '@/lib/services/posting-verify';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { requireAuth } from '@/lib/api-handler';
+import { sandboxAllowed, SANDBOX_REFUSED_MESSAGE } from '@/lib/services/sandbox-guard';
 
-/** GET /api/sandbox — current sandbox status (entities, master-data counts, periods). */
+/**
+ * SECURITY (HIGH): every sandbox action targets the CALLER'S verified org (never
+ * "the first organization row", which in production is the live Merit tenant) and
+ * is refused outright unless the deployment explicitly opts in (ALLOW_SANDBOX=1 on
+ * a non-production VERCEL_ENV — see lib/services/sandbox-guard.ts). The services
+ * re-assert the same gate, so a future caller can't bypass it.
+ */
+
+/** GET /api/sandbox — sandbox status for the caller's own org. */
 export async function GET() {
-  const { userId } = await auth().catch(() => ({ userId: null as string | null }));
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authRes = await requireAuth();
+  if (authRes instanceof NextResponse) return authRes;
+  const guard = await requirePermission(authRes.userId, 'settings_system', 'view');
+  if (!guard.ok) return guard.response;
 
   const supabase = createAdminSupabase();
   try {
-    const status = await getSandboxStatus(supabase);
-    return NextResponse.json({ ok: true, status });
+    const status = await getSandboxStatus(supabase, guard.orgId);
+    return NextResponse.json({ ok: true, enabled: sandboxAllowed(), status });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Status failed' }, { status: 500 });
   }
 }
 
 /**
- * POST /api/sandbox { action: 'seed' | 'reset' | 'verify' }
+ * POST /api/sandbox { action: 'seed' | 'reset' | 'verify' | 'verify-posting' }
  *  - seed:   idempotent seed/repair (COA via real path + entities + master data + jobs)
  *  - reset:  clear transactional + master data, then re-seed
  *  - verify: run the four-path cross-module round-trip and report pass/fail
  */
 export async function POST(request: Request) {
-  const a = await auth().catch(() => null);
-  const userId = (a as { userId?: string | null } | null)?.userId ?? null;
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
-  // first-org lookup stays only as a transitional fallback when no claim.
-  const claimOrgId =
-    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
-      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
-      : null;
+  const authRes = await requireAuth();
+  if (authRes instanceof NextResponse) return authRes;
 
   let action: string | undefined;
   let resetFirst = false;
@@ -55,34 +60,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "action must be one of: 'seed', 'reset', 'verify', 'verify-posting'" }, { status: 422 });
   }
 
+  // Environment gate FIRST: in production nothing below may run, for anyone.
+  if (!sandboxAllowed()) {
+    return NextResponse.json({ error: SANDBOX_REFUSED_MESSAGE, code: 'SANDBOX_DISABLED' }, { status: 403 });
+  }
+
+  // Authorize — seed/reset/verify write (and reset CLEARS) the tenant's
+  // transactional and master data through the ADMIN client.
+  const guard = await requirePermission(authRes.userId, 'settings_system', 'edit');
+  if (!guard.ok) return guard.response;
+  const orgId = guard.orgId; // the caller's verified tenant — the ONLY org touched
+
   const supabase = createAdminSupabase();
   try {
     if (action === 'seed') {
-      const result = await seedSandbox(supabase);
+      const result = await seedSandbox(supabase, { orgId });
       return NextResponse.json({ ok: true, action, ...result });
     }
     if (action === 'reset') {
-      const result = await resetSandbox(supabase);
+      const result = await resetSandbox(supabase, orgId);
       return NextResponse.json({ ok: true, action, ...result });
     }
     if (action === 'verify-posting') {
       // Ensure COA + entities + periods exist, then exercise the deterministic
       // posting engine + settlement lifecycle and assert the GATE 2 criteria.
-      await seedSandbox(supabase);
-      const result = await runPostingEngineChecks(supabase, claimOrgId);
+      await seedSandbox(supabase, { orgId });
+      const result = await runPostingEngineChecks(supabase, orgId);
       return NextResponse.json({ ok: true, action, ...result }, { status: result.allPassed ? 200 : 207 });
     }
     // verify
-    let status = await getSandboxStatus(supabase);
-    if (!status.orgId) {
-      return NextResponse.json({ error: 'No organization to verify — seed the sandbox first.' }, { status: 400 });
-    }
     if (resetFirst) {
-      await resetSandbox(supabase);
-      status = await getSandboxStatus(supabase);
+      await resetSandbox(supabase, orgId);
     }
-    const roundTrip = await runSandboxRoundTrip(supabase, status.orgId!);
-    const fresh = await getSandboxStatus(supabase);
+    const roundTrip = await runSandboxRoundTrip(supabase, orgId);
+    const fresh = await getSandboxStatus(supabase, orgId);
     return NextResponse.json({ ok: true, action, resetFirst, roundTrip, status: fresh });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : `${action} failed` }, { status: 500 });

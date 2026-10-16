@@ -32,7 +32,7 @@ import {
  * no extra audit sink is written here.
  */
 
-const PORTFOLIO_NARRATIVE_MODEL = 'claude-sonnet-4-20250514';
+const PORTFOLIO_NARRATIVE_MODEL = 'claude-sonnet-4-6';
 const PORTFOLIO_NARRATIVE_FEATURE = 'PORTFOLIO_NARRATIVE';
 
 type BriefingSource = 'ai' | 'deterministic';

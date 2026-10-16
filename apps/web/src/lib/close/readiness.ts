@@ -29,6 +29,7 @@ import { gatherReconciliationCloseStatus } from '@/lib/services/reconciliation-c
 import { getLearnedPreference } from '@/lib/learning/preferences';
 import { scanUncategorizedLeakage } from '@/lib/controls/uncategorized-leakage';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 import { gatherOpenItemsByLocation, gatherEntityOpenItems, emptyOpenItems } from './open-items';
 import {
   evaluateCloseGraph,
@@ -46,7 +47,8 @@ const num = (v: number | string | null | undefined): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const ROW_CAP = 5000;
+/** Unique key of `v_trial_balance` — the stable page order for `fetchAll`. */
+const TB_ORDER = ['org_id', 'location_id', 'account_id'] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared control-account resolution + subledger variance
@@ -66,8 +68,15 @@ async function loadSubledgerVariance(supabase: SupabaseClient, orgId: string): P
   try {
     const ar = await resolveRole(supabase, orgId, 'AR_CONTROL');
     const [{ data: aging }, { data: tb }] = await Promise.all([
-      supabase.from('v_ar_aging').select('location_id, balance_cents').gt('balance_cents', 0).limit(ROW_CAP),
-      supabase.from('v_trial_balance').select('location_id, net_balance').eq('account_id', ar.id).limit(ROW_CAP),
+      // Paged — these are summed into the AR tie-out; a 1,000-row cap misstates it.
+      fetchAll(
+        () => supabase.from('v_ar_aging').select('location_id, balance_cents').gt('balance_cents', 0),
+        { orderBy: 'invoice_id', label: 'close/readiness v_ar_aging' },
+      ),
+      fetchAll(
+        () => supabase.from('v_trial_balance').select('location_id, net_balance').eq('account_id', ar.id),
+        { orderBy: TB_ORDER, label: 'close/readiness v_trial_balance (AR)' },
+      ),
     ]);
     const sub = new Map<string, number>();
     for (const r of (aging ?? []) as Array<{ location_id: string | null; balance_cents: number | string }>) {
@@ -92,8 +101,15 @@ async function loadSubledgerVariance(supabase: SupabaseClient, orgId: string): P
   try {
     const ap = await resolveRole(supabase, orgId, 'AP_CONTROL');
     const [{ data: aging }, { data: tb }] = await Promise.all([
-      supabase.from('v_ap_aging').select('location_id, balance_cents').limit(ROW_CAP),
-      supabase.from('v_trial_balance').select('location_id, net_balance').eq('account_id', ap.id).limit(ROW_CAP),
+      // Paged — these are summed into the AP tie-out; a 1,000-row cap misstates it.
+      fetchAll(
+        () => supabase.from('v_ap_aging').select('location_id, balance_cents'),
+        { orderBy: 'bill_id', label: 'close/readiness v_ap_aging' },
+      ),
+      fetchAll(
+        () => supabase.from('v_trial_balance').select('location_id, net_balance').eq('account_id', ap.id),
+        { orderBy: TB_ORDER, label: 'close/readiness v_trial_balance (AP)' },
+      ),
     ]);
     const sub = new Map<string, number>();
     for (const r of (aging ?? []) as Array<{ location_id: string | null; balance_cents: number | string }>) {
@@ -256,7 +272,10 @@ export async function gatherCloseOrchestration(
   const [subledger, leakage, aiRes, checkoffsByLoc, openItemsByLoc] = await Promise.all([
     loadSubledgerVariance(supabase, orgId),
     scanUncategorizedLeakage(supabase, orgId, { dryRun: true, asOfISO: now.toISOString() }),
-    supabase.from('ai_decisions').select('location_id').eq('status', 'PROPOSED').limit(ROW_CAP),
+    fetchAll(
+      () => supabase.from('ai_decisions').select('location_id').eq('status', 'PROPOSED'),
+      { label: 'close/readiness ai_decisions' },
+    ),
     loadManualCheckoffs(supabase, periodIds),
     gatherOpenItemsByLocation(supabase, openItemsContexts).catch(() => new Map<string, ReturnType<typeof emptyOpenItems>>()),
   ]);
@@ -385,7 +404,10 @@ export async function gatherCloseSignals(
     loadSubledgerVariance(supabase, orgId),
     scanUncategorizedLeakage(supabase, orgId, { dryRun: true }),
     gatherReconciliationCloseStatus(supabase, args).catch(() => null),
-    supabase.from('ai_decisions').select('location_id').eq('status', 'PROPOSED').eq('location_id', args.locationId).limit(ROW_CAP),
+    fetchAll(
+      () => supabase.from('ai_decisions').select('location_id').eq('status', 'PROPOSED').eq('location_id', args.locationId),
+      { label: 'close/readiness ai_decisions (entity)' },
+    ),
     gatherEntityOpenItems(supabase, {
       locationId: args.locationId,
       periodId: args.fiscalPeriodId,

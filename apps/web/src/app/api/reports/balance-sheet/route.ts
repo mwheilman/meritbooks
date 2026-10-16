@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
 import { z } from 'zod';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 const bsQuerySchema = z.object({
   location_id: z.string().optional(),
@@ -35,47 +36,52 @@ export const GET = apiQueryHandler(
       locationIds.push(params.location_id);
     }
 
-    let query = ctx.supabase
-      .from('gl_entry_lines')
-      .select(`
-        account_id,
-        debit_cents,
-        credit_cents,
-        accounts!inner(
-          account_number,
-          name,
-          account_type,
-          display_order,
-          account_groups!inner(
+    // Paged read: PostgREST caps a response at 1,000 rows, so an unpaged read
+    // silently truncates the ledger once a company passes 1,000 lines.
+    const buildQuery = () => {
+      let query = ctx.supabase
+        .from('gl_entry_lines')
+        .select(`
+          account_id,
+          debit_cents,
+          credit_cents,
+          accounts!inner(
+            account_number,
             name,
+            account_type,
             display_order,
-            account_sub_types!inner(
+            account_groups!inner(
               name,
               display_order,
-              account_types!inner(
+              account_sub_types!inner(
                 name,
-                normal_balance,
-                display_order
+                display_order,
+                account_types!inner(
+                  name,
+                  normal_balance,
+                  display_order
+                )
               )
             )
+          ),
+          gl_entries!inner(
+            entry_date,
+            status
           )
-        ),
-        gl_entries!inner(
-          entry_date,
-          status
-        )
-      `)
-      .eq('gl_entries.status', 'POSTED')
-      .lte('gl_entries.entry_date', asOfDate)
-      .in('accounts.account_type', ['ASSET', 'LIABILITY', 'EQUITY']);
+        `)
+        .eq('gl_entries.status', 'POSTED')
+        .lte('gl_entries.entry_date', asOfDate)
+        .in('accounts.account_type', ['ASSET', 'LIABILITY', 'EQUITY']);
 
-    if (locationIds.length === 1) {
-      query = query.eq('location_id', locationIds[0]);
-    } else if (locationIds.length > 1) {
-      query = query.in('location_id', locationIds);
-    }
+      if (locationIds.length === 1) {
+        query = query.eq('location_id', locationIds[0]);
+      } else if (locationIds.length > 1) {
+        query = query.in('location_id', locationIds);
+      }
+      return query;
+    };
 
-    const { data, error } = await query;
+    const { data, error } = await fetchAll(buildQuery, { label: 'balance-sheet gl_entry_lines' });
 
     if (error) {
       console.error('[balance-sheet] Query error:', error);

@@ -25,108 +25,11 @@ import { runAiGateway } from '@meritbooks/core-ai';
 export const INTAKE_CLASSIFY_FEATURE = 'INTAKE_CLASSIFY';
 export const INTAKE_CLASSIFY_MODEL = 'claude-sonnet-4-6';
 
-/** The canonical document types the intake classifier can recognize. */
-export type IntakeDocType =
-  | 'LOAN'
-  | 'LEASE'
-  | 'BILL'
-  | 'BANK_STATEMENT'
-  | 'TRIAL_BALANCE'
-  | 'W9'
-  | 'COI'
-  | 'CUSTOMER_CONTRACT'
-  | 'OPERATING_AGREEMENT'
-  | 'INSURANCE_POLICY'
-  | 'PREPAID'
-  | 'SUBSCRIPTION'
-  | 'PAYROLL_REGISTER'
-  | 'WIP_SCHEDULE'
-  | 'FORMATION_DOC'
-  | 'UNKNOWN';
-
-/** One routing entry: the type, its human label, the destination page, and the parser (if any). */
-export interface IntakeRoute {
-  docType: IntakeDocType;
-  label: string;
-  /** The app page the document routes to. */
-  route: string;
-  /** The dedicated parse endpoint to hand the file to, or null when no parser exists yet. */
-  parseEndpoint: string | null;
-}
-
-/**
- * The authoritative type → destination map. This is the single source of truth for where
- * every recognized document goes; the normalizer resolves route/parseEndpoint by lookup here.
- */
-export const INTAKE_ROUTES: Record<IntakeDocType, IntakeRoute> = {
-  LOAN: { docType: 'LOAN', label: 'Loan / Credit Agreement', route: '/debt', parseEndpoint: '/api/debt/parse' },
-  LEASE: { docType: 'LEASE', label: 'Lease Agreement', route: '/leases', parseEndpoint: '/api/leases/parse' },
-  BILL: { docType: 'BILL', label: 'Vendor Bill / Invoice', route: '/bills', parseEndpoint: '/api/bills/parse' },
-  BANK_STATEMENT: {
-    docType: 'BANK_STATEMENT',
-    label: 'Bank Statement',
-    route: '/bank-feed',
-    parseEndpoint: '/api/bank-feed/import-statement',
-  },
-  TRIAL_BALANCE: {
-    docType: 'TRIAL_BALANCE',
-    label: 'Trial Balance',
-    route: '/onboarding',
-    parseEndpoint: '/api/onboarding/import/tb',
-  },
-  W9: { docType: 'W9', label: 'Form W-9', route: '/vendors', parseEndpoint: '/api/vendors/w9-parse' },
-  COI: {
-    docType: 'COI',
-    label: 'Certificate of Insurance',
-    route: '/vendor-compliance',
-    parseEndpoint: '/api/vendors/coi-parse',
-  },
-  CUSTOMER_CONTRACT: {
-    docType: 'CUSTOMER_CONTRACT',
-    label: 'Customer Contract',
-    route: '/invoices',
-    parseEndpoint: '/api/invoices/parse-contract',
-  },
-  OPERATING_AGREEMENT: {
-    docType: 'OPERATING_AGREEMENT',
-    label: 'Operating Agreement',
-    route: '/onboarding',
-    parseEndpoint: '/api/onboarding/import/equity',
-  },
-  INSURANCE_POLICY: {
-    docType: 'INSURANCE_POLICY',
-    label: 'Insurance Policy',
-    route: '/insurance',
-    parseEndpoint: '/api/insurance/parse',
-  },
-  PREPAID: { docType: 'PREPAID', label: 'Prepaid Expense Document', route: '/prepaids', parseEndpoint: '/api/prepaid/parse' },
-  SUBSCRIPTION: {
-    docType: 'SUBSCRIPTION',
-    label: 'Subscription Agreement',
-    route: '/subscriptions',
-    parseEndpoint: '/api/subscriptions/parse-agreement',
-  },
-  PAYROLL_REGISTER: {
-    docType: 'PAYROLL_REGISTER',
-    label: 'Payroll Register',
-    route: '/payroll',
-    parseEndpoint: '/api/payroll/import-register',
-  },
-  WIP_SCHEDULE: {
-    docType: 'WIP_SCHEDULE',
-    label: 'WIP Schedule',
-    route: '/jobs',
-    parseEndpoint: '/api/onboarding/import/wip',
-  },
-  FORMATION_DOC: {
-    docType: 'FORMATION_DOC',
-    label: 'Formation Document',
-    route: '/onboarding',
-    // No parser yet — Wave 3. The file still routes to onboarding for manual handling.
-    parseEndpoint: null,
-  },
-  UNKNOWN: { docType: 'UNKNOWN', label: 'Unrecognized Document', route: '/onboarding', parseEndpoint: null },
-};
+// The vocabulary + routing map live in the client-safe `types.ts` (the intake UI and the
+// deterministic fallback share them). Re-exported here so existing imports keep working.
+import { INTAKE_ROUTES, mapDocType, type IntakeDocType, type IntakeRoute } from './types';
+export { INTAKE_ROUTES, mapDocType };
+export type { IntakeDocType, IntakeRoute };
 
 /** The successful classification handed back to the caller / UI. */
 export interface ClassificationSuccess {
@@ -148,9 +51,6 @@ export interface ClassificationFailure {
 
 export type ClassificationResult = ClassificationSuccess | ClassificationFailure;
 
-/** Set of all valid docType strings, for O(1) membership checks against loose input. */
-const DOC_TYPES: ReadonlySet<string> = new Set(Object.keys(INTAKE_ROUTES));
-
 function clampConfidence(raw: unknown): number {
   const n = typeof raw === 'number' ? raw : Number(raw);
   if (!Number.isFinite(n)) return 0;
@@ -160,19 +60,6 @@ function clampConfidence(raw: unknown): number {
 function toTrimmedString(raw: unknown): string {
   if (typeof raw !== 'string') return '';
   return raw.trim();
-}
-
-/**
- * Coerce a loose model docType string to a canonical IntakeDocType. Uppercases,
- * strips non-letters (so "bank-statement", "bank statement", "Bank_Statement" all
- * normalize), and only accepts an exact match against the known set — anything else
- * (empty, garbled, hallucinated) falls to UNKNOWN.
- */
-export function mapDocType(raw: unknown): IntakeDocType {
-  if (typeof raw !== 'string') return 'UNKNOWN';
-  const normalized = raw.trim().toUpperCase().replace(/[\s-]+/g, '_').replace(/[^A-Z0-9_]/g, '');
-  if (DOC_TYPES.has(normalized)) return normalized as IntakeDocType;
-  return 'UNKNOWN';
 }
 
 interface RawClassification {
@@ -223,21 +110,30 @@ export function normalizeClassification(raw: unknown): ClassificationSuccess {
 const CLASSIFY_PROMPT = `You are a document intake triage specialist for an accounting book-of-record system. A user has dropped a document during onboarding. Read only the FIRST page / opening portion — enough to identify WHAT KIND of document this is. Do NOT extract its detailed contents; a dedicated parser will do that later. Your ONLY job is to classify it into exactly one type.
 
 The allowed types (choose the single best fit):
+- TRIAL_BALANCE — a trial balance or account-balances export (accounts with debit/credit or balance columns).
+- GENERAL_LEDGER — a general-ledger DETAIL export (dated transactions per account, with memo/split/debit/credit).
+- FORMATION_DOC — articles of organization / incorporation, certificate of formation / incorporation.
+- EIN_LETTER — the IRS EIN assignment letter (CP-575) or an SS-4 application / 147C letter.
+- OPERATING_AGREEMENT — an LLC operating agreement, partnership agreement, shareholder agreement, or bylaws.
 - LOAN — a loan agreement, promissory note, credit agreement, line of credit, or debt instrument.
+- BUDGET — an operating budget or forecast (accounts by month / annual budget amounts).
+- CUSTOMER_LIST — a customer database, client list, or CRM export (names, contacts — not balances).
+- AR_AGING — an accounts-receivable aging / open-invoices report (customers with balances due).
+- VENDOR_LIST — a vendor / supplier list (names, contacts — not balances).
+- AP_AGING — an accounts-payable aging / unpaid-bills report (vendors with balances due).
+- WIP_SCHEDULE — a work-in-progress / construction job-cost schedule (contracts, costs, % complete, billings).
+- ORG_CHART — an organization chart or reporting-lines list (who reports to whom).
+- EXPENSE_POLICY — an expense, travel, reimbursement, spending, or approval policy.
 - LEASE — a lease agreement for real estate or equipment (lessor/lessee, rent, term).
 - BILL — a vendor bill or accounts-payable invoice the business RECEIVED and must pay.
 - BANK_STATEMENT — a bank or credit-card account statement (transactions, beginning/ending balance).
-- TRIAL_BALANCE — a trial balance or general-ledger balances export (accounts with debit/credit columns).
 - W9 — an IRS Form W-9 (Request for Taxpayer Identification Number).
 - COI — a Certificate of Insurance (ACORD form; evidence of a vendor's coverage).
 - CUSTOMER_CONTRACT — a signed customer / sales agreement, MSA, or SOW under which the business will bill a customer.
-- OPERATING_AGREEMENT — an LLC operating agreement or partnership agreement (members, ownership, capital).
 - INSURANCE_POLICY — the business's OWN insurance policy document (declarations page, coverages, premium).
 - PREPAID — a document evidencing a prepaid expense (annual prepayment, retainer, prepaid maintenance).
 - SUBSCRIPTION — a SaaS / software / recurring subscription agreement or order form.
 - PAYROLL_REGISTER — a payroll register or payroll summary (employees, gross/net pay, taxes).
-- WIP_SCHEDULE — a work-in-progress / construction job-cost schedule (contracts, costs, % complete, billings).
-- FORMATION_DOC — a company formation document (articles of incorporation/organization, certificate of formation).
 - UNKNOWN — none of the above, or you cannot tell with reasonable confidence.
 
 Return ONLY valid JSON (no markdown, no prose, no code fences) with this exact shape:
@@ -276,28 +172,42 @@ export type ClassifyDocumentResult =
  */
 export async function classifyDocument(
   deps: { supabase: SupabaseClient; anthropicApiKey: string },
-  args: { orgId: string; userId?: string | null; base64Data: string; mediaType: string },
+  args: {
+    orgId: string;
+    userId?: string | null;
+    base64Data: string;
+    mediaType: string;
+    /**
+     * For spreadsheets/CSV: the first rows rendered as text. When present it is sent
+     * INSTEAD of the binary (the model cannot read an .xlsx), so a sheet the
+     * deterministic rules couldn't place can still get an AI opinion.
+     */
+    textSample?: string | null;
+  },
 ): Promise<ClassifyDocumentResult> {
   const { supabase, anthropicApiKey } = deps;
-  const { orgId, userId, base64Data, mediaType } = args;
+  const { orgId, userId, base64Data, mediaType, textSample } = args;
   const startTime = Date.now();
 
   const isPdf = mediaType === 'application/pdf';
   const isImage = mediaType.startsWith('image/');
-  if (!isPdf && !isImage) {
-    return { ok: false, error: `Unsupported file type: ${mediaType}. Must be PDF or image.` };
+  const hasText = typeof textSample === 'string' && textSample.trim().length > 0;
+  if (!isPdf && !isImage && !hasText) {
+    return { ok: false, error: `Unsupported file type: ${mediaType}. Must be PDF, image, or a spreadsheet sample.` };
   }
 
-  const contentBlock = isPdf
-    ? { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: base64Data } }
-    : {
-        type: 'image' as const,
-        source: {
-          type: 'base64' as const,
-          media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-          data: base64Data,
-        },
-      };
+  const contentBlock = hasText
+    ? { type: 'text' as const, text: `The document is a spreadsheet. Its first rows (comma-separated):\n\n${(textSample ?? '').slice(0, 6000)}` }
+    : isPdf
+      ? { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: base64Data } }
+      : {
+          type: 'image' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+            data: base64Data,
+          },
+        };
 
   let gw;
   try {

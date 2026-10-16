@@ -70,6 +70,7 @@ import {
 } from '@/lib/services/rev-rec';
 import { recognizesAtBilling } from '@/lib/posting/rev-rec-method';
 import { formatMoney } from '@meritbooks/shared';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
 export const REVENUE_NOT_RECOGNIZED_FEATURE = 'REVENUE_NOT_RECOGNIZED';
 
@@ -464,12 +465,16 @@ export async function scanRevenueNotRecognized(
 
   // ── Signal A — deferred-revenue schedule run missing for the period ──────────
   try {
-    const { data, error } = await supabase
-      .from('posting_schedules')
-      .select('id, schedule_type, status, start_date, months, amount_per_period_cents, debit_account_id, credit_account_id, location_id, memo')
-      .eq('status', 'ACTIVE')
-      .eq('schedule_type', 'DEFERRED_REVENUE')
-      .limit(2000);
+    // Paged: a `.limit(2000)` is silently capped at 1,000 rows by PostgREST.
+    const { data, error } = await fetchAll(
+      () =>
+        supabase
+          .from('posting_schedules')
+          .select('id, schedule_type, status, start_date, months, amount_per_period_cents, debit_account_id, credit_account_id, location_id, memo')
+          .eq('status', 'ACTIVE')
+          .eq('schedule_type', 'DEFERRED_REVENUE'),
+      { label: 'controls/revrec posting_schedules' },
+    );
     if (error) {
       console.warn('[controls/revrec] schedules load failed:', error.message);
     } else {
@@ -491,12 +496,17 @@ export async function scanRevenueNotRecognized(
       const runSet = new Set<string>();
       if (rows.length > 0 && py != null && pm != null) {
         try {
-          const { data: runs } = await supabase
-            .from('posting_schedule_runs')
-            .select('schedule_id')
-            .eq('period_year', py)
-            .eq('period_month', pm)
-            .in('schedule_id', rows.map((r) => r.id).slice(0, 2000));
+          const { data: runs } = await fetchAllIn(
+            rows.map((r) => r.id).slice(0, 2000),
+            (chunk) =>
+              supabase
+                .from('posting_schedule_runs')
+                .select('schedule_id')
+                .eq('period_year', py)
+                .eq('period_month', pm)
+                .in('schedule_id', chunk),
+            { label: 'controls/revrec posting_schedule_runs' },
+          );
           for (const r of (runs ?? []) as Array<{ schedule_id: string }>) runSet.add(r.schedule_id);
         } catch {
           /* best-effort — worst case we flag a schedule already posted */
@@ -573,13 +583,17 @@ export async function scanRevenueNotRecognized(
       'id, job_number, name, location_id, job_type, archetype, status, rev_rec_method, rev_rec_method_override, ' +
       'revenue_account_id, contract_amount_cents, estimated_cost_cents, actual_cost_cents, billed_to_date_cents, ' +
       'pct_complete, revenue_recognized_cents, service_start_date, service_end_date';
-    const { data: jobsRaw, error } = await supabase
-      .schema('core')
-      .from('jobs')
-      .select(JOB_SELECT)
-      .eq('org_id', orgId)
-      .in('status', ['ACTIVE', 'ON_HOLD', 'COMPLETE', 'CLOSED'])
-      .limit(5000);
+    // Paged: a `.limit(5000)` is silently capped at 1,000 rows by PostgREST.
+    const { data: jobsRaw, error } = await fetchAll(
+      () =>
+        supabase
+          .schema('core')
+          .from('jobs')
+          .select(JOB_SELECT)
+          .eq('org_id', orgId)
+          .in('status', ['ACTIVE', 'ON_HOLD', 'COMPLETE', 'CLOSED']),
+      { label: 'controls/revrec jobs' },
+    );
     if (error) {
       console.warn('[controls/revrec] jobs load failed:', error.message);
     } else {
@@ -643,10 +657,15 @@ export async function scanRevenueNotRecognized(
       const collectedByJob = new Map<string, number>();
       if (cashJobIds.length > 0) {
         try {
-          const { data: inv } = await supabase
-            .from('invoices')
-            .select('job_id, amount_paid_cents')
-            .in('job_id', cashJobIds.slice(0, 2000));
+          const { data: inv } = await fetchAllIn(
+            cashJobIds.slice(0, 2000),
+            (chunk) =>
+              supabase
+                .from('invoices')
+                .select('job_id, amount_paid_cents')
+                .in('job_id', chunk),
+            { label: 'controls/revrec invoices' },
+          );
           for (const r of (inv ?? []) as Array<{ job_id: string | null; amount_paid_cents: number | string | null }>) {
             if (!r.job_id) continue;
             collectedByJob.set(r.job_id, (collectedByJob.get(r.job_id) ?? 0) + (Number(r.amount_paid_cents) || 0));
@@ -663,11 +682,17 @@ export async function scanRevenueNotRecognized(
       const deferredBalByJob = new Map<string, number>();
       if (doneJobIds.length > 0 && deferredAcct) {
         try {
-          const { data: lines } = await supabase
-            .from('gl_entry_lines')
-            .select('job_id, debit_cents, credit_cents')
-            .eq('account_id', deferredAcct.id)
-            .in('job_id', doneJobIds.slice(0, 2000));
+          const deferredAcctId = deferredAcct.id;
+          const { data: lines } = await fetchAllIn(
+            doneJobIds.slice(0, 2000),
+            (chunk) =>
+              supabase
+                .from('gl_entry_lines')
+                .select('job_id, debit_cents, credit_cents')
+                .eq('account_id', deferredAcctId)
+                .in('job_id', chunk),
+            { label: 'controls/revrec deferred gl_entry_lines' },
+          );
           for (const l of (lines ?? []) as Array<{ job_id: string | null; debit_cents: number | string; credit_cents: number | string }>) {
             if (!l.job_id) continue;
             const bal = (Number(l.credit_cents) || 0) - (Number(l.debit_cents) || 0);

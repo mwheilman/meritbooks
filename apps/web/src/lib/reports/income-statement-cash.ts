@@ -34,6 +34,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
 import type { IncomeStatementPayload } from '@/lib/reports/board-package';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
 const PL_TYPES = ['REVENUE', 'COGS', 'OPEX', 'OTHER'] as const;
 
@@ -270,7 +271,11 @@ async function fetchAccountMeta(
 ): Promise<Map<string, CashAccountMeta>> {
   const out = new Map<string, CashAccountMeta>();
   if (accountIds.length === 0) return out;
-  const { data, error } = await supabase.from('accounts').select(ACCOUNT_META_SELECT).in('id', accountIds);
+  const { data, error } = await fetchAllIn(
+    accountIds,
+    (chunk) => supabase.from('accounts').select(ACCOUNT_META_SELECT).in('id', chunk),
+    { label: 'cash-IS accounts' },
+  );
   if (error) throw new Error(error.message);
   for (const raw of (data ?? []) as unknown as Record<string, unknown>[]) {
     const type = String(raw.account_type ?? '');
@@ -298,12 +303,19 @@ export async function fetchCashIncomeStatement(
 ): Promise<IncomeStatementPayload> {
   const { startDate, endDate, locationIds } = scope;
 
+  // Every read below is PAGED (fetchAll / fetchAllIn): PostgREST caps a response
+  // at 1,000 rows, which silently truncated this statement for busy periods.
+
   // ── Leg A: customer cash receipts → invoice revenue lines ───────────────────
-  const { data: paymentsRaw, error: payErr } = await supabase
-    .from('customer_payments')
-    .select('id, gl_entry_id')
-    .gte('payment_date', startDate)
-    .lte('payment_date', endDate);
+  const { data: paymentsRaw, error: payErr } = await fetchAll(
+    () =>
+      supabase
+        .from('customer_payments')
+        .select('id, gl_entry_id')
+        .gte('payment_date', startDate)
+        .lte('payment_date', endDate),
+    { label: 'cash-IS customer_payments' },
+  );
   if (payErr) throw new Error(payErr.message);
   const payments = (paymentsRaw ?? []) as Array<{ id: string; gl_entry_id: string | null }>;
   const paymentIds = payments.map((p) => p.id);
@@ -313,19 +325,26 @@ export async function fetchCashIncomeStatement(
   const receipts: CashSettlementLeg[] = [];
   const referencedAccountIds = new Set<string>();
   if (paymentIds.length > 0) {
-    const { data: appsRaw, error: appErr } = await supabase
-      .from('payment_applications')
-      .select('payment_id, invoice_id, amount_cents')
-      .in('payment_id', paymentIds);
+    const { data: appsRaw, error: appErr } = await fetchAllIn(
+      paymentIds,
+      (chunk) =>
+        supabase
+          .from('payment_applications')
+          .select('payment_id, invoice_id, amount_cents')
+          .in('payment_id', chunk),
+      { label: 'cash-IS payment_applications' },
+    );
     if (appErr) throw new Error(appErr.message);
     const apps = (appsRaw ?? []) as Array<{ payment_id: string; invoice_id: string; amount_cents: number }>;
     const invoiceIds = [...new Set(apps.map((a) => a.invoice_id))];
 
     if (invoiceIds.length > 0) {
       // Invoices carry the revenue location — location-scope the receipts here.
-      let invQ = supabase.from('invoices').select('id, total_cents, location_id').in('id', invoiceIds);
-      invQ = applyLoc(invQ, locationIds);
-      const { data: invRaw, error: invErr } = await invQ;
+      const { data: invRaw, error: invErr } = await fetchAllIn(
+        invoiceIds,
+        (chunk) => applyLoc(supabase.from('invoices').select('id, total_cents, location_id').in('id', chunk), locationIds),
+        { label: 'cash-IS invoices' },
+      );
       if (invErr) throw new Error(invErr.message);
       const invMeta = new Map<string, { totalCents: number }>();
       for (const iv of (invRaw ?? []) as Array<{ id: string; total_cents: number }>) {
@@ -335,10 +354,15 @@ export async function fetchCashIncomeStatement(
 
       const linesByInvoice = new Map<string, Array<{ accountId: string; amountCents: number }>>();
       if (inScopeInvoiceIds.length > 0) {
-        const { data: linesRaw, error: lineErr } = await supabase
-          .from('invoice_lines')
-          .select('invoice_id, account_id, amount_cents')
-          .in('invoice_id', inScopeInvoiceIds);
+        const { data: linesRaw, error: lineErr } = await fetchAllIn(
+          inScopeInvoiceIds,
+          (chunk) =>
+            supabase
+              .from('invoice_lines')
+              .select('invoice_id, account_id, amount_cents')
+              .in('invoice_id', chunk),
+          { label: 'cash-IS invoice_lines' },
+        );
         if (lineErr) throw new Error(lineErr.message);
         for (const l of (linesRaw ?? []) as Array<{ invoice_id: string; account_id: string; amount_cents: number }>) {
           const arr = linesByInvoice.get(l.invoice_id) ?? [];
@@ -358,14 +382,19 @@ export async function fetchCashIncomeStatement(
   }
 
   // ── Leg B: bill payments → bill expense lines ───────────────────────────────
-  let bpQ = supabase
-    .from('bill_payments')
-    .select('id, bill_id, amount_cents, gl_entry_id, location_id')
-    .eq('status', 'POSTED')
-    .gte('payment_date', startDate)
-    .lte('payment_date', endDate);
-  bpQ = applyLoc(bpQ, locationIds);
-  const { data: bpRaw, error: bpErr } = await bpQ;
+  const { data: bpRaw, error: bpErr } = await fetchAll(
+    () =>
+      applyLoc(
+        supabase
+          .from('bill_payments')
+          .select('id, bill_id, amount_cents, gl_entry_id, location_id')
+          .eq('status', 'POSTED')
+          .gte('payment_date', startDate)
+          .lte('payment_date', endDate),
+        locationIds,
+      ),
+    { label: 'cash-IS bill_payments' },
+  );
   if (bpErr) throw new Error(bpErr.message);
   const billPayments = (bpRaw ?? []) as Array<{ id: string; bill_id: string; amount_cents: number; gl_entry_id: string | null }>;
   for (const bp of billPayments) if (bp.gl_entry_id) settlementEntryIds.add(bp.gl_entry_id);
@@ -373,15 +402,24 @@ export async function fetchCashIncomeStatement(
   const disbursements: CashSettlementLeg[] = [];
   const billIds = [...new Set(billPayments.map((b) => b.bill_id))];
   if (billIds.length > 0) {
-    const { data: billsRaw, error: billErr } = await supabase.from('bills').select('id, total_cents').in('id', billIds);
+    const { data: billsRaw, error: billErr } = await fetchAllIn(
+      billIds,
+      (chunk) => supabase.from('bills').select('id, total_cents').in('id', chunk),
+      { label: 'cash-IS bills' },
+    );
     if (billErr) throw new Error(billErr.message);
     const billTotal = new Map<string, number>();
     for (const b of (billsRaw ?? []) as Array<{ id: string; total_cents: number }>) billTotal.set(b.id, Number(b.total_cents ?? 0));
 
-    const { data: blRaw, error: blErr } = await supabase
-      .from('bill_lines')
-      .select('bill_id, account_id, amount_cents')
-      .in('bill_id', billIds);
+    const { data: blRaw, error: blErr } = await fetchAllIn(
+      billIds,
+      (chunk) =>
+        supabase
+          .from('bill_lines')
+          .select('bill_id, account_id, amount_cents')
+          .in('bill_id', chunk),
+      { label: 'cash-IS bill_lines' },
+    );
     if (blErr) throw new Error(blErr.message);
     const linesByBill = new Map<string, Array<{ accountId: string; amountCents: number }>>();
     for (const l of (blRaw ?? []) as Array<{ bill_id: string; account_id: string; amount_cents: number }>) {
@@ -403,15 +441,21 @@ export async function fetchCashIncomeStatement(
   const cashIds = await resolveCashAccountIds(supabase, orgId);
   if (cashIds.size > 0) {
     // (a) entries in the period that touch a cash account
-    let cashQ = supabase
-      .from('gl_entry_lines')
-      .select('gl_entry_id, gl_entries!inner(entry_date, status)')
-      .eq('gl_entries.status', 'POSTED')
-      .gte('gl_entries.entry_date', startDate)
-      .lte('gl_entries.entry_date', endDate)
-      .in('account_id', [...cashIds]);
-    cashQ = applyLoc(cashQ, locationIds);
-    const { data: cashLinesRaw, error: cashErr } = await cashQ;
+    const cashIdList = [...cashIds];
+    const { data: cashLinesRaw, error: cashErr } = await fetchAll(
+      () =>
+        applyLoc(
+          supabase
+            .from('gl_entry_lines')
+            .select('gl_entry_id, gl_entries!inner(entry_date, status)')
+            .eq('gl_entries.status', 'POSTED')
+            .gte('gl_entries.entry_date', startDate)
+            .lte('gl_entries.entry_date', endDate)
+            .in('account_id', cashIdList),
+          locationIds,
+        ),
+      { label: 'cash-IS cash gl_entry_lines' },
+    );
     if (cashErr) throw new Error(cashErr.message);
     const cashEntryIds = new Set<string>();
     for (const l of (cashLinesRaw ?? []) as Array<{ gl_entry_id: string }>) cashEntryIds.add(l.gl_entry_id);
@@ -421,13 +465,19 @@ export async function fetchCashIncomeStatement(
 
     if (targetEntryIds.length > 0) {
       // (b) the P&L lines on those entries = the direct cash revenue / expense
-      let plQ = supabase
-        .from('gl_entry_lines')
-        .select('account_id, debit_cents, credit_cents, accounts!inner(account_type)')
-        .in('gl_entry_id', targetEntryIds)
-        .in('accounts.account_type', PL_TYPES as unknown as string[]);
-      plQ = applyLoc(plQ, locationIds);
-      const { data: plRaw, error: plErr } = await plQ;
+      const { data: plRaw, error: plErr } = await fetchAllIn(
+        targetEntryIds,
+        (chunk) =>
+          applyLoc(
+            supabase
+              .from('gl_entry_lines')
+              .select('account_id, debit_cents, credit_cents, accounts!inner(account_type)')
+              .in('gl_entry_id', chunk)
+              .in('accounts.account_type', PL_TYPES as unknown as string[]),
+            locationIds,
+          ),
+        { label: 'cash-IS P&L gl_entry_lines' },
+      );
       if (plErr) throw new Error(plErr.message);
       for (const l of (plRaw ?? []) as unknown as Array<Record<string, unknown>>) {
         const accountId = l.account_id as string;

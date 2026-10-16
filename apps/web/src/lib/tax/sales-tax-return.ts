@@ -34,6 +34,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 import { normalizeState, periodOf } from '@/lib/controls/sales-tax-nexus';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { fetchCoreMap } from '@/lib/stitch-core';
@@ -585,19 +586,23 @@ export async function loadReturnInvoices(
   const locationId = opts.locationId && opts.locationId !== 'all' ? opts.locationId : null;
 
   // ── 1. Invoices in the window (real sales only) ──────────────────────────────
-  let invQuery = supabase
-    .from('invoices')
-    .select('id, invoice_number, customer_id, job_id, location_id, invoice_date, subtotal_cents, tax_cents, total_cents, status, ship_to, bill_to')
-    .in('status', SALE_STATUSES)
-    .gte('invoice_date', startDate)
-    .lte('invoice_date', endDate)
-    .order('invoice_date', { ascending: true })
-    .limit(20000);
-  if (locationId) invQuery = invQuery.eq('location_id', locationId);
+  // Paged (PostgREST caps a response at 1,000 rows — a `.limit(20000)` was
+  // silently truncated to 1,000). invoice_date order kept; id is the tie-breaker.
+  const buildInvQuery = () => {
+    let invQuery = supabase
+      .from('invoices')
+      .select('id, invoice_number, customer_id, job_id, location_id, invoice_date, subtotal_cents, tax_cents, total_cents, status, ship_to, bill_to')
+      .in('status', SALE_STATUSES)
+      .gte('invoice_date', startDate)
+      .lte('invoice_date', endDate)
+      .order('invoice_date', { ascending: true });
+    if (locationId) invQuery = invQuery.eq('location_id', locationId);
+    return invQuery;
+  };
 
   let rows: InvoiceRow[] = [];
   try {
-    const { data, error } = await invQuery;
+    const { data, error } = await fetchAll(buildInvQuery, { label: 'sales-tax-return invoices' });
     if (!error) rows = (data ?? []) as InvoiceRow[];
     else console.warn('[tax/sales-tax-return] invoice load failed:', error.message);
   } catch (e) {
@@ -758,16 +763,18 @@ async function buildGlTieOut(
   let windowDebitCents = 0;
   let arCreditCents = 0;
   try {
-    let q = supabase
-      .from('gl_entry_lines')
-      .select('debit_cents, credit_cents, location_id, gl_entries!inner(entry_date, status, source_module)')
-      .eq('account_id', account.id)
-      .eq('gl_entries.status', 'POSTED')
-      .gte('gl_entries.entry_date', args.startDate)
-      .lte('gl_entries.entry_date', args.endDate)
-      .limit(50000);
-    if (args.locationId) q = q.eq('location_id', args.locationId);
-    const { data, error } = await q;
+    const build = () => {
+      let q = supabase
+        .from('gl_entry_lines')
+        .select('debit_cents, credit_cents, location_id, gl_entries!inner(entry_date, status, source_module)')
+        .eq('account_id', account.id)
+        .eq('gl_entries.status', 'POSTED')
+        .gte('gl_entries.entry_date', args.startDate)
+        .lte('gl_entries.entry_date', args.endDate);
+      if (args.locationId) q = q.eq('location_id', args.locationId);
+      return q;
+    };
+    const { data, error } = await fetchAll(build, { label: 'sales-tax-return window gl_entry_lines' });
     if (error) return { ...base, available: true, accountNumber: account.account_number, note: `GL activity query failed: ${error.message}` };
     for (const row of (data ?? []) as unknown as Array<{ debit_cents: number | null; credit_cents: number | null; gl_entries: { source_module: string | null } }>) {
       const d = Number(row.debit_cents) || 0;
@@ -783,15 +790,17 @@ async function buildGlTieOut(
   // Ending balance = all-time net credit (credits − debits) through endDate.
   let endingBalanceCents = 0;
   try {
-    let q = supabase
-      .from('gl_entry_lines')
-      .select('debit_cents, credit_cents, location_id, gl_entries!inner(entry_date, status)')
-      .eq('account_id', account.id)
-      .eq('gl_entries.status', 'POSTED')
-      .lte('gl_entries.entry_date', args.endDate)
-      .limit(100000);
-    if (args.locationId) q = q.eq('location_id', args.locationId);
-    const { data } = await q;
+    const build = () => {
+      let q = supabase
+        .from('gl_entry_lines')
+        .select('debit_cents, credit_cents, location_id, gl_entries!inner(entry_date, status)')
+        .eq('account_id', account.id)
+        .eq('gl_entries.status', 'POSTED')
+        .lte('gl_entries.entry_date', args.endDate);
+      if (args.locationId) q = q.eq('location_id', args.locationId);
+      return q;
+    };
+    const { data } = await fetchAll(build, { label: 'sales-tax-return ending-balance gl_entry_lines' });
     for (const row of (data ?? []) as unknown as Array<{ debit_cents: number | null; credit_cents: number | null }>) {
       endingBalanceCents += (Number(row.credit_cents) || 0) - (Number(row.debit_cents) || 0);
     }

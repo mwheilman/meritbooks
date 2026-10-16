@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
 
 export async function GET(request: Request) {
@@ -99,6 +100,11 @@ export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
   const { userId, supabase } = ctx;
+
+  // Authorize — checking off close-checklist items feeds the period close; it is a
+  // close-management action.
+  const guard = await requirePermission(userId, 'close_mgmt', 'manage');
+  if (!guard.ok) return guard.response;
 
   try {
     const raw = await request.json();

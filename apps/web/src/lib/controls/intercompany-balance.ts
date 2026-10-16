@@ -58,6 +58,7 @@ import {
 } from '@/lib/autonomy/disposition';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { formatMoney } from '@meritbooks/shared';
+import { fetchAll, FETCH_ALL_IN_CHUNK } from '@/lib/supabase/fetch-all';
 
 export const IC_FEATURE = 'INTERCOMPANY_IMBALANCE';
 
@@ -319,13 +320,19 @@ async function fetchLinesForAccounts(
 ): Promise<LineRow[]> {
   const out: LineRow[] = [];
   if (accountIds.length === 0 || entryIds.length === 0) return out;
-  for (let i = 0; i < entryIds.length; i += 500) {
-    const slice = entryIds.slice(i, i + 500);
-    const { data, error } = await supabase
-      .from('gl_entry_lines')
-      .select('gl_entry_id, account_id, debit_cents, credit_cents, location_id')
-      .in('gl_entry_id', slice)
-      .in('account_id', accountIds);
+  // Per id-chunk, page every line (a chunk's lines can exceed PostgREST's
+  // 1,000-row response cap). A failed chunk is skipped, as before.
+  for (let i = 0; i < entryIds.length; i += FETCH_ALL_IN_CHUNK) {
+    const slice = entryIds.slice(i, i + FETCH_ALL_IN_CHUNK);
+    const { data, error } = await fetchAll(
+      () =>
+        supabase
+          .from('gl_entry_lines')
+          .select('gl_entry_id, account_id, debit_cents, credit_cents, location_id')
+          .in('gl_entry_id', slice)
+          .in('account_id', accountIds),
+      { label: 'controls/ic gl_entry_lines' },
+    );
     if (error) {
       console.warn('[controls/ic] line load failed:', error.message);
       continue;
@@ -398,13 +405,19 @@ export async function scanIntercompanyBalance(
   const isClosed = (s: string | undefined) => s === 'SOFT_CLOSE' || s === 'HARD_CLOSE';
 
   // ── Posted GL entries in scope (build id → {date, location}) ─────────────────
-  let entryQuery = supabase
-    .from('gl_entries')
-    .select('id, location_id, entry_date')
-    .eq('org_id', orgId)
-    .eq('status', 'POSTED');
-  if (opts.sinceDate) entryQuery = entryQuery.gte('entry_date', opts.sinceDate);
-  const { data: entriesRaw, error: entryErr } = await entryQuery.limit(20000);
+  // Paged: a `.limit(20000)` is silently capped at 1,000 rows by PostgREST.
+  const buildEntryQuery = () => {
+    let entryQuery = supabase
+      .from('gl_entries')
+      .select('id, location_id, entry_date')
+      .eq('org_id', orgId)
+      .eq('status', 'POSTED');
+    if (opts.sinceDate) entryQuery = entryQuery.gte('entry_date', opts.sinceDate);
+    return entryQuery;
+  };
+  const { data: entriesRaw, error: entryErr } = await fetchAll(buildEntryQuery, {
+    label: 'controls/ic gl_entries',
+  });
   if (entryErr) {
     console.warn('[controls/ic] entries load failed:', entryErr.message);
     return summary;
@@ -492,13 +505,19 @@ export async function scanIntercompanyBalance(
   }
   const coverage = new Map<string, Cov>(); // `${locationId}:${periodKey}`
   {
-    let invQuery = supabase
-      .from('internal_invoices')
-      .select('id, invoice_number, location_id, invoice_date, charge_method, status, total_cents, booked_gl_entry_id')
-      .eq('org_id', orgId)
-      .eq('status', 'booked');
-    if (opts.sinceDate) invQuery = invQuery.gte('invoice_date', opts.sinceDate);
-    const { data: invsRaw, error: invErr } = await invQuery.limit(10000);
+    // Paged: a `.limit(10000)` is silently capped at 1,000 rows by PostgREST.
+    const buildInvQuery = () => {
+      let invQuery = supabase
+        .from('internal_invoices')
+        .select('id, invoice_number, location_id, invoice_date, charge_method, status, total_cents, booked_gl_entry_id')
+        .eq('org_id', orgId)
+        .eq('status', 'booked');
+      if (opts.sinceDate) invQuery = invQuery.gte('invoice_date', opts.sinceDate);
+      return invQuery;
+    };
+    const { data: invsRaw, error: invErr } = await fetchAll(buildInvQuery, {
+      label: 'controls/ic internal_invoices',
+    });
     if (invErr) {
       console.warn('[controls/ic] internal invoices load failed:', invErr.message);
     }

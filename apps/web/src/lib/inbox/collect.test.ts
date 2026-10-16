@@ -198,7 +198,7 @@ function sample(): InboxItem[] {
     buildObligationItem(
       makeObligation(ASOF, { type: 'INSURANCE', category: 'RENEWAL', title: 'GL renewal', subtitle: null, dueDate: '2026-08-05', amountCents: null, entityId: 'i1', href: '/insurance' })!,
     ),
-    buildBillHoldItem(ASOF, { id: 'b1', bill_number: 'INV-1', total_cents: 100, payment_hold_reason: null, vendor_id: null, created_at: ASOF }),
+    buildBillHoldItem(ASOF, { id: 'b1', bill_number: 'INV-1', total_cents: 100, payment_hold_reason: null, vendor_id: null, created_at: ASOF }, null),
     buildApprovalItem(ASOF, { id: 'a1', kind: 'AP_BATCH', subject_table: null, amount_cents: 100, created_at: ASOF }, false),
   ];
 }

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { hasModule } from '@/lib/services/entitlements';
 import { z } from 'zod';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 export const REV_REC_METHODS = [
   { value: 'POINT_OF_SALE', label: 'Point of sale', poc: false,
@@ -75,7 +76,12 @@ const postSchema = z.union([
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
+
+  // Authorize — the revenue-recognition method (setting a company default / job-type rule) is an accounting
+  // policy that drives what rev-rec posts; gate on settings_acct:edit.
+  const guard = await requirePermission(userId, 'settings_acct', 'edit');
+  if (!guard.ok) return guard.response;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   let raw: unknown;
@@ -101,7 +107,12 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
+
+  // Authorize — the revenue-recognition method (removing a job-type rule) is an accounting
+  // policy that drives what rev-rec posts; gate on settings_acct:edit.
+  const guard = await requirePermission(userId, 'settings_acct', 'edit');
+  if (!guard.ok) return guard.response;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });

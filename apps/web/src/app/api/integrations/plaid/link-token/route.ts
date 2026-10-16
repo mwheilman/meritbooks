@@ -6,6 +6,7 @@ import { createAdminSupabase } from '@/lib/supabase/server';
 import { resolveOrgId } from '@/lib/posting/lifecycle';
 import { isCapabilityEntitled } from '@/lib/money/connections';
 import { createLinkToken, type PlaidEnv } from '@/lib/money/providers/plaid';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 const ENV: PlaidEnv = process.env.PLAID_ENV === 'production' ? 'production' : 'sandbox';
 
@@ -18,6 +19,10 @@ export async function POST() {
   const a = await auth().catch(() => null);
   const userId = (a as { userId?: string | null } | null)?.userId ?? null;
   if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  // Authorize — opening Plaid Link starts a bank connection (system integration);
+  // same gate as the exchange step and payments/connect.
+  const guard = await requirePermission(userId, 'settings_system', 'edit');
+  if (!guard.ok) return guard.response;
   // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
   // first-org lookup stays only as a transitional fallback when no claim.
   const claimOrgId =

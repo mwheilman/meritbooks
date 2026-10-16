@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 export async function GET() {
   const ctx = await requireAuthedContext();
@@ -21,8 +22,13 @@ export async function GET() {
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — approver-routing rules are an approval policy; same gate as the
+  // bills approval policy (bills/policy): bills:approve.
+  const guard = await requirePermission(userId, 'bills', 'approve');
+  if (!guard.ok) return guard.response;
 
   let body: Record<string, unknown>;
   try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
@@ -52,8 +58,13 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Authorize — approver-routing rules are an approval policy; same gate as the
+  // bills approval policy (bills/policy): bills:approve.
+  const guard = await requirePermission(userId, 'bills', 'approve');
+  if (!guard.ok) return guard.response;
 
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });

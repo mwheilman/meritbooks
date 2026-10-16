@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
 import { buildReforecast, type ReforecastAccountInput } from '@/lib/budget/reforecast';
 import type { AccountType } from '@/lib/budget/drivers';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 import {
   computeKpiSet,
   computeRunway,
@@ -102,15 +103,19 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
     asOfMonth > 1 ? `${fiscalYear}-${pad(asOfMonth - 1)}-${pad(new Date(fiscalYear, asOfMonth - 1, 0).getDate())}` : `${fiscalYear - 1}-12-31`;
 
   // ── 1. Budgets by account × month ──────────────────────────────────────────
-  let budgetQ = supabase
-    .from('budgets')
-    .select(`account_id, amount_cents, period_number,
-             account:accounts!budgets_account_id_fkey(account_number, name, account_type)`)
-    .eq('fiscal_year', fiscalYear);
-  if (locationIds.length === 1) budgetQ = budgetQ.eq('location_id', locationIds[0]);
-  else if (locationIds.length > 1) budgetQ = budgetQ.in('location_id', locationIds);
-  if (departmentId) budgetQ = budgetQ.eq('department_id', departmentId);
-  const { data: budgetData, error: budgetErr } = await budgetQ;
+  // Every read below is paged (PostgREST caps a response at 1,000 rows).
+  const buildBudgetQ = () => {
+    let budgetQ = supabase
+      .from('budgets')
+      .select(`account_id, amount_cents, period_number,
+               account:accounts!budgets_account_id_fkey(account_number, name, account_type)`)
+      .eq('fiscal_year', fiscalYear);
+    if (locationIds.length === 1) budgetQ = budgetQ.eq('location_id', locationIds[0]);
+    else if (locationIds.length > 1) budgetQ = budgetQ.in('location_id', locationIds);
+    if (departmentId) budgetQ = budgetQ.eq('department_id', departmentId);
+    return budgetQ;
+  };
+  const { data: budgetData, error: budgetErr } = await fetchAll(buildBudgetQ, { label: 'fpna budgets' });
   if (budgetErr) return NextResponse.json({ error: budgetErr.message, code: 'QUERY_ERROR' }, { status: 500 });
 
   const acctMap = new Map<string, AcctBuckets>();
@@ -133,15 +138,18 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
   }
 
   // ── 2. Actuals from posted GL, bucketed by month ───────────────────────────
-  let entriesQ = supabase
-    .from('gl_entries')
-    .select('id, entry_date')
-    .eq('status', 'POSTED')
-    .gte('entry_date', `${fiscalYear}-01-01`)
-    .lte('entry_date', `${fiscalYear}-12-31`);
-  if (locationIds.length === 1) entriesQ = entriesQ.eq('location_id', locationIds[0]);
-  else if (locationIds.length > 1) entriesQ = entriesQ.in('location_id', locationIds);
-  const { data: entries, error: entryErr } = await entriesQ;
+  const buildEntriesQ = () => {
+    let entriesQ = supabase
+      .from('gl_entries')
+      .select('id, entry_date')
+      .eq('status', 'POSTED')
+      .gte('entry_date', `${fiscalYear}-01-01`)
+      .lte('entry_date', `${fiscalYear}-12-31`);
+    if (locationIds.length === 1) entriesQ = entriesQ.eq('location_id', locationIds[0]);
+    else if (locationIds.length > 1) entriesQ = entriesQ.in('location_id', locationIds);
+    return entriesQ;
+  };
+  const { data: entries, error: entryErr } = await fetchAll(buildEntriesQ, { label: 'fpna gl_entries' });
   if (entryErr) return NextResponse.json({ error: entryErr.message, code: 'QUERY_ERROR' }, { status: 500 });
 
   const monthByEntry = new Map<string, number>();
@@ -151,13 +159,19 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
   }
   const entryIds = Array.from(monthByEntry.keys());
   if (entryIds.length > 0) {
-    let linesQ = supabase
-      .from('gl_entry_lines')
-      .select(`gl_entry_id, account_id, debit_cents, credit_cents,
-               account:accounts!gl_entry_lines_account_id_fkey(account_number, name, account_type)`)
-      .in('gl_entry_id', entryIds);
-    if (departmentId) linesQ = linesQ.eq('department_id', departmentId);
-    const { data: lines, error: lineErr } = await linesQ;
+    const { data: lines, error: lineErr } = await fetchAllIn(
+      entryIds,
+      (chunk) => {
+        let linesQ = supabase
+          .from('gl_entry_lines')
+          .select(`gl_entry_id, account_id, debit_cents, credit_cents,
+                   account:accounts!gl_entry_lines_account_id_fkey(account_number, name, account_type)`)
+          .in('gl_entry_id', chunk);
+        if (departmentId) linesQ = linesQ.eq('department_id', departmentId);
+        return linesQ;
+      },
+      { label: 'fpna gl_entry_lines' },
+    );
     if (lineErr) return NextResponse.json({ error: lineErr.message, code: 'QUERY_ERROR' }, { status: 500 });
     for (const line of lines ?? []) {
       const idx = monthByEntry.get(line.gl_entry_id);
@@ -175,17 +189,20 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
   // ── 3. Balance-sheet snapshot (as-of date) — cash / AR / AP / working capital
   //      Classified by account_type + sub_type + is_bank flag (never by number).
   const snapshot = async (asOf: string) => {
-    let q = supabase
-      .from('gl_entry_lines')
-      .select(`account_id, debit_cents, credit_cents,
-               accounts!inner(account_type, account_sub_type, is_bank_account, name),
-               gl_entries!inner(entry_date, status)`)
-      .eq('gl_entries.status', 'POSTED')
-      .lte('gl_entries.entry_date', asOf)
-      .in('accounts.account_type', ['ASSET', 'LIABILITY']);
-    if (locationIds.length === 1) q = q.eq('location_id', locationIds[0]);
-    else if (locationIds.length > 1) q = q.in('location_id', locationIds);
-    const { data, error } = await q;
+    const buildQ = () => {
+      let q = supabase
+        .from('gl_entry_lines')
+        .select(`account_id, debit_cents, credit_cents,
+                 accounts!inner(account_type, account_sub_type, is_bank_account, name),
+                 gl_entries!inner(entry_date, status)`)
+        .eq('gl_entries.status', 'POSTED')
+        .lte('gl_entries.entry_date', asOf)
+        .in('accounts.account_type', ['ASSET', 'LIABILITY']);
+      if (locationIds.length === 1) q = q.eq('location_id', locationIds[0]);
+      else if (locationIds.length > 1) q = q.in('location_id', locationIds);
+      return q;
+    };
+    const { data, error } = await fetchAll(buildQ, { label: 'fpna balance snapshot gl_entry_lines' });
     if (error) throw new Error(error.message);
 
     let cashCents = 0, arCents = 0, apCents = 0, currentAssetsCents = 0, currentLiabilitiesCents = 0;

@@ -81,6 +81,8 @@ export async function GET(request: Request) {
       .gte('gl_entries.entry_date', yearStart)
       .lte('gl_entries.entry_date', ytdEnd)
       .order('account_id', { ascending: true })
+      // account_id is not unique — the id tie-breaker keeps pages from overlapping/skipping.
+      .order('id', { ascending: true })
       .range(from, to);
 
     // Company scope — gl_entry_lines carries its own location_id (indexed).

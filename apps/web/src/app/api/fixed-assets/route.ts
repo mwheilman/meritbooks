@@ -4,6 +4,7 @@ import { auth } from '@clerk/nextjs/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /** Depreciation methods the enum accepts (migration 001 + 079). The book methods
  *  post to the GL; MACRS_* drive the parallel tax track. */
@@ -121,7 +122,13 @@ export async function GET(request: Request) {
  * the incremental usage. RLS-scoped write (createServerSupabase).
  */
 export async function PATCH(request: Request) {
-  await auth().catch(() => null);
+  const a = await auth().catch(() => null);
+  const userId = (a as { userId?: string | null } | null)?.userId ?? null;
+  if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  // Authorize — re-basing an asset (method / life / salvage / units) changes what the
+  // depreciation engine posts to the GL. Same gate as fixed-asset creation.
+  const guard = await requirePermission(userId, 'fixed_assets', 'create');
+  if (!guard.ok) return guard.response;
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
@@ -280,9 +281,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       .select('id')
       .maybeSingle();
     if (updErr || !updated) {
-      // Roll the GL entry back so the idempotency key is free to retry cleanly.
-      await supabase.from('gl_entry_lines').delete().eq('gl_entry_id', posted.entry_id);
-      await supabase.from('gl_entries').delete().eq('id', posted.entry_id);
+      await compensatePostedAdjustment(supabase, orgId, posted.entry_id, sourceRef);
       return NextResponse.json({ error: 'Failed to attach the adjustment to the source line' }, { status: 500 });
     }
     txnId = (updated as { id: string }).id;
@@ -307,9 +306,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       .single();
 
     if (txnErr || !txn) {
-      // Roll the GL entry back so the idempotency key is free to retry cleanly.
-      await supabase.from('gl_entry_lines').delete().eq('gl_entry_id', posted.entry_id);
-      await supabase.from('gl_entries').delete().eq('id', posted.entry_id);
+      await compensatePostedAdjustment(supabase, orgId, posted.entry_id, sourceRef);
       return NextResponse.json({ error: 'Failed to record the statement line for the adjustment' }, { status: 500 });
     }
     txnId = (txn as { id: string }).id;
@@ -342,4 +339,41 @@ export async function POST(request: Request): Promise<NextResponse> {
     },
     { status: 201 },
   );
+}
+
+/**
+ * Compensate a just-posted adjustment whose statement-line write failed.
+ *
+ * A POSTED entry with lines can no longer be deleted (migration 153 — posted GL is
+ * immutable; the old line-delete had already been a silent no-op since 152). So
+ * the compensation VOIDS the entry (drops it out of every POSTED-only balance,
+ * keeps the audit trail) and moves it off the idempotency key
+ * (uq_gl_entries_org_source_type covers voided rows too) so a retry with the same
+ * key posts cleanly instead of returning this voided entry as "idempotent".
+ * The entry was posted moments ago into a non-hard-closed period (checked above),
+ * so the void is permitted by the period lock.
+ */
+async function compensatePostedAdjustment(
+  supabase: SupabaseClient,
+  orgId: string,
+  entryId: string,
+  sourceRef: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('gl_entries')
+    .update({
+      status: 'VOIDED',
+      voided_at: now,
+      voided_by: null, // uuid column; Clerk ids are text
+      void_reason: 'Reconciliation adjustment rolled back: statement line could not be recorded',
+      source_ref: `${sourceRef}:rolled-back:${entryId}`,
+      updated_at: now,
+    })
+    .eq('id', entryId)
+    .eq('org_id', orgId)
+    .eq('status', 'POSTED');
+  if (error) {
+    console.error('[reconciliation/adjustment] compensating void failed:', error.message);
+  }
 }

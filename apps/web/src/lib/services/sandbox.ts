@@ -38,6 +38,7 @@ import { processBillingEvents } from './billing-consumer';
 import { recognizeJobById } from './rev-rec';
 import { emitDeptInvoiceIssue } from './dept-invoice-events';
 import { processDeptInvoiceEvents } from './dept-invoice-consumer';
+import { assertSandboxAllowed } from './sandbox-guard';
 
 type DB = SupabaseClient;
 
@@ -98,31 +99,25 @@ export interface RoundTripResult {
 
 // ───────────────────────── helpers ─────────────────────────
 
-async function resolveOrg(db: DB): Promise<{ id: string; name: string } | null> {
+/**
+ * The sandbox org is ALWAYS the caller's verified org, passed in explicitly by the
+ * route (security HIGH: this used to be "the first organization row" on the admin
+ * client — i.e. the production Merit tenant). No first-org lookup, no auto-create.
+ */
+async function resolveOrg(db: DB, orgId: string): Promise<{ id: string; name: string } | null> {
+  if (!orgId) return null;
   const { data } = await db
     .schema('core').from('organizations')
     .select('id, name')
-    .limit(1)
+    .eq('id', orgId)
     .maybeSingle();
   return (data as { id: string; name: string } | null) ?? null;
 }
 
-async function ensureOrg(db: DB): Promise<{ id: string; name: string }> {
-  const existing = await resolveOrg(db);
-  if (existing) return existing;
-  const { data, error } = await db
-    .schema('core').from('organizations')
-    .insert({
-      name: `${SANDBOX_TAG} Sandbox Co`,
-      slug: 'sandbox-co',
-      timezone: 'America/Chicago',
-      setup_complete: true,
-      entitlements: { projects: true },
-    })
-    .select('id, name')
-    .single();
-  if (error || !data) throw new Error(`Could not create sandbox organization: ${error?.message}`);
-  return data as { id: string; name: string };
+async function ensureOrg(db: DB, orgId: string): Promise<{ id: string; name: string }> {
+  const existing = await resolveOrg(db, orgId);
+  if (!existing) throw new Error('Sandbox organization not found');
+  return existing;
 }
 
 async function acctId(db: DB, orgId: string, number: string): Promise<string | null> {
@@ -271,9 +266,12 @@ async function upsertDepartment(
  * Seed (or repair) the sandbox tenant. Idempotent: safe to run repeatedly.
  * If `reset` is true, transactional + master data is cleared first.
  */
-export async function seedSandbox(db: DB, opts: { reset?: boolean } = {}): Promise<SeedResult> {
+export async function seedSandbox(db: DB, opts: { orgId: string; reset?: boolean }): Promise<SeedResult> {
+  // Defense in depth: the route also gates, but the service must never seed or
+  // CLEAR a tenant outside an explicitly-enabled non-production environment.
+  assertSandboxAllowed();
   const steps: SeedStep[] = [];
-  const org = await ensureOrg(db);
+  const org = await ensureOrg(db, opts.orgId);
   steps.push({ step: 'organization', detail: `${org.name} (${org.id.slice(0, 8)}…)` });
 
   // Ensure Projects entitlement so Books runs in auto-fed mode (seam exercised).
@@ -334,7 +332,7 @@ export async function seedSandbox(db: DB, opts: { reset?: boolean } = {}): Promi
   });
   steps.push({ step: 'jobs', detail: `Job A ${jobA.jobNumber} (POC), Job B ${jobB.jobNumber} (point-of-sale)` });
 
-  const status = await getSandboxStatus(db);
+  const status = await getSandboxStatus(db, org.id);
   return { orgId: org.id, steps, status };
 }
 
@@ -450,6 +448,7 @@ async function findSandboxJobs(db: DB, orgId: string) {
  * re-running converges (delta → 0) rather than double-counting.
  */
 export async function runSandboxRoundTrip(db: DB, orgId: string): Promise<RoundTripResult> {
+  assertSandboxAllowed(); // posts test GL entries / issues invoices — sandbox envs only
   const asOf = openDate();
   const paths: RoundTripPath[] = [];
   const { jobA, jobB } = await findSandboxJobs(db, orgId);
@@ -785,14 +784,14 @@ async function enqueueBillingEvent(
  * rev-rec runs/maps → cost bridges/attributions → jobs → master data → depts.
  */
 async function clearTenantData(db: DB, orgId: string): Promise<void> {
+  assertSandboxAllowed();
   // Internal invoices first: they FK gl_entries (booked_gl_entry_id) and
   // departments, both of which are cleared below — delete these ahead of them.
   await db.from('internal_invoice_lines').delete().eq('org_id', orgId);
   await db.from('internal_invoices').delete().eq('org_id', orgId);
 
-  // Books-schema (public) ledger + sub-ledger rows.
-  await db.from('gl_entry_lines').delete().eq('org_id', orgId);
-  await db.from('gl_entries').delete().eq('org_id', orgId);
+  // Books-schema (public) sub-ledger rows first (they FK gl_entries without
+  // ON DELETE CASCADE), then the ledger itself.
   await db.from('invoice_lines').delete().eq('org_id', orgId);
   await db.from('invoices').delete().eq('org_id', orgId);
   await db.from('revenue_recognition_runs').delete().eq('org_id', orgId);
@@ -800,27 +799,46 @@ async function clearTenantData(db: DB, orgId: string): Promise<void> {
   await db.from('job_cost_entries').delete().eq('org_id', orgId);
   await db.from('job_cost_attributions').delete().eq('org_id', orgId);
 
+  // The GL. POSTED entries are immutable to ordinary writes (migrations 152/153 —
+  // a posted header with lines can't be deleted), so it is cleared through the
+  // service-role-only purge RPC, which opts out of the guards for its own
+  // transaction only.
+  const { error: purgeErr } = await db.rpc('purge_org_ledger', { p_org_id: orgId });
+  if (purgeErr) {
+    if ((purgeErr as { code?: string }).code === 'PGRST202') {
+      // RPC not installed (migration 153 not applied yet): the pre-153 header
+      // delete still cascades, so fall back to it.
+      await db.from('gl_entries').delete().eq('org_id', orgId);
+    } else {
+      // Best-effort like every other delete here (e.g. an FK from a table the
+      // sandbox doesn't clear) — but never silent.
+      console.error('[sandbox] ledger purge failed:', purgeErr.message);
+    }
+  }
+
   // Suite event log.
   await db.schema('core').from('events').delete().eq('org_id', orgId);
 
   // Core master data (jobs first — they FK customers/departments/locations).
   await db.schema('core').from('jobs').delete().eq('org_id', orgId);
   await db.schema('core').from('items').delete().eq('org_id', orgId);
-  await db.schema('core').from('employees').delete().eq('org_id', orgId);
+  // Seeded demo employees only — never a real signed-in user's seat (the sandbox
+  // org is the caller's own org, so deleting every employee would lock them out).
+  await db.schema('core').from('employees').delete().eq('org_id', orgId).is('clerk_user_id', null);
   await db.schema('core').from('customers').delete().eq('org_id', orgId);
   await db.schema('core').from('vendors').delete().eq('org_id', orgId);
   await db.schema('core').from('departments').delete().eq('org_id', orgId);
 }
 
 /** Reset = clear + re-seed. */
-export async function resetSandbox(db: DB): Promise<SeedResult> {
-  return seedSandbox(db, { reset: true });
+export async function resetSandbox(db: DB, orgId: string): Promise<SeedResult> {
+  return seedSandbox(db, { orgId, reset: true });
 }
 
 // ───────────────────────── status ─────────────────────────
 
-export async function getSandboxStatus(db: DB): Promise<SandboxStatus> {
-  const org = await resolveOrg(db);
+export async function getSandboxStatus(db: DB, targetOrgId: string): Promise<SandboxStatus> {
+  const org = await resolveOrg(db, targetOrgId);
   if (!org) {
     return {
       hasOrg: false, orgId: null, orgName: null, accountCount: 0, entities: [],

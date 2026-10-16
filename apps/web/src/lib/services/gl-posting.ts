@@ -200,7 +200,8 @@ export async function voidJournalEntry(
     .update({
       status: 'VOIDED',
       voided_at: new Date().toISOString(),
-      voided_by: userId,
+      // voided_by is a uuid column; Clerk user ids are text — only write a real uuid.
+      voided_by: userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId) ? userId : null,
       void_reason: reason,
       updated_at: new Date().toISOString(),
     })

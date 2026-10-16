@@ -18,6 +18,8 @@ import {
   inviteAcceptUrl,
   buildInvitationEmail,
   mapPending,
+  normalizeInviteContext,
+  inviteEmailNotConfiguredMessage,
   type InvitationRow,
 } from '@/lib/team/invitations';
 import {
@@ -78,9 +80,12 @@ export async function GET(_req: NextRequest) {
     rows = (withScope.data ?? []) as unknown as InvitationRow[];
   }
 
+  // Lets invite UIs say "email isn't configured" BEFORE the user hits send (B4).
+  const emailConfigured = Boolean(resolveEmailProvider() && resolveFromAddress());
+
   if (error) {
     if (isMissingInvitationsTable(error)) {
-      return NextResponse.json({ data: [], available: false });
+      return NextResponse.json({ data: [], available: false, emailConfigured });
     }
     return NextResponse.json({ error: error.message, code: 'QUERY_ERROR' }, { status: 500 });
   }
@@ -88,6 +93,7 @@ export async function GET(_req: NextRequest) {
   return NextResponse.json({
     data: rows.map(mapPending),
     available: true,
+    emailConfigured,
   });
 }
 
@@ -124,6 +130,10 @@ export async function POST(req: NextRequest) {
 
   const { email, firstName, lastName, role, companyIds, adminScope, onboardingCompanyIds } =
     parsed.data;
+  // Optional "what you're being asked to finish" (InviteHelper, FPB §5). Additive and
+  // read outside the shared schema; there's no note column, so it rides in the email
+  // body and the action-log metadata (the durable record of the ask).
+  const context = normalizeInviteContext((raw as { context?: unknown } | null)?.context);
   const normalizedEmail = email.trim().toLowerCase();
   const admin = createAdminSupabase();
 
@@ -239,7 +249,7 @@ export async function POST(req: NextRequest) {
   const provider = resolveEmailProvider();
   const from = resolveFromAddress();
   if (!provider || !from) {
-    emailError = 'Email is not configured (RESEND_API_KEY / INVITE-from address). Share the link manually.';
+    emailError = inviteEmailNotConfiguredMessage({ provider: !provider, from: !from });
   } else {
     // Org name for the email body (best-effort).
     const { data: org } = await supabase
@@ -253,6 +263,7 @@ export async function POST(req: NextRequest) {
       roleLabel,
       acceptUrl,
       email: normalizedEmail,
+      context,
     });
     try {
       await provider.send({ to: [normalizedEmail], subject, html, text }, from);
@@ -269,8 +280,9 @@ export async function POST(req: NextRequest) {
     subjectId: created.id as string,
     summary: `Invited ${normalizedEmail} as ${roleLabel}${
       effectiveScope ? ` (${effectiveScope.join('+').toLowerCase()})` : ''
-    }${emailSent ? '' : ' (email not sent)'}`,
+    }${context ? ` to finish: ${context}` : ''}${emailSent ? '' : ' (email not sent)'}`,
     metadata: {
+      context,
       role,
       companyIds: locationIds,
       onboardingCompanyIds: onboardingLocationIds,

@@ -2,16 +2,17 @@
  * Credential-gated REAL migration adapters (QuickBooks Online / Xero / Sage).
  *
  * DEGRADE-SAFE by contract: every fetch resolves to a NotConnectedResult — it never
- * throws and never touches a network — in two cases:
- *   1. No OAuth credentials are configured for this provider (the state today).
- *   2. Credentials exist but the live HTTP client is not wired in this build.
+ * throws — when there is no live source for this org:
+ *   1. The platform isn't configured for the provider (no app keys), or
+ *   2. The org hasn't connected its company yet (or the connection is in error), or
+ *   3. The live pull itself failed (Intuit down, throttled past budget, revoked) —
+ *      surfaced as a plain-English reason, never a stack trace.
  *
- * This is the deliberate seam. The mapping profiles and the whole downstream
- * conversion pipeline are ready; the only remaining work to make the real pull run is
- * (a) Mike adding the provider's OAuth credentials to the env, and (b) implementing
- * `liveFetch` to call the provider REST API and hand the raw records to the SAME
- * transforms the mock adapter already uses. Until then the mock/fixture path is the
- * exercisable one, and the real adapter honestly reports "not connected".
+ * QuickBooks Online is LIVE (slice W6): `resolveMigrationProvider` (../resolve-provider.ts)
+ * builds a per-org `LiveRawSource` (quickbooks/live-source.ts) from the org's
+ * Vault-stored OAuth tokens and passes it in here. `liveFetch` hands the raw,
+ * fixture-shaped records to the SAME transforms the mock adapter uses — the mapping
+ * profiles are never bypassed. Xero / Sage remain not-connected (guided export).
  */
 
 import {
@@ -33,6 +34,7 @@ import {
   type ProviderParty,
   type ProviderTrialBalanceRow,
 } from './types';
+import { readQboConfig } from '../quickbooks/config';
 
 const ALL_ENTITIES: MigrationEntity[] = [
   'accounts',
@@ -50,38 +52,74 @@ const PROVIDER_LABEL: Record<MigrationProviderId, string> = {
 };
 
 /**
- * Live raw fetch — NOT YET WIRED. Returns null to signal "no live client", which the
- * adapter turns into a NotConnectedResult. When implemented it must return the
- * provider-native raw records for the entity (the same shape the fixtures use), which
- * are then passed through the shared transforms — no bypassing the mapping profiles.
+ * A per-org live puller that returns PROVIDER-NATIVE raw records (the same shape as
+ * fixtures.ts) for one entity. Implemented for QBO by quickbooks/live-source.ts.
+ */
+export interface LiveRawSource {
+  fetchRaw(entity: MigrationEntity): Promise<RawRecord[]>;
+}
+
+/**
+ * Live raw fetch. Returns null when there is no live source (→ NotConnectedResult).
+ * Env-only credentials (legacy `*_ACCESS_TOKEN` seam) are never used to call a
+ * provider: per-tenant OAuth tokens are the only supported live path.
  */
 async function liveFetch(
-  _creds: MigrationCredentials,
-  _entity: MigrationEntity,
+  live: LiveRawSource | null,
+  entity: MigrationEntity,
 ): Promise<RawRecord[] | null> {
-  // Intentionally not implemented: we do not call a live provider in this build.
-  return null;
+  if (!live) return null;
+  return live.fetchRaw(entity);
+}
+
+export interface RealProviderOptions {
+  /** The org's live source (set only when the org has a connected, valid link). */
+  live?: LiveRawSource | null;
+  /** Reason to show when `live` is absent (e.g. "Reconnect QuickBooks"). */
+  notConnectedReason?: string | null;
 }
 
 export class RealConnectorProvider implements ConnectorProvider {
   readonly id: MigrationProviderId;
   private readonly creds: MigrationCredentials | null;
+  private readonly appConfigured: boolean;
+  private readonly live: LiveRawSource | null;
+  private readonly notConnectedReason: string | null;
 
-  constructor(id: MigrationProviderId, env: NodeJS.ProcessEnv = process.env) {
+  constructor(
+    id: MigrationProviderId,
+    env: NodeJS.ProcessEnv = process.env,
+    opts: RealProviderOptions = {},
+  ) {
     this.id = id;
     this.creds = readMigrationCredentials(id, env);
+    this.appConfigured = id === 'quickbooks' && readQboConfig(env) !== null;
+    this.live = opts.live ?? null;
+    this.notConnectedReason = opts.notConnectedReason ?? null;
   }
 
   listEntities(): MigrationEntity[] {
     return [...ALL_ENTITIES];
   }
 
-  /** True when OAuth credentials are present for this provider. */
+  /** True when the platform can run this provider's live connect (app keys present). */
   hasCredentials(): boolean {
-    return this.creds !== null;
+    return this.creds !== null || this.appConfigured;
+  }
+
+  /** True when this instance has a per-org live source (the org is connected). */
+  isLive(): boolean {
+    return this.live !== null;
   }
 
   private notConnected<T>(): FetchResult<T> {
+    if (this.notConnectedReason) return { connected: false, reason: this.notConnectedReason };
+    if (this.appConfigured) {
+      return {
+        connected: false,
+        reason: `Not connected — click “Connect ${PROVIDER_LABEL[this.id]}” to link your company first.`,
+      };
+    }
     if (!this.creds) {
       return {
         connected: false,
@@ -98,8 +136,19 @@ export class RealConnectorProvider implements ConnectorProvider {
     entity: MigrationEntity,
     transform: (raw: RawRecord) => T,
   ): Promise<FetchResult<T>> {
-    if (!this.creds) return this.notConnected<T>();
-    const raw = await liveFetch(this.creds, entity);
+    let raw: RawRecord[] | null;
+    try {
+      raw = await liveFetch(this.live, entity);
+    } catch (err) {
+      // Degrade-safe: a live failure is a not-connected result with a plain reason.
+      return {
+        connected: false,
+        reason:
+          err instanceof Error && err.message
+            ? err.message
+            : `Couldn’t read from ${PROVIDER_LABEL[this.id]} right now. Please try again.`,
+      };
+    }
     if (raw === null) return this.notConnected<T>();
     return { connected: true, source: 'live', entity, records: raw.map(transform) };
   }

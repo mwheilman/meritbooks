@@ -11,19 +11,28 @@ import {
 } from 'lucide-react';
 import { useMe } from '@/lib/hooks/use-me';
 import { buildTourSteps, type TourContext } from './tour-steps';
+import { markTourSeenAction } from './actions';
 
 const TOUR_SEEN_KEY = 'meritbooks.tour.seen';
 
 /**
- * Best-effort "remember the tour was seen" — purely cosmetic, wrapped so a
- * disabled/blocked localStorage (private mode, preview surface) never breaks the
- * tour. Absence is always treated as "not seen."
+ * Best-effort "remember the tour was seen". The durable copy is SERVER-SIDE (Clerk
+ * publicMetadata via markTourSeenAction — survives a new device/browser, and is what
+ * the router reads); localStorage is a fast local cache. Both are wrapped so a failure
+ * never breaks the tour. Absence is always treated as "not seen."
  */
+let serverMarked = false;
 function markTourSeen(): void {
   try {
     window.localStorage.setItem(TOUR_SEEN_KEY, new Date().toISOString());
   } catch {
     /* preview / privacy mode — remembering is optional, correctness is not */
+  }
+  if (!serverMarked) {
+    serverMarked = true;
+    void markTourSeenAction().catch(() => {
+      serverMarked = false;
+    });
   }
 }
 

@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
@@ -27,57 +28,59 @@ export async function GET(request: Request) {
 
   const accountIds = equityAccounts.map((a) => a.id);
 
-  // Get beginning balances (all entries before start_date)
-  let priorQ = supabase.from('gl_entries').select('id').eq('status', 'POSTED').lt('entry_date', startDate);
-  if (locationId) priorQ = priorQ.eq('location_id', locationId);
-  const { data: priorEntries } = await priorQ;
-
-  const beginMap = new Map<string, number>();
-  if (priorEntries && priorEntries.length > 0) {
-    const { data: priorLines } = await supabase
+  // All reads below are PAGED inner joins from gl_entry_lines to gl_entries on the
+  // same entry filters the old two-step used ("entry ids → .in(gl_entry_id)").
+  // PostgREST caps any response at 1,000 rows, so the old unbounded entry-id lists
+  // and line reads silently truncated beginning balances, activity and net income.
+  type EntryWindow = { lt?: string; gte?: string; lte?: string };
+  const linesFor = <Sel extends string>(select: Sel, w: EntryWindow) => {
+    let q = supabase
       .from('gl_entry_lines')
-      .select('account_id, debit_cents, credit_cents')
-      .in('gl_entry_id', priorEntries.map((e) => e.id))
-      .in('account_id', accountIds);
-    for (const line of priorLines ?? []) {
-      const existing = beginMap.get(line.account_id) ?? 0;
-      beginMap.set(line.account_id, existing + Number(line.credit_cents ?? 0) - Number(line.debit_cents ?? 0));
-    }
+      .select(`${select}, gl_entries!inner(id)`)
+      .eq('gl_entries.status', 'POSTED');
+    if (w.lt) q = q.lt('gl_entries.entry_date', w.lt);
+    if (w.gte) q = q.gte('gl_entries.entry_date', w.gte);
+    if (w.lte) q = q.lte('gl_entries.entry_date', w.lte);
+    if (locationId) q = q.eq('gl_entries.location_id', locationId);
+    return q;
+  };
+
+  // Get beginning balances (all entries before start_date)
+  const beginMap = new Map<string, number>();
+  const { data: priorLines } = await fetchAll(
+    () => linesFor('account_id, debit_cents, credit_cents', { lt: startDate }).in('account_id', accountIds),
+    { label: 'equity-changes beginning gl_entry_lines' },
+  );
+  for (const line of priorLines ?? []) {
+    const existing = beginMap.get(line.account_id) ?? 0;
+    beginMap.set(line.account_id, existing + Number(line.credit_cents ?? 0) - Number(line.debit_cents ?? 0));
   }
 
   // Get period activity
-  let periodQ = supabase.from('gl_entries').select('id').eq('status', 'POSTED').gte('entry_date', startDate).lte('entry_date', endDate);
-  if (locationId) periodQ = periodQ.eq('location_id', locationId);
-  const { data: periodEntries } = await periodQ;
-
   const activityMap = new Map<string, number>();
-  if (periodEntries && periodEntries.length > 0) {
-    const { data: periodLines } = await supabase
-      .from('gl_entry_lines')
-      .select('account_id, debit_cents, credit_cents')
-      .in('gl_entry_id', periodEntries.map((e) => e.id))
-      .in('account_id', accountIds);
-    for (const line of periodLines ?? []) {
-      const existing = activityMap.get(line.account_id) ?? 0;
-      activityMap.set(line.account_id, existing + Number(line.credit_cents ?? 0) - Number(line.debit_cents ?? 0));
-    }
+  const { data: periodLines } = await fetchAll(
+    () => linesFor('account_id, debit_cents, credit_cents', { gte: startDate, lte: endDate }).in('account_id', accountIds),
+    { label: 'equity-changes activity gl_entry_lines' },
+  );
+  for (const line of periodLines ?? []) {
+    const existing = activityMap.get(line.account_id) ?? 0;
+    activityMap.set(line.account_id, existing + Number(line.credit_cents ?? 0) - Number(line.debit_cents ?? 0));
   }
 
   // Get net income for the period (revenue - expenses)
   let netIncome = 0;
-  if (periodEntries && periodEntries.length > 0) {
-    const { data: pnlLines } = await supabase
-      .from('gl_entry_lines')
-      .select('debit_cents, credit_cents, accounts!inner(account_type)')
-      .in('gl_entry_id', periodEntries.map((e) => e.id))
-      .in('accounts.account_type', ['REVENUE', 'COGS', 'OPEX', 'OTHER']);
-    for (const line of pnlLines ?? []) {
-      const acct = line.accounts as any;
-      if (acct.account_type === 'REVENUE') {
-        netIncome += Number(line.credit_cents ?? 0) - Number(line.debit_cents ?? 0);
-      } else {
-        netIncome -= Number(line.debit_cents ?? 0) - Number(line.credit_cents ?? 0);
-      }
+  const { data: pnlLines } = await fetchAll(
+    () =>
+      linesFor('debit_cents, credit_cents, accounts!inner(account_type)', { gte: startDate, lte: endDate })
+        .in('accounts.account_type', ['REVENUE', 'COGS', 'OPEX', 'OTHER']),
+    { label: 'equity-changes net-income gl_entry_lines' },
+  );
+  for (const line of pnlLines ?? []) {
+    const acct = line.accounts as unknown as { account_type: string };
+    if (acct.account_type === 'REVENUE') {
+      netIncome += Number(line.credit_cents ?? 0) - Number(line.debit_cents ?? 0);
+    } else {
+      netIncome -= Number(line.debit_cents ?? 0) - Number(line.credit_cents ?? 0);
     }
   }
 

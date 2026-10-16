@@ -6,6 +6,7 @@ import { createAdminSupabase } from '@/lib/supabase/server';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { bookInternalInvoice, type ChargeMethod } from '@/lib/services/internal-invoices';
 import { z } from 'zod';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 const actionSchema = z.object({
   action: z.enum(['send', 'approve', 'reject', 'void']),
@@ -51,6 +52,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const authResult = await auth().catch(() => ({ userId: null as string | null }));
   const userId = authResult.userId ?? null;
+  if (!userId) return NextResponse.json({ error: 'Authentication required', code: 'UNAUTHORIZED' }, { status: 401 });
   const supabase = createAdminSupabase();
 
   let body: z.infer<typeof actionSchema>;
@@ -71,8 +73,33 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     .single();
   if (invErr || !inv) return NextResponse.json({ error: 'Invoice not found', code: 'NOT_FOUND' }, { status: 404 });
 
+  // Authorize — 'approve' books the internal invoice to the GL (invoices:approve, the
+  // same gate as credit-memo post / invoice void); send / reject / void are invoice
+  // lifecycle edits (invoices:create). requirePermission resolves the caller's org
+  // from the verified Clerk claim; this route reads with the ADMIN client, so the
+  // invoice MUST belong to that org — otherwise 404 (no cross-tenant action by id).
+  const guard = await requirePermission(userId, 'invoices', body.action === 'approve' ? 'approve' : 'create');
+  if (!guard.ok) return guard.response;
+  if ((inv.org_id as string) !== guard.orgId) {
+    return NextResponse.json({ error: 'Invoice not found', code: 'NOT_FOUND' }, { status: 404 });
+  }
+
   const now = new Date().toISOString();
   const status = inv.status as string;
+
+  // Audit attribution (security MEDIUM): the *_by lifecycle columns are uuid
+  // (migration 015) and Clerk user ids are text, so record the acting user's
+  // core.employees.id in THIS org (the same seat requirePermission authorized).
+  // Null only if the seat can't be read — never a fabricated id.
+  const { data: actorRow } = await supabase
+    .schema('core').from('employees')
+    .select('id')
+    .eq('clerk_user_id', userId)
+    .eq('org_id', guard.orgId)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle();
+  const actorId = (actorRow as { id: string } | null)?.id ?? null;
 
   // ---- SEND: draft -> sent (resolve effective charge method; provider governs) ----
   if (body.action === 'send') {
@@ -93,7 +120,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
     const { error } = await supabase
       .from('internal_invoices')
-      .update({ status: 'sent', sent_at: now, sent_by: null, charge_method: method })
+      .update({ status: 'sent', sent_at: now, sent_by: actorId, charge_method: method })
       .eq('id', inv.id);
     if (error) return NextResponse.json({ error: error.message, code: 'UPDATE_ERROR' }, { status: 500 });
     return NextResponse.json({ success: true, status: 'sent', chargeMethod: method });
@@ -115,7 +142,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         receiverDepartmentId: inv.receiver_department_id as string,
         chargeMethod: (inv.charge_method as ChargeMethod) === 'cost_transfer' ? 'cost_transfer' : 'revenue',
         memo: (inv.memo as string) ?? null,
-        postedBy: null,
+        postedBy: actorId,
       });
       glEntryId = result.glEntryId;
     } catch (e) {
@@ -123,7 +150,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
     const { error } = await supabase
       .from('internal_invoices')
-      .update({ status: 'booked', approved_at: now, approved_by: null, booked_at: now, booked_gl_entry_id: glEntryId })
+      .update({ status: 'booked', approved_at: now, approved_by: actorId, booked_at: now, booked_gl_entry_id: glEntryId })
       .eq('id', inv.id);
     if (error) return NextResponse.json({ error: error.message, code: 'UPDATE_ERROR' }, { status: 500 });
     return NextResponse.json({ success: true, status: 'booked', glEntryId });
@@ -136,7 +163,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
     const { error } = await supabase
       .from('internal_invoices')
-      .update({ status: 'rejected', rejected_at: now, rejected_by: null, rejection_reason: body.reason ?? null })
+      .update({ status: 'rejected', rejected_at: now, rejected_by: actorId, rejection_reason: body.reason ?? null })
       .eq('id', inv.id);
     if (error) return NextResponse.json({ error: error.message, code: 'UPDATE_ERROR' }, { status: 500 });
     return NextResponse.json({ success: true, status: 'rejected' });
@@ -152,7 +179,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
     const { error } = await supabase
       .from('internal_invoices')
-      .update({ status: 'void', voided_at: now, voided_by: null })
+      .update({ status: 'void', voided_at: now, voided_by: actorId })
       .eq('id', inv.id);
     if (error) return NextResponse.json({ error: error.message, code: 'UPDATE_ERROR' }, { status: 500 });
     return NextResponse.json({ success: true, status: 'void' });

@@ -25,8 +25,11 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
-const ROW_CAP = 5000;
+// Every read below is paged (`fetchAll` / `fetchAllIn`): PostgREST caps a response
+// at 1,000 rows (a `.limit(5000)` is silently capped too), and an under-counted
+// open item would let a period close with work still outstanding.
 
 const num = (v: number | string | null | undefined): number => {
   const n = Number(v);
@@ -102,13 +105,16 @@ export async function gatherOpenItemsByLocation(
   // ── (1) Unposted draft journal entries, by period ──────────────────────────
   // A draft = a gl_entries header not yet POSTED and not VOIDED, dated in the period.
   if (periodIds.length > 0) {
-    const { data } = await supabase
-      .from('gl_entries')
-      .select('fiscal_period_id')
-      .in('fiscal_period_id', periodIds)
-      .neq('status', 'POSTED')
-      .neq('status', 'VOIDED')
-      .limit(ROW_CAP);
+    const { data } = await fetchAll(
+      () =>
+        supabase
+          .from('gl_entries')
+          .select('fiscal_period_id')
+          .in('fiscal_period_id', periodIds)
+          .neq('status', 'POSTED')
+          .neq('status', 'VOIDED'),
+      { label: 'close/open-items draft gl_entries' },
+    );
     for (const r of (data ?? []) as DraftRow[]) {
       const loc = r.fiscal_period_id ? locByPeriod.get(r.fiscal_period_id) : undefined;
       if (!loc) continue;
@@ -119,12 +125,15 @@ export async function gatherOpenItemsByLocation(
 
   // ── (2) Bills on hold, by location, dated on/before period end ─────────────
   {
-    const { data } = await supabase
-      .from('bills')
-      .select('id, location_id, bill_date')
-      .eq('status', 'ON_HOLD')
-      .in('location_id', locationIds)
-      .limit(ROW_CAP);
+    const { data } = await fetchAll(
+      () =>
+        supabase
+          .from('bills')
+          .select('id, location_id, bill_date')
+          .eq('status', 'ON_HOLD')
+          .in('location_id', locationIds),
+      { label: 'close/open-items bills on hold' },
+    );
     for (const r of (data ?? []) as BillRow[]) {
       if (!inSet(r.location_id)) continue;
       if (!beforeEnd(r.location_id as string, r.bill_date)) continue;
@@ -136,31 +145,38 @@ export async function gatherOpenItemsByLocation(
   // customer_payments carry no location; attribute by bank_account_id → location.
   // Unapplied = amount − Σ(payment_applications). Current-state cash (not period-bound).
   {
-    const { data: acctData } = await supabase
-      .from('bank_accounts')
-      .select('id, location_id')
-      .in('location_id', locationIds)
-      .limit(ROW_CAP);
+    const { data: acctData } = await fetchAll(
+      () => supabase.from('bank_accounts').select('id, location_id').in('location_id', locationIds),
+      { label: 'close/open-items bank_accounts' },
+    );
     const acctToLoc = new Map<string, string>();
     for (const a of (acctData ?? []) as BankAcctRow[]) {
       if (a.location_id && inSet(a.location_id)) acctToLoc.set(a.id, a.location_id);
     }
     const acctIds = [...acctToLoc.keys()];
     if (acctIds.length > 0) {
-      const { data: payData } = await supabase
-        .from('customer_payments')
-        .select('id, amount_cents, bank_account_id')
-        .in('bank_account_id', acctIds)
-        .limit(ROW_CAP);
+      const { data: payData } = await fetchAllIn(
+        acctIds,
+        (chunk) =>
+          supabase
+            .from('customer_payments')
+            .select('id, amount_cents, bank_account_id')
+            .in('bank_account_id', chunk),
+        { label: 'close/open-items customer_payments' },
+      );
       const payments = (payData ?? []) as PaymentRow[];
       const paymentIds = payments.map((p) => p.id);
       const appliedByPayment = new Map<string, number>();
       if (paymentIds.length > 0) {
-        const { data: appData } = await supabase
-          .from('payment_applications')
-          .select('payment_id, amount_cents')
-          .in('payment_id', paymentIds)
-          .limit(ROW_CAP);
+        const { data: appData } = await fetchAllIn(
+          paymentIds,
+          (chunk) =>
+            supabase
+              .from('payment_applications')
+              .select('payment_id, amount_cents')
+              .in('payment_id', chunk),
+          { label: 'close/open-items payment_applications' },
+        );
         for (const a of (appData ?? []) as ApplicationRow[]) {
           appliedByPayment.set(a.payment_id, (appliedByPayment.get(a.payment_id) ?? 0) + num(a.amount_cents));
         }
@@ -184,23 +200,30 @@ export async function gatherOpenItemsByLocation(
   // + bill_date <= period end). PAYMENT/EXPENSE/PAYROLL lack a clean period tie and
   // are intentionally not treated as per-period close blockers.
   {
-    const { data } = await supabase
-      .from('approval_requests')
-      .select('doc_type, doc_id')
-      .eq('status', 'PENDING')
-      .in('doc_type', ['JOURNAL_ENTRY', 'BILL'])
-      .limit(ROW_CAP);
+    const { data } = await fetchAll(
+      () =>
+        supabase
+          .from('approval_requests')
+          .select('doc_type, doc_id')
+          .eq('status', 'PENDING')
+          .in('doc_type', ['JOURNAL_ENTRY', 'BILL']),
+      { label: 'close/open-items approval_requests' },
+    );
     const rows = (data ?? []) as ApprovalRow[];
     const jeIds = rows.filter((r) => r.doc_type === 'JOURNAL_ENTRY').map((r) => r.doc_id);
     const billIds = rows.filter((r) => r.doc_type === 'BILL').map((r) => r.doc_id);
 
     if (jeIds.length > 0 && periodIds.length > 0) {
-      const { data: jeData } = await supabase
-        .from('gl_entries')
-        .select('id, location_id, fiscal_period_id')
-        .in('id', jeIds)
-        .in('fiscal_period_id', periodIds)
-        .limit(ROW_CAP);
+      const { data: jeData } = await fetchAllIn(
+        jeIds,
+        (chunk) =>
+          supabase
+            .from('gl_entries')
+            .select('id, location_id, fiscal_period_id')
+            .in('id', chunk)
+            .in('fiscal_period_id', periodIds),
+        { label: 'close/open-items pending-approval gl_entries' },
+      );
       for (const r of (jeData ?? []) as GlLocRow[]) {
         const loc = r.fiscal_period_id ? locByPeriod.get(r.fiscal_period_id) : undefined;
         if (!loc) continue;
@@ -208,12 +231,16 @@ export async function gatherOpenItemsByLocation(
       }
     }
     if (billIds.length > 0) {
-      const { data: billData } = await supabase
-        .from('bills')
-        .select('id, location_id, bill_date')
-        .in('id', billIds)
-        .in('location_id', locationIds)
-        .limit(ROW_CAP);
+      const { data: billData } = await fetchAllIn(
+        billIds,
+        (chunk) =>
+          supabase
+            .from('bills')
+            .select('id, location_id, bill_date')
+            .in('id', chunk)
+            .in('location_id', locationIds),
+        { label: 'close/open-items pending-approval bills' },
+      );
       for (const r of (billData ?? []) as BillRow[]) {
         if (!inSet(r.location_id)) continue;
         if (!beforeEnd(r.location_id as string, r.bill_date)) continue;

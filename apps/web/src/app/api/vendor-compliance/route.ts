@@ -11,6 +11,7 @@ import {
 import { getTierPolicy } from '@/lib/trust/score-tier';
 import { assessVendorRisk } from '@/lib/compliance/risk';
 import { assessAndEscalate } from '@/lib/compliance/assess';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 type DocState = 'valid' | 'expiring' | 'expired' | 'missing' | 'pending';
 
@@ -104,6 +105,11 @@ export async function POST(request: Request) {
   }
 
   if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
+
+  // Authorize — granting/releasing a compliance override lifts (or restores) a
+  // vendor PAYMENT HOLD; that is a compliance control, gated on compliance:manage.
+  const guard = await requirePermission(userId, 'compliance', 'manage');
+  if (!guard.ok) return guard.response;
 
   const body = parsed.data;
 

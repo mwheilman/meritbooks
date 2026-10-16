@@ -36,6 +36,20 @@ export interface DebtInstrumentRow {
   interest_expense_account_id: string | null;
   interest_payable_account_id: string | null;
   cash_account_id: string | null;
+  /** Free-text notes; carries EXISTING_LOAN_MARKER for loans brought over at their balance (B9). */
+  notes?: string | null;
+}
+
+/**
+ * Marker stamped into `debt_instruments.notes` for a loan brought over at its current
+ * balance (B9 existing-loan mode). Such a loan must NEVER get an origination entry —
+ * the opening trial balance already carries the liability — so the origination poster
+ * refuses it even if called directly.
+ */
+export const EXISTING_LOAN_MARKER = '[MB:existing_loan]';
+
+export function isExistingLoanNotes(notes: string | null | undefined): boolean {
+  return typeof notes === 'string' && notes.includes(EXISTING_LOAN_MARKER);
 }
 
 export interface DebtScheduleLineRow {
@@ -61,7 +75,7 @@ export interface DebtPostResult {
 const INSTRUMENT_COLS =
   'id, org_id, location_id, loan_name:name, original_amount_cents, origination_date, ' +
   'liability_account_id:gl_liability_account_id, ' +
-  'interest_expense_account_id:gl_interest_account_id, interest_payable_account_id, cash_account_id';
+  'interest_expense_account_id:gl_interest_account_id, interest_payable_account_id, cash_account_id, notes';
 
 async function loadInstrument(db: DB, orgId: string, instrumentId: string): Promise<DebtInstrumentRow> {
   const { data, error } = await db
@@ -179,6 +193,11 @@ export async function recordDebtOrigination(db: DB, args: RecordDebtOriginationA
   const instrument = await loadInstrument(db, args.orgId, args.instrumentId);
   if (!instrument.location_id) {
     throw new PostingError('This loan has no location — set a company/location before posting to the ledger.');
+  }
+  if (isExistingLoanNotes(instrument.notes)) {
+    throw new PostingError(
+      'This loan was brought over at its current balance — the opening trial balance already carries it, so no origination entry is posted.',
+    );
   }
   const principal = instrument.original_amount_cents;
   if (!principal || principal <= 0) {

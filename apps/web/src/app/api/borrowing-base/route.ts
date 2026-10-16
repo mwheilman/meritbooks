@@ -8,6 +8,7 @@ import {
   type ValuationItemInput,
 } from '@/lib/inventory/stock-valuation';
 import type { ArInvoiceInput } from '@/lib/borrowing-base/calc';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 
 /**
  * GET /api/borrowing-base — collateral inputs for the borrowing-base calculator.
@@ -63,14 +64,21 @@ export async function GET(request: Request) {
       : [];
 
   // ── Open AR, per invoice (v_ar_aging — excludes PAID/VOIDED/DRAFT/WRITTEN_OFF) ──
-  let arQuery = supabase
-    .from('v_ar_aging')
-    .select('customer_id, customer_name, balance_cents, due_date, location_id')
-    .gt('balance_cents', 0);
-  if (locFilter.length === 1) arQuery = arQuery.eq('location_id', locFilter[0]);
-  else if (locFilter.length > 1) arQuery = arQuery.in('location_id', locFilter);
+  // Paged: PostgREST caps a response at 1,000 rows.
+  const buildArQuery = () => {
+    let arQuery = supabase
+      .from('v_ar_aging')
+      .select('customer_id, customer_name, balance_cents, due_date, location_id')
+      .gt('balance_cents', 0);
+    if (locFilter.length === 1) arQuery = arQuery.eq('location_id', locFilter[0]);
+    else if (locFilter.length > 1) arQuery = arQuery.in('location_id', locFilter);
+    return arQuery;
+  };
 
-  const { data: arData, error: arErr } = await arQuery;
+  const { data: arData, error: arErr } = await fetchAll(buildArQuery, {
+    orderBy: 'invoice_id',
+    label: 'borrowing-base v_ar_aging',
+  });
   if (arErr && !isMissingTable(arErr)) {
     return NextResponse.json({ error: arErr.message, code: 'QUERY_ERROR' }, { status: 500 });
   }

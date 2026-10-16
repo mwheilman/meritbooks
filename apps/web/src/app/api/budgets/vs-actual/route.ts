@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
 export async function GET(request: Request) {
   // SECURITY: run AS THE USER so org_isolation RLS enforces the tenant on every
@@ -24,20 +25,24 @@ export async function GET(request: Request) {
   const periodNumber = parseInt(searchParams.get('period_number') ?? '0', 10);
 
   // Get budget data
-  let budgetQ = supabase
-    .from('budgets')
-    .select(`
-      account_id, amount_cents, period_number,
-      account:accounts!budgets_account_id_fkey(account_number, name, account_type)
-    `)
-    .eq('fiscal_year', fiscalYear);
+  // Paged: an annual budget (accounts × 12 periods × entities) passes PostgREST's 1,000-row cap.
+  const buildBudgetQ = () => {
+    let budgetQ = supabase
+      .from('budgets')
+      .select(`
+        account_id, amount_cents, period_number,
+        account:accounts!budgets_account_id_fkey(account_number, name, account_type)
+      `)
+      .eq('fiscal_year', fiscalYear);
 
-  if (locationIds.length === 1) budgetQ = budgetQ.eq('location_id', locationIds[0]);
-  else if (locationIds.length > 1) budgetQ = budgetQ.in('location_id', locationIds);
-  if (departmentId) budgetQ = budgetQ.eq('department_id', departmentId);
-  if (periodNumber > 0) budgetQ = budgetQ.eq('period_number', periodNumber);
+    if (locationIds.length === 1) budgetQ = budgetQ.eq('location_id', locationIds[0]);
+    else if (locationIds.length > 1) budgetQ = budgetQ.in('location_id', locationIds);
+    if (departmentId) budgetQ = budgetQ.eq('department_id', departmentId);
+    if (periodNumber > 0) budgetQ = budgetQ.eq('period_number', periodNumber);
+    return budgetQ;
+  };
 
-  const { data: budgetData } = await budgetQ;
+  const { data: budgetData } = await fetchAll(buildBudgetQ, { label: 'budget-vs-actual budgets' });
 
   // Aggregate budgets by account
   const budgetMap = new Map<string, { accountNumber: string; accountName: string; accountType: string; budgetCents: number }>();
@@ -71,26 +76,37 @@ export async function GET(request: Request) {
   const actualStart = startDateParam ?? derivedStart;
   const actualEnd = endDateParam ?? derivedEnd;
 
-  let entriesQ = supabase
-    .from('gl_entries')
-    .select('id')
-    .eq('status', 'POSTED')
-    .gte('entry_date', actualStart)
-    .lte('entry_date', actualEnd);
-  if (locationIds.length === 1) entriesQ = entriesQ.eq('location_id', locationIds[0]);
-  else if (locationIds.length > 1) entriesQ = entriesQ.in('location_id', locationIds);
+  // Paged + chunked: PostgREST caps a response at 1,000 rows and a long
+  // `.in(gl_entry_id, …)` list overflows the URL.
+  const buildEntriesQ = () => {
+    let entriesQ = supabase
+      .from('gl_entries')
+      .select('id')
+      .eq('status', 'POSTED')
+      .gte('entry_date', actualStart)
+      .lte('entry_date', actualEnd);
+    if (locationIds.length === 1) entriesQ = entriesQ.eq('location_id', locationIds[0]);
+    else if (locationIds.length > 1) entriesQ = entriesQ.in('location_id', locationIds);
+    return entriesQ;
+  };
 
-  const { data: entries } = await entriesQ;
+  const { data: entries } = await fetchAll(buildEntriesQ, { label: 'budget-vs-actual gl_entries' });
   const entryIds = (entries ?? []).map((e) => e.id);
 
   const actualMap = new Map<string, number>();
   if (entryIds.length > 0) {
-    let linesQ = supabase
-      .from('gl_entry_lines')
-      .select('account_id, debit_cents, credit_cents')
-      .in('gl_entry_id', entryIds);
-    if (departmentId) linesQ = linesQ.eq('department_id', departmentId);
-    const { data: lines } = await linesQ;
+    const { data: lines } = await fetchAllIn(
+      entryIds,
+      (chunk) => {
+        let linesQ = supabase
+          .from('gl_entry_lines')
+          .select('account_id, debit_cents, credit_cents')
+          .in('gl_entry_id', chunk);
+        if (departmentId) linesQ = linesQ.eq('department_id', departmentId);
+        return linesQ;
+      },
+      { label: 'budget-vs-actual gl_entry_lines' },
+    );
 
     for (const line of lines ?? []) {
       const existing = actualMap.get(line.account_id) ?? 0;

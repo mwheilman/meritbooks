@@ -5,6 +5,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { parseCsv } from '@/lib/import/csv';
 import { readXlsx } from '@/lib/payroll/xlsx-read';
+import { resolveUploadedFile, SPREADSHEET_TYPES } from '@/lib/uploads/resolve-upload';
+import { isOrgIntakePath } from '@/lib/uploads/paths';
 import {
   parseBudgetGrid,
   foldToPeriods,
@@ -15,8 +17,10 @@ import {
 /**
  * POST /api/budgets/import — DETERMINISTIC (no-AI) budget file loader.
  *
- * Accepts an uploaded budget as CSV / XLSX (multipart `file`) plus the target
- * company (`companyId` = location id), `fiscalYear`, and optional `departmentId`.
+ * Accepts a budget as CSV / XLSX — multipart `file`, OR JSON `{ storagePath, … }` for
+ * a file already uploaded once via uploadForParse (the Smart Intake handoff: the user
+ * never re-uploads) — plus the target company (`companyId` = location id),
+ * `fiscalYear`, and optional `departmentId` / `layout` / `dryRun`.
  * The file is parsed in-request (never persisted): CSV via the shared RFC-4180
  * parser, XLSX via the dependency-free byte reader. Columns are auto-mapped to an
  * account + monthly/annual amounts, accounts are matched to the org's chart of
@@ -65,44 +69,75 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization on session', code: 'NO_ORG' }, { status: 400 });
 
-  // ── Read the multipart payload ──────────────────────────────────────────
+  // ── Read the payload: JSON { storagePath, … } (intake handoff) or multipart ──
   let fileName: string;
   let buffer: Buffer;
-  let companyId: string;
-  let fiscalYear: number;
-  let departmentId: string | null;
-  let forcedLayout: BudgetLayout | undefined;
-  let dryRun: boolean;
-  try {
-    const form = await request.formData();
-    const file = form.get('file');
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: 'No file provided', code: 'NO_FILE' }, { status: 400 });
+  const isJson = (request.headers.get('content-type') ?? '').includes('application/json');
+  let fields: { companyId: unknown; fiscalYear: unknown; departmentId: unknown; layout: unknown; dryRun: unknown };
+  if (isJson) {
+    let body: Record<string, unknown>;
+    try {
+      body = (await request.clone().json()) as Record<string, unknown>;
+    } catch {
+      return NextResponse.json({ error: 'Invalid request body', code: 'BAD_BODY' }, { status: 400 });
     }
-    if (file.size > MAX_BYTES) {
+    const storagePath = typeof body.storagePath === 'string' ? body.storagePath : '';
+    if (!isOrgIntakePath(storagePath, orgId)) {
+      return NextResponse.json({ error: 'Invalid file path', code: 'BAD_PATH' }, { status: 403 });
+    }
+    const resolved = await resolveUploadedFile(request, orgId, { allowedTypes: SPREADSHEET_TYPES });
+    if (resolved instanceof NextResponse) return resolved;
+    if (resolved.sizeBytes > MAX_BYTES) {
       return NextResponse.json({ error: 'File too large. Maximum 10MB.', code: 'FILE_TOO_LARGE' }, { status: 400 });
     }
-    fileName = file.name || 'budget';
-    buffer = Buffer.from(await file.arrayBuffer());
-
-    companyId = String(form.get('companyId') ?? '').trim();
-    if (!companyId) return NextResponse.json({ error: 'Select a company for this budget import', code: 'NO_COMPANY' }, { status: 400 });
-
-    fiscalYear = parseInt(String(form.get('fiscalYear') ?? ''), 10);
-    if (!Number.isInteger(fiscalYear) || fiscalYear < 2020 || fiscalYear > 2040) {
-      return NextResponse.json({ error: 'A valid fiscal year (2020–2040) is required', code: 'BAD_FISCAL_YEAR' }, { status: 400 });
+    fileName = resolved.fileName.replace(/^[0-9a-f-]{36}-/i, '') || 'budget';
+    buffer = Buffer.from(resolved.base64Data, 'base64');
+    fields = {
+      companyId: body.companyId,
+      fiscalYear: body.fiscalYear,
+      departmentId: body.departmentId,
+      layout: body.layout,
+      dryRun: body.dryRun === true ? 'true' : body.dryRun,
+    };
+  } else {
+    try {
+      const form = await request.formData();
+      const file = form.get('file');
+      if (!(file instanceof File)) {
+        return NextResponse.json({ error: 'No file provided', code: 'NO_FILE' }, { status: 400 });
+      }
+      if (file.size > MAX_BYTES) {
+        return NextResponse.json({ error: 'File too large. Maximum 10MB.', code: 'FILE_TOO_LARGE' }, { status: 400 });
+      }
+      fileName = file.name || 'budget';
+      buffer = Buffer.from(await file.arrayBuffer());
+      fields = {
+        companyId: form.get('companyId'),
+        fiscalYear: form.get('fiscalYear'),
+        departmentId: form.get('departmentId'),
+        layout: form.get('layout'),
+        dryRun: form.get('dryRun'),
+      };
+    } catch {
+      return NextResponse.json({ error: 'Failed to read the uploaded file', code: 'UPLOAD_ERROR' }, { status: 400 });
     }
-
-    const deptRaw = String(form.get('departmentId') ?? '').trim();
-    departmentId = deptRaw === '' ? null : deptRaw;
-
-    const layoutRaw = String(form.get('layout') ?? '').trim();
-    forcedLayout = layoutRaw === 'monthly' || layoutRaw === 'annual' ? layoutRaw : undefined;
-
-    dryRun = String(form.get('dryRun') ?? '') === 'true';
-  } catch {
-    return NextResponse.json({ error: 'Failed to read the uploaded file', code: 'UPLOAD_ERROR' }, { status: 400 });
   }
+
+  const companyId = String(fields.companyId ?? '').trim();
+  if (!companyId) return NextResponse.json({ error: 'Select a company for this budget import', code: 'NO_COMPANY' }, { status: 400 });
+
+  const fiscalYear = parseInt(String(fields.fiscalYear ?? ''), 10);
+  if (!Number.isInteger(fiscalYear) || fiscalYear < 2020 || fiscalYear > 2040) {
+    return NextResponse.json({ error: 'A valid fiscal year (2020–2040) is required', code: 'BAD_FISCAL_YEAR' }, { status: 400 });
+  }
+
+  const deptRaw = String(fields.departmentId ?? '').trim();
+  const departmentId: string | null = deptRaw === '' || deptRaw === 'null' ? null : deptRaw;
+
+  const layoutRaw = String(fields.layout ?? '').trim();
+  const forcedLayout: BudgetLayout | undefined = layoutRaw === 'monthly' || layoutRaw === 'annual' ? layoutRaw : undefined;
+
+  const dryRun = String(fields.dryRun ?? '') === 'true';
 
   // ── Parse the file into a grid ──────────────────────────────────────────
   let parsed;

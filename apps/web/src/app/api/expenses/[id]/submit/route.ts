@@ -21,7 +21,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
-  const guard = await requirePermission(userId, 'receipts', 'create');
+  const guard = await requirePermission(userId, 'receipts', 'edit');
   if (!guard.ok) return guard.response;
 
   // Optional override body (submission past a policy block).

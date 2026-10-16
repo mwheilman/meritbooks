@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Loader2, Plug, AlertCircle, Check, Database, ArrowRight, PlayCircle, RefreshCw, ShieldCheck,
+  Loader2, Plug, AlertCircle, Check, Database, ArrowRight, RefreshCw, ShieldCheck, FlaskConical,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
+import { sampleImportsEnabledClient } from '@/lib/onboarding/sample-guard';
+import { isQboReturnCode, qboReturnMessage } from '@/lib/integrations/erp/quickbooks/return-codes';
 
 interface EntityDesc { entity: string; label: string; sourceFields: string[] }
 interface MigrationProvider {
@@ -54,15 +56,20 @@ function monogram(name: string): string {
  * MigrationConnectors — the direct-API "migrate your prior books" surface.
  *
  * Lists QuickBooks Online / Xero / Sage as one-time migration sources. Each offers:
- *   • Connect — the OAuth handshake stub (via the existing connector connect route);
- *     honest about needing credentials that aren't configured yet.
- *   • Preview import — pulls the provider's sample (fixture) trial balance, maps it
+ *   • Connect — QuickBooks Online: the real per-tenant OAuth flow (full-page navigation
+ *     to /api/integrations/erp/quickbooks/connect). Xero / Sage: the connector connect
+ *     route, honest that a direct link isn't available yet (export instead).
+ *   • Preview with SAMPLE data — pulls the provider's fixture trial balance, maps it
  *     deterministically, stages the SAME historical-conversion session the CSV path
- *     stages, and opens the review so a person can see the balanced opening entry and
- *     tie it out before anything posts.
+ *     stages, and opens the review. FPB B3 ("never fake it"): only OFFERED off
+ *     production, or when NEXT_PUBLIC_ENABLE_SAMPLE_IMPORTS=true (a demo deployment),
+ *     and labelled SAMPLE DATA loudly. The adapter also stamps every staged line, and
+ *     the go-live post refuses sample-sourced sessions in production regardless.
  */
 export function MigrationConnectors() {
   const router = useRouter();
+  // Build-time constant (env inlined) — never offer fixture books to a real company.
+  const sampleEnabled = sampleImportsEnabledClient();
   const { data, isLoading, error, refetch } = useQuery<ProvidersResponse>('/api/integrations/erp/providers');
 
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -80,7 +87,28 @@ export function MigrationConnectors() {
 
   const providers = data?.providers ?? [];
 
+  // Back from the QuickBooks OAuth round-trip (`?qbo=<code>`): say what happened, once.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('qbo');
+    if (!isQboReturnCode(code)) return;
+    const msg = qboReturnMessage(code, params.get('qbo_reason'));
+    addToast(msg.tone === 'success' ? 'success' : msg.tone === 'danger' ? 'error' : 'info', msg.text);
+    params.delete('qbo');
+    params.delete('qbo_reason');
+    const qs = params.toString();
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  }, []);
+
   const doConnect = useCallback(async (p: MigrationProvider) => {
+    // QuickBooks Online has a real per-tenant OAuth flow: a FULL-PAGE navigation to the
+    // connect route, which bounces through Intuit and returns here with `?qbo=<code>`.
+    if (p.id === 'quickbooks') {
+      setConnectingId(p.id);
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      window.location.assign(`/api/integrations/erp/quickbooks/connect?returnTo=${encodeURIComponent(returnTo)}`);
+      return;
+    }
     setConnectingId(p.id);
     try {
       const res = await fetch('/api/integrations/erp/connect', {
@@ -97,16 +125,19 @@ export function MigrationConnectors() {
         'success',
         p.credentialsConfigured
           ? `${p.name} OAuth is configured — we noted your intent to connect.`
-          : `Noted — ${p.name} needs OAuth credentials before a live pull. Use “Preview import” to try the pipeline now.`,
+          : sampleEnabled
+            ? `Noted — ${p.name} needs OAuth credentials before a live pull. “Preview with sample data” runs the pipeline on demo books.`
+            : `Noted — ${p.name} isn’t connected yet. Export your trial balance from ${p.name} and upload it under Opening balances instead.`,
       );
     } catch {
       addToast('error', 'Network error starting that connection.');
     } finally {
       setConnectingId(null);
     }
-  }, []);
+  }, [sampleEnabled]);
 
   const doPreview = useCallback(async (p: MigrationProvider) => {
+    if (!sampleEnabled) return; // defense in depth — the button isn't rendered either
     if (!companyId) { addToast('error', 'Pick the company to migrate into first.'); return; }
     if (!asOfDate) { addToast('error', 'Pick the opening-balance as-of date first.'); return; }
     setBusyId(p.id);
@@ -141,7 +172,7 @@ export function MigrationConnectors() {
 
       addToast(
         'success',
-        `Pulled ${imp.summary?.trialBalanceLines ?? 0} opening-balance lines from ${p.name}. Review and tie out before go-live.`,
+        `Loaded ${imp.summary?.trialBalanceLines ?? 0} SAMPLE opening-balance lines (${p.name} demo data). Sample conversions can’t be posted to real books.`,
       );
       // 3. Open the review — the exact preview + tie-out + post UI (no second importer).
       router.push(`/onboarding/conversion?sessionId=${encodeURIComponent(conv.id)}`);
@@ -150,7 +181,7 @@ export function MigrationConnectors() {
     } finally {
       setBusyId(null);
     }
-  }, [companyId, asOfDate, router]);
+  }, [companyId, asOfDate, router, sampleEnabled]);
 
   return (
     <div className="card p-4 space-y-4">
@@ -160,8 +191,8 @@ export function MigrationConnectors() {
           <p className="text-sm font-semibold text-white">Migrate your prior books (QuickBooks, Xero, Sage)</p>
           <p className="text-xs text-slate-400 mt-0.5 max-w-2xl">
             MeritBooks owns the general ledger — these are one-time migration sources. Connect to pull your prior
-            books over the provider&apos;s API, or preview the import now with sample data. Every pull feeds the same
-            historical-conversion review: a balanced opening entry that a person ties out before go-live.
+            books over the provider&apos;s API{sampleEnabled ? ', or try the pipeline on sample (demo) books' : ''}. Every
+            pull feeds the same historical-conversion review: a balanced opening entry that a person ties out before go-live.
           </p>
         </div>
       </div>
@@ -261,19 +292,21 @@ export function MigrationConnectors() {
                   {connectingId === p.id ? <Loader2 size={12} className="animate-spin" /> : <Plug size={12} />}
                   Connect <ArrowRight size={11} />
                 </button>
-                {p.fixtureAvailable && (
+                {sampleEnabled && p.fixtureAvailable && (
                   <button
                     onClick={() => void doPreview(p)}
                     disabled={busyId === p.id}
+                    aria-label={`Preview ${p.name} import with sample data — demo books, not yours`}
                     className={clsx(
-                      'w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                      'w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border',
                       busyId === p.id
-                        ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                        : 'bg-brand-500 text-slate-900 hover:bg-brand-400',
+                        ? 'bg-slate-700 text-slate-500 border-slate-700 cursor-not-allowed'
+                        : 'bg-amber-500/10 text-amber-200 border-amber-500/40 hover:bg-amber-500/20',
                     )}
                   >
-                    {busyId === p.id ? <Loader2 size={12} className="animate-spin" /> : <PlayCircle size={12} />}
-                    Preview import
+                    {busyId === p.id ? <Loader2 size={12} className="animate-spin" /> : <FlaskConical size={12} />}
+                    <span className="rounded bg-amber-500/25 px-1 py-px text-[9px] font-bold uppercase tracking-wider text-amber-100">Sample data</span>
+                    Preview with sample data
                   </button>
                 )}
               </div>
@@ -282,11 +315,20 @@ export function MigrationConnectors() {
         </div>
       )}
 
-      <p className="text-[11px] text-slate-600 flex items-center gap-1.5">
-        <Check size={12} className="text-brand-400" />
-        Preview import runs the full pipeline on sample data — nothing posts until a person ties out the opening balance.
-        {companyId && asOfDate ? '' : ' Pick a company and as-of date to enable it.'}
-      </p>
+      {sampleEnabled ? (
+        <p className="text-[11px] text-amber-300/80 flex items-center gap-1.5">
+          <FlaskConical size={12} className="text-amber-400 shrink-0" />
+          SAMPLE DATA: the preview runs the full pipeline on demo books, not yours. Every line is labelled
+          [SAMPLE DATA] and a sample conversion can never be posted to a real company in production.
+          {companyId && asOfDate ? '' : ' Pick a company and as-of date to enable it.'}
+        </p>
+      ) : (
+        <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+          <Check size={12} className="text-brand-400 shrink-0" />
+          Not connected yet? Export your trial balance from QuickBooks, Xero or Sage and upload it under Opening
+          balances — nothing posts until a person ties out the opening balance.
+        </p>
+      )}
     </div>
   );
 }

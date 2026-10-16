@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
+import { fetchAll, FETCH_ALL_IN_CHUNK } from '@/lib/supabase/fetch-all';
 import {
   proposeArApMatches,
   proposeRevExpMatches,
@@ -43,13 +44,19 @@ async function fetchLines(
 ): Promise<LineRow[]> {
   const out: LineRow[] = [];
   if (accountIds.length === 0 || entryIds.length === 0) return out;
-  for (let i = 0; i < entryIds.length; i += 500) {
-    const slice = entryIds.slice(i, i + 500);
-    const { data, error } = await supabase
-      .from('gl_entry_lines')
-      .select('gl_entry_id, account_id, debit_cents, credit_cents, location_id')
-      .in('gl_entry_id', slice)
-      .in('account_id', accountIds);
+  // Each id chunk is fully paged (PostgREST caps a response at 1,000 rows); an
+  // errored chunk is skipped, as before.
+  for (let i = 0; i < entryIds.length; i += FETCH_ALL_IN_CHUNK) {
+    const slice = entryIds.slice(i, i + FETCH_ALL_IN_CHUNK);
+    const { data, error } = await fetchAll(
+      () =>
+        supabase
+          .from('gl_entry_lines')
+          .select('gl_entry_id, account_id, debit_cents, credit_cents, location_id')
+          .in('gl_entry_id', slice)
+          .in('account_id', accountIds),
+      { label: 'consolidation-match gl_entry_lines' },
+    );
     if (error) continue;
     for (const row of (data ?? []) as LineRow[]) out.push(row);
   }
@@ -73,13 +80,17 @@ export async function GET(request: Request) {
   }
 
   // Posted entries → id → {periodKey, locationId}.
-  let entryQuery = supabase
-    .from('gl_entries')
-    .select('id, location_id, entry_date')
-    .eq('org_id', orgId)
-    .eq('status', 'POSTED');
-  if (sinceDate) entryQuery = entryQuery.gte('entry_date', sinceDate);
-  const { data: entriesRaw } = await entryQuery.limit(20000);
+  // Paged (the former `.limit(20000)` was silently capped at PostgREST's 1,000 rows).
+  const buildEntryQuery = () => {
+    let entryQuery = supabase
+      .from('gl_entries')
+      .select('id, location_id, entry_date')
+      .eq('org_id', orgId)
+      .eq('status', 'POSTED');
+    if (sinceDate) entryQuery = entryQuery.gte('entry_date', sinceDate);
+    return entryQuery;
+  };
+  const { data: entriesRaw } = await fetchAll(buildEntryQuery, { label: 'consolidation-match gl_entries' });
   const entries = (entriesRaw ?? []) as Array<{ id: string; location_id: string; entry_date: string }>;
   const entryMeta = new Map<string, { periodKey: string; locationId: string }>();
   for (const e of entries) entryMeta.set(e.id, { periodKey: periodKeyOf(e.entry_date), locationId: e.location_id });
