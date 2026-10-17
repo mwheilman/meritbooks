@@ -24,11 +24,11 @@ const signed = (c: number) => (c === 0 ? '—' : c < 0 ? `(${formatMoney(-c)})` 
 function Row({ r, bold }: { r: RollForwardRow; bold?: boolean }) {
   return (
     <tr className={clsx('border-b border-slate-800/40', bold && 'bg-slate-800/30 font-semibold')}>
-      <td className={clsx('px-3 py-2 text-xs', bold ? 'text-white' : 'text-slate-300')}>{r.className}</td>
+      <td className={clsx('px-3 py-2 text-xs', bold ? 'text-ink-hi' : 'text-slate-300')}>{r.className}</td>
       <td className="px-3 py-2 text-right text-xs font-mono text-slate-300">{num(r.begCostCents)}</td>
       <td className="px-3 py-2 text-right text-xs font-mono text-emerald-400">{r.additionsCents ? num(r.additionsCents) : '—'}</td>
       <td className="px-3 py-2 text-right text-xs font-mono text-red-400">{r.disposalsCostCents ? `(${num(r.disposalsCostCents)})` : '—'}</td>
-      <td className="px-3 py-2 text-right text-xs font-mono text-white">{num(r.endCostCents)}</td>
+      <td className="px-3 py-2 text-right text-xs font-mono text-ink-hi">{num(r.endCostCents)}</td>
       <td className="px-3 py-2 text-right text-xs font-mono text-amber-400">{num(r.begAccumCents)}</td>
       <td className="px-3 py-2 text-right text-xs font-mono text-amber-400">{r.depreciationCents ? num(r.depreciationCents) : '—'}</td>
       <td className="px-3 py-2 text-right text-xs font-mono text-slate-400">{r.disposalsAccumCents ? `(${num(r.disposalsAccumCents)})` : '—'}</td>
@@ -54,12 +54,12 @@ export function RollForwardView() {
         <div>
           <label className="block text-2xs uppercase text-slate-500 mb-1">Period start</label>
           <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)}
-            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white" />
+            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi" />
         </div>
         <div>
           <label className="block text-2xs uppercase text-slate-500 mb-1">Period end</label>
           <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)}
-            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white" />
+            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi" />
         </div>
         <p className="text-2xs text-slate-500 ml-auto max-w-xs">
           Continuity schedule — cost from the asset register, depreciation from posted GL runs.
@@ -67,7 +67,7 @@ export function RollForwardView() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>
       ) : error ? (
         <div className="card p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-red-400 text-sm">{error}</p></div>
       ) : !data || data.classes.length === 0 ? (

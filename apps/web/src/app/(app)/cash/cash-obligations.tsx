@@ -44,7 +44,7 @@ export function CashObligations({ locationId }: { locationId?: string }) {
   const { data, isLoading, error } = useQuery<ObligationsResponse>('/api/cash/obligations', params);
 
   if (isLoading) {
-    return <div className="card p-6 flex items-center justify-center h-[168px]"><Loader2 className="w-5 h-5 text-emerald-400 animate-spin" /></div>;
+    return <div className="card p-6 flex items-center justify-center h-[168px]"><Loader2 className="w-5 h-5 text-brand-400 animate-spin" /></div>;
   }
   if (error) {
     return <div className="card p-6 text-center text-xs text-red-400 h-[168px] flex items-center justify-center">{error}</div>;
@@ -60,7 +60,7 @@ export function CashObligations({ locationId }: { locationId?: string }) {
     <div className="card p-5">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
-          <h3 className="text-sm font-semibold text-white flex items-center gap-1.5">
+          <h3 className="text-sm font-semibold text-ink-hi flex items-center gap-1.5">
             <CalendarClock size={14} className="text-amber-400" /> Upcoming Obligations
           </h3>
           <p className="text-[11px] text-slate-500 mt-0.5">
@@ -69,7 +69,7 @@ export function CashObligations({ locationId }: { locationId?: string }) {
         </div>
         {hasObligations && (
           <div className="text-right">
-            <p className="text-lg font-mono font-semibold text-white">{formatMoney(data?.totalWithinHorizonCents ?? 0, { compact: true })}</p>
+            <p className="text-lg font-mono font-semibold text-ink-hi">{formatMoney(data?.totalWithinHorizonCents ?? 0, { compact: true })}</p>
             <p className="text-[11px] text-slate-500 font-mono">
               {data?.debtItemCount ?? 0} debt · {data?.recurringItemCount ?? 0} recurring
             </p>
@@ -112,7 +112,7 @@ export function CashObligations({ locationId }: { locationId?: string }) {
 
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition-colors"
+            className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-ink-hi transition-colors"
           >
             {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             {expanded ? 'Hide' : 'Show'} {items.length} scheduled item{items.length === 1 ? '' : 's'}

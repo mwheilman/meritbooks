@@ -111,13 +111,13 @@ export function EntityInvoiceSettings({ scope, id }: { scope: 'CUSTOMER' | 'JOB'
           <div className="flex items-center gap-2 mt-2 pl-6">
             <span className="text-xs text-slate-400">Default %</span>
             <input value={retPct} onChange={(e) => setRetPct(e.target.value)} inputMode="decimal" placeholder="10"
-              className="w-20 px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm text-white font-mono" />
+              className="w-20 px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm text-ink-hi font-mono" />
           </div>
         )}
       </div>
 
       <button onClick={save} disabled={saving}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50">
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50">
         {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save settings
       </button>
     </div>

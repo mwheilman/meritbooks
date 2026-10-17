@@ -311,7 +311,7 @@ export default function ConversionClient({
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-500/25 bg-blue-500/5 px-4 py-2.5 text-sm text-blue-200" role="status">
           <Info size={15} className="mt-0.5 shrink-0" />
           <span>
-            We have <span className="font-medium text-white">{displayNameFromStoragePath(pendingIntake)}</span> from your drop.
+            We have <span className="font-medium text-ink-hi">{displayNameFromStoragePath(pendingIntake)}</span> from your drop.
             Choose the company it belongs to and we&apos;ll read it — no need to upload it again.
           </span>
         </div>
@@ -368,7 +368,7 @@ function SetupStep({
           <label htmlFor="conv-company" className="block text-xs font-medium text-slate-400 mb-1">Which company?</label>
           {!pickCompany ? (
             <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm">
-              <span className="flex items-center gap-2 text-white">
+              <span className="flex items-center gap-2 text-ink-hi">
                 <Building2 size={14} className="text-slate-500" />
                 {company ? `${company.name} (${company.short_code})` : companiesState === 'loading' ? 'Loading…' : 'Selected company'}
               </span>
@@ -380,7 +380,7 @@ function SetupStep({
             </div>
           ) : (
             <select id="conv-company" value={companyId} onChange={(e) => setCompanyId(e.target.value)} disabled={companiesState === 'loading'}
-              className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white disabled:opacity-60">
+              className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi disabled:opacity-60">
               <option value="">{companiesState === 'loading' ? 'Loading companies…' : 'Choose a company…'}</option>
               {companies.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.short_code})</option>)}
             </select>
@@ -396,7 +396,7 @@ function SetupStep({
           <div className="relative">
             <CalendarDays size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
             <input id="conv-asof" type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-surface-900 pl-9 pr-3 py-2 text-sm text-white" />
+              className="w-full rounded-lg border border-slate-700 bg-surface-900 pl-9 pr-3 py-2 text-sm text-ink-hi" />
           </div>
           <p className="text-2xs text-slate-400 mt-1">{cutoverExplanation(asOfDate)}</p>
         </div>
@@ -520,7 +520,7 @@ function MapStep({
               <ArrowRight size={14} className="hidden sm:block text-slate-600 shrink-0" />
               <select id={`col-${f.key}`} value={colMapping[f.key] || NONE}
                 onChange={(e) => setColMapping((m) => ({ ...m, [f.key]: e.target.value }))}
-                className="flex-1 rounded-lg border border-slate-700 bg-surface-950 px-2.5 py-1.5 text-sm text-white">
+                className="flex-1 rounded-lg border border-slate-700 bg-surface-950 px-2.5 py-1.5 text-sm text-ink-hi">
                 <option value={NONE}>— Not in my file —</option>
                 {file.headers.map((h) => <option key={h} value={h}>{h}</option>)}
               </select>
@@ -565,7 +565,7 @@ function DoneStep({ posted, onReset }: { posted: PostResult; onReset: () => void
       <div className="mx-auto mb-4 h-14 w-14 rounded-full bg-brand-500/15 flex items-center justify-center">
         <CircleCheck size={30} className="text-brand-400" />
       </div>
-      <h2 className="text-lg font-semibold text-white">{posted.alreadyPosted ? 'Already live' : 'You’re live'}</h2>
+      <h2 className="text-lg font-semibold text-ink-hi">{posted.alreadyPosted ? 'Already live' : 'You’re live'}</h2>
       <p className="text-sm text-slate-400 mt-1 max-w-xl mx-auto">
         Your opening balances were posted as one balanced journal entry
         {posted.entryNumber ? <> (<span className="font-mono text-slate-300">{posted.entryNumber}</span>)</> : ''}
@@ -581,7 +581,7 @@ function DoneStep({ posted, onReset }: { posted: PostResult; onReset: () => void
           See the opening entry
         </Link>
         <button type="button" onClick={onReset}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-white/[0.03] transition-colors">
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-navy/[0.03] transition-colors">
           Convert another company
         </button>
       </div>

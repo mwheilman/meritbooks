@@ -27,7 +27,7 @@ export function ReceiptPeek({ receiptId }: { receiptId: string }) {
       )}
       <div className="px-3 py-2 space-y-1">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-white truncate">{data.vendorName ?? 'Unknown vendor'}</span>
+          <span className="text-sm font-medium text-ink-hi truncate">{data.vendorName ?? 'Unknown vendor'}</span>
           <span className="text-sm font-mono tabular-nums text-slate-200">{data.amountCents != null ? formatMoney(data.amountCents) : '--'}</span>
         </div>
         <div className="flex items-center justify-between text-2xs text-slate-500">

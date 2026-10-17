@@ -130,7 +130,7 @@ function InventoryValuationInner() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
+          <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
         </div>
       ) : error ? (
         <div className="p-8 text-center">
@@ -161,12 +161,12 @@ function InventoryValuationInner() {
                 <div key={m.method} className="flex items-center gap-2 rounded-lg border border-slate-800 bg-surface-900 px-3 py-1.5 text-xs">
                   <Scale size={13} className="text-slate-500" />
                   <span className="text-slate-400">{METHOD_LABEL[m.method]}</span>
-                  <span className="font-mono text-white">{formatMoney(m.totalValueCents)}</span>
+                  <span className="font-mono text-ink-hi">{formatMoney(m.totalValueCents)}</span>
                   <span className="text-slate-600">· {m.itemCount} item{m.itemCount === 1 ? '' : 's'}</span>
                 </div>
               ))}
               <label className="ml-auto flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-                <input type="checkbox" checked={includeZero} onChange={(e) => setIncludeZero(e.target.checked)} className="accent-emerald-500" />
+                <input type="checkbox" checked={includeZero} onChange={(e) => setIncludeZero(e.target.checked)} className="accent-brand-500" />
                 Show zero-quantity items
               </label>
             </div>
@@ -177,7 +177,7 @@ function InventoryValuationInner() {
             <div className="card p-10 text-center">
               <Package className="w-8 h-8 mx-auto text-slate-600 mb-3" />
               <p className="text-slate-400 text-sm">No on-hand inventory to value.</p>
-              <Link href="/inventory" className="mt-3 inline-block text-emerald-400 text-sm hover:text-emerald-300">
+              <Link href="/inventory" className="mt-3 inline-block text-brand-400 text-sm hover:text-brand-300">
                 Go to inventory
               </Link>
             </div>
@@ -186,7 +186,7 @@ function InventoryValuationInner() {
               {groups.map((g) => (
                 <div key={g.locationId ?? 'unassigned'} className="card overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-                    <div className="text-sm font-medium text-white">{g.locationName}</div>
+                    <div className="text-sm font-medium text-ink-hi">{g.locationName}</div>
                     <div className="text-xs text-slate-500">
                       {g.itemCount} item{g.itemCount === 1 ? '' : 's'} ·{' '}
                       <span className="font-mono text-slate-300">{formatMoney(g.totalValueCents)}</span>
@@ -209,8 +209,8 @@ function InventoryValuationInner() {
                         {g.lines.map((l) => (
                           <tr key={l.id} className="border-b border-slate-800/60 hover:bg-slate-800/30">
                             <td className="px-4 py-2.5 font-mono text-xs text-slate-300">{l.sku}</td>
-                            <td className="px-4 py-2.5 text-white">
-                              <Link href={`/inventory/${l.id}`} className="hover:text-emerald-400">{l.name}</Link>
+                            <td className="px-4 py-2.5 text-ink-hi">
+                              <Link href={`/inventory/${l.id}`} className="hover:text-brand-400">{l.name}</Link>
                               {!l.isActive && <span className="ml-2 text-xs text-slate-600">(inactive)</span>}
                             </td>
                             <td className="px-4 py-2.5 text-xs text-slate-400">{METHOD_LABEL[l.valuationMethod]}</td>
@@ -218,7 +218,7 @@ function InventoryValuationInner() {
                               {l.qtyOnHand} <span className="text-slate-600">{l.uom}</span>
                             </td>
                             <td className="px-4 py-2.5 text-right font-mono text-slate-300">{formatMoney(l.avgCostCents)}</td>
-                            <td className="px-4 py-2.5 text-right font-mono text-white">{formatMoney(l.valueCents)}</td>
+                            <td className="px-4 py-2.5 text-right font-mono text-ink-hi">{formatMoney(l.valueCents)}</td>
                             <td className="px-4 py-2.5 text-right font-mono text-slate-400">{(l.pctOfTotal * 100).toFixed(1)}%</td>
                           </tr>
                         ))}
@@ -226,7 +226,7 @@ function InventoryValuationInner() {
                       <tfoot>
                         <tr className="border-t border-slate-800 bg-surface-950/40">
                           <td colSpan={5} className="px-4 py-2.5 text-xs uppercase text-slate-500">Subtotal</td>
-                          <td className="px-4 py-2.5 text-right font-mono text-white">{formatMoney(g.totalValueCents)}</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-ink-hi">{formatMoney(g.totalValueCents)}</td>
                           <td />
                         </tr>
                       </tfoot>
@@ -237,7 +237,7 @@ function InventoryValuationInner() {
 
               {/* Grand total */}
               <div className="card flex items-center justify-between px-4 py-3">
-                <span className="text-sm font-medium text-white">Total inventory value</span>
+                <span className="text-sm font-medium text-ink-hi">Total inventory value</span>
                 <span className="font-mono text-lg font-semibold text-emerald-400">{formatMoney(report?.summary.totalValueCents ?? 0)}</span>
               </div>
             </div>
@@ -289,7 +289,7 @@ function Metric({ label, value, accent, hint }: { label: string; value: string; 
   return (
     <div className="card p-4">
       <span className="text-xs text-slate-500 uppercase">{label}</span>
-      <p className={clsx('text-xl font-mono font-semibold mt-1', accent ? 'text-emerald-400' : 'text-white')}>{value}</p>
+      <p className={clsx('text-xl font-mono font-semibold mt-1', accent ? 'text-emerald-400' : 'text-ink-hi')}>{value}</p>
       {hint && <p className="text-[11px] text-slate-600 mt-0.5">{hint}</p>}
     </div>
   );

@@ -44,7 +44,7 @@ export function DebtSummary({ onViewCovenants }: { onViewCovenants?: () => void 
   const { data, isLoading, error } = useQuery<DebtSummaryResponse>('/api/debt/summary');
 
   if (isLoading) {
-    return <div className="card p-6 flex items-center justify-center h-[128px]"><Loader2 className="w-5 h-5 text-emerald-400 animate-spin" /></div>;
+    return <div className="card p-6 flex items-center justify-center h-[128px]"><Loader2 className="w-5 h-5 text-brand-400 animate-spin" /></div>;
   }
   // Degrade quietly — the register below still renders; don't block it on a summary error.
   if (error || !data) return null;
@@ -73,7 +73,7 @@ export function DebtSummary({ onViewCovenants }: { onViewCovenants?: () => void 
           <Layers size={14} className="text-slate-400" />
           <span className="text-xs text-slate-500 uppercase tracking-wider">Total Outstanding</span>
         </div>
-        <p className="text-2xl font-mono font-semibold text-white">{formatMoney(s.totalOutstandingCents, { compact: true })}</p>
+        <p className="text-2xl font-mono font-semibold text-ink-hi">{formatMoney(s.totalOutstandingCents, { compact: true })}</p>
         <div className="mt-2 h-1.5 w-full rounded-full bg-slate-700 overflow-hidden flex">
           <div className="h-full bg-amber-500" style={{ width: `${currentPct}%` }} title="Current portion (≤12mo)" />
           <div className="h-full bg-emerald-500/70" style={{ width: `${100 - currentPct}%` }} title="Non-current" />
@@ -92,7 +92,7 @@ export function DebtSummary({ onViewCovenants }: { onViewCovenants?: () => void 
         </div>
         {s.nextPayment ? (
           <>
-            <p className="text-2xl font-mono font-semibold text-white">{formatMoney(s.nextPayment.paymentCents, { compact: true })}</p>
+            <p className="text-2xl font-mono font-semibold text-ink-hi">{formatMoney(s.nextPayment.paymentCents, { compact: true })}</p>
             <p className="text-[11px] text-slate-500 mt-1 truncate">{s.nextPayment.loanName}</p>
             <p className="text-[10px] text-slate-600 font-mono">{fmtDate(s.nextPayment.dueDate)}</p>
           </>
@@ -110,7 +110,7 @@ export function DebtSummary({ onViewCovenants }: { onViewCovenants?: () => void 
           <TrendingDown size={14} className="text-slate-400" />
           <span className="text-xs text-slate-500 uppercase tracking-wider">Debt Service · 12mo</span>
         </div>
-        <p className="text-2xl font-mono font-semibold text-white">{formatMoney(s.debtService12Mo.totalCents, { compact: true })}</p>
+        <p className="text-2xl font-mono font-semibold text-ink-hi">{formatMoney(s.debtService12Mo.totalCents, { compact: true })}</p>
         <p className="text-[10px] text-slate-600 font-mono mt-1">
           Interest {formatMoney(s.debtService12Mo.interestCents, { compact: true })} · Principal {formatMoney(s.debtService12Mo.principalCents, { compact: true })}
         </p>

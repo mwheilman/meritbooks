@@ -209,7 +209,7 @@ export function InvoiceDraftPanel({ description, onDone }: { description: string
           <Field label="Description"><input value={lineDesc} onChange={(e) => setLineDesc(e.target.value)} className={inputCls} /></Field>
 
           <div className="flex flex-wrap items-center gap-3">
-            <button onClick={submit} disabled={submitting} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40 transition-colors">
+            <button onClick={submit} disabled={submitting} className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-40 transition-colors">
               {submitting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Create draft invoice
             </button>
             <span className="text-2xs text-slate-500">Draft only — rev-rec aware, posts no GL</span>
@@ -221,7 +221,7 @@ export function InvoiceDraftPanel({ description, onDone }: { description: string
   );
 }
 
-const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white';
+const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-ink-hi';
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>

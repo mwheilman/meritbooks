@@ -152,7 +152,7 @@ function AccountPicker({
       <label className="block text-2xs uppercase text-slate-500 mb-1">{label}</label>
       <button type="button" onClick={() => setOpen(!open)}
         className={clsx('w-full text-left px-2 py-1.5 rounded-lg border text-xs truncate relative',
-          selected ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}>
+          selected ? 'bg-slate-800 border-slate-700 text-ink-hi' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}>
         {selected ? `${selected.accountNumber} · ${selected.name}` : placeholder}
         <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />
       </button>
@@ -162,7 +162,7 @@ function AccountPicker({
             <div className="relative">
               <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
               <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." autoFocus
-                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50" />
+                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi placeholder:text-slate-500 focus:outline-none focus:border-brand-500/50" />
             </div>
           </div>
           <div className="max-h-44 overflow-y-auto">
@@ -230,7 +230,7 @@ function AssetCard({
   }
 
   const fieldCls = (low: boolean) =>
-    clsx('w-full px-2 py-1.5 rounded-lg text-xs text-white font-mono bg-slate-800 border',
+    clsx('w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi font-mono bg-slate-800 border',
       low ? 'border-amber-500/50' : 'border-slate-700');
 
   return (
@@ -262,7 +262,7 @@ function AssetCard({
       <div>
         <label className="block text-2xs uppercase text-slate-500 mb-1">Asset name</label>
         <input type="text" value={draft.name} onChange={(e) => onPatch({ name: e.target.value })}
-          className={clsx('w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border', isLow('name') ? 'border-amber-500/50' : 'border-slate-700')} />
+          className={clsx('w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi bg-slate-800 border', isLow('name') ? 'border-amber-500/50' : 'border-slate-700')} />
       </div>
 
       {/* Class / life / method */}
@@ -270,7 +270,7 @@ function AssetCard({
         <div>
           <label className="block text-2xs uppercase text-slate-500 mb-1">Class</label>
           <select value={draft.category} onChange={(e) => onPatch({ category: e.target.value })}
-            className={clsx('w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border', isLow('proposedCategory') ? 'border-amber-500/50' : 'border-slate-700')}>
+            className={clsx('w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi bg-slate-800 border', isLow('proposedCategory') ? 'border-amber-500/50' : 'border-slate-700')}>
             {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
@@ -282,7 +282,7 @@ function AssetCard({
         <div>
           <label className="block text-2xs uppercase text-slate-500 mb-1">Method</label>
           <select value={draft.method} onChange={(e) => onPatch({ method: e.target.value })}
-            className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700">
+            className="w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi bg-slate-800 border border-slate-700">
             {METHOD_OPTIONS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
         </div>
@@ -303,7 +303,7 @@ function AssetCard({
         <div>
           <label className="block text-2xs uppercase text-slate-500 mb-1">In-service date</label>
           <input type="date" value={draft.acquisitionDate} onChange={(e) => onPatch({ acquisitionDate: e.target.value })}
-            className={clsx('w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border', isLow('purchaseDate') ? 'border-amber-500/50' : 'border-slate-700')} />
+            className={clsx('w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi bg-slate-800 border', isLow('purchaseDate') ? 'border-amber-500/50' : 'border-slate-700')} />
         </div>
       </div>
 
@@ -313,7 +313,7 @@ function AssetCard({
           <label className="block text-2xs uppercase text-slate-500 mb-1">Company</label>
           <select value={draft.locationId}
             onChange={(e) => onPatch({ locationId: e.target.value, assetAccountId: '', depExpenseAccountId: '', accumDepAccountId: '' })}
-            className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700">
+            className="w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi bg-slate-800 border border-slate-700">
             <option value="">Select company…</option>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
@@ -321,7 +321,7 @@ function AssetCard({
         <div>
           <label className="block text-2xs uppercase text-slate-500 mb-1">How it was paid</label>
           <select value={draft.rail} onChange={(e) => onPatch({ rail: e.target.value })}
-            className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700">
+            className="w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi bg-slate-800 border border-slate-700">
             {RAIL_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
         </div>
@@ -343,7 +343,7 @@ function AssetCard({
           {costCents > 0 ? <>Capitalize <span className="font-mono text-slate-300">{formatMoney(costCents)}</span> · {formatMoney(costCents)} ÷ {lifeMonths || '?'}mo</> : 'Enter a cost'}
         </span>
         <button onClick={onConfirm} disabled={!canConfirm}
-          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center gap-1">
+          className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center gap-1">
           {draft.saving ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
           Add to register
         </button>
@@ -451,7 +451,7 @@ export function ImportFromInvoice({ open, onClose, onCreated }: { open: boolean;
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
           <div>
-            <h2 className="text-sm font-semibold text-white flex items-center gap-2"><UploadCloud size={16} className="text-emerald-400" /> Add asset from invoice</h2>
+            <h2 className="text-sm font-semibold text-ink-hi flex items-center gap-2"><UploadCloud size={16} className="text-emerald-400" /> Add asset from invoice</h2>
             <p className="text-2xs text-slate-500 mt-0.5">Drop a capex invoice — AI proposes the class, useful life, and method for you to confirm.</p>
           </div>
           <button onClick={onClose} aria-label="Close dialog" className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400"><X size={16} /></button>
@@ -467,7 +467,7 @@ export function ImportFromInvoice({ open, onClose, onCreated }: { open: boolean;
                 onDragLeave={() => setDragOver(false)}
                 onDrop={onDrop}
                 className={clsx('cursor-pointer rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors',
-                  dragOver ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-700 hover:border-slate-600 bg-slate-800/20')}>
+                  dragOver ? 'border-brand-500 bg-brand-500/5' : 'border-slate-700 hover:border-slate-600 bg-slate-800/20')}>
                 <UploadCloud size={28} className="mx-auto text-slate-500 mb-3" />
                 <p className="text-sm text-slate-300">Drop a capex invoice here, or <span className="text-emerald-400">browse</span></p>
                 <p className="text-2xs text-slate-500 mt-1">PDF, PNG, JPEG, or WebP · up to 10MB</p>
@@ -484,7 +484,7 @@ export function ImportFromInvoice({ open, onClose, onCreated }: { open: boolean;
           {/* Parsing */}
           {phase === 'parsing' && (
             <div className="py-16 text-center">
-              <Loader2 size={28} className="mx-auto text-emerald-400 animate-spin mb-3" />
+              <Loader2 size={28} className="mx-auto text-brand-400 animate-spin mb-3" />
               <p className="text-sm text-slate-300">Reading {fileName ?? 'invoice'}…</p>
               <p className="text-2xs text-slate-500 mt-1">Extracting assets and proposing a class + useful life.</p>
             </div>

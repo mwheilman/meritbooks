@@ -135,14 +135,14 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-white">Bill detail</h2>
+            <h2 className="text-lg font-semibold text-ink-hi">Bill detail</h2>
             {bill && <StatusBadge status={bill.status} />}
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.04]"><X size={18} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-navy/[0.04]"><X size={18} /></button>
         </div>
 
         {isLoading ? (
-          <div className="flex-1 flex items-center justify-center"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
+          <div className="flex-1 flex items-center justify-center"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>
         ) : error || !bill ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 px-6 text-center">
             <AlertCircle className="w-8 h-8 text-red-400" />
@@ -165,7 +165,7 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
                   <span className="text-2xs text-slate-500 uppercase tracking-wider">Total</span>
                   <span className="inline-flex items-center gap-2">
                     <CurrencyTag code={billCcy} homeCurrency={homeCcy} onlyForeign />
-                    <span className="text-lg font-mono font-semibold text-white">{formatMoney(bill.total_cents, { currency: billCcy })}</span>
+                    <span className="text-lg font-mono font-semibold text-ink-hi">{formatMoney(bill.total_cents, { currency: billCcy })}</span>
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
@@ -193,7 +193,7 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
                   ) : (
                     <div className="flex items-center gap-2">
                       <input value={holdReason} onChange={(e) => setHoldReason(e.target.value)} placeholder="Reason for the override…"
-                        className="flex-1 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-white" />
+                        className="flex-1 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-ink-hi" />
                       <button disabled={!holdReason || busy !== null}
                         onClick={() => post({ action: 'release_hold', reason: holdReason }, 'Release hold')}
                         className="px-2.5 py-1.5 rounded-md text-xs bg-red-600 text-white hover:bg-red-500 disabled:opacity-40">Release</button>
@@ -264,7 +264,7 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
                 {(bill.status === 'PENDING' || bill.status === 'ON_HOLD') && (
                   <div className="flex items-center gap-2 mt-2">
                     <select value={overrideType} onChange={(e) => { setOverrideType(e.target.value); setOverrideRef(''); }}
-                      className="flex-1 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-white">
+                      className="flex-1 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-ink-hi">
                       <option value="">Re-route to…</option>
                       <option value="ACCOUNTING">Accounting</option>
                       <option value="RESPONSIBLE_PARTY">Responsible party</option>
@@ -272,7 +272,7 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
                     </select>
                     {(overrideType === 'RESPONSIBLE_PARTY' || overrideType === 'PM_LEADER') && (
                       <select value={overrideRef} onChange={(e) => setOverrideRef(e.target.value)}
-                        className="flex-1 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-white">
+                        className="flex-1 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-ink-hi">
                         <option value="">Person…</option>
                         {employees.map((e) => <option key={e.id} value={e.id}>{e.fullName}</option>)}
                       </select>
@@ -302,7 +302,7 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
                               {l.account ? `${l.account.account_number} · ${l.account.name}` : ''}
                             </p>
                             {l.job && (
-                              <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-2xs bg-brand-500/10 text-brand-400">
+                              <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-2xs bg-brand-500/10 text-brand-300">
                                 <Briefcase size={9} /> {l.job.job_number} · {l.job.name}
                               </span>
                             )}
@@ -332,7 +332,7 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
               {showVoid ? (
                 <div className="space-y-2">
                   <input value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Reason for voiding…"
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-md text-sm text-white" />
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-md text-sm text-ink-hi" />
                   <div className="flex gap-2">
                     <button onClick={() => setShowVoid(false)} className="flex-1 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-800">Cancel</button>
                     <button disabled={!voidReason || busy !== null}
@@ -345,7 +345,7 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
                   {bill.status === 'PENDING' && (
                     <button disabled={busy !== null}
                       onClick={() => post({ action: 'approve' }, 'Approve')}
-                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50">
+                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50">
                       {busy === 'Approve' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve &amp; post
                     </button>
                   )}
@@ -353,7 +353,7 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
                   {(bill.status === 'APPROVED' || bill.status === 'SCHEDULED') && (
                     <div className="flex items-center gap-2 flex-1">
                       <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)}
-                        className="flex-1 px-2 py-2 bg-slate-800 border border-slate-700 rounded-md text-sm text-white font-mono" />
+                        className="flex-1 px-2 py-2 bg-slate-800 border border-slate-700 rounded-md text-sm text-ink-hi font-mono" />
                       <button disabled={!scheduleDate || busy !== null}
                         onClick={() => post({ action: 'schedule', scheduled_payment_date: scheduleDate }, 'Schedule')}
                         className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40">
@@ -367,11 +367,11 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
                       <div className="relative flex-1">
                         <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500">$</span>
                         <input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder={(balance / 100).toFixed(2)}
-                          className="w-full pl-6 pr-2 py-2 bg-slate-800 border border-slate-700 rounded-md text-sm text-white font-mono" />
+                          className="w-full pl-6 pr-2 py-2 bg-slate-800 border border-slate-700 rounded-md text-sm text-ink-hi font-mono" />
                       </div>
                       <button disabled={busy !== null}
                         onClick={() => post({ action: 'pay', amount_cents: Math.round(parseFloat(payAmount || String(balance / 100)) * 100) }, 'Payment')}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40">
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40">
                         <DollarSign size={14} /> Record payment
                       </button>
                     </div>

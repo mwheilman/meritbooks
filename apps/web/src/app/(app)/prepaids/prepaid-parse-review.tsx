@@ -110,13 +110,13 @@ export function PrepaidParseReview({
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-indigo-400" />
             <div>
-              <h2 className="text-lg font-semibold text-white">Upload a prepaid invoice</h2>
+              <h2 className="text-lg font-semibold text-ink-hi">Upload a prepaid invoice</h2>
               <p className="text-[11px] text-slate-500">
                 AI reads the amount and coverage period, then pre-fills the setup form. Nothing is saved until you confirm.
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close">
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -142,7 +142,7 @@ export function PrepaidParseReview({
             phase === 'parsing'
               ? 'border-indigo-500/40 bg-indigo-500/5 cursor-default'
               : dragOver
-                ? 'border-emerald-500 bg-emerald-500/5 cursor-pointer'
+                ? 'border-brand-500 bg-brand-500/5 cursor-pointer'
                 : 'border-slate-700 hover:border-slate-600 cursor-pointer',
           )}
         >

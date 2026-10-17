@@ -379,7 +379,7 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
       <div className="relative w-full max-w-lg overflow-hidden rounded-xl border border-slate-800 bg-surface-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
           <div className="min-w-0">
-            <h2 className="text-subheading font-semibold text-white">
+            <h2 className="text-subheading font-semibold text-ink-hi">
               {mode === 'add' ? 'Invite team member' : 'Edit member access'}
             </h2>
             {mode === 'edit' && member && (
@@ -392,7 +392,7 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-slate-500 transition-colors hover:bg-white/[0.04] hover:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+            className="rounded-md p-1 text-slate-500 transition-colors hover:bg-navy/[0.04] hover:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
             aria-label="Close"
           >
             <X size={18} />
@@ -441,7 +441,7 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
               <div className="flex items-center gap-3 rounded-lg border border-slate-800 bg-surface-850 px-3 py-2.5">
                 <Avatar member={member} />
                 <div className="min-w-0">
-                  <p className="truncate text-body font-medium text-white">
+                  <p className="truncate text-body font-medium text-ink-hi">
                     {member.firstName || member.lastName
                       ? `${member.firstName} ${member.lastName}`.trim()
                       : '—'}
@@ -503,7 +503,7 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
                         name="responsibility"
                         checked={checked}
                         onChange={() => setResponsibility(opt.key)}
-                        className="mt-0.5 h-3.5 w-3.5 accent-emerald-500"
+                        className="mt-0.5 h-3.5 w-3.5 accent-brand-500"
                       />
                       <span className="min-w-0">
                         <span className="block text-sm font-medium text-slate-200">{opt.title}</span>
@@ -547,7 +547,7 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleCompany(loc.id)}
-                          className="h-3.5 w-3.5 accent-emerald-500"
+                          className="h-3.5 w-3.5 accent-brand-500"
                         />
                         <span className="text-sm text-slate-200">{loc.name}</span>
                       </label>
@@ -640,9 +640,9 @@ function SectionTabs({
           onClick={() => onChange(t.key)}
           aria-current={active === t.key ? 'page' : undefined}
           className={clsx(
-            '-mb-px border-b-2 pb-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:text-white',
+            '-mb-px border-b-2 pb-2.5 text-sm font-medium transition-colors focus:outline-none focus-visible:text-ink-hi',
             active === t.key
-              ? 'border-brand-500 text-white'
+              ? 'border-brand-500 text-ink-hi'
               : 'border-transparent text-slate-500 hover:text-slate-300'
           )}
         >
@@ -738,7 +738,7 @@ function ReadOnlyRosterBody({
                       <div className="flex items-center gap-3">
                         <Avatar member={{ firstName: first, lastName: restName.join(' '), email: r.email }} />
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-white">{r.fullName || '—'}</p>
+                          <p className="truncate text-sm font-medium text-ink-hi">{r.fullName || '—'}</p>
                           {r.email && <p className="truncate text-xs text-slate-500">{r.email}</p>}
                         </div>
                       </div>
@@ -811,7 +811,7 @@ function SummaryStat({
       <span
         className={clsx(
           'mt-0.5 font-mono text-heading font-semibold tabular-nums',
-          accent ? 'text-emerald-400' : 'text-white'
+          accent ? 'text-emerald-400' : 'text-ink-hi'
         )}
       >
         {value}
@@ -930,7 +930,7 @@ function PendingInvitations({
                           <Mail size={14} />
                         </div>
                         <div className="min-w-0">
-                          {name && <p className="truncate text-sm font-medium text-white">{name}</p>}
+                          {name && <p className="truncate text-sm font-medium text-ink-hi">{name}</p>}
                           <p className="truncate text-xs text-slate-400">{inv.email}</p>
                         </div>
                       </div>
@@ -1058,7 +1058,7 @@ export function TeamClient() {
   if (meLoading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
       </div>
     );
   }
@@ -1196,7 +1196,7 @@ export function TeamClient() {
                       <div className="flex items-center gap-3">
                         <Avatar member={m} />
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-white">{displayName}</p>
+                          <p className="truncate text-sm font-medium text-ink-hi">{displayName}</p>
                           {m.email && <p className="truncate text-xs text-slate-500">{m.email}</p>}
                         </div>
                       </div>

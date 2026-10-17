@@ -172,7 +172,7 @@ export function CloseOrchestration() {
   }, [refresh]);
 
   if (isLoading) {
-    return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>;
+    return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>;
   }
   if (error) {
     return (
@@ -192,12 +192,12 @@ export function CloseOrchestration() {
       {/* Period nav + summary */}
       <div className="flex flex-wrap items-center gap-4 px-4 py-3 rounded-lg bg-slate-800/30 border border-slate-700/50 text-sm">
         <div className="flex items-center gap-2">
-          <button onClick={() => shiftMonth(-1)} className="p-1.5 rounded-md bg-slate-800 text-slate-400 hover:text-white"><ChevronLeft size={15} /></button>
-          <span className="text-white font-medium w-36 text-center">{monthName}</span>
-          <button onClick={() => shiftMonth(1)} className="p-1.5 rounded-md bg-slate-800 text-slate-400 hover:text-white"><ChevronRight size={15} /></button>
+          <button onClick={() => shiftMonth(-1)} className="p-1.5 rounded-md bg-slate-800 text-slate-400 hover:text-ink-hi"><ChevronLeft size={15} /></button>
+          <span className="text-ink-hi font-medium w-36 text-center">{monthName}</span>
+          <button onClick={() => shiftMonth(1)} className="p-1.5 rounded-md bg-slate-800 text-slate-400 hover:text-ink-hi"><ChevronRight size={15} /></button>
         </div>
         <div className="h-4 w-px bg-slate-700" />
-        <span className="text-slate-400">Entities <span className="text-white font-mono">{summary?.totalEntities ?? 0}</span></span>
+        <span className="text-slate-400">Entities <span className="text-ink-hi font-mono">{summary?.totalEntities ?? 0}</span></span>
         <span className="flex items-center gap-1 text-emerald-400"><ShieldCheck size={14} />{summary?.readyToClose ?? 0} ready</span>
         <span className="flex items-center gap-1 text-red-400"><ShieldAlert size={14} />{summary?.blocked ?? 0} blocked</span>
         <span className="flex items-center gap-1 text-slate-400"><Lock size={13} />{summary?.closed ?? 0} closed</span>
@@ -240,7 +240,7 @@ export function CloseOrchestration() {
                   <span className="w-8 h-8 rounded bg-slate-700 text-[10px] font-mono text-slate-300 flex items-center justify-center shrink-0">
                     {ent.shortCode}
                   </span>
-                  <span className="text-sm font-medium text-white flex-1 truncate">{ent.name}</span>
+                  <span className="text-sm font-medium text-ink-hi flex-1 truncate">{ent.name}</span>
 
                   {/* Progress bar */}
                   <div className="hidden sm:flex items-center gap-2">
@@ -293,7 +293,7 @@ export function CloseOrchestration() {
                           {ent.periodId && (
                             <a
                               href={`/api/close/package?year=${year}&month=${month}&location_id=${ent.locationId}&format=xlsx`}
-                              className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-700/60 text-slate-200 hover:bg-slate-700 hover:text-white"
+                              className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-700/60 text-slate-200 hover:bg-slate-700 hover:text-ink-hi"
                               title="Download the close package (Trial Balance, Reconciliation Status, JE Listing, Open Items) as Excel"
                             >
                               <FileSpreadsheet size={13} /> Close package
@@ -332,7 +332,7 @@ export function CloseOrchestration() {
                                 <button
                                   onClick={() => hardClose(ent)}
                                   disabled={busyTask === `${ent.locationId}:__close`}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50"
                                 >
                                   {busyTask === `${ent.locationId}:__close` ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />}
                                   Hard-close period
@@ -354,7 +354,7 @@ export function CloseOrchestration() {
                                       value={overrideReason}
                                       onChange={(e) => setOverrideReason(e.target.value)}
                                       placeholder="Override reason (audited)…"
-                                      className="flex-1 px-2.5 py-1.5 rounded-md bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-red-500/50"
+                                      className="flex-1 px-2.5 py-1.5 rounded-md bg-slate-900 border border-slate-700 text-xs text-ink-hi placeholder-slate-600 focus:outline-none focus:border-red-500/50"
                                     />
                                     <button
                                       onClick={() => hardClose(ent, overrideReason)}
@@ -423,7 +423,7 @@ function TaskRow({ task, busy, onToggle }: { task: EvaluatedTask; busy: boolean;
         {task.status === 'blocked' && task.deepLinkHref && (
           <Link
             href={task.deepLinkHref}
-            className="inline-flex items-center gap-1 text-[11px] text-emerald-400/90 hover:text-emerald-300 mt-0.5 underline underline-offset-2"
+            className="inline-flex items-center gap-1 text-[11px] text-brand-400/90 hover:text-brand-300 mt-0.5 underline underline-offset-2"
           >
             Go clear this <ExternalLink size={10} />
           </Link>

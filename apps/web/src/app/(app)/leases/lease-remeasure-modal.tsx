@@ -140,10 +140,10 @@ export function LeaseRemeasureModal({
       <div className="w-full max-w-xl card p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-base font-semibold text-white">{TITLES[mode]}</h2>
+            <h2 className="text-base font-semibold text-ink-hi">{TITLES[mode]}</h2>
             <p className="text-[12px] text-slate-500 mt-0.5">{lease.lessor} — {lease.classification === 'OPERATING' ? 'operating' : 'finance'} lease</p>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white" aria-label="Close"><X size={18} /></button>
+          <button onClick={onClose} className="text-slate-500 hover:text-ink-hi" aria-label="Close"><X size={18} /></button>
         </div>
 
         {/* ── Inputs ─────────────────────────────────────────────── */}
@@ -152,7 +152,7 @@ export function LeaseRemeasureModal({
             <label className="block">
               <span className="text-[11px] text-slate-400">{mode === 'cpi' ? 'New index-based payment ($)' : 'Revised payment ($)'}</span>
               <input value={payment} onChange={(e) => setPayment(e.target.value)} inputMode="decimal"
-                className="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:border-emerald-500 outline-none" />
+                className="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-ink-hi font-mono focus:border-brand-500 outline-none" />
             </label>
           )}
           {mode === 'modify' && (
@@ -161,17 +161,17 @@ export function LeaseRemeasureModal({
                 <label className="block">
                   <span className="text-[11px] text-slate-400">Revised remaining periods</span>
                   <input value={remainingPeriods} onChange={(e) => setRemainingPeriods(e.target.value)} inputMode="numeric" placeholder="e.g. 24"
-                    className="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:border-emerald-500 outline-none" />
+                    className="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-ink-hi font-mono focus:border-brand-500 outline-none" />
                   <span className="text-[10px] text-slate-600">{periodsFor(lease)} month(s) per period</span>
                 </label>
                 <label className="block">
                   <span className="text-[11px] text-slate-400">Revised rate (%)</span>
                   <input value={rate} onChange={(e) => setRate(e.target.value)} inputMode="decimal"
-                    className="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:border-emerald-500 outline-none" />
+                    className="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-ink-hi font-mono focus:border-brand-500 outline-none" />
                 </label>
               </div>
               <label className="flex items-center gap-2 text-[12px] text-slate-300">
-                <input type="checkbox" checked={scopeReduction} onChange={(e) => setScopeReduction(e.target.checked)} className="accent-emerald-500" />
+                <input type="checkbox" checked={scopeReduction} onChange={(e) => setScopeReduction(e.target.checked)} className="accent-brand-500" />
                 Treat as a reduction in scope (partial termination — recognizes a gain/loss)
               </label>
             </>
@@ -180,13 +180,13 @@ export function LeaseRemeasureModal({
             <label className="block">
               <span className="text-[11px] text-slate-400">Termination penalty paid ($)</span>
               <input value={penalty} onChange={(e) => setPenalty(e.target.value)} inputMode="decimal"
-                className="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:border-emerald-500 outline-none" />
+                className="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-ink-hi font-mono focus:border-brand-500 outline-none" />
             </label>
           )}
         </div>
 
         <button onClick={runPreview} disabled={busy}
-          className="mt-4 px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 text-white rounded-lg disabled:opacity-40 inline-flex items-center gap-1.5">
+          className="mt-4 px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 text-ink-hi rounded-lg disabled:opacity-40 inline-flex items-center gap-1.5">
           {busy && !hasPreview ? <Loader2 size={13} className="animate-spin" /> : null} Preview
         </button>
 
@@ -250,7 +250,7 @@ export function LeaseRemeasureModal({
 
         {/* ── Actions ────────────────────────────────────────────── */}
         <div className="mt-6 flex items-center justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Cancel</button>
+          <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-400 hover:text-ink-hi">Cancel</button>
           <button onClick={confirm} disabled={busy || !hasPreview}
             className={clsx('px-4 py-1.5 text-xs font-medium text-white rounded-lg disabled:opacity-40 inline-flex items-center gap-1.5',
               mode === 'terminate' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500')}>
@@ -271,7 +271,7 @@ function BeforeAfter({ label, before, after }: { label: string; before: number; 
       <div className="flex items-center gap-1.5 mt-0.5 font-mono text-xs">
         <span className="text-slate-400">{formatMoney(before)}</span>
         <ArrowRight size={11} className="text-slate-600" />
-        <span className="text-white">{formatMoney(after)}</span>
+        <span className="text-ink-hi">{formatMoney(after)}</span>
       </div>
       {delta !== 0 && <p className={clsx('text-[10px] mt-0.5 font-mono', delta > 0 ? 'text-emerald-400' : 'text-red-400')}>{delta > 0 ? '+' : ''}{formatMoney(delta)}</p>}
     </div>
@@ -282,7 +282,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="card p-3 bg-slate-950/40">
       <p className="text-[10px] text-slate-500">{label}</p>
-      <p className="text-xs text-white font-mono mt-0.5">{value}</p>
+      <p className="text-xs text-ink-hi font-mono mt-0.5">{value}</p>
     </div>
   );
 }

@@ -59,7 +59,7 @@ export function CoverageReport({ workflows }: { workflows: AnalyzableWorkflow[] 
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="text-sm font-semibold text-white">Coverage gaps</h2>
+        <h2 className="text-sm font-semibold text-ink-hi">Coverage gaps</h2>
         <p className="mt-1 text-xs text-slate-400">
           Document types and amount bands with no approval rule, or rules that reference a role
           no active member can fill. Critical gaps can strand a document with no valid approver.
@@ -67,7 +67,7 @@ export function CoverageReport({ workflows }: { workflows: AnalyzableWorkflow[] 
       </div>
 
       {loading ? (
-        <div className="rounded-lg border border-white/5 bg-surface-900 p-4 text-xs text-slate-500">
+        <div className="rounded-lg border border-slate-800 bg-surface-900 p-4 text-xs text-slate-500">
           Analyzing coverage…
         </div>
       ) : error ? (
@@ -85,7 +85,7 @@ export function CoverageReport({ workflows }: { workflows: AnalyzableWorkflow[] 
         <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5 text-xs text-emerald-300">
           <CheckCircle2 className="h-5 w-5" />
           <div>
-            <div className="font-medium text-white">No coverage gaps detected.</div>
+            <div className="font-medium text-ink-hi">No coverage gaps detected.</div>
             <div className="mt-0.5 text-2xs text-emerald-200/80">
               Every document type has an active chain covering all amounts, and every step names a
               role at least one active member can satisfy.
@@ -102,7 +102,7 @@ export function CoverageReport({ workflows }: { workflows: AnalyzableWorkflow[] 
               {warnings.length} warning{warnings.length === 1 ? '' : 's'}
             </span>
             {activeRoleCounts && Object.keys(activeRoleCounts).length === 0 && (
-              <span className="rounded-full bg-white/5 px-3 py-1 text-slate-500">
+              <span className="rounded-full bg-navy/5 px-3 py-1 text-slate-500">
                 No active members resolved — satisfiability checks skipped
               </span>
             )}
@@ -120,7 +120,7 @@ export function CoverageReport({ workflows }: { workflows: AnalyzableWorkflow[] 
                   <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${style.text}`} />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-white">{f.docTypeLabel}</span>
+                      <span className="text-xs font-medium text-ink-hi">{f.docTypeLabel}</span>
                       <span className={`text-2xs uppercase tracking-wide ${style.text}`}>
                         {f.severity}
                       </span>

@@ -10,3 +10,4 @@ export {
   type AutonomyDialOption,
   type AutonomyDialProps,
 } from './autonomy-dial';
+export { BrandMonogram, BrandLockup } from './brand-mark';

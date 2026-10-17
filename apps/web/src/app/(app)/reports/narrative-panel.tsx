@@ -148,7 +148,7 @@ export function NarrativePanel({ report, sd = '', ed = '', locIds = '', basis = 
             <Sparkles size={14} className="text-indigo-400" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-white">{title}</p>
+            <p className="text-sm font-semibold text-ink-hi">{title}</p>
             <p className="text-[11px] text-indigo-300/60">{subtitle}</p>
           </div>
         </div>

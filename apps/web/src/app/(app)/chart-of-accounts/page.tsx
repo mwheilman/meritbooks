@@ -134,7 +134,7 @@ export default function ChartOfAccountsPage() {
         actions={
           <button
             onClick={() => setShowRequest(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 transition-colors"
           >
             <Plus size={16} /> Request Account
           </button>
@@ -151,20 +151,20 @@ export default function ChartOfAccountsPage() {
       {/* Tabs + filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-800">
-          <button onClick={() => setTab('all')} className={clsx('px-3 py-1.5 rounded-md text-xs font-medium', tab === 'all' ? 'bg-slate-700 text-white' : 'text-slate-500')}>
+          <button onClick={() => setTab('all')} className={clsx('px-3 py-1.5 rounded-md text-xs font-medium', tab === 'all' ? 'bg-slate-700 text-ink-hi' : 'text-slate-500')}>
             All <span className="font-mono ml-1 text-slate-600">{counts?.total ?? 0}</span>
           </button>
-          <button onClick={() => setTab('pending')} className={clsx('px-3 py-1.5 rounded-md text-xs font-medium', tab === 'pending' ? 'bg-slate-700 text-white' : 'text-slate-500')}>
+          <button onClick={() => setTab('pending')} className={clsx('px-3 py-1.5 rounded-md text-xs font-medium', tab === 'pending' ? 'bg-slate-700 text-ink-hi' : 'text-slate-500')}>
             Pending <span className="font-mono ml-1 text-amber-500">{counts?.pending ?? 0}</span>
           </button>
         </div>
 
         {tab === 'all' && (
           <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-800">
-            <button onClick={() => setView('grouped')} aria-label="Grouped view" className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium', view === 'grouped' ? 'bg-slate-700 text-white' : 'text-slate-500')}>
+            <button onClick={() => setView('grouped')} aria-label="Grouped view" className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium', view === 'grouped' ? 'bg-slate-700 text-ink-hi' : 'text-slate-500')}>
               <ListTree size={13} /> Grouped
             </button>
-            <button onClick={() => setView('list')} aria-label="List view" className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium', view === 'list' ? 'bg-slate-700 text-white' : 'text-slate-500')}>
+            <button onClick={() => setView('list')} aria-label="List view" className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium', view === 'list' ? 'bg-slate-700 text-ink-hi' : 'text-slate-500')}>
               <Table2 size={13} /> List
             </button>
           </div>
@@ -174,7 +174,7 @@ export default function ChartOfAccountsPage() {
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
           aria-label="Filter accounts by type"
-          className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"
+          className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi"
         >
           <option value="">All Types</option>
           {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -184,7 +184,7 @@ export default function ChartOfAccountsPage() {
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
           aria-label="Filter accounts by status"
-          className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"
+          className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi"
         >
           <option value="all">All Status</option>
           <option value="active">Active</option>
@@ -194,11 +194,11 @@ export default function ChartOfAccountsPage() {
         {showGrouped && (
           <div className="flex items-center gap-1.5">
             <select value={month} onChange={(e) => setMonth(Number(e.target.value))} aria-label="Balance period month"
-              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
+              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi">
               {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
             </select>
             <select value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Balance period year"
-              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
+              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi">
               {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
@@ -212,14 +212,14 @@ export default function ChartOfAccountsPage() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search accounts..."
             aria-label="Search accounts by number, name, or group"
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500"
+            className="w-full pl-9 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi placeholder:text-slate-500"
           />
         </div>
       </div>
 
       {/* Content */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>
       ) : error ? (
         <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{error}</p></div>
       ) : filtered.length === 0 ? (
@@ -389,7 +389,7 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-        <h2 className="text-lg font-semibold text-white">Request New Account</h2>
+        <h2 className="text-lg font-semibold text-ink-hi">Request New Account</h2>
         <button onClick={onClose} aria-label="Close request account form" className="p-1 rounded-lg hover:bg-slate-800 text-slate-400"><X size={18} /></button>
       </div>
       <div className="p-6 space-y-4">
@@ -405,7 +405,7 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
               value={accountNumber}
               onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 5))}
               placeholder="e.g. 61500"
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi font-mono"
             />
           </div>
           <div>
@@ -415,7 +415,7 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Equipment Rental"
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi"
             />
           </div>
           <div>
@@ -423,7 +423,7 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
             <select
               value={accountType}
               onChange={(e) => setAccountType(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi"
             >
               <option value="">Select type...</option>
               <option value="ASSET">Asset (10000-19999)</option>
@@ -439,15 +439,15 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
 
         <div className="flex items-center gap-6">
           <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-            <input type="checkbox" checked={isCompanySpecific} onChange={(e) => setIsCompanySpecific(e.target.checked)} className="rounded border-slate-600 bg-slate-800 text-emerald-500" />
+            <input type="checkbox" checked={isCompanySpecific} onChange={(e) => setIsCompanySpecific(e.target.checked)} className="rounded border-slate-600 bg-slate-800 accent-brand-500" />
             Company-specific
           </label>
           <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-            <input type="checkbox" checked={reqDept} onChange={(e) => setReqDept(e.target.checked)} className="rounded border-slate-600 bg-slate-800 text-emerald-500" />
+            <input type="checkbox" checked={reqDept} onChange={(e) => setReqDept(e.target.checked)} className="rounded border-slate-600 bg-slate-800 accent-brand-500" />
             Require department
           </label>
           <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-            <input type="checkbox" checked={reqClass} onChange={(e) => setReqClass(e.target.checked)} className="rounded border-slate-600 bg-slate-800 text-emerald-500" />
+            <input type="checkbox" checked={reqClass} onChange={(e) => setReqClass(e.target.checked)} className="rounded border-slate-600 bg-slate-800 accent-brand-500" />
             Require class
           </label>
         </div>
@@ -458,7 +458,7 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
-            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600 resize-none"
+            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-600 resize-none"
             placeholder="Why is this account needed?"
           />
         </div>
@@ -471,7 +471,7 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
         )}
 
         <div className="flex justify-end gap-3 pt-2">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-ink-hi hover:bg-slate-800">Cancel</button>
           <button
             onClick={handleSubmit}
             disabled={submitting || !accountNumber || !name || !accountType}
@@ -479,7 +479,7 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
               'flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium',
               submitting || !accountNumber || !name || !accountType
                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                : 'bg-brand-500 text-white hover:bg-brand-600'
             )}
           >
             {submitting ? <Loader2 size={14} className="animate-spin" /> : <Shield size={14} />}

@@ -125,7 +125,7 @@ export function RevRecAccrual() {
             type="date"
             value={asOf}
             onChange={(e) => setAsOf(e.target.value)}
-            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-white font-mono"
+            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-ink-hi font-mono"
           />
           <span className="inline-flex items-center gap-1 text-2xs text-slate-500">
             <Eye size={12} /> preview updates live
@@ -134,7 +134,7 @@ export function RevRecAccrual() {
         <button
           onClick={post}
           disabled={posting || toPost.length === 0}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40"
         >
           {posting ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Post accruals ({toPost.length})
         </button>
@@ -169,9 +169,9 @@ export function RevRecAccrual() {
             )}
             <span className="text-slate-300">
               Contract asset (acct {data.unbilledAccount?.number ?? '1180'}) after accrual{' '}
-              <span className="font-mono text-white">{formatMoney(data.projectedContractAssetCents)}</span>{' '}
+              <span className="font-mono text-ink-hi">{formatMoney(data.projectedContractAssetCents)}</span>{' '}
               {tiesOut ? 'ties to' : 'vs'} net WIP under-billing{' '}
-              <span className="font-mono text-white">{formatMoney(data.totalUnderBillingCents)}</span>
+              <span className="font-mono text-ink-hi">{formatMoney(data.totalUnderBillingCents)}</span>
             </span>
           </div>
           <span className="font-mono text-slate-500">
@@ -182,7 +182,7 @@ export function RevRecAccrual() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
+          <Loader2 className="w-5 h-5 text-brand-400 animate-spin" />
         </div>
       ) : error ? (
         <div className="card p-6 text-center">
@@ -287,7 +287,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: 'br
       <p
         className={clsx(
           'text-lg font-mono font-semibold mt-1 tabular-nums',
-          tone === 'brand' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : tone === 'danger' ? 'text-red-400' : 'text-white',
+          tone === 'brand' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : tone === 'danger' ? 'text-red-400' : 'text-ink-hi',
         )}
       >
         {value}

@@ -88,7 +88,7 @@ export default function ReconciliationClient() {
         <select
           value={sessionId}
           onChange={(e) => setSessionId(e.target.value)}
-          className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white"
+          className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi"
         >
           <option value="">Select a conversion to reconcile…</option>
           {sessions.map((s) => (
@@ -156,7 +156,7 @@ function ReportView({ data, onExport }: { data: ReconResponse; onExport: () => v
         </div>
         <button
           onClick={onExport}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/[0.03] transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-navy/[0.03] transition-colors"
         >
           <Download size={13} /> Export CSV
         </button>
@@ -168,7 +168,7 @@ function ReportView({ data, onExport }: { data: ReconResponse; onExport: () => v
       <div className="mt-5 rounded-xl border border-slate-800 bg-surface-900 px-4 py-3">
         <div className="flex items-center gap-2 mb-2">
           <ListChecks size={15} className="text-brand-400" />
-          <p className="text-sm font-semibold text-white">Subledger ties to control (live)</p>
+          <p className="text-sm font-semibold text-ink-hi">Subledger ties to control (live)</p>
         </div>
         <p className="text-2xs text-slate-500 mb-2">Each subledger detail must foot to its GL control account — a hard go-live check.</p>
         <div className="rounded-lg border border-slate-800 overflow-hidden">
@@ -211,7 +211,7 @@ function SectionCard({ section }: { section: ReconSection }) {
             : section.ties
               ? <Check size={16} className="text-emerald-400" />
               : <AlertTriangle size={15} className="text-amber-400" />}
-          <p className="text-sm font-semibold text-white">{section.label}</p>
+          <p className="text-sm font-semibold text-ink-hi">{section.label}</p>
         </div>
         {!neutral && (
           <span className={`text-xs font-mono ${section.ties ? 'text-emerald-300' : 'text-amber-300'}`}>

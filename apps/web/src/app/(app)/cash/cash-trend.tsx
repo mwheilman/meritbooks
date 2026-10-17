@@ -36,7 +36,7 @@ export function CashTrend({ locationId }: { locationId?: string }) {
   if (isLoading) {
     return (
       <div className="card p-6 flex items-center justify-center h-[168px]">
-        <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
+        <Loader2 className="w-5 h-5 text-brand-400 animate-spin" />
       </div>
     );
   }
@@ -72,7 +72,7 @@ export function CashTrend({ locationId }: { locationId?: string }) {
     <div className="card p-5">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
-          <h3 className="text-sm font-semibold text-white flex items-center gap-1.5">
+          <h3 className="text-sm font-semibold text-ink-hi flex items-center gap-1.5">
             <Activity size={14} className="text-emerald-400" /> Balance Trend
           </h3>
           <p className="text-[11px] text-slate-500 mt-0.5">
@@ -81,7 +81,7 @@ export function CashTrend({ locationId }: { locationId?: string }) {
           </p>
         </div>
         <div className="text-right">
-          <p className="text-lg font-mono font-semibold text-white">{formatMoney(data?.endCents ?? 0, { compact: true })}</p>
+          <p className="text-lg font-mono font-semibold text-ink-hi">{formatMoney(data?.endCents ?? 0, { compact: true })}</p>
           <p className={clsx('text-[11px] font-mono flex items-center gap-1 justify-end', flat ? 'text-slate-500' : up ? 'text-emerald-400' : 'text-red-400')}>
             {flat ? <Minus size={11} /> : up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
             {change >= 0 ? '+' : ''}{formatMoney(change, { compact: true })}

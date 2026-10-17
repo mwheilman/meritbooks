@@ -105,10 +105,10 @@ export function SubscriptionParseReview({ onClose, onSaved }: { onClose: () => v
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="card w-full max-w-xl max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Upload subscription agreement">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-ink-hi flex items-center gap-2">
             <Sparkles size={16} className="text-indigo-400" /> Upload subscription agreement
           </h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close">
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -158,20 +158,20 @@ export function SubscriptionParseReview({ onClose, onSaved }: { onClose: () => v
               {low.size > 0 && <span className="ml-auto text-amber-400">{low.size} field(s) need review</span>}
             </div>
             <div className="rounded-lg border border-slate-800 px-3">
-              <div className={rowCls('vendor_name')}><span className="text-slate-500">Vendor</span><span className="text-white">{terms.vendor_name ?? '—'}</span></div>
-              <div className={rowCls('product')}><span className="text-slate-500">Product</span><span className="text-white">{terms.product ?? '—'}</span></div>
-              <div className={rowCls('amount_cents')}><span className="text-slate-500">Amount</span><span className="text-white font-mono">{fmtCents(terms.amount_cents)} / {terms.billing_cadence.toLowerCase()}</span></div>
-              <div className={rowCls('next_renewal_date')}><span className="text-slate-500">Next renewal</span><span className="text-white">{terms.next_renewal_date ?? '—'}</span></div>
-              <div className={rowCls('auto_renews')}><span className="text-slate-500">Auto-renews</span><span className="text-white">{terms.auto_renews === null ? '—' : terms.auto_renews ? 'Yes' : 'No'}</span></div>
-              <div className={rowCls('notice_period_days')}><span className="text-slate-500">Notice required</span><span className="text-white">{terms.notice_period_days === null ? '—' : `${terms.notice_period_days} days`}</span></div>
-              <div className={rowCls('cancellation_method')}><span className="text-slate-500">Cancel via</span><span className="text-white">{terms.cancellation_method ?? '—'}</span></div>
+              <div className={rowCls('vendor_name')}><span className="text-slate-500">Vendor</span><span className="text-ink-hi">{terms.vendor_name ?? '—'}</span></div>
+              <div className={rowCls('product')}><span className="text-slate-500">Product</span><span className="text-ink-hi">{terms.product ?? '—'}</span></div>
+              <div className={rowCls('amount_cents')}><span className="text-slate-500">Amount</span><span className="text-ink-hi font-mono">{fmtCents(terms.amount_cents)} / {terms.billing_cadence.toLowerCase()}</span></div>
+              <div className={rowCls('next_renewal_date')}><span className="text-slate-500">Next renewal</span><span className="text-ink-hi">{terms.next_renewal_date ?? '—'}</span></div>
+              <div className={rowCls('auto_renews')}><span className="text-slate-500">Auto-renews</span><span className="text-ink-hi">{terms.auto_renews === null ? '—' : terms.auto_renews ? 'Yes' : 'No'}</span></div>
+              <div className={rowCls('notice_period_days')}><span className="text-slate-500">Notice required</span><span className="text-ink-hi">{terms.notice_period_days === null ? '—' : `${terms.notice_period_days} days`}</span></div>
+              <div className={rowCls('cancellation_method')}><span className="text-slate-500">Cancel via</span><span className="text-ink-hi">{terms.cancellation_method ?? '—'}</span></div>
             </div>
             {terms.snippet && (
               <p className="mt-3 text-xs text-slate-500 italic border-l-2 border-slate-700 pl-3">“{terms.snippet}”</p>
             )}
             <div className="mt-5 flex items-center justify-end gap-2">
-              <button onClick={() => setTerms(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Upload another</button>
-              <button onClick={confirmAdd} disabled={saving} className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
+              <button onClick={() => setTerms(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-ink-hi">Upload another</button>
+              <button onClick={confirmAdd} disabled={saving} className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
                 {saving && <Loader2 size={14} className="animate-spin" />}
                 Add to register
               </button>

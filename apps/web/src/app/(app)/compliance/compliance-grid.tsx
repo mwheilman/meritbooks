@@ -75,7 +75,7 @@ export function ComplianceGrid() {
 
       <div className="card overflow-x-auto">
         <div className="px-5 py-3 border-b border-slate-800">
-          <h3 className="text-sm font-semibold text-white">March 2026 — Entity × Obligation</h3>
+          <h3 className="text-sm font-semibold text-ink-hi">March 2026 — Entity × Obligation</h3>
         </div>
         <table className="w-full">
           <thead>

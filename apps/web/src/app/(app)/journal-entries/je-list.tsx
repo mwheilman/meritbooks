@@ -112,7 +112,7 @@ export function JournalEntryList() {
             className={clsx(
               'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors',
               activeTab === tab.key
-                ? 'bg-slate-800 text-white font-medium'
+                ? 'bg-slate-800 text-ink-hi font-medium'
                 : 'text-slate-400 hover:text-slate-300'
             )}
           >

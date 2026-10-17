@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { SignUp } from '@clerk/nextjs';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { previewInvitationByToken, isWellFormedInviteToken, type InvitationPreview } from '@/lib/team/invitations';
+import { BrandLockup } from '@/components/brand/brand-mark';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,14 +43,13 @@ export default async function SignUpPage({
     <div className="min-h-screen flex items-center justify-center bg-surface-950 px-4 py-10">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-6">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/meritbooks-logo-dark.svg" alt="MeritBooks" className="h-9 w-auto" />
-          <p className="text-sm text-slate-400 mt-3">AI-native accounting platform</p>
+          <BrandLockup tone="onLight" size={36} />
+          <p className="eyebrow mt-4">AI-native accounting platform</p>
         </div>
 
         {valid && (
           <div className="mb-5 rounded-xl border border-brand-500/30 bg-surface-900 px-4 py-3.5" role="status">
-            <p className="text-sm text-white">
+            <p className="text-sm text-ink-hi">
               {valid.firstName ? `${valid.firstName}, you've` : "You've"} been invited to{' '}
               <span className="font-semibold">{valid.orgName}</span> as{' '}
               <span className="font-semibold text-brand-400">{valid.roleLabel}</span>.

@@ -40,7 +40,7 @@ export function CompanySelector({ selectedId, onChange }: CompanySelectorProps) 
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-label={`Filter by company: ${label}`}
-        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-900 border border-slate-800 text-sm text-slate-200 hover:border-slate-700 hover:bg-white/[0.02] transition-colors"
+        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-900 border border-slate-800 text-sm text-slate-200 hover:border-slate-700 hover:bg-navy/[0.02] transition-colors"
       >
         <Building2 size={14} className="text-slate-500" />
         <span className="max-w-[200px] truncate">{label}</span>
@@ -54,8 +54,8 @@ export function CompanySelector({ selectedId, onChange }: CompanySelectorProps) 
             onClick={() => { onChange(null); setIsOpen(false); }}
             className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors ${
               !selectedId
-                ? 'bg-brand-500/10 text-brand-400'
-                : 'text-slate-300 hover:bg-white/[0.04]'
+                ? 'bg-brand-500/10 text-brand-300'
+                : 'text-slate-300 hover:bg-navy/[0.04]'
             }`}
           >
             <Building2 size={14} className="text-slate-500 shrink-0" />
@@ -71,8 +71,8 @@ export function CompanySelector({ selectedId, onChange }: CompanySelectorProps) 
               onClick={() => { onChange(loc.id); setIsOpen(false); }}
               className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors ${
                 selectedId === loc.id
-                  ? 'bg-brand-500/10 text-brand-400'
-                  : 'text-slate-300 hover:bg-white/[0.04]'
+                  ? 'bg-brand-500/10 text-brand-300'
+                  : 'text-slate-300 hover:bg-navy/[0.04]'
               }`}
             >
               <span className="font-mono text-xs text-slate-500 w-8 shrink-0">{loc.short_code}</span>

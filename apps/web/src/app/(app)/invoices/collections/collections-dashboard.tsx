@@ -150,7 +150,7 @@ export function CollectionsDashboard({ embedded = false }: { embedded?: boolean 
             <Link href="/invoices" className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 mb-1">
               <ArrowLeft className="w-3.5 h-3.5" /> Invoices &amp; AR
             </Link>
-            <h1 className="text-2xl font-semibold text-white">Collections &amp; DSO</h1>
+            <h1 className="text-2xl font-semibold text-ink-hi">Collections &amp; DSO</h1>
             <p className="text-sm text-slate-400 mt-1">Aging, days sales outstanding, and the overdue worklist</p>
           </div>
         </div>
@@ -162,7 +162,7 @@ export function CollectionsDashboard({ embedded = false }: { embedded?: boolean 
           <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
           <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
             aria-label="Filter collections by company"
-            className="pl-9 pr-8 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white appearance-none cursor-pointer">
+            className="pl-9 pr-8 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi appearance-none cursor-pointer">
             <option value="">All companies</option>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
@@ -172,13 +172,13 @@ export function CollectionsDashboard({ embedded = false }: { embedded?: boolean 
         <label className="inline-flex items-center gap-2 text-xs text-slate-400">
           As of
           <input type="date" value={asOf} max={today} onChange={(e) => setAsOf(e.target.value)}
-            className="px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white" />
+            className="px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi" />
         </label>
 
         <div className="inline-flex rounded-lg border border-slate-700 overflow-hidden text-xs">
           {(['DUE_DATE', 'INVOICE_DATE'] as const).map((m) => (
             <button key={m} onClick={() => setAgingMethod(m)}
-              className={`px-3 py-2 ${agingMethod === m ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+              className={`px-3 py-2 ${agingMethod === m ? 'bg-slate-700 text-ink-hi' : 'bg-slate-800 text-slate-400 hover:text-ink-hi'}`}>
               {m === 'DUE_DATE' ? 'Age by due date' : 'Age by invoice date'}
             </button>
           ))}
@@ -187,7 +187,7 @@ export function CollectionsDashboard({ embedded = false }: { embedded?: boolean 
         <label className="inline-flex items-center gap-2 text-xs text-slate-400">
           DSO window
           <select value={dsoDays} onChange={(e) => setDsoDays(e.target.value)}
-            className="px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white">
+            className="px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi">
             <option value="30">30 days</option>
             <option value="60">60 days</option>
             <option value="90">90 days</option>
@@ -209,7 +209,7 @@ export function CollectionsDashboard({ embedded = false }: { embedded?: boolean 
       {/* Loading */}
       {isLoading && !data && (
         <div className="flex items-center justify-center py-24">
-          <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
+          <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
         </div>
       )}
 
@@ -267,7 +267,7 @@ function KpiCard({ icon: Icon, color, label, value, sub }: {
         <span className="text-xs text-slate-400">{label}</span>
         <Icon className={`w-4 h-4 ${color}`} />
       </div>
-      <p className="text-xl font-mono font-semibold text-white tabular-nums">{value}</p>
+      <p className="text-xl font-mono font-semibold text-ink-hi tabular-nums">{value}</p>
       <p className="text-xs text-slate-500 mt-1">{sub}</p>
     </div>
   );
@@ -279,7 +279,7 @@ function AgingBar({ buckets, total }: { buckets: BucketMap; total: number }) {
   return (
     <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-white">AR aging</h2>
+        <h2 className="text-sm font-semibold text-ink-hi">AR aging</h2>
         <span className="text-xs text-slate-500 font-mono">{formatMoney(total)} outstanding</span>
       </div>
       {total > 0 ? (
@@ -314,7 +314,7 @@ function TabButton({ active, onClick, label, icon: Icon }: {
   return (
     <button onClick={onClick}
       className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-t-lg transition-colors ${
-        active ? 'bg-slate-800 text-emerald-400 border-b-2 border-emerald-400' : 'text-slate-400 hover:text-white'
+        active ? 'bg-slate-800 text-brand-400 border-b-2 border-brand-500' : 'text-slate-400 hover:text-ink-hi'
       }`}>
       <Icon className="w-3.5 h-3.5" /> {label}
     </button>
@@ -341,7 +341,7 @@ function RemindButton({ inv, onRemind, busy }: {
       onClick={(e) => { e.stopPropagation(); onRemind(inv); }}
       disabled={disabled}
       title={inv.customerEmail ? `Email a payment reminder to ${inv.customerEmail}` : 'No customer email on file'}
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed">
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed">
       {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
       {busy ? 'Sending…' : inv.lastReminderAt ? 'Remind again' : 'Send reminder'}
     </button>
@@ -405,7 +405,7 @@ function Worklist({ rows, onOpen, onRemind, remindingId }: {
               <td className="py-3 pr-4 text-right">
                 <span className={`font-mono text-xs px-1.5 py-0.5 rounded ${BUCKET_TEXT[inv.bucket]} ${inv.bucket === '90+' ? 'bg-red-500/10' : ''}`}>{inv.daysOverdue}d</span>
               </td>
-              <td className="py-3 pr-4 text-right font-mono text-white font-medium tabular-nums">{formatMoney(inv.balanceCents)}</td>
+              <td className="py-3 pr-4 text-right font-mono text-ink-hi font-medium tabular-nums">{formatMoney(inv.balanceCents)}</td>
               <td className="py-3 pr-4"><LastActivity inv={inv} /></td>
               <td className="py-3 text-right"><RemindButton inv={inv} onRemind={onRemind} busy={remindingId === inv.id} /></td>
             </tr>
@@ -462,7 +462,7 @@ function CustomerTable({ customers, onOpen, onRemind, remindingId }: {
                       {c.customerName}
                     </span>
                   </td>
-                  <td className="py-3 pr-4 text-right font-mono text-white tabular-nums">{formatMoney(c.openBalanceCents)}</td>
+                  <td className="py-3 pr-4 text-right font-mono text-ink-hi tabular-nums">{formatMoney(c.openBalanceCents)}</td>
                   <td className="py-3 pr-4 text-right font-mono tabular-nums text-red-300">{c.overdueBalanceCents > 0 ? formatMoney(c.overdueBalanceCents) : '—'}</td>
                   <td className="py-3 pr-4 text-right font-mono text-xs text-slate-400">{c.oldestDaysOverdue > 0 ? `${c.oldestDaysOverdue}d` : '—'}</td>
                   <td className="py-3 pr-4 text-right font-mono text-xs text-slate-400">{c.avgDaysToPay != null ? `${c.avgDaysToPay}d` : '—'}</td>

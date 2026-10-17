@@ -68,7 +68,7 @@ export function ProposalCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div id={labelId} className="flex items-center gap-2 text-sm text-white">
+          <div id={labelId} className="flex items-center gap-2 text-sm text-ink-hi">
             <Sparkles size={13} className="shrink-0 text-ai-fg" aria-hidden />
             <span className="min-w-0">{title}</span>
           </div>
@@ -98,7 +98,7 @@ export function ProposalCard({
               className={clsx(
                 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
                 'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
-                busy ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-slate-900 hover:bg-brand-400',
+                busy ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-white hover:bg-brand-400',
               )}
             >
               <Check size={13} aria-hidden /> Accept
@@ -109,7 +109,7 @@ export function ProposalCard({
               type="button"
               onClick={onEdit}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-slate-300 hover:text-ink-hi hover:bg-slate-800/60 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
             >
               <Pencil size={12} aria-hidden /> Edit
             </button>

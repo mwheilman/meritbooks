@@ -63,7 +63,7 @@ export default function InventoryItemPage() {
       <Link href="/inventory" className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300"><ArrowLeft size={14} /> Inventory</Link>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>
       ) : error || !item ? (
         <div className="p-8 text-center">
           <AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" />
@@ -91,7 +91,7 @@ export default function InventoryItemPage() {
                 {(['RECEIPT', 'ISSUE', 'ADJUST'] as const).map((t) => (
                   <button key={t} onClick={() => setAction(t)}
                     className={clsx('px-2.5 py-2 text-xs font-medium border-b-2 -mb-px',
-                      action === t ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300')}>
+                      action === t ? 'border-brand-500 text-ink-hi' : 'border-transparent text-slate-500 hover:text-slate-300')}>
                     {TYPE_META[t].label}
                   </button>
                 ))}
@@ -171,7 +171,7 @@ function MovementRow({ m, onPosted }: { m: Movement; onPosted: () => void }) {
       <td className="px-4 py-2.5 text-right">
         {m.status === 'PROPOSED' && (
           <button onClick={approve} disabled={posting}
-            className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 rounded text-xs font-medium text-white">
+            className="inline-flex items-center gap-1 px-2 py-1 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 rounded text-xs font-medium text-white">
             {posting ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} Approve & post
           </button>
         )}
@@ -227,13 +227,13 @@ function MovementForm({ itemId, uom, action, onDone }: { itemId: string; uom: st
       <label className="block">
         <span className="text-xs text-slate-500 mb-1 block">Quantity {action === 'ADJUST' ? '(signed, e.g. -3)' : `(${uom})`}</span>
         <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^0-9.\-]/g, ''))} inputMode="decimal"
-          className="w-full bg-surface-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-600" placeholder="0" />
+          className="w-full bg-surface-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:border-brand-600" placeholder="0" />
       </label>
       {needsCost && (
         <label className="block">
           <span className="text-xs text-slate-500 mb-1 block">{action === 'RECEIPT' ? 'Total cost ($)' : 'Unit cost ($)'}</span>
           <input value={cost} onChange={(e) => setCost(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal"
-            className="w-full bg-surface-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-600" placeholder="0.00" />
+            className="w-full bg-surface-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:border-brand-600" placeholder="0.00" />
         </label>
       )}
       {action === 'ISSUE' && (
@@ -241,13 +241,13 @@ function MovementForm({ itemId, uom, action, onDone }: { itemId: string; uom: st
           <span className="text-xs text-slate-500 block">Attach to (optional)</span>
           <div className="flex gap-2">
             <select value={linkKind} onChange={(e) => setLinkKind(e.target.value as '' | 'JOB' | 'INVOICE')}
-              className="bg-surface-950 border border-slate-800 rounded-lg px-2 py-2 text-sm text-white focus:outline-none focus:border-emerald-600">
+              className="bg-surface-950 border border-slate-800 rounded-lg px-2 py-2 text-sm text-ink-hi focus:outline-none focus:border-brand-600">
               <option value="">None</option>
               <option value="JOB">Job</option>
               <option value="INVOICE">Invoice</option>
             </select>
             <input value={linkId} onChange={(e) => setLinkId(e.target.value)} disabled={!linkKind}
-              className="flex-1 bg-surface-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white disabled:opacity-40 focus:outline-none focus:border-emerald-600"
+              className="flex-1 bg-surface-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-ink-hi disabled:opacity-40 focus:outline-none focus:border-brand-600"
               placeholder={linkKind === 'JOB' ? 'Job ID' : linkKind === 'INVOICE' ? 'Invoice ID' : 'Select a type first'} />
           </div>
           <p className="text-[11px] text-slate-600">COGS still posts by role on approval; the link attaches the cost to the job or sale.</p>
@@ -256,12 +256,12 @@ function MovementForm({ itemId, uom, action, onDone }: { itemId: string; uom: st
       <label className="block">
         <span className="text-xs text-slate-500 mb-1 block">Memo (optional)</span>
         <input value={memo} onChange={(e) => setMemo(e.target.value)}
-          className="w-full bg-surface-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-600" placeholder="Reference / note" />
+          className="w-full bg-surface-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-ink-hi focus:outline-none focus:border-brand-600" placeholder="Reference / note" />
       </label>
       {cogsPreview != null && (
         <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2">
           <p className="text-[11px] uppercase tracking-wide text-indigo-300">Computed COGS impact</p>
-          <p className="font-mono text-sm font-semibold text-white">{formatMoney(cogsPreview)}</p>
+          <p className="font-mono text-sm font-semibold text-ink-hi">{formatMoney(cogsPreview)}</p>
           <p className="text-[11px] text-slate-400 mt-0.5">
             Will post DR Cost of goods sold / CR Inventory on hand when you approve it.
           </p>
@@ -270,7 +270,7 @@ function MovementForm({ itemId, uom, action, onDone }: { itemId: string; uom: st
       {err && <p className="text-red-400 text-xs">{err}</p>}
       {ok && <p className="text-emerald-400 text-xs">{ok}</p>}
       <button onClick={submit} disabled={!valid || saving}
-        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 rounded-lg text-sm font-medium text-white">
+        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 rounded-lg text-sm font-medium text-white">
         {saving ? <Loader2 size={14} className="animate-spin" /> : <Icon size={14} />}
         {action === 'RECEIPT' ? 'Record receipt' : action === 'ISSUE' ? 'Propose issue' : 'Propose adjustment'}
       </button>
@@ -282,7 +282,7 @@ function Metric({ label, value, accent }: { label: string; value: string; accent
   return (
     <div className="card p-4">
       <span className="text-xs text-slate-500 uppercase">{label}</span>
-      <p className={clsx('text-xl font-mono font-semibold mt-1', accent ? 'text-emerald-400' : 'text-white')}>{value}</p>
+      <p className={clsx('text-xl font-mono font-semibold mt-1', accent ? 'text-emerald-400' : 'text-ink-hi')}>{value}</p>
     </div>
   );
 }

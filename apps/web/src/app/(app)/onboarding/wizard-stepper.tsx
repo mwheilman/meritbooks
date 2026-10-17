@@ -38,8 +38,8 @@ export function WizardStepper({
                         : 'text-slate-500 hover:bg-slate-800/40')}
               >
                 <span className={clsx('flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold shrink-0',
-                  st === 'current' ? 'bg-brand-500 text-slate-900'
-                    : st === 'done' ? 'bg-brand-500/80 text-slate-900'
+                  st === 'current' ? 'bg-brand-500 text-white'
+                    : st === 'done' ? 'bg-brand-500 text-white'
                       : st === 'skipped' ? 'bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30'
                         : 'bg-slate-800 text-slate-500')}>
                   {st === 'done' ? <Check size={12} /> : st === 'skipped' ? <Minus size={12} /> : i + 1}

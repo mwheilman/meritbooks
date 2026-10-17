@@ -145,7 +145,7 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Sparkles size={16} className="text-emerald-400" />
-          <h3 className="text-sm font-semibold text-white">Compose with AI</h3>
+          <h3 className="text-sm font-semibold text-ink-hi">Compose with AI</h3>
           <span className="text-2xs text-slate-500">advisory — you review and post</span>
         </div>
         <button onClick={onClose} aria-label="Close AI composer" className="text-slate-500 hover:text-slate-300"><X size={16} /></button>
@@ -155,7 +155,7 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
         <div className="col-span-2">
           <label className="block text-xs text-slate-400 mb-1">Company</label>
           <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white">
+            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-ink-hi">
             <option value="">Select a company…</option>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.short_code})</option>)}
           </select>
@@ -163,18 +163,18 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
         <div>
           <label className="block text-xs text-slate-400 mb-1">Entry date</label>
           <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white" />
+            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-ink-hi" />
         </div>
       </div>
 
       <label className="block text-xs text-slate-400 mb-1">Describe the transaction in plain English</label>
       <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
         placeholder="e.g. Paid $1,200 for a 12-month business insurance policy by check from operating checking."
-        className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50" />
+        className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-ink-hi placeholder:text-slate-500 focus:outline-none focus:border-brand-500/50" />
 
       <div className="mt-3 flex items-center gap-3">
         <button onClick={compose} disabled={composing}
-          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors">
+          className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 transition-colors">
           {composing ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} Compose entry
         </button>
         {error && <span className="text-xs text-rose-400 flex items-center gap-1"><AlertTriangle size={13} /> {error}</span>}
@@ -204,7 +204,7 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
           <div>
             <label className="block text-xs text-slate-400 mb-1">Memo</label>
             <input value={memo} onChange={(e) => setMemo(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white" />
+              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-ink-hi" />
           </div>
 
           <div className="rounded-xl border border-slate-800 overflow-hidden">
@@ -220,10 +220,10 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
                 </div>
                 <input value={l.debit} onChange={(e) => updateLine(i, { debit: e.target.value, credit: '' })}
                   aria-label={`Line ${i + 1} debit amount`}
-                  className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-right text-white font-mono" placeholder="0.00" />
+                  className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-right text-ink-hi font-mono" placeholder="0.00" />
                 <input value={l.credit} onChange={(e) => updateLine(i, { credit: e.target.value, debit: '' })}
                   aria-label={`Line ${i + 1} credit amount`}
-                  className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-right text-white font-mono" placeholder="0.00" />
+                  className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-right text-ink-hi font-mono" placeholder="0.00" />
               </div>
             ))}
             <div className="grid grid-cols-[1fr_110px_110px] gap-2 px-3 py-2 border-t border-slate-700 bg-slate-800/40 text-sm font-mono">
@@ -237,7 +237,7 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
 
           <div className="flex items-center gap-3">
             <button onClick={post} disabled={posting || !totals.balanced || !allResolved}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               {posting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Post entry
             </button>
             <span className="text-2xs text-slate-500">Confidence {(proposal.confidence * 100).toFixed(0)}%</span>

@@ -114,7 +114,7 @@ export function ConfidenceExplainer({
       >
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="min-w-0">
-            <h3 id="conf-explainer-title" className="text-sm font-semibold text-white flex items-center gap-1.5">
+            <h3 id="conf-explainer-title" className="text-sm font-semibold text-ink-hi flex items-center gap-1.5">
               <Sparkles size={13} className="text-indigo-400 shrink-0" />
               Why this confidence
             </h3>
@@ -122,7 +122,7 @@ export function ConfidenceExplainer({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] transition-colors shrink-0"
+            className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-navy/[0.04] transition-colors shrink-0"
             aria-label="Close explanation"
           >
             <X size={14} />

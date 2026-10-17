@@ -47,13 +47,13 @@ export function RevRecConfig() {
     refetch();
   }, [refetch]);
 
-  if (isLoading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 text-emerald-400 animate-spin" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 text-brand-400 animate-spin" /></div>;
   if (error || !data) return <div className="card p-6 text-center"><AlertCircle className="mx-auto text-red-400 mb-2" size={20} /><p className="text-sm text-red-400">{error ?? 'Failed to load'}</p></div>;
 
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-base font-semibold text-white flex items-center gap-2"><Percent size={16} className="text-brand-400" /> Revenue Recognition</h2>
+        <h2 className="text-base font-semibold text-ink-hi flex items-center gap-2"><Percent size={16} className="text-brand-400" /> Revenue Recognition</h2>
         <p className="text-sm text-slate-500 mt-1">
           Method resolves per job: <span className="text-slate-300">job override → job-type mapping → company default</span>. One company can run several methods at once.
         </p>
@@ -81,7 +81,7 @@ export function RevRecConfig() {
               <div className="flex items-center gap-2">
                 <label className="text-2xs uppercase tracking-wider text-slate-500">Default</label>
                 <select value={c.defaultMethod} onChange={(e) => setDefault(c.locationId, e.target.value)}
-                  className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-white">
+                  className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-ink-hi">
                   {methods.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
@@ -108,13 +108,13 @@ export function RevRecConfig() {
             {/* add rule */}
             <div className="flex items-center gap-2 pt-1">
               <input value={d.jobType} onChange={(e) => setDraft((s) => ({ ...s, [c.locationId]: { ...d, jobType: e.target.value } }))}
-                placeholder="job_type (e.g. construction)" className="flex-1 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-white" />
+                placeholder="job_type (e.g. construction)" className="flex-1 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-ink-hi" />
               <select value={d.method} onChange={(e) => setDraft((s) => ({ ...s, [c.locationId]: { ...d, method: e.target.value } }))}
-                className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-white">
+                className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-ink-hi">
                 <option value="">method…</option>
                 {methods.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
-              <button onClick={() => addRule(c.locationId)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-emerald-600 text-white hover:bg-emerald-500"><Plus size={13} /> Add</button>
+              <button onClick={() => addRule(c.locationId)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-brand-500 text-white hover:bg-brand-600"><Plus size={13} /> Add</button>
             </div>
           </div>
         );

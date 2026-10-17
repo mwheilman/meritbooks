@@ -180,7 +180,7 @@ export function DepositsManager() {
             <span className="text-sm text-slate-400">Outstanding liability</span>
             <PiggyBank className="h-4 w-4 text-brand-400" />
           </div>
-          <p className="font-mono text-xl font-semibold tabular-nums text-white">{formatMoney(totalOutstanding)}</p>
+          <p className="font-mono text-xl font-semibold tabular-nums text-ink-hi">{formatMoney(totalOutstanding)}</p>
           <p className="mt-1 text-2xs text-slate-500">{openCount} open deposit{openCount === 1 ? '' : 's'}</p>
         </div>
 
@@ -189,7 +189,7 @@ export function DepositsManager() {
             <span className="text-sm text-slate-400">Deposits (all statuses)</span>
             <Users className="h-4 w-4 text-slate-400" />
           </div>
-          <p className="font-mono text-xl font-semibold tabular-nums text-white">{deposits.length}</p>
+          <p className="font-mono text-xl font-semibold tabular-nums text-ink-hi">{deposits.length}</p>
           <p className="mt-1 text-2xs text-slate-500">{rollup.length} customer{rollup.length === 1 ? '' : 's'} with a balance</p>
         </div>
 
@@ -239,7 +239,7 @@ export function DepositsManager() {
               key={t.key}
               onClick={() => setStatus(t.key)}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                status === t.key ? 'bg-brand-500/15 text-brand-400' : 'text-slate-400 hover:text-slate-200'
+                status === t.key ? 'bg-brand-500/15 text-brand-300' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               {t.label}
@@ -253,7 +253,7 @@ export function DepositsManager() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search customer or memo…"
             aria-label="Search deposits"
-            className="w-full rounded-lg border border-slate-800 bg-surface-950 py-2 pl-9 pr-3 text-sm text-white placeholder:text-slate-600 focus:border-brand-500/50 focus:outline-none"
+            className="w-full rounded-lg border border-slate-800 bg-surface-950 py-2 pl-9 pr-3 text-sm text-ink-hi placeholder:text-slate-600 focus:border-brand-500/50 focus:outline-none"
           />
         </div>
       </div>
@@ -274,7 +274,7 @@ export function DepositsManager() {
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-500/10">
             <PiggyBank className="h-6 w-6 text-brand-400" />
           </div>
-          <p className="text-white">No deposits{status !== 'ALL' ? ` in ${status.replace(/_/g, ' ').toLowerCase()}` : ''} yet</p>
+          <p className="text-ink-hi">No deposits{status !== 'ALL' ? ` in ${status.replace(/_/g, ' ').toLowerCase()}` : ''} yet</p>
           <p className="max-w-sm text-sm text-slate-500">
             Take a deposit when {activeCompany?.name ?? 'this company'} receives customer cash before (or without) an invoice — a retainer or progress deposit held as a liability.
           </p>
@@ -306,7 +306,7 @@ export function DepositsManager() {
                   <tr
                     key={d.id}
                     onClick={() => setSelectedId(d.id)}
-                    className="cursor-pointer border-b border-slate-800/60 transition-colors last:border-0 hover:bg-white/[0.02]"
+                    className="cursor-pointer border-b border-slate-800/60 transition-colors last:border-0 hover:bg-navy/[0.02]"
                   >
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-200">{d.customerName}</div>
@@ -314,7 +314,7 @@ export function DepositsManager() {
                       {d.memo && <div className="max-w-[240px] truncate text-2xs text-slate-500">{d.memo}</div>}
                     </td>
                     <td className="px-4 py-3 text-slate-400">{d.deposit_date}</td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums text-white">{formatMoney(d.amount_cents)}</td>
+                    <td className="px-4 py-3 text-right font-mono tabular-nums text-ink-hi">{formatMoney(d.amount_cents)}</td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-400">{d.applied_cents ? formatMoney(d.applied_cents) : '—'}</td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-400">{d.refunded_cents ? formatMoney(d.refunded_cents) : '—'}</td>
                     <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums text-brand-400">{formatMoney(d.remainingCents)}</td>
@@ -456,7 +456,7 @@ function NewDepositModal({
                 type="button"
                 onClick={() => setDepositTo(opt)}
                 className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                  depositTo === opt ? 'border-brand-500/50 bg-brand-500/10 text-brand-400' : 'border-slate-800 text-slate-400 hover:text-slate-200'
+                  depositTo === opt ? 'border-brand-500/50 bg-brand-500/10 text-brand-300' : 'border-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
                 {opt === 'bank' ? 'Operating bank' : 'Undeposited funds'}
@@ -589,7 +589,7 @@ function DepositDrawer({
         className="relative flex h-full w-full max-w-lg flex-col overflow-y-auto border-l border-slate-800 bg-surface-900 shadow-xl outline-none"
       >
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-          <h2 id="deposit-drawer-title" className="flex items-center gap-2 text-base font-semibold text-white">
+          <h2 id="deposit-drawer-title" className="flex items-center gap-2 text-base font-semibold text-ink-hi">
             <PiggyBank className="h-4 w-4 text-brand-400" />
             Deposit detail
           </h2>
@@ -611,7 +611,7 @@ function DepositDrawer({
             <div>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-lg font-semibold text-white">{detail.customer?.name ?? deposit.customerName}</p>
+                  <p className="text-lg font-semibold text-ink-hi">{detail.customer?.name ?? deposit.customerName}</p>
                   <p className="text-xs text-slate-500">{deposit.deposit_date}{deposit.jobLabel ? ` · ${deposit.jobLabel}` : ''}</p>
                 </div>
                 <StatusBadge status={deposit.status} variant={STATUS_VARIANT[deposit.status]} size="md" />
@@ -629,7 +629,7 @@ function DepositDrawer({
             {/* Apply */}
             {canApply ? (
               <div className="card space-y-3 p-4">
-                <p className="flex items-center gap-1.5 text-sm font-medium text-white">
+                <p className="flex items-center gap-1.5 text-sm font-medium text-ink-hi">
                   <ArrowDownRight className="h-4 w-4 text-brand-400" />
                   Apply to an invoice
                 </p>
@@ -699,7 +699,7 @@ function DepositDrawer({
             {/* Refund */}
             {remaining > 0 && deposit.status !== 'REFUNDED' && (
               <div className="card space-y-3 p-4">
-                <p className="flex items-center gap-1.5 text-sm font-medium text-white">
+                <p className="flex items-center gap-1.5 text-sm font-medium text-ink-hi">
                   <ArrowUpRight className="h-4 w-4 text-red-400" />
                   Refund remaining
                 </p>
@@ -752,7 +752,7 @@ function Stat({ label, cents, accent, muted }: { label: string; cents: number; a
   return (
     <div className="rounded-lg border border-slate-800 bg-surface-950 p-3">
       <p className="text-2xs uppercase tracking-wider text-slate-500">{label}</p>
-      <p className={`mt-1 font-mono text-base font-semibold tabular-nums ${accent ? 'text-brand-400' : muted ? 'text-slate-400' : 'text-white'}`}>
+      <p className={`mt-1 font-mono text-base font-semibold tabular-nums ${accent ? 'text-brand-400' : muted ? 'text-slate-400' : 'text-ink-hi'}`}>
         {formatMoney(cents)}
       </p>
     </div>
@@ -799,7 +799,7 @@ function Overlay({ title, children, onClose }: { title: string; children: React.
         className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-800 bg-surface-900 shadow-xl outline-none"
       >
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-          <h2 id="deposit-overlay-title" className="text-base font-semibold text-white">{title}</h2>
+          <h2 id="deposit-overlay-title" className="text-base font-semibold text-ink-hi">{title}</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-200" aria-label="Close">
             <X className="h-5 w-5" />
           </button>

@@ -101,7 +101,7 @@ function StatTile({
     tone === 'danger' ? 'bg-red-500/10 text-red-400'
     : tone === 'warn' ? 'bg-amber-500/10 text-amber-400'
     : tone === 'good' ? 'bg-emerald-500/10 text-emerald-400'
-    : 'bg-brand-500/10 text-brand-400';
+    : 'bg-brand-500/10 text-brand-300';
   return (
     <div className="card p-4">
       <div className="flex items-start justify-between">
@@ -110,7 +110,7 @@ function StatTile({
           <Icon size={14} />
         </div>
       </div>
-      <p className="mt-2 font-mono text-2xl font-semibold tabular-nums tracking-tight text-white">{value}</p>
+      <p className="mt-2 font-mono text-2xl font-semibold tabular-nums tracking-tight text-ink-hi">{value}</p>
       {hint && <p className="mt-1 text-[11px] text-slate-500">{hint}</p>}
     </div>
   );
@@ -142,7 +142,7 @@ function NetIncomeChart({ entities, highlightId }: { entities: EntityRow[]; high
     <div className="card p-5">
       <div className="mb-3 flex items-center gap-2">
         <BarChart3 size={15} className="text-brand-400" />
-        <h3 className="text-sm font-semibold text-white">Net income by entity</h3>
+        <h3 className="text-sm font-semibold text-ink-hi">Net income by entity</h3>
         <span className="text-[11px] text-slate-500">emerald = profit · red = loss</span>
       </div>
       <div className="overflow-x-auto">
@@ -155,7 +155,7 @@ function NetIncomeChart({ entities, highlightId }: { entities: EntityRow[]; high
           style={{ minWidth: 520 }}
         >
           {/* zero axis */}
-          <line x1={zeroX} y1={padT} x2={zeroX} y2={H - padB} stroke="#232C27" strokeWidth={1} />
+          <line x1={zeroX} y1={padT} x2={zeroX} y2={H - padB} stroke="#E7E3DB" strokeWidth={1} />
           {sorted.map((e, i) => {
             const y = padT + i * rowH;
             const cy = y + rowH / 2;
@@ -163,7 +163,7 @@ function NetIncomeChart({ entities, highlightId }: { entities: EntityRow[]; high
             const len = (Math.abs(ni) / maxAbs) * (plotW / 2 - 6);
             const positive = ni >= 0;
             const barX = positive ? zeroX : zeroX - len;
-            const fill = ni > 0 ? '#10b981' : ni < 0 ? '#ef4444' : '#2C362F';
+            const fill = ni > 0 ? '#10b981' : ni < 0 ? '#ef4444' : '#D9D4CA';
             const isFocus = highlightId != null && e.locationId === highlightId;
             const dim = highlightId != null && !isFocus;
             return (
@@ -175,7 +175,7 @@ function NetIncomeChart({ entities, highlightId }: { entities: EntityRow[]; high
                   dominantBaseline="central"
                   fontSize={12}
                   fontWeight={isFocus ? 600 : 400}
-                  fill={isFocus ? '#EDF2EF' : '#AEB8B2'}
+                  fill={isFocus ? '#0A1628' : '#3D4F65'}
                   opacity={dim ? 0.5 : 1}
                 >
                   {clip(e.name, 30)}
@@ -196,7 +196,7 @@ function NetIncomeChart({ entities, highlightId }: { entities: EntityRow[]; high
                   dominantBaseline="central"
                   fontSize={11}
                   fontFamily="'JetBrains Mono', monospace"
-                  fill={ni >= 0 ? '#34d399' : '#f87171'}
+                  fill={ni >= 0 ? '#04714f' : '#b91c1c'}
                   opacity={dim ? 0.4 : 1}
                 >
                   {formatMoney(ni, { compact: true })}
@@ -221,7 +221,7 @@ function SortHeader({
       className={clsx('inline-flex items-center gap-1 hover:text-slate-300', active && 'text-slate-300', align === 'right' && 'flex-row-reverse')}
     >
       {label}
-      <ArrowUpDown size={11} className={clsx(active ? 'text-emerald-400' : 'text-slate-600', active && dir === 'asc' && 'rotate-180')} />
+      <ArrowUpDown size={11} className={clsx(active ? 'text-brand-400' : 'text-slate-600', active && dir === 'asc' && 'rotate-180')} />
     </button>
   );
 }
@@ -333,18 +333,18 @@ export function ProfitabilityBoard() {
           <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-surface-900 p-1">
             <button
               onClick={() => stepMonth(-1)}
-              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-ink-hi"
               aria-label="Previous month"
             >
               <ChevronLeft size={16} />
             </button>
-            <span className="min-w-[9.5rem] px-2 text-center text-sm font-medium text-white">
+            <span className="min-w-[9.5rem] px-2 text-center text-sm font-medium text-ink-hi">
               {data?.period.label ?? new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })}
             </span>
             <button
               onClick={() => stepMonth(1)}
               disabled={isCurrentMonth}
-              className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-white disabled:opacity-30"
+              className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-ink-hi disabled:opacity-30"
               aria-label="Next month"
             >
               <ChevronRight size={16} />
@@ -382,7 +382,7 @@ export function ProfitabilityBoard() {
           {data && <span className="text-[11px] text-slate-500">Updated {relativeTime(data.generatedAt)}</span>}
           <button
             onClick={() => { setRefreshKey((k) => k + 1); refetch(); }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-surface-900 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-surface-900 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-ink-hi"
           >
             <RefreshCw size={13} className={clsx(isLoading && 'animate-spin')} />
             Refresh
@@ -392,7 +392,7 @@ export function ProfitabilityBoard() {
 
       {isLoading && !data ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
         </div>
       ) : error ? (
         <div className="card p-10 text-center">
@@ -427,7 +427,7 @@ export function ProfitabilityBoard() {
           </p>
           <button
             onClick={() => pickFocus('all')}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-ink-hi"
           >
             <Layers size={13} /> View all entities
           </button>
@@ -570,7 +570,7 @@ export function ProfitabilityBoard() {
                       <td className="px-4 py-3 text-right">
                         <Link
                           href={`/reports?location_id=${e.locationId}&start_date=${startDate}&end_date=${endDate}`}
-                          className="inline-flex items-center gap-1 rounded-md border border-slate-800 bg-surface-900 px-2.5 py-1 text-[11px] text-slate-300 hover:border-emerald-500/40 hover:text-white"
+                          className="inline-flex items-center gap-1 rounded-md border border-slate-800 bg-surface-900 px-2.5 py-1 text-[11px] text-slate-300 hover:border-brand-500/40 hover:text-ink-hi"
                         >
                           Statements
                           <ChevronRight size={11} />

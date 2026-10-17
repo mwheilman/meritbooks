@@ -101,8 +101,8 @@ export function PortfolioOnboarding() {
       {total > 0 && (
         <div className="card px-4 py-3 mb-4 flex items-center gap-4" aria-live="polite">
           <div className="text-sm text-slate-300">
-            <span className="font-mono tabular-nums text-white">{live}</span> of{' '}
-            <span className="font-mono tabular-nums text-white">{total}</span> companies live
+            <span className="font-mono tabular-nums text-ink-hi">{live}</span> of{' '}
+            <span className="font-mono tabular-nums text-ink-hi">{total}</span> companies live
           </div>
           <div
             className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden"
@@ -132,8 +132,8 @@ export function PortfolioOnboarding() {
               tabIndex={active ? 0 : -1}
               onClick={() => setTab(t.key)}
               className={clsx(
-                'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded-t',
-                active ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200',
+                'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 rounded-t',
+                active ? 'border-brand-500 text-ink-hi' : 'border-transparent text-slate-400 hover:text-slate-200',
               )}
             >
               <Icon size={15} aria-hidden />

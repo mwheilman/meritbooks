@@ -60,10 +60,10 @@ export function InvoiceTextOverrides({ scope, refId, title }: { scope: 'CUSTOMER
           <div className="flex items-start gap-2">
             {f.multiline ? (
               <textarea rows={2} value={values[f.slot] ?? ''} onChange={(e) => setValues((v) => ({ ...v, [f.slot]: e.target.value }))}
-                className="flex-1 px-2.5 py-1.5 rounded-md bg-slate-800 border border-slate-700 text-sm text-white" placeholder="Inherited" />
+                className="flex-1 px-2.5 py-1.5 rounded-md bg-slate-800 border border-slate-700 text-sm text-ink-hi" placeholder="Inherited" />
             ) : (
               <input value={values[f.slot] ?? ''} onChange={(e) => setValues((v) => ({ ...v, [f.slot]: e.target.value }))}
-                className="flex-1 px-2.5 py-1.5 rounded-md bg-slate-800 border border-slate-700 text-sm text-white" placeholder="Inherited" />
+                className="flex-1 px-2.5 py-1.5 rounded-md bg-slate-800 border border-slate-700 text-sm text-ink-hi" placeholder="Inherited" />
             )}
             <button onClick={() => saveSlot(f.slot)} disabled={savingSlot === f.slot}
               className="mt-0.5 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-slate-700 text-slate-200 hover:bg-slate-600">

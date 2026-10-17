@@ -81,7 +81,7 @@ function DifferenceExplainerPanel({ explainer }: { explainer: DifferenceExplaine
         className="flex w-full items-center gap-2 px-4 py-3 text-left"
       >
         <Scale size={14} className="text-indigo-400" />
-        <span className="text-sm font-medium text-white">What makes up the difference</span>
+        <span className="text-sm font-medium text-ink-hi">What makes up the difference</span>
         <span
           className={clsx(
             'ml-1 font-mono text-sm tabular-nums',
@@ -199,7 +199,7 @@ function AgingPanel({ aging }: { aging: AgingDto }) {
         className="flex w-full items-center gap-2 px-4 py-3 text-left"
       >
         <Layers size={14} className="text-amber-400" />
-        <span className="text-sm font-medium text-white">Outstanding item aging</span>
+        <span className="text-sm font-medium text-ink-hi">Outstanding item aging</span>
         <span className="ml-1 rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
           {aging.totals.count}
         </span>

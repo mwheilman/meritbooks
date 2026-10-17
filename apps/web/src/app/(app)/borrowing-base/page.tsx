@@ -37,6 +37,7 @@ import {
   type StmtRow,
 } from '@/lib/reports/export/statement-model';
 import { toCsv, downloadBlob } from '@/lib/reports/export/csv';
+import { getTenantBrand } from '@/lib/brand/tenant-brand';
 
 interface CollateralResponse {
   arInvoices: ArInvoiceInput[];
@@ -199,7 +200,7 @@ function BorrowingBaseInner({ consolidated }: { consolidated: boolean }) {
       periodLabel: `As of ${data?.asOf ?? new Date().toISOString().slice(0, 10)}`,
       basisLabel: `AR ${(result.arAdvanceRate * 100).toFixed(0)}% · Inventory ${(result.inventoryAdvanceRate * 100).toFixed(0)}% · Cutoff ${result.agingCutoffDays}d · Concentration cap ${(result.concentrationCapPct * 100).toFixed(0)}%`,
       generatedAt: new Date().toISOString(),
-      accent: '#10b981',
+      accent: getTenantBrand().colors.accent,
       columns: [{ key: 'amount', label: 'Amount', money: true }],
       rows,
     };
@@ -280,7 +281,7 @@ function BorrowingBaseInner({ consolidated }: { consolidated: boolean }) {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
         </div>
       ) : error ? (
         <div className="p-8 text-center">
@@ -314,7 +315,7 @@ function BorrowingBaseInner({ consolidated }: { consolidated: boolean }) {
                   type="checkbox"
                   checked={form.crossAgeTaint}
                   onChange={(e) => set('crossAgeTaint', e.target.checked)}
-                  className="mt-0.5 accent-emerald-500"
+                  className="mt-0.5 accent-brand-500"
                 />
                 <span>
                   Cross-age taint
@@ -353,7 +354,7 @@ function BorrowingBaseInner({ consolidated }: { consolidated: boolean }) {
             {/* Certificate */}
             <div className="card overflow-hidden">
               <div className="border-b border-slate-800 px-4 py-3">
-                <p className="text-sm font-medium text-white">Borrowing base certificate</p>
+                <p className="text-sm font-medium text-ink-hi">Borrowing base certificate</p>
                 <p className="text-xs text-slate-500">
                   {entityLabel} · as of {data?.asOf} · {data?.arInvoiceCount ?? 0} open invoices · {data?.inventoryItemCount ?? 0} inventory items
                 </p>
@@ -389,7 +390,7 @@ function BorrowingBaseInner({ consolidated }: { consolidated: boolean }) {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-700 bg-surface-950/40">
-                    <td className="px-4 py-3 text-sm font-semibold text-white">Net availability</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-ink-hi">Net availability</td>
                     <td className="px-4 py-3 text-right font-mono text-lg font-semibold text-emerald-400">{formatMoney(result.availabilityCents)}</td>
                   </tr>
                 </tfoot>
@@ -401,7 +402,7 @@ function BorrowingBaseInner({ consolidated }: { consolidated: boolean }) {
             {result.customers.length > 0 && (
               <div className="card overflow-hidden">
                 <div className="border-b border-slate-800 px-4 py-3">
-                  <p className="text-sm font-medium text-white">Customer concentration</p>
+                  <p className="text-sm font-medium text-ink-hi">Customer concentration</p>
                   <p className="text-xs text-slate-500">Eligible AR by customer, after past-due and concentration carve-outs.</p>
                 </div>
                 <div className="overflow-x-auto">
@@ -421,7 +422,7 @@ function BorrowingBaseInner({ consolidated }: { consolidated: boolean }) {
                         const over = result.concentrationCapPct > 0 && c.pctOfEligible > result.concentrationCapPct + 1e-9;
                         return (
                           <tr key={c.customerId} className="border-b border-slate-800/60 hover:bg-slate-800/30">
-                            <td className="px-4 py-2.5 text-white">
+                            <td className="px-4 py-2.5 text-ink-hi">
                               {c.customerName}
                               {c.hasPastDue && <span className="ml-2 text-[10px] uppercase text-red-400">past due</span>}
                             </td>
@@ -429,7 +430,7 @@ function BorrowingBaseInner({ consolidated }: { consolidated: boolean }) {
                             <td className={clsx('px-4 py-2.5 text-right font-mono', ineligible > 0 ? 'text-amber-400' : 'text-slate-600')}>
                               {ineligible > 0 ? formatMoney(ineligible) : '—'}
                             </td>
-                            <td className="px-4 py-2.5 text-right font-mono text-white">{formatMoney(c.eligibleCents)}</td>
+                            <td className="px-4 py-2.5 text-right font-mono text-ink-hi">{formatMoney(c.eligibleCents)}</td>
                             <td className={clsx('px-4 py-2.5 text-right font-mono', over ? 'text-amber-400' : 'text-slate-400')}>
                               {(c.pctOfEligible * 100).toFixed(1)}%
                             </td>
@@ -444,7 +445,7 @@ function BorrowingBaseInner({ consolidated }: { consolidated: boolean }) {
                         <td className="px-4 py-2.5 text-right font-mono text-amber-400">
                           {formatMoney(result.arPastDueIneligibleCents + result.arConcentrationIneligibleCents)}
                         </td>
-                        <td className="px-4 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(result.eligibleArCents)}</td>
+                        <td className="px-4 py-2.5 text-right font-mono font-semibold text-ink-hi">{formatMoney(result.eligibleArCents)}</td>
                         <td className="px-4 py-2.5 text-right font-mono text-slate-500">100%</td>
                       </tr>
                     </tfoot>
@@ -491,7 +492,7 @@ function Metric({ label, value, accent, big, hint }: { label: string; value: str
   return (
     <div className="card p-4">
       <span className="text-2xs uppercase text-slate-500">{label}</span>
-      <p className={clsx('mt-1 font-mono font-semibold tabular-nums', big ? 'text-2xl' : 'text-xl', accent ? 'text-emerald-400' : 'text-white')}>{value}</p>
+      <p className={clsx('mt-1 font-mono font-semibold tabular-nums', big ? 'text-2xl' : 'text-xl', accent ? 'text-emerald-400' : 'text-ink-hi')}>{value}</p>
       {hint && <p className="mt-0.5 text-[11px] text-slate-600">{hint}</p>}
     </div>
   );
@@ -509,7 +510,7 @@ function fieldWrap(label: string, hint: string | undefined, control: ReactNode) 
 
 function PercentField({ label, value, onChange, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string }) {
   return fieldWrap(label, hint, (
-    <div className="flex items-center rounded-lg border border-slate-700 bg-surface-950 focus-within:border-emerald-500/50">
+    <div className="flex items-center rounded-lg border border-slate-700 bg-surface-950 focus-within:border-brand-500/50">
       <input
         type="number"
         inputMode="decimal"
@@ -517,7 +518,7 @@ function PercentField({ label, value, onChange, hint }: { label: string; value: 
         max={100}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-transparent px-3 py-1.5 text-sm tabular-nums text-white outline-none"
+        className="w-full bg-transparent px-3 py-1.5 text-sm tabular-nums text-ink-hi outline-none"
       />
       <span className="px-3 text-xs text-slate-500">%</span>
     </div>
@@ -526,14 +527,14 @@ function PercentField({ label, value, onChange, hint }: { label: string; value: 
 
 function NumberField({ label, value, onChange, suffix }: { label: string; value: string; onChange: (v: string) => void; suffix?: string }) {
   return fieldWrap(label, undefined, (
-    <div className="flex items-center rounded-lg border border-slate-700 bg-surface-950 focus-within:border-emerald-500/50">
+    <div className="flex items-center rounded-lg border border-slate-700 bg-surface-950 focus-within:border-brand-500/50">
       <input
         type="number"
         inputMode="numeric"
         min={0}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-transparent px-3 py-1.5 text-sm tabular-nums text-white outline-none"
+        className="w-full bg-transparent px-3 py-1.5 text-sm tabular-nums text-ink-hi outline-none"
       />
       {suffix && <span className="px-3 text-xs text-slate-500">{suffix}</span>}
     </div>
@@ -542,7 +543,7 @@ function NumberField({ label, value, onChange, suffix }: { label: string; value:
 
 function MoneyField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return fieldWrap(label, undefined, (
-    <div className="flex items-center rounded-lg border border-slate-700 bg-surface-950 focus-within:border-emerald-500/50">
+    <div className="flex items-center rounded-lg border border-slate-700 bg-surface-950 focus-within:border-brand-500/50">
       <span className="pl-3 text-xs text-slate-500">$</span>
       <input
         type="text"
@@ -550,7 +551,7 @@ function MoneyField({ label, value, onChange, placeholder }: { label: string; va
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-transparent px-2 py-1.5 text-sm tabular-nums text-white outline-none placeholder:text-slate-600"
+        className="w-full bg-transparent px-2 py-1.5 text-sm tabular-nums text-ink-hi outline-none placeholder:text-slate-600"
       />
     </div>
   ));
@@ -568,7 +569,7 @@ function CertSection({ title }: { title: string }) {
 function CertLine({ label, cents, muted, strong, small }: { label: string; cents: number; muted?: boolean; strong?: boolean; small?: boolean }) {
   return (
     <tr className="border-b border-slate-800/50">
-      <td className={clsx('px-4 py-2 pl-8', small ? 'text-xs' : 'text-sm', muted ? 'text-slate-500' : strong ? 'font-medium text-white' : 'text-slate-300')}>
+      <td className={clsx('px-4 py-2 pl-8', small ? 'text-xs' : 'text-sm', muted ? 'text-slate-500' : strong ? 'font-medium text-ink-hi' : 'text-slate-300')}>
         {label}
       </td>
       <td className={clsx('px-4 py-2 text-right font-mono tabular-nums', small ? 'text-xs' : 'text-sm', muted ? 'text-slate-500' : strong ? 'font-medium text-emerald-400' : 'text-slate-200')}>
@@ -581,8 +582,8 @@ function CertLine({ label, cents, muted, strong, small }: { label: string; cents
 function CertSubtotal({ label, cents }: { label: string; cents: number }) {
   return (
     <tr className="border-t border-slate-800 bg-surface-950/30">
-      <td className="px-4 py-2 text-sm font-semibold text-white">{label}</td>
-      <td className="px-4 py-2 text-right font-mono text-sm font-semibold tabular-nums text-white">{formatMoney(cents)}</td>
+      <td className="px-4 py-2 text-sm font-semibold text-ink-hi">{label}</td>
+      <td className="px-4 py-2 text-right font-mono text-sm font-semibold tabular-nums text-ink-hi">{formatMoney(cents)}</td>
     </tr>
   );
 }

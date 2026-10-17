@@ -242,7 +242,7 @@ export function PbcClient() {
     return (
       <div className="mx-auto max-w-lg rounded-xl border border-slate-800 bg-surface-900 p-8 text-center">
         <ClipboardList className="mx-auto mb-3 h-8 w-8 text-slate-500" />
-        <h3 className="text-lg font-semibold text-white">No access to audit requests</h3>
+        <h3 className="text-lg font-semibold text-ink-hi">No access to audit requests</h3>
         <p className="mt-2 text-sm text-slate-400">
           The PBC list is available to compliance / audit roles. Ask an administrator for access.
         </p>
@@ -276,7 +276,7 @@ export function PbcClient() {
               onClick={() => setTab(t)}
               className={clsx(
                 'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
-                tab === t ? 'bg-emerald-500/15 text-emerald-300' : 'text-slate-400 hover:bg-surface-900',
+                tab === t ? 'bg-brand-500/15 text-brand-300' : 'text-slate-400 hover:bg-surface-900',
               )}
             >
               {t === 'ALL' ? 'All' : PBC_STATUS_LABEL[t]}
@@ -288,7 +288,7 @@ export function PbcClient() {
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-600"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600"
           >
             <Plus className="h-4 w-4" /> New request
           </button>
@@ -300,7 +300,7 @@ export function PbcClient() {
         <select
           value={periodFilter}
           onChange={(e) => setPeriodFilter(e.target.value)}
-          className="rounded-lg border border-slate-700 bg-surface-900 px-2.5 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+          className="rounded-lg border border-slate-700 bg-surface-900 px-2.5 py-1.5 text-xs text-ink-hi focus:border-brand-500 focus:outline-none"
         >
           <option value="">All periods</option>
           {periods.map((p) => (
@@ -312,7 +312,7 @@ export function PbcClient() {
         <select
           value={assigneeFilter}
           onChange={(e) => setAssigneeFilter(e.target.value)}
-          className="rounded-lg border border-slate-700 bg-surface-900 px-2.5 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+          className="rounded-lg border border-slate-700 bg-surface-900 px-2.5 py-1.5 text-xs text-ink-hi focus:border-brand-500 focus:outline-none"
         >
           <option value="">All assignees</option>
           {assignees.map((a) => (
@@ -326,7 +326,7 @@ export function PbcClient() {
             type="checkbox"
             checked={overdueOnly}
             onChange={(e) => setOverdueOnly(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-slate-600 bg-surface-900 text-emerald-500 focus:ring-emerald-500/50"
+            className="h-3.5 w-3.5 rounded border-slate-600 bg-surface-900 text-emerald-500 focus:ring-brand-500/50"
           />
           Overdue only
         </label>
@@ -357,7 +357,7 @@ export function PbcClient() {
             <button
               type="button"
               onClick={() => setShowCreate(true)}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-600"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600"
             >
               <Plus className="h-4 w-4" /> Raise the first request
             </button>
@@ -428,7 +428,7 @@ function PbcRow({
     <div className={clsx('flex flex-col gap-3 p-4 lg:flex-row lg:items-start lg:justify-between', !first && 'border-t border-slate-800')}>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium text-white">{item.title}</span>
+          <span className="text-sm font-medium text-ink-hi">{item.title}</span>
           <span className={clsx('rounded px-1.5 py-0.5 text-[10px] font-medium uppercase', STATUS_STYLE[item.status])}>
             {PBC_STATUS_LABEL[item.status]}
           </span>
@@ -447,7 +447,7 @@ function PbcRow({
           )}
           {item.requestedByName && <span>By {item.requestedByName}</span>}
           {item.documentName && (
-            <button type="button" onClick={onViewDoc} className="inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300">
+            <button type="button" onClick={onViewDoc} className="inline-flex items-center gap-1 text-brand-400 hover:text-brand-300">
               <FileText className="h-3 w-3" /> {item.documentName}
             </button>
           )}
@@ -462,7 +462,7 @@ function PbcRow({
             disabled={busy}
             onChange={(e) => onAssign(e.target.value)}
             title="Assign a client user"
-            className="rounded-lg border border-slate-700 bg-surface-950 px-2 py-1 text-[11px] text-slate-200 focus:border-emerald-500 focus:outline-none disabled:opacity-50"
+            className="rounded-lg border border-slate-700 bg-surface-950 px-2 py-1 text-[11px] text-slate-200 focus:border-brand-500 focus:outline-none disabled:opacity-50"
           >
             <option value="">Unassigned</option>
             {assignees.map((a) => (
@@ -586,8 +586,8 @@ function CreateRequestModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-md rounded-xl border border-slate-800 bg-surface-950 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-white">New audit request</h3>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-white">
+          <h3 className="text-base font-semibold text-ink-hi">New audit request</h3>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-ink-hi">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -597,7 +597,7 @@ function CreateRequestModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. June bank statements — Operating account"
-              className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi placeholder:text-slate-600 focus:border-brand-500 focus:outline-none"
             />
           </Field>
           <Field label="Description" optional>
@@ -606,7 +606,7 @@ function CreateRequestModal({
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
               placeholder="What exactly do you need, and why?"
-              className="w-full resize-none rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
+              className="w-full resize-none rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi placeholder:text-slate-600 focus:border-brand-500 focus:outline-none"
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
@@ -614,7 +614,7 @@ function CreateRequestModal({
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as PbcCategory | '')}
-                className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi focus:border-brand-500 focus:outline-none"
               >
                 <option value="">—</option>
                 {PBC_CATEGORIES.map((c) => (
@@ -629,7 +629,7 @@ function CreateRequestModal({
                 value={periodLabel}
                 onChange={(e) => setPeriodLabel(e.target.value)}
                 placeholder="FY2026 / 2026-06"
-                className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi placeholder:text-slate-600 focus:border-brand-500 focus:outline-none"
               />
             </Field>
           </div>
@@ -639,14 +639,14 @@ function CreateRequestModal({
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi focus:border-brand-500 focus:outline-none"
               />
             </Field>
             <Field label="Assign to" optional>
               <select
                 value={assignedTo}
                 onChange={(e) => setAssignedTo(e.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi focus:border-brand-500 focus:outline-none"
               >
                 <option value="">Unassigned</option>
                 {assignees.map((a) => (
@@ -666,7 +666,7 @@ function CreateRequestModal({
             type="button"
             onClick={submit}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             Raise request

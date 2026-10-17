@@ -154,7 +154,7 @@ export function TourClient() {
           </div>
 
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold text-white tracking-tight flex items-center justify-center gap-2">
+            <h1 className="text-2xl font-semibold text-ink-hi tracking-tight flex items-center justify-center gap-2">
               {isFinal && <Sparkles size={18} className="text-brand-400" aria-hidden="true" />}
               {step.title}
             </h1>
@@ -204,7 +204,7 @@ export function TourClient() {
             type="button"
             onClick={goBack}
             disabled={isFirst}
-            className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:text-ink-hi disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <ArrowLeft size={14} aria-hidden="true" /> Back
           </button>
@@ -213,7 +213,7 @@ export function TourClient() {
             <Link
               href={step.cta?.href ?? '/dashboard'}
               onClick={markTourSeen}
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-5 py-2 text-sm font-medium text-slate-900 hover:bg-brand-400 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-5 py-2 text-sm font-medium text-white hover:bg-brand-400 transition-colors"
             >
               {step.cta?.label ?? 'Start using MeritBooks'}{' '}
               <ArrowRight size={14} aria-hidden="true" />
@@ -222,7 +222,7 @@ export function TourClient() {
             <button
               type="button"
               onClick={goNext}
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-5 py-2 text-sm font-medium text-slate-900 hover:bg-brand-400 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-5 py-2 text-sm font-medium text-white hover:bg-brand-400 transition-colors"
             >
               Next <ArrowRight size={14} aria-hidden="true" />
             </button>

@@ -39,7 +39,7 @@ export function BillsClient() {
               </button>
               <button
                 onClick={() => setShowCreate(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 transition-colors"
               >
                 <Plus size={16} /> New Bill
               </button>

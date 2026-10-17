@@ -71,7 +71,7 @@ export function ConnectedSystemFallback({ kind }: { kind: SubledgerKind }) {
       <div className="flex items-start gap-2">
         <FileDown size={16} className="mt-0.5 shrink-0 text-brand-400" aria-hidden />
         <div>
-          <p id={`${groupId}-title`} className="text-sm font-semibold text-white">Export from your system in about a minute</p>
+          <p id={`${groupId}-title`} className="text-sm font-semibold text-ink-hi">Export from your system in about a minute</p>
           <p className="mt-0.5 text-xs text-slate-400">
             Your accounting system isn’t connected to MeritBooks yet, so we can’t pull these for you. Export your{' '}
             {noun}, then drop the file below.

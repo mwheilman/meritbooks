@@ -142,7 +142,7 @@ function StatTile({ label, value, hint, icon: Icon, tone = 'default' }: StatTile
     tone === 'danger' ? 'bg-red-500/10 text-red-400'
     : tone === 'warn' ? 'bg-amber-500/10 text-amber-400'
     : tone === 'good' ? 'bg-emerald-500/10 text-emerald-400'
-    : 'bg-brand-500/10 text-brand-400';
+    : 'bg-brand-500/10 text-brand-300';
   return (
     <div className="card p-4">
       <div className="flex items-start justify-between">
@@ -151,7 +151,7 @@ function StatTile({ label, value, hint, icon: Icon, tone = 'default' }: StatTile
           <Icon size={14} />
         </div>
       </div>
-      <p className="mt-2 font-mono text-2xl font-semibold tabular-nums tracking-tight text-white">{value}</p>
+      <p className="mt-2 font-mono text-2xl font-semibold tabular-nums tracking-tight text-ink-hi">{value}</p>
       {hint && <p className="mt-1 text-[11px] text-slate-500">{hint}</p>}
     </div>
   );
@@ -234,18 +234,18 @@ export function CloseStatusBoard() {
         <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-surface-900 p-1">
           <button
             onClick={() => stepMonth(-1)}
-            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-ink-hi"
             aria-label="Previous month"
           >
             <ChevronLeft size={16} />
           </button>
-          <span className="min-w-[9.5rem] px-2 text-center text-sm font-medium text-white">
+          <span className="min-w-[9.5rem] px-2 text-center text-sm font-medium text-ink-hi">
             {data?.period.label ?? new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })}
           </span>
           <button
             onClick={() => stepMonth(1)}
             disabled={isCurrentMonth}
-            className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-white disabled:opacity-30"
+            className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-ink-hi disabled:opacity-30"
             aria-label="Next month"
           >
             <ChevronRight size={16} />
@@ -258,7 +258,7 @@ export function CloseStatusBoard() {
           )}
           <button
             onClick={() => { setRefreshKey((k) => k + 1); refetch(); }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-surface-900 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-surface-900 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-ink-hi"
           >
             <RefreshCw size={13} className={clsx(isLoading && 'animate-spin')} />
             Refresh
@@ -268,7 +268,7 @@ export function CloseStatusBoard() {
 
       {isLoading && !data ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
         </div>
       ) : error ? (
         <div className="card p-10 text-center">
@@ -425,7 +425,7 @@ function SortHeader({
       className={clsx('inline-flex items-center gap-1 hover:text-slate-300', active && 'text-slate-300', align === 'right' && 'flex-row-reverse')}
     >
       {label}
-      <ArrowUpDown size={11} className={clsx(active ? 'text-emerald-400' : 'text-slate-600', active && dir === 'asc' && 'rotate-180')} />
+      <ArrowUpDown size={11} className={clsx(active ? 'text-brand-400' : 'text-slate-600', active && dir === 'asc' && 'rotate-180')} />
     </button>
   );
 }
@@ -441,7 +441,7 @@ function EntityDetail({ e }: { e: EntityCloseStatus }) {
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       {/* What's blocking */}
       <div>
-        <p className="mb-2 text-xs font-semibold text-white">What&apos;s blocking a clean close</p>
+        <p className="mb-2 text-xs font-semibold text-ink-hi">What&apos;s blocking a clean close</p>
         {e.blockers.length === 0 ? (
           <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-300">
             <CheckCircle2 size={14} />
@@ -467,7 +467,7 @@ function EntityDetail({ e }: { e: EntityCloseStatus }) {
 
       {/* Signal breakdown + drill-in links */}
       <div className="space-y-3">
-        <p className="text-xs font-semibold text-white">Signals</p>
+        <p className="text-xs font-semibold text-ink-hi">Signals</p>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
           <SignalRow label="Not in the GL" value={formatMoney(e.leakageAtRiskCents)} sub={`${e.leakageItems} item(s)`} tone={e.leakageTier === 'escalate' ? 'danger' : e.leakageAtRiskCents > 0 ? 'warn' : 'muted'} />
           <SignalRow label="Open exceptions" value={String(e.openExceptions)} sub={e.exceptionAtRiskCents > 0 ? `${formatMoney(e.exceptionAtRiskCents)} at risk` : 'review queue'} tone={e.openExceptions > 0 ? 'warn' : 'muted'} />
@@ -551,7 +551,7 @@ function DrillLink({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="inline-flex items-center gap-1 rounded-md border border-slate-800 bg-surface-900 px-2.5 py-1 text-[11px] text-slate-300 hover:border-emerald-500/40 hover:text-white"
+      className="inline-flex items-center gap-1 rounded-md border border-slate-800 bg-surface-900 px-2.5 py-1 text-[11px] text-slate-300 hover:border-brand-500/40 hover:text-ink-hi"
     >
       {label}
       <ChevronRight size={11} />

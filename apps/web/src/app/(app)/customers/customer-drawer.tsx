@@ -74,13 +74,13 @@ function StatementActions({ customerId, hasEmail }: { customerId: string; hasEma
   };
 
   const toggle = 'px-2.5 py-1 rounded-md text-xs font-medium transition-colors';
-  const dateInput = 'px-2 py-1 rounded-md bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50';
+  const dateInput = 'px-2 py-1 rounded-md bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-brand-500/50';
   const canAct = !rangeInvalid;
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <button onClick={() => setMode('open')} className={`${toggle} ${mode === 'open' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Open items</button>
-        <button onClick={() => setMode('activity')} className={`${toggle} ${mode === 'activity' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Activity</button>
+        <button onClick={() => setMode('open')} className={`${toggle} ${mode === 'open' ? 'bg-brand-500 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Open items</button>
+        <button onClick={() => setMode('activity')} className={`${toggle} ${mode === 'activity' ? 'bg-brand-500 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Activity</button>
         <div className="ml-auto flex items-center gap-1.5">
           <span className="text-2xs text-slate-500 uppercase tracking-wider">As of</span>
           <input type="date" value={asOf} max={today} onChange={(e) => setAsOf(e.target.value || today)} className={dateInput} />
@@ -112,7 +112,7 @@ function StatementActions({ customerId, hasEmail }: { customerId: string; hasEma
         </button>
         <button onClick={send} disabled={sending || !hasEmail || !canAct}
           title={hasEmail ? 'Email this statement to the customer' : 'No customer email on file'}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed">
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed">
           {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
           {sending ? 'Sending…' : 'Send statement'}
         </button>
@@ -342,7 +342,7 @@ function ArGlanceStrip({ ar }: { ar: CustDetail['ar'] }) {
       label: 'Total open',
       value: formatMoney(ar.totalOutstanding),
       sub: ar.openInvoiceCount > 0 ? `${ar.openInvoiceCount} open invoice${ar.openInvoiceCount !== 1 ? 's' : ''}` : 'Zero balance',
-      tone: 'text-white',
+      tone: 'text-ink-hi',
     },
     {
       label: 'Overdue',

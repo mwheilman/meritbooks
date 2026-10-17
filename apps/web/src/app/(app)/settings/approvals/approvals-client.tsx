@@ -166,7 +166,7 @@ export function ApprovalWorkflowsClient() {
   return (
     <div className="space-y-6">
       {/* View tabs — deepen the admin experience without changing enforcement. */}
-      <div role="tablist" aria-label="Approval workflow views" className="flex flex-wrap gap-1 border-b border-white/5">
+      <div role="tablist" aria-label="Approval workflow views" className="flex flex-wrap gap-1 border-b border-slate-800">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -176,7 +176,7 @@ export function ApprovalWorkflowsClient() {
             onClick={() => setTab(t.id)}
             className={`-mb-px rounded-t-lg border-b-2 px-3.5 py-2 text-xs font-medium focus:outline-none ${
               tab === t.id
-                ? 'border-emerald-500 text-white'
+                ? 'border-brand-500 text-ink-hi'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -186,7 +186,7 @@ export function ApprovalWorkflowsClient() {
       </div>
 
       {tab !== 'configure' && loading && (
-        <div className="rounded-lg border border-white/5 bg-surface-900 p-4 text-xs text-slate-500">
+        <div className="rounded-lg border border-slate-800 bg-surface-900 p-4 text-xs text-slate-500">
           Loading workflows…
         </div>
       )}
@@ -200,8 +200,8 @@ export function ApprovalWorkflowsClient() {
       {tab === 'configure' && (
         <div className="space-y-8">
       {/* Builder */}
-      <section className="rounded-xl border border-white/5 bg-surface-900 p-5">
-        <h2 className="text-sm font-semibold text-white">Define a workflow</h2>
+      <section className="rounded-xl border border-slate-800 bg-surface-900 p-5">
+        <h2 className="text-sm font-semibold text-ink-hi">Define a workflow</h2>
         <p className="mt-1 text-xs text-slate-400">
           Steps stack by amount: a document triggers every step whose band covers its total, walked in order. Example: a
           manager on all bills, a controller on $10k+, a CFO on $50k+.
@@ -213,7 +213,7 @@ export function ApprovalWorkflowsClient() {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-surface-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              className="mt-1 w-full rounded-lg border border-slate-800 bg-surface-950 px-3 py-2 text-sm text-ink-hi focus:border-brand-500 focus:outline-none"
               placeholder="AP approval chain"
             />
           </label>
@@ -222,7 +222,7 @@ export function ApprovalWorkflowsClient() {
             <select
               value={docType}
               onChange={(e) => setDocType(e.target.value as WorkflowDocType)}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-surface-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              className="mt-1 w-full rounded-lg border border-slate-800 bg-surface-950 px-3 py-2 text-sm text-ink-hi focus:border-brand-500 focus:outline-none"
             >
               {WORKFLOW_DOC_TYPES.map((t) => (
                 <option key={t} value={t}>{DOC_TYPE_LABEL[t]}</option>
@@ -233,7 +233,7 @@ export function ApprovalWorkflowsClient() {
 
         <div className="mt-5 space-y-3">
           {steps.map((st, i) => (
-            <div key={i} className="rounded-lg border border-white/5 bg-surface-950 p-3">
+            <div key={i} className="rounded-lg border border-slate-800 bg-surface-950 p-3">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-2xs text-slate-500">STEP {st.stepOrder}</span>
                 {steps.length > 1 && (
@@ -253,7 +253,7 @@ export function ApprovalWorkflowsClient() {
                     inputMode="decimal"
                     value={st.minDollars}
                     onChange={(e) => patchStep(i, { minDollars: e.target.value })}
-                    className="mt-1 w-full rounded-md border border-white/10 bg-surface-900 px-2 py-1.5 font-mono text-sm text-white focus:border-emerald-500 focus:outline-none"
+                    className="mt-1 w-full rounded-md border border-slate-800 bg-surface-900 px-2 py-1.5 font-mono text-sm text-ink-hi focus:border-brand-500 focus:outline-none"
                   />
                 </label>
                 <label className="block">
@@ -263,7 +263,7 @@ export function ApprovalWorkflowsClient() {
                     value={st.maxDollars}
                     onChange={(e) => patchStep(i, { maxDollars: e.target.value })}
                     placeholder="—"
-                    className="mt-1 w-full rounded-md border border-white/10 bg-surface-900 px-2 py-1.5 font-mono text-sm text-white focus:border-emerald-500 focus:outline-none"
+                    className="mt-1 w-full rounded-md border border-slate-800 bg-surface-900 px-2 py-1.5 font-mono text-sm text-ink-hi focus:border-brand-500 focus:outline-none"
                   />
                 </label>
                 <label className="block">
@@ -271,7 +271,7 @@ export function ApprovalWorkflowsClient() {
                   <select
                     value={st.approverRole}
                     onChange={(e) => patchStep(i, { approverRole: e.target.value as UserRole })}
-                    className="mt-1 w-full rounded-md border border-white/10 bg-surface-900 px-2 py-1.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                    className="mt-1 w-full rounded-md border border-slate-800 bg-surface-900 px-2 py-1.5 text-sm text-ink-hi focus:border-brand-500 focus:outline-none"
                   >
                     {APPROVER_ROLES.map((r) => (
                       <option key={r} value={r}>{ROLE_DEFINITIONS[r].label}</option>
@@ -283,7 +283,7 @@ export function ApprovalWorkflowsClient() {
                     type="checkbox"
                     checked={st.requireDistinct}
                     onChange={(e) => patchStep(i, { requireDistinct: e.target.checked })}
-                    className="h-4 w-4 rounded border-white/20 bg-surface-900 text-emerald-500"
+                    className="h-4 w-4 rounded border-slate-700 bg-surface-900 text-emerald-500"
                   />
                   <span className="text-2xs text-slate-400">Distinct approver</span>
                 </label>
@@ -296,7 +296,7 @@ export function ApprovalWorkflowsClient() {
           <button
             type="button"
             onClick={addStep}
-            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:border-emerald-500/40 hover:text-white"
+            className="rounded-lg border border-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:border-brand-500/40 hover:text-ink-hi"
           >
             + Add step
           </button>
@@ -304,7 +304,7 @@ export function ApprovalWorkflowsClient() {
             type="button"
             onClick={submit}
             disabled={saving || formErrors.length > 0}
-            className="rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-semibold text-surface-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg bg-brand-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {saving ? 'Saving…' : 'Save & activate'}
           </button>
@@ -314,7 +314,7 @@ export function ApprovalWorkflowsClient() {
 
       {/* Existing workflows */}
       <section>
-        <h2 className="mb-3 text-sm font-semibold text-white">Configured workflows</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink-hi">Configured workflows</h2>
         {loading ? (
           <div className="text-xs text-slate-500">Loading…</div>
         ) : error ? (
@@ -324,11 +324,11 @@ export function ApprovalWorkflowsClient() {
         ) : (
           <div className="space-y-3">
             {workflows.map((wf) => (
-              <div key={wf.id} className="rounded-xl border border-white/5 bg-surface-900 p-4">
+              <div key={wf.id} className="rounded-xl border border-slate-800 bg-surface-900 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-white">{wf.name}</span>
+                      <span className="text-sm font-medium text-ink-hi">{wf.name}</span>
                       <StatusBadge status={wf.active ? 'ACTIVE' : 'DRAFT'} />
                     </div>
                     <div className="mt-0.5 text-2xs text-slate-500">{DOC_TYPE_LABEL[wf.docType]}</div>
@@ -336,7 +336,7 @@ export function ApprovalWorkflowsClient() {
                   <button
                     type="button"
                     onClick={() => toggleActive(wf)}
-                    className="rounded-lg border border-white/10 px-3 py-1.5 text-2xs text-slate-300 hover:border-emerald-500/40 hover:text-white"
+                    className="rounded-lg border border-slate-800 px-3 py-1.5 text-2xs text-slate-300 hover:border-brand-500/40 hover:text-ink-hi"
                   >
                     {wf.active ? 'Deactivate' : 'Activate'}
                   </button>
@@ -345,7 +345,7 @@ export function ApprovalWorkflowsClient() {
                   {wf.steps.map((s) => (
                     <li key={s.stepOrder} className="flex items-center gap-3 text-xs text-slate-300">
                       <span className="font-mono text-2xs text-slate-500">#{s.stepOrder}</span>
-                      <span className="font-medium text-white">{ROLE_DEFINITIONS[s.approverRole]?.label ?? s.approverRole}</span>
+                      <span className="font-medium text-ink-hi">{ROLE_DEFINITIONS[s.approverRole]?.label ?? s.approverRole}</span>
                       <span className="text-slate-500">
                         {formatMoney(s.minAmountCents)}
                         {s.maxAmountCents === null ? '+' : `–${formatMoney(s.maxAmountCents)}`}

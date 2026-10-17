@@ -149,10 +149,10 @@ export default function SettingsPage() {
     setSaving(false);
   }, [orgName, contactName, contactEmail, timezone, fiscalMonth, chaseFirst, chaseFollowup, chaseEscalation, chaseQuietStart, chaseQuietEnd, chaseChannel, chaseAutoApprove, aiThreshold, aiMaxCents, refetch]);
 
-  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>;
   if (error) return <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-red-400 text-sm">{error}</p></div>;
 
-  const inputCls = "w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50";
+  const inputCls = "w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50";
   const labelCls = "block text-xs text-slate-500 mb-1.5 font-medium";
 
   // The Cost Routing tab manages its own persistence; the org Save bar doesn't apply there.
@@ -172,7 +172,7 @@ export default function SettingsPage() {
                 className={clsx('w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left',
                   activeTab === tab.key
                     ? (isDanger ? 'bg-red-500/10 text-red-400 font-medium' : 'bg-emerald-500/10 text-emerald-400 font-medium')
-                    : (isDanger ? 'text-red-400/70 hover:text-red-300 hover:bg-red-500/5 mt-2 border-t border-slate-800 pt-3' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'))}>
+                    : (isDanger ? 'text-red-400/70 hover:text-red-300 hover:bg-red-500/5 mt-2 border-t border-slate-800 pt-3' : 'text-slate-400 hover:text-ink-hi hover:bg-slate-800/50'))}>
                 <Icon size={15} />{tab.label}
               </button>
             );
@@ -182,7 +182,7 @@ export default function SettingsPage() {
         <div className="flex-1 max-w-2xl">
           {activeTab === 'organization' && (
             <div className="card p-6 space-y-5">
-              <h2 className="text-lg font-semibold text-white">Organization</h2>
+              <h2 className="text-lg font-semibold text-ink-hi">Organization</h2>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className={labelCls}>Organization Name</label><input value={orgName} onChange={(e) => setOrgName(e.target.value)} className={inputCls} /></div>
                 <div><label className={labelCls}>Slug</label><input value={org?.slug ?? ''} disabled className={clsx(inputCls, 'opacity-50 cursor-not-allowed')} /></div>
@@ -207,7 +207,7 @@ export default function SettingsPage() {
 
           {activeTab === 'chase' && (
             <div className="card p-6 space-y-5">
-              <h2 className="text-lg font-semibold text-white">Receipt Chase Configuration</h2>
+              <h2 className="text-lg font-semibold text-ink-hi">Receipt Chase Configuration</h2>
               <p className="text-xs text-slate-500">Controls how aggressively MeritBooks chases missing receipts from cardholders.</p>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className={labelCls}>First Reminder (minutes after charge)</label><input type="number" value={chaseFirst} onChange={(e) => setChaseFirst(Number(e.target.value))} className={inputCls} min={5} max={1440} /></div>
@@ -230,7 +230,7 @@ export default function SettingsPage() {
 
           {activeTab === 'ai' && (
             <div className="card p-6 space-y-5">
-              <h2 className="text-lg font-semibold text-white">AI Categorization Thresholds</h2>
+              <h2 className="text-lg font-semibold text-ink-hi">AI Categorization Thresholds</h2>
               <p className="text-xs text-slate-500">Controls when AI auto-approves bank feed transactions vs sending them for human review.</p>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className={labelCls}>Auto-Approve Confidence (%)</label><input type="number" value={Math.round(aiThreshold * 100)} onChange={(e) => setAiThreshold(Number(e.target.value) / 100)} className={inputCls} min={50} max={100} step={1} /><span className="text-[10px] text-slate-600">≥ this confidence = auto-approve</span></div>
@@ -260,7 +260,7 @@ export default function SettingsPage() {
               {!saveError && !saved && <div />}
               <button onClick={handleSave} disabled={saving}
                 className={clsx('flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors',
-                  saving ? 'bg-slate-700 text-slate-500' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
+                  saving ? 'bg-slate-700 text-slate-500' : 'bg-brand-500 text-white hover:bg-brand-600')}>
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                 Save Settings
               </button>

@@ -35,7 +35,7 @@ interface CreateResponse {
 }
 
 const inputCls =
-  'w-full px-3 py-2.5 bg-surface-900 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20';
+  'w-full px-3 py-2.5 bg-surface-900 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-600 focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20';
 const labelCls = 'block text-xs text-slate-400 mb-1.5 font-medium';
 
 function detectTimezone(): string {
@@ -159,7 +159,7 @@ export default function SetupPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-white tracking-tight">Welcome to MeritBooks</h1>
+        <h1 className="text-2xl font-semibold text-ink-hi tracking-tight">Welcome to MeritBooks</h1>
         <p className="text-sm text-slate-400 mt-1.5">
           {activatable.length > 0
             ? 'You already belong to an organization. Pick up where you left off.'
@@ -179,7 +179,7 @@ export default function SetupPage() {
             >
               <span className="flex items-center gap-2.5">
                 <Building2 size={16} className="text-brand-400" />
-                <span className="text-sm text-white">{o.name}</span>
+                <span className="text-sm text-ink-hi">{o.name}</span>
               </span>
               <span className="flex items-center gap-1 text-xs text-brand-300">Continue <ArrowRight size={13} /></span>
             </button>
@@ -263,7 +263,7 @@ export default function SetupPage() {
             type="submit"
             disabled={!valid || submitting}
             className={clsx('w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              !valid || submitting ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-slate-900 hover:bg-brand-400')}
+              !valid || submitting ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-white hover:bg-brand-400')}
           >
             {submitting ? <Loader2 size={15} className="animate-spin" /> : <ArrowRight size={15} />}
             {submitting ? 'Creating your organization…' : 'Continue to set up your books'}

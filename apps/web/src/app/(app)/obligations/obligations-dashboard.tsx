@@ -52,7 +52,7 @@ const TYPE_META: Record<
   SUBSCRIPTION: { label: 'Subscription', icon: Repeat, badge: 'bg-fuchsia-500/10 text-fuchsia-300 ring-fuchsia-500/20' },
   VENDOR_W9: { label: 'W-9', icon: FileText, badge: 'bg-amber-500/10 text-amber-300 ring-amber-500/20' },
   VENDOR_COI: { label: 'COI', icon: FileText, badge: 'bg-amber-500/10 text-amber-300 ring-amber-500/20' },
-  RECURRING_INVOICE: { label: 'Recurring invoice', icon: CreditCard, badge: 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/20' },
+  RECURRING_INVOICE: { label: 'Recurring invoice', icon: CreditCard, badge: 'bg-emerald-500/10 text-emerald-300 ring-brand-500/20' },
 };
 
 const HORIZON_SECTIONS: Array<{ key: HorizonBucket; title: string; hint: string }> = [
@@ -118,7 +118,7 @@ function ObligationRow({ o }: { o: Obligation }) {
           >
             {meta.label}
           </span>
-          <span className="truncate text-sm font-medium text-white">{o.title}</span>
+          <span className="truncate text-sm font-medium text-ink-hi">{o.title}</span>
         </div>
         {o.subtitle && <p className="mt-0.5 truncate text-xs text-slate-500">{o.subtitle}</p>}
       </div>
@@ -144,7 +144,7 @@ function Metric({ label, value, tone }: { label: string; value: string; tone?: s
   return (
     <div className="rounded-xl border border-slate-800 bg-surface-900 px-4 py-3">
       <p className="text-xs text-slate-500">{label}</p>
-      <p className={clsx('mt-1 font-mono text-lg font-semibold', tone ?? 'text-white')}>{value}</p>
+      <p className={clsx('mt-1 font-mono text-lg font-semibold', tone ?? 'text-ink-hi')}>{value}</p>
     </div>
   );
 }
@@ -197,7 +197,7 @@ export function ObligationsDashboard() {
         <Metric
           label="Overdue"
           value={String(summary?.overdue ?? 0)}
-          tone={(summary?.overdue ?? 0) > 0 ? 'text-red-400' : 'text-white'}
+          tone={(summary?.overdue ?? 0) > 0 ? 'text-red-400' : 'text-ink-hi'}
         />
         <Metric label="Next 30 days" value={String(summary?.d30 ?? 0)} tone="text-amber-400" />
         <Metric label="31–90 days" value={String((summary?.d60 ?? 0) + (summary?.d90 ?? 0))} />
@@ -218,7 +218,7 @@ export function ObligationsDashboard() {
               className={clsx(
                 'rounded-full px-3 py-1 text-xs font-medium transition',
                 typeFilter === f.value
-                  ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-inset ring-emerald-500/30'
+                  ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-inset ring-brand-500/30'
                   : 'bg-slate-800/50 text-slate-400 hover:text-slate-200',
               )}
             >
@@ -235,7 +235,7 @@ export function ObligationsDashboard() {
             id="horizon"
             value={horizon}
             onChange={(e) => setHorizon(Number(e.target.value))}
-            className="rounded-lg border border-slate-800 bg-surface-900 px-2.5 py-1.5 text-xs text-slate-200 focus:border-emerald-500/50 focus:outline-none"
+            className="rounded-lg border border-slate-800 bg-surface-900 px-2.5 py-1.5 text-xs text-slate-200 focus:border-brand-500/50 focus:outline-none"
           >
             {HORIZON_OPTIONS.map((d) => (
               <option key={d} value={d}>

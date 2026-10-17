@@ -85,7 +85,7 @@ export function VendorPaymentDetailsModal({
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-white">Payment details</h3>
+            <h3 className="text-sm font-semibold text-ink-hi">Payment details</h3>
             <p className="text-2xs text-slate-500 mt-0.5 max-w-[300px] truncate">{vendorName}</p>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
@@ -133,7 +133,7 @@ export function VendorPaymentDetailsModal({
                     className={clsx(
                       'px-3 py-2 rounded-lg text-xs font-medium border capitalize transition-colors',
                       accountType === t
-                        ? 'bg-slate-700 border-slate-600 text-white'
+                        ? 'bg-slate-700 border-slate-600 text-ink-hi'
                         : 'bg-surface-950 border-slate-800 text-slate-400 hover:border-slate-700',
                     )}
                   >
@@ -194,7 +194,7 @@ export function VendorPaymentDetailsModal({
           <button
             onClick={save}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40 transition-colors"
           >
             {saving ? <Loader2 size={12} className="animate-spin" /> : <ShieldCheck size={12} />} Save details
           </button>
@@ -205,7 +205,7 @@ export function VendorPaymentDetailsModal({
 }
 
 const inputCls =
-  'w-full px-2.5 py-1.5 rounded-md bg-surface-950 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-600';
+  'w-full px-2.5 py-1.5 rounded-md bg-surface-950 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-brand-600';
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (

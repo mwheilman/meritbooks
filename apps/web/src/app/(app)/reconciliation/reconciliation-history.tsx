@@ -140,14 +140,14 @@ export function ReconciliationHistory({
             {selected && (
               <button
                 onClick={() => setSelected(null)}
-                className="rounded-md p-1 text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+                className="rounded-md p-1 text-slate-400 hover:bg-navy/[0.04] hover:text-slate-200"
                 aria-label="Back to history list"
               >
                 <ChevronLeft size={18} />
               </button>
             )}
             <div>
-              <h3 className="flex items-center gap-2 text-base font-semibold text-white">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-ink-hi">
                 <History size={16} className="text-indigo-400" />
                 {selected ? 'Reconciliation detail' : 'Reconciliation history'}
               </h3>
@@ -156,7 +156,7 @@ export function ReconciliationHistory({
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-1.5 text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"
+            className="rounded-md p-1.5 text-slate-500 hover:bg-navy/[0.04] hover:text-slate-200"
             aria-label="Close"
           >
             <X size={18} />
@@ -209,7 +209,7 @@ export function ReconciliationHistory({
                       onClick={() => openDetail(r.id)}
                       className="cursor-pointer hover:bg-slate-800/20"
                     >
-                      <td className="px-3 py-2.5 text-white">{periodLabel(r.periodYear, r.periodMonth)}</td>
+                      <td className="px-3 py-2.5 text-ink-hi">{periodLabel(r.periodYear, r.periodMonth)}</td>
                       <td className="px-3 py-2.5 font-mono text-xs text-slate-400">{r.statementDate}</td>
                       <td className="px-3 py-2.5 text-right font-mono tabular-nums text-slate-300">
                         {formatMoney(r.statementEndingBalanceCents)}
@@ -243,7 +243,7 @@ export function ReconciliationHistory({
         <div className="flex items-center justify-end border-t border-slate-800 px-5 py-4">
           <button
             onClick={onClose}
-            className="rounded-md px-4 py-2 text-sm text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+            className="rounded-md px-4 py-2 text-sm text-slate-400 hover:bg-navy/[0.04] hover:text-slate-200"
           >
             Close
           </button>
@@ -298,7 +298,7 @@ function DetailView({
   return (
     <>
       <div className="mb-4 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] px-4 py-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-white">
+        <div className="flex items-center gap-2 text-sm font-medium text-ink-hi">
           <Lock className="h-4 w-4 text-emerald-400" />
           {periodLabel(r.periodYear, r.periodMonth)} · finalized
           {r.reconciledAt ? ` ${new Date(r.reconciledAt).toLocaleDateString()}` : ''}

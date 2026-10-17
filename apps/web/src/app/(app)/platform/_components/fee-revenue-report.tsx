@@ -127,7 +127,7 @@ export function FeeRevenueReport() {
       <select
         value={preset}
         onChange={(e) => setPreset(e.target.value as PresetKey)}
-        className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:border-indigo-500 focus:outline-none"
+        className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-ink-hi focus:border-indigo-500 focus:outline-none"
       >
         {PRESETS.map((p) => (
           <option key={p.key} value={p.key}>
@@ -204,7 +204,7 @@ export function FeeRevenueReport() {
               <DollarSign size={16} className="text-indigo-300" />
             </div>
           </div>
-          <p className="mt-2 text-2xl font-semibold text-white tracking-tight font-mono tabular-nums">
+          <p className="mt-2 text-2xl font-semibold text-ink-hi tracking-tight font-mono tabular-nums">
             {formatMoney(totals.feeCents)}
           </p>
           <p className="mt-1 text-2xs text-slate-500">Application fees the platform earned</p>
@@ -217,7 +217,7 @@ export function FeeRevenueReport() {
               <Receipt size={16} className="text-emerald-400" />
             </div>
           </div>
-          <p className="mt-2 text-2xl font-semibold text-white tracking-tight font-mono tabular-nums">
+          <p className="mt-2 text-2xl font-semibold text-ink-hi tracking-tight font-mono tabular-nums">
             {formatMoney(totals.grossCents)}
           </p>
           <p className="mt-1 text-2xs text-slate-500">Payment volume run through the rails</p>
@@ -230,7 +230,7 @@ export function FeeRevenueReport() {
               <CreditCard size={16} className="text-slate-300" />
             </div>
           </div>
-          <p className="mt-2 text-2xl font-semibold text-white tracking-tight font-mono tabular-nums">
+          <p className="mt-2 text-2xl font-semibold text-ink-hi tracking-tight font-mono tabular-nums">
             {totals.paymentCount.toLocaleString()}
           </p>
           <p className="mt-1 text-2xs text-slate-500">Card + ACH collections</p>
@@ -243,7 +243,7 @@ export function FeeRevenueReport() {
               <Percent size={16} className="text-indigo-300" />
             </div>
           </div>
-          <p className="mt-2 text-2xl font-semibold text-white tracking-tight font-mono tabular-nums">
+          <p className="mt-2 text-2xl font-semibold text-ink-hi tracking-tight font-mono tabular-nums">
             {pct(totals.takeRateBps)}
           </p>
           <p className="mt-1 text-2xs text-slate-500">Fee ÷ gross across all tenants</p>
@@ -327,17 +327,17 @@ export function FeeRevenueReport() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-800/20 border-t border-slate-700">
-                    <td className="px-4 py-2.5 text-xs font-semibold text-white">Total</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-white tabular-nums font-semibold">
+                    <td className="px-4 py-2.5 text-xs font-semibold text-ink-hi">Total</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-ink-hi tabular-nums font-semibold">
                       {totals.paymentCount.toLocaleString()}
                     </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-white tabular-nums font-semibold">
+                    <td className="px-4 py-2.5 text-right font-mono text-ink-hi tabular-nums font-semibold">
                       {formatMoney(totals.grossCents)}
                     </td>
                     <td className="px-4 py-2.5 text-right font-mono text-indigo-300 tabular-nums font-semibold">
                       {formatMoney(totals.feeCents)}
                     </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-white tabular-nums font-semibold">
+                    <td className="px-4 py-2.5 text-right font-mono text-ink-hi tabular-nums font-semibold">
                       {pct(totals.takeRateBps)}
                     </td>
                   </tr>
@@ -391,7 +391,7 @@ function RailCard({
         </div>
         <span className="text-2xs text-slate-500 font-mono">{share}% of fees</span>
       </div>
-      <p className="text-xl font-semibold text-white font-mono tabular-nums">{formatMoney(fee)}</p>
+      <p className="text-xl font-semibold text-ink-hi font-mono tabular-nums">{formatMoney(fee)}</p>
       <div className="mt-2 h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
         <div className="h-full rounded-full bg-indigo-500" style={{ width: `${share}%` }} />
       </div>
@@ -455,7 +455,7 @@ function TrendChart({ trend }: { trend: TrendPoint[] }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Fee revenue by month">
-      <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="#232C27" strokeWidth={1} />
+      <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="#E7E3DB" strokeWidth={1} />
       {trend.map((t, i) => {
         const h = Math.max(1, barH(t.feeCents));
         const x = padL + slot * i + slot * 0.2;
@@ -463,7 +463,7 @@ function TrendChart({ trend }: { trend: TrendPoint[] }) {
         const y = padT + innerH - h;
         return (
           <g key={t.month}>
-            <rect x={x} y={y} width={w} height={h} rx={2} fill="#818cf8" opacity={0.85}>
+            <rect x={x} y={y} width={w} height={h} rx={2} fill="#6366f1" opacity={0.85}>
               <title>{`${monthLabel(t.month)} — ${(t.feeCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} · ${t.paymentCount} payments`}</title>
             </rect>
             <text
@@ -471,7 +471,7 @@ function TrendChart({ trend }: { trend: TrendPoint[] }) {
               y={H - 9}
               textAnchor="middle"
               fontSize={9}
-              fill="#7E8983"
+              fill="#55657A"
               fontFamily="var(--font-mono, monospace)"
             >
               {monthLabel(t.month)}

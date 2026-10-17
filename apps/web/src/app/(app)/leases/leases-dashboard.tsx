@@ -123,10 +123,10 @@ export function LeasesDashboard() {
           <Metric label="Fully recognized" value={String(summary.ended)} />
         </div>
         <div className="flex items-start gap-2">
-          <button onClick={() => refetch()} className="p-2 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600" title="Refresh" aria-label="Refresh">
+          <button onClick={() => refetch()} className="p-2 rounded-lg border border-slate-700 text-slate-400 hover:text-ink-hi hover:border-slate-600" title="Refresh" aria-label="Refresh">
             <RefreshCw size={16} />
           </button>
-          <button onClick={() => setShowUpload(true)} className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-2">
+          <button onClick={() => setShowUpload(true)} className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg flex items-center gap-2">
             <Plus size={16} /> Upload lease
           </button>
         </div>
@@ -148,7 +148,7 @@ export function LeasesDashboard() {
           <p className="text-[12px] text-slate-500 mt-1 max-w-sm mx-auto">
             Drop a lease agreement — the AI extracts the terms, and after you confirm, MeritBooks sets up the ROU asset, the lease liability, and the full ASC 842 schedule.
           </p>
-          <button onClick={() => setShowUpload(true)} className="mt-4 px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg inline-flex items-center gap-2">
+          <button onClick={() => setShowUpload(true)} className="mt-4 px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg inline-flex items-center gap-2">
             <Plus size={16} /> Upload your first lease
           </button>
         </div>
@@ -161,12 +161,12 @@ export function LeasesDashboard() {
             return (
               <div key={l.id} className="card overflow-hidden">
                 <div className="p-4 flex flex-wrap items-center gap-4">
-                  <button onClick={() => toggle(l.id)} className="text-slate-500 hover:text-white" aria-label="Toggle schedule">
+                  <button onClick={() => toggle(l.id)} className="text-slate-500 hover:text-ink-hi" aria-label="Toggle schedule">
                     {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                   </button>
                   <div className="min-w-[180px] flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-white">{l.lessor}</span>
+                      <span className="text-sm font-semibold text-ink-hi">{l.lessor}</span>
                       <ClassBadge c={l.classification} />
                       <StatusBadge s={l.status} />
                     </div>
@@ -189,7 +189,7 @@ export function LeasesDashboard() {
                     <button
                       onClick={() => setRemeasure({ lease: l, mode: 'modify' })}
                       disabled={l.status !== 'ACTIVE'}
-                      className="p-1.5 rounded-md text-slate-500 hover:text-emerald-400 hover:bg-slate-800 disabled:opacity-40"
+                      className="p-1.5 rounded-md text-slate-500 hover:text-brand-400 hover:bg-slate-800 disabled:opacity-40"
                       aria-label="Modify lease" title="Modify lease"
                     >
                       <Pencil size={14} />
@@ -306,7 +306,7 @@ function Metric({ label, value, sub }: { label: string; value: string; sub?: str
   return (
     <div className="card p-3">
       <p className="text-[11px] text-slate-500">{label}</p>
-      <p className="text-lg font-semibold text-white mt-0.5 font-mono">{value}</p>
+      <p className="text-lg font-semibold text-ink-hi mt-0.5 font-mono">{value}</p>
       {sub && <p className="text-[10px] text-slate-600 mt-0.5">{sub}</p>}
     </div>
   );

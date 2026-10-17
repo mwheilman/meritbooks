@@ -196,7 +196,7 @@ function InlineAccountPicker({
                 onClick={() => onSelect(a.id)}
                 className={clsx(
                   'w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
-                  a.id === currentAccountId ? 'bg-brand-500/10 text-brand-400' : 'text-slate-300 hover:bg-white/[0.04]'
+                  a.id === currentAccountId ? 'bg-brand-500/10 text-brand-300' : 'text-slate-300 hover:bg-navy/[0.04]'
                 )}
               >
                 <span className="font-mono text-slate-500">{a.account_number}</span>
@@ -217,7 +217,7 @@ function InlineAccountPicker({
                 onClick={() => onSelect(a.id)}
                 className={clsx(
                   'w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
-                  a.id === currentAccountId ? 'bg-brand-500/10 text-brand-400' : 'text-slate-300 hover:bg-white/[0.04]'
+                  a.id === currentAccountId ? 'bg-brand-500/10 text-brand-300' : 'text-slate-300 hover:bg-navy/[0.04]'
                 )}
               >
                 <span className="font-mono text-slate-500">{a.account_number}</span>
@@ -308,7 +308,7 @@ function InlineJobPicker({
         {currentJobId && (
           <button
             onClick={onClear}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-slate-400 hover:bg-white/[0.04] border-b border-slate-800/50"
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-slate-400 hover:bg-navy/[0.04] border-b border-slate-800/50"
           >
             <X size={10} />
             <span>Clear job assignment</span>
@@ -321,7 +321,7 @@ function InlineJobPicker({
               onClick={() => onSelect(j.id)}
               className={clsx(
                 'w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
-                j.id === currentJobId ? 'bg-brand-500/10 text-brand-400' : 'text-slate-300 hover:bg-white/[0.04]'
+                j.id === currentJobId ? 'bg-brand-500/10 text-brand-300' : 'text-slate-300 hover:bg-navy/[0.04]'
               )}
             >
               <span className="font-mono text-slate-500">{j.job_number}</span>
@@ -440,7 +440,7 @@ export function BankFeedList({
               </span>
               <button
                 onClick={onClearSelection}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-2xs text-slate-500 hover:text-slate-300 hover:bg-white/[0.04] transition-colors"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-2xs text-slate-500 hover:text-slate-300 hover:bg-navy/[0.04] transition-colors"
               >
                 <X size={11} /> Clear
               </button>
@@ -601,7 +601,7 @@ export function BankFeedList({
                         className={clsx(
                           'text-left text-xs font-mono px-2 py-1 rounded transition-colors w-full truncate max-w-[180px]',
                           account
-                            ? 'text-slate-300 hover:bg-white/[0.04] hover:text-white'
+                            ? 'text-slate-300 hover:bg-navy/[0.04] hover:text-ink-hi'
                             : 'text-amber-400 italic hover:bg-amber-500/10'
                         )}
                         title="Click to change GL account"
@@ -631,10 +631,10 @@ export function BankFeedList({
                         className={clsx(
                           'text-left text-xs px-2 py-1 rounded transition-colors w-full truncate max-w-[140px]',
                           job
-                            ? 'text-slate-300 hover:bg-white/[0.04]'
+                            ? 'text-slate-300 hover:bg-navy/[0.04]'
                             : isCogs
                               ? 'text-red-400 italic hover:bg-red-500/10'
-                              : 'text-slate-600 hover:bg-white/[0.04]'
+                              : 'text-slate-600 hover:bg-navy/[0.04]'
                         )}
                         title={isCogs ? 'COGS account — job required' : 'Click to assign job (optional)'}
                       >
@@ -699,7 +699,7 @@ export function BankFeedList({
                           'p-1.5 rounded-md transition-colors',
                           !account || isPosted || (isCogs && !job)
                             ? 'text-slate-700 cursor-not-allowed'
-                            : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'
+                            : 'text-slate-500 hover:text-brand-400 hover:bg-brand-500/10'
                         )}
                         title={isCogs && !job ? 'Assign job before approving (COGS)' : 'Approve (a)'}
                         aria-label={isCogs && !job ? 'Assign job before approving (COGS)' : 'Approve transaction'}
@@ -710,7 +710,7 @@ export function BankFeedList({
                       </button>
                       <button
                         onClick={() => onEdit(txn)}
-                        className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] transition-colors"
+                        className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-navy/[0.04] transition-colors"
                         title="Full edit panel (e)"
                         aria-label="Edit transaction"
                       >

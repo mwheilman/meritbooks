@@ -277,7 +277,7 @@ export function SmartIntake({ companyId: companyIdProp, onboarding = true, cutov
       <div className="flex items-start gap-2">
         <Sparkles size={15} className="text-indigo-400 mt-0.5" />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-white">Drop everything you have</p>
+          <p className="text-sm font-medium text-ink-hi">Drop everything you have</p>
           <p className="text-[11px] text-slate-500">
             Articles, operating agreement, EIN letter, loan agreements, trial balance or general ledger, budget, customer or
             CRM export, vendor list, WIP schedule, org chart, expense policy — we work out what each file is and put it to work.
@@ -290,7 +290,7 @@ export function SmartIntake({ companyId: companyIdProp, onboarding = true, cutov
             <select
               value={companyId ?? ''}
               onChange={(e) => setPickedCompany(e.target.value || null)}
-              className="max-w-[180px] px-2 py-1 bg-slate-900 border border-slate-700 rounded-md text-[11px] text-white"
+              className="max-w-[180px] px-2 py-1 bg-slate-900 border border-slate-700 rounded-md text-[11px] text-ink-hi"
             >
               {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
@@ -455,7 +455,7 @@ function IntakeCard({
               value={item.docType}
               onChange={(e) => onCorrect(e.target.value as IntakeDocType)}
               disabled={!!item.done}
-              className="max-w-[220px] px-2 py-1 bg-slate-900 border border-slate-700 rounded-md text-[11px] text-white focus:border-indigo-500 focus:outline-none"
+              className="max-w-[220px] px-2 py-1 bg-slate-900 border border-slate-700 rounded-md text-[11px] text-ink-hi focus:border-indigo-500 focus:outline-none"
             >
               {INTAKE_DOC_TYPES.map((t) => <option key={t} value={t}>{INTAKE_ROUTES[t].label}</option>)}
             </select>
@@ -507,7 +507,7 @@ function IntakeCard({
               ) : handoff.kind === 'opening' && handoff.href ? (
                 <Link
                   href={handoff.href}
-                  className="inline-flex items-center gap-1 rounded-md bg-brand-500 hover:bg-brand-400 px-2.5 py-1 text-[11px] font-medium text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+                  className="inline-flex items-center gap-1 rounded-md bg-brand-500 hover:bg-brand-400 px-2.5 py-1 text-[11px] font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
                 >
                   {handoff.actionLabel} <ArrowRight size={12} />
                 </Link>

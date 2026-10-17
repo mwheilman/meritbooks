@@ -144,7 +144,7 @@ export function ArAgingReport({ params }: { params: Record<string, string> }) {
       {/* ─── Summary: ONE headline AR number + combined bucket strip ─── */}
       <div className="card p-5">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-medium text-white">
+          <p className="text-sm font-medium text-ink-hi">
             Total Receivables: <span className="font-mono text-emerald-400 tabular-nums">{formatMoney(combinedTotalCents)}</span>
           </p>
           <p className="text-xs text-slate-500">
@@ -163,7 +163,7 @@ export function ArAgingReport({ params }: { params: Record<string, string> }) {
           {AR_BUCKET_ORDER.map((b) => (
             <div key={b} className="text-center">
               <p className={clsx('text-xs font-medium', BUCKET_TEXT[b])}>{bucketLabel(b)}</p>
-              <p className="text-sm font-mono text-white tabular-nums">{formatMoney(combinedTotals[b])}</p>
+              <p className="text-sm font-mono text-ink-hi tabular-nums">{formatMoney(combinedTotals[b])}</p>
             </div>
           ))}
         </div>
@@ -178,14 +178,14 @@ export function ArAgingReport({ params }: { params: Record<string, string> }) {
       {/* ─── Unified, collapsible AR aging table ─── */}
       <div className="card overflow-hidden">
         <div className="px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-white">AR Aging</h3>
+          <h3 className="text-sm font-semibold text-ink-hi">AR Aging</h3>
           <button
             type="button"
             onClick={toggleSplitAll}
             aria-pressed={splitAll}
             className={clsx(
-              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/40',
-              splitAll ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-300 border border-slate-700 hover:border-slate-600',
+              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/40',
+              splitAll ? 'bg-brand-500/10 text-brand-300 border border-brand-500/30' : 'bg-slate-800 text-slate-300 border border-slate-700 hover:border-slate-600',
             )}
           >
             <ChevronRight size={12} className={clsx('transition-transform', splitAll && 'rotate-90')} />
@@ -238,11 +238,11 @@ export function ArAgingReport({ params }: { params: Record<string, string> }) {
               </>
             )}
             <tr className={clsx(LEDGER_TOTAL, 'bg-slate-800/40')}>
-              <td className="px-4 py-2.5 text-sm font-semibold text-white">Total Receivables</td>
+              <td className="px-4 py-2.5 text-sm font-semibold text-ink-hi">Total Receivables</td>
               {AR_BUCKET_ORDER.map((b) => (
                 <td key={b} className={clsx('px-3 py-2.5 text-right text-xs font-mono tabular-nums font-semibold', BUCKET_TEXT[b])}>{formatMoney(combinedTotals[b])}</td>
               ))}
-              <td className="px-4 py-2.5 text-right text-sm font-mono tabular-nums font-bold text-white">{formatMoney(combinedTotalCents)}</td>
+              <td className="px-4 py-2.5 text-right text-sm font-mono tabular-nums font-bold text-ink-hi">{formatMoney(combinedTotalCents)}</td>
             </tr>
           </tfoot>
         </table>
@@ -279,14 +279,14 @@ function CustomerRows({ customer, open, onToggle, childOpen, onToggleChild }: {
             type="button"
             onClick={onToggle}
             aria-expanded={open}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-white hover:text-emerald-400 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/40 rounded"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-hi hover:text-brand-400 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/40 rounded"
           >
             <ChevronRight size={13} className={clsx('text-slate-500 transition-transform', open && 'rotate-90')} />
             {customerName}
           </button>
         </td>
         <BucketCells buckets={buckets} />
-        <td className={clsx('px-4 py-2 text-right text-xs font-mono tabular-nums font-semibold', figColor(totalCents, 'text-white'))}>{formatMoney(totalCents)}</td>
+        <td className={clsx('px-4 py-2 text-right text-xs font-mono tabular-nums font-semibold', figColor(totalCents, 'text-ink-hi'))}>{formatMoney(totalCents)}</td>
       </tr>
 
       {open && (
@@ -299,7 +299,7 @@ function CustomerRows({ customer, open, onToggle, childOpen, onToggleChild }: {
                   type="button"
                   onClick={() => onToggleChild(billedKey)}
                   aria-expanded={billedDetailOpen}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-300 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/40 rounded"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-300 hover:text-ink-hi transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/40 rounded"
                 >
                   <ChevronRight size={12} className={clsx('text-slate-600 transition-transform', billedDetailOpen && 'rotate-90')} />
                   Billed
@@ -335,7 +335,7 @@ function CustomerRows({ customer, open, onToggle, childOpen, onToggleChild }: {
                   type="button"
                   onClick={() => onToggleChild(unbilledKey)}
                   aria-expanded={unbilledDetailOpen}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-300 hover:text-indigo-200 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/40 rounded"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-300 hover:text-indigo-200 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/40 rounded"
                 >
                   <ChevronRight size={12} className={clsx('text-slate-600 transition-transform', unbilledDetailOpen && 'rotate-90')} />
                   Unbilled

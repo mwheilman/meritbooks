@@ -59,7 +59,7 @@ function TabBtn({
         <span
           className={clsx(
             'ml-0.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 font-mono text-[10px] font-semibold leading-none',
-            active ? 'bg-white/20 text-white' : 'bg-slate-700/60 text-slate-300',
+            active ? 'bg-navy/20 text-ink-hi' : 'bg-slate-700/60 text-slate-300',
           )}
         >
           {count > 99 ? '99+' : count}

@@ -226,7 +226,7 @@ function InternalInvoicesPageInner() {
             onClick={() => setFilter(f.key)}
             className={clsx(
               'px-3 py-1.5 rounded-lg text-sm transition-colors',
-              filter === f.key ? 'bg-emerald-500/15 text-emerald-300' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5',
+              filter === f.key ? 'bg-brand-500/15 text-brand-300' : 'text-slate-400 hover:text-slate-200 hover:bg-navy/5',
             )}
           >
             {f.label}
@@ -260,10 +260,10 @@ function InternalInvoicesPageInner() {
       )}
 
       {!isLoading && !error && rows.length > 0 && (
-        <div className="rounded-xl border border-white/5 overflow-hidden">
+        <div className="rounded-xl border border-slate-800 overflow-hidden">
           <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[760px]">
-            <thead className="bg-white/5 text-slate-400 text-xs uppercase tracking-wide">
+            <thead className="bg-navy/5 text-slate-400 text-xs uppercase tracking-wide">
               <tr>
                 <th className="text-left font-medium px-4 py-3">Invoice</th>
                 <th className="text-left font-medium px-4 py-3">Company</th>
@@ -278,7 +278,7 @@ function InternalInvoicesPageInner() {
                 const st = STATUS_STYLE[inv.status];
                 const busy = busyId === inv.id;
                 return (
-                  <tr key={inv.id} {...rowHandlers(inv)} onClick={() => setSelectedId(inv.id)} className="border-t border-white/5 row-clickable">
+                  <tr key={inv.id} {...rowHandlers(inv)} onClick={() => setSelectedId(inv.id)} className="border-t border-slate-800 row-clickable">
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-200">{inv.invoiceNumber}</div>
                       <div className="text-xs text-slate-500">{inv.invoiceDate}</div>
@@ -346,13 +346,13 @@ function InternalInvoicesPageInner() {
       >
         {peek && (
           <div className="p-3">
-            <div className="text-sm font-semibold text-white mb-1">{peek.item.invoiceNumber}</div>
+            <div className="text-sm font-semibold text-ink-hi mb-1">{peek.item.invoiceNumber}</div>
             <div className="text-2xs text-slate-400 mb-2">
               <span className="text-slate-200">{peek.item.provider?.name ?? '?'}</span> → <span className="text-slate-200">{peek.item.receiver?.name ?? '?'}</span>
             </div>
             <div className="rounded-md bg-slate-800/40 px-3 py-2 flex items-center justify-between">
               <span className="text-2xs text-slate-500">{peek.item.chargeMethod === 'cost_transfer' ? 'Cost transfer' : 'Revenue'}</span>
-              <span className="text-sm font-mono text-white">{fmt(peek.item.totalCents)}</span>
+              <span className="text-sm font-mono text-ink-hi">{fmt(peek.item.totalCents)}</span>
             </div>
             <div className="mt-2 text-2xs text-slate-500">{peek.item.location?.name ?? '--'} · {peek.item.invoiceDate}</div>
           </div>
@@ -364,8 +364,8 @@ function InternalInvoicesPageInner() {
       {/* Create modal */}
       {form && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => !saving && setForm(null)}>
-          <div className="bg-[#0f1729] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="New internal invoice">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <div className="bg-[#0f1729] border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="New internal invoice">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
               <h2 className="text-lg font-semibold text-slate-100">New internal invoice</h2>
               <button onClick={() => !saving && setForm(null)} className="text-slate-400 hover:text-slate-200" aria-label="Close"><X className="w-5 h-5" /></button>
             </div>
@@ -375,7 +375,7 @@ function InternalInvoicesPageInner() {
                 <select
                   value={form.locationId}
                   onChange={(e) => setForm({ ...form, locationId: e.target.value, providerId: '', receiverId: '' })}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-200"
+                  className="w-full bg-navy/5 border border-slate-800 rounded-lg px-3 py-2 text-slate-200"
                 >
                   <option value="">Select a company…</option>
                   {locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -389,7 +389,7 @@ function InternalInvoicesPageInner() {
                     value={form.providerId}
                     onChange={(e) => setForm({ ...form, providerId: e.target.value })}
                     disabled={!form.locationId}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-200 disabled:opacity-50"
+                    className="w-full bg-navy/5 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 disabled:opacity-50"
                   >
                     <option value="">Select…</option>
                     {companyDepts(form.locationId).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -401,7 +401,7 @@ function InternalInvoicesPageInner() {
                     value={form.receiverId}
                     onChange={(e) => setForm({ ...form, receiverId: e.target.value })}
                     disabled={!form.locationId}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-200 disabled:opacity-50"
+                    className="w-full bg-navy/5 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 disabled:opacity-50"
                   >
                     <option value="">Select…</option>
                     {companyDepts(form.locationId).filter((d) => d.id !== form.providerId).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -413,12 +413,12 @@ function InternalInvoicesPageInner() {
                 <div>
                   <label className="block text-sm text-slate-400 mb-1.5">Invoice date</label>
                   <input type="date" value={form.invoiceDate} onChange={(e) => setForm({ ...form, invoiceDate: e.target.value })}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-200" />
+                    className="w-full bg-navy/5 border border-slate-800 rounded-lg px-3 py-2 text-slate-200" />
                 </div>
                 <div>
                   <label className="block text-sm text-slate-400 mb-1.5">Memo</label>
                   <input type="text" value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} placeholder="Optional"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-200" />
+                    className="w-full bg-navy/5 border border-slate-800 rounded-lg px-3 py-2 text-slate-200" />
                 </div>
               </div>
 
@@ -433,10 +433,10 @@ function InternalInvoicesPageInner() {
                     <div key={i} className="flex gap-2">
                       <input type="text" value={line.description} placeholder="Description"
                         onChange={(e) => { const ls = [...form.lines]; ls[i] = { ...ls[i], description: e.target.value }; setForm({ ...form, lines: ls }); }}
-                        className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-200" />
+                        className="flex-1 bg-navy/5 border border-slate-800 rounded-lg px-3 py-2 text-slate-200" />
                       <input type="number" min="0" step="0.01" value={line.amount} placeholder="0.00"
                         onChange={(e) => { const ls = [...form.lines]; ls[i] = { ...ls[i], amount: e.target.value }; setForm({ ...form, lines: ls }); }}
-                        className="w-32 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-200 text-right font-mono" />
+                        className="w-32 bg-navy/5 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 text-right font-mono" />
                       <button onClick={() => setForm({ ...form, lines: form.lines.filter((_, j) => j !== i) })}
                         disabled={form.lines.length === 1} className="text-slate-500 hover:text-red-400 disabled:opacity-30 px-1">
                         <Trash2 className="w-4 h-4" />
@@ -450,7 +450,7 @@ function InternalInvoicesPageInner() {
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-2 px-6 py-4 border-t border-white/10">
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-800">
               <button onClick={() => !saving && setForm(null)} className="btn-ghost btn-sm">Cancel</button>
               <button onClick={createInvoice} disabled={saving} className="btn-primary btn-sm inline-flex items-center gap-1.5 disabled:opacity-60">
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />} Create draft
@@ -463,16 +463,16 @@ function InternalInvoicesPageInner() {
       {/* Reject modal */}
       {rejecting && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => busyId == null && setRejecting(null)}>
-          <div className="bg-[#0f1729] border border-white/10 rounded-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Reject ${rejecting.invoiceNumber}`}>
-            <div className="px-6 py-4 border-b border-white/10">
+          <div className="bg-[#0f1729] border border-slate-800 rounded-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Reject ${rejecting.invoiceNumber}`}>
+            <div className="px-6 py-4 border-b border-slate-800">
               <h2 className="text-lg font-semibold text-slate-100">Reject {rejecting.invoiceNumber}</h2>
             </div>
             <div className="p-6">
               <label className="block text-sm text-slate-400 mb-1.5">Reason (optional)</label>
               <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={3}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-slate-200" placeholder="Why is this being rejected?" />
+                className="w-full bg-navy/5 border border-slate-800 rounded-lg px-3 py-2 text-slate-200" placeholder="Why is this being rejected?" />
             </div>
-            <div className="flex justify-end gap-2 px-6 py-4 border-t border-white/10">
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-800">
               <button onClick={() => setRejecting(null)} className="btn-ghost btn-sm">Cancel</button>
               <button onClick={() => act(rejecting, 'reject', rejectReason)} className="btn-primary btn-sm">Reject invoice</button>
             </div>

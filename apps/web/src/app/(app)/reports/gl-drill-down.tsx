@@ -91,18 +91,18 @@ export function GlDrillDown({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700/50">
           <div>
-            <h2 className="text-base font-semibold text-white">GL Detail — {accountNumber}</h2>
+            <h2 className="text-base font-semibold text-ink-hi">GL Detail — {accountNumber}</h2>
             <p className="text-sm text-gray-400 mt-0.5">{accountName}</p>
             <p className="text-xs text-gray-500 font-mono mt-0.5">{startDate} through {endDate}</p>
           </div>
           <div className="flex items-center gap-4">
             {summary && (
               <div className="text-right text-xs">
-                <div className="text-gray-500">Net: <span className="font-mono text-white font-medium">{formatMoney(summary.netCents)}</span></div>
+                <div className="text-gray-500">Net: <span className="font-mono text-ink-hi font-medium">{formatMoney(summary.netCents)}</span></div>
                 <div className="text-gray-600">{pagination?.total ?? 0} entries</div>
               </div>
             )}
-            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition-colors">
+            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-ink-hi rounded-lg hover:bg-gray-800 transition-colors">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -110,7 +110,7 @@ export function GlDrillDown({
 
         {/* Content */}
         {loading ? (
-          <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
+          <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>
         ) : error ? (
           <div className="p-8 text-center text-red-400 text-sm">{error}</div>
         ) : txns.length === 0 ? (
@@ -158,9 +158,9 @@ export function GlDrillDown({
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-gray-700 bg-gray-800/30">
-                    <td colSpan={5} className="px-4 py-2.5 text-xs font-semibold text-white">Totals</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold text-white">{formatMoney(summary?.totalDebitCents ?? 0)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold text-white">{formatMoney(summary?.totalCreditCents ?? 0)}</td>
+                    <td colSpan={5} className="px-4 py-2.5 text-xs font-semibold text-ink-hi">Totals</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold text-ink-hi">{formatMoney(summary?.totalDebitCents ?? 0)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold text-ink-hi">{formatMoney(summary?.totalCreditCents ?? 0)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -174,9 +174,9 @@ export function GlDrillDown({
                 </span>
                 <div className="flex gap-1">
                   <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
-                    className="p-1 text-gray-400 hover:text-white disabled:opacity-30 rounded"><ChevronLeft className="w-4 h-4" /></button>
+                    className="p-1 text-gray-400 hover:text-ink-hi disabled:opacity-30 rounded"><ChevronLeft className="w-4 h-4" /></button>
                   <button onClick={() => setPage((p) => Math.min(pagination.total_pages, p + 1))} disabled={page >= pagination.total_pages}
-                    className="p-1 text-gray-400 hover:text-white disabled:opacity-30 rounded"><ChevronRight className="w-4 h-4" /></button>
+                    className="p-1 text-gray-400 hover:text-ink-hi disabled:opacity-30 rounded"><ChevronRight className="w-4 h-4" /></button>
                 </div>
               </div>
             )}

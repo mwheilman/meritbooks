@@ -38,7 +38,7 @@ interface CreateInviteResponse {
   code?: string;
 }
 
-const inputCls = 'w-full px-3 py-2 bg-surface-900 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50';
+const inputCls = 'w-full px-3 py-2 bg-surface-900 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50';
 const labelCls = 'block text-xs text-slate-500 mb-1.5 font-medium';
 
 export function TeamStep({ companies }: { companies: CompanyOption[] }) {
@@ -114,7 +114,7 @@ export function TeamStep({ companies }: { companies: CompanyOption[] }) {
     <div className="space-y-4">
       <div className="card p-6 space-y-5">
         <div>
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-ink-hi flex items-center gap-2">
             <Users size={18} className="text-brand-400" /> Invite your team
           </h2>
           <p className="text-xs text-slate-500 mt-1">
@@ -199,7 +199,7 @@ export function TeamStep({ companies }: { companies: CompanyOption[] }) {
               onClick={() => void invite()}
               disabled={!emailValid || submitting}
               className={clsx('flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                !emailValid || submitting ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-slate-900 hover:bg-brand-400')}
+                !emailValid || submitting ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-white hover:bg-brand-400')}
             >
               {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Send invitation
             </button>
@@ -220,7 +220,7 @@ export function TeamStep({ companies }: { companies: CompanyOption[] }) {
             <ul className="space-y-1.5">
               {pending.map((i) => (
                 <li key={i.id} className="flex items-center justify-between rounded-lg bg-surface-900 border border-slate-800 px-3 py-2">
-                  <span className="flex items-center gap-2 text-sm text-white"><Mail size={13} className="text-slate-500" /> {i.email}</span>
+                  <span className="flex items-center gap-2 text-sm text-ink-hi"><Mail size={13} className="text-slate-500" /> {i.email}</span>
                   <span className="text-[11px] text-slate-400">{i.roleLabel}</span>
                 </li>
               ))}
@@ -241,7 +241,7 @@ export function TeamStep({ companies }: { companies: CompanyOption[] }) {
               {roster.map((m) => (
                 <li key={m.id} className="flex items-center justify-between rounded-lg bg-surface-900 border border-slate-800 px-3 py-2">
                   <div>
-                    <p className="text-sm text-white">{[m.firstName, m.lastName].filter(Boolean).join(' ') || m.email || 'Member'}</p>
+                    <p className="text-sm text-ink-hi">{[m.firstName, m.lastName].filter(Boolean).join(' ') || m.email || 'Member'}</p>
                     <p className="text-[11px] text-slate-500">{m.email ?? '—'}</p>
                   </div>
                   <span className="text-[11px] text-slate-400">{m.roleLabel}</span>

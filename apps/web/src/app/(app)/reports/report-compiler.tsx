@@ -153,7 +153,7 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
           <Wand2 size={16} className="text-indigo-400" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-white">Describe a report pack</p>
+          <p className="text-sm font-semibold text-ink-hi">Describe a report pack</p>
           <p className="text-[11px] text-slate-400 truncate">
             e.g. “last three years of P&amp;L and balance sheets on accrual, in one PDF” — assembled into a single branded document
           </p>
@@ -172,7 +172,7 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
               onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); parse(); } }}
               rows={2}
               placeholder="Describe the reports, periods, and basis you want in one PDF…"
-              className="w-full pl-9 pr-3 py-2.5 bg-slate-900/60 border border-indigo-500/25 rounded-xl text-sm text-white placeholder:text-indigo-300/40 focus:outline-none focus:border-indigo-500/50 resize-none"
+              className="w-full pl-9 pr-3 py-2.5 bg-slate-900/60 border border-indigo-500/25 rounded-xl text-sm text-ink-hi placeholder:text-indigo-300/40 focus:outline-none focus:border-indigo-500/50 resize-none"
             />
           </div>
 
@@ -231,7 +231,7 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
           {result && !result.abstained && result.summary && (
             <div className="mt-3 rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
               <div className="px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
-                <p className="text-xs font-semibold text-white flex items-center gap-1.5">
+                <p className="text-xs font-semibold text-ink-hi flex items-center gap-1.5">
                   <FileText size={13} className="text-emerald-400" />
                   I’ll generate {totalSections} report section{totalSections === 1 ? '' : 's'} in one PDF
                 </p>
@@ -241,7 +241,7 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
                 {result.summary.map((s, i) => (
                   <div key={i} className="px-4 py-2.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm text-white font-medium">{s.report}</span>
+                      <span className="text-sm text-ink-hi font-medium">{s.report}</span>
                       <span className={clsx('px-1.5 py-0.5 rounded text-[10px]', s.basis === 'Cash' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-slate-800 text-slate-400')}>{s.basis}</span>
                     </div>
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -272,7 +272,7 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
                   <button
                     onClick={() => generate('pdf')}
                     disabled={generating !== null}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
                     {generating === 'pdf' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                     {generating === 'pdf' ? 'Building PDF…' : 'Generate PDF'}
@@ -288,7 +288,7 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); savePack(); } }}
                     maxLength={120}
                     placeholder="Name this pack to save & reuse (e.g. Monthly board pack)…"
-                    className="flex-1 px-3 py-1.5 bg-slate-900/60 border border-slate-800 rounded-lg text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50"
+                    className="flex-1 px-3 py-1.5 bg-slate-900/60 border border-slate-800 rounded-lg text-xs text-ink-hi placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50"
                   />
                   <button
                     onClick={savePack}

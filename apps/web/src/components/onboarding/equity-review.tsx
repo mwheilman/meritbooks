@@ -170,7 +170,7 @@ export function EquityReview({ entities, defaultEntityId, onCommitted }: EquityR
       {/* Header + target company */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-lg font-semibold text-white">
+          <h1 className="flex items-center gap-2 text-lg font-semibold text-ink-hi">
             <Building2 size={18} className="text-brand-400" /> Equity &amp; Cap Table
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-400">
@@ -183,7 +183,7 @@ export function EquityReview({ entities, defaultEntityId, onCommitted }: EquityR
           <select
             value={entityId}
             onChange={(e) => { setEntityId(e.target.value); setResult(null); }}
-            className="rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+            className="rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
           >
             {entities.length === 0 && <option value="">No companies yet</option>}
             {entities.map((en) => <option key={en.id} value={en.id}>{en.name}</option>)}
@@ -251,7 +251,7 @@ export function EquityReview({ entities, defaultEntityId, onCommitted }: EquityR
                   key={b}
                   type="button"
                   onClick={() => setBasis(b)}
-                  className={clsx('rounded-md px-2.5 py-1', basis === b ? 'bg-brand-500 text-slate-900' : 'text-slate-400 hover:text-white')}
+                  className={clsx('rounded-md px-2.5 py-1', basis === b ? 'bg-brand-500 text-white' : 'text-slate-400 hover:text-ink-hi')}
                 >
                   {b === 'PERCENT' ? 'By %' : 'By units'}
                 </button>
@@ -285,7 +285,7 @@ export function EquityReview({ entities, defaultEntityId, onCommitted }: EquityR
                           value={o.name}
                           onChange={(e) => patchOwner(i, { name: e.target.value })}
                           placeholder="Owner / member name"
-                          className={clsx('w-44 rounded-md border bg-surface-950 px-2 py-1 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
+                          className={clsx('w-44 rounded-md border bg-surface-950 px-2 py-1 text-sm text-ink-hi focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
                             low.has('name') ? 'border-warning/50' : 'border-slate-700')}
                         />
                       </td>
@@ -300,7 +300,7 @@ export function EquityReview({ entities, defaultEntityId, onCommitted }: EquityR
                             const v = e.target.value === '' ? null : Number(e.target.value);
                             patchOwner(i, basis === 'PERCENT' ? { ownership_pct: v } : { units: v });
                           }}
-                          className={clsx('w-24 rounded-md border bg-surface-950 px-2 py-1 text-right text-sm tabular-nums text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
+                          className={clsx('w-24 rounded-md border bg-surface-950 px-2 py-1 text-right text-sm tabular-nums text-ink-hi focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
                             low.has('ownership_pct') ? 'border-warning/50' : 'border-slate-700')}
                         />
                       </td>
@@ -314,7 +314,7 @@ export function EquityReview({ entities, defaultEntityId, onCommitted }: EquityR
                             aria-label={`Owner ${i + 1} capital contributed (dollars)`}
                             value={o.capital_contributed_cents === null ? '' : centsToDollars(o.capital_contributed_cents)}
                             onChange={(e) => patchOwner(i, { capital_contributed_cents: e.target.value === '' ? null : dollarsToCents(e.target.value) })}
-                            className="w-28 rounded-md border border-slate-700 bg-surface-950 px-2 py-1 text-right text-sm tabular-nums text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+                            className="w-28 rounded-md border border-slate-700 bg-surface-950 px-2 py-1 text-right text-sm tabular-nums text-ink-hi focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
                           />
                         </div>
                       </td>
@@ -326,7 +326,7 @@ export function EquityReview({ entities, defaultEntityId, onCommitted }: EquityR
                             const ec = e.target.value as EquityClass;
                             patchOwner(i, { equity_class: ec, is_preferred: ec === 'PREFERRED' });
                           }}
-                          className="rounded-md border border-slate-700 bg-surface-950 px-2 py-1 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+                          className="rounded-md border border-slate-700 bg-surface-950 px-2 py-1 text-sm text-ink-hi focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
                         >
                           {EQUITY_CLASSES.map((c) => <option key={c} value={c}>{CLASS_LABEL[c]}</option>)}
                         </select>
@@ -386,7 +386,7 @@ export function EquityReview({ entities, defaultEntityId, onCommitted }: EquityR
               onClick={save}
               disabled={!canSave}
               className={clsx('inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
-                canSave ? 'bg-brand-500 text-slate-900 hover:bg-brand-400' : 'cursor-not-allowed bg-slate-700 text-slate-500')}
+                canSave ? 'bg-brand-500 text-white hover:bg-brand-400' : 'cursor-not-allowed bg-slate-700 text-slate-500')}
             >
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save cap table
             </button>
@@ -398,7 +398,7 @@ export function EquityReview({ entities, defaultEntityId, onCommitted }: EquityR
       {/* Commit result — persistence + consolidation + reconcile */}
       {result && (
         <div className="space-y-2 rounded-xl border border-slate-800 bg-surface-900/60 p-4 text-sm">
-          <p className="flex items-center gap-2 font-medium text-white">
+          <p className="flex items-center gap-2 font-medium text-ink-hi">
             <FileText size={15} className="text-brand-400" />
             {result.persisted
               ? `Saved ${result.holdersWritten} owner${result.holdersWritten === 1 ? '' : 's'}.`

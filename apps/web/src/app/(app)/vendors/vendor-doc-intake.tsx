@@ -78,7 +78,7 @@ interface Meta {
 }
 
 const inputCls =
-  'w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-sm text-white focus:border-emerald-500 focus:outline-none';
+  'w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-sm text-ink-hi focus:border-brand-500 focus:outline-none';
 const flagCls = 'border-amber-500/60 ring-1 ring-amber-500/30';
 const labelCls = 'block text-[10px] text-slate-500 uppercase tracking-wider mb-1';
 
@@ -251,13 +251,13 @@ export function VendorDocIntake({
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-indigo-400" />
             <div>
-              <h2 className="text-lg font-semibold text-white">{title}</h2>
+              <h2 className="text-lg font-semibold text-ink-hi">{title}</h2>
               <p className="text-[11px] text-slate-500">
                 {vendorName} · Drop the document — AI proposes the fields; you review and confirm. Nothing is saved until you confirm.
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close">
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -280,7 +280,7 @@ export function VendorDocIntake({
               phase === 'parsing'
                 ? 'border-indigo-500/40 bg-indigo-500/5 cursor-default'
                 : dragOver
-                  ? 'border-emerald-500 bg-emerald-500/5 cursor-pointer'
+                  ? 'border-brand-500 bg-brand-500/5 cursor-pointer'
                   : 'border-slate-700 hover:border-slate-600 cursor-pointer',
             )}
           >
@@ -349,7 +349,7 @@ export function VendorDocIntake({
                 </div>
                 <div className="col-span-2">
                   <label className={labelCls}>Address</label>
-                  <input className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-sm text-white focus:border-emerald-500 focus:outline-none mb-2" value={w9.address_line1 ?? ''} onChange={(e) => setW9Field('address_line1', e.target.value || null)} placeholder="Street" />
+                  <input className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-sm text-ink-hi focus:border-brand-500 focus:outline-none mb-2" value={w9.address_line1 ?? ''} onChange={(e) => setW9Field('address_line1', e.target.value || null)} placeholder="Street" />
                   <div className="grid grid-cols-3 gap-2">
                     <input className={inputCls} value={w9.city ?? ''} onChange={(e) => setW9Field('city', e.target.value || null)} placeholder="City" />
                     <input className={inputCls} value={w9.state ?? ''} onChange={(e) => setW9Field('state', e.target.value || null)} placeholder="State" maxLength={2} />
@@ -358,7 +358,7 @@ export function VendorDocIntake({
                 </div>
                 <div className="col-span-2">
                   <label className={clsx('flex items-center gap-2 rounded-lg border px-3 py-2.5 cursor-pointer', flag(w9.lowConfidenceFields, 'is_1099_eligible') || 'border-slate-700', is1099 ? 'bg-emerald-500/5' : 'bg-slate-900')}>
-                    <input type="checkbox" checked={is1099} onChange={(e) => setIs1099(e.target.checked)} className="accent-emerald-500" />
+                    <input type="checkbox" checked={is1099} onChange={(e) => setIs1099(e.target.checked)} className="accent-brand-500" />
                     <span className="text-sm text-slate-200">1099-eligible vendor</span>
                     <span className="text-[11px] text-slate-500 ml-auto">
                       {w9.is_1099_eligible_signal === null ? 'AI unsure — please confirm' : `AI suggests ${w9.is_1099_eligible_signal ? 'eligible' : 'exempt'}`}
@@ -393,7 +393,7 @@ export function VendorDocIntake({
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             {persistable ? (
-                              <input type="checkbox" checked={!!keep[i]} onChange={(e) => setKeep((k) => ({ ...k, [i]: e.target.checked }))} className="accent-emerald-500" />
+                              <input type="checkbox" checked={!!keep[i]} onChange={(e) => setKeep((k) => ({ ...k, [i]: e.target.checked }))} className="accent-brand-500" />
                             ) : (
                               <Lock size={12} className="text-slate-600" />
                             )}
@@ -444,11 +444,11 @@ export function VendorDocIntake({
                 {mode === 'W9' ? 'Confirm records the W-9 on file and flips 1099 readiness.' : 'Confirm records each coverage on the compliance monitor.'}
               </p>
               <div className="flex items-center gap-2">
-                <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+                <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-ink-hi">Cancel</button>
                 <button
                   onClick={() => (mode === 'W9' ? confirmW9() : confirmCoi())}
                   disabled={phase === 'confirming'}
-                  className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-2"
                 >
                   {phase === 'confirming' && <Loader2 size={14} className="animate-spin" />}
                   {mode === 'W9' ? 'Confirm W-9' : 'Confirm coverages'}

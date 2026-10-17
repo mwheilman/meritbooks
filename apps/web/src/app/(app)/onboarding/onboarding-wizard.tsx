@@ -70,7 +70,7 @@ const REV_REC_METHODS: { value: string; label: string; help: string }[] = [
 ];
 
 
-const inputCls = 'w-full px-3 py-2 bg-surface-900 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50';
+const inputCls = 'w-full px-3 py-2 bg-surface-900 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50';
 const labelCls = 'block text-xs text-slate-500 mb-1.5 font-medium';
 
 /**
@@ -399,7 +399,7 @@ export function OnboardingWizard() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight flex items-center gap-2">
+          <h1 className="text-2xl font-semibold text-ink-hi tracking-tight flex items-center gap-2">
             <Sparkles size={20} className="text-brand-400" /> Set up your books
           </h1>
           <p className="text-sm text-slate-400 mt-1 max-w-2xl">
@@ -446,7 +446,7 @@ export function OnboardingWizard() {
             id="wizard-company"
             value={activeCompanyId ?? ''}
             onChange={(e) => setPreferredCompanyId(e.target.value || null)}
-            className="px-2.5 py-1.5 bg-surface-900 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-brand-500/50"
+            className="px-2.5 py-1.5 bg-surface-900 border border-slate-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50"
           >
             {entities.map((e) => {
               const c = findCompany(status, e.id);
@@ -501,7 +501,7 @@ export function OnboardingWizard() {
           {/* Nav */}
           <div className="flex items-center justify-between pt-2">
             {stepIndex > 0 ? (
-              <button type="button" onClick={goBack} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/50 transition-colors">
+              <button type="button" onClick={goBack} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-ink-hi hover:bg-slate-800/50 transition-colors">
                 <ArrowLeft size={14} /> Back
               </button>
             ) : (
@@ -516,7 +516,7 @@ export function OnboardingWizard() {
                   disabled={finishing || !finishAllowed}
                   aria-describedby={!finishAllowed ? 'finish-blocked' : undefined}
                   className={clsx('flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors',
-                    finishing || !finishAllowed ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-slate-900 hover:bg-brand-400')}
+                    finishing || !finishAllowed ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-white hover:bg-brand-400')}
                 >
                   {finishing ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
                   {activeCompany ? `Finish & enter ${activeCompany.shortCode || activeCompany.name}` : 'Finish'}
@@ -534,7 +534,7 @@ export function OnboardingWizard() {
               <button
                 type="button"
                 onClick={goNext}
-                className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium transition-colors bg-brand-500 text-slate-900 hover:bg-brand-400"
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium transition-colors bg-brand-500 text-white hover:bg-brand-400"
               >
                 {SKIPPABLE_STEPS.has(step) && stepStatus(step) !== 'done' ? 'Skip for now' : 'Continue'} <ArrowRight size={14} />
               </button>
@@ -629,7 +629,7 @@ function SourceStep({
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-xl font-semibold text-white tracking-tight">Where do your books live today?</h2>
+        <h2 className="text-xl font-semibold text-ink-hi tracking-tight">Where do your books live today?</h2>
         <p className="text-sm text-slate-400 mt-1.5 max-w-2xl">
           First question — and almost the only one. Connect your system or drop your files and we&apos;ll bring
           everything over. You review; you don&apos;t re-enter. Starting a brand-new business? Begin clean.
@@ -673,7 +673,7 @@ function SourceStep({
                 onClick={() => void forward.run()}
                 disabled={!hasCompany || savingFresh}
                 className={clsx('shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                  hasCompany && !savingFresh ? 'bg-brand-500 text-slate-900 hover:bg-brand-400' : 'bg-slate-700 text-slate-500 cursor-not-allowed')}
+                  hasCompany && !savingFresh ? 'bg-brand-500 text-white hover:bg-brand-400' : 'bg-slate-700 text-slate-500 cursor-not-allowed')}
               >
                 {savingFresh && <Loader2 size={14} className="animate-spin" />} {forward.label} <ArrowRight size={14} />
               </button>
@@ -778,7 +778,7 @@ function CompanyConfirm({
   return (
     <div className="space-y-4">
       <div className="card p-6 space-y-2">
-        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-ink-hi flex items-center gap-2">
           <Building2 size={18} className="text-brand-400" />
           {entities.length > 0 ? 'Your company' : source === 'fresh' ? 'Name your company' : 'Confirm your company'}
         </h2>
@@ -800,7 +800,7 @@ function CompanyConfirm({
                     <Building2 size={14} className="text-brand-400" />
                   </div>
                   <div>
-                    <p className="text-sm text-white">{e.name}</p>
+                    <p className="text-sm text-ink-hi">{e.name}</p>
                     <p className="text-[11px] text-slate-500 font-mono">{e.shortCode}{e.industry ? ` · ${e.industry}` : ''}</p>
                   </div>
                 </div>
@@ -875,7 +875,7 @@ function CompanyConfirm({
               onClick={submit}
               disabled={!valid || submitting}
               className={clsx('flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors',
-                !valid || submitting ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-slate-900 hover:bg-brand-400')}
+                !valid || submitting ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-white hover:bg-brand-400')}
             >
               {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Create company
             </button>
@@ -902,7 +902,7 @@ function CoaStep({ accountCount }: { accountCount: number }) {
     <div className="space-y-4">
       <div className="card p-6 space-y-4">
         <div>
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-ink-hi flex items-center gap-2">
             <BookOpen size={18} className="text-brand-400" /> Chart of accounts
           </h2>
           <p className="text-xs text-slate-500 mt-1">
@@ -923,7 +923,7 @@ function CoaStep({ accountCount }: { accountCount: number }) {
             />
             <div className="rounded-xl border border-brand-500/20 bg-brand-500/5 p-6 text-center">
               <CircleCheck className="w-10 h-10 mx-auto text-brand-400 mb-2" />
-              <p className="text-2xl font-mono font-semibold text-white tabular-nums">{accountCount}</p>
+              <p className="text-2xl font-mono font-semibold text-ink-hi tabular-nums">{accountCount}</p>
               <p className="text-sm text-slate-400 mt-0.5">accounts ready</p>
             </div>
           </>
@@ -994,7 +994,7 @@ function OpeningStep({
   return (
     <div className="space-y-4">
       <div className="card p-6 space-y-3">
-        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-ink-hi flex items-center gap-2">
           <Scale size={18} className="text-brand-400" /> Opening balances
         </h2>
         <p className="text-xs text-slate-500">
@@ -1040,7 +1040,7 @@ function BankStep({ entities }: { entities: EntityRow[] }) {
     <div className="space-y-4">
       <div className="card p-6 space-y-4">
         <div>
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-ink-hi flex items-center gap-2">
             <Landmark size={18} className="text-brand-400" /> Connect your bank
           </h2>
           <p className="text-xs text-slate-500 mt-1">
@@ -1072,7 +1072,7 @@ function ErpStep({ onSkip, onDone }: { onSkip: () => void; onDone: () => void })
   return (
     <div className="space-y-4">
       <div className="card p-6 space-y-2">
-        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-ink-hi flex items-center gap-2">
           <Plug size={18} className="text-brand-400" /> Connect your existing systems
         </h2>
         <p className="text-xs text-slate-500">

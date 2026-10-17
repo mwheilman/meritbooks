@@ -226,7 +226,7 @@ export function PlaidLinkButton({
           <button
             onClick={startConnect}
             disabled={busy}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-slate-900 text-sm font-medium hover:bg-emerald-400 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 disabled:opacity-50 transition-colors"
             aria-label="Connect a bank account with Plaid"
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Landmark size={14} />}

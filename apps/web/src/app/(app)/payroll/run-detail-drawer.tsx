@@ -289,7 +289,7 @@ function ActionRail({
             <button
               onClick={onApprove}
               disabled={preparedByMe || !canApprove || pending === 'approve'}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {pending === 'approve' ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
               Approve run
@@ -345,7 +345,7 @@ function ActionRail({
             </p>
           ) : (
             <p className="mb-3 text-xs text-slate-300">
-              The provider will debit the bank{funding !== null ? <span className="font-mono font-semibold text-white"> {formatMoney(funding)}</span> : ''} and pay
+              The provider will debit the bank{funding !== null ? <span className="font-mono font-semibold text-ink-hi"> {formatMoney(funding)}</span> : ''} and pay
               employees, agencies, and garnishment recipients. This cannot be undone.
             </p>
           )}
@@ -381,7 +381,7 @@ function ActionRail({
           <button
             onClick={onPost}
             disabled={pending === 'post'}
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40"
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-40"
           >
             {pending === 'post' ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />}
             Post to GL

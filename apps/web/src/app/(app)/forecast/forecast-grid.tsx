@@ -98,7 +98,7 @@ function ForecastChart({ weeks }: { weeks: ForecastWeek[] }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Projected weekly ending balance">
       {/* zero baseline */}
-      <line x1={padL} y1={zeroY} x2={W - padR} y2={zeroY} stroke="#2C362F" strokeWidth={1} strokeDasharray="3 3" />
+      <line x1={padL} y1={zeroY} x2={W - padR} y2={zeroY} stroke="#D9D4CA" strokeWidth={1} strokeDasharray="3 3" />
       {/* net bars */}
       {weeks.map((w, i) => {
         const barX = padL + slot * i + slot * 0.28;
@@ -137,7 +137,7 @@ function ForecastChart({ weeks }: { weeks: ForecastWeek[] }) {
           y={H - 10}
           textAnchor="middle"
           fontSize={9}
-          fill="#7E8983"
+          fill="#55657A"
           fontFamily="var(--font-mono, monospace)"
         >
           W{w.weekNumber}
@@ -190,7 +190,7 @@ function WeekDetail({ week, onClose }: { week: ForecastWeek; onClose: () => void
     <div className="card p-4 border border-emerald-500/20">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <p className="text-sm font-semibold text-white">
+          <p className="text-sm font-semibold text-ink-hi">
             Week {week.weekNumber} · {fmtWeekLabel(week.startDate)} – {fmtWeekLabel(week.endDate)}
           </p>
           <p className="text-xs text-slate-500 font-mono">
@@ -200,7 +200,7 @@ function WeekDetail({ week, onClose }: { week: ForecastWeek; onClose: () => void
             </span>
           </p>
         </div>
-        <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close detail">
+        <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close detail">
           <X size={16} />
         </button>
       </div>
@@ -230,7 +230,7 @@ export function ForecastGrid() {
       <select
         value={locationId}
         onChange={(e) => { setLocationId(e.target.value); setSelectedWeek(null); }}
-        className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:border-emerald-500 focus:outline-none"
+        className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-ink-hi focus:border-brand-500 focus:outline-none"
       >
         <option value="">All companies (consolidated)</option>
         {locations.map((l) => (
@@ -245,7 +245,7 @@ export function ForecastGrid() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">{Selector}</div>
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
+          <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
         </div>
       </div>
     );
@@ -324,11 +324,11 @@ export function ForecastGrid() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="card p-4">
           <span className="text-xs text-slate-500 uppercase tracking-wider">Starting cash</span>
-          <p className="text-xl font-mono font-semibold text-white mt-1">{formatMoney(starting)}</p>
+          <p className="text-xl font-mono font-semibold text-ink-hi mt-1">{formatMoney(starting)}</p>
         </div>
         <div className="card p-4">
           <span className="text-xs text-slate-500 uppercase tracking-wider">Projected (13 wk)</span>
-          <p className={clsx('text-xl font-mono font-semibold mt-1', ending < 0 ? 'text-red-400' : 'text-white')}>
+          <p className={clsx('text-xl font-mono font-semibold mt-1', ending < 0 ? 'text-red-400' : 'text-ink-hi')}>
             {formatMoney(ending)}
           </p>
         </div>
@@ -423,7 +423,7 @@ export function ForecastGrid() {
               </Row>
               {/* Closing */}
               <tr className="bg-slate-800/20 border-t border-slate-700">
-                <td className="px-4 py-2.5 text-xs font-semibold text-white sticky left-0 bg-slate-800/20 z-10">
+                <td className="px-4 py-2.5 text-xs font-semibold text-ink-hi sticky left-0 bg-slate-800/20 z-10">
                   Closing balance
                 </td>
                 {weeks.map((w) => (
@@ -431,7 +431,7 @@ export function ForecastGrid() {
                     key={w.index}
                     className={clsx(
                       'px-3 py-2.5 text-center text-xs font-mono font-semibold',
-                      w.closingCents < 0 ? 'text-red-400 bg-red-500/10' : w.index === lowIdx ? 'text-amber-300 bg-amber-500/5' : 'text-white'
+                      w.closingCents < 0 ? 'text-red-400 bg-red-500/10' : w.index === lowIdx ? 'text-amber-300 bg-amber-500/5' : 'text-ink-hi'
                     )}
                   >
                     {formatMoney(w.closingCents)}

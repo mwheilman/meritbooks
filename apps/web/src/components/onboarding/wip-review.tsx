@@ -218,7 +218,7 @@ export function WipReview({ companyId, sessionId, asOfDate, onCommitted }: WipRe
               {/* Opening WIP tie summary */}
               {totals && (
                 <div className="rounded-2xl border border-slate-800 bg-surface-900 p-4">
-                  <h3 className="text-sm font-semibold text-white">Opening WIP — how it ties to your ledger</h3>
+                  <h3 className="text-sm font-semibold text-ink-hi">Opening WIP — how it ties to your ledger</h3>
                   <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
                     <TieStat label="Costs to date → WIP asset" cents={totals.costsToDateCents} />
                     <TieStat label="Earned revenue (POC)" cents={totals.earnedRevenueCents} muted />
@@ -249,7 +249,7 @@ export function WipReview({ companyId, sessionId, asOfDate, onCommitted }: WipRe
               {/* Jobs that need a look */}
               {lowConfidenceJobs.length > 0 && (
                 <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-white">Jobs that need a look</h3>
+                  <h3 className="text-sm font-semibold text-ink-hi">Jobs that need a look</h3>
                   {lowConfidenceJobs.map((j) => (
                     <ProposalCard
                       key={j.jobNumber}
@@ -282,7 +282,7 @@ export function WipReview({ companyId, sessionId, asOfDate, onCommitted }: WipRe
                       return (
                         <tr key={j.jobNumber} className="border-b border-slate-900 last:border-0">
                           <td className="px-3 py-2">
-                            <div className="text-white">{j.jobNumber}</div>
+                            <div className="text-ink-hi">{j.jobNumber}</div>
                             <div className="text-xs text-slate-500">{j.jobName}{j.customerName ? ` · ${j.customerName}` : ''}</div>
                           </td>
                           <td className="px-3 py-2 text-right font-mono tabular-nums text-slate-300">{(row?.pctCompleteDisplay ?? 0).toFixed(1)}%</td>
@@ -310,7 +310,7 @@ export function WipReview({ companyId, sessionId, asOfDate, onCommitted }: WipRe
                   onClick={handleCommit}
                   disabled={!canCommit || committing}
                   className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 ${
-                    !canCommit || committing ? 'cursor-not-allowed bg-slate-700 text-slate-500' : 'bg-brand-500 text-slate-900 hover:bg-brand-400'
+                    !canCommit || committing ? 'cursor-not-allowed bg-slate-700 text-slate-500' : 'bg-brand-500 text-white hover:bg-brand-400'
                   }`}
                 >
                   {committing ? 'Importing…' : `Import ${parsed.jobs.length} job${parsed.jobs.length === 1 ? '' : 's'}`}
@@ -338,7 +338,7 @@ function TieStat({ label, cents, accent, muted }: { label: string; cents: number
   return (
     <div>
       <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className={`font-mono tabular-nums ${accent ? 'text-brand-300' : muted ? 'text-slate-400' : 'text-white'}`}>{formatMoney(cents)}</dd>
+      <dd className={`font-mono tabular-nums ${accent ? 'text-brand-300' : muted ? 'text-slate-400' : 'text-ink-hi'}`}>{formatMoney(cents)}</dd>
     </div>
   );
 }

@@ -62,7 +62,7 @@ export function SourceTile({
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-white">{title}</span>
+        <span className="block text-sm font-semibold text-ink-hi">{title}</span>
         <span className="block text-xs text-slate-500">{subtitle}</span>
       </span>
       {selected && <Check size={16} className="shrink-0 text-brand-400" aria-hidden />}

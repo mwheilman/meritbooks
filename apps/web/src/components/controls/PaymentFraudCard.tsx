@@ -171,7 +171,7 @@ export function PaymentFraudCard({
   if (state === 'loading' || state === 'idle') {
     return (
       <div className="card flex items-center gap-3 p-4 text-sm text-slate-400">
-        <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+        <Loader2 className="h-4 w-4 animate-spin text-brand-400" />
         Screening this payment for fraud indicators…
       </div>
     );
@@ -291,7 +291,7 @@ export function PaymentFraudCard({
                 onChange={(e) => setOverrideReason(e.target.value)}
                 rows={2}
                 placeholder="e.g. Verified new bank details by phone with the vendor's AP contact."
-                className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:border-emerald-500/40 focus:outline-none"
+                className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:border-brand-500/40 focus:outline-none"
               />
               <div className="flex items-center justify-end gap-2">
                 <button

@@ -81,7 +81,7 @@ export default function AiDecisionsPage() {
         {STATUSES.map((s) => (
           <button key={s} onClick={() => setFilter(s)}
             className={clsx('px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
-              filter === s ? 'bg-emerald-600 border-emerald-500 text-white' : 'border-slate-700 text-slate-400 hover:text-slate-200')}>
+              filter === s ? 'bg-brand-500 border-brand-500 text-white' : 'border-slate-700 text-slate-400 hover:text-slate-200')}>
             {s === 'ALL' ? 'All' : statusBadge(s as Decision['status']).label}
           </button>
         ))}

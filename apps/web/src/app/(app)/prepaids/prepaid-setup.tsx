@@ -122,7 +122,7 @@ export function PrepaidSetup({
   }
 
   const inputCls =
-    'w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-sm text-white focus:border-emerald-500 focus:outline-none';
+    'w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-sm text-ink-hi focus:border-brand-500 focus:outline-none';
   const labelCls = 'block text-[11px] text-slate-500 mb-1';
 
   return (
@@ -132,7 +132,7 @@ export function PrepaidSetup({
           <div className="flex items-center gap-2">
             {prefill?.origin === 'ai' && <Sparkles size={18} className="text-indigo-400" />}
             <div>
-              <h2 className="text-lg font-semibold text-white">Set up prepaid amortization</h2>
+              <h2 className="text-lg font-semibold text-ink-hi">Set up prepaid amortization</h2>
               <p className="text-[11px] text-slate-500">
                 Straight-line: DR expense / CR prepaid asset each period.
                 {prefill?.origin === 'ai' && ' Review the AI-proposed values before saving.'}
@@ -140,7 +140,7 @@ export function PrepaidSetup({
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close">
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -216,11 +216,11 @@ export function PrepaidSetup({
         )}
 
         <div className="mt-5 flex items-center justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-ink-hi">Cancel</button>
           <button
             onClick={save}
             disabled={!canSave}
-            className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-40 flex items-center gap-2"
+            className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-40 flex items-center gap-2"
           >
             {saving && <Loader2 size={14} className="animate-spin" />}
             Create schedule

@@ -178,7 +178,7 @@ export function OriginationPanel() {
     <div className="card p-4 space-y-4 border border-indigo-900/40">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-ink-hi flex items-center gap-2">
             <Landmark size={15} className="text-indigo-400" /> Payment origination
           </h2>
           <p className="text-2xs text-slate-500 mt-0.5 max-w-2xl">

@@ -43,7 +43,7 @@ export function AiUnavailableNotice({
       </p>
       <Link
         href={manualHref}
-        className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-brand-500/50 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+        className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-brand-500/50 hover:text-ink-hi focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
       >
         <PencilLine size={13} aria-hidden />
         {manualLabel}

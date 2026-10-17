@@ -168,7 +168,7 @@ export function BulkCompanies({ existing, existingLoading, onCreated, onNext }: 
       <div className="card p-4 space-y-3">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-sm font-semibold text-white">Your companies</h2>
+            <h2 className="text-sm font-semibold text-ink-hi">Your companies</h2>
             <p className="text-xs text-slate-400 mt-0.5">
               Paste one company per line, paste cells from a spreadsheet, or upload a CSV with a <span className="font-mono">name</span> column
               (optional <span className="font-mono">industry</span> and <span className="font-mono">fiscal year start</span>). We’ll suggest a short code for each.
@@ -251,7 +251,7 @@ export function BulkCompanies({ existing, existingLoading, onCreated, onNext }: 
                       <td className="px-3 py-2">
                         <input
                           type="checkbox"
-                          className="accent-emerald-500"
+                          className="accent-brand-500"
                           aria-label={`Include ${d.name}`}
                           checked={d.include || done}
                           disabled={done}

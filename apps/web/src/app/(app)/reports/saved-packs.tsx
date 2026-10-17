@@ -139,7 +139,7 @@ export function SavedPacks() {
           <Bookmark size={16} className="text-emerald-400" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-white">Saved report packs</p>
+          <p className="text-sm font-semibold text-ink-hi">Saved report packs</p>
           <p className="text-[11px] text-slate-400">
             Reusable packs re-run against today’s ledger. Schedule one for automatic monthly or quarterly email delivery.
           </p>
@@ -171,7 +171,7 @@ export function SavedPacks() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-white truncate">{pack.name}</span>
+                      <span className="text-sm font-semibold text-ink-hi truncate">{pack.name}</span>
                       {pack.schedule_active ? (
                         <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-300 flex items-center gap-1">
                           <CalendarClock size={10} />
@@ -218,7 +218,7 @@ export function SavedPacks() {
                       onClick={() => runPack(pack, 'pdf')}
                       disabled={running === pack.id}
                       title="Run & download PDF"
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 transition-colors"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40 transition-colors"
                     >
                       {running === pack.id && runFmt === 'pdf' ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
                       PDF
@@ -226,7 +226,7 @@ export function SavedPacks() {
                     <button
                       onClick={() => setEditing((id) => (id === pack.id ? null : pack.id))}
                       title="Schedule delivery"
-                      className={clsx('p-1.5 rounded-lg transition-colors', editing === pack.id ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800')}
+                      className={clsx('p-1.5 rounded-lg transition-colors', editing === pack.id ? 'bg-slate-700 text-ink-hi' : 'text-slate-400 hover:text-ink-hi hover:bg-slate-800')}
                     >
                       <CalendarClock size={15} />
                     </button>
@@ -326,7 +326,7 @@ function ScheduleEditor({ pack, onSaved, onCancel }: { pack: Pack; onSaved: (p: 
             onClick={() => setCadence(c)}
             className={clsx(
               'px-2.5 py-1 rounded-full text-[11px] transition-colors',
-              cadence === c ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700',
+              cadence === c ? 'bg-brand-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700',
             )}
           >
             {c === 'NONE' ? 'Off' : c === 'MONTHLY' ? 'Monthly' : 'Quarterly'}
@@ -338,8 +338,8 @@ function ScheduleEditor({ pack, onSaved, onCancel }: { pack: Pack; onSaved: (p: 
         onChange={(e) => setRecipientsText(e.target.value)}
         placeholder="Recipient emails, comma-separated"
         className={clsx(
-          'w-full px-3 py-1.5 bg-slate-900/60 border rounded-lg text-xs text-white placeholder:text-slate-600 focus:outline-none',
-          invalid.length > 0 ? 'border-red-500/50 focus:border-red-500/70' : 'border-slate-800 focus:border-emerald-500/50',
+          'w-full px-3 py-1.5 bg-slate-900/60 border rounded-lg text-xs text-ink-hi placeholder:text-slate-600 focus:outline-none',
+          invalid.length > 0 ? 'border-red-500/50 focus:border-red-500/70' : 'border-slate-800 focus:border-brand-500/50',
         )}
       />
 
@@ -378,13 +378,13 @@ function ScheduleEditor({ pack, onSaved, onCancel }: { pack: Pack; onSaved: (p: 
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <button onClick={onCancel} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+          <button onClick={onCancel} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] text-slate-400 hover:text-ink-hi hover:bg-slate-800 transition-colors">
             <X size={12} /> Cancel
           </button>
           <button
             onClick={save}
             disabled={saving || !canSave}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
             {saving ? 'Saving…' : cadence === 'NONE' ? 'Turn off delivery' : 'Save schedule'}

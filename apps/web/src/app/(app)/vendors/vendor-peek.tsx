@@ -17,7 +17,7 @@ export function VendorPeek({ vendorId }: { vendorId: string }) {
   return (
     <div className="p-3">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-sm font-semibold text-white truncate">{data.name}</span>
+        <span className="text-sm font-semibold text-ink-hi truncate">{data.name}</span>
         {data.is1099 && <span className="text-2xs text-slate-500 font-mono">1099</span>}
         {data.compliance.hasPaymentHold && <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium bg-rose-500/10 text-rose-400"><ShieldAlert size={9} /> HOLD</span>}
       </div>
@@ -28,7 +28,7 @@ export function VendorPeek({ vendorId }: { vendorId: string }) {
       <div className="rounded-md bg-slate-800/40 px-3 py-2">
         <div className="flex items-center justify-between">
           <span className="text-2xs text-slate-500">Open A/P</span>
-          <span className="text-sm font-mono tabular-nums text-white">{formatMoney(data.ap.openBalance)}</span>
+          <span className="text-sm font-mono tabular-nums text-ink-hi">{formatMoney(data.ap.openBalance)}</span>
         </div>
         <div className="flex items-center justify-between mt-0.5">
           <span className="text-2xs text-slate-500">{data.ap.openBillCount} open bill{data.ap.openBillCount !== 1 ? 's' : ''}</span>

@@ -167,9 +167,9 @@ export function IntercompanyWorkspace() {
                 {pairs.map((p) => (
                   <div key={p.creditorEntity.id + p.debtorEntity.id} className="card p-3 flex items-center justify-between">
                     <div className="text-sm text-slate-300 flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-white">{p.debtorEntity.name}</span>
+                      <span className="font-medium text-ink-hi">{p.debtorEntity.name}</span>
                       <span className="text-slate-500">owes</span>
-                      <span className="font-medium text-white">{p.creditorEntity.name}</span>
+                      <span className="font-medium text-ink-hi">{p.creditorEntity.name}</span>
                     </div>
                     <span className="font-mono text-sm text-emerald-300">{fmt(p.netCents)}</span>
                   </div>
@@ -280,7 +280,7 @@ function NewTransactionModal(props: {
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
       <div className="card w-full max-w-lg p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-white">New intercompany transaction</h3>
+          <h3 className="text-base font-semibold text-ink-hi">New intercompany transaction</h3>
           <button className="text-slate-500 hover:text-slate-300" onClick={onClose}><X size={18} /></button>
         </div>
 

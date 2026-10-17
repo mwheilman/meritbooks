@@ -148,19 +148,19 @@ export function VendorDrawer({ vendorId, onClose }: { vendorId: string | null; o
           <div className="mb-6 grid grid-cols-3 gap-3">
             <div className="rounded-lg bg-slate-800/40 px-3 py-2.5">
               <div className="text-2xs uppercase tracking-wider text-slate-500">Open A/P</div>
-              <div className="mt-1 text-lg font-mono tabular-nums text-white">{formatMoney(data.ap.openBalance)}</div>
+              <div className="mt-1 text-lg font-mono tabular-nums text-ink-hi">{formatMoney(data.ap.openBalance)}</div>
               <div className="text-2xs text-slate-500">
                 {data.ap.openBillCount} open{data.ap.overdueCount > 0 && <span className="text-red-400"> · {data.ap.overdueCount} overdue</span>}
               </div>
             </div>
             <div className="rounded-lg bg-slate-800/40 px-3 py-2.5">
               <div className="text-2xs uppercase tracking-wider text-slate-500">{year} Spend</div>
-              <div className="mt-1 text-lg font-mono tabular-nums text-white">{formatMoney(data.spend.ytdCents)}</div>
+              <div className="mt-1 text-lg font-mono tabular-nums text-ink-hi">{formatMoney(data.spend.ytdCents)}</div>
               <div className="text-2xs text-slate-500">{formatMoney(data.spend.paidYtdCents, { compact: true })} paid</div>
             </div>
             <div className="rounded-lg bg-slate-800/40 px-3 py-2.5">
               <div className="text-2xs uppercase tracking-wider text-slate-500">Trailing 12mo</div>
-              <div className="mt-1 text-lg font-mono tabular-nums text-white">{formatMoney(data.spend.ttmCents)}</div>
+              <div className="mt-1 text-lg font-mono tabular-nums text-ink-hi">{formatMoney(data.spend.ttmCents)}</div>
               <div className="text-2xs text-slate-500">billed</div>
             </div>
           </div>
@@ -183,7 +183,7 @@ export function VendorDrawer({ vendorId, onClose }: { vendorId: string | null; o
                   : <BadgeAlert size={13} className="text-slate-600" />}
               </div>
               <div className="flex items-center gap-1.5 mb-1">
-                <span className={`text-sm font-medium ${data.ten99.reportable ? 'text-white' : 'text-slate-300'}`}>
+                <span className={`text-sm font-medium ${data.ten99.reportable ? 'text-ink-hi' : 'text-slate-300'}`}>
                   {data.ten99.reportable ? 'Reportable' : data.ten99.eligible ? 'Not reportable' : 'Not 1099'}
                 </span>
                 <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-2xs font-medium ${READINESS_META[data.ten99.readiness].cls}`}>
@@ -213,7 +213,7 @@ export function VendorDrawer({ vendorId, onClose }: { vendorId: string | null; o
               </div>
               {data.paymentProfile ? (
                 <>
-                  <div className="text-sm font-medium text-white">
+                  <div className="text-sm font-medium text-ink-hi">
                     {data.paymentProfile.method === 'CHECK' ? 'Check' : 'ACH'}
                     {data.paymentProfile.accountType && <span className="text-slate-400 font-normal"> · {data.paymentProfile.accountType}</span>}
                   </div>
@@ -240,13 +240,13 @@ export function VendorDrawer({ vendorId, onClose }: { vendorId: string | null; o
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setIntake('W9')}
-                className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/40 px-2 py-1 text-2xs font-medium text-slate-300 hover:text-white hover:border-slate-600"
+                className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/40 px-2 py-1 text-2xs font-medium text-slate-300 hover:text-ink-hi hover:border-slate-600"
               >
                 <UploadCloud size={12} /> Upload W-9
               </button>
               <button
                 onClick={() => setIntake('COI')}
-                className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/40 px-2 py-1 text-2xs font-medium text-slate-300 hover:text-white hover:border-slate-600"
+                className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/40 px-2 py-1 text-2xs font-medium text-slate-300 hover:text-ink-hi hover:border-slate-600"
               >
                 <ShieldCheck size={12} /> Upload COI
               </button>

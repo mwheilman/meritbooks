@@ -186,7 +186,7 @@ export function BudgetEntryGrid({ locationId, locationName, fiscalYear, departme
             onClick={save}
             disabled={saving || dirtyCount === 0}
             className={clsx('flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors',
-              dirtyCount > 0 && !saving ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700')}
+              dirtyCount > 0 && !saving ? 'bg-brand-500 text-white hover:bg-brand-600' : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700')}
           >
             {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
             {saving ? 'Saving…' : dirtyCount > 0 ? `Save ${dirtyCount} changed` : 'Saved'}
@@ -293,7 +293,7 @@ function DollarCell({ value, onCommit }: { value: number; onCommit: (cents: numb
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-      className="w-full px-1.5 py-1 bg-slate-900/60 border border-slate-800 rounded text-right font-mono text-xs text-slate-200 placeholder:text-slate-700 focus:outline-none focus:border-emerald-500/50 focus:bg-slate-900"
+      className="w-full px-1.5 py-1 bg-slate-900/60 border border-slate-800 rounded text-right font-mono text-xs text-slate-200 placeholder:text-slate-700 focus:outline-none focus:border-brand-500/50 focus:bg-slate-900"
     />
   );
 }
@@ -310,7 +310,7 @@ function SpreadButton({ onSpread }: { onSpread: (annualCents: number) => void })
         if (Number.isNaN(cents)) { addToast('error', 'Enter a valid dollar amount.'); return; }
         onSpread(cents);
       }}
-      className="p-1 rounded text-slate-500 hover:text-emerald-400 hover:bg-slate-800"
+      className="p-1 rounded text-slate-500 hover:text-brand-400 hover:bg-slate-800"
     >
       <Wand2 size={13} />
     </button>

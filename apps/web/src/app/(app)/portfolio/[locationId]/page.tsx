@@ -241,7 +241,7 @@ function Snapshot({ data }: { data: EntitySnapshot }) {
       {/* Mini P&L */}
       <div className="card p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-white">Income statement</h3>
+          <h3 className="text-sm font-semibold text-ink-hi">Income statement</h3>
           <span className="text-2xs text-slate-500">
             {data.period.label} · vs {data.priorPeriod.label}
           </span>
@@ -262,7 +262,7 @@ function Snapshot({ data }: { data: EntitySnapshot }) {
         {/* Balance sheet */}
         <div className="card p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-hi">
               <Landmark size={15} className="text-slate-500" /> Balance sheet
             </h3>
             <span className="text-2xs text-slate-500">as of {data.period.endDate}</span>
@@ -293,7 +293,7 @@ function Snapshot({ data }: { data: EntitySnapshot }) {
         {/* Close + cash */}
         <div className="card p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-hi">
               <ClipboardCheck size={15} className="text-slate-500" /> Close status
             </h3>
             <span
@@ -390,7 +390,7 @@ function Snapshot({ data }: { data: EntitySnapshot }) {
         />
         <div className="card p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-hi">
               <Inbox size={15} className="text-slate-500" /> Open exceptions
             </h3>
             {data.openExceptions.total > 0 && (
@@ -439,7 +439,7 @@ function CrossLink({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="inline-flex items-center gap-1 rounded-md border border-slate-800 px-2.5 py-1 text-slate-300 transition-colors hover:border-slate-700 hover:text-white"
+      className="inline-flex items-center gap-1 rounded-md border border-slate-800 px-2.5 py-1 text-slate-300 transition-colors hover:border-slate-700 hover:text-ink-hi"
     >
       {label} <ExternalLink size={11} className="text-slate-500" />
     </Link>
@@ -450,7 +450,7 @@ function PnlStat({ label, delta, hint }: { label: string; delta: PeriodDelta; hi
   return (
     <div>
       <p className="text-xs text-slate-400">{label}</p>
-      <p className="mt-1 font-mono text-xl font-semibold tabular-nums tracking-tight text-white">
+      <p className="mt-1 font-mono text-xl font-semibold tabular-nums tracking-tight text-ink-hi">
         {formatMoney(delta.currentCents)}
       </p>
       <div className="mt-1 flex items-center gap-2">
@@ -494,7 +494,7 @@ function BsLine({
       <span
         className={clsx(
           'font-mono text-sm tabular-nums',
-          emphasize ? 'font-semibold text-white' : 'text-slate-200',
+          emphasize ? 'font-semibold text-ink-hi' : 'text-slate-200',
         )}
       >
         {formatMoney(cents)}
@@ -521,7 +521,7 @@ function OpenItemsCard({
   return (
     <div className="card p-5">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-hi">
           <Icon size={15} className="text-slate-500" /> {title}
         </h3>
         <span className={clsx('font-mono text-sm tabular-nums', total > 0 ? 'text-amber-400' : 'text-slate-500')}>

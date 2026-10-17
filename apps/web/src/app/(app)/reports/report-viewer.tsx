@@ -85,16 +85,16 @@ function MultiSelect({ label, icon: Icon, options, selected, onChange, allLabel 
 
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white hover:border-slate-600 transition-colors">
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi hover:border-slate-600 transition-colors">
         <Icon size={13} className="text-slate-500" />
-        <span className={isAll ? 'text-slate-400' : 'text-emerald-400'}>{displayText}</span>
+        <span className={isAll ? 'text-slate-400' : 'text-brand-400'}>{displayText}</span>
         <ChevronDown size={11} className="text-slate-500" />
       </button>
 
       {open && (
         <div className="absolute top-full mt-1 left-0 w-64 max-h-72 overflow-y-auto bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 py-1">
-          <button onClick={() => onChange([])} className={clsx('w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-800 transition-colors', isAll ? 'text-emerald-400' : 'text-slate-400')}>
-            <div className={clsx('w-3.5 h-3.5 rounded border flex items-center justify-center', isAll ? 'bg-emerald-600 border-emerald-500' : 'border-slate-600')}>{isAll && <Check size={9} className="text-white" />}</div>
+          <button onClick={() => onChange([])} className={clsx('w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-800 transition-colors', isAll ? 'text-brand-400' : 'text-slate-400')}>
+            <div className={clsx('w-3.5 h-3.5 rounded border flex items-center justify-center', isAll ? 'bg-brand-600 border-brand-500' : 'border-slate-600')}>{isAll && <Check size={9} className="text-white" />}</div>
             {allLabel ?? `All ${label}`}
           </button>
 
@@ -105,7 +105,7 @@ function MultiSelect({ label, icon: Icon, options, selected, onChange, allLabel 
                 const checked = selected.includes(opt.value);
                 return (
                   <button key={opt.value} onClick={() => toggle(opt.value)} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 transition-colors">
-                    <div className={clsx('w-3.5 h-3.5 rounded border flex items-center justify-center', checked ? 'bg-emerald-600 border-emerald-500' : 'border-slate-600')}>{checked && <Check size={9} className="text-white" />}</div>
+                    <div className={clsx('w-3.5 h-3.5 rounded border flex items-center justify-center', checked ? 'bg-brand-600 border-brand-500' : 'border-slate-600')}>{checked && <Check size={9} className="text-white" />}</div>
                     {opt.label}
                   </button>
                 );
@@ -440,7 +440,7 @@ export function ReportViewer() {
         <div className="relative mb-4">
           <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-400" />
           <input type="text" placeholder="Ask for any report..." value={nlQuery} onChange={(e) => setNlQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2.5 bg-indigo-500/[0.06] border border-indigo-500/20 rounded-xl text-sm text-white placeholder:text-indigo-300/40 focus:outline-none focus:border-indigo-500/40" />
+            className="w-full pl-9 pr-3 py-2.5 bg-indigo-500/[0.06] border border-indigo-500/20 rounded-xl text-sm text-ink-hi placeholder:text-indigo-300/40 focus:outline-none focus:border-indigo-500/40" />
         </div>
         <nav className="space-y-0.5">
           {CATALOG.map((cat) => {
@@ -450,7 +450,7 @@ export function ReportViewer() {
               <div key={cat.key}>
                 <button onClick={() => { setCatKey(cat.key); setReportKey(null); }}
                   className={clsx('w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left',
-                    active ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:text-white hover:bg-slate-800/50')}>
+                    active ? 'bg-brand-500/10 text-brand-300' : 'text-slate-400 hover:text-ink-hi hover:bg-slate-800/50')}>
                   <Icon className="w-4 h-4 shrink-0" />{cat.label}
                   <ChevronDown className={clsx('w-3 h-3 ml-auto transition-transform', active ? '' : '-rotate-90')} />
                 </button>
@@ -459,7 +459,7 @@ export function ReportViewer() {
                     {cat.reports.map((r) => (
                       <button key={r.key} onClick={() => setReportKey(r.key)}
                         className={clsx('w-full text-left px-2.5 py-1.5 rounded-md text-xs transition-colors',
-                          reportKey === r.key ? 'bg-slate-800 text-white font-medium' : 'text-slate-500 hover:text-slate-300')}>
+                          reportKey === r.key ? 'bg-slate-800 text-ink-hi font-medium' : 'text-slate-500 hover:text-slate-300')}>
                         {r.label}
                       </button>
                     ))}
@@ -480,15 +480,15 @@ export function ReportViewer() {
         <SavedPacks />
         {!reportKey ? (
           <div>
-            <h1 className="text-2xl font-semibold text-white mb-2">{currentCat?.label ?? 'Reports'}</h1>
+            <h1 className="text-2xl font-semibold text-ink-hi mb-2">{currentCat?.label ?? 'Reports'}</h1>
             <p className="text-sm text-slate-400 mb-6">Select a report to generate.</p>
             <div className="grid grid-cols-2 gap-3">
               {(currentCat?.reports ?? []).map((r) => (
                 <button key={r.key} onClick={() => setReportKey(r.key)}
                   className="text-left p-4 rounded-xl border border-slate-800 bg-slate-800/20 hover:bg-slate-800/50 hover:border-slate-700 transition-colors group">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-white group-hover:text-emerald-400 transition-colors">{r.label}</span>
-                    <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-emerald-400" />
+                    <span className="text-sm font-medium text-ink-hi group-hover:text-brand-400 transition-colors">{r.label}</span>
+                    <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-brand-400" />
                   </div>
                   <p className="text-xs text-slate-500">{r.desc}</p>
                   <div className="flex gap-1.5 mt-2">
@@ -504,7 +504,7 @@ export function ReportViewer() {
           <div>
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h1 className="text-xl font-semibold text-white">{reportDef?.label}</h1>
+                <h1 className="text-xl font-semibold text-ink-hi">{reportDef?.label}</h1>
                 <p className="text-xs text-slate-500 mt-0.5">{reportDef?.desc}</p>
                 {rememberedHint && (
                   <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-indigo-300/80" title="Learned from your past runs — you can change anything">
@@ -534,13 +534,13 @@ export function ReportViewer() {
               {reportDef?.needsDates !== false && (
                 <div className="flex items-center gap-1.5">
                   <Calendar size={13} className="text-slate-500" />
-                  <select value={periodKey} onChange={(e) => setPeriodKey(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
+                  <select value={periodKey} onChange={(e) => setPeriodKey(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi">
                     {PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
                   </select>
                   {periodKey === 'custom' && <>
-                    <input type="date" value={customS} onChange={(e) => setCustomS(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono w-32" />
+                    <input type="date" value={customS} onChange={(e) => setCustomS(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono w-32" />
                     <span className="text-slate-600 text-xs">to</span>
-                    <input type="date" value={customE} onChange={(e) => setCustomE(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono w-32" />
+                    <input type="date" value={customE} onChange={(e) => setCustomE(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono w-32" />
                   </>}
                 </div>
               )}
@@ -559,7 +559,7 @@ export function ReportViewer() {
                   <select
                     value={selectedLocs[0] ?? ''}
                     onChange={(e) => setSelectedLocs(e.target.value ? [e.target.value] : [])}
-                    className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"
+                    className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi"
                     aria-label="Company"
                   >
                     {myCompanies.map((c) => (
@@ -571,8 +571,8 @@ export function ReportViewer() {
 
               {reportDef?.hasBasis && !supportsOverlay && (
                 <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-700">
-                  <button onClick={() => setBasis('accrual')} className={clsx('px-2.5 py-1 rounded-md text-xs font-medium', basis==='accrual' ? 'bg-slate-700 text-white' : 'text-slate-500')}>Accrual</button>
-                  <button onClick={() => setBasis('cash')} className={clsx('px-2.5 py-1 rounded-md text-xs font-medium', basis==='cash' ? 'bg-slate-700 text-white' : 'text-slate-500')}>Cash</button>
+                  <button onClick={() => setBasis('accrual')} className={clsx('px-2.5 py-1 rounded-md text-xs font-medium', basis==='accrual' ? 'bg-slate-700 text-ink-hi' : 'text-slate-500')}>Accrual</button>
+                  <button onClick={() => setBasis('cash')} className={clsx('px-2.5 py-1 rounded-md text-xs font-medium', basis==='cash' ? 'bg-slate-700 text-ink-hi' : 'text-slate-500')}>Cash</button>
                 </div>
               )}
 
@@ -604,7 +604,7 @@ export function ReportViewer() {
                             'px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
                             active
                               ? accent
-                                ? 'bg-slate-700 text-white'
+                                ? 'bg-slate-700 text-ink-hi'
                                 : 'bg-indigo-600/30 text-indigo-100 border border-indigo-500/40'
                               : 'text-slate-500 hover:text-slate-300',
                           )}
@@ -622,8 +622,8 @@ export function ReportViewer() {
 
               {reportDef?.hasDetail && (
                 <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-700">
-                  <button onClick={() => setViewMode('summary')} className={clsx('px-2 py-1 rounded-md text-xs flex items-center gap-1', viewMode==='summary'?'bg-slate-700 text-white':'text-slate-500')}><LayoutGrid size={11}/>Summary</button>
-                  <button onClick={() => setViewMode('detail')} className={clsx('px-2 py-1 rounded-md text-xs flex items-center gap-1', viewMode==='detail'?'bg-slate-700 text-white':'text-slate-500')}><List size={11}/>Detail</button>
+                  <button onClick={() => setViewMode('summary')} className={clsx('px-2 py-1 rounded-md text-xs flex items-center gap-1', viewMode==='summary'?'bg-slate-700 text-ink-hi':'text-slate-500')}><LayoutGrid size={11}/>Summary</button>
+                  <button onClick={() => setViewMode('detail')} className={clsx('px-2 py-1 rounded-md text-xs flex items-center gap-1', viewMode==='detail'?'bg-slate-700 text-ink-hi':'text-slate-500')}><List size={11}/>Detail</button>
                 </div>
               )}
 
@@ -632,10 +632,10 @@ export function ReportViewer() {
                   <GitCompare size={12} className={compareMode !== 'none' ? 'text-indigo-400' : 'text-slate-500'} />
                   <select value={compareMode} onChange={(e) => setCompareMode(e.target.value as CompareMode)}
                     className={clsx('bg-transparent text-xs font-medium focus:outline-none cursor-pointer', compareMode !== 'none' ? 'text-indigo-300' : 'text-slate-400')}>
-                    <option value="none" className="bg-slate-900 text-white">No comparison</option>
-                    <option value="prior_period" className="bg-slate-900 text-white">vs Prior Period</option>
-                    <option value="prior_year" className="bg-slate-900 text-white">vs Prior Year</option>
-                    {reportDef?.hasBasis && <option value="budget" className="bg-slate-900 text-white">vs Budget</option>}
+                    <option value="none" className="bg-slate-900 text-ink-hi">No comparison</option>
+                    <option value="prior_period" className="bg-slate-900 text-ink-hi">vs Prior Period</option>
+                    <option value="prior_year" className="bg-slate-900 text-ink-hi">vs Prior Year</option>
+                    {reportDef?.hasBasis && <option value="budget" className="bg-slate-900 text-ink-hi">vs Budget</option>}
                   </select>
                 </div>
               )}
@@ -900,8 +900,8 @@ function PnlReport({ p, onDrill, compareMode, overlay }: { p: Record<string, str
       {sections.map((sec: ISSection) => (<React.Fragment key={sec.type}><tr className="bg-slate-800/30"><td colSpan={cols} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase">{sec.label} <span className="font-mono text-slate-500 ml-1">{formatMoney(sec.totalCents)}</span></td></tr>
         {sec.groups.flatMap((g: ISGroup) => g.accounts.map((a: ISAcct) => { const pv=cmpMap.get(a.accountNumber)??0; const v=a.amountCents-pv; const f=favorability(sec.type,v); return <tr key={a.accountNumber} onClick={() => onDrill({accountId:a.accountId,accountNumber:a.accountNumber,accountName:a.accountName})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td><td className="px-4 py-1.5 text-sm text-slate-300 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600"/></td><td className={clsx('px-4 py-1.5 text-right text-sm font-mono', figColor(a.amountCents))}>{formatMoney(a.amountCents)}</td><td className="px-3 py-1.5 text-right text-2xs font-mono text-slate-600">{Math.round(Math.abs(a.amountCents)/rb*100)}%</td>{comparing&&<><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-400">{formatMoney(pv)}</td><td className={clsx('px-4 py-1.5 text-right text-sm font-mono',favClass(f))}>{v>0?'+':''}{formatMoney(v)}</td><td className={clsx('px-3 py-1.5 text-right text-2xs font-mono',favClass(f))}>{variancePct(v,pv)}</td></>}</tr>; }))}
       </React.Fragment>))}
-      <tr className={clsx(LEDGER_SUBTOTAL, 'bg-slate-800/20')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Gross Profit</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(s.grossProfitCents)} <span className="text-2xs text-slate-500">{s.grossMarginPct}%</span></td><td/>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{formatMoney(cmpGP)}</td><td className={clsx('px-4 py-2.5 text-right font-mono text-sm',favClass(favorability('REVENUE',gpVar)))}>{gpVar>0?'+':''}{formatMoney(gpVar)}</td><td className={clsx('px-3 py-2.5 text-right text-2xs font-mono',favClass(favorability('REVENUE',gpVar)))}>{variancePct(gpVar,cmpGP)}</td></>}</tr>
-      <tr className={clsx(LEDGER_TOTAL, 'bg-brand-500/[0.04]')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Net Income</td><td className={clsx('px-4 py-2.5 text-right font-mono font-semibold',s.netIncomeCents>=0?'text-emerald-400':'text-red-fig')}>{formatMoney(s.netIncomeCents)} <span className="text-2xs text-slate-500">{s.netMarginPct}%</span></td><td/>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{formatMoney(cmpNI)}</td><td className={clsx('px-4 py-2.5 text-right font-mono text-sm',favClass(favorability('REVENUE',niVar)))}>{niVar>0?'+':''}{formatMoney(niVar)}</td><td className={clsx('px-3 py-2.5 text-right text-2xs font-mono',favClass(favorability('REVENUE',niVar)))}>{variancePct(niVar,cmpNI)}</td></>}</tr>
+      <tr className={clsx(LEDGER_SUBTOTAL, 'bg-slate-800/20')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-ink-hi">Gross Profit</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-ink-hi">{formatMoney(s.grossProfitCents)} <span className="text-2xs text-slate-500">{s.grossMarginPct}%</span></td><td/>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{formatMoney(cmpGP)}</td><td className={clsx('px-4 py-2.5 text-right font-mono text-sm',favClass(favorability('REVENUE',gpVar)))}>{gpVar>0?'+':''}{formatMoney(gpVar)}</td><td className={clsx('px-3 py-2.5 text-right text-2xs font-mono',favClass(favorability('REVENUE',gpVar)))}>{variancePct(gpVar,cmpGP)}</td></>}</tr>
+      <tr className={clsx(LEDGER_TOTAL, 'bg-brand-500/[0.04]')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-ink-hi">Net Income</td><td className={clsx('px-4 py-2.5 text-right font-mono font-semibold',s.netIncomeCents>=0?'text-emerald-400':'text-red-fig')}>{formatMoney(s.netIncomeCents)} <span className="text-2xs text-slate-500">{s.netMarginPct}%</span></td><td/>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{formatMoney(cmpNI)}</td><td className={clsx('px-4 py-2.5 text-right font-mono text-sm',favClass(favorability('REVENUE',niVar)))}>{niVar>0?'+':''}{formatMoney(niVar)}</td><td className={clsx('px-3 py-2.5 text-right text-2xs font-mono',favClass(favorability('REVENUE',niVar)))}>{variancePct(niVar,cmpNI)}</td></>}</tr>
     </tbody></table></div>
       <BasisAdjustmentsSchedule overlay={overlay} labels={adjusted.labels} />
     </>
@@ -974,12 +974,12 @@ function PnlByMonthReport({ locIds, basis, year }: { locIds: string; basis: stri
             ))}
             {/* Summary rows */}
             <tr className={clsx(LEDGER_SUBTOTAL, 'bg-slate-800/20')}>
-              <td className="px-4 py-2.5 text-sm font-semibold text-white sticky left-0 bg-slate-800/20 z-10">{summaryRows.grossProfit.label}</td>
-              {summaryRows.grossProfit.months.map((m: number, i: number) => <td key={i} className={clsx('px-3 py-2.5 text-right text-xs font-mono font-semibold', figColor(m, 'text-white'))}>{formatMoney(m)}</td>)}
-              <td className={clsx('px-4 py-2.5 text-right text-sm font-mono font-bold bg-slate-800/30', figColor(summaryRows.grossProfit.totalCents, 'text-white'))}>{formatMoney(summaryRows.grossProfit.totalCents)}</td>
+              <td className="px-4 py-2.5 text-sm font-semibold text-ink-hi sticky left-0 bg-slate-800/20 z-10">{summaryRows.grossProfit.label}</td>
+              {summaryRows.grossProfit.months.map((m: number, i: number) => <td key={i} className={clsx('px-3 py-2.5 text-right text-xs font-mono font-semibold', figColor(m, 'text-ink-hi'))}>{formatMoney(m)}</td>)}
+              <td className={clsx('px-4 py-2.5 text-right text-sm font-mono font-bold bg-slate-800/30', figColor(summaryRows.grossProfit.totalCents, 'text-ink-hi'))}>{formatMoney(summaryRows.grossProfit.totalCents)}</td>
             </tr>
             <tr className={clsx(LEDGER_TOTAL, 'bg-brand-500/[0.04]')}>
-              <td className="px-4 py-2.5 text-sm font-semibold text-white sticky left-0 bg-emerald-500/[0.04] z-10">{summaryRows.netIncome.label}</td>
+              <td className="px-4 py-2.5 text-sm font-semibold text-ink-hi sticky left-0 bg-emerald-500/[0.04] z-10">{summaryRows.netIncome.label}</td>
               {summaryRows.netIncome.months.map((m: number, i: number) => <td key={i} className={clsx('px-3 py-2.5 text-right text-xs font-mono font-semibold', m >= 0 ? 'text-emerald-400' : 'text-red-fig')}>{formatMoney(m)}</td>)}
               <td className={clsx('px-4 py-2.5 text-right text-sm font-mono font-bold bg-slate-800/30', summaryRows.netIncome.totalCents >= 0 ? 'text-emerald-400' : 'text-red-fig')}>{formatMoney(summaryRows.netIncome.totalCents)}</td>
             </tr>
@@ -1062,8 +1062,8 @@ function BsReport({ ed, locIds, onDrill, compareMode, overlay }: { ed: string; l
         {sections.map((sec) => { let secPrior=0; sec.subTypes.forEach((st) => st.groups.forEach((g) => g.accounts.forEach((a) => { secPrior += cmpMap.get(a.accountNumber)??0; }))); const secChg=sec.totalCents-secPrior; return (<React.Fragment key={sec.type}><tr className="bg-slate-800/30"><td colSpan={2} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase">{sec.label}</td><td className="px-6 py-2 text-right text-xs font-mono font-semibold text-slate-300">{formatMoney(sec.totalCents)}</td>{comparing&&<><td className="px-4 py-2 text-right text-xs font-mono text-slate-500">{formatMoney(secPrior)}</td><td className="px-4 py-2 text-right text-xs font-mono text-slate-400">{secChg>0?'+':''}{formatMoney(secChg)}</td></>}</tr>
           {sec.subTypes.flatMap((st) => st.groups.flatMap((g) => g.accounts.map((a) => { const pv=cmpMap.get(a.accountNumber)??0; const chg=a.balanceCents-pv; return <tr key={a.accountNumber} onClick={() => onDrill({accountId:a.accountId,accountNumber:a.accountNumber,accountName:a.accountName})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td><td className="px-4 py-1.5 text-sm text-slate-400 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600"/></td><td className={clsx('px-6 py-1.5 text-right text-sm font-mono', figColor(a.balanceCents, 'text-slate-300'))}>{formatMoney(a.balanceCents)}</td>{comparing&&<><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-500">{formatMoney(pv)}</td><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-400">{chg>0?'+':''}{formatMoney(chg)}</td></>}</tr>; })))}
         </React.Fragment>); })}
-        <tr className={clsx(LEDGER_TOTAL, 'bg-slate-800/30')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Total Assets</td><td className={clsx('px-6 py-2.5 text-right text-base font-mono font-semibold', figColor(s.totalAssetsCents, 'text-white'))}>{formatMoney(s.totalAssetsCents)}</td>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-500">{formatMoney(cmpAssets)}</td><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{s.totalAssetsCents-cmpAssets>0?'+':''}{formatMoney(s.totalAssetsCents-cmpAssets)}</td></>}</tr>
-        <tr className={clsx(LEDGER_TOTAL, 'bg-brand-500/[0.04]')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Total L + E</td><td className={clsx('px-6 py-2.5 text-right text-base font-mono font-semibold', figColor(s.totalLiabilitiesCents+s.totalEquityCents, 'text-white'))}>{formatMoney(s.totalLiabilitiesCents+s.totalEquityCents)}</td>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-500">{formatMoney(cmpLE)}</td><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{(s.totalLiabilitiesCents+s.totalEquityCents)-cmpLE>0?'+':''}{formatMoney((s.totalLiabilitiesCents+s.totalEquityCents)-cmpLE)}</td></>}</tr>
+        <tr className={clsx(LEDGER_TOTAL, 'bg-slate-800/30')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-ink-hi">Total Assets</td><td className={clsx('px-6 py-2.5 text-right text-base font-mono font-semibold', figColor(s.totalAssetsCents, 'text-ink-hi'))}>{formatMoney(s.totalAssetsCents)}</td>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-500">{formatMoney(cmpAssets)}</td><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{s.totalAssetsCents-cmpAssets>0?'+':''}{formatMoney(s.totalAssetsCents-cmpAssets)}</td></>}</tr>
+        <tr className={clsx(LEDGER_TOTAL, 'bg-brand-500/[0.04]')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-ink-hi">Total L + E</td><td className={clsx('px-6 py-2.5 text-right text-base font-mono font-semibold', figColor(s.totalLiabilitiesCents+s.totalEquityCents, 'text-ink-hi'))}>{formatMoney(s.totalLiabilitiesCents+s.totalEquityCents)}</td>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-500">{formatMoney(cmpLE)}</td><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{(s.totalLiabilitiesCents+s.totalEquityCents)-cmpLE>0?'+':''}{formatMoney((s.totalLiabilitiesCents+s.totalEquityCents)-cmpLE)}</td></>}</tr>
       </tbody></table>
     </div>
       <BasisAdjustmentsSchedule overlay={overlay} labels={adjusted.labels} />
@@ -1096,7 +1096,7 @@ function TbReport({ locIds, onDrill, overlay }: { locIds: string; onDrill: (t: D
       <div className="px-6 py-3 border-b border-slate-800 flex items-center justify-between"><p className="text-2xs text-slate-500">{rows.length} accounts{on ? ` · ${overlay.basisLabel}` : ''}</p>{(on ? overlay.balances : td===tc)?<span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs bg-emerald-500/10 text-pos"><span className="w-1.5 h-1.5 rounded-full bg-pos" aria-hidden />In balance</span>:<span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-fig"><span className="w-1.5 h-1.5 rounded-full bg-red-fig" aria-hidden />Out of balance</span>}</div>
       <table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50 text-2xs text-slate-500 uppercase font-mono tracking-caps"><th className="px-6 py-2.5 text-left w-20">Acct</th><th className="px-4 py-2.5 text-left">Name</th><th className="px-4 py-2.5 text-left w-16">Type</th><th className="px-6 py-2.5 text-right">Debits</th><th className="px-6 py-2.5 text-right">Credits</th>{on&&<th className="px-6 py-2.5 text-right">Adj</th>}<th className="px-6 py-2.5 text-right">{on ? 'Adj Net' : 'Net'}</th></tr></thead>
         <tbody className="divide-y divide-slate-800/30">{rows.map((r) => { const d = delta(r.account_id); const adjNet = Number(r.net_balance) + d; return <tr key={r.account_number} onClick={() => onDrill({accountNumber:r.account_number,accountName:r.account_name})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500">{r.account_number}</td><td className="px-4 py-1.5 text-slate-300">{r.account_name}</td><td className="px-4 py-1.5 text-2xs text-slate-500">{r.account_type}</td><td className="px-6 py-1.5 text-right font-mono text-slate-300">{Number(r.total_debits)>0?formatMoney(r.total_debits):''}</td><td className="px-6 py-1.5 text-right font-mono text-slate-300">{Number(r.total_credits)>0?formatMoney(r.total_credits):''}</td>{on&&<td className={clsx('px-6 py-1.5 text-right font-mono text-2xs', d>0?'text-emerald-400':d<0?'text-red-fig':'text-slate-600')}>{d!==0?`${d>0?'+':''}${formatMoney(d)}`:'—'}</td>}<td className={clsx('px-6 py-1.5 text-right font-mono font-medium', figColor(adjNet, 'text-slate-200'))}>{formatMoney(adjNet)}</td></tr>; })}</tbody>
-        <tfoot><tr className={clsx(LEDGER_TOTAL, 'bg-slate-800/30')}><td colSpan={3} className="px-6 py-2.5 font-semibold text-white">Totals</td><td className="px-6 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(td)}</td><td className="px-6 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(tc)}</td>{on&&<td className="px-6 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(overlay.netDebitPositiveCents)}</td>}<td className={clsx('px-6 py-2.5 text-right font-mono font-semibold', figColor(on ? netTotal : td-tc, 'text-white'))}>{formatMoney(on ? netTotal : td-tc)}</td></tr></tfoot>
+        <tfoot><tr className={clsx(LEDGER_TOTAL, 'bg-slate-800/30')}><td colSpan={3} className="px-6 py-2.5 font-semibold text-ink-hi">Totals</td><td className="px-6 py-2.5 text-right font-mono font-semibold text-ink-hi">{formatMoney(td)}</td><td className="px-6 py-2.5 text-right font-mono font-semibold text-ink-hi">{formatMoney(tc)}</td>{on&&<td className="px-6 py-2.5 text-right font-mono font-semibold text-ink-hi">{formatMoney(overlay.netDebitPositiveCents)}</td>}<td className={clsx('px-6 py-2.5 text-right font-mono font-semibold', figColor(on ? netTotal : td-tc, 'text-ink-hi'))}>{formatMoney(on ? netTotal : td-tc)}</td></tr></tfoot>
       </table>
     </div>
       <BasisAdjustmentsSchedule overlay={overlay} labels={labels} />

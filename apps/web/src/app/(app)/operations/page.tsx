@@ -153,13 +153,13 @@ function ClientHealthSection() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-sm font-semibold text-white">Needs your attention</h2>
+        <h2 className="text-sm font-semibold text-ink-hi">Needs your attention</h2>
         <p className="mt-0.5 text-xs text-slate-500">Where to step in across the portfolio — computed from live books.</p>
       </div>
 
       {isLoading ? (
         <div className="flex items-center justify-center py-10">
-          <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+          <Loader2 className="h-5 w-5 animate-spin text-brand-400" />
         </div>
       ) : error ? (
         <div className="p-6 text-center">
@@ -289,7 +289,7 @@ function KpiCard({ label, value, hint, icon: Icon }: KpiCardProps) {
           <Icon size={16} className="text-brand-400" />
         </div>
       </div>
-      <p className="mt-2 text-2xl font-semibold tracking-tight text-white font-mono tabular-nums">{value}</p>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-ink-hi font-mono tabular-nums">{value}</p>
       {hint && <p className="mt-2 text-xs text-slate-500">{hint}</p>}
     </div>
   );
@@ -307,7 +307,7 @@ export default function OperationsPage() {
   if (meLoading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
       </div>
     );
   }
@@ -339,7 +339,7 @@ export default function OperationsPage() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
         </div>
       ) : error ? (
         <div className="p-8 text-center">
@@ -371,7 +371,7 @@ export default function OperationsPage() {
           </div>
 
           <div>
-            <h2 className="mb-3 text-sm font-semibold text-white">Recent activity</h2>
+            <h2 className="mb-3 text-sm font-semibold text-ink-hi">Recent activity</h2>
             {recent.length === 0 ? (
               <div className="card p-12 text-center">
                 <Activity className="mx-auto mb-3 h-8 w-8 text-slate-600" />

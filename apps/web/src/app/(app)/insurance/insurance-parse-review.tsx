@@ -165,7 +165,7 @@ export function InsuranceParseReview({
   }
 
   const inputCls =
-    'w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-white focus:border-emerald-500 focus:outline-none';
+    'w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-ink-hi focus:border-brand-500 focus:outline-none';
   const flag = (r: Row, field: string) =>
     r.lowConfidenceFields.includes(field) ? 'border-amber-500/60 ring-1 ring-amber-500/30' : '';
 
@@ -176,13 +176,13 @@ export function InsuranceParseReview({
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-indigo-400" />
             <div>
-              <h2 className="text-lg font-semibold text-white">Extract policies from an insurance document</h2>
+              <h2 className="text-lg font-semibold text-ink-hi">Extract policies from an insurance document</h2>
               <p className="text-[11px] text-slate-500">
                 Drop a policy or declarations page — AI proposes the terms; you review and confirm. Nothing is saved until you confirm.
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close">
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -205,7 +205,7 @@ export function InsuranceParseReview({
               phase === 'parsing'
                 ? 'border-indigo-500/40 bg-indigo-500/5 cursor-default'
                 : dragOver
-                  ? 'border-emerald-500 bg-emerald-500/5 cursor-pointer'
+                  ? 'border-brand-500 bg-brand-500/5 cursor-pointer'
                   : 'border-slate-700 hover:border-slate-600 cursor-pointer',
             )}
           >
@@ -337,11 +337,11 @@ export function InsuranceParseReview({
                 Confirmed policies persist through the standard create path — the same validation and tenant isolation as manual entry.
               </p>
               <div className="flex items-center gap-2">
-                <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+                <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-ink-hi">Cancel</button>
                 <button
                   onClick={confirmAll}
                   disabled={phase === 'confirming' || rows.length === 0}
-                  className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-2"
                 >
                   {phase === 'confirming' && <Loader2 size={14} className="animate-spin" />}
                   Confirm {rows.length} polic{rows.length === 1 ? 'y' : 'ies'}

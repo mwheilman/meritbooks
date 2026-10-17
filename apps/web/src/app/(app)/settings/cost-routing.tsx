@@ -96,12 +96,12 @@ export function CostRouting() {
     else addToast('error', 'Failed to remove rule');
   }, [refetch]);
 
-  const inputCls = 'px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50';
+  const inputCls = 'px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50';
 
   return (
     <div className="card p-6 space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-white flex items-center gap-2"><Route size={18} className="text-emerald-400" /> Cost Approval Routing</h2>
+        <h2 className="text-lg font-semibold text-ink-hi flex items-center gap-2"><Route size={18} className="text-emerald-400" /> Cost Approval Routing</h2>
         <p className="text-xs text-slate-500 mt-1">
           Decides who approves a job-tagged cost when a bill is entered. Most-specific match wins
           (Vendor &gt; GL account &gt; Source &gt; Default), then lowest priority number. Bank &amp; card
@@ -165,14 +165,14 @@ export function CostRouting() {
           </div>
         </div>
         <button onClick={addRule} disabled={saving}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50">
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50">
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add rule
         </button>
       </div>
 
       {/* Existing rules */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 text-emerald-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 text-brand-400 animate-spin" /></div>
       ) : error ? (
         <div className="flex items-center gap-2 text-sm text-red-400"><AlertCircle size={16} /> {error}</div>
       ) : rules.length === 0 ? (

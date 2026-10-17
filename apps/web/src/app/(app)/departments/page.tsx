@@ -250,7 +250,7 @@ function DepartmentsPageInner() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
+          <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
         </div>
       ) : error ? (
         <div className="p-8 text-center">
@@ -273,7 +273,7 @@ function DepartmentsPageInner() {
           {grouped.map((group) => (
             <div key={group.companyId} className="card overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-800 bg-slate-800/20">
-                <h2 className="text-sm font-semibold text-white">{group.companyName}</h2>
+                <h2 className="text-sm font-semibold text-ink-hi">{group.companyName}</h2>
                 <p className="text-2xs text-slate-500">{group.rows.length} department{group.rows.length === 1 ? '' : 's'}</p>
               </div>
               <div className="overflow-x-auto">
@@ -296,7 +296,7 @@ function DepartmentsPageInner() {
                         <td className="px-4 py-3">
                           <div className="flex items-center" style={{ paddingLeft: `${indent * 18}px` }}>
                             {indent > 0 && <span className="text-slate-600 mr-1.5">{'\u2514'}</span>}
-                            <span className="text-sm text-white font-medium">{d.name}</span>
+                            <span className="text-sm text-ink-hi font-medium">{d.name}</span>
                           </div>
                           {d.parentName && (
                             <p className="text-2xs text-slate-500" style={{ paddingLeft: `${indent * 18}px` }}>
@@ -323,7 +323,7 @@ function DepartmentsPageInner() {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={(e) => { e.stopPropagation(); openEdit(d); }}
-                              className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-white/[0.04] transition-colors"
+                              className="p-1.5 rounded-md text-slate-400 hover:text-ink-hi hover:bg-navy/[0.04] transition-colors"
                               title="Edit"
                             >
                               <Pencil size={14} />
@@ -357,10 +357,10 @@ function DepartmentsPageInner() {
       >
         {peek && (
           <div className="p-3">
-            <div className="text-sm font-semibold text-white mb-1">{peek.item.dept.name}</div>
+            <div className="text-sm font-semibold text-ink-hi mb-1">{peek.item.dept.name}</div>
             <div className="text-2xs text-slate-500 mb-2">{peek.item.dept.code} · {peek.item.companyName}</div>
             {peek.item.dept.parentName && <div className="text-2xs text-slate-500">under {peek.item.dept.parentName}</div>}
-            <div className="mt-2 text-2xs"><span className={peek.item.dept.isActive ? 'text-emerald-400' : 'text-slate-500'}>{peek.item.dept.isActive ? 'Active' : 'Inactive'}</span></div>
+            <div className="mt-2 text-2xs"><span className={peek.item.dept.isActive ? 'text-brand-400' : 'text-slate-500'}>{peek.item.dept.isActive ? 'Active' : 'Inactive'}</span></div>
           </div>
         )}
       </HoverPeekCard>
@@ -378,10 +378,10 @@ function DepartmentsPageInner() {
           <div className="absolute inset-0 bg-black/60" onClick={() => !saving && setForm(null)} />
           <div className="relative z-10 w-full max-w-lg rounded-xl border border-slate-800 bg-surface-900 shadow-2xl" role="dialog" aria-modal="true" aria-label={form.id ? 'Edit department' : 'New department'}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-              <h3 className="text-sm font-semibold text-white">
+              <h3 className="text-sm font-semibold text-ink-hi">
                 {form.id ? 'Edit department' : 'New department'}
               </h3>
-              <button onClick={() => !saving && setForm(null)} className="text-slate-500 hover:text-white" aria-label="Close">
+              <button onClick={() => !saving && setForm(null)} className="text-slate-500 hover:text-ink-hi" aria-label="Close">
                 <X size={18} />
               </button>
             </div>
@@ -393,7 +393,7 @@ function DepartmentsPageInner() {
                   value={form.locationId}
                   onChange={(e) => setForm({ ...form, locationId: e.target.value, parentDepartmentId: '' })}
                   disabled={!!form.id}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white disabled:opacity-60"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi disabled:opacity-60"
                 >
                   <option value="">{'Select a company\u2026'}</option>
                   {locationList.map((l) => (
@@ -409,7 +409,7 @@ function DepartmentsPageInner() {
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                     placeholder="e.g. Commercial Service"
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-500"
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-500"
                   />
                 </div>
                 <div>
@@ -418,7 +418,7 @@ function DepartmentsPageInner() {
                     value={form.code}
                     onChange={(e) => setForm({ ...form, code: e.target.value })}
                     placeholder="auto"
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-500 font-mono"
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-500 font-mono"
                   />
                 </div>
               </div>
@@ -428,7 +428,7 @@ function DepartmentsPageInner() {
                 <select
                   value={form.parentDepartmentId}
                   onChange={(e) => setForm({ ...form, parentDepartmentId: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi"
                 >
                   <option value="">None (top level)</option>
                   {parentOptions.map((p) => (
@@ -442,7 +442,7 @@ function DepartmentsPageInner() {
                 <select
                   value={form.internalChargeMethod}
                   onChange={(e) => setForm({ ...form, internalChargeMethod: e.target.value as ChargeMethod })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi"
                 >
                   <option value="inherit">Use company default</option>
                   <option value="revenue">Revenue</option>

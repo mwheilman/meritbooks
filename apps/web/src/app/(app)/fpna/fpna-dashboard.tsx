@@ -234,7 +234,7 @@ function Kpi({
     tone === 'danger' ? 'bg-red-500/10 text-red-400'
     : tone === 'warn' ? 'bg-amber-500/10 text-amber-400'
     : tone === 'good' ? 'bg-emerald-500/10 text-emerald-400'
-    : 'bg-brand-500/10 text-brand-400';
+    : 'bg-brand-500/10 text-brand-300';
   return (
     <div className="card p-4">
       <div className="flex items-start justify-between">
@@ -243,7 +243,7 @@ function Kpi({
           <Icon size={14} />
         </div>
       </div>
-      <p className="mt-2 font-mono text-2xl font-semibold tabular-nums tracking-tight text-white">{value}</p>
+      <p className="mt-2 font-mono text-2xl font-semibold tabular-nums tracking-tight text-ink-hi">{value}</p>
       <div className="mt-1 flex items-center justify-between gap-2">
         {sub ? <p className="text-[11px] text-slate-500">{sub}</p> : <span />}
         <DeltaPill delta={delta} kind={deltaKind} higherIsBetter={higherIsBetter} />
@@ -282,13 +282,13 @@ function TrendChart({ trend, throughMonth }: { trend: TrendPoint[]; throughMonth
     <div className="card p-5">
       <div className="mb-3 flex items-center gap-2">
         <BarChart3 size={15} className="text-brand-400" />
-        <h3 className="text-sm font-semibold text-white">Revenue &amp; net income by month</h3>
+        <h3 className="text-sm font-semibold text-ink-hi">Revenue &amp; net income by month</h3>
         <span className="text-[11px] text-slate-500">bars = revenue · line = net income</span>
       </div>
       <div className="overflow-x-auto">
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Revenue and net income by month" style={{ minWidth: 560 }}>
           {/* zero line for net income */}
-          <line x1={padL} y1={niY(0)} x2={W - padR} y2={niY(0)} stroke="#232C27" strokeWidth={1} />
+          <line x1={padL} y1={niY(0)} x2={W - padR} y2={niY(0)} stroke="#E7E3DB" strokeWidth={1} />
           {trend.map((t, i) => {
             const x = padL + slot * i + slot / 2;
             const bh = padT + plotH - revY(t.revenueCents);
@@ -304,15 +304,15 @@ function TrendChart({ trend, throughMonth }: { trend: TrendPoint[]; throughMonth
                   fill={isFuture ? '#3b82f6' : '#10b981'}
                   opacity={isFuture ? 0.35 : 0.75}
                 />
-                <text x={x} y={H - 8} textAnchor="middle" fontSize={10} fill="#7E8983">{t.label}</text>
+                <text x={x} y={H - 8} textAnchor="middle" fontSize={10} fill="#55657A">{t.label}</text>
               </g>
             );
           })}
           {/* net income line */}
-          <polyline points={linePts} fill="none" stroke="#818cf8" strokeWidth={2} />
+          <polyline points={linePts} fill="none" stroke="#6366f1" strokeWidth={2} />
           {trend.map((t, i) => {
             const x = padL + slot * i + slot / 2;
-            return <circle key={t.label} cx={x} cy={niY(t.netIncomeCents)} r={2.5} fill={t.netIncomeCents >= 0 ? '#818cf8' : '#ef4444'} />;
+            return <circle key={t.label} cx={x} cy={niY(t.netIncomeCents)} r={2.5} fill={t.netIncomeCents >= 0 ? '#6366f1' : '#ef4444'} />;
           })}
         </svg>
       </div>
@@ -347,7 +347,7 @@ function MarginTrend({ trend }: { trend: TrendPoint[] }) {
     <div className="card p-5">
       <div className="mb-3 flex items-center gap-2">
         <Percent size={15} className="text-brand-400" />
-        <h3 className="text-sm font-semibold text-white">Gross margin trend</h3>
+        <h3 className="text-sm font-semibold text-ink-hi">Gross margin trend</h3>
       </div>
       <div className="overflow-x-auto">
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Gross margin trend" style={{ minWidth: 560 }}>
@@ -356,7 +356,7 @@ function MarginTrend({ trend }: { trend: TrendPoint[] }) {
             t.grossMarginPct === null ? null : (
               <g key={t.label}>
                 <circle cx={padL + slot * i + slot / 2} cy={y(t.grossMarginPct)} r={2.5} fill="#10b981" />
-                <text x={padL + slot * i + slot / 2} y={H - 6} textAnchor="middle" fontSize={10} fill="#7E8983">{t.label}</text>
+                <text x={padL + slot * i + slot / 2} y={H - 6} textAnchor="middle" fontSize={10} fill="#55657A">{t.label}</text>
               </g>
             ),
           )}
@@ -399,9 +399,9 @@ function VarianceTable({
       <div className="flex items-center justify-between border-b border-slate-800/60 px-5 py-3">
         <div className="flex items-center gap-2">
           <Scale size={15} className="text-brand-400" />
-          <h3 className="text-sm font-semibold text-white">Plan variance — actual vs budget vs forecast</h3>
+          <h3 className="text-sm font-semibold text-ink-hi">Plan variance — actual vs budget vs forecast</h3>
         </div>
-        <Link href={drillHref} className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-white">
+        <Link href={drillHref} className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-ink-hi">
           Budget vs actual <ArrowRight size={11} />
         </Link>
       </div>
@@ -604,7 +604,7 @@ function CustomizePanel({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <SlidersHorizontal size={15} className="text-brand-400" />
-          <h3 className="text-sm font-semibold text-white">Customize your KPI dashboard</h3>
+          <h3 className="text-sm font-semibold text-ink-hi">Customize your KPI dashboard</h3>
         </div>
         <button
           onClick={onClose}
@@ -625,13 +625,13 @@ function CustomizePanel({
               title={l.description}
               className="group rounded-lg border border-slate-800 bg-surface-950 px-3 py-2 text-left hover:border-brand-500/40 hover:bg-slate-800/40"
             >
-              <span className="block text-xs font-semibold text-slate-200 group-hover:text-white">{l.label}</span>
+              <span className="block text-xs font-semibold text-slate-200 group-hover:text-ink-hi">{l.label}</span>
               <span className="block max-w-[220px] text-[10px] text-slate-500">{l.description}</span>
             </button>
           ))}
           <button
             onClick={onReset}
-            className="inline-flex items-center gap-1.5 self-start rounded-lg border border-slate-800 bg-surface-950 px-3 py-2 text-xs font-medium text-slate-400 hover:border-slate-600 hover:text-white"
+            className="inline-flex items-center gap-1.5 self-start rounded-lg border border-slate-800 bg-surface-950 px-3 py-2 text-xs font-medium text-slate-400 hover:border-slate-600 hover:text-ink-hi"
           >
             <RotateCcw size={13} /> Reset to default
           </button>
@@ -678,7 +678,7 @@ function CustomizePanel({
                     onClick={() => onMove(id, -1)}
                     disabled={idx === 0}
                     aria-label={`Move ${meta.label} up`}
-                    className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-white disabled:opacity-25"
+                    className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-ink-hi disabled:opacity-25"
                   >
                     <ArrowUp size={13} />
                   </button>
@@ -686,7 +686,7 @@ function CustomizePanel({
                     onClick={() => onMove(id, 1)}
                     disabled={idx === config.visible.length - 1}
                     aria-label={`Move ${meta.label} down`}
-                    className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-white disabled:opacity-25"
+                    className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-ink-hi disabled:opacity-25"
                   >
                     <ArrowDown size={13} />
                   </button>
@@ -725,7 +725,7 @@ function CustomizePanel({
                           onClick={() => onToggle(id)}
                           title={meta.description}
                           aria-label={`Add ${meta.label}`}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-surface-950 px-2.5 py-1.5 text-xs text-slate-300 hover:border-brand-500/40 hover:text-white"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-surface-950 px-2.5 py-1.5 text-xs text-slate-300 hover:border-brand-500/40 hover:text-ink-hi"
                         >
                           <Plus size={12} className="text-brand-400" /> {meta.label}
                         </button>
@@ -858,13 +858,13 @@ export function FpnaDashboard() {
       {/* Period selector + refresh */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-surface-900 p-1">
-          <button onClick={() => stepMonth(-1)} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white" aria-label="Previous month">
+          <button onClick={() => stepMonth(-1)} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-ink-hi" aria-label="Previous month">
             <ChevronLeft size={16} />
           </button>
-          <span className="min-w-[10rem] px-2 text-center text-sm font-medium text-white">
+          <span className="min-w-[10rem] px-2 text-center text-sm font-medium text-ink-hi">
             {data?.period.label ?? new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })}
           </span>
-          <button onClick={() => stepMonth(1)} disabled={isCurrentMonth} className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-white disabled:opacity-30" aria-label="Next month">
+          <button onClick={() => stepMonth(1)} disabled={isCurrentMonth} className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-ink-hi disabled:opacity-30" aria-label="Next month">
             <ChevronRight size={16} />
           </button>
         </div>
@@ -878,7 +878,7 @@ export function FpnaDashboard() {
               'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium',
               customizing
                 ? 'border-brand-500/40 bg-brand-500/15 text-brand-300'
-                : 'border-slate-800 bg-surface-900 text-slate-300 hover:bg-slate-800 hover:text-white',
+                : 'border-slate-800 bg-surface-900 text-slate-300 hover:bg-slate-800 hover:text-ink-hi',
             )}
           >
             <SlidersHorizontal size={13} />
@@ -886,7 +886,7 @@ export function FpnaDashboard() {
           </button>
           <button
             onClick={() => { setRefreshKey((x) => x + 1); refetch(); }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-surface-900 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-surface-900 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-ink-hi"
           >
             <RefreshCw size={13} className={clsx(isLoading && 'animate-spin')} />
             Refresh
@@ -908,7 +908,7 @@ export function FpnaDashboard() {
 
       {isLoading && !data ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
         </div>
       ) : error ? (
         <div className="card p-10 text-center">

@@ -44,8 +44,8 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html lang="en" className="dark">
-      <body className="min-h-screen bg-slate-950 text-white antialiased">
+    <html lang="en">
+      <body className="min-h-screen bg-page text-ink-hi antialiased">
         <div className="min-h-screen flex items-center justify-center p-6">
           <div className="max-w-md w-full text-center">
             <div className="mx-auto mb-5 h-14 w-14 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
@@ -54,7 +54,7 @@ export default function GlobalError({
                 height="26"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="#f87171"
+                stroke="#b91c1c"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -77,7 +77,7 @@ export default function GlobalError({
               <button
                 type="button"
                 onClick={() => reset()}
-                className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-4 py-2 text-sm font-medium text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                className="inline-flex items-center gap-2 rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/50"
               >
                 Try again
               </button>

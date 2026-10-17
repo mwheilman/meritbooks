@@ -134,11 +134,11 @@ export function NotificationsBell() {
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label={total > 0 ? `Notifications, ${total} need you` : 'Notifications'}
-        className="relative p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.03] transition-colors"
+        className="relative p-2 rounded-brand text-shell-mid hover:text-shell-fg hover:bg-white/[0.06] transition-colors"
       >
         <Bell size={18} />
         {total > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+          <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-shell">
             {badge}
           </span>
         )}
@@ -182,7 +182,7 @@ export function NotificationsBell() {
                   <p className="text-sm text-red-400">Couldn’t load notifications.</p>
                   <button
                     onClick={load}
-                    className="mt-3 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/[0.03]"
+                    className="mt-3 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-navy/[0.03]"
                   >
                     Retry
                   </button>
@@ -207,7 +207,7 @@ export function NotificationsBell() {
                       <button
                         key={item.id}
                         onClick={() => act(item)}
-                        className="flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
+                        className="flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-navy/[0.03]"
                       >
                         <span
                           className={clsx('mt-1.5 h-2 w-2 shrink-0 rounded-full', SEVERITY_DOT[item.severity])}
@@ -232,7 +232,7 @@ export function NotificationsBell() {
                 <Link
                   href="/inbox"
                   onClick={() => setOpen(false)}
-                  className="block border-t border-slate-800 px-4 py-3 text-center text-xs font-medium text-brand-400 hover:bg-white/[0.03]"
+                  className="block border-t border-slate-800 px-4 py-3 text-center text-xs font-medium text-brand-400 hover:bg-navy/[0.03]"
                 >
                   View all in Inbox
                 </Link>

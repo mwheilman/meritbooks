@@ -188,7 +188,7 @@ export function FpnaNlScenario({ fiscalYear }: { fiscalYear: number }) {
               }}
               rows={2}
               placeholder='e.g. "raise revenue 8% and cut costs 12%"'
-              className="w-full resize-none rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2.5 pr-28 text-sm text-white placeholder:text-slate-600 focus:border-indigo-500/50 focus:outline-none"
+              className="w-full resize-none rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2.5 pr-28 text-sm text-ink-hi placeholder:text-slate-600 focus:border-indigo-500/50 focus:outline-none"
             />
             <button
               onClick={run}
@@ -239,7 +239,7 @@ function ScenarioResult({ resp, fiscalYear }: { resp: NlResponse; fiscalYear: nu
   return (
     <div className="mt-3 space-y-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-white">{parsed.scenarioName}</span>
+        <span className="text-sm font-medium text-ink-hi">{parsed.scenarioName}</span>
         <span
           className={clsx(
             'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium',

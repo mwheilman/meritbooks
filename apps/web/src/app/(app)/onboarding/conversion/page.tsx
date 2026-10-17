@@ -18,7 +18,7 @@ export default function ConversionPage({ searchParams }: { searchParams?: { comp
   return (
     <div className="px-6 py-6">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-white tracking-tight">Bring your opening balances over</h1>
+        <h1 className="text-xl font-semibold text-ink-hi tracking-tight">Bring your opening balances over</h1>
         <p className="text-sm text-slate-400 mt-1 max-w-3xl">
           Drop the list of account balances from your old system (your trial balance). We match each of your accounts
           to a MeritBooks account, you check the numbers match, and we post them as one balanced opening entry.

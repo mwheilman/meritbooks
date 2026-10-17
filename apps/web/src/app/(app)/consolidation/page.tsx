@@ -311,16 +311,16 @@ function StatementsTab() {
           <input type="date" className="input" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
         </Field>
         <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer pb-2">
-          <input type="checkbox" checked={eliminate} onChange={(e) => setEliminate(e.target.checked)} className="accent-emerald-500" />
+          <input type="checkbox" checked={eliminate} onChange={(e) => setEliminate(e.target.checked)} className="accent-brand-500" />
           Apply eliminations
         </label>
         <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer pb-2"
           title="Translate foreign-currency entities into the reporting currency (ASC 830). Off shows the pre-translation combined amounts.">
-          <input type="checkbox" checked={translate} onChange={(e) => setTranslate(e.target.checked)} className="accent-emerald-500" />
+          <input type="checkbox" checked={translate} onChange={(e) => setTranslate(e.target.checked)} className="accent-brand-500" />
           Translate to reporting currency
         </label>
         <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer pb-2">
-          <input type="checkbox" checked={showEntities} onChange={(e) => setShowEntities(e.target.checked)} className="accent-emerald-500" />
+          <input type="checkbox" checked={showEntities} onChange={(e) => setShowEntities(e.target.checked)} className="accent-brand-500" />
           Show per-entity columns
         </label>
         <Field label="Reporting currency">
@@ -432,7 +432,7 @@ function StatementsTab() {
           {/* Equity-method investments */}
           {data.equityMethod.length > 0 && (
             <div className="card p-4">
-              <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-ink-hi mb-1 flex items-center gap-2">
                 <Building2 size={15} className="text-blue-400" /> Equity-method investments
               </h3>
               <p className="text-xs text-slate-500 mb-3">Affiliates with significant influence appear one-line, not consolidated.</p>
@@ -458,7 +458,7 @@ function StatementsTab() {
           {/* NCI detail */}
           {data.nci.byEntity.length > 0 && (
             <div className="card p-4">
-              <h3 className="text-sm font-semibold text-white mb-1">Non-controlling interest by subsidiary</h3>
+              <h3 className="text-sm font-semibold text-ink-hi mb-1">Non-controlling interest by subsidiary</h3>
               <p className="text-xs text-slate-500 mb-3">The minority owners&apos; share of each partially-owned subsidiary.</p>
               <table className="w-full text-sm">
                 <thead><tr className="text-2xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
@@ -508,7 +508,7 @@ function Statement({
   return (
     <div className="card overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-800">
-        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        <h3 className="text-sm font-semibold text-ink-hi">{title}</h3>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -585,7 +585,7 @@ function TypeGroup({ type, typeRows, fullEntities, showEntities, money }: {
         })}
         {!showEntities && <td className="text-right px-3 font-mono text-slate-300">{money(subtotalGross)}</td>}
         <td className="text-right px-3 font-mono text-amber-400">{subtotalElim ? money(subtotalElim) : '—'}</td>
-        <td className="text-right px-4 font-mono text-white">{money(subtotalCons)}</td>
+        <td className="text-right px-4 font-mono text-ink-hi">{money(subtotalCons)}</td>
       </tr>
     </>
   );
@@ -596,10 +596,10 @@ function SubtotalRow({ label, cents, cols, money, strong, muted }: {
 }) {
   return (
     <tr className={clsx('border-b border-slate-800/40', strong && 'bg-surface-950/40')}>
-      <td colSpan={cols - 1} className={clsx('py-1.5 px-4 sticky left-0', strong ? 'bg-surface-950/40 text-white font-semibold' : muted ? 'text-slate-500' : 'text-slate-300', !strong && 'bg-surface-900')}>
+      <td colSpan={cols - 1} className={clsx('py-1.5 px-4 sticky left-0', strong ? 'bg-surface-950/40 text-ink-hi font-semibold' : muted ? 'text-slate-500' : 'text-slate-300', !strong && 'bg-surface-900')}>
         {label}
       </td>
-      <td className={clsx('text-right px-4 font-mono', strong ? 'text-white font-semibold' : muted ? 'text-slate-500' : 'text-slate-200')}>
+      <td className={clsx('text-right px-4 font-mono', strong ? 'text-ink-hi font-semibold' : muted ? 'text-slate-500' : 'text-slate-200')}>
         {money(cents)}
       </td>
     </tr>
@@ -618,7 +618,7 @@ function FxTranslationPanel({ fx, foreign, nameById }: {
   );
   return (
     <div className="card p-4">
-      <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+      <h3 className="text-sm font-semibold text-ink-hi mb-1 flex items-center gap-2">
         <Coins size={15} className="text-blue-400" /> Currency translation (ASC 830)
       </h3>
       <p className="text-xs text-slate-500 mb-3">
@@ -812,7 +812,7 @@ function OwnershipTab() {
       {edit && (
         <div className="fixed inset-0 z-40 flex justify-end bg-black/50" onClick={() => setEdit(null)}>
           <div className="w-full max-w-md h-full bg-surface-950 border-l border-slate-800 p-6 overflow-y-auto animate-in" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-white mb-4">{edit.id ? 'Edit' : 'Add'} ownership structure</h2>
+            <h2 className="text-lg font-semibold text-ink-hi mb-4">{edit.id ? 'Edit' : 'Add'} ownership structure</h2>
             {formErr && <div className="mb-3 text-xs text-red-400 flex items-center gap-1"><AlertCircle size={13} /> {formErr}</div>}
             <div className="space-y-4">
               <Field label="Parent entity">
@@ -907,7 +907,7 @@ function EntityCurrencyManager({ reporting }: { reporting: string }) {
 
   return (
     <div className="card p-4">
-      <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+      <h3 className="text-sm font-semibold text-ink-hi mb-1 flex items-center gap-2">
         <Building2 size={15} className="text-blue-400" /> Entity functional currencies
       </h3>
       <p className="text-xs text-slate-500 mb-3">
@@ -1080,7 +1080,7 @@ function FxRatesTab() {
       {edit && (
         <div className="fixed inset-0 z-40 flex justify-end bg-black/50" onClick={() => setEdit(null)}>
           <div className="w-full max-w-md h-full bg-surface-950 border-l border-slate-800 p-6 overflow-y-auto animate-in" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-white mb-4">{edit.id ? 'Edit' : 'Add'} FX rate</h2>
+            <h2 className="text-lg font-semibold text-ink-hi mb-4">{edit.id ? 'Edit' : 'Add'} FX rate</h2>
             {formErr && <div className="mb-3 text-xs text-red-400 flex items-center gap-1"><AlertCircle size={13} /> {formErr}</div>}
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
@@ -1191,7 +1191,7 @@ function MatchBlock({ title, result, confirmed, toggle, keyPrefix }: {
   return (
     <div className="card overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        <h3 className="text-sm font-semibold text-ink-hi">{title}</h3>
         <span className="text-2xs text-slate-500">{result.matched.length} matched · {result.matchedCents ? fmt(result.matchedCents) : '—'}</span>
       </div>
       {result.matched.length === 0 && unmatched.length === 0 ? (
@@ -1256,7 +1256,7 @@ function Metric({ label, value, accent, muted, tone }: {
     <div className="card p-3">
       <div className="text-2xs uppercase tracking-wide text-slate-500">{label}</div>
       <div className={clsx('mt-1 text-lg font-mono font-semibold',
-        tone === 'bad' ? 'text-red-400' : tone === 'ok' ? 'text-emerald-400' : accent ? 'text-emerald-400' : muted ? 'text-slate-400' : 'text-white',
+        tone === 'bad' ? 'text-red-400' : tone === 'ok' ? 'text-emerald-400' : accent ? 'text-emerald-400' : muted ? 'text-slate-400' : 'text-ink-hi',
       )}>
         {value}
       </div>

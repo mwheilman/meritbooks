@@ -90,7 +90,7 @@ export function TieOutCard() {
     <div className="card p-5">
       <div className="flex items-center gap-2">
         <Scale size={16} className="text-indigo-400" />
-        <h2 className="text-sm font-semibold text-white">AR subledger ↔ GL control tie-out</h2>
+        <h2 className="text-sm font-semibold text-ink-hi">AR subledger ↔ GL control tie-out</h2>
       </div>
       <p className="mt-1 text-xs text-slate-500">
         The sum of open invoice balances should equal the AR control account in the general ledger.
@@ -98,7 +98,7 @@ export function TieOutCard() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+          <Loader2 className="h-5 w-5 animate-spin text-brand-400" />
         </div>
       ) : error ? (
         <p className="mt-4 text-sm text-red-400">{error}</p>
@@ -256,7 +256,7 @@ export function ProposalCard({ proposal, onApplied }: { proposal: Proposal; onAp
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-medium text-white">{proposal.customerName}</p>
+            <p className="truncate text-sm font-medium text-ink-hi">{proposal.customerName}</p>
             <span className="inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-300 ring-1 ring-inset ring-slate-600/40">
               {proposal.kind === 'single' ? 'Single invoice' : 'Lump remittance'}
             </span>
@@ -312,7 +312,7 @@ export function ProposalCard({ proposal, onApplied }: { proposal: Proposal; onAp
                       type="checkbox"
                       checked={st.selected}
                       onChange={() => toggle(inv)}
-                      className="h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500/40"
+                      className="h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-800 accent-brand-500 focus:ring-brand-500/40"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -336,7 +336,7 @@ export function ProposalCard({ proposal, onApplied }: { proposal: Proposal; onAp
                         disabled={!st.selected}
                         value={st.amountDollars}
                         onChange={(e) => setAmount(inv.id, e.target.value)}
-                        className="w-28 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-right font-mono text-xs text-slate-100 disabled:opacity-40 focus:border-emerald-500/40 focus:outline-none"
+                        className="w-28 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-right font-mono text-xs text-slate-100 disabled:opacity-40 focus:border-brand-500/40 focus:outline-none"
                       />
                     </div>
                   </div>
@@ -397,7 +397,7 @@ export function ApplyDepositsQueue() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
         </div>
       ) : error ? (
         <div className="card p-10 text-center">
@@ -413,7 +413,7 @@ export function ApplyDepositsQueue() {
       ) : proposals.length === 0 ? (
         <div className="card p-16 text-center">
           <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-emerald-500/70" />
-          <p className="text-sm font-medium text-white">No deposits waiting to be applied</p>
+          <p className="text-sm font-medium text-ink-hi">No deposits waiting to be applied</p>
           <p className="mt-1 text-xs text-slate-500">
             When the AI matches an unapplied deposit to open invoices, it will appear here for your
             approval.

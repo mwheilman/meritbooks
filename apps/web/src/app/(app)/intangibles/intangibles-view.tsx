@@ -185,13 +185,13 @@ export function IntangiblesView() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search intangibles…"
-            className="w-full rounded-lg border border-slate-800 bg-surface-950 py-2 pl-9 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:outline-none"
+            className="w-full rounded-lg border border-slate-800 bg-surface-950 py-2 pl-9 pr-3 text-sm text-ink-hi placeholder:text-slate-500 focus:border-brand-500/50 focus:outline-none"
           />
         </div>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-lg border border-slate-800 bg-surface-950 px-3 py-2 text-sm text-white focus:border-emerald-500/50 focus:outline-none"
+          className="rounded-lg border border-slate-800 bg-surface-950 px-3 py-2 text-sm text-ink-hi focus:border-brand-500/50 focus:outline-none"
         >
           <option value="">All statuses</option>
           <option value="ACTIVE">Amortizing</option>
@@ -202,14 +202,14 @@ export function IntangiblesView() {
         <button
           onClick={runAmortization}
           disabled={amortize.isLoading}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-800 bg-surface-900 px-3 py-2 text-sm font-medium text-slate-200 hover:border-emerald-500/40 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-800 bg-surface-900 px-3 py-2 text-sm font-medium text-slate-200 hover:border-brand-500/40 disabled:opacity-50"
         >
           {amortize.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           Record amortization
         </button>
         <button
           onClick={() => setCreateOpen(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-400"
+          className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-600"
         >
           <Plus className="h-4 w-4" />
           New intangible
@@ -255,7 +255,7 @@ export function IntangiblesView() {
               {filtered.map((r) => (
                 <tr key={r.id} className="hover:bg-surface-900/50">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-white">{r.name}</div>
+                    <div className="font-medium text-ink-hi">{r.name}</div>
                     <div className="text-xs text-slate-500">Acquired {r.acquisitionDate}</div>
                   </td>
                   <td className="px-4 py-3 text-slate-300">
@@ -274,7 +274,7 @@ export function IntangiblesView() {
                   <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-400">
                     {formatMoney(r.accumulatedAmortizationCents)}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums text-white">
+                  <td className="px-4 py-3 text-right font-mono tabular-nums text-ink-hi">
                     {formatMoney(r.netBookValueCents)}
                   </td>
                   <td className="px-4 py-3 text-right text-slate-300">{remainingLifeLabel(r)}</td>
@@ -381,8 +381,8 @@ function CreateIntangiblePanel({ onClose, onCreated }: { onClose: () => void; on
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">New intangible asset</h2>
-          <button onClick={onClose} aria-label="Close panel" className="text-slate-500 hover:text-white">
+          <h2 className="text-lg font-semibold text-ink-hi">New intangible asset</h2>
+          <button onClick={onClose} aria-label="Close panel" className="text-slate-500 hover:text-ink-hi">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -465,13 +465,13 @@ function CreateIntangiblePanel({ onClose, onCreated }: { onClose: () => void; on
           )}
 
           <div className="flex justify-end gap-2 pt-2">
-            <button onClick={onClose} className="rounded-lg border border-slate-800 px-4 py-2 text-sm text-slate-300 hover:text-white">
+            <button onClick={onClose} className="rounded-lg border border-slate-800 px-4 py-2 text-sm text-slate-300 hover:text-ink-hi">
               Cancel
             </button>
             <button
               onClick={submit}
               disabled={!canSubmit || create.isLoading}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
             >
               {create.isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
               Create

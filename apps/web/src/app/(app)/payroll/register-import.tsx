@@ -110,7 +110,7 @@ function AccountPicker({
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen(!open)}
         className={clsx('w-full text-left px-2 py-1.5 rounded-lg border text-xs truncate relative',
-          selected ? 'bg-slate-800 border-slate-700 text-white' : invalid ? 'bg-slate-800/50 border-amber-500/50 text-slate-400' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}>
+          selected ? 'bg-slate-800 border-slate-700 text-ink-hi' : invalid ? 'bg-slate-800/50 border-amber-500/50 text-slate-400' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}>
         {selected ? `${selected.accountNumber} · ${selected.name}` : placeholder}
         <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />
       </button>
@@ -120,7 +120,7 @@ function AccountPicker({
             <div className="relative">
               <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
               <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search accounts..." autoFocus
-                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50" />
+                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi placeholder:text-slate-500 focus:outline-none focus:border-brand-500/50" />
             </div>
           </div>
           <div className="max-h-44 overflow-y-auto">
@@ -298,7 +298,7 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
           <div>
-            <h2 className="text-sm font-semibold text-white flex items-center gap-2"><UploadCloud size={16} className="text-emerald-400" /> Import payroll register</h2>
+            <h2 className="text-sm font-semibold text-ink-hi flex items-center gap-2"><UploadCloud size={16} className="text-emerald-400" /> Import payroll register</h2>
             <p className="text-2xs text-slate-500 mt-0.5">For payroll you ran at an outside processor — drop the register and we propose a balanced payroll entry for you to review and confirm.</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400"><X size={16} /></button>
@@ -314,7 +314,7 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
                 onDragLeave={() => setDragOver(false)}
                 onDrop={onDrop}
                 className={clsx('cursor-pointer rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors',
-                  dragOver ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-700 hover:border-slate-600 bg-slate-800/20')}>
+                  dragOver ? 'border-brand-500 bg-brand-500/5' : 'border-slate-700 hover:border-slate-600 bg-slate-800/20')}>
                 <UploadCloud size={28} className="mx-auto text-slate-500 mb-3" />
                 <p className="text-sm text-slate-300">Drop a payroll register here, or <span className="text-emerald-400">browse</span></p>
                 <p className="text-2xs text-slate-500 mt-1">PDF, PNG, JPEG, or WebP · up to 10MB</p>
@@ -331,7 +331,7 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
           {/* Parsing */}
           {phase === 'parsing' && (
             <div className="py-16 text-center">
-              <Loader2 size={28} className="mx-auto text-emerald-400 animate-spin mb-3" />
+              <Loader2 size={28} className="mx-auto text-brand-400 animate-spin mb-3" />
               <p className="text-sm text-slate-300">Reading {fileName ?? 'register'}…</p>
               <p className="text-2xs text-slate-500 mt-1">Extracting the period totals and proposing a balanced payroll entry.</p>
             </div>
@@ -353,7 +353,7 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
               <p className="text-sm text-emerald-300">Payroll register posted{postedEntryNumber ? ` — entry ${postedEntryNumber}` : ''}.</p>
               <div className="mt-4 flex items-center justify-center gap-2">
                 <button onClick={() => { setPhase('idle'); setDrafts([]); setPostedEntryNumber(null); }} className="px-3 py-1.5 border border-slate-700 rounded-lg text-xs text-slate-300 hover:bg-slate-800">Import another</button>
-                <button onClick={onClose} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-medium text-white">Done</button>
+                <button onClick={onClose} className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 rounded-lg text-xs font-medium text-white">Done</button>
               </div>
             </div>
           )}
@@ -431,7 +431,7 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
                 <div>
                   <label className="block text-2xs uppercase text-slate-500 mb-1">Company</label>
                   <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700">
+                    className="w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi bg-slate-800 border border-slate-700">
                     <option value="">Select company…</option>
                     {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
@@ -439,7 +439,7 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
                 <div>
                   <label className="block text-2xs uppercase text-slate-500 mb-1">Pay date</label>
                   <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700" />
+                    className="w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi bg-slate-800 border border-slate-700" />
                 </div>
               </div>
 
@@ -513,7 +513,7 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
               <div className="flex items-center justify-between pt-1">
                 <button onClick={() => { setPhase('idle'); setDrafts([]); }} className="text-2xs text-slate-500 hover:text-slate-300">Upload a different register</button>
                 <button onClick={() => void confirmPost()} disabled={!canPost}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center gap-1.5">
+                  className="px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center gap-1.5">
                   {saving ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
                   Confirm &amp; post payroll entry
                 </button>

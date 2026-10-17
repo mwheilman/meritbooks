@@ -163,7 +163,7 @@ export function SavedViews({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white hover:border-slate-600 transition-colors"
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi hover:border-slate-600 transition-colors"
         title="Save and re-run report configurations"
       >
         <Bookmark size={13} className="text-slate-500" />
@@ -187,12 +187,12 @@ export function SavedViews({
                   onKeyDown={(e) => { if (e.key === 'Enter') void save(); }}
                   placeholder={`${reportLabelFor(currentReportKey)} — name it`}
                   maxLength={120}
-                  className="flex-1 min-w-0 px-2.5 py-1.5 bg-slate-950/60 border border-slate-800 rounded-lg text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50"
+                  className="flex-1 min-w-0 px-2.5 py-1.5 bg-slate-950/60 border border-slate-800 rounded-lg text-xs text-ink-hi placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50"
                 />
                 <button
                   onClick={() => void save()}
                   disabled={!name.trim() || saving}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
                 >
                   {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                   Save
@@ -222,7 +222,7 @@ export function SavedViews({
                 <div key={v.id} className="group flex items-center gap-2 px-2.5 py-1.5 hover:bg-slate-800/60 transition-colors">
                   <button onClick={() => apply(v)} className="flex-1 min-w-0 text-left">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-white truncate">{v.name}</span>
+                      <span className="text-xs font-medium text-ink-hi truncate">{v.name}</span>
                       <span className="px-1 rounded bg-slate-800 text-[9px] text-slate-400 shrink-0">
                         {reportLabelFor(v.report_key)}
                       </span>
@@ -232,7 +232,7 @@ export function SavedViews({
                   <button
                     onClick={() => apply(v)}
                     title="Run this view"
-                    className="p-1 rounded text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors shrink-0"
+                    className="p-1 rounded text-slate-500 hover:text-brand-400 hover:bg-brand-500/10 transition-colors shrink-0"
                   >
                     <Play size={13} />
                   </button>

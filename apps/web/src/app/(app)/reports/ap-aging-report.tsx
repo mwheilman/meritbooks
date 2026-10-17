@@ -70,7 +70,7 @@ export function ApAgingReport({ params }: { params: Record<string, string> }) {
       {/* Aging summary strip */}
       <div className="card p-5">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-medium text-white">Total Outstanding: <span className="font-mono text-emerald-400">{formatMoney(totalOutstanding)}</span></p>
+          <p className="text-sm font-medium text-ink-hi">Total Outstanding: <span className="font-mono text-emerald-400">{formatMoney(totalOutstanding)}</span></p>
           <p className="text-xs text-slate-500">{rows.length} bills from {vendorMap.size} vendors</p>
         </div>
 
@@ -92,7 +92,7 @@ export function ApAgingReport({ params }: { params: Record<string, string> }) {
             return (
               <div key={b} className="text-center">
                 <p className={clsx('text-xs font-medium', BUCKET_TEXT[b])}>{b === 'CURRENT' ? 'Current' : `${b} days`}</p>
-                <p className="text-sm font-mono text-white">{formatMoney(bucket.totalCents)}</p>
+                <p className="text-sm font-mono text-ink-hi">{formatMoney(bucket.totalCents)}</p>
                 <p className="text-[10px] text-slate-600">{bucket.count} bills</p>
               </div>
             );
@@ -122,7 +122,7 @@ export function ApAgingReport({ params }: { params: Record<string, string> }) {
               <React.Fragment key={vendorName}>
                 {/* Vendor header */}
                 <tr className="bg-slate-800/30">
-                  <td colSpan={4} className="px-4 py-2 text-xs font-semibold text-white">{vendorName}</td>
+                  <td colSpan={4} className="px-4 py-2 text-xs font-semibold text-ink-hi">{vendorName}</td>
                   {BUCKET_ORDER.map((b) => {
                     const bucketTotal = vendorData.rows
                       .filter((r) => r.agingBucket === b)
@@ -133,7 +133,7 @@ export function ApAgingReport({ params }: { params: Record<string, string> }) {
                       </td>
                     );
                   })}
-                  <td className={clsx('px-4 py-2 text-right text-xs font-mono font-semibold', figColor(vendorData.totalCents, 'text-white'))}>
+                  <td className={clsx('px-4 py-2 text-right text-xs font-mono font-semibold', figColor(vendorData.totalCents, 'text-ink-hi'))}>
                     {formatMoney(vendorData.totalCents)}
                   </td>
                 </tr>
@@ -159,13 +159,13 @@ export function ApAgingReport({ params }: { params: Record<string, string> }) {
           </tbody>
           <tfoot>
             <tr className={clsx(LEDGER_TOTAL, 'bg-slate-800/30')}>
-              <td colSpan={4} className="px-4 py-2.5 text-sm font-semibold text-white">Total</td>
+              <td colSpan={4} className="px-4 py-2.5 text-sm font-semibold text-ink-hi">Total</td>
               {BUCKET_ORDER.map((b) => (
                 <td key={b} className={clsx('px-3 py-2.5 text-right text-xs font-mono font-semibold', BUCKET_TEXT[b])}>
                   {formatMoney(buckets[b]?.totalCents ?? 0)}
                 </td>
               ))}
-              <td className="px-4 py-2.5 text-right text-sm font-mono font-bold text-white">{formatMoney(totalOutstanding)}</td>
+              <td className="px-4 py-2.5 text-right text-sm font-mono font-bold text-ink-hi">{formatMoney(totalOutstanding)}</td>
             </tr>
           </tfoot>
         </table>

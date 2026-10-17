@@ -23,15 +23,16 @@ export function MetricCard({ label, value, change, icon: Icon, className }: Metr
   return (
     <div className={clsx('card p-5', className)}>
       <div className="flex items-start justify-between">
-        <p className="text-sm text-slate-400">{label}</p>
+        <p className="eyebrow">{label}</p>
         {Icon && (
           <div className="h-8 w-8 rounded-lg bg-brand-500/10 flex items-center justify-center">
             <Icon size={16} className="text-brand-400" />
           </div>
         )}
       </div>
-      {/* Money and figures are always JetBrains Mono, tabular (design system). */}
-      <p className="mt-2 text-2xl font-semibold text-white tracking-tight font-mono tabular-nums">{value}</p>
+      {/* Standalone KPI = brand "big stat": Syne 700, tabular. Figures inside
+          tables/ledgers/forms stay JetBrains Mono (design system §2). */}
+      <p className="mt-2 font-display text-[1.75rem] leading-9 font-bold tracking-[-0.02em] text-ink-hi tabular-nums">{value}</p>
       {change && (
         <div className="mt-2 flex items-center gap-1.5">
           <TrendIcon

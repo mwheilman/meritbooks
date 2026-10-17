@@ -288,7 +288,7 @@ function KpiCard({
         <Icon size={13} className="text-slate-500" />
         {label}
       </div>
-      <div className={clsx('font-mono text-2xl font-semibold tabular-nums', accent ?? 'text-white')}>
+      <div className={clsx('font-mono text-2xl font-semibold tabular-nums', accent ?? 'text-ink-hi')}>
         {value}
       </div>
       {sub && <div className="text-2xs text-slate-500">{sub}</div>}
@@ -354,13 +354,13 @@ function ScorecardCard({
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-navy/[0.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
       >
         {rank != null && (
           <span className="w-6 shrink-0 font-mono text-sm tabular-nums text-slate-500">{rank}</span>
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-white">{card.name || '—'}</p>
+          <p className="truncate text-sm font-medium text-ink-hi">{card.name || '—'}</p>
           <p className="truncate text-2xs uppercase tracking-caps text-slate-500">
             {tp.totalActions} items · {card.engagement.activeDays} active days
           </p>
@@ -374,7 +374,7 @@ function ScorecardCard({
             <p className="text-2xs text-slate-500">$ processed</p>
           </div>
           <div className="text-right">
-            <p className="font-mono text-sm font-semibold tabular-nums text-white">{num(tp.composite)}</p>
+            <p className="font-mono text-sm font-semibold tabular-nums text-ink-hi">{num(tp.composite)}</p>
             <p className="text-2xs text-slate-500">wtd output</p>
           </div>
           <div className="text-right">
@@ -400,7 +400,7 @@ function ScorecardCard({
             <Stat label="Bills" value={num(bf.bill)} />
             <Stat label="Approvals" value={num(bf.approve)} />
             <Stat label="Reconciliations" value={num(bf.reconcile)} />
-            <Stat label="Total items" value={num(tp.totalActions)} color="text-white" />
+            <Stat label="Total items" value={num(tp.totalActions)} color="text-ink-hi" />
           </FamilyBlock>
 
           <FamilyBlock title="Volume — by dollars processed">
@@ -409,7 +409,7 @@ function ScorecardCard({
             <Stat label="Invoices issued" value={money(df.invoice)} color="text-emerald-400" />
             <Stat label="Payroll approved" value={money(df.payroll)} color="text-emerald-400" />
             <Stat label="Payments released" value={money(df.payments)} color="text-emerald-400" />
-            <Stat label="Total $" value={money(dl.totalCents)} color="text-white" />
+            <Stat label="Total $" value={money(dl.totalCents)} color="text-ink-hi" />
           </FamilyBlock>
 
           <FamilyBlock title="Cycle time">
@@ -437,7 +437,7 @@ function ScorecardCard({
               color={reworkColor(q.reworkRate, gate)}
             />
             <Stat label="Override rate" value={pctStr(q.overrideRate)} />
-            <Stat label="Composite" value={num(tp.composite)} color="text-white" />
+            <Stat label="Composite" value={num(tp.composite)} color="text-ink-hi" />
             <Stat label="Last active" value={relTime(en.lastActive)} mono={false} />
           </FamilyBlock>
         </div>
@@ -536,7 +536,7 @@ function Leaderboard({
         )}
       >
         {children}
-        <ArrowUpDown size={11} className={clsx(sortKey === k ? 'text-emerald-400' : 'text-slate-600')} />
+        <ArrowUpDown size={11} className={clsx(sortKey === k ? 'text-brand-400' : 'text-slate-600')} />
       </button>
     </th>
   );
@@ -545,7 +545,7 @@ function Leaderboard({
     <div className="card overflow-hidden">
       <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
         <Trophy size={15} className="text-emerald-400" />
-        <h4 className="text-sm font-semibold text-white">Team leaderboard</h4>
+        <h4 className="text-sm font-semibold text-ink-hi">Team leaderboard</h4>
       </div>
       <div className="flex items-start gap-2 border-b border-slate-800 bg-surface-950/40 px-4 py-2.5 text-2xs leading-relaxed text-slate-500">
         <Info size={13} className="mt-px shrink-0 text-slate-500" />
@@ -584,7 +584,7 @@ function Leaderboard({
                 <td className="px-4 py-3 font-mono text-sm tabular-nums text-slate-400">{r.rank}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium text-white">{r.name || '—'}</span>
+                    <span className="truncate text-sm font-medium text-ink-hi">{r.name || '—'}</span>
                     {r.qualityFlag && (
                       <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400">
                         quality
@@ -596,7 +596,7 @@ function Leaderboard({
                 <td className="px-4 py-3 text-right font-mono tabular-nums text-emerald-400">
                   {moneyCompact(r.dollarsCents)}
                 </td>
-                <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums text-white">
+                <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums text-ink-hi">
                   {num(r.composite)}
                 </td>
                 <td className={clsx('px-4 py-3 text-right font-mono tabular-nums', cycleColor(r.cycle))}>
@@ -622,7 +622,7 @@ function CloseAdherence({ close }: { close: Close }) {
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
         <div className="flex items-center gap-2">
           <CalendarCheck size={15} className="text-emerald-400" />
-          <h4 className="text-sm font-semibold text-white">Close-schedule adherence</h4>
+          <h4 className="text-sm font-semibold text-ink-hi">Close-schedule adherence</h4>
         </div>
         <span className="text-2xs text-slate-500">
           Target: hard-close by business day {close.targetBusinessDay} · trailing {close.lookbackMonths} months
@@ -638,13 +638,13 @@ function CloseAdherence({ close }: { close: Close }) {
         </div>
         <div className="bg-surface-900 p-4">
           <p className="text-2xs uppercase tracking-caps text-slate-500">Avg days-to-close</p>
-          <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-white">
+          <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-ink-hi">
             {close.avgDaysToClose == null ? NA : `${close.avgDaysToClose}d`}
           </p>
         </div>
         <div className="bg-surface-900 p-4">
           <p className="text-2xs uppercase tracking-caps text-slate-500">Closed periods</p>
-          <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-white">
+          <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-ink-hi">
             {close.onTimeCount}/{close.closedCount}
           </p>
         </div>
@@ -653,7 +653,7 @@ function CloseAdherence({ close }: { close: Close }) {
           <p
             className={clsx(
               'mt-1 font-mono text-xl font-semibold tabular-nums',
-              close.openOverdueCount === 0 ? 'text-white' : BAD
+              close.openOverdueCount === 0 ? 'text-ink-hi' : BAD
             )}
           >
             {close.openOverdueCount}
@@ -730,7 +730,7 @@ function FilingAdherence({ filing }: { filing: Filing }) {
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
         <div className="flex items-center gap-2">
           <FileCheck size={15} className="text-emerald-400" />
-          <h4 className="text-sm font-semibold text-white">Regulatory filing adherence</h4>
+          <h4 className="text-sm font-semibold text-ink-hi">Regulatory filing adherence</h4>
         </div>
         <span className="text-2xs text-slate-500">
           Sales tax + compliance obligations · trailing {filing.lookbackMonths} months
@@ -746,7 +746,7 @@ function FilingAdherence({ filing }: { filing: Filing }) {
         </div>
         <div className="bg-surface-900 p-4">
           <p className="text-2xs uppercase tracking-caps text-slate-500">Filed</p>
-          <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-white">
+          <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-ink-hi">
             {filing.filedOnTime}/{filing.filedCount}
           </p>
         </div>
@@ -755,7 +755,7 @@ function FilingAdherence({ filing }: { filing: Filing }) {
           <p
             className={clsx(
               'mt-1 font-mono text-xl font-semibold tabular-nums',
-              filing.filedLate === 0 ? 'text-white' : WARN
+              filing.filedLate === 0 ? 'text-ink-hi' : WARN
             )}
           >
             {filing.filedLate}
@@ -766,7 +766,7 @@ function FilingAdherence({ filing }: { filing: Filing }) {
           <p
             className={clsx(
               'mt-1 font-mono text-xl font-semibold tabular-nums',
-              filing.overdueCount === 0 ? 'text-white' : BAD
+              filing.overdueCount === 0 ? 'text-ink-hi' : BAD
             )}
           >
             {filing.overdueCount}
@@ -899,7 +899,7 @@ export function PerformancePanel({ scope }: { scope: Scope }) {
               aria-pressed={period === p.key}
               className={clsx(
                 'rounded-md px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40',
-                period === p.key ? 'bg-brand-500/10 text-emerald-400' : 'text-slate-400 hover:text-slate-200'
+                period === p.key ? 'bg-brand-500/10 text-brand-300' : 'text-slate-400 hover:text-slate-200'
               )}
             >
               {p.label}
@@ -1016,7 +1016,7 @@ export function PerformancePanel({ scope }: { scope: Scope }) {
           {/* Per-person scorecards (expandable). */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <h4 className="text-sm font-semibold text-white">{isManager ? 'Scorecards' : 'Your scorecard'}</h4>
+              <h4 className="text-sm font-semibold text-ink-hi">{isManager ? 'Scorecards' : 'Your scorecard'}</h4>
               {isManager && (
                 <span className="font-mono text-2xs tabular-nums text-slate-500">{people.length}</span>
               )}

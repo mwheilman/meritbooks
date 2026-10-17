@@ -152,7 +152,7 @@ export function ConnectErpStep({ embedded = false, onSkip, onDone }: ConnectErpS
       {!embedded && (
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-white tracking-tight flex items-center gap-2">
+            <h1 className="text-2xl font-semibold text-ink-hi tracking-tight flex items-center gap-2">
               <Plug size={20} className="text-brand-400" /> Connect your existing system
             </h1>
             <p className="text-sm text-slate-400 mt-1 max-w-2xl">
@@ -195,7 +195,7 @@ export function ConnectErpStep({ embedded = false, onSkip, onDone }: ConnectErpS
                       {monogram(connector?.name ?? conn.erpId)}
                     </div>
                     <div>
-                      <p className="text-sm text-white">{connector?.name ?? conn.erpId}</p>
+                      <p className="text-sm text-ink-hi">{connector?.name ?? conn.erpId}</p>
                       <p className="text-[11px] text-slate-500">
                         {conn.externalAccountLabel ?? ERP_METHOD_LABELS[conn.method]}
                       </p>
@@ -225,7 +225,7 @@ export function ConnectErpStep({ embedded = false, onSkip, onDone }: ConnectErpS
             value={rawSearch}
             onChange={(e) => setRawSearch(e.target.value)}
             placeholder="Search ServiceTitan, RFMS, Procore, QuickBooks…"
-            className="w-full pl-9 pr-3 py-2 bg-surface-900 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50"
+            className="w-full pl-9 pr-3 py-2 bg-surface-900 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50"
           />
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -299,7 +299,7 @@ export function ConnectErpStep({ embedded = false, onSkip, onDone }: ConnectErpS
         </p>
         <button
           onClick={() => (onSkip ? onSkip() : router.push('/dashboard'))}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/50 transition-colors"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-ink-hi hover:bg-slate-800/50 transition-colors"
         >
           <SkipForward size={14} /> {embedded ? 'Skip for now' : 'Do this later'}
         </button>
@@ -357,7 +357,7 @@ function ConnectorCard({
           {monogram(connector.name)}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-white leading-tight">{connector.name}</p>
+          <p className="text-sm font-medium text-ink-hi leading-tight">{connector.name}</p>
           {connector.description && (
             <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{connector.description}</p>
           )}
@@ -415,7 +415,7 @@ function ConnectorCard({
               onChange={(e) => onRequestNameChange(e.target.value)}
               autoFocus
               placeholder="Which system do you use?"
-              className="w-full px-2.5 py-1.5 bg-surface-900 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50"
+              className="w-full px-2.5 py-1.5 bg-surface-900 border border-slate-700 rounded-lg text-xs text-ink-hi placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50"
             />
             <div className="flex items-center gap-2">
               <button
@@ -425,7 +425,7 @@ function ConnectorCard({
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
                   busy || requestName.trim().length === 0
                     ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                    : 'bg-brand-500 text-slate-900 hover:bg-brand-400',
+                    : 'bg-brand-500 text-white hover:bg-brand-400',
                 )}
               >
                 {busy ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Send request
@@ -444,8 +444,8 @@ function ConnectorCard({
               busy
                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
                 : available || isRequest
-                  ? 'bg-brand-500 text-slate-900 hover:bg-brand-400'
-                  : 'bg-surface-950 border border-slate-700 text-slate-200 hover:border-brand-500/40 hover:text-white',
+                  ? 'bg-brand-500 text-white hover:bg-brand-400'
+                  : 'bg-surface-950 border border-slate-700 text-slate-200 hover:border-brand-500/40 hover:text-ink-hi',
             )}
           >
             {busy ? (

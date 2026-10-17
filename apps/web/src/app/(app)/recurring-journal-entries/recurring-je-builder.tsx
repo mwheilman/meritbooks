@@ -80,7 +80,7 @@ function AccountPicker({ value, label, onChange, locationId }: {
         type="button"
         onClick={() => setOpen(!open)}
         className={clsx('w-full text-left px-2.5 py-1.5 rounded-lg border text-sm truncate relative',
-          value ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}
+          value ? 'bg-slate-800 border-slate-700 text-ink-hi' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}
       >
         {label || 'Select account...'}
         <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -93,7 +93,7 @@ function AccountPicker({ value, label, onChange, locationId }: {
               <input
                 type="text" value={search} onChange={(e) => setSearch(e.target.value)} autoFocus
                 placeholder="Search by number or name..."
-                className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50"
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-500 focus:outline-none focus:border-brand-500/50"
               />
             </div>
           </div>
@@ -138,7 +138,7 @@ function DollarInput({ value, onChange, disabled }: { value: string; onChange: (
         placeholder="0.00"
         className={clsx('w-full pl-5 pr-2 py-1.5 rounded-lg border text-sm font-mono text-right',
           disabled ? 'bg-slate-900/50 border-slate-800 text-slate-600 cursor-not-allowed'
-            : 'bg-slate-800 border-slate-700 text-white focus:outline-none focus:border-emerald-500/50')}
+            : 'bg-slate-800 border-slate-700 text-ink-hi focus:outline-none focus:border-brand-500/50')}
       />
     </div>
   );
@@ -212,7 +212,7 @@ function AllocationHelper({ locationId, departments, onGenerate }: {
               <button
                 key={d.id} type="button" onClick={() => toggle(d.id)}
                 className={clsx('px-2.5 py-1 rounded-lg border text-xs',
-                  picked.includes(d.id) ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white')}
+                  picked.includes(d.id) ? 'bg-brand-500/15 border-brand-500/40 text-brand-300' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-ink-hi')}
               >
                 {d.name}
               </button>
@@ -325,8 +325,8 @@ export function RecurringJeBuilder({ existing, onClose, onSaved }: {
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 sm:p-8">
       <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden my-4">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-          <h2 className="text-lg font-semibold text-white">{editing ? 'Edit recurring entry' : 'New recurring journal entry'}</h2>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"><X size={18} /></button>
+          <h2 className="text-lg font-semibold text-ink-hi">{editing ? 'Edit recurring entry' : 'New recurring journal entry'}</h2>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-ink-hi"><X size={18} /></button>
         </div>
 
         <div className="p-6 space-y-5">
@@ -334,12 +334,12 @@ export function RecurringJeBuilder({ existing, onClose, onSaved }: {
             <div className="col-span-2 md:col-span-1">
               <label className="block text-xs text-slate-500 mb-1 font-medium">Template name</label>
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Monthly rent accrual"
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600" />
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-600" />
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium">Company</label>
               <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white">
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi">
                 <option value="">Select...</option>
                 {locations.map((loc) => <option key={loc.id} value={loc.id}>{loc.short_code} · {loc.name}</option>)}
               </select>
@@ -347,7 +347,7 @@ export function RecurringJeBuilder({ existing, onClose, onSaved }: {
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium">Cadence</label>
               <select value={cadence} onChange={(e) => setCadence(e.target.value as 'MONTHLY' | 'QUARTERLY')}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white">
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi">
                 <option value="MONTHLY">Monthly</option>
                 <option value="QUARTERLY">Quarterly</option>
               </select>
@@ -355,7 +355,7 @@ export function RecurringJeBuilder({ existing, onClose, onSaved }: {
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium">Type</label>
               <select value={entryType} onChange={(e) => setEntryType(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white">
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi">
                 <option value="ADJUSTING">Adjusting</option>
                 <option value="STANDARD">Standard</option>
                 <option value="CLOSING">Closing</option>
@@ -365,17 +365,17 @@ export function RecurringJeBuilder({ existing, onClose, onSaved }: {
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium">Start</label>
               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono" />
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi font-mono" />
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium">End <span className="text-slate-600">(optional)</span></label>
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono" />
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi font-mono" />
             </div>
             <div className="col-span-2">
               <label className="block text-xs text-slate-500 mb-1 font-medium">Memo <span className="text-slate-600">(optional)</span></label>
               <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Posted each period with the period appended"
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600" />
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-600" />
             </div>
           </div>
 
@@ -432,12 +432,12 @@ export function RecurringJeBuilder({ existing, onClose, onSaved }: {
               <tfoot>
                 <tr className="border-t border-slate-700">
                   <td colSpan={2} className="px-3 py-2.5">
-                    <button type="button" onClick={addLine} className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300">
+                    <button type="button" onClick={addLine} className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300">
                       <Plus size={13} /> Add line
                     </button>
                   </td>
-                  <td className="px-3 py-2.5 text-right"><span className={clsx('text-sm font-mono font-semibold', totalDebits > 0 ? 'text-white' : 'text-slate-600')}>{formatMoney(dollarsToCents(totalDebits))}</span></td>
-                  <td className="px-3 py-2.5 text-right"><span className={clsx('text-sm font-mono font-semibold', totalCredits > 0 ? 'text-white' : 'text-slate-600')}>{formatMoney(dollarsToCents(totalCredits))}</span></td>
+                  <td className="px-3 py-2.5 text-right"><span className={clsx('text-sm font-mono font-semibold', totalDebits > 0 ? 'text-ink-hi' : 'text-slate-600')}>{formatMoney(dollarsToCents(totalDebits))}</span></td>
+                  <td className="px-3 py-2.5 text-right"><span className={clsx('text-sm font-mono font-semibold', totalCredits > 0 ? 'text-ink-hi' : 'text-slate-600')}>{formatMoney(dollarsToCents(totalCredits))}</span></td>
                   <td colSpan={2} className="px-3 py-2.5">
                     {totalDebits > 0 || totalCredits > 0 ? (
                       isBalanced ? <span className="flex items-center gap-1 text-xs text-emerald-400"><Check size={12} /> Balanced</span>
@@ -457,10 +457,10 @@ export function RecurringJeBuilder({ existing, onClose, onSaved }: {
           )}
 
           <div className="flex items-center justify-end gap-3 pt-1">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800">Cancel</button>
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-ink-hi hover:bg-slate-800">Cancel</button>
             <button type="button" onClick={save} disabled={saving || !isBalanced || !locationId || !name.trim()}
               className={clsx('flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium',
-                saving || !isBalanced || !locationId || !name.trim() ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
+                saving || !isBalanced || !locationId || !name.trim() ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-white hover:bg-brand-600')}>
               {saving ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : <><Save size={14} /> {editing ? 'Save changes' : 'Create template'}</>}
             </button>
           </div>

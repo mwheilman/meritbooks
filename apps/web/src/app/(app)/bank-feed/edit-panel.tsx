@@ -381,10 +381,10 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-          <h2 id="edit-panel-title" className="text-lg font-semibold text-white">Edit Transaction</h2>
+          <h2 id="edit-panel-title" className="text-lg font-semibold text-ink-hi">Edit Transaction</h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] transition-colors"
+            className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-navy/[0.04] transition-colors"
             aria-label="Close"
           >
             <X size={18} />
@@ -403,7 +403,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
             <div className="flex items-center justify-between pt-1">
               <span className={clsx(
                 'text-lg font-mono tabular-nums font-semibold',
-                transaction.amount_cents >= 0 ? 'text-emerald-400' : 'text-white'
+                transaction.amount_cents >= 0 ? 'text-emerald-400' : 'text-ink-hi'
               )}>
                 {formatMoney(transaction.amount_cents)}
               </span>
@@ -740,7 +740,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
                 <div className="flex items-center gap-1">
                   <button
                     onClick={(e) => { e.stopPropagation(); setSelectedJob(null); }}
-                    className="p-0.5 rounded hover:bg-white/[0.08] text-slate-600 hover:text-slate-300"
+                    className="p-0.5 rounded hover:bg-navy/[0.08] text-slate-600 hover:text-slate-300"
                     aria-label="Clear job"
                   >
                     <X size={12} />
@@ -776,7 +776,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
                       onClick={() => { setSelectedJob(job); setShowJobDropdown(false); setJobSearch(''); }}
                       className={clsx(
                         'w-full flex items-center justify-between px-3 py-2 text-left transition-colors',
-                        selectedJob?.id === job.id ? 'bg-brand-500/10 text-brand-400' : 'text-slate-300 hover:bg-white/[0.04]'
+                        selectedJob?.id === job.id ? 'bg-brand-500/10 text-brand-300' : 'text-slate-300 hover:bg-navy/[0.04]'
                       )}
                     >
                       <div className="min-w-0">
@@ -823,7 +823,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
         <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-md text-sm text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] transition-colors"
+            className="px-4 py-2 rounded-md text-sm text-slate-400 hover:text-slate-200 hover:bg-navy/[0.04] transition-colors"
           >
             Cancel
           </button>
@@ -834,7 +834,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
               'inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors',
               !selectedAccount || isAlreadyPosted || blockingMissing
                 ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                : 'bg-brand-500 text-white hover:bg-brand-600'
             )}
           >
             {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
@@ -892,7 +892,7 @@ function AccountRow({ account, isSelected, onSelect }: {
       onClick={onSelect}
       className={clsx(
         'w-full flex items-center justify-between px-3 py-2 text-left transition-colors',
-        isSelected ? 'bg-brand-500/10 text-brand-400' : 'text-slate-300 hover:bg-white/[0.04]'
+        isSelected ? 'bg-brand-500/10 text-brand-300' : 'text-slate-300 hover:bg-navy/[0.04]'
       )}
     >
       <div>
@@ -940,7 +940,7 @@ function DimensionPicker(props: {
           {selectedLabel && (
             <button
               onClick={(e) => { e.stopPropagation(); onClear(); }}
-              className="p-0.5 rounded hover:bg-white/[0.08] text-slate-600 hover:text-slate-300"
+              className="p-0.5 rounded hover:bg-navy/[0.08] text-slate-600 hover:text-slate-300"
               aria-label={`Clear ${label.toLowerCase()}`}
             >
               <X size={12} />
@@ -959,7 +959,7 @@ function DimensionPicker(props: {
                 onClick={() => onSelect(o.id)}
                 className={clsx(
                   'w-full flex items-center justify-between px-3 py-2 text-left text-sm transition-colors',
-                  o.selected ? 'bg-brand-500/10 text-brand-400' : 'text-slate-300 hover:bg-white/[0.04]'
+                  o.selected ? 'bg-brand-500/10 text-brand-300' : 'text-slate-300 hover:bg-navy/[0.04]'
                 )}
               >
                 <span>{o.label}</span>

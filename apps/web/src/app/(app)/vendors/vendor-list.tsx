@@ -72,7 +72,7 @@ export function VendorList() {
           <div className="flex items-center gap-2">
             <Shield size={14} className="text-slate-500" />
             <span className="text-sm text-slate-400">Total vendors</span>
-            <span className="text-sm font-medium text-white font-mono">{summary.total}</span>
+            <span className="text-sm font-medium text-ink-hi font-mono">{summary.total}</span>
           </div>
           <div className="h-4 w-px bg-slate-800" />
           <div className="flex items-center gap-2">
@@ -83,7 +83,7 @@ export function VendorList() {
           <div className="h-4 w-px bg-slate-800" />
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-400">1099 vendors</span>
-            <span className="text-sm font-medium text-white font-mono">{summary.with1099}</span>
+            <span className="text-sm font-medium text-ink-hi font-mono">{summary.with1099}</span>
           </div>
         </div>
       )}
@@ -97,7 +97,7 @@ export function VendorList() {
               className={clsx(
                 'px-3 py-1.5 rounded-md text-sm transition-colors',
                 filter === tab.key
-                  ? 'bg-slate-800 text-white font-medium'
+                  ? 'bg-slate-800 text-ink-hi font-medium'
                   : 'text-slate-400 hover:text-slate-300'
               )}
             >

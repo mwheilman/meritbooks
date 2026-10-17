@@ -42,7 +42,7 @@ function Tier({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs">
-        <span className={clsx('font-medium', tone === 'required' ? 'text-white' : 'text-slate-300')}>{label}</span>
+        <span className={clsx('font-medium', tone === 'required' ? 'text-ink-hi' : 'text-slate-300')}>{label}</span>
         <span className="font-mono tabular-nums text-slate-500">{done}/{total}</span>
       </div>
       <div
@@ -77,7 +77,7 @@ export function ReadinessMeter({ status, className }: ReadinessMeterProps) {
         {ready
           ? <CircleCheck size={15} className="text-brand-400" aria-hidden />
           : <ShieldCheck size={15} className="text-slate-400" aria-hidden />}
-        <p className="text-sm font-semibold text-white">
+        <p className="text-sm font-semibold text-ink-hi">
           {ready ? 'Your books are operating' : 'Books health'}
         </p>
       </div>

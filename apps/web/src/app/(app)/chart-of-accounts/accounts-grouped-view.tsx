@@ -44,7 +44,7 @@ function toNatural(rawNetCents: number, normalBalance: string): number {
 }
 
 function NetCell({ cents, strong }: { cents: number; strong?: boolean }) {
-  const cls = cents < 0 ? 'text-red-400' : cents === 0 ? 'text-slate-600' : strong ? 'text-white' : 'text-slate-200';
+  const cls = cents < 0 ? 'text-red-400' : cents === 0 ? 'text-slate-600' : strong ? 'text-ink-hi' : 'text-slate-200';
   return (
     <span className={clsx('font-mono tabular-nums', strong && 'font-semibold', cls)}>
       {cents === 0 ? '—' : formatMoney(cents)}
@@ -132,7 +132,7 @@ export function AccountsGroupedView({
   return (
     <div>
       <div className="flex items-center justify-end gap-4 mb-2 text-xs">
-        <button onClick={() => setAll(true)} className="text-emerald-400 hover:text-emerald-300 transition-colors">Expand all</button>
+        <button onClick={() => setAll(true)} className="text-brand-400 hover:text-brand-300 transition-colors">Expand all</button>
         <button onClick={() => setAll(false)} className="text-slate-400 hover:text-slate-300 transition-colors">Collapse all</button>
       </div>
 
@@ -189,7 +189,7 @@ function TypeBlock({
         <td className="px-4 py-2.5">
           <div className="flex items-center gap-2">
             {typeOpen ? <ChevronDown size={15} className="text-slate-500" /> : <ChevronRight size={15} className="text-slate-500" />}
-            <span className="text-sm font-semibold text-white">{t.name}</span>
+            <span className="text-sm font-semibold text-ink-hi">{t.name}</span>
             <span className="text-2xs font-mono text-slate-600">{t.normalBalance === 'DEBIT' ? 'DR' : 'CR'}</span>
             <span className="text-2xs text-slate-600">· {acctCount}</span>
           </div>
@@ -237,7 +237,7 @@ function SubTypeBlock({
 }) {
   return (
     <>
-      <tr className="border-b border-slate-800/50 cursor-pointer hover:bg-white/[0.02]" onClick={() => toggle(stKey)}>
+      <tr className="border-b border-slate-800/50 cursor-pointer hover:bg-navy/[0.02]" onClick={() => toggle(stKey)}>
         <td className="px-4 py-2 pl-9">
           <div className="flex items-center gap-2">
             {stOpen ? <ChevronDown size={13} className="text-slate-500" /> : <ChevronRight size={13} className="text-slate-500" />}
@@ -283,7 +283,7 @@ function GroupBlock({
 }) {
   return (
     <>
-      <tr className="cursor-pointer hover:bg-white/[0.02]" onClick={() => toggle(gKey)}>
+      <tr className="cursor-pointer hover:bg-navy/[0.02]" onClick={() => toggle(gKey)}>
         <td className="px-4 py-1.5 pl-14">
           <div className="flex items-center gap-2">
             {gOpen ? <ChevronDown size={12} className="text-slate-600" /> : <ChevronRight size={12} className="text-slate-600" />}
@@ -304,7 +304,7 @@ function GroupBlock({
         return (
           <tr
             key={a.id}
-            className={clsx('group border-t border-slate-800/20 hover:bg-white/[0.02] cursor-pointer', !a.isActive && 'opacity-55')}
+            className={clsx('group border-t border-slate-800/20 hover:bg-navy/[0.02] cursor-pointer', !a.isActive && 'opacity-55')}
             onClick={() => onSelectAccount(a.id)}
           >
             <td className="px-4 py-2 pl-24">
@@ -333,7 +333,7 @@ function GroupBlock({
               <button
                 onClick={(e) => { e.stopPropagation(); onOpenLedger(a); }}
                 aria-label={`View GL detail for ${a.accountNumber} ${a.name}`}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] text-slate-400 opacity-0 group-hover:opacity-100 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] text-slate-400 opacity-0 group-hover:opacity-100 hover:text-brand-400 hover:bg-brand-500/10 transition-all"
               >
                 <ScrollText size={12} /> Ledger
               </button>

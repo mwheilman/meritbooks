@@ -70,14 +70,14 @@ export function ReforecastView() {
       <div className="flex items-center gap-2 mb-5 p-3 rounded-xl bg-slate-800/20 border border-slate-800 flex-wrap">
         <div className="flex items-center gap-1.5">
           <Building2 size={13} className="text-slate-500" />
-          <select value={locationId} onChange={(e) => { setCompanyTouched(true); setLocationId(e.target.value); }} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white max-w-[240px]">
+          <select value={locationId} onChange={(e) => { setCompanyTouched(true); setLocationId(e.target.value); }} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi max-w-[240px]">
             <option value="">All Companies (Consolidated)</option>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.short_code} · {l.name}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-1.5">
           <Calendar size={13} className="text-slate-500" />
-          <select value={fiscalYear} onChange={(e) => setFiscalYear(parseInt(e.target.value, 10))} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono">
+          <select value={fiscalYear} onChange={(e) => setFiscalYear(parseInt(e.target.value, 10))} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono">
             {FISCAL_YEARS.map((y) => <option key={y} value={y}>FY {y}</option>)}
           </select>
         </div>
@@ -86,7 +86,7 @@ export function ReforecastView() {
           <select
             value={closedThrough ?? closed}
             onChange={(e) => setClosedThrough(parseInt(e.target.value, 10))}
-            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"
+            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi"
           >
             {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
               <option key={n} value={n}>{n === 0 ? 'None (pure budget)' : MONTHS[n - 1]}</option>
@@ -193,14 +193,14 @@ export function ReforecastView() {
 
 function MethodTab({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={clsx('px-3 py-1.5 text-xs font-medium', active ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-800 text-slate-400 hover:text-white')}>
+    <button onClick={onClick} className={clsx('px-3 py-1.5 text-xs font-medium', active ? 'bg-brand-500/15 text-brand-300' : 'bg-slate-800 text-slate-400 hover:text-ink-hi')}>
       {label}
     </button>
   );
 }
 
 function SummaryCard({ label, value, accent, variance }: { label: string; value: number; accent?: boolean; variance?: boolean }) {
-  const color = variance ? (value >= 0 ? 'text-emerald-400' : 'text-red-400') : accent ? 'text-white' : 'text-slate-200';
+  const color = variance ? (value >= 0 ? 'text-emerald-400' : 'text-red-400') : accent ? 'text-ink-hi' : 'text-slate-200';
   return (
     <div className="card p-3.5">
       <p className="text-2xs uppercase text-slate-500 mb-1">{label}</p>

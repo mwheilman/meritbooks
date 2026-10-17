@@ -87,14 +87,14 @@ export function InvoiceBranding() {
 
   return (
     <div>
-      <div className="mb-1"><h2 className="text-lg font-semibold text-white">Invoice display</h2></div>
+      <div className="mb-1"><h2 className="text-lg font-semibold text-ink-hi">Invoice display</h2></div>
       <p className="text-sm text-slate-400 mb-5">Pick the look customers see on invoices and the hosted payment page. Each entity can have its own.</p>
 
       {entities.length > 1 && (
         <div className="flex flex-wrap gap-2 mb-6">
           {entities.map((e) => (
             <button key={e.locationId} onClick={() => setActiveId(e.locationId)}
-              className={clsx('px-3 py-1.5 rounded-md text-sm', e.locationId === activeId ? 'bg-emerald-500/10 text-emerald-400 font-medium' : 'text-slate-400 hover:text-white hover:bg-slate-800/50')}>
+              className={clsx('px-3 py-1.5 rounded-md text-sm', e.locationId === activeId ? 'bg-brand-500/10 text-brand-300 font-medium' : 'text-slate-400 hover:text-ink-hi hover:bg-slate-800/50')}>
               {e.name}
             </button>
           ))}
@@ -109,9 +109,9 @@ export function InvoiceBranding() {
             <div className="space-y-2">
               {STYLES.map((s) => (
                 <button key={s.key} onClick={() => patch({ style: s.key })}
-                  className={clsx('w-full text-left rounded-lg border p-3 transition', active.style === s.key ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-700 hover:border-slate-600')}>
+                  className={clsx('w-full text-left rounded-lg border p-3 transition', active.style === s.key ? 'border-brand-500 bg-brand-500/5' : 'border-slate-700 hover:border-slate-600')}>
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-white">{s.label}</span>
+                    <span className="font-medium text-ink-hi">{s.label}</span>
                     {active.style === s.key && <Check size={15} className="text-emerald-400" />}
                   </div>
                   <span className="text-xs text-slate-400">{s.blurb}</span>
@@ -125,13 +125,13 @@ export function InvoiceBranding() {
             <div className="flex items-center gap-2 flex-wrap">
               {SWATCHES.map((c) => (
                 <button key={c} onClick={() => patch({ accentColor: c })} title={c}
-                  className={clsx('w-8 h-8 rounded-full border-2', active.accentColor.toLowerCase() === c ? 'border-white' : 'border-transparent')}
+                  className={clsx('w-8 h-8 rounded-full border-2', active.accentColor.toLowerCase() === c ? 'border-navy' : 'border-transparent')}
                   style={{ background: c }} />
               ))}
               <input type="color" value={active.accentColor} onChange={(e) => patch({ accentColor: e.target.value })}
                 className="w-8 h-8 rounded cursor-pointer bg-transparent" title="Custom color" />
               <input type="text" value={active.accentColor} onChange={(e) => patch({ accentColor: e.target.value })}
-                className="w-24 px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm text-white font-mono" />
+                className="w-24 px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm text-ink-hi font-mono" />
             </div>
           </div>
 
@@ -158,28 +158,28 @@ export function InvoiceBranding() {
           <div>
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Remit-to (pay-to block)</label>
             <textarea value={active.remitTo} onChange={(e) => patch({ remitTo: e.target.value })} rows={3}
-              className="w-full px-3 py-2 rounded-md bg-slate-800 border border-slate-700 text-sm text-white"
+              className="w-full px-3 py-2 rounded-md bg-slate-800 border border-slate-700 text-sm text-ink-hi"
               placeholder={`${active.name}\nPO Box 4410\nJohnston, IA 50131`} />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Footer</label>
             <input value={active.footerText} onChange={(e) => patch({ footerText: e.target.value })}
-              className="w-full px-3 py-2 rounded-md bg-slate-800 border border-slate-700 text-sm text-white"
+              className="w-full px-3 py-2 rounded-md bg-slate-800 border border-slate-700 text-sm text-ink-hi"
               placeholder="Questions? billing@yourco.com · (515) 555-0142" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Default invoice message</label>
             <textarea value={active.defaultMessage} onChange={(e) => patch({ defaultMessage: e.target.value })} rows={2}
-              className="w-full px-3 py-2 rounded-md bg-slate-800 border border-slate-700 text-sm text-white"
+              className="w-full px-3 py-2 rounded-md bg-slate-800 border border-slate-700 text-sm text-ink-hi"
               placeholder="Thank you for your business. Bank transfer (ACH) is free." />
           </div>
 
           <div className="flex items-center gap-3 pt-1">
             <button onClick={save} disabled={saving}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50">
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50">
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save
             </button>
-            <a href={previewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm text-slate-300 hover:text-white">
+            <a href={previewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm text-slate-300 hover:text-ink-hi">
               <ExternalLink size={14} /> Open preview PDF
             </a>
           </div>
@@ -197,15 +197,15 @@ export function InvoiceBranding() {
 
       <div className="mt-10 pt-6 border-t border-slate-800 grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div>
-          <h3 className="text-sm font-semibold text-white mb-1">Payment &amp; retainage defaults</h3>
+          <h3 className="text-sm font-semibold text-ink-hi mb-1">Payment &amp; retainage defaults</h3>
           <p className="text-2xs text-slate-500 mb-3">Entity-level defaults. Customers and jobs can override these; invoices override everything.</p>
           <EntityInvoiceSettings scope="LOCATION" id={active.locationId} />
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-white mb-1">Invoice-type text</h3>
+          <h3 className="text-sm font-semibold text-ink-hi mb-1">Invoice-type text</h3>
           <p className="text-2xs text-slate-500 mb-3">Set default text for a kind of invoice (e.g. “Progress Bill”, “Deposit”). The label must match the invoice’s type.</p>
           <input value={typeLabel} onChange={(e) => setTypeLabel(e.target.value)} placeholder="Invoice type label, e.g. Progress Bill"
-            className="w-full px-3 py-2 rounded-md bg-slate-800 border border-slate-700 text-sm text-white mb-3" />
+            className="w-full px-3 py-2 rounded-md bg-slate-800 border border-slate-700 text-sm text-ink-hi mb-3" />
           {typeLabel.trim() ? <InvoiceTextOverrides scope="INVOICE_TYPE" refId={typeLabel.trim()} /> : <p className="text-2xs text-slate-500">Enter a type label to edit its text.</p>}
         </div>
       </div>

@@ -60,7 +60,7 @@ export function PaymentsConnect() {
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400"><CreditCard size={20} /></div>
         <div>
-          <h2 className="text-base font-semibold text-white">Accept card &amp; ACH payments</h2>
+          <h2 className="text-base font-semibold text-ink-hi">Accept card &amp; ACH payments</h2>
           <p className="text-xs text-slate-400">Powered by Stripe. Funds settle to your own bank account.</p>
         </div>
       </div>
@@ -80,7 +80,7 @@ export function PaymentsConnect() {
       {s.message && s.status !== 'error' && <p className="text-sm text-red-400 mb-4">{s.message}</p>}
 
       <button onClick={start} disabled={starting}
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50">
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50">
         {starting ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
         {active ? 'Manage on Stripe' : pending ? 'Continue onboarding' : 'Connect with Stripe'}
       </button>

@@ -160,7 +160,7 @@ export function ReceiptQueue() {
               className={clsx(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors',
                 activeTab === tab.key
-                  ? 'bg-slate-800 text-white font-medium'
+                  ? 'bg-slate-800 text-ink-hi font-medium'
                   : 'text-slate-400 hover:text-slate-300'
               )}
             >
@@ -271,7 +271,7 @@ export function ReceiptQueue() {
                             'p-1.5 rounded-md transition-colors',
                             !r.account || !r.amount_cents || isPosted
                               ? 'text-slate-700 cursor-not-allowed'
-                              : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'
+                              : 'text-slate-500 hover:text-brand-400 hover:bg-brand-500/10'
                           )}
                         >
                           {approvingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}

@@ -149,7 +149,7 @@ export function SandboxConsole() {
             checked={resetBeforeRun}
             onChange={(e) => setResetBeforeRun(e.target.checked)}
             disabled={!!busy}
-            className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500/40"
+            className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-800 accent-brand-500 focus:ring-brand-500/40"
           />
           Reset before run
         </label>
@@ -275,7 +275,7 @@ function Tile({ icon: Icon, label, value }: { icon: typeof Database; label: stri
         <Icon size={13} />
         <span className="text-2xs uppercase tracking-wide">{label}</span>
       </div>
-      <p className="mt-1 text-xl font-semibold text-white font-mono tabular-nums">{value}</p>
+      <p className="mt-1 text-xl font-semibold text-ink-hi font-mono tabular-nums">{value}</p>
     </div>
   );
 }

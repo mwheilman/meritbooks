@@ -184,13 +184,13 @@ export function DebtParseReview({
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-indigo-400" />
             <div>
-              <h2 className="text-lg font-semibold text-white">Add a loan from a document</h2>
+              <h2 className="text-lg font-semibold text-ink-hi">Add a loan from a document</h2>
               <p className="text-[11px] text-slate-500">
                 Drop a loan agreement — AI proposes the terms; you review and confirm. Nothing is saved until you confirm.
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close">
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -219,7 +219,7 @@ export function DebtParseReview({
               phase === 'parsing'
                 ? 'border-indigo-500/40 bg-indigo-500/5 cursor-default'
                 : dragOver
-                  ? 'border-emerald-500 bg-emerald-500/5 cursor-pointer'
+                  ? 'border-brand-500 bg-brand-500/5 cursor-pointer'
                   : 'border-slate-700 hover:border-slate-600 cursor-pointer',
             )}
           >
@@ -234,7 +234,7 @@ export function DebtParseReview({
               <>
                 <Loader2 className="w-9 h-9 text-indigo-400 animate-spin mb-3" />
                 <p className="text-sm text-slate-300">
-                  Reading {initialStoragePath ? <span className="text-white">{displayNameFromStoragePath(initialStoragePath)}</span> : 'the loan document'} and extracting terms…
+                  Reading {initialStoragePath ? <span className="text-ink-hi">{displayNameFromStoragePath(initialStoragePath)}</span> : 'the loan document'} and extracting terms…
                 </p>
                 <p className="text-[11px] text-slate-500 mt-1">This can take 15-30 seconds for a long document.</p>
               </>

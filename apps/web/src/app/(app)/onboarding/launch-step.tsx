@@ -44,7 +44,7 @@ export function LaunchStep({
             ready ? 'bg-brand-500/15' : 'bg-slate-800')}>
             <Rocket size={28} className={ready ? 'text-brand-400' : 'text-slate-500'} />
           </div>
-          <h2 className="text-xl font-semibold text-white">
+          <h2 className="text-xl font-semibold text-ink-hi">
             {ready ? `${company?.name ?? 'Your company'} is ready to go live` : 'Almost there'}
           </h2>
           <p className="text-sm text-slate-400 mt-1 max-w-lg mx-auto">
@@ -69,7 +69,7 @@ export function LaunchStep({
                     <Icon size={15} className={r.state === 'done' ? 'text-brand-400' : 'text-slate-500'} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white font-medium truncate">{r.label}</p>
+                    <p className="text-sm text-ink-hi font-medium truncate">{r.label}</p>
                     <p className={clsx('text-xs', r.state === 'skipped' ? 'text-amber-300/80' : 'text-slate-500')}>{r.value}</p>
                   </div>
                   {r.state === 'done' && <Check size={16} className="text-brand-400 shrink-0" aria-label="Done" />}
@@ -92,7 +92,7 @@ export function LaunchStep({
         <span className="flex items-center gap-3">
           <LayoutGrid size={18} className="text-brand-400" />
           <span>
-            <span className="block text-sm font-medium text-white">Open your setup board</span>
+            <span className="block text-sm font-medium text-ink-hi">Open your setup board</span>
             <span className="block text-xs text-slate-500">Loans, customers, vendors, fixed assets, leases — add each whenever you&apos;re ready.</span>
           </span>
         </span>

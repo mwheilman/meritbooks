@@ -140,7 +140,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:outline-none"
+        className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 text-sm text-ink-hi placeholder:text-slate-600 focus:border-brand-500/50 focus:outline-none"
       />
     </label>
   );
@@ -245,7 +245,7 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
           <div>
-            <h2 id="misc-modal-title" className="text-base font-semibold text-white">Generate {year} 1099-MISC</h2>
+            <h2 id="misc-modal-title" className="text-base font-semibold text-ink-hi">Generate {year} 1099-MISC</h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Rents, royalties, other income, medical, and attorney proceeds — classified from the GL. Read-only
               assembly; nothing is filed with the IRS.
@@ -273,7 +273,7 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
             <button
               onClick={() => void review()}
               disabled={loading}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-emerald-500/40 hover:text-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-brand-500/40 hover:text-brand-400 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? <Loader2 size={13} className="animate-spin" /> : <Wrench size={13} />} Re-assemble
             </button>
@@ -282,7 +282,7 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
           {/* States */}
           {loading && !data ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+              <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
             </div>
           ) : error ? (
             <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-400">
@@ -298,7 +298,7 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
                 </div>
                 <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
                   <div className="flex items-center gap-1.5 text-[11px] text-slate-500"><DollarSign size={12} /> Total reportable</div>
-                  <p className="mt-1 font-mono tabular-nums text-xl font-semibold text-white">{formatMoney(summary.totalReportableMiscCents)}</p>
+                  <p className="mt-1 font-mono tabular-nums text-xl font-semibold text-ink-hi">{formatMoney(summary.totalReportableMiscCents)}</p>
                 </div>
                 <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
                   <div className="flex items-center gap-1.5 text-[11px] text-slate-500"><ShieldAlert size={12} /> Blockers</div>
@@ -367,7 +367,7 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
                     {blocked.map((e) => (
                       <li key={e.vendorId} className="rounded-lg border border-red-500/15 bg-red-500/[0.03] px-3 py-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-white">{e.vendorName}</span>
+                          <span className="text-sm font-medium text-ink-hi">{e.vendorName}</span>
                           <span className="font-mono tabular-nums text-xs text-slate-400">{formatMoney(e.totalPaidCents)}</span>
                         </div>
                         <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{e.reason}</p>
@@ -389,7 +389,7 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
                         {data.records.map((r) => (
                           <tr key={r.vendorId} className="align-top">
                             <td className="px-3 py-2">
-                              <div className="text-white">{r.recipientName}</div>
+                              <div className="text-ink-hi">{r.recipientName}</div>
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {MISC_BOX_ORDER.filter((c) => (r.boxAmounts[c] ?? 0) > 0).map((c) => (
                                   <span
@@ -437,20 +437,20 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
 
         {/* Footer actions */}
         <div className="flex items-center justify-end gap-2 border-t border-slate-800 px-5 py-3">
-          <button onClick={onClose} className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white">
+          <button onClick={onClose} className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-ink-hi">
             Close
           </button>
           <button
             onClick={() => download('pdf')}
             disabled={!summary || summary.readyCount === 0}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-emerald-500/40 hover:text-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-brand-500/40 hover:text-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <FileText size={14} /> Recipient copies (PDF)
           </button>
           <button
             onClick={() => download('csv')}
             disabled={!summary || summary.readyCount === 0 || summary.payerTinMissing}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-emerald-500/40 hover:text-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-brand-500/40 hover:text-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <FileSpreadsheet size={14} /> Filing-service CSV
           </button>
@@ -458,7 +458,7 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
             onClick={downloadFire}
             disabled={!summary || summary.readyCount === 0 || summary.payerTinMissing}
             title="IRS FIRE fixed-width e-file (Pub. 1220). File only — you upload it to FIRE yourself."
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <FileCode2 size={14} /> IRS e-file (FIRE)
           </button>

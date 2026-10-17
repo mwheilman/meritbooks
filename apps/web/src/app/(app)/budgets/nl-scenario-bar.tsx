@@ -144,7 +144,7 @@ export function NlScenarioBar({
           }}
           rows={2}
           placeholder='e.g. "raise revenue 8% and cut headcount cost 12% starting Q3"'
-          className="w-full resize-none rounded-lg bg-slate-900/70 border border-slate-800 px-3 py-2.5 pr-28 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
+          className="w-full resize-none rounded-lg bg-slate-900/70 border border-slate-800 px-3 py-2.5 pr-28 text-sm text-ink-hi placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
         />
         <button
           onClick={run}
@@ -192,7 +192,7 @@ export function NlScenarioBar({
             <input
               value={draft.scenarioName}
               onChange={(e) => setDraft((d) => (d ? { ...d, scenarioName: e.target.value } : d))}
-              className="rounded-lg bg-slate-800 border border-slate-700 px-2 py-1 text-sm font-medium text-white w-[220px] focus:outline-none focus:border-indigo-500/50"
+              className="rounded-lg bg-slate-800 border border-slate-700 px-2 py-1 text-sm font-medium text-ink-hi w-[220px] focus:outline-none focus:border-indigo-500/50"
             />
             <span
               className={clsx(
@@ -210,7 +210,7 @@ export function NlScenarioBar({
               <button onClick={discard} className="flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800">
                 <X size={12} /> Discard
               </button>
-              <button onClick={apply} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-500">
+              <button onClick={apply} className="flex items-center gap-1 rounded-lg bg-brand-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-600">
                 <Check size={12} /> Apply to model
               </button>
             </div>

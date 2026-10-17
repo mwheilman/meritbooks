@@ -199,7 +199,13 @@ Do NOT trust older "Session 7 / Bank Feed only", "session 38", or "session 40" s
 
 ## Design System (BINDING)
 
-Primary accent: #10b981 (Tailwind emerald-500). Dark dominant, surface-900 for cards, surface-950 for nested. Typography: Plus Jakarta Sans (UI), JetBrains Mono (numbers/codes). Text: white primary, slate-300 secondary, slate-500 tertiary. Emerald for debits/success, red for credits/danger, amber warning, blue info, indigo AI features.
+Default theme = **Merit Management Group brand (Feb 2026 Style Guide)**, implemented as the DEFAULT TENANT theme through tokens — full spec in `docs/DESIGN-SYSTEM.md`. **White-label rule:** never hard-code a tenant name or brand hex in a component; identity comes from `getTenantBrand()` (`lib/brand/tenant-brand.ts`), color from CSS variables in `styles/globals.css :root` via Tailwind tokens, fonts from next/font in `app/layout.tsx`.
+- **Palette & ratios (60/25/10/5):** Warm White `#FDFCFA` page + Canvas `#F5F3EF` insets + white cards (60%); Navy `#0A1628` shell (sidebar + top bar), dark sections, headlines (25%); Steel `#3D4F65` body text (10%); **Electric Blue `#2563EB` accent only** — primary buttons, links, active nav, focus, selection (5%). Signal Blue `#3B82F6` = accent on navy. Blue Wash `#EBF2FE` tags. Muted Slate `#8494A7` captions only.
+- **Type:** Syne (`font-display`; h1–h3, page/section titles, standalone KPI stats, 700) · DM Sans (default body/nav/labels/buttons) · JetBrains Mono (every figure/id/code in tables, ledgers, forms — tabular, right-aligned — plus `.eyebrow` uppercase tracked labels).
+- **Text tiers:** `text-ink-hi` (navy) primary · `text-slate-300` body · `text-slate-400` secondary · `text-slate-500` labels (AA floor). `text-white` only on solid fills / the navy shell.
+- **Shape:** cards white, 1px warm hairline, 16px radius; buttons Electric Blue fill + white text, 10px radius.
+- **Semantic color is kept:** emerald = debits/success/positive, red = credits/danger, amber = warning, blue = info, indigo = AI — text shades tuned to pass WCAG AA on light. Green is never a CTA color.
+- The legacy dark classes (`slate-*`, `surface-*`, `gray/zinc-*`) still work — `tailwind.config.ts` remaps them per utility onto the light theme; prefer the semantic tokens in new code.
 
 ## Business Rules
 

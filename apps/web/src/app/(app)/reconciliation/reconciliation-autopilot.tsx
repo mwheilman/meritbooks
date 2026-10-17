@@ -218,7 +218,7 @@ export function ReconciliationAutopilot() {
   if (isLoading && !data) {
     return (
       <div className="flex items-center justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
       </div>
     );
   }
@@ -304,7 +304,7 @@ export function ReconciliationAutopilot() {
       {accounts.length === 0 && (
         <div className="card p-16 text-center">
           <CreditCard className="mx-auto mb-3 h-10 w-10 text-slate-600" />
-          <p className="text-sm font-medium text-white">No bank accounts connected</p>
+          <p className="text-sm font-medium text-ink-hi">No bank accounts connected</p>
           <p className="mt-1 text-xs text-slate-500">
             Connect a bank in the Statement Reconciliation tab to start clearing transactions.
           </p>
@@ -315,7 +315,7 @@ export function ReconciliationAutopilot() {
       {accounts.length > 0 && !detail && (
         <div className="card p-16 text-center">
           <ScanSearch className="mx-auto mb-3 h-10 w-10 text-indigo-400/70" />
-          <p className="text-sm font-medium text-white">Choose an account and period to reconcile</p>
+          <p className="text-sm font-medium text-ink-hi">Choose an account and period to reconcile</p>
           <p className="mt-1 text-xs text-slate-500">
             The autopilot scores every uncleared statement line against your open bills and learned
             patterns, then tells you what to accept.
@@ -417,7 +417,7 @@ export function ReconciliationAutopilot() {
             (detail.unmatched.length === 0 ? (
               <div className="card p-12 text-center">
                 <CheckCircle2 className="mx-auto mb-3 h-9 w-9 text-emerald-500/70" />
-                <p className="text-sm font-medium text-white">Every line is cleared</p>
+                <p className="text-sm font-medium text-ink-hi">Every line is cleared</p>
                 <p className="mt-1 text-xs text-slate-500">
                   Nothing outstanding for this account and period.
                 </p>
@@ -514,7 +514,7 @@ function SummaryCard({
         ? 'text-red-400'
         : tone === 'muted'
           ? 'text-slate-500'
-          : 'text-white';
+          : 'text-ink-hi';
   return (
     <div className="card px-4 py-3">
       <p className="text-[11px] uppercase tracking-wider text-slate-500">{label}</p>
@@ -566,7 +566,7 @@ function UnmatchedRowView({
           )}
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-white">{row.description}</p>
+          <p className="truncate text-sm font-medium text-ink-hi">{row.description}</p>
           <p className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-500">
             <span className="font-mono">{row.transactionDate}</span>
             {row.status === 'FLAGGED' && (

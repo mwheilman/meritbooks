@@ -127,7 +127,7 @@ export function ExpensesClient() {
                 onClick={() => { setScope(t.key); }}
                 className={clsx(
                   'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
-                  scope === t.key ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200',
+                  scope === t.key ? 'bg-slate-800 text-ink-hi' : 'text-slate-400 hover:text-slate-200',
                 )}
               >
                 <Icon size={14} /> {t.label}
@@ -233,11 +233,11 @@ function MineRow({ report: r, onOpen }: { report: ReportRow; onOpen: () => void 
   return (
     <button
       onClick={onOpen}
-      className="w-full flex items-center gap-4 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors"
+      className="w-full flex items-center gap-4 px-4 py-3 text-left hover:bg-navy/[0.02] transition-colors"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-white truncate">{r.title ?? 'Expense report'}</span>
+          <span className="text-sm font-medium text-ink-hi truncate">{r.title ?? 'Expense report'}</span>
           {r.policy_flag_count > 0 && (
             <span className="inline-flex items-center gap-1 text-2xs text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
               <AlertTriangle size={10} /> {r.policy_flag_count}
@@ -289,10 +289,10 @@ function QueueRow({ report: r, onOpen, onChanged }: { report: ReportRow; onOpen:
   }
 
   return (
-    <div className="flex items-center gap-4 px-4 py-3 hover:bg-white/[0.02] transition-colors">
+    <div className="flex items-center gap-4 px-4 py-3 hover:bg-navy/[0.02] transition-colors">
       <button onClick={onOpen} className="min-w-0 flex-1 text-left">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-medium text-white truncate">{r.title ?? 'Expense report'}</span>
+          <span className="text-sm font-medium text-ink-hi truncate">{r.title ?? 'Expense report'}</span>
           <ViolationBadges block={r.block_count} warn={r.warn_count} info={r.info_count} />
         </div>
         <p className="text-2xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
@@ -405,7 +405,7 @@ function BatchView({ rows, onOpen, onChanged }: { rows: ReportRow[]; onOpen: (id
 
       <div className="card divide-y divide-slate-800/70">
         {payable.map((r) => (
-          <div key={r.id} className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors">
+          <div key={r.id} className="flex items-center gap-3 px-4 py-3 hover:bg-navy/[0.02] transition-colors">
             <input
               type="checkbox"
               checked={selected.has(r.id)}
@@ -415,7 +415,7 @@ function BatchView({ rows, onOpen, onChanged }: { rows: ReportRow[]; onOpen: (id
             />
             <button onClick={() => onOpen(r.id)} className="min-w-0 flex-1 text-left">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-medium text-white truncate">{r.title ?? 'Expense report'}</span>
+                <span className="text-sm font-medium text-ink-hi truncate">{r.title ?? 'Expense report'}</span>
                 <ViolationBadges block={r.block_count} warn={r.warn_count} info={r.info_count} />
               </div>
               <p className="text-2xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
@@ -441,8 +441,8 @@ function BatchView({ rows, onOpen, onChanged }: { rows: ReportRow[]; onOpen: (id
           title="Post reimbursement batch"
           body={
             <>
-              Post <span className="text-white font-semibold">{formatMoney(selectedTotal)}</span> across{' '}
-              <span className="text-white font-semibold">{selected.size}</span> report{selected.size === 1 ? '' : 's'} to the
+              Post <span className="text-ink-hi font-semibold">{formatMoney(selectedTotal)}</span> across{' '}
+              <span className="text-ink-hi font-semibold">{selected.size}</span> report{selected.size === 1 ? '' : 's'} to the
               general ledger (DR expense / CR Accounts Payable). Each report settles through the normal AP payment path.
               This posts to the ledger and cannot be undone here.
             </>
@@ -471,7 +471,7 @@ function ConfirmDialog({ title, body, confirmLabel, busy, onConfirm, onCancel }:
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
         <div role="dialog" aria-modal="true" aria-label={title} className="pointer-events-auto w-full max-w-md rounded-xl bg-slate-900 border border-slate-800 shadow-2xl">
           <div className="px-4 py-3 border-b border-slate-800">
-            <h2 className="text-base font-semibold text-white">{title}</h2>
+            <h2 className="text-base font-semibold text-ink-hi">{title}</h2>
           </div>
           <div className="p-4 text-sm text-slate-300 leading-relaxed">{body}</div>
           <div className="flex justify-end gap-2 px-4 py-3 border-t border-slate-800">
@@ -724,7 +724,7 @@ function SummaryTile({ label, value, accent }: { label: string; value: string; a
     <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2">
       <p className="text-2xs text-slate-500">{label}</p>
       <p className={clsx('mt-0.5 text-sm font-mono tabular-nums font-semibold',
-        accent === 'emerald' ? 'text-emerald-400' : accent === 'indigo' ? 'text-indigo-300' : 'text-white')}>
+        accent === 'emerald' ? 'text-emerald-400' : accent === 'indigo' ? 'text-indigo-300' : 'text-ink-hi')}>
         {value}
       </p>
     </div>
@@ -747,7 +747,7 @@ function LineCard({ line, editable, onChanged }: { line: LineRow; editable: bool
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-2xs font-mono text-slate-600">#{line.line_number}</span>
-            <span className="text-sm text-white truncate">{line.merchant ?? line.description ?? 'Expense'}</span>
+            <span className="text-sm text-ink-hi truncate">{line.merchant ?? line.description ?? 'Expense'}</span>
             {line.payment_source === 'CORPORATE_CARD' ? (
               <span className="inline-flex items-center gap-1 text-2xs text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded"><CreditCard size={10} /> Card</span>
             ) : (
@@ -807,7 +807,7 @@ function CardMatchPicker({ lineId, onMatched }: { lineId: string; onMatched: () 
       ) : (
         <div className="space-y-1">
           {(data?.data ?? []).map((t) => (
-            <button key={t.id} onClick={() => pick(t.id)} className="w-full flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-white/[0.04] text-left">
+            <button key={t.id} onClick={() => pick(t.id)} className="w-full flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-navy/[0.04] text-left">
               <span className="text-2xs text-slate-300 truncate">{t.transaction_date} · {t.description}</span>
               <span className="text-2xs font-mono text-slate-400">{formatMoney(Math.abs(t.amount_cents))}</span>
             </button>
@@ -911,7 +911,7 @@ function CreateReportModal({ onClose, onCreated }: { onClose: () => void; onCrea
           className="pointer-events-auto w-full max-w-lg rounded-xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col max-h-[85vh]"
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-            <h2 id="create-report-title" className="text-base font-semibold text-white">New expense report</h2>
+            <h2 id="create-report-title" className="text-base font-semibold text-ink-hi">New expense report</h2>
             <button onClick={onClose} aria-label="Close" className="p-1 text-slate-500 hover:text-slate-200"><X size={18} /></button>
           </div>
           <div className="p-4 space-y-3 overflow-auto">
@@ -927,7 +927,7 @@ function CreateReportModal({ onClose, onCreated }: { onClose: () => void; onCrea
               ) : (
                 <div className="space-y-1 max-h-64 overflow-auto">
                   {receipts.map((r) => (
-                    <label key={r.id} className="flex items-center gap-3 px-2 py-1.5 rounded hover:bg-white/[0.03] cursor-pointer">
+                    <label key={r.id} className="flex items-center gap-3 px-2 py-1.5 rounded hover:bg-navy/[0.03] cursor-pointer">
                       <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} className="accent-brand-500" />
                       <span className="min-w-0 flex-1 text-sm text-slate-200 truncate">{r.vendor_name ?? 'Receipt'}</span>
                       <span className="text-2xs text-slate-500">{r.account ? r.account.account_number : 'uncoded'}</span>

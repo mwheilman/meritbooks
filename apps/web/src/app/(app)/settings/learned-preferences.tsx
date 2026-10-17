@@ -63,13 +63,13 @@ export function LearnedPreferences() {
     }
   }, [refetch]);
 
-  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>;
   if (error) return <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-red-400 text-sm">{String(error)}</p></div>;
 
   return (
     <div className="card p-6 space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-white flex items-center gap-2"><Brain size={18} className="text-indigo-400" /> Learned Preferences</h2>
+        <h2 className="text-lg font-semibold text-ink-hi flex items-center gap-2"><Brain size={18} className="text-indigo-400" /> Learned Preferences</h2>
         <p className="text-xs text-slate-500 mt-1">
           What MeritBooks has learned about how your team works. These only pre-fill defaults and hints — they never post
           entries or approve anything. Forget any of them and it stops being suggested.

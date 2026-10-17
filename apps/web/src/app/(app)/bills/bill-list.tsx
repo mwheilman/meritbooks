@@ -110,7 +110,7 @@ export function BillList() {
               className={clsx(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors',
                 activeTab === tab.key
-                  ? 'bg-slate-800 text-white font-medium'
+                  ? 'bg-slate-800 text-ink-hi font-medium'
                   : 'text-slate-400 hover:text-slate-300'
               )}
             >
@@ -183,7 +183,7 @@ export function BillList() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-slate-200">{vendorName}</span>
                         {bill.jobLines > 0 && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium bg-brand-500/10 text-brand-400" title={`${bill.jobLines} job-tagged line(s)`}>
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium bg-brand-500/10 text-brand-300" title={`${bill.jobLines} job-tagged line(s)`}>
                             <Briefcase size={10} /> {bill.jobLines}
                           </span>
                         )}

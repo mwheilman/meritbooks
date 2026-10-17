@@ -110,7 +110,7 @@ function absoluteTime(iso: string): string {
 }
 
 const INPUT_CLASS =
-  'rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 focus:border-emerald-500/50 focus:outline-none';
+  'rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 focus:border-brand-500/50 focus:outline-none';
 
 // ── Actor badge ─────────────────────────────────────────────────────────────────
 
@@ -158,7 +158,7 @@ function StatTile({ label, value, tint }: { label: string; value: string | numbe
   return (
     <div className="card px-4 py-3">
       <p className="text-2xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={clsx('mt-1 font-mono text-xl font-semibold tabular-nums', tint ?? 'text-white')}>{value}</p>
+      <p className={clsx('mt-1 font-mono text-xl font-semibold tabular-nums', tint ?? 'text-ink-hi')}>{value}</p>
     </div>
   );
 }
@@ -244,14 +244,14 @@ function TimelineDrawer({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <Clock size={15} className="text-emerald-400" />
-              <h2 className="text-sm font-semibold text-white">Record timeline</h2>
+              <h2 className="text-sm font-semibold text-ink-hi">Record timeline</h2>
             </div>
             <p className="mt-1 truncate font-mono text-2xs text-slate-500" title={`${subjectTable ?? ''} ${subjectId}`}>
               {subjectTable ? `${subjectTable} · ` : ''}
               {subjectId}
             </p>
           </div>
-          <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white">
+          <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-ink-hi">
             <X size={16} />
           </button>
         </div>
@@ -264,7 +264,7 @@ function TimelineDrawer({
             </div>
           ) : events === null ? (
             <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+              <Loader2 className="h-5 w-5 animate-spin text-brand-400" />
             </div>
           ) : events.length === 0 ? (
             <p className="py-10 text-center text-xs text-slate-500">No recorded actions for this record.</p>
@@ -584,7 +584,7 @@ export function AuditClient() {
       {/* Table */}
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
         </div>
       ) : error ? (
         <div className="card p-8 text-center">
@@ -647,7 +647,7 @@ export function AuditClient() {
                       {e.subjectId ? (
                         <button
                           onClick={() => setTimeline({ subjectTable: e.subjectTable, subjectId: e.subjectId! })}
-                          className="inline-flex items-center gap-1 rounded border border-slate-700 px-1.5 py-0.5 font-mono text-[10px] text-slate-300 hover:border-emerald-500/40 hover:text-emerald-300"
+                          className="inline-flex items-center gap-1 rounded border border-slate-700 px-1.5 py-0.5 font-mono text-[10px] text-slate-300 hover:border-brand-500/40 hover:text-brand-300"
                           title="View this record's full timeline"
                         >
                           <Clock size={10} />

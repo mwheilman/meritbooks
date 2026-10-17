@@ -36,7 +36,7 @@ export default async function PlatformPage() {
       {/* Revenue deep-dive: realized processor-fee revenue, by rail / tenant / month. */}
       <div className="mt-10">
         <div className="mb-4">
-          <h2 className="text-base font-semibold text-white">Processor fee revenue — detail</h2>
+          <h2 className="text-base font-semibold text-ink-hi">Processor fee revenue — detail</h2>
           <p className="text-sm text-slate-500">
             The application fee earned on card and ACH collections, broken out by rail, tenant, and month.
           </p>
@@ -62,7 +62,7 @@ export default async function PlatformPage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-white">{s.title}</h3>
+                    <h3 className="text-sm font-semibold text-ink-hi">{s.title}</h3>
                     <span className="text-2xs uppercase tracking-wider text-slate-500 bg-slate-800 rounded px-1.5 py-0.5">
                       Soon
                     </span>

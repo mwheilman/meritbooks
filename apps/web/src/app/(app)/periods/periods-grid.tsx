@@ -91,9 +91,9 @@ export function PeriodsGrid() {
       {/* Year nav + generate-all */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <button onClick={() => setYear((y) => y - 1)} aria-label="Previous year" className="p-1.5 rounded-md bg-slate-800 text-slate-400 hover:text-white"><ChevronLeft size={16} /></button>
-          <span className="text-lg font-semibold text-white font-mono w-16 text-center">{year}</span>
-          <button onClick={() => setYear((y) => y + 1)} aria-label="Next year" className="p-1.5 rounded-md bg-slate-800 text-slate-400 hover:text-white"><ChevronRight size={16} /></button>
+          <button onClick={() => setYear((y) => y - 1)} aria-label="Previous year" className="p-1.5 rounded-md bg-slate-800 text-slate-400 hover:text-ink-hi"><ChevronLeft size={16} /></button>
+          <span className="text-lg font-semibold text-ink-hi font-mono w-16 text-center">{year}</span>
+          <button onClick={() => setYear((y) => y + 1)} aria-label="Next year" className="p-1.5 rounded-md bg-slate-800 text-slate-400 hover:text-ink-hi"><ChevronRight size={16} /></button>
           {year !== nowYear && (
             <button onClick={() => setYear(nowYear)} className="text-xs text-slate-500 hover:text-slate-300 ml-1">Today</button>
           )}
@@ -101,7 +101,7 @@ export function PeriodsGrid() {
         <button
           onClick={() => generate('all')}
           disabled={busy}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50"
         >
           {busy ? <Loader2 size={14} className="animate-spin" /> : <CalendarPlus size={14} />} Generate {year} for all companies
         </button>

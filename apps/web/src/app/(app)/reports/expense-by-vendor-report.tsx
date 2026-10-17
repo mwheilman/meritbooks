@@ -48,13 +48,13 @@ export function ExpenseByVendorReport({ params }: { params: Record<string, strin
       <div className="card p-5">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-white">Total Vendor Spend: <span className="font-mono text-emerald-400">{formatMoney(s.totalExpenseCents)}</span></p>
+            <p className="text-sm font-medium text-ink-hi">Total Vendor Spend: <span className="font-mono text-emerald-400">{formatMoney(s.totalExpenseCents)}</span></p>
             <p className="text-xs text-slate-500 mt-0.5">{s.vendorCount} vendors</p>
           </div>
           {rows.length >= 5 && (
             <div className="text-right">
               <p className="text-xs text-slate-400">Top 5 Concentration</p>
-              <p className={clsx('text-lg font-mono font-semibold', top5Pct > 80 ? 'text-amber-400' : 'text-white')}>{top5Pct}%</p>
+              <p className={clsx('text-lg font-mono font-semibold', top5Pct > 80 ? 'text-amber-400' : 'text-ink-hi')}>{top5Pct}%</p>
             </div>
           )}
         </div>
@@ -82,11 +82,11 @@ export function ExpenseByVendorReport({ params }: { params: Record<string, strin
                 <tr key={`${row.vendorName}-${idx}`} className="hover:bg-slate-800/20">
                   <td className="px-4 py-2.5 text-xs font-mono text-slate-600">{idx + 1}</td>
                   <td className="px-4 py-2.5">
-                    <p className="text-sm text-white font-medium">{row.vendorName}</p>
+                    <p className="text-sm text-ink-hi font-medium">{row.vendorName}</p>
                     {row.locationName && <p className="text-[10px] text-slate-600">{row.locationName}</p>}
                   </td>
                   <td className="px-4 py-2.5 text-center text-xs font-mono text-slate-400">{row.billCount}</td>
-                  <td className="px-4 py-2.5 text-right text-sm font-mono text-white">{formatMoney(row.totalCents)}</td>
+                  <td className="px-4 py-2.5 text-right text-sm font-mono text-ink-hi">{formatMoney(row.totalCents)}</td>
                   <td className="px-4 py-2.5 text-right text-xs font-mono text-slate-400">{spendPct}%</td>
                   <td className="px-4 py-2.5">
                     <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
@@ -104,11 +104,11 @@ export function ExpenseByVendorReport({ params }: { params: Record<string, strin
           <tfoot>
             <tr className="border-t-2 border-slate-700 bg-slate-800/30">
               <td />
-              <td className="px-4 py-2.5 text-sm font-semibold text-white">Total</td>
+              <td className="px-4 py-2.5 text-sm font-semibold text-ink-hi">Total</td>
               <td className="px-4 py-2.5 text-center text-xs font-mono text-slate-400">
                 {rows.reduce((s, r) => s + r.billCount, 0)}
               </td>
-              <td className="px-4 py-2.5 text-right text-sm font-mono font-bold text-white">{formatMoney(s.totalExpenseCents)}</td>
+              <td className="px-4 py-2.5 text-right text-sm font-mono font-bold text-ink-hi">{formatMoney(s.totalExpenseCents)}</td>
               <td className="px-4 py-2.5 text-right text-xs font-mono text-slate-400">100%</td>
               <td />
               <td />

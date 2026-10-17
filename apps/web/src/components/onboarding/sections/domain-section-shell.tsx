@@ -81,7 +81,7 @@ export function DomainSectionShell({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 id={labelId} className="flex items-center gap-2 text-sm font-semibold text-white">
+          <h3 id={labelId} className="flex items-center gap-2 text-sm font-semibold text-ink-hi">
             {title}
             <span className="rounded-full bg-slate-800/70 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-400">
               {TONE_LABEL[tone]}
@@ -103,7 +103,7 @@ export function DomainSectionShell({
         <div className="mt-3 flex items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 text-xs text-slate-500"><Ban size={13} aria-hidden /> Marked not applicable.</p>
           {onReset && (
-            <button type="button" onClick={onReset} className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 rounded">
+            <button type="button" onClick={onReset} className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-ink-hi focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 rounded">
               <RotateCcw size={11} aria-hidden /> Undo
             </button>
           )}
@@ -112,7 +112,7 @@ export function DomainSectionShell({
         <div className="mt-3 flex items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 text-xs text-slate-500"><Clock size={13} aria-hidden /> You&apos;ll add this later.</p>
           {onReset && (
-            <button type="button" onClick={onReset} className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 rounded">
+            <button type="button" onClick={onReset} className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-ink-hi focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 rounded">
               <RotateCcw size={11} aria-hidden /> Undo
             </button>
           )}
