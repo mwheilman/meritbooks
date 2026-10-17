@@ -6,6 +6,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logAction } from '@/lib/trust/action-log';
 import { hasModule } from '@/lib/services/entitlements';
+import { shouldRepointJobs } from '@/lib/customers/merge-rules';
 
 /**
  * POST /api/customers/merge — human-approved duplicate-customer merge.
@@ -37,14 +38,6 @@ interface MergeBody {
   duplicate_id?: string;
 }
 
-/**
- * Ownership-matrix decision for core.jobs.customer_id (a Core-identity FK). Books
- * may re-point it only when it owns core.jobs — i.e. the tenant is standalone
- * (Projects NOT entitled). Pure so the rule is unit-testable.
- */
-export function shouldRepointJobs(projectsEntitled: boolean, jobsReferencing: number): boolean {
-  return !projectsEntitled && jobsReferencing > 0;
-}
 
 const OPEN_STATUSES = ['SENT', 'PARTIALLY_PAID', 'OVERDUE'];
 

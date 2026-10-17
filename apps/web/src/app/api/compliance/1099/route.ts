@@ -46,7 +46,7 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
 
 // ── Flag-gap action ─────────────────────────────────────────────────────────────
 
-export const FLAG_FEATURE = 'W9_1099_GAP';
+const FLAG_FEATURE = 'W9_1099_GAP';
 
 const flagSchema = z.object({
   vendorId: z.string().uuid(),

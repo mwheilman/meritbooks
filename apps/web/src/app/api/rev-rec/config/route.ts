@@ -6,7 +6,7 @@ import { hasModule } from '@/lib/services/entitlements';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/rbac/require-permission';
 
-export const REV_REC_METHODS = [
+const REV_REC_METHODS = [
   { value: 'POINT_OF_SALE', label: 'Point of sale', poc: false,
     help: 'Retail, restaurants, e-commerce — recognize revenue the moment you invoice or ring the sale. No deferral.' },
   { value: 'AS_BILLED', label: 'Billing-based (as billed)', poc: false,

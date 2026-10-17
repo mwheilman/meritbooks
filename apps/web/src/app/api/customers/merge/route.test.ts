@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shouldRepointJobs } from './route';
+import { shouldRepointJobs } from '@/lib/customers/merge-rules';
 
 /**
  * core.jobs.customer_id is a Core-IDENTITY FK (ownership matrix, FILE 2). Books may

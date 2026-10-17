@@ -5,7 +5,7 @@ import { apiHandler, type ApiContext } from '@/lib/api-handler';
 import { proposeFromBill } from '@/lib/prepaid/propose';
 import { proposeFromBillSchema, type ProposeFromBillBody } from '@/lib/prepaid/schema';
 
-export const PREPAID_PROPOSE_FEATURE = 'PREPAID_SCHEDULE';
+const PREPAID_PROPOSE_FEATURE = 'PREPAID_SCHEDULE';
 
 /**
  * POST /api/prepaid/propose — propose a prepaid amortization schedule from a BILL line.

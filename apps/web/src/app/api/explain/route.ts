@@ -32,8 +32,8 @@ import {
  *      the panel always renders something truthful.
  */
 
-export const EXPLAIN_MODEL = 'claude-sonnet-4-6';
-export const EXPLAIN_FEATURE = 'OBJECT_EXPLAIN';
+const EXPLAIN_MODEL = 'claude-sonnet-4-6';
+const EXPLAIN_FEATURE = 'OBJECT_EXPLAIN';
 
 const schema = z.object({
   kind: z.enum(['JOURNAL_ENTRY', 'BILL', 'BANK_TRANSACTION', 'PAYMENT', 'INVOICE']),

@@ -71,8 +71,8 @@ const schema = z.object({
 type Body = z.infer<typeof schema>;
 type Dimensions = NonNullable<Body['dimensions']>;
 
-export const NARRATIVE_MODEL = 'claude-sonnet-4-6';
-export const NARRATIVE_FEATURE = 'FLUX_NARRATIVE';
+const NARRATIVE_MODEL = 'claude-sonnet-4-6';
+const NARRATIVE_FEATURE = 'FLUX_NARRATIVE';
 
 // ── Nested join shape (mirrors income-statement / balance-sheet routes) ──────
 interface JoinedLine {
