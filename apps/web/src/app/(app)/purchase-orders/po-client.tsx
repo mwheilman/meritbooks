@@ -232,7 +232,7 @@ function CreatePoModal({ onClose, onCreated }: { onClose: () => void; onCreated:
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <span className="text-2xs uppercase tracking-wide text-slate-500">Lines</span>
-            <button className="text-xs text-brand-400 hover:text-brand-300" onClick={() => setLines((l) => [...l, emptyLine()])}>
+            <button className="text-xs text-emerald-400 hover:text-emerald-300" onClick={() => setLines((l) => [...l, emptyLine()])}>
               + Add line
             </button>
           </div>
@@ -283,7 +283,7 @@ function CreatePoModal({ onClose, onCreated }: { onClose: () => void; onCreated:
 
         <div className="flex items-center justify-between border-t border-slate-800 pt-3">
           <span className="text-sm text-slate-400">Subtotal</span>
-          <span className="font-mono text-base text-ink-hi">{fmt(subtotal)}</span>
+          <span className="font-mono text-base text-white">{fmt(subtotal)}</span>
         </div>
 
         <div className="flex justify-end gap-2">
@@ -531,7 +531,7 @@ function Drawer({ title, children, onClose, wide }: { title: string; children: R
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className={clsx('relative h-full overflow-y-auto border-l border-slate-800 bg-surface-900 p-6', wide ? 'w-full max-w-3xl' : 'w-full max-w-xl')}>
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-ink-hi">{title}</h2>
+          <h2 className="text-lg font-semibold text-white">{title}</h2>
           <button className="text-slate-500 hover:text-slate-300" onClick={onClose}><X size={18} /></button>
         </div>
         {children}

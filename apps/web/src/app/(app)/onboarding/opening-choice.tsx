@@ -78,7 +78,7 @@ export function OpeningChoice({
     <div className="rounded-xl border border-slate-800 bg-surface-900/60 px-4 py-3.5 space-y-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-slate-300">
-          Opening balances for <span className="text-ink-hi font-medium">{company.name}</span>
+          Opening balances for <span className="text-white font-medium">{company.name}</span>
         </p>
         <span className={clsx('text-[11px] px-2 py-0.5 rounded-full', stateCls)}>{OPENING_STATE_LABEL[company.opening]}</span>
       </div>
@@ -109,7 +109,7 @@ export function OpeningChoice({
           <button
             type="button"
             onClick={() => setConfirming(true)}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 text-slate-200 hover:border-brand-500/40 hover:text-ink-hi transition-colors"
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 text-slate-200 hover:border-brand-500/40 hover:text-white transition-colors"
           >
             <Sparkles size={13} className="text-brand-400" /> Start fresh with no history
           </button>
@@ -129,7 +129,7 @@ export function OpeningChoice({
               disabled={saving}
               autoFocus
               className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-                saving ? 'bg-slate-700 text-slate-500' : 'bg-brand-500 text-white hover:bg-brand-400')}
+                saving ? 'bg-slate-700 text-slate-500' : 'bg-brand-500 text-slate-900 hover:bg-brand-400')}
             >
               {saving && <Loader2 size={12} className="animate-spin" />} Yes, start fresh
             </button>

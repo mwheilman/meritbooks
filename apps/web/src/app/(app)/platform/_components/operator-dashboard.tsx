@@ -180,7 +180,7 @@ export function OperatorDashboard() {
       <select
         value={preset}
         onChange={(e) => setPreset(e.target.value as PresetKey)}
-        className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-ink-hi focus:border-indigo-500 focus:outline-none"
+        className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:border-indigo-500 focus:outline-none"
       >
         {PRESETS.map((p) => (
           <option key={p.key} value={p.key}>
@@ -398,20 +398,20 @@ export function OperatorDashboard() {
               </tbody>
               <tfoot>
                 <tr className="bg-slate-800/20 border-t border-slate-700">
-                  <td className="px-4 py-2.5 text-xs font-semibold text-ink-hi">Total</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-ink-hi tabular-nums font-semibold">
+                  <td className="px-4 py-2.5 text-xs font-semibold text-white">Total</td>
+                  <td className="px-4 py-2.5 text-right font-mono text-white tabular-nums font-semibold">
                     {perTenant.reduce((s, t) => s + t.activeCompanies, 0).toLocaleString()}
                   </td>
                   <td className="px-4 py-2.5 text-right font-mono text-emerald-300 tabular-nums font-semibold">
                     {formatMoney(revenue.subscriptionMrrCents)}
                   </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-ink-hi tabular-nums font-semibold">
+                  <td className="px-4 py-2.5 text-right font-mono text-white tabular-nums font-semibold">
                     {tenants.activeSeats.toLocaleString()}
                   </td>
                   <td className="px-4 py-2.5 text-right font-mono text-indigo-300 tabular-nums font-semibold">
                     {formatMoney(costs.aiCostCents)}
                   </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-ink-hi tabular-nums font-semibold">
+                  <td className="px-4 py-2.5 text-right font-mono text-white tabular-nums font-semibold">
                     {fmtStorage(costs.storageBytes)}
                   </td>
                   <td className="px-4 py-2.5 text-right font-mono text-emerald-400 tabular-nums font-semibold">
@@ -478,7 +478,7 @@ function Kpi({
       </div>
       <p
         className={clsx(
-          'mt-2 text-2xl font-semibold text-ink-hi tracking-tight',
+          'mt-2 text-2xl font-semibold text-white tracking-tight',
           mono && 'font-mono tabular-nums',
         )}
       >
@@ -619,7 +619,7 @@ function SignupChart({ trend }: { trend: SignupPoint[] }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Tenant growth by month">
-      <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="#E7E3DB" strokeWidth={1} />
+      <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="#232C27" strokeWidth={1} />
       {trend.map((t, i) => {
         const h = t.newTenants > 0 ? Math.max(2, (t.newTenants / maxCum) * innerH) : 0;
         const x = padL + slot * i + slot * 0.28;
@@ -628,7 +628,7 @@ function SignupChart({ trend }: { trend: SignupPoint[] }) {
         return (
           <g key={t.month}>
             {h > 0 && (
-              <rect x={x} y={by} width={w} height={h} rx={2} fill="#6366f1" opacity={0.35}>
+              <rect x={x} y={by} width={w} height={h} rx={2} fill="#818cf8" opacity={0.35}>
                 <title>{`${monthLabel(t.month)} — +${t.newTenants} new · ${t.cumulativeTenants} total`}</title>
               </rect>
             )}
@@ -637,7 +637,7 @@ function SignupChart({ trend }: { trend: SignupPoint[] }) {
               y={H - 9}
               textAnchor="middle"
               fontSize={9}
-              fill="#55657A"
+              fill="#7E8983"
               fontFamily="var(--font-mono, monospace)"
             >
               {monthLabel(t.month)}
@@ -645,14 +645,14 @@ function SignupChart({ trend }: { trend: SignupPoint[] }) {
           </g>
         );
       })}
-      <polyline points={linePts} fill="none" stroke="#6366f1" strokeWidth={1.75} />
+      <polyline points={linePts} fill="none" stroke="#818cf8" strokeWidth={1.75} />
       {trend.map((t, i) => (
         <circle
           key={t.month}
           cx={padL + slot * i + slot / 2}
           cy={y(t.cumulativeTenants)}
           r={2.5}
-          fill="#6366f1"
+          fill="#818cf8"
         >
           <title>{`${monthLabel(t.month)} — ${t.cumulativeTenants} tenants`}</title>
         </circle>

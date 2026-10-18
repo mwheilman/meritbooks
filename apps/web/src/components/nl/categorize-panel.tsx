@@ -157,7 +157,7 @@ export function CategorizePanel({ prompt, onDone }: { prompt: string; onDone: ()
                 <select
                   value={chosen[r.transactionId] ?? ''}
                   onChange={(e) => setChosen((c) => ({ ...c, [r.transactionId]: e.target.value }))}
-                  className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-ink-hi"
+                  className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white"
                 >
                   <option value="">Select a GL account…</option>
                   {usableAccounts.map((a) => <option key={a.id} value={a.id}>{a.accountNumber} · {a.name}</option>)}

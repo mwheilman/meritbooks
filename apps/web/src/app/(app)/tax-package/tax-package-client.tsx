@@ -108,7 +108,7 @@ export function TaxPackageClient() {
       {error && !isLoading && (
         <div className="card p-4 flex items-center gap-2 text-red-400 text-sm">
           <AlertCircle size={16} /> {error}
-          <button onClick={refetch} className="ml-2 text-xs text-brand-400 hover:text-brand-300 underline">Try again</button>
+          <button onClick={refetch} className="ml-2 text-xs text-emerald-400 hover:text-emerald-300 underline">Try again</button>
         </div>
       )}
 
@@ -127,7 +127,7 @@ function PackageBody({ pkg, entityLabel }: { pkg: TaxReturnPackage; entityLabel:
       {/* Cover strip */}
       <div className="card p-5 border-l-4 border-l-emerald-500">
         <p className="text-[10px] uppercase tracking-widest text-slate-500">Confidential · Prepared for Tax Filing</p>
-        <h2 className="text-xl font-semibold text-ink-hi mt-1">{entityLabel}</h2>
+        <h2 className="text-xl font-semibold text-white mt-1">{entityLabel}</h2>
         <p className="text-sm text-emerald-400 font-medium">Corporate Tax Return Package · Form 1120 ({pkg.meta.taxYear})</p>
         <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-xs text-slate-400">
           <span>Tax period: <span className="text-slate-200 font-mono">{pkg.meta.periodLabel}</span></span>
@@ -139,7 +139,7 @@ function PackageBody({ pkg, entityLabel }: { pkg: TaxReturnPackage; entityLabel:
       {/* Preparer notes */}
       {pkg.preparerNotes.length > 0 && (
         <div className="card p-4 border-blue-500/30">
-          <div className="flex items-center gap-2 mb-2"><Info size={14} className="text-blue-400" /><p className="text-sm font-semibold text-ink-hi">Preparer notes</p></div>
+          <div className="flex items-center gap-2 mb-2"><Info size={14} className="text-blue-400" /><p className="text-sm font-semibold text-white">Preparer notes</p></div>
           <ul className="space-y-1.5">
             {pkg.preparerNotes.map((n, i) => (
               <li key={i} className="text-xs text-slate-300 flex gap-2"><span className="text-blue-400 shrink-0">•</span>{n}</li>
@@ -161,14 +161,14 @@ function PackageBody({ pkg, entityLabel }: { pkg: TaxReturnPackage; entityLabel:
       {/* Waterfall */}
       <section className="card overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-800">
-          <h2 className="text-sm font-semibold text-ink-hi">Book income → taxable income → provision</h2>
+          <h2 className="text-sm font-semibold text-white">Book income → taxable income → provision</h2>
           <p className="text-2xs text-slate-500 mt-0.5">Net income per books, adjusted by Schedule M-1 differences, to taxable income and the ASC 740 provision.</p>
         </div>
         <table className="w-full text-sm">
           <tbody>
             {pkg.waterfall.map((w) => (
               <tr key={w.key} className={clsx(w.kind === 'subtotal' && 'border-t border-slate-700 bg-slate-900/40')}>
-                <td className={clsx('px-4 py-2.5', w.kind === 'subtotal' ? 'font-semibold text-ink-hi' : 'text-slate-300')}>{w.label}</td>
+                <td className={clsx('px-4 py-2.5', w.kind === 'subtotal' ? 'font-semibold text-white' : 'text-slate-300')}>{w.label}</td>
                 <td className={clsx('px-4 py-2.5 text-right font-mono', w.kind === 'subtotal' ? 'font-semibold text-emerald-300' : w.kind === 'add' ? 'text-emerald-400' : w.kind === 'subtract' ? 'text-red-400' : 'text-slate-200')}>
                   {signed(w.amountCents)}
                 </td>
@@ -182,10 +182,10 @@ function PackageBody({ pkg, entityLabel }: { pkg: TaxReturnPackage; entityLabel:
       <section className="card overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-ink-hi">Schedule M-1 — book-to-tax reconciliation</h2>
+            <h2 className="text-sm font-semibold text-white">Schedule M-1 — book-to-tax reconciliation</h2>
             <p className="text-2xs text-slate-500 mt-0.5">{pkg.m1.adjustmentCount} adjustment line{pkg.m1.adjustmentCount === 1 ? '' : 's'} · P = permanent, T = temporary.</p>
           </div>
-          <Link href="/book-to-tax" className="text-xs text-brand-400 hover:text-brand-300 inline-flex items-center gap-1"><Scale size={13} /> Tag differences</Link>
+          <Link href="/book-to-tax" className="text-xs text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1"><Scale size={13} /> Tag differences</Link>
         </div>
         <table className="w-full text-sm">
           <tbody>
@@ -201,7 +201,7 @@ function PackageBody({ pkg, entityLabel }: { pkg: TaxReturnPackage; entityLabel:
               : pkg.m1.subtractions.map((l) => <MLineRow key={l.code} line={l} />)}
             <MRow label="Total subtractions" cents={pkg.m1.totalSubtractionsCents} subtotal />
             <tr className="border-t-2 border-slate-700 bg-slate-900/40">
-              <td className="px-4 py-3 font-semibold text-ink-hi">Taxable income</td>
+              <td className="px-4 py-3 font-semibold text-white">Taxable income</td>
               <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-300">{signed(pkg.m1.taxableIncomeCents)}</td>
             </tr>
           </tbody>
@@ -212,10 +212,10 @@ function PackageBody({ pkg, entityLabel }: { pkg: TaxReturnPackage; entityLabel:
       <section className="card overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-ink-hi">Tax vs. book depreciation — {pkg.depreciation.taxYear}</h2>
+            <h2 className="text-sm font-semibold text-white">Tax vs. book depreciation — {pkg.depreciation.taxYear}</h2>
             <p className="text-2xs text-slate-500 mt-0.5">Posted book depreciation vs. the MACRS/§179/bonus tax schedule. The net delta is a temporary M-1 difference.</p>
           </div>
-          <Link href="/tax-depreciation" className="text-xs text-brand-400 hover:text-brand-300 inline-flex items-center gap-1"><Calculator size={13} /> Detail</Link>
+          <Link href="/tax-depreciation" className="text-xs text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1"><Calculator size={13} /> Detail</Link>
         </div>
         {pkg.depreciation.assets.length === 0 ? (
           <div className="px-4 py-6 text-sm text-slate-500">No depreciable fixed assets for this tax year.</div>
@@ -235,7 +235,7 @@ function PackageBody({ pkg, entityLabel }: { pkg: TaxReturnPackage; entityLabel:
                 <tr key={a.assetId} className="border-b border-slate-800/40 last:border-0">
                   <td className="px-4 py-2 text-slate-200">{a.name}</td>
                   <td className="px-4 py-2 text-xs text-slate-500">{a.taxMethod}{a.recoveryYears ? ` · ${a.recoveryYears}yr` : ''}</td>
-                  <td className="px-4 py-2 text-right font-mono text-ink-hi">{fmt(a.taxYearCents)}</td>
+                  <td className="px-4 py-2 text-right font-mono text-white">{fmt(a.taxYearCents)}</td>
                   <td className="px-4 py-2 text-right font-mono text-slate-300">{fmt(a.bookYearCents)}</td>
                   <td className={clsx('px-4 py-2 text-right font-mono', a.differenceCents === 0 ? 'text-slate-500' : a.differenceCents > 0 ? 'text-emerald-400' : 'text-red-400')}>
                     {a.differenceCents === 0 ? '—' : `${a.differenceCents > 0 ? '+' : '−'}${fmt(Math.abs(a.differenceCents))}`}
@@ -245,8 +245,8 @@ function PackageBody({ pkg, entityLabel }: { pkg: TaxReturnPackage; entityLabel:
             </tbody>
             <tfoot>
               <tr className="border-t border-slate-700 bg-slate-900/40">
-                <td className="px-4 py-2.5 font-semibold text-ink-hi" colSpan={2}>Totals</td>
-                <td className="px-4 py-2.5 text-right font-mono text-ink-hi">{fmt(pkg.depreciation.totalTaxCents)}</td>
+                <td className="px-4 py-2.5 font-semibold text-white" colSpan={2}>Totals</td>
+                <td className="px-4 py-2.5 text-right font-mono text-white">{fmt(pkg.depreciation.totalTaxCents)}</td>
                 <td className="px-4 py-2.5 text-right font-mono text-slate-300">{fmt(pkg.depreciation.totalBookCents)}</td>
                 <td className={clsx('px-4 py-2.5 text-right font-mono font-semibold', pkg.depreciation.netDifferenceCents >= 0 ? 'text-emerald-300' : 'text-red-300')}>
                   {signed(pkg.depreciation.netDifferenceCents)}
@@ -261,14 +261,14 @@ function PackageBody({ pkg, entityLabel }: { pkg: TaxReturnPackage; entityLabel:
         {/* Effective-rate reconciliation */}
         <section className="card overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-800">
-            <h2 className="text-sm font-semibold text-ink-hi">Effective-rate reconciliation</h2>
+            <h2 className="text-sm font-semibold text-white">Effective-rate reconciliation</h2>
             <p className="text-2xs text-slate-500 mt-0.5">Only permanent differences move the rate away from statutory.</p>
           </div>
           <table className="w-full text-sm">
             <tbody>
               {pkg.effectiveRate.map((row, i) => (
                 <tr key={i} className={clsx('border-b border-slate-800/40 last:border-0', i === pkg.effectiveRate.length - 1 && 'border-t-2 border-slate-700 bg-slate-900/40')}>
-                  <td className={clsx('px-4 py-2.5', i === pkg.effectiveRate.length - 1 ? 'font-semibold text-ink-hi' : 'text-slate-300')}>{row.label}</td>
+                  <td className={clsx('px-4 py-2.5', i === pkg.effectiveRate.length - 1 ? 'font-semibold text-white' : 'text-slate-300')}>{row.label}</td>
                   <td className="px-4 py-2.5 text-right font-mono text-slate-200">{signed(row.amountCents)}</td>
                   <td className={clsx('px-4 py-2.5 text-right font-mono', i === pkg.effectiveRate.length - 1 ? 'text-emerald-300' : 'text-slate-400')}>{row.ratePct.toFixed(2)}%</td>
                 </tr>
@@ -280,7 +280,7 @@ function PackageBody({ pkg, entityLabel }: { pkg: TaxReturnPackage; entityLabel:
         {/* DTA/DTL rollforward */}
         <section className="card overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-800">
-            <h2 className="text-sm font-semibold text-ink-hi">Deferred tax rollforward — DTA / DTL</h2>
+            <h2 className="text-sm font-semibold text-white">Deferred tax rollforward — DTA / DTL</h2>
             <p className="text-2xs text-slate-500 mt-0.5">
               {pkg.deferred.rollforward.hasPriorHistory ? 'Beginning balances from prior filed provisions.' : 'No prior provisions on file — beginning balances are zero.'}
             </p>
@@ -297,7 +297,7 @@ function PackageBody({ pkg, entityLabel }: { pkg: TaxReturnPackage; entityLabel:
               <RollRow label="Beginning balance" dta={pkg.deferred.rollforward.beginningDtaCents} dtl={pkg.deferred.rollforward.beginningDtlCents} />
               <RollRow label="Change this period" dta={pkg.deferred.rollforward.dtaChangeCents} dtl={pkg.deferred.rollforward.dtlChangeCents} />
               <tr className="border-t border-slate-700 bg-slate-900/40">
-                <td className="px-4 py-2.5 font-semibold text-ink-hi">Ending balance</td>
+                <td className="px-4 py-2.5 font-semibold text-white">Ending balance</td>
                 <td className="px-4 py-2.5 text-right font-mono font-semibold text-emerald-300">{fmt(pkg.deferred.rollforward.endingDtaCents)}</td>
                 <td className="px-4 py-2.5 text-right font-mono font-semibold text-red-300">{fmt(pkg.deferred.rollforward.endingDtlCents)}</td>
               </tr>
@@ -343,7 +343,7 @@ function Kpi(props: { label: string; valueCents?: number; rawText?: string; emph
   return (
     <div className={clsx('card p-3', emphasize && 'border-emerald-500/40')}>
       <p className="text-2xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={clsx('mt-1 font-mono text-lg', emphasize ? 'text-emerald-300' : 'text-ink-hi')}>
+      <p className={clsx('mt-1 font-mono text-lg', emphasize ? 'text-emerald-300' : 'text-white')}>
         {rawText ?? (valueCents !== undefined ? signed(valueCents) : '—')}
       </p>
     </div>
@@ -353,8 +353,8 @@ function Kpi(props: { label: string; valueCents?: number; rawText?: string; emph
 function MRow(props: { label: string; cents: number; bold?: boolean; subtotal?: boolean }) {
   return (
     <tr className={clsx(props.subtotal && 'border-t border-slate-800')}>
-      <td className={clsx('px-4 py-2', props.bold || props.subtotal ? 'font-medium text-ink-hi' : 'text-slate-300')}>{props.label}</td>
-      <td className={clsx('px-4 py-2 text-right font-mono', props.bold || props.subtotal ? 'font-medium text-ink-hi' : 'text-slate-200')}>{signed(props.cents)}</td>
+      <td className={clsx('px-4 py-2', props.bold || props.subtotal ? 'font-medium text-white' : 'text-slate-300')}>{props.label}</td>
+      <td className={clsx('px-4 py-2 text-right font-mono', props.bold || props.subtotal ? 'font-medium text-white' : 'text-slate-200')}>{signed(props.cents)}</td>
     </tr>
   );
 }

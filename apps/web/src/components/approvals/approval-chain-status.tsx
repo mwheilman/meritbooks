@@ -114,7 +114,7 @@ export function ApprovalChainStatus({ docType, docId, onDecided }: ApprovalChain
   };
 
   if (loading) {
-    return <div className="rounded-lg border border-slate-800 bg-surface-900 p-4 text-xs text-slate-500">Loading approval chain…</div>;
+    return <div className="rounded-lg border border-white/5 bg-surface-900 p-4 text-xs text-slate-500">Loading approval chain…</div>;
   }
   if (error) {
     return <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-xs text-red-300">{error}</div>;
@@ -128,9 +128,9 @@ export function ApprovalChainStatus({ docType, docId, onDecided }: ApprovalChain
   for (const a of request.actions) actionByStep.set(a.stepOrder, a);
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-surface-900 p-4">
+    <div className="rounded-xl border border-white/5 bg-surface-900 p-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-ink-hi">Approval chain</h3>
+        <h3 className="text-sm font-semibold text-white">Approval chain</h3>
         <span
           className={
             request.status === 'APPROVED'
@@ -154,17 +154,17 @@ export function ApprovalChainStatus({ docType, docId, onDecided }: ApprovalChain
             <li
               key={s.stepOrder}
               className={`flex items-start gap-3 rounded-lg border p-2.5 ${
-                isCurrent ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-slate-800 bg-surface-950'
+                isCurrent ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-white/5 bg-surface-950'
               }`}
             >
               <span
                 className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-2xs font-mono ${
                   action?.decision === 'APPROVE'
-                    ? 'bg-brand-500/20 text-brand-300'
+                    ? 'bg-emerald-500/20 text-emerald-300'
                     : action?.decision === 'REJECT'
                     ? 'bg-red-500/20 text-red-300'
                     : isCurrent
-                    ? 'bg-brand-500 text-white'
+                    ? 'bg-emerald-500 text-surface-950'
                     : 'bg-white/5 text-slate-500'
                 }`}
               >
@@ -172,7 +172,7 @@ export function ApprovalChainStatus({ docType, docId, onDecided }: ApprovalChain
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-ink-hi">{ROLE_DEFINITIONS[s.approverRole]?.label ?? s.approverRole}</span>
+                  <span className="text-xs font-medium text-white">{ROLE_DEFINITIONS[s.approverRole]?.label ?? s.approverRole}</span>
                   <span className="text-2xs text-slate-500">
                     {formatMoney(s.minAmountCents)}
                     {s.maxAmountCents === null ? '+' : `–${formatMoney(s.maxAmountCents)}`}
@@ -203,7 +203,7 @@ export function ApprovalChainStatus({ docType, docId, onDecided }: ApprovalChain
               onChange={(e) => setReason(e.target.value)}
               placeholder="Reason for rejection (required)…"
               rows={2}
-              className="w-full rounded-lg border border-slate-800 bg-surface-950 px-3 py-2 text-xs text-ink-hi focus:border-red-500 focus:outline-none"
+              className="w-full rounded-lg border border-white/10 bg-surface-950 px-3 py-2 text-xs text-white focus:border-red-500 focus:outline-none"
             />
           )}
           <div className="flex items-center gap-2">
@@ -211,7 +211,7 @@ export function ApprovalChainStatus({ docType, docId, onDecided }: ApprovalChain
               type="button"
               onClick={() => act('APPROVE')}
               disabled={acting}
-              className="rounded-lg bg-brand-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
+              className="rounded-lg bg-emerald-500 px-4 py-1.5 text-xs font-semibold text-surface-950 hover:bg-emerald-400 disabled:opacity-40"
             >
               {acting ? 'Working…' : 'Approve this step'}
             </button>

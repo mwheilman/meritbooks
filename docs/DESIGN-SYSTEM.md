@@ -4,75 +4,55 @@
 
 Companion docs: `CLAUDE.md` → "Design System (BINDING)" (the short brief this expands on) and `docs/DESIGN-ELEVATION-PLAN.md` (the ranked backlog of specific screen upgrades).
 
-Tokens live in `apps/web/src/styles/globals.css` (`:root` CSS variables — the single source of color) and `apps/web/tailwind.config.ts` (maps Tailwind utilities onto those variables). Tenant identity lives in `apps/web/src/lib/brand/tenant-brand.ts`; the monogram/wordmark in `apps/web/src/components/brand/brand-mark.tsx`. Primitives live in `apps/web/src/components/ui/`.
-
----
-
-## 0. Brand source & white-label rule
-
-The default theme is the **Merit Management Group brand (February 2026 Style Guide; hex identical in the 2026 guide)**. Merit is the first tenant; MeritBooks is resold white-label. Therefore:
-
-- **Nothing in a component names a tenant or a brand hex.** Identity (product name, monogram, optional logo file) comes from `getTenantBrand()`; color comes from CSS variables (`--brand-navy`, `--brand-accent`, `--bg`, `--canvas`, `--ink*`, …) consumed through Tailwind tokens.
-- **To re-skin a tenant, change only the token layer:** supply a `TenantBrand` and render `brandCssVars(brand)` on `<html>` (already wired in `app/layout.tsx`); swap font families in `app/layout.tsx` (next/font). Status colors (success/danger/warning/info/AI) are system-owned and are *not* tenant-swappable — they carry accounting meaning.
-- Favicon / app icon: `app/icon.svg` (a static file, so it uses literal hex — regenerate it per tenant). Static logo files in `public/brand/` mirror the component for non-React consumers.
+Tokens live in `apps/web/tailwind.config.ts` and `apps/web/src/styles/globals.css`. Primitives live in `apps/web/src/components/ui/`.
 
 ---
 
 ## 1. Point of view
 
-MeritBooks is the **book of record for a multi-entity holding company** — many operating companies, real cash, a real audit trail. The person on the other side of the screen is a controller or CFO who has to trust a number at a glance and drill to its source. The product reads as **an operator's ledger: confident, direct, quiet** — warm-white paper, navy ink, one blue accent. Dense where the data is, calm everywhere else.
+MeritBooks is the **book of record for a private-equity holding company** — 17 operating companies, real cash, a real audit trail. The person on the other side of the screen is a controller or CFO who has to trust a number at a glance and be able to drill to its source. So the product feels like **a terminal for private capital: dense, quiet, and authoritative** — closer to a Bloomberg terminal's seriousness than a consumer app's whitespace, but never cramped and never cold.
 
-Three commitments:
+Three commitments follow from that:
 
-- **The number is the hero.** Figures in tables, ledgers, and forms are JetBrains Mono, tabular, right-aligned. Chrome recedes.
-- **Restraint with the accent.** Electric Blue is ~5% of any screen: the primary action, links, the active nav item, focus, the selected row. If blue is everywhere it means nothing.
-- **Density with air.** A strict 4px grid and clear hierarchy, so density reads as command, not clutter.
+- **The number is the hero.** Money and identifiers are the content; chrome recedes. Figures are monospaced, tabular, and right-aligned so columns read like a ledger, not a webpage.
+- **Calm over cheerful.** Color is scarce and meaningful. A screen is mostly graphite and slate; emerald appears for the one thing that matters. Nothing pulses, bounces, or celebrates.
+- **Density with air.** We show a lot at once — but on a strict spacing grid with clear hierarchy, so density reads as command, not clutter.
 
-Voice (all UI copy): confident, direct, operator language. Never "synergy", "leverage" (as a verb/marketing word — the covenant ratio is fine), "best in class", "world-class", "revolutionize", or a standalone "solutions".
+If a screen could be mistaken for a generic SaaS starter or an AI mock, it has failed this POV. The tells are catalogued in §9.
 
 ---
 
 ## 2. Typography
 
-Three families, one job each — loaded with `next/font/google` in `app/layout.tsx` and exposed as CSS variables:
+Two families, one job each. **Plus Jakarta Sans** for everything human-readable; **JetBrains Mono** for everything countable.
 
-| Family | Variable / utility | Job |
-|---|---|---|
-| **Syne** (600/700) | `--font-display` · `font-display` | Page titles, section titles (`h1`–`h3` get it automatically), standalone big stats (KPI tiles, `MetricCard`). Headings 700. Never body or table text — it is wide. |
-| **DM Sans** (400–700) | `--font-sans` · `font-sans` (default) | Body, nav, labels, buttons, table text. |
-| **JetBrains Mono** (400–600) | `--font-mono` · `font-mono` | **Every figure, id, and code in tables/ledgers/forms**; eyebrows, section labels, column headers, tags (uppercase, tracked). |
-
-**The money rule:** amounts, account numbers, invoice/JE numbers, dates in tables, percentages, confidence values are `font-mono tabular-nums`, right-aligned in tables. The one sanctioned exception is the **standalone KPI tile** (a single hero figure not in a column), which uses Syne 700 per the brand's "big stat numbers" rule.
-
-**Eyebrows / section labels:** `.eyebrow` utility (JetBrains Mono, 11px, 500, uppercase, `letter-spacing: 0.16em` ≈ 1.8px, `text-ink-mid`). Column headers: `font-mono text-2xs font-medium uppercase tracking-eyebrow text-slate-500`. Tracking token: `tracking-eyebrow` (0.16em; brand range 1.5–2.5px).
+**The rule that matters most: money and identifiers are ALWAYS JetBrains Mono, `tabular-nums`, and right-aligned in tables.** Amounts, account numbers, invoice numbers, journal IDs, dates in tables, percentages, confidence values — all mono. A dollar figure set in the sans face is a bug.
 
 ### Type scale (named tokens — use these, not raw `text-2xl`)
 
+Defined in `tailwind.config.ts › fontSize`. Each token carries its own line-height, tracking, and default weight.
+
 | Token | Size | Weight / tracking | Use |
 |---|---|---|---|
-| `text-display` | 32px | 700 · -0.02em | The single hero figure on a screen. One per screen, max. |
-| `text-title` | 24px | 700 · -0.015em | Page H1 (`PageHeader`, with `font-display`). |
+| `text-display` | 32px | 700 · -0.02em | The single hero figure on a screen — the primary KPI, the balance due. One per screen, max. |
+| `text-title` | 24px | 600 · -0.015em | Page H1 (`PageHeader`). |
 | `text-heading` | 18px | 600 · -0.01em | Section / card header. |
 | `text-subheading` | 16px | 600 | Dialog title, sub-section. |
 | `text-body` | 14px | 400 | Default UI text and table cells. |
 | `text-body-sm` | 13px | 400 | Dense secondary text, drawer metadata. |
 | `text-label` | 12px | 500 | Form labels, inline metadata. |
-| `text-caption` | 11px | 400 · +0.04em | Overlines. |
-| `text-2xs` | 10px | — | Micro-labels, badge text. Sparingly. |
+| `text-caption` | 11px | 400 · +0.04em | Overlines. Pair with `uppercase tracking-caps` for column headers and eyebrows. |
+| `text-2xs` | 10px | — | Micro-labels, badge text. Use sparingly. |
 
-### Text color tiers (on the light canvas)
+Weights in use: 400 body, 500 labels/emphasis, 600 headings, 700 hero figures. **Never 800** in the app shell (the hosted invoice/PDF surface is the one exception — a printed document may go heavier). No italics except genuine citation.
 
-| Tier | Token (preferred) | Legacy class that resolves to it | Hex | On white |
-|---|---|---|---|---|
-| Primary — the number, headings | `text-ink-hi` | `text-slate-50/100`, (was `text-white`) | `#0A1628` Navy | 18.1:1 |
-| Strong body / input text | `text-ink-strong` | `text-slate-200` | `#1B2A40` | 14.5:1 |
-| Body | `text-ink` | `text-slate-300` | `#3D4F65` Steel | 8.4:1 |
-| Secondary | `text-ink-soft` | `text-slate-400` | `#4B5C72` | 6.8:1 |
-| Labels, column headers — **AA floor** | `text-ink-mid` | `text-slate-500` | `#55657A` | 6.0:1 (5.4 on canvas) |
-| Captions / meta / placeholder only | `text-ink-dim` | `text-slate-600` | `#8494A7` Slate | 3.1:1 — never for content a user must read |
-| Decorative (separators, disabled glyphs) | `text-ink-faint` | `text-slate-700` | `#B4BDC8` | 1.9:1 |
+Text color tiers (dark surfaces):
+- **Primary** — `text-white`: the number, the row's subject, headings.
+- **Secondary** — `text-slate-300`: supporting values, active labels.
+- **Tertiary** — `text-slate-400`: descriptions, inactive metadata.
+- **Quaternary** — `text-slate-500`: column headers, placeholders, timestamps.
 
-`text-white` is **only** for text on a solid fill (accent button, solid status pill, navy shell). On the canvas it is a bug.
+Four tiers, no more. If everything is `slate-400`, nothing has hierarchy — assign each piece of text a tier deliberately.
 
 ---
 
@@ -92,125 +72,92 @@ Inline (`style={{ padding: 13 }}`) values are only acceptable on the hosted invo
 
 ---
 
----
-
 ## 4. Color
 
-Light, warm, and disciplined. **Ratios: 60% Warm White + Canvas backgrounds · 25% Navy (shell, dark sections, headlines, text) · 10% Steel body text · 5% Electric Blue accent.**
+Dark-dominant. The canvas is graphite; color is a scarce signal.
 
-### Merit brand palette (CSS variables in `globals.css :root`)
-
-| Name (guide) | Hex | Variable | Tailwind | Role |
-|---|---|---|---|---|
-| Navy / Midnight | `#0A1628` | `--brand-navy`, `--ink-hi` | `bg-navy`, `bg-shell`, `text-ink-hi` | Shell (sidebar + top bar), dark sections, headlines, primary text |
-| Electric Blue | `#2563EB` | `--brand-accent` | `brand-400/500`, `accent`, `em` | Primary buttons, links, active nav rail, focus rings, selection |
-| Signal Blue | `#3B82F6` | `--brand-accent-bright` | `accent-bright`, `shell-accent` | Accent **on navy** (icons, active tint) — 4.9:1 on navy |
-| (pressed) | `#1D4ED8` | `--brand-accent-strong` | `brand-300/600`, `accent-strong` | Button hover/pressed on light; accent text on blue tints |
-| (deep) | `#1E40AF` | `--brand-accent-deep` | `brand-200/700` | Emphasized accent text |
-| Blue Wash / Sky | `#EBF2FE` | `--brand-wash` | `brand-50`, `accent-wash`, `.tag` | Tags, badges, selection wash |
-| Warm White | `#FDFCFA` | `--bg` | `bg-page` (body) | Page background |
-| Surface / Canvas | `#F5F3EF` | `--canvas` | `bg-canvas`, `bg-surface-950`, `bg-slate-950` | Alt background: insets, wells, table heads |
-| Body Text / Steel | `#3D4F65` | `--ink` | `text-ink`, `text-slate-300` | Body copy |
-| Muted / Slate | `#8494A7` | `--ink-dim` | `text-ink-dim`, `text-slate-600` | Captions, metadata |
-
-**Hover decision:** the guide gives Signal Blue as the hover. White text on `#3B82F6` is 3.7:1 (fails AA), so on light surfaces a filled button hovers **darker** (`#1D4ED8`, 6.7:1); Signal Blue is the hover/active accent on navy, where it passes.
-
-### Surfaces & hairlines
+### Surfaces (depth by layering, see §5)
 
 | Token | Hex | Role |
 |---|---|---|
-| `bg-page` / `--bg` | `#FDFCFA` | Page (body) |
-| `bg-surface-900` / `bg-slate-900` / `--surface` | `#FFFFFF` | Cards, panels, dialogs, menus |
-| `bg-surface-850` / `--inset-soft` | `#FAF9F6` | Nested well inside a card |
-| `bg-surface-950` / `bg-slate-950` / `--canvas` | `#F5F3EF` | Insets, inputs-in-wells, table heads, full-page wrappers |
-| `bg-slate-800` / `--fill` | `#F1EEE8` | Control fill: secondary chips, tracks, kbd, segmented-control active |
-| `bg-slate-700` / `--fill-strong` | `#E7E3DB` | Control hover fill |
-| `border-slate-800` / `hairline` | `#E7E3DB` | Default card border / divider |
-| `border-slate-700` / `hairline-strong` | `#D9D4CA` | Inputs, interactive borders |
-| `border-slate-600` | `#B4BDC8` | Hover border |
+| `surface-950` | `#020617` | App background (`body`). The floor. |
+| `surface-900` | `#0f172a` | Cards, panels — the default raised surface (`.card`). |
+| `surface-850` | `#172033` | Nested surface inside a card (a sub-panel, a selected row shade). |
+| `surface-800` | `#1e293b` | Inputs, secondary buttons, hover fills. |
 
-Overlays that used to be white-on-dark (`bg-white/[0.03]`) are now **navy-on-light** (`bg-navy/[0.03]`). On the navy shell, `bg-white/[0.06]` is correct.
+Borders: `border-slate-800` (default hairline), `border-slate-700` (interactive / hovered). These do more structural work than any shadow.
 
-### App shell (navy chrome)
+### Accent — emerald, used once per screen
 
-`bg-shell` (`#0A1628`) with `border-shell-line` (`#21314A`). Text: `text-shell-fg` (white, 18:1), `text-shell-mid` (`#A3B1C2`, 8.3:1) for nav labels, `text-shell-dim` (`#8494A7`, 5.9:1) for group eyebrows. Active nav = `bg-accent-bright/[0.16]` + white label + Signal Blue icon + a 3px Electric Blue rail. Dropdown menus that open *from* the shell are light (`bg-surface-900`). Use `.section-navy` + `.grid-mesh` for an occasional navy hero band (never behind dense data).
+`brand-500 #10b981` is the product's one accent. **Spend it on the single most important action or value on a screen** — the primary button, the active tab, the KPI that matters, a debit. Text tint on dark is `brand-400 #34d399`. When emerald is everywhere it stops meaning anything; discipline here is most of what separates this from a template.
 
-### Semantic roles (meaning, not decoration)
+### Semantic roles (named tokens — meaning, not decoration)
 
-Status colors are kept from the previous system and **tuned for light backgrounds**: each palette's text shades (`text-*-100…600`) are remapped to an "fg" that clears **4.5:1 on white and on the palette's own 500@20% soft fill**; dark-tinted fills (`bg-*-800/900/950`) are flipped to light tints.
+Defined in `tailwind.config.ts › colors`. Each is `DEFAULT` (solid/on-color) + `fg` (bright on-dark text). Soft fills use the alpha modifier.
 
-| Token | Fill / fg | Meaning |
+| Token | Hex | Meaning |
 |---|---|---|
-| `success` / `emerald` | `#059669` / `#04714F` | Debit, posted, paid, healthy, balanced |
-| `danger` / `red` | `#DC2626` / `#B91C1C` | Credit, overdue, error, destructive |
-| `warning` / `amber` | `#D97706` / `#A14B08` | Needs review, soft-close, expiring |
-| `info` / `blue` | `#3B82F6` / `#1D4ED8` | Neutral status, in-progress, sent |
-| `ai` / `indigo` | `#6366F1` / `#4338CA` | AI-generated, suggested, auto-categorized |
+| `success` | `#10b981` / fg `#34d399` | Debit, posted, paid, healthy. |
+| `danger` | `#ef4444` / fg `#f87171` | Credit, overdue, error, destructive. |
+| `warning` | `#f59e0b` / fg `#fbbf24` | Needs review, soft-close, expiring. |
+| `info` | `#3b82f6` / fg `#60a5fa` | Neutral status, in-progress, sent. |
+| `ai` | `#6366f1` / fg `#818cf8` | AI-generated, suggested, auto-categorized. Indigo signals "the machine did this." |
 
-**Emerald decision.** In the old theme emerald was *both* the brand accent and "success". Under Merit, emerald keeps only its **meaning** (success, debits, positive figures, healthy/balanced states, paid). Every *accent* use — primary buttons, links, focus rings/borders, checkbox accent, spinners, active tabs, selected rows/cards — was moved to `brand-*` (Electric Blue). Accounting convention is load-bearing: **debits / positive are green; credits / negative are red.** Do not invert for variety, and do not use green as a CTA color.
-
-Usage: text `text-danger-fg`, soft fill `bg-danger/10`, dot/bar `bg-danger`. Prefer the role tokens in new code.
-
-### How the re-skin works (for maintainers)
-
-The app was authored dark (~6k `slate-*`/`surface-*`/`emerald-*` utilities). `tailwind.config.ts` remaps those palettes **per utility** — `textColor`, `backgroundColor`, `borderColor`, `divideColor`, `ringColor` each get the ramp that preserves the original *intent* on a light canvas (low numbers = emphatic text; high numbers = surfaces/hairlines). `gray`/`zinc`/`neutral`/`stone` share the slate ramps. New code should prefer the semantic names (`text-ink-*`, `bg-surface-*`, `border-hairline`, `bg-canvas`, `accent`, `shell-*`) over raw slate numbers.
+Usage: text `text-danger-fg`, soft fill `bg-danger/10`, dot/bar `bg-danger`. Prefer these over raw `text-red-400` so intent is legible in the markup and a future palette change is one edit. Accounting convention is load-bearing: **debits and positive/healthy states are emerald; credits and negatives are red.** Do not invert for visual variety.
 
 ---
 
 ## 5. Surface & elevation
 
-**Depth comes from layering and hairlines, not drop shadows.** Page (warm white) → card (white, 1px `#E7E3DB`, 16px radius) → nested well (`surface-850`) / inset (`canvas`).
+**Depth comes from layering, borders, and contrast — not drop shadows.** The stack is `surface-950` floor → `surface-900` card → `surface-850` nested → `surface-800` control, each step separated by a `slate-800` hairline. That's the whole elevation model.
 
-- `.card` = `bg-surface-900 border border-slate-800 rounded-brand-lg shadow-card` (`shadow-card` is a 1px navy-4% lift — the only resting shadow).
-- Floating layers (menus, popovers, toasts, drawers) use `shadow-pop`.
-- **Radii (Merit digital spec):** buttons/inputs **10px** (`rounded-lg` is remapped to 10px; `rounded-brand`), cards/dialogs/menus **16px** (`rounded-xl` remapped to 16px; `rounded-brand-lg`), large modals `rounded-2xl` 20px, pills `rounded-full`.
+- The `.card` primitive (`bg-surface-900 border border-slate-800 rounded-xl`) is the standard raised container. `.card-hover` adds a `slate-700` border on hover — border, not shadow.
+- Drop shadows are reserved for genuinely floating layers (drawers, popovers, toasts) and even there stay soft and dark. The emerald `glow` shadows exist for rare deliberate emphasis (a live/primary state) — not general decoration.
+- Radii: `rounded-lg` (8px) controls and inputs, `rounded-xl` (12px) cards and dialogs, `rounded-full` pills/dots. Keep it consistent; don't mix `rounded` and `rounded-md` within one component.
 
-Group related content in **one** card with internal dividers (`divide-slate-800/50`), not five stacked cards.
+Avoid the "everything floating in its own rounded card" look (§9). Group related content in **one** card with internal dividers (`divide-slate-800/50`), not five stacked cards.
 
 ---
 
 ## 6. Component patterns
 
-Primitives live in `components/ui/`.
+Primitives live in `components/ui/`. Two grades below: **on-standard** (use as-is) and **needs elevation** (upgrade per the plan). The largest single inconsistency in the app today is that flagship screens (invoices, bank-feed) re-implement tables, badges, and cards inline with `gray-*` utilities instead of using these `slate-*` primitives — closing that gap is the top elevation move.
 
-### Tables — the core surface (`ui/data-table.tsx`)
-- Header row: `bg-canvas/60`, `font-mono text-2xs font-medium uppercase tracking-eyebrow text-slate-500`, `border-b border-slate-800`.
-- Body rows: `divide-y divide-slate-800/50`; hover `.table-row-hover` (navy 2.5% wash on `<td>` for Safari). Clickable rows `.row-clickable` (blue 5% wash + 2px Electric Blue left rail + chevron on hover).
-- **Money columns:** `text-right font-mono tabular-nums`; primary figure `text-ink-hi`, secondary `text-slate-400`; debits `text-emerald-400`, credits/negatives `text-red-400` (or `.fig-pos` / `.fig-neg`). Grand total `.ledger-total` (navy single rule above, double rule below).
+### Tables — the core surface (`ui/data-table.tsx`, on-standard)
+Tables are where this product lives; treat them as the hero, not a fallback.
+- Header row: `text-caption uppercase tracking-caps text-slate-500`, `border-b border-slate-800`.
+- Body rows: `divide-y divide-slate-800/50`, hover via `.table-row-hover` (targets `<td>` for Safari). Clickable rows use `.row-clickable` (emerald left-accent + chevron on hover) — a strong, discoverable affordance already built; reuse it.
+- **Money columns:** `text-right font-mono tabular-nums`, primary figure `text-white`, secondary (paid, prior) `text-slate-400`. Align the decimal by keeping consistent precision.
 - Empty cell: em dash `—` in `text-slate-500`, never blank.
+- Zebra striping is unnecessary and adds noise; the hairline divider is enough.
 
-### Metric cards (`ui/metric-card.tsx`)
-Label `.eyebrow`; value Syne 700 ~28px, `text-ink-hi`, `tabular-nums` (the brand big-stat). Trend in semantic color.
+### Metric cards (`ui/metric-card.tsx`, NEEDS ELEVATION)
+The KPI number must be **mono + tabular** (`font-mono tabular-nums`), which it currently is not — a money figure in the sans face violates §2. Give the one primary KPI on a screen `text-display`; keep peers at their current size so hierarchy exists rather than four identical tiles. The trend delta belongs in a colored pill (`bg-success/10 text-success-fg`), not loose text.
 
-### Badges & tags
-`ui/status-badge.tsx` and `.badge-*`: soft fill `bg-{role}-500/10` + `text-{role}-400` (remapped to AA fg). `.tag` = Blue Wash fill, mono uppercase, `text-accent-strong` — for neutral categorization tags.
+### Badges (`ui/status-badge.tsx`, on-standard)
+Soft-fill pill: `bg-{role}/10 text-{role}-fg`, `text-2xs font-medium`, optional leading dot. The `variantMap` is the canonical status→color mapping — extend it there, never hand-roll a second badge component per screen (invoices currently does; delete that duplicate and use `StatusBadge`).
 
-### Buttons (`globals.css`)
-- `.btn-primary` — **Electric Blue fill, white text (5.2:1), 10px radius**, hover `#1D4ED8`. One per view.
-- `.btn-secondary` — white, `border-slate-700`, `text-slate-200`; hover canvas fill.
-- `.btn-ghost` — text-only, navy 4% hover. `.btn-danger` — red soft fill.
-- Every button has a visible `focus-visible` ring in the accent.
+### Buttons (globals.css, on-standard)
+- `.btn-primary` (emerald) — one per view, the main action. Reserve emerald for it.
+- `.btn-secondary` (slate) — everything else.
+- `.btn-ghost` — tertiary / icon actions in toolbars and rows.
+- `.btn-danger` — destructive, and destructive actions always confirm.
+- Sizes `.btn-sm` / `.btn-lg`. Every button has a visible `focus:ring`; don't strip it.
 
-### Inputs (`globals.css`)
-`.input`: white, `border-slate-700` (`#D9D4CA`), 10px radius, `text-ink-hi`, placeholder `text-slate-600`; focus = Electric Blue border + 25% ring. Money inputs `font-mono text-right`. Error region `bg-danger/10 border-danger/30 text-danger-fg`.
+### Inputs (globals.css, on-standard)
+`.input` / `.input-error`. Label above field (`text-label text-slate-400 mb-1`). Focus is emerald ring + border. Selects get a chevron affordance. Money inputs are `font-mono text-right`. Every form validates before submit and shows a single error region (`bg-danger/10 border-danger/30 text-danger-fg`).
 
-### Toasts (`ui/toast.tsx`)
-White, `shadow-pop`, 3px left rule in the status color.
-
-### Drawers & dialogs
-Overlay `bg-black/60`; panel `bg-surface-900 border-slate-800`, 16–20px radius, `shadow-pop`.
-
-### Brand mark (`components/brand/brand-mark.tsx`)
-`<BrandMonogram />` — original geometric "M" (two square-cut stems + centred V) in Signal Blue on a navy tile, with a single Electric Blue rule beneath (the underline under a total). `<BrandLockup tone="onDark" />` = monogram + white Syne wordmark (navy shell); `tone="onLight"` = navy wordmark (auth pages). If the tenant config supplies `logoSrc`, it replaces the generated monogram.
+### Drawers & dialogs (NEEDS ELEVATION → shared primitive)
+Detail drawers slide from the right (`animate-slide-up`/fade), overlay `bg-black/60`, panel `bg-surface-900 border-l border-slate-800`. Dialogs center with the same panel treatment. These are re-implemented per screen today with divergent `gray-*` values — extract a shared `Drawer`/`Modal` primitive so header/footer/scroll behavior and escape-to-close are identical everywhere.
 
 ### States — every screen renders four
-1. **Loading:** skeletons that mirror the layout (`ui/skeleton.tsx`), never a bare centered spinner.
-2. **Empty:** `ui/empty-state.tsx` — icon, one-line title, a directive sentence, a primary action.
-3. **Error:** inline, in the product's voice, stating what failed and the retry path.
-4. **Populated:** real data from real Supabase queries.
+1. **Loading:** skeletons that mirror the real layout (`ui/skeleton.tsx`, `MetricCardSkeleton`), **never a bare centered spinner.** A spinner alone is a §9 tell; invoices uses one today and should move to skeleton rows.
+2. **Empty:** `ui/empty-state.tsx` — icon, one-line title, a sentence of direction, and a primary action. An empty screen is an invitation to act, not a dead end. Copy is directive ("Create your first invoice"), never a shrug ("No data").
+3. **Error:** inline, in the product's voice, stating what failed and the retry path — not a raw exception string.
+4. **Populated:** the real thing, from real Supabase queries.
 
-### Confidence bar (`ui/confidence-bar.tsx`)
-AI certainty as a thin bar + mono percentage: emerald ≥85 / amber ≥70 / red below — consistent with the auto-approve rule.
+### Confidence bar (`ui/confidence-bar.tsx`, on-standard)
+AI certainty as a thin bar + mono percentage, thresholded emerald ≥85 / amber ≥70 / red below. This is a signature element (§8) — keep its thresholds consistent with the auto-approve business rule.
 
 ---
 
@@ -222,27 +169,31 @@ Lucide, `size={16}` inline / `size={14}` in dense rows, stroke default. Icons ar
 
 ## 8. Signature elements
 
-1. **The ledger row.** Mono tabular figures, green debits / red credits, warm hairline dividers, a blue left rail + drill chevron on hover. The table *is* the product.
-2. **The navy frame.** A navy sidebar + top bar (the brand's 25%) around a warm-white work surface; the active nav item is the brightest blue on screen.
-3. **The confidence bar + AI indigo.** Anything the machine decided is marked in indigo with a confidence bar.
-4. **Balance-forward hero.** On money surfaces the outstanding figure is the first thing the eye lands on.
+The things a controller should remember MeritBooks by — protect these, don't dilute them:
+
+1. **The ledger row.** Mono tabular figures, emerald debits / red credits, hairline dividers, a hover state that reveals a drill-to-source chevron. The table *is* the product.
+2. **The confidence bar + AI indigo.** Anything the machine decided is marked in indigo with a confidence bar; the human always sees how sure the AI was before approving.
+3. **Balance-forward hero.** On money surfaces (invoice, pay page, account), the outstanding figure is set in `text-display` mono — the first thing the eye lands on.
+
+Spend boldness here and keep everything around them quiet.
 
 ---
 
 ## 9. Anti-AI-tells — never ship these
 
-- **Everything-in-a-card.** Group, don't scatter.
-- **Centered marketing layouts** for a data tool.
-- **Emoji as icons.** Use Lucide.
-- **Gradient soup** — decorative gradients, glows. Blue is a signal, not a wash.
-- **No hierarchy** — assign text tiers (§2) deliberately.
-- **Blank empty states / spinner-only loading.**
-- **Sans-serif money in a table.** Figures are mono tabular.
-- **Raw hex or a tenant name in a component.** Use tokens and `getTenantBrand()`.
-- **`text-white` on the light canvas**, or green as a CTA color.
-- **Two design languages** — prefer the semantic tokens; don't hand-roll a second badge.
-- **Eyeballed spacing** — snap to the 4px grid.
-- **Rainbow accenting** — if it doesn't mean something, it's navy/steel.
+A running checklist. If a screen does any of these, fix it before calling it done:
+
+- **Everything-in-a-card:** five floating rounded cards where one card with dividers belongs. Group, don't scatter.
+- **Centered marketing layouts** for what is a data tool. Content is left-aligned and dense; hero-centered columns are for the landing page, not the ledger.
+- **Emoji as icons** (🔒 ✓ 📊). Use Lucide.
+- **Gradient soup** — decorative gradients, glows on everything, neon. Emerald is a signal, not a wash.
+- **No hierarchy** — every text at `slate-400`, every card identical weight. Assign tiers (§2) and give one element the `text-display` moment.
+- **Blank empty states** ("No data to display" and nothing else). Always icon + direction + action.
+- **Spinner-only loading.** Skeletons that mirror the layout.
+- **Sans-serif money.** Figures are mono tabular, always.
+- **Two design languages in one app** — `gray-*` here, `slate-*` there; a bespoke badge on one screen and the primitive on another. Consolidate on the primitives and the `slate` palette.
+- **Eyeballed spacing** (`mt-[13px]`). Snap to the 4px grid.
+- **Rainbow accenting** — using emerald, blue, indigo, amber decoratively. Semantic colors carry meaning; if it doesn't mean something, it's slate.
 
 ---
 
@@ -257,12 +208,10 @@ Restrained and purposeful. Three speeds, named tokens (`tailwind.config.ts › t
 
 ---
 
----
-
 ## 11. Accessibility floor (non-negotiable)
 
-- Visible keyboard focus on every interactive element (global `:focus-visible` outline in the accent, plus the ring utilities in primitives).
-- Semantic color is never the *only* signal — pair it with an icon, label, or position.
-- **Contrast (WCAG AA ≥ 4.5:1 for body text), measured:** navy 18.1, steel body 8.4, `slate-400` 6.8, `slate-500` 6.0 on white / 5.4 on canvas; status fg on white ≥ 5.7 and on their own 500@20% tint ≥ 4.7 (emerald 4.99, red 4.99, amber 5.12, blue 5.32, indigo 6.11; all 17 status palettes verified); Electric Blue text on white 5.2; white on Electric Blue 5.2. Below the floor by design (meta/decorative only): `slate-600` 3.1, `slate-700` 1.9. Known near-misses: `text-brand-400` on `bg-brand-500/10` is 4.49 (use `text-brand-300`, 5.8 — the codebase was swept to do so).
+- Visible keyboard focus on every interactive element (`focus:ring`, already in the button/input primitives — don't remove it).
+- Semantic color is never the *only* signal — pair it with an icon, label, or position (a red badge also says "Overdue").
+- Text contrast meets WCAG AA on `surface-900`/`surface-950`; that's why tertiary text bottoms out at `slate-500`, not lower.
 - Hit targets ≥ 32px; icon-only buttons carry a `title`/`aria-label`.
 - Tables are real `<table>` semantics; drawers trap focus and close on `Esc`.

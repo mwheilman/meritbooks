@@ -89,7 +89,7 @@ function FallbackCard({ onRetry }: { onRetry: () => void }) {
         <AlertTriangle size={22} className="text-red-400" aria-hidden="true" />
       </div>
       <div>
-        <h3 className="text-base font-semibold text-ink-hi">This section hit a snag</h3>
+        <h3 className="text-base font-semibold text-white">This section hit a snag</h3>
         <p className="mt-1 text-sm text-slate-400 max-w-md">
           Something on this view stopped responding. The rest of the app is fine — our team has been
           notified automatically. You can try reloading just this section.
@@ -98,7 +98,7 @@ function FallbackCard({ onRetry }: { onRetry: () => void }) {
       <button
         type="button"
         onClick={onRetry}
-        className="mt-1 inline-flex items-center gap-2 rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+        className="mt-1 inline-flex items-center gap-2 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
       >
         <RotateCcw size={15} aria-hidden="true" />
         Try again

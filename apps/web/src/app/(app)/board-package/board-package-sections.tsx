@@ -23,7 +23,7 @@ export function MdnaSection({ mdna }: { mdna: Mdna | undefined }) {
             <FileText size={14} className="text-slate-300" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-ink-hi">Management Discussion &amp; Analysis</p>
+            <p className="text-sm font-semibold text-white">Management Discussion &amp; Analysis</p>
             <p className="text-[11px] text-slate-500">Results, key drivers, liquidity and receivables/payables health</p>
           </div>
         </div>
@@ -96,7 +96,7 @@ function TrendCard({ metric }: { metric: TrendMetric }) {
           </span>
         )}
       </div>
-      <p className="text-base font-mono font-semibold text-ink-hi mt-0.5 tabular-nums">{last.valueText}</p>
+      <p className="text-base font-mono font-semibold text-white mt-0.5 tabular-nums">{last.valueText}</p>
       <Sparkline metric={metric} />
     </div>
   );

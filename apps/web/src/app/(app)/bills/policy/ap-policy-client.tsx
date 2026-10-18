@@ -84,7 +84,7 @@ const EMPTY_RULESET: Ruleset = {
 
 const ALLOWED = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const inputCls =
-  'w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-ink-hi focus:border-brand-500 focus:outline-none';
+  'w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-white focus:border-emerald-500 focus:outline-none';
 
 /** cents → dollar string for an input value ('' when null). */
 const dollars = (c: number | null): string => (c === null ? '' : String(c / 100));
@@ -159,7 +159,7 @@ export function ApPolicyClient() {
               <ShieldCheck size={18} className="text-emerald-400" />
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-ink-hi">{active.name}</span>
+                  <span className="text-sm font-semibold text-white">{active.name}</span>
                   <StatusBadge status="ACTIVE" />
                   <span className="text-2xs text-slate-500 font-mono">v{active.version}</span>
                 </div>
@@ -210,7 +210,7 @@ export function ApPolicyClient() {
               <div key={p.id} className="flex items-center gap-4 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-ink-hi truncate">{p.name}</span>
+                    <span className="text-sm font-medium text-white truncate">{p.name}</span>
                     <span className="text-2xs text-slate-500 font-mono">v{p.version}</span>
                     <StatusBadge status={p.status} />
                   </div>
@@ -226,7 +226,7 @@ export function ApPolicyClient() {
                 )}
                 <button
                   onClick={() => setEditor({ ruleset: structuredClone(p.compiled_rules), name: p.name, sourceNote: p.source_note ?? '' })}
-                  className="p-1.5 rounded-md text-slate-500 hover:text-ink-hi hover:bg-slate-800"
+                  className="p-1.5 rounded-md text-slate-500 hover:text-white hover:bg-slate-800"
                   aria-label="Edit as new version"
                 >
                   <ChevronRight size={16} />
@@ -299,11 +299,11 @@ function CompileModal({
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-indigo-400" />
             <div>
-              <h2 className="text-lg font-semibold text-ink-hi">Compile a bill-approval policy</h2>
+              <h2 className="text-lg font-semibold text-white">Compile a bill-approval policy</h2>
               <p className="text-[11px] text-slate-500">Drop your written AP policy — AI compiles it into a ruleset you review. Nothing is saved until you activate.</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close"><X size={18} /></button>
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close"><X size={18} /></button>
         </div>
         {err && (
           <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
@@ -318,7 +318,7 @@ function CompileModal({
           className={clsx(
             'flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-14 text-center transition-colors',
             phase === 'parsing' ? 'border-indigo-500/40 bg-indigo-500/5 cursor-default'
-              : dragOver ? 'border-brand-500 bg-brand-500/5 cursor-pointer'
+              : dragOver ? 'border-emerald-500 bg-emerald-500/5 cursor-pointer'
               : 'border-slate-700 hover:border-slate-600 cursor-pointer'
           )}
         >
@@ -591,7 +591,7 @@ function PolicyEditor({
                   <p className="text-[11px] text-slate-300">{u.text}</p>
                   {u.note && <p className="text-[10px] text-slate-500 mt-0.5">{u.note}</p>}
                 </div>
-                <button onClick={() => removeUnmapped(i)} className="p-1 rounded text-slate-500 hover:text-ink-hi hover:bg-slate-800" aria-label="Dismiss"><X size={13} /></button>
+                <button onClick={() => removeUnmapped(i)} className="p-1 rounded text-slate-500 hover:text-white hover:bg-slate-800" aria-label="Dismiss"><X size={13} /></button>
               </div>
             ))}
           </div>

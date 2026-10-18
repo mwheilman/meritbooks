@@ -48,11 +48,11 @@ export default function TaxHubPage() {
               className="card group p-4 transition-colors hover:border-brand-500/40"
             >
               <div className="flex items-start gap-3">
-                <span className="rounded-lg bg-brand-500/10 p-2 text-brand-300">
+                <span className="rounded-lg bg-brand-500/10 p-2 text-brand-400">
                   <Icon size={18} />
                 </span>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-sm font-semibold text-ink-hi">
+                  <div className="flex items-center gap-1.5 text-sm font-semibold text-white">
                     {c.title}
                     <ArrowRight size={14} className="text-slate-600 transition-colors group-hover:text-brand-400" />
                   </div>

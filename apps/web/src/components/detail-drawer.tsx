@@ -54,12 +54,12 @@ export function DetailDrawer({
       >
         <div className="flex items-start justify-between px-6 py-4 border-b border-slate-800">
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-ink-hi truncate">{title}</h2>
+            <h2 className="text-lg font-semibold text-white truncate">{title}</h2>
             {subtitle && <p className="text-xs text-slate-500 mt-0.5 truncate">{subtitle}</p>}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {headerRight}
-            <button onClick={onClose} className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-navy/[0.04] transition-colors" aria-label="Close">
+            <button onClick={onClose} className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] transition-colors" aria-label="Close">
               <X size={18} />
             </button>
           </div>
@@ -67,7 +67,7 @@ export function DetailDrawer({
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {isLoading ? (
-            <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>
+            <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
           ) : error ? (
             <div className="py-12 text-center">
               <AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" />

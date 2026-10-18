@@ -48,7 +48,7 @@ export function CompanyScopeGuard({
       <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500/15">
         <Building2 size={26} className="text-brand-400" />
       </div>
-      <h2 className="mb-2 text-xl font-semibold tracking-tight text-ink-hi">{title}</h2>
+      <h2 className="mb-2 text-xl font-semibold tracking-tight text-white">{title}</h2>
       <p className="mb-8 max-w-md text-sm leading-relaxed text-slate-400">{description}</p>
 
       {companies.length === 0 ? (
@@ -65,7 +65,7 @@ export function CompanyScopeGuard({
             <button
               key={c.id}
               onClick={() => setActiveCompany(c.id)}
-              className="group flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-surface-900 px-4 py-3 text-left transition-colors hover:border-brand-500/40 hover:bg-navy/[0.03]"
+              className="group flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-surface-900 px-4 py-3 text-left transition-colors hover:border-brand-500/40 hover:bg-white/[0.03]"
             >
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-800 text-2xs font-bold text-slate-400 group-hover:bg-brand-500/20 group-hover:text-brand-400">
                 {c.shortCode.slice(0, 2)}

@@ -120,7 +120,7 @@ const STATUS_META: Record<
   pass: {
     label: 'Operating',
     text: 'text-emerald-400',
-    ring: 'ring-brand-500/25',
+    ring: 'ring-emerald-500/25',
     bg: 'bg-emerald-500/10',
     dot: 'bg-emerald-400',
     icon: ShieldCheck,
@@ -208,7 +208,7 @@ function SummaryTile({
         <p className="text-2xs font-semibold uppercase tracking-wider text-slate-500">{label}</p>
         <Icon size={15} className={clsx(m ? m.text : 'text-slate-500')} />
       </div>
-      <p className={clsx('mt-2 font-mono text-2xl font-semibold', m ? m.text : 'text-ink-hi')}>{value}</p>
+      <p className={clsx('mt-2 font-mono text-2xl font-semibold', m ? m.text : 'text-white')}>{value}</p>
       {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
     </div>
   );
@@ -230,7 +230,7 @@ export function ControlsClient() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
       </div>
     );
   }
@@ -330,10 +330,10 @@ export function ControlsClient() {
       {/* Control cards */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-ink-hi">Financial controls</h2>
+          <h2 className="text-sm font-semibold text-white">Financial controls</h2>
           <button
             onClick={() => router.push(center.hrefs.exceptions)}
-            className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-brand-400"
+            className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-emerald-400"
           >
             View exception queue <ArrowUpRight size={13} />
           </button>
@@ -359,7 +359,7 @@ export function ControlsClient() {
                       </span>
                       <span className="text-2xs uppercase tracking-wide text-slate-500">{c.category}</span>
                     </div>
-                    <p className="mt-1.5 truncate text-sm font-medium text-ink-hi">{c.name}</p>
+                    <p className="mt-1.5 truncate text-sm font-medium text-white">{c.name}</p>
                   </div>
                   <StatusPill status={c.status} />
                 </div>
@@ -392,7 +392,7 @@ export function ControlsClient() {
           <div className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
             <div className="flex items-center gap-2">
               <Scale size={15} className="text-emerald-400" />
-              <h2 className="text-sm font-semibold text-ink-hi">Segregation of duties</h2>
+              <h2 className="text-sm font-semibold text-white">Segregation of duties</h2>
             </div>
             <StatusPill status={sod.status} />
           </div>
@@ -403,7 +403,7 @@ export function ControlsClient() {
               { label: 'Released', value: sod.released },
             ].map((s) => (
               <div key={s.label} className="bg-slate-950 px-3 py-3">
-                <p className="font-mono text-lg font-semibold text-ink-hi">{s.value}</p>
+                <p className="font-mono text-lg font-semibold text-white">{s.value}</p>
                 <p className="text-2xs uppercase tracking-wide text-slate-500">{s.label}</p>
               </div>
             ))}
@@ -439,7 +439,7 @@ export function ControlsClient() {
             )}
             <button
               onClick={() => router.push(center.hrefs.audit)}
-              className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-brand-400"
+              className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-emerald-400"
             >
               <History size={13} /> Open audit trail <ArrowUpRight size={12} />
             </button>
@@ -451,7 +451,7 @@ export function ControlsClient() {
           <div className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
             <div className="flex items-center gap-2">
               <Sparkles size={15} className="text-indigo-400" />
-              <h2 className="text-sm font-semibold text-ink-hi">AI autonomy posture</h2>
+              <h2 className="text-sm font-semibold text-white">AI autonomy posture</h2>
             </div>
             <StatusPill status={autonomy.status} />
           </div>
@@ -504,13 +504,13 @@ export function ControlsClient() {
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
           <div className="flex items-center gap-2">
             <History size={15} className="text-blue-400" />
-            <h2 className="text-sm font-semibold text-ink-hi">Audit-trail completeness</h2>
+            <h2 className="text-sm font-semibold text-white">Audit-trail completeness</h2>
           </div>
           <StatusPill status={audit.status} />
         </div>
         <div className="flex flex-wrap items-center gap-6 px-5 py-4 text-sm">
           <div>
-            <p className="font-mono text-2xl font-semibold text-ink-hi">{audit.totalActions}</p>
+            <p className="font-mono text-2xl font-semibold text-white">{audit.totalActions}</p>
             <p className="text-2xs uppercase tracking-wide text-slate-500">actions logged (recent)</p>
           </div>
           <div className="flex items-center gap-4">

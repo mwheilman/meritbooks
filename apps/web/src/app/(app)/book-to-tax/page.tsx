@@ -128,7 +128,7 @@ function TabButton(props: { active: boolean; onClick: () => void; icon: React.El
       onClick={onClick}
       className={clsx(
         'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
-        active ? 'border-brand-500 text-ink-hi' : 'border-transparent text-slate-400 hover:text-slate-200',
+        active ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200',
       )}
     >
       <Icon size={15} /> {label}
@@ -187,7 +187,7 @@ function ScheduleTab(props: {
             <div className="card p-4 flex items-start gap-3 border-blue-500/30">
               <Info size={16} className="text-blue-400 mt-0.5 shrink-0" />
               <div className="text-sm text-slate-300">
-                No book-tax differences are tagged for this period, so <span className="font-medium text-ink-hi">taxable income equals book net income</span>.
+                No book-tax differences are tagged for this period, so <span className="font-medium text-white">taxable income equals book net income</span>.
                 Tag accounts (meals, penalties, depreciation…) on the <span className="text-emerald-400">Account tagging</span> tab — or let the AI propose them — to build the reconciliation.
               </div>
             </div>
@@ -196,7 +196,7 @@ function ScheduleTab(props: {
           {/* M-1 reconciliation ladder */}
           <section className="card overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800">
-              <h2 className="text-sm font-semibold text-ink-hi">Schedule M-1 — book income to taxable income</h2>
+              <h2 className="text-sm font-semibold text-white">Schedule M-1 — book income to taxable income</h2>
               <p className="text-2xs text-slate-500 mt-0.5">
                 {data.startDate} → {data.endDate} · {data.taggedAccountCount} tagged / {data.untaggedAccountCount} untagged accounts
               </p>
@@ -230,7 +230,7 @@ function ScheduleTab(props: {
                 )}
 
                 <tr className="border-t-2 border-slate-700 bg-slate-900/40">
-                  <td className="px-4 py-3 font-semibold text-ink-hi" colSpan={2}>Taxable income (before NOL / special deductions)</td>
+                  <td className="px-4 py-3 font-semibold text-white" colSpan={2}>Taxable income (before NOL / special deductions)</td>
                   <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-300">{fmt(data.taxableIncomeCents)}</td>
                 </tr>
               </tbody>
@@ -240,7 +240,7 @@ function ScheduleTab(props: {
           {/* M-3 permanent / temporary summary */}
           <section className="card overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800">
-              <h2 className="text-sm font-semibold text-ink-hi">Schedule M-3 summary — permanent vs temporary</h2>
+              <h2 className="text-sm font-semibold text-white">Schedule M-3 summary — permanent vs temporary</h2>
               <p className="text-2xs text-slate-500 mt-0.5">
                 Temporary differences reverse in a later year (the ASC 740 deferred-tax input); permanent differences never reverse.
               </p>
@@ -273,7 +273,7 @@ function SummaryCard(props: { label: string; valueCents: number; tone?: 'add' | 
       <p className="text-2xs uppercase tracking-wide text-slate-500">{label}</p>
       <p className={clsx(
         'mt-1 font-mono text-lg',
-        emphasize ? 'text-emerald-300' : tone === 'add' ? 'text-emerald-400' : tone === 'sub' ? 'text-red-400' : 'text-ink-hi',
+        emphasize ? 'text-emerald-300' : tone === 'add' ? 'text-emerald-400' : tone === 'sub' ? 'text-red-400' : 'text-white',
       )}>
         {tone === 'add' ? '+' : tone === 'sub' ? '−' : ''}{fmt(Math.abs(valueCents))}
       </p>
@@ -284,8 +284,8 @@ function SummaryCard(props: { label: string; valueCents: number; tone?: 'add' | 
 function LadderRow(props: { label: string; amountCents: number; bold?: boolean }) {
   return (
     <tr>
-      <td className={clsx('px-4 py-3', props.bold ? 'font-semibold text-ink-hi' : 'text-slate-300')} colSpan={2}>{props.label}</td>
-      <td className={clsx('px-4 py-3 text-right font-mono', props.bold ? 'font-semibold text-ink-hi' : 'text-slate-200')}>{fmt(props.amountCents)}</td>
+      <td className={clsx('px-4 py-3', props.bold ? 'font-semibold text-white' : 'text-slate-300')} colSpan={2}>{props.label}</td>
+      <td className={clsx('px-4 py-3 text-right font-mono', props.bold ? 'font-semibold text-white' : 'text-slate-200')}>{fmt(props.amountCents)}</td>
     </tr>
   );
 }
@@ -390,7 +390,7 @@ function TaggingTab() {
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={clsx('px-3 py-1.5 rounded text-xs font-medium capitalize', filter === f ? 'bg-slate-800 text-ink-hi' : 'text-slate-400 hover:text-slate-200')}
+              className={clsx('px-3 py-1.5 rounded text-xs font-medium capitalize', filter === f ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200')}
             >
               {f}
             </button>
@@ -480,7 +480,7 @@ function TagRow(props: {
           <div className="mt-1.5 flex items-center gap-2 text-2xs">
             <span className="badge bg-indigo-500/10 text-indigo-400 inline-flex items-center gap-1"><Sparkles size={10} /> AI: {row.proposal.label}</span>
             {row.proposal.confidence != null && <span className="text-slate-500">{Math.round(row.proposal.confidence * 100)}%</span>}
-            <button className="text-brand-400 hover:text-brand-300 inline-flex items-center gap-0.5" disabled={busy} onClick={() => onAccept(row.proposal!.code, row.proposal!.id)}>
+            <button className="text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-0.5" disabled={busy} onClick={() => onAccept(row.proposal!.code, row.proposal!.id)}>
               <Check size={11} /> Accept
             </button>
           </div>

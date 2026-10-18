@@ -146,7 +146,7 @@ export function AnalyticalPanel({ prompt }: { prompt: string }) {
               <span className="text-2xs uppercase tracking-wider text-slate-500">Cited from</span>
               {state.data.citations.map((c, i) => (
                 <Link key={i} href={c.href}
-                  className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-xs text-slate-300 hover:border-brand-500/50 hover:text-ink-hi transition-colors">
+                  className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-xs text-slate-300 hover:border-emerald-500/50 hover:text-white transition-colors">
                   {c.label} <ExternalLink size={11} />
                 </Link>
               ))}
@@ -155,7 +155,7 @@ export function AnalyticalPanel({ prompt }: { prompt: string }) {
 
           {state.data.drilldownHref && (
             <Link href={state.data.drilldownHref}
-              className="inline-flex items-center gap-1.5 text-sm text-brand-400 hover:text-brand-300">
+              className="inline-flex items-center gap-1.5 text-sm text-emerald-400 hover:text-emerald-300">
               Drill into the source rows <ExternalLink size={13} />
             </Link>
           )}

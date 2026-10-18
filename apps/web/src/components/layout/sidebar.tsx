@@ -11,8 +11,6 @@ import { PLANES } from '@/lib/planes';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { useMe } from '@/lib/hooks/use-me';
 import { filterNavByPermissions } from '@/components/layout/nav-permissions';
-import { BrandLockup, BrandMonogram } from '@/components/brand/brand-mark';
-import { getTenantBrand } from '@/lib/brand/tenant-brand';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -44,34 +42,40 @@ export function Sidebar() {
     { hasPermissionData, canView: (featureId) => can(featureId, 'view') },
   );
   const PlaneIcon = PLANES[plane].icon;
-  const brand = getTenantBrand();
 
   return (
     <aside
       className={clsx(
-        // Navy shell (Merit 25% navy). Colors come from `shell-*` tokens so a
-        // white-label tenant re-skins via CSS variables only.
-        'flex flex-col border-r border-shell-line bg-shell text-shell-mid transition-all duration-200',
+        'flex flex-col border-r border-slate-800 bg-surface-950 transition-all duration-200',
         collapsed ? 'w-16' : 'w-[var(--sidebar-width)]'
       )}
     >
       {/* Logo */}
-      <div className="flex h-[var(--header-height)] items-center justify-between px-4 border-b border-shell-line">
+      <div className="flex h-[var(--header-height)] items-center justify-between px-4 border-b border-slate-800">
         {!collapsed && (
-          <Link
-            href="/dashboard"
-            className="flex items-center rounded-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-shell-accent"
-            aria-label={brand.productName}
-          >
-            {/* On dark: white wordmark + blue monogram (brand guide). */}
-            <BrandLockup tone="onDark" size={26} />
+          <Link href="/dashboard" className="flex items-center" aria-label="MeritBooks">
+            {/* Brand dark lockup (mark + wordmark). Min 120px wide per brand
+                clearspace rules; ~h-7 keeps it ≥120px at the 4.3:1 aspect. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/meritbooks-logo-dark.svg"
+              alt="MeritBooks"
+              className="h-7 w-auto"
+            />
           </Link>
         )}
-        {collapsed && <BrandMonogram size={24} keyline className="mx-auto" />}
+        {collapsed && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src="/brand/meritbooks-mark.svg"
+            alt="MeritBooks"
+            className="mx-auto h-6 w-6"
+          />
+        )}
         <button
           onClick={() => setCollapsed(!collapsed)}
           className={clsx(
-            'rounded p-0.5 text-shell-dim hover:text-shell-fg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-shell-accent',
+            'text-slate-500 hover:text-slate-300 transition-colors',
             collapsed && 'mx-auto mt-2'
           )}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -85,11 +89,11 @@ export function Sidebar() {
 
       {/* Active plane indicator — which hat you're wearing */}
       {!collapsed && (
-        <div className="mx-2 mt-3 mb-1 flex items-center gap-2 rounded-brand bg-shell-raised border border-shell-line px-3 py-2">
-          <PlaneIcon size={15} className="text-shell-accent shrink-0" />
+        <div className="mx-2 mt-3 mb-1 flex items-center gap-2 rounded-lg bg-brand-500/5 border border-brand-500/15 px-3 py-2">
+          <PlaneIcon size={15} className="text-brand-400 shrink-0" />
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-shell-fg leading-tight truncate">{PLANES[plane].label}</p>
-            <p className="text-2xs text-shell-dim leading-tight truncate">{PLANES[plane].tagline}</p>
+            <p className="text-xs font-semibold text-brand-300 leading-tight truncate">{PLANES[plane].label}</p>
+            <p className="text-2xs text-slate-500 leading-tight truncate">{PLANES[plane].tagline}</p>
           </div>
         </div>
       )}
@@ -99,7 +103,7 @@ export function Sidebar() {
         {visibleNav.map((group) => (
           <div key={group.label} className="mb-4">
             {!collapsed && (
-              <p className="px-3 mb-1.5 font-mono text-2xs font-medium uppercase tracking-eyebrow text-shell-dim">
+              <p className="px-3 mb-1 text-2xs font-semibold uppercase tracking-wider text-slate-500">
                 {group.label}
               </p>
             )}
@@ -112,16 +116,15 @@ export function Sidebar() {
                     <Link
                       href={item.href}
                       className={clsx(
-                        'relative flex items-center gap-3 rounded-brand px-3 py-2 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-shell-accent',
+                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
                         isActive
-                          ? // Active: white label on a blue-tinted fill + Electric Blue rail.
-                            'bg-accent-bright/[0.16] text-shell-fg font-medium before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-full before:bg-accent'
-                          : 'text-shell-mid hover:text-shell-fg hover:bg-white/[0.06]',
+                          ? 'bg-brand-500/10 text-brand-400 font-medium'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]',
                         collapsed && 'justify-center px-0'
                       )}
                       title={collapsed ? item.label : undefined}
                     >
-                      <Icon size={18} className={clsx('shrink-0', isActive && 'text-shell-accent')} />
+                      <Icon size={18} className="shrink-0" />
                       {!collapsed && <span>{item.label}</span>}
                       {!collapsed && item.badge && (
                         <span className="ml-auto badge-warning">{item.badge}</span>
@@ -134,9 +137,9 @@ export function Sidebar() {
           </div>
         ))}
         {mustSelectCompany && !collapsed && (
-          <div className="mx-2 mt-2 rounded-brand border border-shell-line bg-shell-raised px-3 py-3">
-            <p className="text-xs font-semibold text-shell-fg">Select a company</p>
-            <p className="mt-1 text-2xs leading-snug text-shell-mid">
+          <div className="mx-2 mt-2 rounded-lg border border-brand-500/20 bg-brand-500/5 px-3 py-3">
+            <p className="text-xs font-semibold text-brand-300">Select a company</p>
+            <p className="mt-1 text-2xs leading-snug text-slate-500">
               Choose a company in the top bar to open its workspace. Processing is
               scoped to one company at a time so nothing posts to the wrong account.
             </p>
@@ -146,11 +149,11 @@ export function Sidebar() {
 
       {/* CPA Desk trigger */}
       {!collapsed && (
-        <div className="p-3 border-t border-shell-line">
-          <button className="w-full flex items-center gap-2 rounded-brand px-3 py-2.5 text-sm text-shell-mid hover:text-shell-fg hover:bg-white/[0.06] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-shell-accent">
-            <Sparkles size={16} className="text-shell-accent" />
+        <div className="p-3 border-t border-slate-800">
+          <button className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-slate-400 hover:text-brand-400 hover:bg-brand-500/5 transition-colors">
+            <Sparkles size={16} className="text-brand-500" />
             <span>CPA Desk</span>
-            <kbd className="ml-auto font-mono text-2xs text-shell-dim bg-white/[0.06] border border-shell-line px-1.5 py-0.5 rounded">⌘K</kbd>
+            <kbd className="ml-auto text-2xs text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">⌘K</kbd>
           </button>
         </div>
       )}

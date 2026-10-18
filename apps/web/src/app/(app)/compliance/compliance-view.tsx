@@ -46,7 +46,7 @@ export function ComplianceView() {
     return filings.find((f) => f.obligationId === oblId && f.locationId === locId) ?? null;
   };
 
-  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>;
   if (error) return <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-red-400 text-sm">{error}</p></div>;
 
   return (
@@ -86,7 +86,7 @@ export function ComplianceView() {
                 {obligations.map((obl) => (
                   <tr key={obl.id} className="hover:bg-slate-800/20">
                     <td className="px-4 py-3 sticky left-0 bg-slate-950 z-10">
-                      <p className="text-sm text-ink-hi font-medium">{obl.name}</p>
+                      <p className="text-sm text-white font-medium">{obl.name}</p>
                       <p className="text-[10px] text-slate-600">{obl.frequency} · {obl.jurisdiction ?? 'Federal'}</p>
                     </td>
                     {locations.map((loc) => {

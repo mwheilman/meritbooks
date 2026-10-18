@@ -64,11 +64,11 @@ export function RevRecRun() {
         <div className="flex items-center gap-2">
           <label className="text-2xs uppercase tracking-wider text-slate-500">Recognize as of</label>
           <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)}
-            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-ink-hi font-mono" />
+            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-white font-mono" />
           <span className="inline-flex items-center gap-1 text-2xs text-slate-500"><Eye size={12} /> preview updates live</span>
         </div>
         <button onClick={post} disabled={posting || toPost.length === 0}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40">
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40">
           {posting ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Post recognition ({toPost.length})
         </button>
       </div>
@@ -83,7 +83,7 @@ export function RevRecRun() {
       )}
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 text-brand-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 text-emerald-400 animate-spin" /></div>
       ) : error ? (
         <div className="card p-6 text-center"><AlertCircle className="mx-auto text-red-400 mb-2" size={20} /><p className="text-sm text-red-400">{error}</p></div>
       ) : jobs.length === 0 ? (
@@ -137,7 +137,7 @@ export function RevRecRun() {
         {peek && (
           <div className="p-3">
             <div className="mb-1"><span className="text-2xs font-mono text-slate-500">{peek.item.jobNumber ?? '--'}</span>
-              <p className="text-sm font-semibold text-ink-hi truncate">{peek.item.jobName ?? peek.item.jobId}</p></div>
+              <p className="text-sm font-semibold text-white truncate">{peek.item.jobName ?? peek.item.jobId}</p></div>
             <div className="text-2xs text-slate-500 mb-2">{METHOD_SHORT[peek.item.method] ?? peek.item.method}</div>
             <div className="rounded-md bg-slate-800/40 px-3 py-2 space-y-0.5">
               <div className="flex justify-between text-2xs"><span className="text-slate-500">Earned to date</span><span className="font-mono text-slate-300">{formatMoney(peek.item.earnedToDateCents)}</span></div>
@@ -156,7 +156,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: 'br
   return (
     <div className="card p-3">
       <p className="text-2xs uppercase tracking-wider text-slate-500 font-semibold">{label}</p>
-      <p className={clsx('text-lg font-mono font-semibold mt-1', tone === 'brand' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : 'text-ink-hi')}>{value}</p>
+      <p className={clsx('text-lg font-mono font-semibold mt-1', tone === 'brand' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : 'text-white')}>{value}</p>
     </div>
   );
 }

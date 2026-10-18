@@ -97,7 +97,7 @@ export function CreateCompanyDialog({
               <Building2 size={16} />
             </div>
             <div>
-              <h2 className="text-subheading font-semibold text-ink-hi">Add a company</h2>
+              <h2 className="text-subheading font-semibold text-white">Add a company</h2>
               <p className="text-body-sm text-slate-500">
                 Creates its own book of record — fiscal calendar and chart of accounts included.
               </p>
@@ -105,7 +105,7 @@ export function CreateCompanyDialog({
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-slate-500 transition-colors hover:bg-navy/[0.04] hover:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+            className="rounded-md p-1 text-slate-500 transition-colors hover:bg-white/[0.04] hover:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
             aria-label="Close"
           >
             <X size={18} />

@@ -150,7 +150,7 @@ export function SalesTaxRates() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-base font-semibold text-ink-hi flex items-center gap-2">
+          <h3 className="text-base font-semibold text-white flex items-center gap-2">
             <Receipt className="w-4 h-4 text-emerald-400" /> Sales-Tax Rates
           </h3>
           <p className="text-sm text-slate-400 mt-1 max-w-2xl">
@@ -177,47 +177,47 @@ export function SalesTaxRates() {
           <div>
             <label htmlFor="tax-rate-state" className="block text-[11px] text-slate-500 mb-1">State *</label>
             <input id="tax-rate-state" value={state} onChange={(e) => setState(e.target.value)} placeholder="IA"
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi" />
+              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white" />
           </div>
           <div>
             <label htmlFor="tax-rate-county" className="block text-[11px] text-slate-500 mb-1">County</label>
             <input id="tax-rate-county" value={county} onChange={(e) => setCounty(e.target.value)} placeholder="Polk"
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi" />
+              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white" />
           </div>
           <div>
             <label htmlFor="tax-rate-city" className="block text-[11px] text-slate-500 mb-1">City</label>
             <input id="tax-rate-city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Des Moines"
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi" />
+              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white" />
           </div>
           <div>
             <label htmlFor="tax-rate-postal" className="block text-[11px] text-slate-500 mb-1">Postal</label>
             <input id="tax-rate-postal" value={postal} onChange={(e) => setPostal(e.target.value)} placeholder="50309"
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi font-mono" />
+              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white font-mono" />
           </div>
           <div>
             <label htmlFor="tax-rate-category" className="block text-[11px] text-slate-500 mb-1">Category</label>
             <input id="tax-rate-category" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="(all)"
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi" />
+              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white" />
           </div>
           <div>
             <label htmlFor="tax-rate-pct" className="block text-[11px] text-slate-500 mb-1">Rate % *</label>
             <input id="tax-rate-pct" type="number" value={ratePct} onChange={(e) => setRatePct(e.target.value)} min={0} step={0.001} placeholder="7.0"
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi text-right font-mono tabular-nums" />
+              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white text-right font-mono tabular-nums" />
           </div>
           <div>
             <label htmlFor="tax-rate-effective" className="block text-[11px] text-slate-500 mb-1">Effective *</label>
             <input id="tax-rate-effective" type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)}
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi" />
+              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white" />
           </div>
           <div>
             <label htmlFor="tax-rate-end" className="block text-[11px] text-slate-500 mb-1">End (opt.)</label>
             <input id="tax-rate-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi" />
+              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white" />
           </div>
         </div>
         <div className="mt-3 flex justify-end">
           <button onClick={addRate} disabled={saving}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add rate
           </button>
         </div>
@@ -231,7 +231,7 @@ export function SalesTaxRates() {
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search jurisdiction, state, city, ZIP…"
           aria-label="Search sales-tax rates"
-          className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi placeholder:text-slate-500"
+          className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white placeholder:text-slate-500"
         />
       </div>
 
@@ -280,7 +280,7 @@ export function SalesTaxRates() {
                       {editing ? (
                         <input type="number" value={editRate} onChange={(e) => setEditRate(e.target.value)} min={0} step={0.001}
                           aria-label="Edit rate percent"
-                          className="w-20 px-1.5 py-1 bg-slate-800 border border-slate-600 rounded text-right font-mono tabular-nums text-ink-hi" />
+                          className="w-20 px-1.5 py-1 bg-slate-800 border border-slate-600 rounded text-right font-mono tabular-nums text-white" />
                       ) : `${r.combinedRatePct}%`}
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-400">{r.effectiveDate}</td>
@@ -288,7 +288,7 @@ export function SalesTaxRates() {
                       {editing ? (
                         <input type="date" value={editEnd} onChange={(e) => setEditEnd(e.target.value)}
                           aria-label="Edit end date"
-                          className="px-1.5 py-1 bg-slate-800 border border-slate-600 rounded text-ink-hi" />
+                          className="px-1.5 py-1 bg-slate-800 border border-slate-600 rounded text-white" />
                       ) : (r.endDate ?? '—')}
                     </td>
                     <td className="px-3 py-2">
@@ -300,7 +300,7 @@ export function SalesTaxRates() {
                       {editing ? (
                         <div className="inline-flex items-center gap-1">
                           <button onClick={() => saveEdit(r.id)} disabled={editSaving} title="Save" aria-label="Save rate"
-                            className="p-1 text-brand-400 hover:text-brand-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                            className="p-1 text-emerald-400 hover:text-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                             {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                           </button>
                           <button onClick={() => setEditId(null)} title="Cancel" aria-label="Cancel edit" className="p-1 text-slate-500 hover:text-slate-300 transition-colors">
@@ -309,7 +309,7 @@ export function SalesTaxRates() {
                         </div>
                       ) : (
                         <div className="inline-flex items-center gap-1">
-                          <button onClick={() => beginEdit(r)} title="Edit rate / end date" aria-label={`Edit rate for ${r.jurisdictionLabel || r.state || 'this jurisdiction'}`} className="p-1 text-slate-500 hover:text-brand-400 transition-colors">
+                          <button onClick={() => beginEdit(r)} title="Edit rate / end date" aria-label={`Edit rate for ${r.jurisdictionLabel || r.state || 'this jurisdiction'}`} className="p-1 text-slate-500 hover:text-emerald-400 transition-colors">
                             <Pencil className="w-4 h-4" />
                           </button>
                           <button onClick={() => retire(r.id)} title="Retire this rate" aria-label={`Retire rate for ${r.jurisdictionLabel || r.state || 'this jurisdiction'}`} className="p-1 text-slate-500 hover:text-red-400 transition-colors">
@@ -376,7 +376,7 @@ function ImportPanel({ onClose, onImported }: { onClose: () => void; onImported:
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-medium text-ink-hi">
+        <div className="flex items-center gap-2 text-sm font-medium text-white">
           <FileSpreadsheet className="w-4 h-4 text-blue-400" /> Bulk import rates
         </div>
         <button onClick={onClose} className="p-1 text-slate-500 hover:text-slate-300" aria-label="Close import panel"><X className="w-4 h-4" /></button>
@@ -402,7 +402,7 @@ function ImportPanel({ onClose, onImported }: { onClose: () => void; onImported:
         rows={4}
         placeholder="state,county,city,postal,rate,effective_date&#10;IA,Polk,Des Moines,50309,7.0,2026-01-01"
         aria-label="Paste CSV rate rows"
-        className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-xs font-mono text-ink-hi placeholder:text-slate-600"
+        className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-xs font-mono text-white placeholder:text-slate-600"
       />
 
       {preview && (
@@ -451,7 +451,7 @@ function ImportPanel({ onClose, onImported }: { onClose: () => void; onImported:
 
       <div className="flex justify-end">
         <button onClick={doImport} disabled={importing || !preview || preview.rows.length === 0}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
           {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
           Import {preview?.rows.length ? `${preview.rows.length} row${preview.rows.length === 1 ? '' : 's'}` : ''}
         </button>

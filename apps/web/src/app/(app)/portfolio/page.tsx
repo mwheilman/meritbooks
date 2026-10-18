@@ -211,7 +211,7 @@ function Metric({
         <p className="text-xs text-slate-400">{label}</p>
         <Icon size={15} className="text-slate-500" />
       </div>
-      <p className={clsx('mt-2 text-xl font-semibold tracking-tight font-mono tabular-nums', tone ?? 'text-ink-hi')}>
+      <p className={clsx('mt-2 text-xl font-semibold tracking-tight font-mono tabular-nums', tone ?? 'text-white')}>
         {value}
       </p>
     </div>
@@ -350,7 +350,7 @@ function OwnershipGrid({
             {entities.map((e) => (
               <tr key={e.locationId} className="border-b border-slate-800/60 last:border-0">
                 <td className="px-4 py-2.5">
-                  <div className="font-medium text-ink-hi">{e.name}</div>
+                  <div className="font-medium text-white">{e.name}</div>
                   <div className="font-mono text-2xs text-slate-500">{e.shortCode}</div>
                 </td>
                 {FUNCTIONS.map((f) => {
@@ -574,7 +574,7 @@ export default function PortfolioPage() {
             onClick={() => setTab('board')}
             className={clsx(
               'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-              tab === 'board' ? 'bg-slate-800 text-ink-hi' : 'text-slate-400 hover:text-slate-200',
+              tab === 'board' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200',
             )}
           >
             <LayoutGrid size={14} /> Board
@@ -583,7 +583,7 @@ export default function PortfolioPage() {
             onClick={() => setTab('ownership')}
             className={clsx(
               'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-              tab === 'ownership' ? 'bg-slate-800 text-ink-hi' : 'text-slate-400 hover:text-slate-200',
+              tab === 'ownership' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200',
             )}
           >
             <Users size={14} /> Ownership
@@ -700,7 +700,7 @@ function BoardTable({
               <td className="px-4 py-3">
                 <Link
                   href={`/portfolio/${e.locationId}`}
-                  className="font-medium text-ink-hi transition-colors hover:text-brand-300"
+                  className="font-medium text-white transition-colors hover:text-brand-300"
                 >
                   {e.name}
                 </Link>

@@ -33,7 +33,7 @@ export function BankFeedMetricsStrip({ metrics, isLoading }: BankFeedMetricsStri
       <div className="flex items-center gap-2">
         <BarChart3 size={14} className="text-slate-500" />
         <span className="text-sm text-slate-400">Reviewed today</span>
-        <span className="text-sm font-medium text-ink-hi font-mono tabular-nums">
+        <span className="text-sm font-medium text-white font-mono tabular-nums">
           {reviewed_today}/{total_today}
         </span>
         {total_today > 0 && (
@@ -58,7 +58,7 @@ export function BankFeedMetricsStrip({ metrics, isLoading }: BankFeedMetricsStri
       <div className="flex items-center gap-2">
         <Zap size={14} className="text-indigo-400" />
         <span className="text-sm text-slate-400">AI auto-approved</span>
-        <span className="text-sm font-medium text-ink-hi font-mono tabular-nums">{auto_approved_today}</span>
+        <span className="text-sm font-medium text-white font-mono tabular-nums">{auto_approved_today}</span>
       </div>
 
       <div className="h-4 w-px bg-slate-800" />

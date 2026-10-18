@@ -106,7 +106,7 @@ export function PayrollClient() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setImportOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
                 title="Drop the processor's payroll register (PDF or image) and post a balanced payroll entry to the ledger"
               >
                 <UploadCloud size={14} /> Import payroll register
@@ -144,7 +144,7 @@ export function PayrollClient() {
             <UploadCloud size={16} />
           </div>
           <div>
-            <p className="text-sm font-medium text-ink-hi">Import a payroll register</p>
+            <p className="text-sm font-medium text-white">Import a payroll register</p>
             <p className="mt-0.5 text-xs text-slate-400">
               The production path. Run payroll at ADP, Paychex, Gusto, QuickBooks — or a spreadsheet — then drop the
               register here. We extract the period totals and post a balanced payroll entry you review first.
@@ -164,7 +164,7 @@ export function PayrollClient() {
             {providerReady ? <PlugZap size={16} /> : <FlaskConical size={16} />}
           </div>
           <div>
-            <p className="text-sm font-medium text-ink-hi">Run payroll in-app</p>
+            <p className="text-sm font-medium text-white">Run payroll in-app</p>
             {providerReady ? (
               <p className="mt-0.5 text-xs text-slate-400">
                 A payroll provider is connected. The wizard computes gross-to-net through the provider, holds a
@@ -214,7 +214,7 @@ export function PayrollClient() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-5 h-5 text-brand-400 animate-spin" />
+          <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
         </div>
       ) : error ? (
         <div className="card p-6 text-center">
@@ -374,7 +374,7 @@ function Stat({
         className={clsx(
           'text-lg font-semibold mt-1',
           mono && 'font-mono tabular-nums',
-          tone === 'warn' ? 'text-amber-400' : 'text-ink-hi',
+          tone === 'warn' ? 'text-amber-400' : 'text-white',
         )}
       >
         {value}

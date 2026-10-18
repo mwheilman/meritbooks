@@ -90,7 +90,7 @@ export function BillingPlanView() {
           ))}
         </div>
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
+          <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
         </div>
       </div>
     );
@@ -126,7 +126,7 @@ export function BillingPlanView() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-ink-hi">{meta.label} plan</h2>
+                <h2 className="text-lg font-semibold text-white">{meta.label} plan</h2>
                 <span className="text-2xs uppercase tracking-wider text-emerald-300/80 bg-emerald-500/10 rounded px-1.5 py-0.5">
                   Current
                 </span>
@@ -136,7 +136,7 @@ export function BillingPlanView() {
           </div>
           <div className="text-right">
             <p className="text-2xs uppercase tracking-wider text-slate-500">Monthly cost</p>
-            <p className="text-3xl font-semibold text-ink-hi font-mono tabular-nums tracking-tight">
+            <p className="text-3xl font-semibold text-white font-mono tabular-nums tracking-tight">
               {formatMoney(breakdown.mrrCents)}
             </p>
             <p className="text-2xs text-slate-500 mt-0.5 font-mono">
@@ -205,7 +205,7 @@ export function BillingPlanView() {
             </tbody>
             <tfoot>
               <tr className="bg-slate-800/20 border-t border-slate-700">
-                <td className="px-5 py-2.5 text-sm font-semibold text-ink-hi" colSpan={3}>
+                <td className="px-5 py-2.5 text-sm font-semibold text-white" colSpan={3}>
                   Total monthly
                 </td>
                 <td className="px-5 py-2.5 text-right font-mono text-emerald-400 tabular-nums font-semibold">
@@ -246,14 +246,14 @@ export function BillingPlanView() {
           <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-slate-300">Bank transfer (ACH)</span>
-              <span className="font-mono text-lg text-ink-hi tabular-nums">{bps(usage.achBps)}</span>
+              <span className="font-mono text-lg text-white tabular-nums">{bps(usage.achBps)}</span>
             </div>
             <p className="text-2xs text-slate-500 mt-1">Of the amount collected · no cap</p>
           </div>
           <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-slate-300">Card</span>
-              <span className="font-mono text-lg text-ink-hi tabular-nums">{bps(usage.cardBps)}</span>
+              <span className="font-mono text-lg text-white tabular-nums">{bps(usage.cardBps)}</span>
             </div>
             <p className="text-2xs text-slate-500 mt-1">Of the amount collected</p>
           </div>
@@ -273,7 +273,7 @@ export function BillingPlanView() {
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold text-ink-hi">Billing activation coming soon</h3>
+              <h3 className="text-sm font-semibold text-white">Billing activation coming soon</h3>
               <BuildStatusBadge
                 status={billingActivated ? 'live' : 'development'}
                 label={billingActivated ? 'Live billing' : 'Live billing — in development'}
@@ -346,7 +346,7 @@ function Kpi({
       </div>
       <p
         className={clsx(
-          'mt-2 text-2xl font-semibold text-ink-hi tracking-tight',
+          'mt-2 text-2xl font-semibold text-white tracking-tight',
           mono && 'font-mono tabular-nums',
         )}
       >

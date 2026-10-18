@@ -102,7 +102,7 @@ export function PrepaidsDashboard() {
       <button
         onClick={runAll}
         disabled={running || dueCount === 0}
-        className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-ink-hi rounded-lg disabled:opacity-40 flex items-center gap-1.5"
+        className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-white rounded-lg disabled:opacity-40 flex items-center gap-1.5"
         title={dueCount === 0 ? 'No amortizations due' : `${dueCount} schedule(s) with a due period`}
       >
         {running ? <Loader2 size={13} className="animate-spin" /> : <PlayCircle size={13} />}
@@ -116,7 +116,7 @@ export function PrepaidsDashboard() {
       </button>
       <button
         onClick={() => setSetup('new')}
-        className="px-3 py-1.5 text-xs font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg flex items-center gap-1.5"
+        className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-1.5"
       >
         <Plus size={13} /> Set up prepaid
       </button>
@@ -124,7 +124,7 @@ export function PrepaidsDashboard() {
   );
 
   if (isLoading) {
-    return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>;
+    return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>;
   }
   if (error) {
     return (
@@ -142,7 +142,7 @@ export function PrepaidsDashboard() {
           {summary && (
             <>
               <span className="text-slate-500">{summary.active} active · {summary.completed} completed</span>
-              <span className="text-slate-300">Prepaid on balance sheet: <span className="font-mono text-ink-hi">{formatMoney(summary.remaining_cents)}</span></span>
+              <span className="text-slate-300">Prepaid on balance sheet: <span className="font-mono text-white">{formatMoney(summary.remaining_cents)}</span></span>
             </>
           )}
         </div>
@@ -161,7 +161,7 @@ export function PrepaidsDashboard() {
             <button onClick={() => setUploading(true)} className="px-4 py-2 text-sm font-medium bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 rounded-lg inline-flex items-center gap-1.5">
               <Sparkles size={14} /> Upload prepaid invoice
             </button>
-            <button onClick={() => setSetup('new')} className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg inline-flex items-center gap-1.5">
+            <button onClick={() => setSetup('new')} className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg inline-flex items-center gap-1.5">
               <Plus size={14} /> Set up manually
             </button>
           </div>
@@ -174,7 +174,7 @@ export function PrepaidsDashboard() {
               <div key={s.id} className="card p-4 border border-slate-800">
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink-hi truncate">{s.memo || 'Prepaid expense'}</p>
+                    <p className="text-sm font-semibold text-white truncate">{s.memo || 'Prepaid expense'}</p>
                     <p className="text-[11px] text-slate-500 truncate">
                       {s.expense_account_name ?? 'expense'} ← {s.prepaid_account_name ?? 'prepaid asset'} · {s.months} mo
                     </p>
@@ -188,7 +188,7 @@ export function PrepaidsDashboard() {
                 <div className="flex items-end justify-between mb-1">
                   <div>
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider">Remaining prepaid</p>
-                    <p className="text-2xl font-mono font-semibold text-ink-hi mt-0.5">{formatMoney(s.remaining_cents)}</p>
+                    <p className="text-2xl font-mono font-semibold text-white mt-0.5">{formatMoney(s.remaining_cents)}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider">Amortized</p>
@@ -219,7 +219,7 @@ export function PrepaidsDashboard() {
                     <button
                       onClick={() => recordOne(s)}
                       disabled={rowBusy === s.id || !s.next_period}
-                      className="px-2.5 py-1 text-[11px] font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-md flex items-center gap-1 disabled:opacity-40"
+                      className="px-2.5 py-1 text-[11px] font-medium bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-md flex items-center gap-1 disabled:opacity-40"
                     >
                       {rowBusy === s.id ? <Loader2 size={11} className="animate-spin" /> : <PlayCircle size={11} />}
                       Record this period

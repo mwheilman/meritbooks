@@ -126,14 +126,14 @@ export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void
       <button onClick={() => setMode('parse')} className="px-3 py-1.5 text-xs font-medium bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 rounded-lg flex items-center gap-1.5">
         <Sparkles size={13} /> Upload loan document
       </button>
-      <button onClick={() => setMode('manual')} className="px-3 py-1.5 text-xs font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg flex items-center gap-1.5">
+      <button onClick={() => setMode('manual')} className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-1.5">
         <Plus size={13} /> Add loan
       </button>
     </div>
   );
 
   if (isLoading) {
-    return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>;
+    return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>;
   }
   if (error) {
     return (
@@ -155,7 +155,7 @@ export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void
         <div className="flex items-center gap-4 text-xs">
           <span className="text-slate-500">{instruments.length} loan{instruments.length === 1 ? '' : 's'}</span>
           {instruments.length > 0 && (
-            <span className="text-slate-300">Outstanding <span className="font-mono text-ink-hi">{formatMoney(totalOutstanding)}</span></span>
+            <span className="text-slate-300">Outstanding <span className="font-mono text-white">{formatMoney(totalOutstanding)}</span></span>
           )}
         </div>
         {Controls}
@@ -173,7 +173,7 @@ export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void
             <button onClick={() => setMode('parse')} className="px-4 py-2 text-sm font-medium bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 rounded-lg inline-flex items-center gap-1.5">
               <Sparkles size={14} /> Upload loan document
             </button>
-            <button onClick={() => setMode('manual')} className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg inline-flex items-center gap-1.5">
+            <button onClick={() => setMode('manual')} className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg inline-flex items-center gap-1.5">
               <Plus size={14} /> Add manually
             </button>
           </div>
@@ -184,7 +184,7 @@ export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void
             <div key={inst.id} className="card p-4 border border-slate-800">
               <div className="flex items-start justify-between gap-2 mb-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-ink-hi truncate">{inst.loan_name}</p>
+                  <p className="text-sm font-semibold text-white truncate">{inst.loan_name}</p>
                   <p className="text-[11px] text-slate-500 truncate">
                     {inst.facility ? `${inst.facility} · ` : ''}{inst.lender ?? 'No lender'} · {Number(inst.interest_rate)}% {inst.rate_type.toLowerCase()} · {inst.payment_frequency.toLowerCase()}
                   </p>
@@ -197,7 +197,7 @@ export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void
               <div className="flex items-end justify-between mb-3">
                 <div>
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider">Current balance</p>
-                  <p className="text-2xl font-mono font-semibold text-ink-hi mt-0.5">{formatMoney(inst.current_balance_cents)}</p>
+                  <p className="text-2xl font-mono font-semibold text-white mt-0.5">{formatMoney(inst.current_balance_cents)}</p>
                   <p className="text-[10px] text-slate-600 mt-0.5">of {formatMoney(inst.principal_cents)} original</p>
                 </div>
                 <div className="text-right">
@@ -214,7 +214,7 @@ export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void
               </div>
 
               <div className="flex items-center gap-2">
-                <button onClick={() => setOpenId(inst.id)} className="px-2.5 py-1 text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-ink-hi rounded-md flex items-center gap-1">
+                <button onClick={() => setOpenId(inst.id)} className="px-2.5 py-1 text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-white rounded-md flex items-center gap-1">
                   View schedule <ChevronRight size={12} />
                 </button>
                 {inst.loan_covenant_id && (
@@ -249,8 +249,8 @@ export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setMode(null)}>
           <div className="card w-full max-w-4xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-ink-hi">Add a loan</h2>
-              <button onClick={() => setMode(null)} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close"><X size={18} /></button>
+              <h2 className="text-lg font-semibold text-white">Add a loan</h2>
+              <button onClick={() => setMode(null)} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close"><X size={18} /></button>
             </div>
             <DebtForm
               initial={null}
@@ -312,7 +312,7 @@ function ScheduleDrawer({ instrumentId, onClose, onPosted }: { instrumentId: str
       <div className="bg-surface-950 border-l border-slate-800 w-full max-w-2xl h-full overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-ink-hi truncate">{inst?.loan_name ?? 'Amortization schedule'}</h2>
+            <h2 className="text-lg font-semibold text-white truncate">{inst?.loan_name ?? 'Amortization schedule'}</h2>
             {inst && (
               <p className="text-[11px] text-slate-500">
                 {formatMoney(inst.principal_cents)} · {Number(inst.interest_rate)}% · {inst.amortization_method === 'INTEREST_ONLY' ? 'interest-only' : 'amortizing'} · {inst.payment_frequency.toLowerCase()}
@@ -320,7 +320,7 @@ function ScheduleDrawer({ instrumentId, onClose, onPosted }: { instrumentId: str
               </p>
             )}
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close"><X size={18} /></button>
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close"><X size={18} /></button>
         </div>
 
         {inst && inst.status === 'ACTIVE' && (
@@ -331,7 +331,7 @@ function ScheduleDrawer({ instrumentId, onClose, onPosted }: { instrumentId: str
             <button onClick={() => setAction('refinance')} className="px-2.5 py-1 text-[11px] font-medium bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-md flex items-center gap-1">
               <ArrowLeftRight size={12} /> Refinance
             </button>
-            <button onClick={() => setAction('payoff')} className="px-2.5 py-1 text-[11px] font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-md flex items-center gap-1">
+            <button onClick={() => setAction('payoff')} className="px-2.5 py-1 text-[11px] font-medium bg-emerald-600/80 hover:bg-emerald-500 text-white rounded-md flex items-center gap-1">
               <CheckCircle2 size={12} /> Pay off
             </button>
           </div>
@@ -345,7 +345,7 @@ function ScheduleDrawer({ instrumentId, onClose, onPosted }: { instrumentId: str
         {actionInst && action === 'payoff' && <PayoffModal inst={actionInst} onClose={() => setAction(null)} onDone={afterAction} />}
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>
+          <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
         ) : error ? (
           <p className="text-sm text-red-400">{error}</p>
         ) : lines.length === 0 ? (
@@ -385,7 +385,7 @@ function ScheduleDrawer({ instrumentId, onClose, onPosted }: { instrumentId: str
                         {l.paid ? (
                           <span className="inline-flex items-center gap-0.5 text-emerald-400 text-[10px]" title="Paid"><CheckCircle2 size={11} /> paid</span>
                         ) : (
-                          <button onClick={() => post(l.period, 'PAYMENT')} disabled={busy !== null} className="px-1.5 py-0.5 rounded bg-brand-500 hover:bg-brand-600 text-white disabled:opacity-40">
+                          <button onClick={() => post(l.period, 'PAYMENT')} disabled={busy !== null} className="px-1.5 py-0.5 rounded bg-emerald-600/80 hover:bg-emerald-500 text-white disabled:opacity-40">
                             {busy === `${l.period}:PAYMENT` ? <Loader2 size={10} className="animate-spin" /> : 'Pay'}
                           </button>
                         )}

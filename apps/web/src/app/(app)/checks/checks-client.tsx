@@ -179,7 +179,7 @@ export function ChecksClient() {
           <button
             onClick={runChecks}
             disabled={running}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40 transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 transition-colors"
           >
             {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Run checks
           </button>
@@ -204,7 +204,7 @@ export function ChecksClient() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-5 h-5 text-brand-400 animate-spin" />
+          <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
         </div>
       ) : error ? (
         <div className="card p-6 text-center">
@@ -271,7 +271,7 @@ export function ChecksClient() {
                           <button
                             onClick={() => approve(row)}
                             disabled={preparedByMe || approvingId === row.id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                           >
                             {approvingId === row.id ? (
                               <Loader2 size={12} className="animate-spin" />
@@ -316,7 +316,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: 'br
       <p
         className={clsx(
           'text-lg font-mono font-semibold mt-1',
-          tone === 'brand' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : 'text-ink-hi',
+          tone === 'brand' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : 'text-white',
         )}
       >
         {value}
@@ -340,7 +340,7 @@ function WorkflowStepper({ current }: { current: number }) {
               i < current
                 ? 'bg-emerald-600/15 text-emerald-300'
                 : i === current
-                  ? 'bg-brand-500 text-white'
+                  ? 'bg-emerald-600 text-white'
                   : 'bg-surface-950 text-slate-500 border border-slate-800',
             )}
           >
@@ -508,7 +508,7 @@ function DisbursementBatchPanel({
     <div className="card p-4 space-y-4 border border-emerald-900/40">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-sm font-semibold text-ink-hi flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-white flex items-center gap-2">
             <Banknote size={15} className="text-emerald-400" /> Pay run — {controls.itemCount} payment(s) to{' '}
             {controls.vendorCount} vendor(s)
           </h2>
@@ -536,7 +536,7 @@ function DisbursementBatchPanel({
           <button
             onClick={release}
             disabled={releasing || (controls.hasBlockingDuplicates && !override)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {releasing ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Release batch
           </button>
@@ -662,7 +662,7 @@ function DisbursementBatchPanel({
                     onChange={(e) => setCheckDrafts((d) => ({ ...d, [it.approvalId]: e.target.value }))}
                     placeholder="Check #"
                     inputMode="numeric"
-                    className="w-24 px-2 py-1 rounded-md bg-surface-950 border border-slate-800 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-brand-600"
+                    className="w-24 px-2 py-1 rounded-md bg-surface-950 border border-slate-800 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-600"
                   />
                 </div>
               </div>

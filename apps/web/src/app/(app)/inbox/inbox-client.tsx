@@ -112,7 +112,7 @@ function InboxRow({
       className={clsx(
         'group relative flex items-center gap-4 rounded-lg border px-4 py-3 transition',
         active
-          ? 'border-emerald-500/40 bg-slate-800/50 ring-1 ring-inset ring-brand-500/20'
+          ? 'border-emerald-500/40 bg-slate-800/50 ring-1 ring-inset ring-emerald-500/20'
           : 'border-slate-800 bg-surface-900 hover:border-slate-700 hover:bg-slate-800/40',
       )}
     >
@@ -126,7 +126,7 @@ function InboxRow({
           title={`${sev.label} priority`}
         />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-ink-hi">{item.title}</p>
+          <p className="truncate text-sm font-medium text-white">{item.title}</p>
           {item.subtitle && (
             <p className="mt-0.5 truncate text-xs text-slate-500">{item.subtitle}</p>
           )}
@@ -166,7 +166,7 @@ function InboxRow({
                       snooze.snooze(item.id, p.ms);
                       setMenuOpen(false);
                     }}
-                    className="block w-full px-3 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800/60 hover:text-ink-hi"
+                    className="block w-full px-3 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800/60 hover:text-white"
                   >
                     {p.label}
                   </button>
@@ -178,7 +178,7 @@ function InboxRow({
       )}
 
       <span className="flex flex-none items-center gap-1.5">
-        <span className="rounded-md border border-slate-700 bg-slate-800/40 px-2 py-1 text-xs font-medium text-slate-300 transition group-hover:border-brand-500/40 group-hover:text-brand-400">
+        <span className="rounded-md border border-slate-700 bg-slate-800/40 px-2 py-1 text-xs font-medium text-slate-300 transition group-hover:border-emerald-500/40 group-hover:text-emerald-400">
           {item.actionLabel}
         </span>
         <ChevronRight size={16} className="text-slate-600 transition group-hover:text-slate-400" />
@@ -465,7 +465,7 @@ function SnoozedRow({ item, onWake }: { item: InboxItem; onWake: () => void }) {
       </div>
       <button
         onClick={onWake}
-        className="inline-flex flex-none items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:border-brand-500/40 hover:text-brand-400"
+        className="inline-flex flex-none items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:border-emerald-500/40 hover:text-emerald-400"
       >
         <Undo2 size={13} />
         Wake

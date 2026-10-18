@@ -25,7 +25,7 @@ export function JournalEntryPeek({ entryId }: { entryId: string }) {
   return (
     <div className="p-3 text-xs">
       <div className="flex items-center justify-between mb-2">
-        <span className="font-mono font-semibold text-ink-hi">{data.entryNumber}</span>
+        <span className="font-mono font-semibold text-white">{data.entryNumber}</span>
         <span className="text-2xs text-slate-500">{data.entryDate}</span>
       </div>
       {data.memo && <div className="text-2xs text-slate-400 mb-2 truncate">{data.memo}</div>}

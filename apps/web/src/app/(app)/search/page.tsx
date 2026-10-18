@@ -164,9 +164,9 @@ function SearchInner() {
   }, [phase.kind, total, allGroups.length]);
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-8" style={{ fontFamily: 'var(--font-sans, inherit)' }}>
+    <div className="mx-auto w-full max-w-4xl px-4 py-8" style={{ fontFamily: 'var(--font-jakarta, inherit)' }}>
       <header className="mb-6">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold text-ink-hi">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-white">
           <Search size={22} className="text-emerald-400" /> Search
         </h1>
         <p className="mt-1 text-sm text-slate-400">
@@ -175,9 +175,9 @@ function SearchInner() {
       </header>
 
       {/* Search box */}
-      <div className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 shadow-lg focus-within:border-brand-500/60">
+      <div className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 shadow-lg focus-within:border-emerald-500/60">
         {phase.kind === 'loading'
-          ? <Loader2 size={18} className="shrink-0 animate-spin text-brand-400" />
+          ? <Loader2 size={18} className="shrink-0 animate-spin text-emerald-400" />
           : <Search size={18} className="shrink-0 text-slate-500" />}
         <input
           ref={inputRef}
@@ -185,7 +185,7 @@ function SearchInner() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="e.g. “Home Depot charges over $500 last month” or “invoice 1042”"
           aria-label="Search the ledger"
-          className="flex-1 bg-transparent text-[15px] text-ink-hi placeholder:text-slate-500 focus:outline-none"
+          className="flex-1 bg-transparent text-[15px] text-white placeholder:text-slate-500 focus:outline-none"
         />
         {query && (
           <button onClick={() => { setQuery(''); setPhase({ kind: 'idle' }); inputRef.current?.focus(); }}
@@ -207,7 +207,7 @@ function SearchInner() {
             <div className="flex flex-wrap gap-2">
               {SUGGESTIONS.map((s) => (
                 <button key={s} onClick={() => setQuery(s)}
-                  className="rounded-full border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-300 hover:border-brand-500/50 hover:text-ink-hi transition-colors">
+                  className="rounded-full border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-300 hover:border-emerald-500/50 hover:text-white transition-colors">
                   {s}
                 </button>
               ))}
@@ -248,7 +248,7 @@ function SearchInner() {
                   className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                     typeFilter === null
                       ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
-                      : 'border-slate-700 bg-slate-800/60 text-slate-400 hover:text-ink-hi'
+                      : 'border-slate-700 bg-slate-800/60 text-slate-400 hover:text-white'
                   }`}
                 >
                   All ({total})
@@ -264,7 +264,7 @@ function SearchInner() {
                       className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
                         active
                           ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
-                          : 'border-slate-700 bg-slate-800/60 text-slate-400 hover:text-ink-hi'
+                          : 'border-slate-700 bg-slate-800/60 text-slate-400 hover:text-white'
                       }`}
                     >
                       <Icon size={12} /> {TYPE_LABEL[g.type]} ({g.results.length})
@@ -286,20 +286,20 @@ function SearchInner() {
                     {group.results.map((r) => (
                       <li key={`${r.type}-${r.id}`}>
                         <Link href={r.href}
-                          className="group flex items-start gap-3 rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-brand-500/40 hover:bg-slate-800/60 transition-colors">
+                          className="group flex items-start gap-3 rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-emerald-500/40 hover:bg-slate-800/60 transition-colors">
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium text-ink-hi">{r.title}</p>
+                            <p className="truncate text-sm font-medium text-white">{r.title}</p>
                             <p className="truncate text-xs text-slate-400">{r.subtitle}</p>
                             {r.headline && r.headline.length > 0
                               ? <Headline segments={r.headline} />
                               : r.snippet && <p className="mt-0.5 truncate text-xs text-slate-500">{r.snippet}</p>}
                           </div>
                           {r.amountCents != null && (
-                            <span className="shrink-0 text-sm text-slate-300" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+                            <span className="shrink-0 text-sm text-slate-300" style={{ fontFamily: 'var(--font-jetbrains, monospace)' }}>
                               {formatCents(r.amountCents)}
                             </span>
                           )}
-                          <ArrowRight size={15} className="mt-0.5 shrink-0 text-slate-600 group-hover:text-brand-400 transition-colors" />
+                          <ArrowRight size={15} className="mt-0.5 shrink-0 text-slate-600 group-hover:text-emerald-400 transition-colors" />
                         </Link>
                       </li>
                     ))}

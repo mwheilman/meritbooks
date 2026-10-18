@@ -804,7 +804,7 @@ function FlagDialog({
         aria-labelledby="flag-dialog-title"
         className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] max-w-[90vw] bg-surface-900 border border-slate-800 rounded-xl shadow-2xl z-50 p-6"
       >
-        <h3 id="flag-dialog-title" className="text-lg font-semibold text-ink-hi mb-1">Flag for Review</h3>
+        <h3 id="flag-dialog-title" className="text-lg font-semibold text-white mb-1">Flag for Review</h3>
         <p className="text-sm text-slate-400 mb-4 truncate">{transaction.description}</p>
         <label htmlFor="flag-reason" className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
           Reason <span className="text-red-400">*</span>
@@ -821,14 +821,14 @@ function FlagDialog({
         <div className="flex items-center justify-end gap-3 mt-4">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-md text-sm text-slate-400 hover:text-slate-200 hover:bg-navy/[0.04] transition-colors"
+            className="px-4 py-2 rounded-md text-sm text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={() => onSubmit(reason)}
             disabled={reason.trim().length === 0 || isLoading}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-amber-700 text-white hover:bg-amber-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-amber-600 text-white hover:bg-amber-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed transition-colors"
           >
             Flag Transaction
           </button>

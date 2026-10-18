@@ -273,7 +273,7 @@ export function DebtForm({
     onSaved();
   }
 
-  const inputCls = 'w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-ink-hi focus:border-brand-500 focus:outline-none';
+  const inputCls = 'w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-white focus:border-emerald-500 focus:outline-none';
   const label = 'block text-[10px] text-slate-500 mb-1 uppercase tracking-wide';
 
   return (
@@ -501,8 +501,8 @@ export function DebtForm({
       </div>
 
       <div className="flex items-center justify-end gap-2">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-ink-hi">Cancel</button>
-        <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
+        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
           {saving && <Loader2 size={14} className="animate-spin" />}
           {existing ? <>Bring over loan &amp; build schedule</> : <>Create loan &amp; generate schedule</>}
         </button>

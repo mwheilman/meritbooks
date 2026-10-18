@@ -133,7 +133,7 @@ export function CustomerPortalAccess({ customerId }: { customerId: string }) {
               value={active.url ?? ''}
               onFocus={(e) => e.currentTarget.select()}
               aria-label="Portal link URL"
-              className="flex-1 min-w-0 px-2 py-1.5 rounded-md bg-slate-950 border border-slate-700 text-2xs font-mono text-slate-300 focus:outline-none focus:border-brand-500/50"
+              className="flex-1 min-w-0 px-2 py-1.5 rounded-md bg-slate-950 border border-slate-700 text-2xs font-mono text-slate-300 focus:outline-none focus:border-emerald-500/50"
             />
             <button
               onClick={copy}
@@ -189,13 +189,13 @@ export function CustomerPortalAccess({ customerId }: { customerId: string }) {
               value={expiry}
               onChange={(e) => setExpiry(e.target.value)}
               aria-label="Link expiration date (optional)"
-              className="px-2 py-1 rounded-md bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-brand-500/50"
+              className="px-2 py-1 rounded-md bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
             />
           </div>
           <button
             onClick={mint}
             disabled={busy !== null}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {busy === 'mint' ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />} Create portal link
           </button>

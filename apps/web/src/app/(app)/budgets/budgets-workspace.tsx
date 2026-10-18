@@ -76,7 +76,7 @@ export function BudgetsWorkspace() {
           <select
             value={locationId}
             onChange={(e) => { setCompanyTouched(true); setLocationId(e.target.value); setDepartmentId(''); }}
-            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi max-w-[240px]"
+            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white max-w-[240px]"
           >
             <option value="">All Companies{tab === 'variance' ? ' (Consolidated)' : ''}</option>
             {locations.map((l) => (
@@ -90,7 +90,7 @@ export function BudgetsWorkspace() {
           <select
             value={fiscalYear}
             onChange={(e) => setFiscalYear(parseInt(e.target.value, 10))}
-            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono"
+            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono"
           >
             {FISCAL_YEARS.map((y) => <option key={y} value={y}>FY {y}</option>)}
           </select>
@@ -102,7 +102,7 @@ export function BudgetsWorkspace() {
             <select
               value={departmentId}
               onChange={(e) => setDepartmentId(e.target.value)}
-              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi max-w-[220px]"
+              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white max-w-[220px]"
             >
               <option value="">Company-level (no dept)</option>
               {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -143,7 +143,7 @@ function TabButton({ active, icon: Icon, label, onClick }: {
       onClick={onClick}
       className={clsx(
         'flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors',
-        active ? 'bg-brand-500/10 text-brand-300' : 'text-slate-400 hover:text-ink-hi hover:bg-slate-800/50'
+        active ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
       )}
     >
       <Icon size={15} />{label}

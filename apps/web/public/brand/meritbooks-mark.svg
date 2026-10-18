@@ -1,8 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="MeritBooks mark">
-  <!-- Original geometric M monogram on a navy tile, with the underline-under-a-total rule. -->
-  <g>
-    <rect x="0" y="0" width="100" height="100" rx="24" fill="#0A1628"/>
-    <path d="M27 70V31L50 55L73 31V70" fill="none" stroke="#3B82F6" stroke-width="10" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="4"/>
-    <rect x="22" y="79" width="56" height="4" rx="1" fill="#2563EB"/>
-  </g>
+  <!-- The Total: three entry bars (right-aligned), a subtotal rule, a grand-total double-rule -->
+  <rect x="40" y="19" width="48" height="10" rx="2" fill="#10b981"/>
+  <rect x="24" y="35" width="64" height="10" rx="2" fill="#10b981"/>
+  <rect x="52" y="51" width="36" height="10" rx="2" fill="#10b981"/>
+  <rect x="16" y="66" width="72" height="4" rx="1" fill="#059669"/>
+  <rect x="16" y="76" width="72" height="4" rx="1" fill="#34d399"/>
+  <rect x="16" y="82" width="72" height="4" rx="1" fill="#34d399"/>
 </svg>

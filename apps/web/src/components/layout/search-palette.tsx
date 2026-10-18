@@ -224,7 +224,7 @@ export function SearchPalette({ open, onClose }: SearchPaletteProps) {
             spellCheck={false}
           />
           {scopedLocationId && activeCompany && (
-            <span className="shrink-0 rounded-md bg-brand-500/10 px-2 py-1 text-2xs font-medium text-brand-300">
+            <span className="shrink-0 rounded-md bg-brand-500/10 px-2 py-1 text-2xs font-medium text-brand-400">
               {activeCompany.shortCode}
             </span>
           )}
@@ -249,7 +249,7 @@ export function SearchPalette({ open, onClose }: SearchPaletteProps) {
               <p className="text-sm text-red-400">{error}</p>
               <button
                 onClick={() => setQuery((q) => q + ' ')}
-                className="mt-3 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-navy/[0.03]"
+                className="mt-3 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/[0.03]"
               >
                 Retry
               </button>
@@ -295,13 +295,13 @@ export function SearchPalette({ open, onClose }: SearchPaletteProps) {
                         onClick={() => go(result)}
                         className={clsx(
                           'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors',
-                          isActive ? 'bg-brand-500/10' : 'hover:bg-navy/[0.03]',
+                          isActive ? 'bg-brand-500/10' : 'hover:bg-white/[0.03]',
                         )}
                       >
                         <div
                           className={clsx(
                             'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                            isActive ? 'bg-brand-500/20 text-brand-300' : 'bg-slate-800 text-slate-400',
+                            isActive ? 'bg-brand-500/20 text-brand-400' : 'bg-slate-800 text-slate-400',
                           )}
                         >
                           <Icon size={15} />

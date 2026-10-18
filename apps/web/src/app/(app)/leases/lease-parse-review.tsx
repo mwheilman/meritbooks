@@ -188,7 +188,7 @@ export function LeaseParseReview({
   }
 
   const inputCls =
-    'w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-ink-hi focus:border-brand-500 focus:outline-none';
+    'w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-white focus:border-emerald-500 focus:outline-none';
   const flag = (field: string) => (flags.includes(field) ? 'border-amber-500/60 ring-1 ring-amber-500/30' : '');
 
   return (
@@ -198,13 +198,13 @@ export function LeaseParseReview({
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-indigo-400" />
             <div>
-              <h2 className="text-lg font-semibold text-ink-hi">Set up a lease from its agreement</h2>
+              <h2 className="text-lg font-semibold text-white">Set up a lease from its agreement</h2>
               <p className="text-[11px] text-slate-500">
                 Drop a lease — AI proposes the terms and classification; you confirm. Nothing is booked until you confirm.
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close">
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -226,7 +226,7 @@ export function LeaseParseReview({
               phase === 'parsing'
                 ? 'border-indigo-500/40 bg-indigo-500/5 cursor-default'
                 : dragOver
-                  ? 'border-brand-500 bg-brand-500/5 cursor-pointer'
+                  ? 'border-emerald-500 bg-emerald-500/5 cursor-pointer'
                   : 'border-slate-700 hover:border-slate-600 cursor-pointer',
             )}
           >
@@ -352,11 +352,11 @@ export function LeaseParseReview({
                 On confirm, MeritBooks computes the ROU asset + lease liability at present value and the full amortization schedule.
               </p>
               <div className="flex items-center gap-2">
-                <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-ink-hi">Cancel</button>
+                <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
                 <button
                   onClick={confirm}
                   disabled={phase === 'saving'}
-                  className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2"
                 >
                   {phase === 'saving' && <Loader2 size={14} className="animate-spin" />}
                   Confirm &amp; create lease

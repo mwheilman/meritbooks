@@ -80,9 +80,9 @@ export function CompaniesPanel() {
     }
   }, [drafts, refetch]);
 
-  const selectCls = 'px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi focus:outline-none focus:border-brand-500/50';
+  const selectCls = 'px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500/50';
 
-  if (isLoading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 text-brand-400 animate-spin" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 text-emerald-400 animate-spin" /></div>;
   if (error) return (
     <div className="p-6 text-center">
       <AlertCircle className="w-6 h-6 mx-auto text-red-400 mb-2" />
@@ -104,7 +104,7 @@ export function CompaniesPanel() {
         <Sparkles size={16} className="text-brand-400" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-ink-hi">Guided setup wizard</p>
+        <p className="text-sm font-medium text-white">Guided setup wizard</p>
         <p className="text-xs text-slate-500">Walk through company, chart of accounts, opening balances, bank feed, and team invites.</p>
       </div>
       <ArrowRight size={16} className="text-slate-500 group-hover:text-brand-400 transition-colors shrink-0" />
@@ -113,13 +113,13 @@ export function CompaniesPanel() {
     <div className="card p-6 space-y-5">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-ink-hi">Companies</h2>
+          <h2 className="text-lg font-semibold text-white">Companies</h2>
           <p className="text-xs text-slate-500 mt-0.5">
             {entities.length} {entities.length === 1 ? 'entity' : 'entities'} · base currency {data?.baseCurrency ?? 'USD'} · each keeps its own fiscal calendar
           </p>
         </div>
         <Link href="/settings/new-entity"
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 transition-colors">
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 transition-colors">
           <Plus size={14} /> Add Company
         </Link>
       </div>
@@ -128,7 +128,7 @@ export function CompaniesPanel() {
         <div className="py-10 text-center border border-dashed border-slate-800 rounded-lg">
           <Building2 className="w-8 h-8 mx-auto text-slate-600 mb-2" />
           <p className="text-sm text-slate-400">No entities yet.</p>
-          <Link href="/settings/new-entity" className="text-sm text-brand-400 hover:text-brand-300 mt-1 inline-block">Add your first company</Link>
+          <Link href="/settings/new-entity" className="text-sm text-emerald-400 hover:text-emerald-300 mt-1 inline-block">Add your first company</Link>
         </div>
       ) : (
         <div className="space-y-2">
@@ -139,7 +139,7 @@ export function CompaniesPanel() {
               <div key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-lg bg-slate-800/30 border border-slate-800">
                 <span className="w-10 h-10 rounded-lg bg-slate-700 text-[10px] font-mono text-slate-300 flex items-center justify-center shrink-0">{e.shortCode}</span>
                 <div className="min-w-[9rem] flex-1">
-                  <p className="text-sm text-ink-hi font-medium">{e.name}</p>
+                  <p className="text-sm text-white font-medium">{e.name}</p>
                   <p className="text-xs text-slate-500">{e.industry ?? 'Uncategorized'}</p>
                 </div>
                 <div className="flex flex-col">
@@ -156,12 +156,12 @@ export function CompaniesPanel() {
                     {Object.entries(REV_REC_LABELS).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                   </select>
                 </div>
-                <span className={clsx('px-2 py-0.5 rounded text-[10px] font-medium shrink-0', e.isActive ? 'bg-brand-500/10 text-brand-300' : 'bg-slate-500/10 text-slate-500')}>
+                <span className={clsx('px-2 py-0.5 rounded text-[10px] font-medium shrink-0', e.isActive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-500/10 text-slate-500')}>
                   {e.isActive ? 'Active' : 'Inactive'}
                 </span>
                 <button onClick={() => save(e)} disabled={!dirty || savingId === e.id}
                   className={clsx('flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0',
-                    dirty ? 'bg-brand-500 text-white hover:bg-brand-600' : 'bg-slate-800 text-slate-600 cursor-not-allowed')}>
+                    dirty ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-slate-800 text-slate-600 cursor-not-allowed')}>
                   {savingId === e.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save
                 </button>
               </div>

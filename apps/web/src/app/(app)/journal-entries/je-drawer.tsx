@@ -182,7 +182,7 @@ export function JournalEntryDrawer({ entryId, onClose }: { entryId: string | nul
 
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Lines</h3>
-            <button onClick={() => setLines((p) => [...p, { accountId: '', debitCents: 0, creditCents: 0, memo: null }])} className="inline-flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300"><Plus size={12} /> Add line</button>
+            <button onClick={() => setLines((p) => [...p, { accountId: '', debitCents: 0, creditCents: 0, memo: null }])} className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300"><Plus size={12} /> Add line</button>
           </div>
           <div className="space-y-2">
             {lines.map((l, i) => (
@@ -204,8 +204,8 @@ export function JournalEntryDrawer({ entryId, onClose }: { entryId: string | nul
           </div>
 
           <div className="mt-4 flex items-center justify-end gap-2">
-            <button onClick={() => { setEditing(false); setNeedsOverride(false); }} className="px-4 py-2 rounded-md text-sm text-slate-400 hover:text-slate-200 hover:bg-navy/[0.04]">Cancel</button>
-            <button onClick={save} disabled={saving || !balanced} className={clsx('inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium', saving || !balanced ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-brand-500 text-white hover:bg-brand-600')}>
+            <button onClick={() => { setEditing(false); setNeedsOverride(false); }} className="px-4 py-2 rounded-md text-sm text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]">Cancel</button>
+            <button onClick={save} disabled={saving || !balanced} className={clsx('inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium', saving || !balanced ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />} Save
             </button>
           </div>

@@ -160,20 +160,20 @@ export function BasisAdjustmentsManager() {
         <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-700">
           {(['TAX', 'CASH', 'CUSTOM'] as Basis[]).map((b) => (
             <button key={b} onClick={() => { setBasis(b); resetForm(); }}
-              className={clsx('px-2.5 py-1 rounded-md text-xs font-medium', basis === b ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-ink-hi')}>
+              className={clsx('px-2.5 py-1 rounded-md text-xs font-medium', basis === b ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white')}>
               {b === 'TAX' ? 'Tax' : b === 'CASH' ? 'Cash' : 'Custom'}
             </button>
           ))}
         </div>
         <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value) || nowYear)}
-          className="w-24 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono" aria-label="Year" />
+          className="w-24 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono" aria-label="Year" />
         <select value={month} onChange={(e) => setMonth(Number(e.target.value))}
-          className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi" aria-label="Month">
+          className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white" aria-label="Month">
           {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
         </select>
         {basis === 'CUSTOM' && (
           <input type="text" value={customLabel} onChange={(e) => setCustomLabel(e.target.value)} placeholder="Custom basis name (e.g. Bank covenant)"
-            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi w-56" />
+            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white w-56" />
         )}
         {basis === 'TAX' && (
           <button onClick={derive} disabled={deriving}
@@ -200,14 +200,14 @@ export function BasisAdjustmentsManager() {
       {/* ─── Add / edit form ─── */}
       <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-ink-hi">{editingId ? 'Edit adjustment' : 'Add adjustment'}</p>
-          {editingId && <button onClick={resetForm} className="text-xs text-slate-500 hover:text-ink-hi flex items-center gap-1"><X size={12} /> Cancel edit</button>}
+          <p className="text-sm font-semibold text-white">{editingId ? 'Edit adjustment' : 'Add adjustment'}</p>
+          {editingId && <button onClick={resetForm} className="text-xs text-slate-500 hover:text-white flex items-center gap-1"><X size={12} /> Cancel edit</button>}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
           <div className="md:col-span-4">
             <label className="block text-2xs uppercase text-slate-500 mb-1">Account</label>
             <select value={accountId} onChange={(e) => setAccountId(e.target.value)} disabled={!!editingId}
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi disabled:opacity-60">
+              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white disabled:opacity-60">
               <option value="">Select account…</option>
               {accountOptions.map((a) => <option key={a.id} value={a.id}>{a.accountNumber} · {a.name}</option>)}
             </select>
@@ -215,12 +215,12 @@ export function BasisAdjustmentsManager() {
           <div className="md:col-span-3">
             <label className="block text-2xs uppercase text-slate-500 mb-1" title="Signed delta to the account's natural balance. + increases (more expense / revenue / asset), − decreases.">Amount ($, signed)</label>
             <input type="text" inputMode="decimal" value={amountStr} onChange={(e) => setAmountStr(e.target.value)} placeholder="e.g. -1250.00"
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono" />
+              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono" />
           </div>
           <div className="md:col-span-2">
             <label className="block text-2xs uppercase text-slate-500 mb-1">Type</label>
             <select value={adjType} onChange={(e) => setAdjType(e.target.value as AdjType | '')}
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi">
+              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
               <option value="">—</option>
               <option value="TIMING">Timing</option>
               <option value="PERMANENT">Permanent</option>
@@ -230,7 +230,7 @@ export function BasisAdjustmentsManager() {
           <div className="md:col-span-3">
             <label className="block text-2xs uppercase text-slate-500 mb-1">Description</label>
             <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional note"
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi" />
+              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white" />
           </div>
         </div>
         <div className="flex items-center gap-2 mt-3">

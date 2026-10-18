@@ -89,7 +89,7 @@ function AccountPicker({ value, label, onChange, locationId }: {
         className={clsx(
           'w-full text-left px-2.5 py-1.5 rounded-lg border text-sm truncate',
           value
-            ? 'bg-slate-800 border-slate-700 text-ink-hi'
+            ? 'bg-slate-800 border-slate-700 text-white'
             : 'bg-slate-800/50 border-slate-700/50 text-slate-500'
         )}
       >
@@ -108,7 +108,7 @@ function AccountPicker({ value, label, onChange, locationId }: {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by number or name..."
                 aria-label="Search accounts by number or name"
-                className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-500 focus:outline-none focus:border-brand-500/50"
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50"
                 autoFocus
               />
             </div>
@@ -183,7 +183,7 @@ function DollarInput({ value, onChange, disabled, placeholder, ariaLabel }: {
           'w-full pl-5 pr-2 py-1.5 rounded-lg border text-sm font-mono text-right',
           disabled
             ? 'bg-slate-900/50 border-slate-800 text-slate-600 cursor-not-allowed'
-            : 'bg-slate-800 border-slate-700 text-ink-hi focus:outline-none focus:border-brand-500/50'
+            : 'bg-slate-800 border-slate-700 text-white focus:outline-none focus:border-emerald-500/50'
         )}
       />
     </div>
@@ -289,8 +289,8 @@ export function JournalEntryForm({ onClose, onSuccess }: {
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-        <h2 className="text-lg font-semibold text-ink-hi">New Journal Entry</h2>
-        <button onClick={onClose} aria-label="Close new journal entry form" className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-ink-hi transition-colors">
+        <h2 className="text-lg font-semibold text-white">New Journal Entry</h2>
+        <button onClick={onClose} aria-label="Close new journal entry form" className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
           <X size={18} />
         </button>
       </div>
@@ -303,7 +303,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
             <select
               value={locationId}
               onChange={(e) => setLocationId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
             >
               <option value="">Select company...</option>
               {locations.map((loc) => (
@@ -317,7 +317,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
               type="date"
               value={entryDate}
               onChange={(e) => setEntryDate(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi font-mono"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono"
             />
           </div>
           <div>
@@ -325,7 +325,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
             <select
               value={entryType}
               onChange={(e) => setEntryType(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
             >
               <option value="STANDARD">Standard</option>
               <option value="ADJUSTING">Adjusting</option>
@@ -340,7 +340,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
               placeholder="Description of this entry..."
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-600"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600"
             />
           </div>
         </div>
@@ -397,7 +397,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
                       onChange={(e) => updateLine(line.key, 'memo', e.target.value)}
                       placeholder="—"
                       aria-label={`Line ${idx + 1} memo`}
-                      className="w-full px-2 py-1.5 bg-slate-800/50 border border-slate-700/50 rounded-lg text-xs text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50"
+                      className="w-full px-2 py-1.5 bg-slate-800/50 border border-slate-700/50 rounded-lg text-xs text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50"
                     />
                   </td>
                   <td className="px-3 py-2 text-center">
@@ -423,18 +423,18 @@ export function JournalEntryForm({ onClose, onSuccess }: {
                   <button
                     type="button"
                     onClick={addLine}
-                    className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 transition-colors"
+                    className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
                   >
                     <Plus size={13} /> Add line
                   </button>
                 </td>
                 <td className="px-3 py-2.5 text-right">
-                  <span className={clsx('text-sm font-mono font-semibold', totalDebits > 0 ? 'text-ink-hi' : 'text-slate-600')}>
+                  <span className={clsx('text-sm font-mono font-semibold', totalDebits > 0 ? 'text-white' : 'text-slate-600')}>
                     {formatMoney(dollarsToCents(totalDebits))}
                   </span>
                 </td>
                 <td className="px-3 py-2.5 text-right">
-                  <span className={clsx('text-sm font-mono font-semibold', totalCredits > 0 ? 'text-ink-hi' : 'text-slate-600')}>
+                  <span className={clsx('text-sm font-mono font-semibold', totalCredits > 0 ? 'text-white' : 'text-slate-600')}>
                     {formatMoney(dollarsToCents(totalCredits))}
                   </span>
                 </td>
@@ -477,7 +477,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
               type="checkbox"
               checked={postImmediately}
               onChange={(e) => setPostImmediately(e.target.checked)}
-              className="rounded border-slate-600 bg-slate-800 accent-brand-500 focus:ring-brand-500/20"
+              className="rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500/20"
             />
             Post immediately
           </label>
@@ -485,7 +485,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-ink-hi hover:bg-slate-800 transition-colors"
+              className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             >
               Cancel
             </button>
@@ -498,8 +498,8 @@ export function JournalEntryForm({ onClose, onSuccess }: {
                 submitting || !isBalanced || !locationId
                   ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
                   : postImmediately
-                    ? 'bg-brand-500 text-white hover:bg-brand-600'
-                    : 'bg-slate-700 text-ink-hi hover:bg-slate-600'
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                    : 'bg-slate-700 text-white hover:bg-slate-600'
               )}
             >
               {submitting ? (

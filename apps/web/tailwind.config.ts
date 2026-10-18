@@ -1,309 +1,133 @@
 import type { Config } from 'tailwindcss';
-import twColors from 'tailwindcss/colors';
-
-/**
- * ─────────────────────────────────────────────────────────────────────────────
- * MeritBooks theme — Merit brand (Feb 2026 Style Guide) as the DEFAULT TENANT
- * theme. See docs/DESIGN-SYSTEM.md for the system and the token tables.
- *
- * WHITE-LABEL RULE: brand + neutral colors resolve to CSS variables declared in
- * `src/styles/globals.css :root` (channel triplets, so `/alpha` modifiers work).
- * A tenant re-skins by overriding those variables (see lib/brand/tenant-brand.ts);
- * no component names a tenant or a brand hex.
- *
- * RE-SKIN STRATEGY: the app was authored dark (≈6k `slate-*`, `surface-*`,
- * `emerald-*`, `brand-*` utilities). Rather than rewrite every file, this config
- * remaps those palettes PER UTILITY (text vs background vs border) so the same
- * class names now render the light Merit theme with correct contrast:
- *   • text-slate-50…500   → navy … steel … slate ink (dark on light)
- *   • bg-slate/surface-*  → warm-white / canvas / white surfaces
- *   • border-slate-*      → warm hairlines
- *   • status palettes      → text shades darkened to pass WCAG AA on light;
- *                            dark-tinted fills (900/950) flipped to light tints
- *   • brand / em           → Merit Electric Blue (the 5% accent)
- * Status meaning (success green, danger red, warning amber, AI indigo) is kept.
- * ─────────────────────────────────────────────────────────────────────────────
- */
-
-/** Resolve a channel-triplet CSS variable with Tailwind's alpha support. */
-const v = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
-
-// ── Neutral ramps (replace Tailwind slate/gray/zinc/neutral/stone) ───────────
-// The dark theme used LOW numbers for text and HIGH numbers for surfaces. Each
-// utility gets the ramp that keeps that intent on a light canvas.
-const neutralText = {
-  50: v('ink-hi'), // headings, the number            (was ≈ white)
-  100: v('ink-hi'),
-  200: v('ink-strong'), // strong body / input text
-  300: v('ink'), // body copy — Merit Steel
-  400: v('ink-soft'), // secondary
-  500: v('ink-mid'), // labels, column headers — AA floor
-  600: v('ink-dim'), // captions, placeholders, disabled — Merit Slate
-  700: v('ink-faint'), // decorative only (separators, disabled glyphs)
-  // 800–950 only ever appeared as dark text ON light fills/documents.
-  800: v('ink-strong'),
-  900: v('ink-hi'),
-  950: v('ink-hi'),
-};
-const neutralBg = {
-  50: v('surface'),
-  100: v('surface'),
-  200: v('inset-soft'),
-  300: v('fill-strong'),
-  400: v('ink-dim'), // neutral dots / bars
-  500: v('ink-dim'),
-  600: v('ink-faint'), // neutral chips / toggle knobs on dark → light grey
-  700: v('fill-strong'), // hover fill for secondary controls
-  800: v('fill'), // control fill: secondary buttons, chips, tracks, kbd
-  900: v('surface'), // cards / panels (white)
-  950: v('canvas'), // insets, wells, page-level wrappers
-};
-const neutralLine = {
-  50: v('hairline-soft'),
-  100: v('hairline-soft'),
-  200: v('hairline'),
-  300: v('hairline-strong'),
-  400: v('ink-faint'),
-  500: v('ink-dim'), // checkbox / emphasized outlines
-  600: v('ink-faint'), // hover border (darker than 700)
-  700: v('hairline-strong'), // inputs, interactive borders
-  800: v('hairline'), // default hairline / dividers
-  900: v('hairline-soft'),
-  950: v('fill'),
-};
-const NEUTRALS = ['slate', 'gray', 'zinc', 'neutral', 'stone'] as const;
-const forNeutrals = (ramp: Record<number, string>) =>
-  Object.fromEntries(NEUTRALS.map((n) => [n, ramp]));
-
-// ── Accent ramp (Merit Electric Blue) ────────────────────────────────────────
-const accentBase = {
-  50: v('brand-wash'),
-  100: v('brand-wash-2'),
-  200: v('brand-accent-deep'),
-  300: v('brand-accent-strong'),
-  400: v('brand-accent'),
-  500: v('brand-accent'),
-  600: v('brand-accent-strong'),
-  700: v('brand-accent-deep'),
-  800: v('brand-accent-line'),
-  900: v('brand-wash-2'),
-  950: v('brand-wash'),
-};
-const accentText = {
-  ...accentBase,
-  // text-brand-300 was the "brighter" hover tint on dark → darker on light.
-  100: v('brand-accent-deep'),
-  800: v('brand-accent-deep'),
-  900: v('brand-accent-deep'),
-  950: v('brand-accent-deep'),
-};
-const accentBg = {
-  ...accentBase,
-  // bg-brand-400 was a lighter hover of bg-brand-500; on light we press darker
-  // so white button text stays ≥ AA.
-  400: v('brand-accent-strong'),
-};
-
-// ── Status palettes ──────────────────────────────────────────────────────────
-// Text "fg" shades chosen to clear 4.5:1 on white AND on the palette's own
-// 500@20% soft fill (the badge background). See docs/DESIGN-SYSTEM.md §Contrast.
-type Ramp = Record<string, string>;
-const STATUS: Record<string, { fg: string; base: Ramp }> = {
-  emerald: { fg: '#04714f', base: twColors.emerald },
-  green: { fg: '#127436', base: twColors.green },
-  teal: { fg: '#0e6f68', base: twColors.teal },
-  lime: { fg: '#45700e', base: twColors.lime },
-  red: { fg: '#b91c1c', base: twColors.red },
-  rose: { fg: '#be123c', base: twColors.rose },
-  pink: { fg: '#be185d', base: twColors.pink },
-  amber: { fg: '#a14b08', base: twColors.amber },
-  orange: { fg: '#b03a0c', base: twColors.orange },
-  yellow: { fg: '#8f5807', base: twColors.yellow },
-  blue: { fg: '#1d4ed8', base: twColors.blue },
-  sky: { fg: '#0369a1', base: twColors.sky },
-  cyan: { fg: '#0d6f8a', base: twColors.cyan },
-  indigo: { fg: '#4338ca', base: twColors.indigo },
-  violet: { fg: '#6d28d9', base: twColors.violet },
-  purple: { fg: '#7e22ce', base: twColors.purple },
-  fuchsia: { fg: '#a21caf', base: twColors.fuchsia },
-};
-const statusText = Object.fromEntries(
-  Object.entries(STATUS).map(([name, { fg, base }]) => [
-    name,
-    {
-      50: base[900], 100: base[800], 200: base[800], 300: base[800],
-      400: fg, 500: fg, 600: fg,
-      700: base[800], 800: base[900], 900: base[900], 950: base[950],
-    },
-  ]),
-);
-const statusBg = Object.fromEntries(
-  Object.entries(STATUS).map(([name, { base }]) => [
-    name,
-    // 800–950 were dark tinted panels on the dark canvas → light tints now.
-    { ...base, 800: base[100], 900: base[100], 950: base[50] },
-  ]),
-);
-const statusBorder = Object.fromEntries(
-  Object.entries(STATUS).map(([name, { base }]) => [
-    name,
-    { ...base, 700: base[300], 800: base[200], 900: base[200], 950: base[100] },
-  ]),
-);
 
 const config: Config = {
   content: ['./src/**/*.{ts,tsx}'],
-  // Light Merit theme only. The legacy `dark` class on <html> is no longer set;
-  // there are no `dark:` variants in the codebase.
   darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // Default (fill/stroke/ring/gradient/accent) resolution for neutrals = text ramp.
-        ...forNeutrals(neutralText),
-        brand: accentBase,
-        // Legacy emerald-accent aliases → the tenant accent.
+        brand: {
+          50: '#ecfdf5',
+          100: '#d1fae5',
+          200: '#a7f3d0',
+          300: '#6ee7b7',
+          400: '#34d399', // = --em-bright
+          500: '#10b981', // primary emerald (= --em)
+          600: '#059669', // = --em-deep
+          700: '#047857',
+          800: '#065f46',
+          900: '#064e3b',
+          950: '#022c22',
+        },
+        // ── Brand emerald aliases (MeritBooks-Brand-Tokens.md §Brand) ───────
+        // Semantic emerald names so markup can read intent: `bg-em`, `text-em-bright`.
         em: {
-          DEFAULT: v('brand-accent'),
-          bright: v('brand-accent'),
-          deep: v('brand-accent-strong'),
+          DEFAULT: '#10b981', // --em: primary. Buttons, links, active, ledger accent.
+          bright: '#34d399', // --em-bright: positive figures, hover, grand-total double-rule.
+          deep: '#059669', // --em-deep: subtotal rule, pressed, emerald-context dividers.
         },
-        // ── Merit brand named colors (use these in new code) ────────────────
-        navy: v('brand-navy'),
-        accent: {
-          DEFAULT: v('brand-accent'),
-          bright: v('brand-accent-bright'),
-          strong: v('brand-accent-strong'),
-          deep: v('brand-accent-deep'),
-          wash: v('brand-wash'),
-          line: v('brand-accent-line'),
-        },
-        canvas: v('canvas'),
-        page: v('bg'),
-        // ── Surfaces ─────────────────────────────────────────────────────────
+        // ── Surfaces (MeritBooks brand — green-tinted near-black) ────────────
+        // The app's existing dark steps are REMAPPED onto the brand surface
+        // tokens so every screen re-skins without a per-file rewrite. Light
+        // steps (0–300) are retained for print/document surfaces.
         surface: {
           0: '#ffffff',
-          50: v('bg'),
-          100: v('canvas'),
-          200: v('fill'),
-          300: v('fill-strong'),
-          800: v('canvas'), // raised / hover surface
-          850: v('inset-soft'), // nested well inside a card
-          900: v('surface'), // cards, panels, dialogs (white)
-          950: v('canvas'), // insets; full-page wrappers
+          50: '#f8fafc',
+          100: '#f1f5f9',
+          200: '#e2e8f0',
+          300: '#cbd5e1',
+          // Dark surfaces → brand near-black ramp
+          800: '#18211C', // --elevated  (raised / hover surfaces)
+          850: '#0E1512', // --surface-2 (insets, wells, code blocks)
+          900: '#121A16', // --surface   (cards, panels)
+          950: '#0A0F0D', // --bg        (page / app background)
         },
-        // ── App shell (navy chrome: sidebar + top bar) ───────────────────────
-        shell: {
-          DEFAULT: v('brand-navy'),
-          raised: v('shell-raised'),
-          line: v('shell-line'),
-          fg: v('shell-fg'),
-          mid: v('shell-fg-mid'),
-          dim: v('shell-fg-dim'),
-          accent: v('brand-accent-bright'),
+        // ── Neutrals: green-tinted ramp (REMAPS Tailwind slate) ─────────────
+        // Components reference `slate-*` ~6.7k times for text and hairlines.
+        // Remapping the palette re-skins them all to the brand's warm-green
+        // greys and hairline borders while every existing class name still
+        // resolves. Luminance ordering is preserved so contrast is unchanged.
+        slate: {
+          50: '#EDF2EF', // ≈ --text-hi
+          100: '#E0E6E2',
+          200: '#CBD3CE',
+          300: '#AEB8B2', // = --text (body)
+          400: '#97A19B',
+          500: '#7E8983', // = --text-mid (secondary/labels — reading floor)
+          600: '#4A544E',
+          700: '#2C362F', // = --hairline-2 (stronger borders, inputs, secondary btn hover)
+          800: '#232C27', // = --hairline (default borders/dividers)
+          900: '#121A16', // = --surface
+          950: '#0A0F0D', // = --bg
         },
-        // ── Semantic roles (meaning-bearing; fg = AA text on light) ──────────
-        success: { DEFAULT: '#059669', fg: '#04714f' }, // debits, posted, healthy
-        danger: { DEFAULT: '#dc2626', fg: '#b91c1c' }, // credits, overdue, errors
-        warning: { DEFAULT: '#d97706', fg: '#a14b08' }, // needs review, soft-close
-        info: { DEFAULT: '#3b82f6', fg: '#1d4ed8' }, // neutral status, in-progress
-        ai: { DEFAULT: '#6366f1', fg: '#4338ca' }, // AI-generated / suggested
-        // ── Text tokens ──────────────────────────────────────────────────────
+        // ── Semantic roles (see docs/DESIGN-SYSTEM.md §Color) ──────────────
+        // Meaning-bearing colors. Prefer these over raw palette utilities so
+        // intent is legible in the markup: `text-danger-fg`, `bg-danger/10`.
+        // DEFAULT = solid/on-color; `fg` = the bright on-dark text tint;
+        // soft fills come from the alpha modifier (e.g. bg-success/10).
+        success: { DEFAULT: '#10b981', fg: '#34d399' }, // debits, posted, healthy
+        danger: { DEFAULT: '#ef4444', fg: '#f87171' }, // credits, overdue, errors
+        warning: { DEFAULT: '#f59e0b', fg: '#fbbf24' }, // needs review, soft-close
+        info: { DEFAULT: '#3b82f6', fg: '#60a5fa' }, // neutral status, in-progress
+        ai: { DEFAULT: '#6366f1', fg: '#818cf8' }, // AI-generated / suggested
+        // ── Brand text tokens (MeritBooks-Brand-Tokens.md §Text) ────────────
+        // Warm-green text ramp. `text-ink` = body; `text-ink-hi` = headings;
+        // `text-ink-mid` = labels; `text-ink-dim` = captions; `ink-on-em` =
+        // text/icons ON an emerald fill (never pure white on emerald).
         ink: {
-          hi: v('ink-hi'), // headings, the number — Merit Navy
-          DEFAULT: v('ink'), // body — Merit Steel
-          strong: v('ink-strong'),
-          soft: v('ink-soft'),
-          mid: v('ink-mid'), // labels — AA floor
-          dim: v('ink-dim'), // captions — Merit Slate (decorative/meta only)
-          faint: v('ink-faint'),
-          'on-em': '#ffffff', // text/icons on an accent fill
+          hi: '#EDF2EF', // --text-hi   (headings, high-emphasis)
+          DEFAULT: '#AEB8B2', // --text      (body)
+          mid: '#7E8983', // --text-mid  (secondary / labels)
+          dim: '#7C877F', // --text-dim  (captions / footnotes)
+          'on-em': '#05221A', // --ink-on-em (on emerald fills)
         },
-        'on-accent': '#ffffff',
+        // Structural hairlines (borders/dividers) as named tokens.
         hairline: {
-          DEFAULT: v('hairline'),
-          strong: v('hairline-strong'),
-          soft: v('hairline-soft'),
+          DEFAULT: '#232C27', // --hairline
+          strong: '#2C362F', // --hairline-2
         },
-        'red-fig': '#b91c1c', // negative figures (parentheses)
-        pos: '#04714f', // positive figures
-        'ink-on-em': '#ffffff',
-      },
-      // Per-utility remaps (see header). Deep-merged over `colors`.
-      textColor: {
-        ...forNeutrals(neutralText),
-        ...statusText,
-        brand: accentText,
-      },
-      backgroundColor: {
-        ...forNeutrals(neutralBg),
-        ...statusBg,
-        brand: accentBg,
-      },
-      borderColor: {
-        ...forNeutrals(neutralLine),
-        ...statusBorder,
-      },
-      divideColor: {
-        ...forNeutrals(neutralLine),
-      },
-      ringColor: {
-        ...forNeutrals(neutralLine),
-      },
-      ringOffsetColor: {
-        ...forNeutrals(neutralBg),
-      },
-      placeholderColor: {
-        ...forNeutrals(neutralText),
+        // Functional-accent figure tints (meaning only, never decoration).
+        'red-fig': '#f87171', // negative figures (parentheses)
+        pos: '#34d399', // positive figures (= --em-bright)
+        'ink-on-em': '#05221A', // flat alias of ink.on-em
       },
       fontFamily: {
-        // Bound in app/layout.tsx via next/font (tenant-swappable).
-        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'], // DM Sans — body, nav, labels, buttons
-        display: ['var(--font-display)', 'var(--font-sans)', 'system-ui', 'sans-serif'], // Syne — titles, big stats
-        mono: ['var(--font-mono)', 'ui-monospace', 'monospace'], // JetBrains Mono — figures, codes, eyebrows
+        sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       // ── Named type scale (see docs/DESIGN-SYSTEM.md §Type) ──────────────
+      // A closed set of roles. Reach for these instead of ad-hoc text-2xl so
+      // hierarchy is consistent across every screen. Raw Tailwind sizes
+      // (text-sm, text-xl…) remain available for backward compatibility.
       fontSize: {
         '2xs': ['0.625rem', { lineHeight: '0.875rem' }],
         // Marquee figures: the one hero number on a screen (KPI, balance due).
-        display: ['2rem', { lineHeight: '2.25rem', letterSpacing: '-0.02em', fontWeight: '700' }],
+        'display': ['2rem', { lineHeight: '2.25rem', letterSpacing: '-0.02em', fontWeight: '700' }],
         // Page H1.
-        title: ['1.5rem', { lineHeight: '1.9rem', letterSpacing: '-0.015em', fontWeight: '700' }],
+        'title': ['1.5rem', { lineHeight: '1.9rem', letterSpacing: '-0.015em', fontWeight: '600' }],
         // Section / card header.
-        heading: ['1.125rem', { lineHeight: '1.6rem', letterSpacing: '-0.01em', fontWeight: '600' }],
+        'heading': ['1.125rem', { lineHeight: '1.6rem', letterSpacing: '-0.01em', fontWeight: '600' }],
         // Sub-section / dialog title.
-        subheading: ['1rem', { lineHeight: '1.5rem', letterSpacing: '-0.006em', fontWeight: '600' }],
+        'subheading': ['1rem', { lineHeight: '1.5rem', letterSpacing: '-0.006em', fontWeight: '600' }],
         // Default body / table cell.
-        body: ['0.875rem', { lineHeight: '1.35rem' }],
+        'body': ['0.875rem', { lineHeight: '1.35rem' }],
         // Dense secondary text.
         'body-sm': ['0.8125rem', { lineHeight: '1.2rem' }],
         // Form labels, inline metadata.
-        label: ['0.75rem', { lineHeight: '1rem', fontWeight: '500' }],
+        'label': ['0.75rem', { lineHeight: '1rem', fontWeight: '500' }],
         // Overline: uppercase table headers / eyebrows (pair with tracking-caps).
-        caption: ['0.6875rem', { lineHeight: '0.9rem', letterSpacing: '0.04em' }],
+        'caption': ['0.6875rem', { lineHeight: '0.9rem', letterSpacing: '0.04em' }],
       },
       letterSpacing: {
         // Uppercase overlines / column headers.
         caps: '0.06em',
-        // Merit eyebrow labels (JetBrains Mono, uppercase): 1.5–2.5px.
-        eyebrow: '0.16em',
       },
       borderRadius: {
-        // Merit digital spec: buttons/inputs 10px, cards 16px. Remapping the
-        // two radii the app already uses re-shapes every control and card.
-        lg: '0.625rem', // 10px (was 8px) — buttons, inputs, chips
-        xl: '1rem', // 16px (was 12px) — cards, dialogs, menus
-        '2xl': '1.25rem', // 20px — large modals (kept above xl)
         '4xl': '2rem',
-        // ── Brand radii (Merit digital: buttons 10px, cards 16px) ───────────
-        'brand-sm': '7px', // chips, small controls
-        brand: '10px', // buttons, inputs
-        'brand-lg': '16px', // cards, panels
-      },
-      boxShadow: {
-        // Cards are border-defined; this is the only resting elevation allowed.
-        card: '0 1px 2px 0 rgb(10 22 40 / 0.04)',
-        pop: '0 12px 32px -8px rgb(10 22 40 / 0.18), 0 2px 6px -2px rgb(10 22 40 / 0.08)',
+        // ── Brand radii (MeritBooks-Brand-Tokens.md §Shape) ─────────────────
+        'brand-sm': '7px', // --radius-sm: chips, small controls
+        brand: '10px', // --radius:    buttons, inputs
+        'brand-lg': '14px', // --radius-lg: cards, panels
       },
       keyframes: {
         'slide-up': {
@@ -325,12 +149,15 @@ const config: Config = {
         'slide-in-right': 'slide-in-right 0.25s ease-out',
       },
       // ── Motion (see docs/DESIGN-SYSTEM.md §Motion) ──────────────────────
+      // Three speeds, nothing bespoke. fast = state feedback (hover/press),
+      // base = entrances (drawer, toast), slow = data transitions (bars).
       transitionDuration: {
         fast: '120ms',
         base: '200ms',
         slow: '500ms',
       },
       transitionTimingFunction: {
+        // Standard ease for UI motion — quick out, settled in.
         standard: 'cubic-bezier(0.2, 0, 0, 1)',
       },
     },

@@ -117,7 +117,7 @@ export function PlaidAccountMapper({ onDone }: { onDone?: () => void }) {
   return (
     <div className="space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-ink-hi">Assign your bank accounts</p>
+        <p className="text-sm font-medium text-white">Assign your bank accounts</p>
         <button onClick={() => onDone?.()} className="text-slate-500 hover:text-slate-300" aria-label="Done mapping"><X size={16} /></button>
       </div>
       <p className="text-xs text-slate-400">For each account, choose the entity, the GL account it posts to, and a label. Accounts you don&apos;t track (loans, personal) can be ignored.</p>
@@ -149,7 +149,7 @@ export function PlaidAccountMapper({ onDone }: { onDone?: () => void }) {
                 <select
                   value={d.glAccountId}
                   onChange={(e) => setDraft(p.id, { glAccountId: e.target.value })}
-                  className="px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-ink-hi"
+                  className="px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white"
                   aria-label="GL account"
                 >
                   <option value="">Select GL account…</option>
@@ -159,13 +159,13 @@ export function PlaidAccountMapper({ onDone }: { onDone?: () => void }) {
                   value={d.label}
                   onChange={(e) => setDraft(p.id, { label: e.target.value })}
                   placeholder="Label"
-                  className="px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-ink-hi"
+                  className="px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white"
                   aria-label="Account label"
                 />
               </div>
               <div className="flex items-center gap-2 justify-end">
-                <button onClick={() => doIgnore(p)} disabled={busy} className="px-2.5 py-1 rounded-lg text-xs text-slate-400 hover:text-ink-hi hover:bg-slate-800 disabled:opacity-50">Ignore</button>
-                <button onClick={() => doMap(p)} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-brand-500 text-white text-xs font-medium hover:bg-brand-600 disabled:opacity-50">
+                <button onClick={() => doIgnore(p)} disabled={busy} className="px-2.5 py-1 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-50">Ignore</button>
+                <button onClick={() => doMap(p)} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500 text-slate-900 text-xs font-medium hover:bg-emerald-400 disabled:opacity-50">
                   {busy ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} Add account
                 </button>
               </div>

@@ -217,7 +217,7 @@ export function RunWizard({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-semibold text-ink-hi">
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
               Run payroll
               {!providerReady && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-2xs font-medium text-amber-300">
@@ -233,7 +233,7 @@ export function RunWizard({
                 : 'Step 2 · Estimated preview (no provider connected)'}
             </p>
           </div>
-          <button onClick={onClose} className="rounded-md p-1.5 text-slate-500 hover:bg-navy/[0.04] hover:text-slate-200" aria-label="Close">
+          <button onClick={onClose} className="rounded-md p-1.5 text-slate-500 hover:bg-white/[0.04] hover:text-slate-200" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -378,7 +378,7 @@ export function RunWizard({
                       ))}
                       <button
                         onClick={() => addEarning(e.employeeId)}
-                        className="inline-flex items-center gap-1 text-2xs text-brand-400 hover:text-brand-300"
+                        className="inline-flex items-center gap-1 text-2xs text-emerald-400 hover:text-emerald-300"
                       >
                         <Plus size={11} /> Add earning (bonus, commission, reimbursement…)
                       </button>
@@ -441,7 +441,7 @@ export function RunWizard({
               <button
                 onClick={createAndPreview}
                 disabled={busy}
-                className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
               >
                 {busy ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
                 {busy ? 'Computing preview…' : 'Preview run'}
@@ -457,7 +457,7 @@ export function RunWizard({
               </button>
               <button
                 onClick={() => runId && onReview(runId)}
-                className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
               >
                 Review &amp; approve <ChevronRight size={14} />
               </button>
@@ -481,7 +481,7 @@ function PreviewStep({
   if (!detail) {
     return (
       <div className="flex items-center justify-center py-16">
-        <Loader2 className="h-5 w-5 animate-spin text-brand-400" />
+        <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
       </div>
     );
   }
@@ -520,7 +520,7 @@ function PreviewStep({
 
       <div className="flex items-center justify-between rounded-lg bg-slate-800/50 px-4 py-3">
         <span className="text-xs text-slate-400">Funding total (net + taxes + garnishments) that will debit the bank</span>
-        <span className="font-mono text-base font-semibold tabular-nums text-ink-hi">{formatMoney(funding)}</span>
+        <span className="font-mono text-base font-semibold tabular-nums text-white">{formatMoney(funding)}</span>
       </div>
 
       {/* Per-employee */}

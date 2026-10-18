@@ -185,20 +185,20 @@ export function BudgetImport({
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet size={16} className="text-emerald-400" />
-                <h2 className="text-sm font-semibold text-ink-hi">Import budget (CSV / XLSX)</h2>
+                <h2 className="text-sm font-semibold text-white">Import budget (CSV / XLSX)</h2>
               </div>
-              <button onClick={close} disabled={busy} aria-label="Close" className="text-slate-500 hover:text-ink-hi disabled:opacity-40"><X size={16} /></button>
+              <button onClick={close} disabled={busy} aria-label="Close" className="text-slate-500 hover:text-white disabled:opacity-40"><X size={16} /></button>
             </div>
 
             <div className="p-5 space-y-4">
               {fromIntake && (
                 <div className="flex items-center gap-2 rounded-lg border border-indigo-500/25 bg-indigo-500/[0.05] px-3 py-2 text-xs text-slate-300">
                   <FileSpreadsheet size={13} className="text-indigo-400 shrink-0" />
-                  <span className="truncate flex-1">Using <span className="text-ink-hi">{fileName}</span> from your upload</span>
+                  <span className="truncate flex-1">Using <span className="text-white">{fileName}</span> from your upload</span>
                   <label className="flex items-center gap-1.5 text-slate-400">
                     Budget year
                     <select value={fy} onChange={(e) => changeYear(parseInt(e.target.value, 10))} disabled={busy}
-                      className="px-2 py-1 bg-slate-800 border border-slate-700 rounded-md text-xs text-ink-hi font-mono">
+                      className="px-2 py-1 bg-slate-800 border border-slate-700 rounded-md text-xs text-white font-mono">
                       {Array.from(new Set([...YEARS, fy])).sort().map((y) => <option key={y} value={y}>FY {y}</option>)}
                     </select>
                   </label>
@@ -212,7 +212,7 @@ export function BudgetImport({
 
               {/* Dropzone / file picker */}
               <label
-                className="flex flex-col items-center justify-center gap-2 py-7 rounded-xl border-2 border-dashed border-slate-700 hover:border-brand-500/60 cursor-pointer transition-colors"
+                className="flex flex-col items-center justify-center gap-2 py-7 rounded-xl border-2 border-dashed border-slate-700 hover:border-emerald-500/60 cursor-pointer transition-colors"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) onSelectFile(f); }}
               >
@@ -280,7 +280,7 @@ export function BudgetImport({
                 onClick={confirm}
                 disabled={busy || !canWrite}
                 className={clsx('flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors',
-                  canWrite && !busy ? 'bg-brand-500 text-white hover:bg-brand-600' : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700')}
+                  canWrite && !busy ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700')}
               >
                 {busy ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
                 {busy ? 'Importing…' : 'Import budget'}

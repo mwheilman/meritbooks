@@ -68,7 +68,7 @@ function InventoryPageInner() {
           </Link>
           <button
             onClick={() => setCreateOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-500 hover:bg-brand-600 rounded-lg text-xs font-medium text-white"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-medium text-white"
           >
             <Plus size={14} /> New item
           </button>
@@ -82,7 +82,7 @@ function InventoryPageInner() {
       )}
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
       ) : error ? (
         <div className="p-8 text-center">
           <AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" />
@@ -96,11 +96,11 @@ function InventoryPageInner() {
           <div className="grid grid-cols-3 gap-4">
             <div className="card p-4">
               <span className="text-xs text-slate-500 uppercase">On-hand value</span>
-              <p className="text-xl font-mono font-semibold text-ink-hi mt-1">{formatMoney(summary?.totalValueCents ?? 0)}</p>
+              <p className="text-xl font-mono font-semibold text-white mt-1">{formatMoney(summary?.totalValueCents ?? 0)}</p>
             </div>
             <div className="card p-4">
               <span className="text-xs text-slate-500 uppercase">Active items</span>
-              <p className="text-xl font-mono font-semibold text-ink-hi mt-1">{summary?.activeCount ?? 0}</p>
+              <p className="text-xl font-mono font-semibold text-white mt-1">{summary?.activeCount ?? 0}</p>
             </div>
             <div className="card p-4">
               <div className="flex items-center gap-2"><TrendingDown size={14} className="text-amber-400" /><span className="text-xs text-slate-500 uppercase">Below reorder</span></div>
@@ -114,7 +114,7 @@ function InventoryPageInner() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name or SKU…"
-              className="w-full bg-surface-900 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm text-ink-hi placeholder:text-slate-600 focus:outline-none focus:border-brand-600"
+              className="w-full bg-surface-900 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-600"
             />
           </div>
 
@@ -123,7 +123,7 @@ function InventoryPageInner() {
               <Package className="w-8 h-8 mx-auto text-slate-600 mb-3" />
               <p className="text-slate-400 text-sm">{items.length === 0 ? 'No inventory items yet.' : 'No items match your search.'}</p>
               {items.length === 0 && (
-                <button onClick={() => setCreateOpen(true)} className="mt-3 text-brand-400 text-sm hover:text-brand-300">Create your first item</button>
+                <button onClick={() => setCreateOpen(true)} className="mt-3 text-emerald-400 text-sm hover:text-emerald-300">Create your first item</button>
               )}
             </div>
           ) : (
@@ -146,8 +146,8 @@ function InventoryPageInner() {
                     return (
                       <tr key={i.id} className="border-b border-slate-800/60 hover:bg-slate-800/30">
                         <td className="px-4 py-2.5 font-mono text-xs text-slate-300">{i.sku}</td>
-                        <td className="px-4 py-2.5 text-ink-hi">
-                          <Link href={`/inventory/${i.id}`} className="hover:text-brand-400">{i.name}</Link>
+                        <td className="px-4 py-2.5 text-white">
+                          <Link href={`/inventory/${i.id}`} className="hover:text-emerald-400">{i.name}</Link>
                           {!i.isActive && <span className="ml-2 text-xs text-slate-600">(inactive)</span>}
                         </td>
                         <td className="px-4 py-2.5 text-xs text-slate-400">{METHOD_LABEL[i.valuationMethod]}</td>
@@ -155,9 +155,9 @@ function InventoryPageInner() {
                           {i.qtyOnHand} <span className="text-slate-600">{i.uom}</span>
                         </td>
                         <td className="px-4 py-2.5 text-right font-mono text-slate-300">{formatMoney(i.avgCostCents)}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-ink-hi">{formatMoney(i.totalValueCents)}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-white">{formatMoney(i.totalValueCents)}</td>
                         <td className="px-4 py-2.5 text-right">
-                          <Link href={`/inventory/${i.id}`} className="text-slate-500 hover:text-brand-400"><ChevronRight size={16} /></Link>
+                          <Link href={`/inventory/${i.id}`} className="text-slate-500 hover:text-emerald-400"><ChevronRight size={16} /></Link>
                         </td>
                       </tr>
                     );
@@ -210,8 +210,8 @@ function CreateItemModal({ onClose, onCreated }: { onClose: () => void; onCreate
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl border border-slate-800 bg-surface-900 p-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="New inventory item">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-ink-hi font-semibold">New inventory item</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-ink-hi"><X size={18} /></button>
+          <h2 className="text-white font-semibold">New inventory item</h2>
+          <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={18} /></button>
         </div>
         <div className="space-y-3">
           <Field label="SKU"><input value={sku} onChange={(e) => setSku(e.target.value)} className={inputCls} placeholder="WIDGET-001" /></Field>
@@ -229,8 +229,8 @@ function CreateItemModal({ onClose, onCreated }: { onClose: () => void; onCreate
           {err && <p className="text-red-400 text-xs">{err}</p>}
         </div>
         <div className="mt-5 flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm text-slate-400 hover:text-ink-hi">Cancel</button>
-          <button onClick={submit} disabled={!valid || saving} className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 rounded-lg text-sm font-medium text-white">
+          <button onClick={onClose} className="px-3 py-1.5 text-sm text-slate-400 hover:text-white">Cancel</button>
+          <button onClick={submit} disabled={!valid || saving} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 rounded-lg text-sm font-medium text-white">
             {saving && <Loader2 size={14} className="animate-spin" />} Create item
           </button>
         </div>
@@ -239,7 +239,7 @@ function CreateItemModal({ onClose, onCreated }: { onClose: () => void; onCreate
   );
 }
 
-const inputCls = 'w-full bg-surface-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-ink-hi placeholder:text-slate-600 focus:outline-none focus:border-brand-600';
+const inputCls = 'w-full bg-surface-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-600';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

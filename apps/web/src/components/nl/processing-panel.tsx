@@ -175,7 +175,7 @@ export function ProcessingPanel({ description, onPosted }: { description: string
               value={locationId}
               onChange={(e) => setLocationId(e.target.value)}
               disabled={loadingLocs}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-ink-hi"
+              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white"
             >
               <option value="">{loadingLocs ? 'Loading companies…' : 'Select a company…'}</option>
               {locations.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.short_code})</option>)}
@@ -184,7 +184,7 @@ export function ProcessingPanel({ description, onPosted }: { description: string
           <div>
             <label className="block text-xs text-slate-400 mb-1">Entry date</label>
             <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-ink-hi" />
+              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white" />
           </div>
         </div>
       )}
@@ -192,7 +192,7 @@ export function ProcessingPanel({ description, onPosted }: { description: string
       {!proposal && (
         <div className="flex items-center gap-3">
           <button onClick={compose} disabled={composing || !locationId}
-            className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 transition-colors">
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors">
             {composing ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} Compose proposal
           </button>
           {error && <span className="text-xs text-rose-400 flex items-center gap-1"><AlertTriangle size={13} /> {error}</span>}
@@ -223,7 +223,7 @@ export function ProcessingPanel({ description, onPosted }: { description: string
           <div>
             <label className="block text-xs text-slate-400 mb-1">Memo</label>
             <input value={memo} onChange={(e) => setMemo(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-ink-hi" />
+              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white" />
           </div>
 
           <div className="rounded-xl border border-slate-800 overflow-hidden">
@@ -238,9 +238,9 @@ export function ProcessingPanel({ description, onPosted }: { description: string
                     placeholder="line memo" className="mt-0.5 w-full bg-transparent text-2xs text-slate-500 placeholder:text-slate-600 focus:outline-none" />
                 </div>
                 <input value={l.debit} onChange={(e) => updateLine(i, { debit: e.target.value, credit: '' })}
-                  className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-right text-ink-hi font-mono" placeholder="0.00" />
+                  className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-right text-white font-mono" placeholder="0.00" />
                 <input value={l.credit} onChange={(e) => updateLine(i, { credit: e.target.value, debit: '' })}
-                  className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-right text-ink-hi font-mono" placeholder="0.00" />
+                  className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-right text-white font-mono" placeholder="0.00" />
               </div>
             ))}
             <div className="grid grid-cols-[1fr_100px_100px] gap-2 px-3 py-2 border-t border-slate-700 bg-slate-800/40 text-sm font-mono">
@@ -254,7 +254,7 @@ export function ProcessingPanel({ description, onPosted }: { description: string
 
           <div className="flex flex-wrap items-center gap-3">
             <button onClick={approveAndPost} disabled={posting || !totals.balanced || !allResolved}
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               {posting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Approve &amp; post
             </button>
             <span className="text-2xs text-slate-500">Confidence {(proposal.confidence * 100).toFixed(0)}%</span>

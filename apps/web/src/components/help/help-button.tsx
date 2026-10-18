@@ -131,7 +131,7 @@ function HelpButtonBase({
                       </p>
                       <h2
                         id="help-panel-title"
-                        className="text-base font-semibold text-ink-hi tracking-tight"
+                        className="text-base font-semibold text-white tracking-tight"
                       >
                         {content.title}
                       </h2>
@@ -141,7 +141,7 @@ function HelpButtonBase({
                     type="button"
                     onClick={close}
                     aria-label="Close help"
-                    className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:text-slate-200 hover:bg-navy/[0.04] transition-colors"
+                    className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] transition-colors"
                   >
                     <X size={18} />
                   </button>

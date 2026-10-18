@@ -170,10 +170,10 @@ export function EstimateForm({
         className="bg-surface-900 border border-slate-700 rounded-xl w-full max-w-3xl mb-8 focus:outline-none"
       >
         <div className="flex items-center justify-between p-6 border-b border-slate-700/50">
-          <h2 id="estimate-form-title" className="text-lg font-semibold text-ink-hi">
+          <h2 id="estimate-form-title" className="text-lg font-semibold text-white">
             {mode === 'create' ? 'New Estimate' : `Edit ${initial?.estimateNumber ?? 'Estimate'}`}
           </h2>
-          <button onClick={onClose} aria-label="Close" className="p-1 text-slate-400 hover:text-ink-hi">
+          <button onClick={onClose} aria-label="Close" className="p-1 text-slate-400 hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -194,7 +194,7 @@ export function EstimateForm({
                 id="est-customer"
                 value={customerId}
                 onChange={(e) => setCustomerId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
               >
                 <option value="">Select customer</option>
                 {customers.map((c) => (
@@ -212,7 +212,7 @@ export function EstimateForm({
                 id="est-job"
                 value={jobId}
                 onChange={(e) => setJobId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
               >
                 <option value="">No job</option>
                 {jobs.map((j) => (
@@ -234,7 +234,7 @@ export function EstimateForm({
                 type="date"
                 value={estimateDate}
                 onChange={(e) => setEstimateDate(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
               />
             </div>
             <div>
@@ -246,7 +246,7 @@ export function EstimateForm({
                 type="date"
                 value={expirationDate}
                 onChange={(e) => setExpirationDate(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
               />
             </div>
           </div>
@@ -255,7 +255,7 @@ export function EstimateForm({
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-slate-400 uppercase tracking-wider">Line items</span>
-              <button onClick={addLine} className="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300">
+              <button onClick={addLine} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300">
                 <Plus className="w-3 h-3" /> Add line
               </button>
             </div>
@@ -270,7 +270,7 @@ export function EstimateForm({
                       onChange={(e) => updateLine(i, 'description', e.target.value)}
                       placeholder="Service or item"
                       aria-label={`Line ${i + 1} description`}
-                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi placeholder:text-slate-600"
+                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white placeholder:text-slate-600"
                     />
                   </div>
                   <div className="col-span-3">
@@ -279,7 +279,7 @@ export function EstimateForm({
                       value={line.revenue_account_id}
                       onChange={(e) => updateLine(i, 'revenue_account_id', e.target.value)}
                       aria-label={`Line ${i + 1} revenue account`}
-                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi"
+                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white"
                     >
                       <option value="">Select account</option>
                       {accounts.map((a) => (
@@ -298,7 +298,7 @@ export function EstimateForm({
                       step={0.01}
                       aria-label={`Line ${i + 1} quantity`}
                       onChange={(e) => updateLine(i, 'quantity', parseFloat(e.target.value) || 0)}
-                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi text-right font-mono tabular-nums"
+                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white text-right font-mono tabular-nums"
                     />
                   </div>
                   <div className="col-span-2">
@@ -312,10 +312,10 @@ export function EstimateForm({
                       onChange={(e) =>
                         updateLine(i, 'unit_price_cents', Math.round(parseFloat(e.target.value) * 100) || 0)
                       }
-                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi text-right font-mono tabular-nums"
+                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white text-right font-mono tabular-nums"
                     />
                   </div>
-                  <div className="col-span-1 text-right font-mono text-sm text-ink-hi py-1.5 tabular-nums">
+                  <div className="col-span-1 text-right font-mono text-sm text-white py-1.5 tabular-nums">
                     {formatMoney(Math.round(line.quantity * line.unit_price_cents))}
                   </div>
                   <div className="col-span-1">
@@ -338,7 +338,7 @@ export function EstimateForm({
           <div className="border-t border-slate-700/50 pt-4 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-slate-400">Subtotal</span>
-              <span className="font-mono text-ink-hi tabular-nums">{formatMoney(subtotal)}</span>
+              <span className="font-mono text-white tabular-nums">{formatMoney(subtotal)}</span>
             </div>
             <div className="flex justify-between text-sm items-center">
               <span className="text-slate-400">Tax</span>
@@ -349,11 +349,11 @@ export function EstimateForm({
                 step={0.01}
                 aria-label="Tax amount"
                 onChange={(e) => setTaxCents(Math.round(parseFloat(e.target.value) * 100) || 0)}
-                className="w-28 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi text-right font-mono tabular-nums"
+                className="w-28 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-sm text-white text-right font-mono tabular-nums"
               />
             </div>
             <div className="flex justify-between text-base font-semibold border-t border-slate-700/50 pt-2">
-              <span className="text-ink-hi">Total</span>
+              <span className="text-white">Total</span>
               <span className="font-mono text-emerald-400 tabular-nums">{formatMoney(total)}</span>
             </div>
           </div>
@@ -368,19 +368,19 @@ export function EstimateForm({
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
               placeholder="Terms, scope caveats, thank-you note…"
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-600"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600"
             />
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-700/50">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-ink-hi">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
             {mode === 'create' ? 'Create Estimate' : 'Save Changes'}

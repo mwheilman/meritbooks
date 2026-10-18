@@ -1,87 +1,57 @@
-/* Fonts are loaded via next/font in app/layout.tsx (Syne · DM Sans · JetBrains Mono)
-   and exposed as --font-display / --font-sans / --font-mono. No @import here. */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  /* ── Theme tokens — DEFAULT TENANT = Merit Management Group (Feb 2026 guide) ──
-     Single source of truth for color. Values are RGB channel triplets so Tailwind
-     can apply alpha: `rgb(var(--brand-accent) / 0.1)`. A white-label tenant
-     overrides the --brand-* (and optionally --bg/--canvas/--ink*) variables only —
-     see lib/brand/tenant-brand.ts. Ratios: 60% warm white + canvas, 25% navy,
-     10% steel body text, 5% Electric Blue accent. */
   :root {
-    /* Brand (tenant-owned) */
-    --brand-navy: 10 22 40; /* #0A1628 Navy / Midnight — shell, dark sections, headlines */
-    --brand-accent: 37 99 235; /* #2563EB Electric Blue — CTAs, links, active, focus */
-    --brand-accent-bright: 59 130 246; /* #3B82F6 Signal Blue — hover / accent on navy */
-    --brand-accent-strong: 29 78 216; /* #1D4ED8 — pressed / hover fill on light */
-    --brand-accent-deep: 30 64 175; /* #1E40AF — emphasized accent text */
-    --brand-wash: 235 242 254; /* #EBF2FE Blue Wash / Sky — tags, badges, selection */
-    --brand-wash-2: 219 231 253; /* #DBE7FD */
-    --brand-accent-line: 191 212 251; /* #BFD4FB — accent hairline */
-
-    /* Surfaces */
-    --bg: 253 252 250; /* #FDFCFA Warm White — page */
-    --canvas: 245 243 239; /* #F5F3EF Surface / Canvas — alt bg, insets, table heads */
-    --surface: 255 255 255; /* #FFFFFF — cards, panels, dialogs */
-    --inset-soft: 250 249 246; /* #FAF9F6 — nested well inside a card */
-    --fill: 241 238 232; /* #F1EEE8 — control fill: chips, tracks, secondary btn */
-    --fill-strong: 231 227 219; /* #E7E3DB — control hover fill */
-
-    /* Hairlines */
-    --hairline-soft: 238 235 229; /* #EEEBE5 */
-    --hairline: 231 227 219; /* #E7E3DB — default divider / card border */
-    --hairline-strong: 217 212 202; /* #D9D4CA — inputs, interactive borders */
-
-    /* Ink (text) — contrast on #FFFFFF in comments (WCAG) */
-    --ink-hi: 10 22 40; /* #0A1628 Navy  18.1:1 — headings, the number */
-    --ink-strong: 27 42 64; /* #1B2A40       14.5:1 */
-    --ink: 61 79 101; /* #3D4F65 Steel 8.4:1 — body copy */
-    --ink-soft: 75 92 114; /* #4B5C72       6.8:1 — secondary */
-    --ink-mid: 85 101 122; /* #55657A       6.0:1 — labels (AA floor on canvas too) */
-    --ink-dim: 132 148 167; /* #8494A7 Slate 3.1:1 — captions/meta/placeholder only */
-    --ink-faint: 180 189 200; /* #B4BDC8       1.9:1 — decorative only */
-
-    /* App shell — navy chrome (sidebar + top bar) */
-    --shell-raised: 20 36 61; /* #14243D — hover/raised on navy */
-    --shell-line: 33 49 74; /* #21314A — hairline on navy */
-    --shell-fg: 255 255 255; /* primary text on navy 18.1:1 */
-    --shell-fg-mid: 163 177 194; /* #A3B1C2 8.3:1 — nav labels */
-    --shell-fg-dim: 132 148 167; /* #8494A7 5.9:1 — group labels, hints */
-
-    /* Status (system-owned; never tenant-swapped) */
-    --pos: 4 113 79; /* #04714F positive figures */
-    --red-fig: 185 28 28; /* #B91C1C negative figures */
-
+    --color-brand: 16 185 129; /* emerald-500 */
     --sidebar-width: 260px;
     --header-height: 56px;
+
+    /* ── MeritBooks brand tokens (drop-in from MeritBooks-Brand-Tokens.md) ──
+       Single source of truth for raw CSS (ledger utilities, inline styles).
+       Tailwind tokens in tailwind.config.ts mirror these exact values. */
+    --em: #10b981;
+    --em-bright: #34d399;
+    --em-deep: #059669;
+    --bg: #0a0f0d;
+    --bg-alt: #0c120f;
+    --surface: #121a16;
+    --surface-2: #0e1512;
+    --elevated: #18211c;
+    --hairline: #232c27;
+    --hairline-2: #2c362f;
+    --text-hi: #edf2ef;
+    --text: #aeb8b2;
+    --text-mid: #7e8983;
+    --text-dim: #7c877f;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --red-fig: #f87171;
+    --blue: #3b82f6;
+    --indigo: #818cf8;
+    --pos: #34d399;
+    --ink-on-em: #05221a;
+    --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
     --radius: 10px;
-    --radius-lg: 16px;
+    --radius-lg: 14px;
     --radius-sm: 7px;
     --ease-brand: cubic-bezier(0.2, 0.6, 0.2, 1);
   }
 
   html {
     @apply antialiased;
-    color-scheme: light;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 
   body {
-    background-color: rgb(var(--bg));
-    color: rgb(var(--ink));
-    font-family: var(--font-sans), system-ui, sans-serif;
-  }
-
-  /* Display face for titles. Syne is wide — reserved for h1–h3 / page and
-     section titles and big narrative stats; never body or table text. */
-  h1,
-  h2,
-  h3 {
-    font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
-    letter-spacing: -0.01em;
+    /* Brand page background (--bg) + body text (--text). */
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font-display);
   }
 
   /* Numbers are the product: every mono run defaults to aligned tabular
@@ -92,22 +62,6 @@
   samp,
   pre {
     font-variant-numeric: tabular-nums;
-  }
-
-  /* Visible keyboard focus everywhere, in the accent. */
-  :focus-visible {
-    outline: 2px solid rgb(var(--brand-accent));
-    outline-offset: 2px;
-  }
-  /* Elements that draw their own ring don't need the outline too. */
-  [class*='focus:ring']:focus-visible,
-  [class*='focus-visible:ring']:focus-visible,
-  .input:focus-visible {
-    outline: none;
-  }
-
-  ::selection {
-    background: rgb(var(--brand-accent) / 0.18);
   }
 
   /* Reduced motion honored globally — show final state, no transforms. */
@@ -124,24 +78,23 @@
 
   /* Scrollbar styling */
   ::-webkit-scrollbar {
-    @apply w-1.5 h-1.5;
+    @apply w-1.5;
   }
   ::-webkit-scrollbar-track {
     @apply bg-transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background-color: rgb(var(--ink-faint) / 0.7);
-    @apply rounded-full;
+    @apply bg-slate-700 rounded-full;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(var(--ink-dim));
+    @apply bg-slate-600;
   }
 }
 
 @layer components {
-  /* Card: white, 1px warm hairline, 16px radius (Merit digital spec). */
+  /* Consistent card styling */
   .card {
-    @apply bg-surface-900 border border-slate-800 rounded-brand-lg shadow-card;
+    @apply bg-surface-900 border border-slate-800 rounded-xl;
   }
   .card-hover {
     @apply card transition-colors hover:border-slate-700;
@@ -153,10 +106,10 @@
     @apply transition-colors;
   }
   .table-row-hover:hover > td {
-    background-color: rgb(var(--brand-navy) / 0.025);
+    background-color: rgb(255 255 255 / 0.05);
   }
-  /* Rows that open a detail panel: blue wash + left accent + a chevron that
-     appears on hover. Backgrounds on <td> for Safari. */
+  /* Rows that open a detail panel: obvious emerald highlight + left accent +
+     a chevron that appears on hover. Backgrounds on <td> for Safari. */
   .row-clickable {
     @apply cursor-pointer;
   }
@@ -164,16 +117,16 @@
     @apply transition-colors;
   }
   .row-clickable:hover > td {
-    background-color: rgb(var(--brand-accent) / 0.05);
+    background-color: rgb(16 185 129 / 0.09);
   }
   .row-clickable:hover > td:first-child {
-    box-shadow: inset 2px 0 0 0 rgb(var(--brand-accent));
+    box-shadow: inset 2px 0 0 0 rgb(16 185 129);
   }
   .row-chevron {
     @apply text-slate-600 opacity-0 transition-opacity;
   }
   .row-clickable:hover .row-chevron {
-    @apply opacity-100 text-brand-400;
+    @apply opacity-100 text-emerald-400;
   }
 
   /* Status badges */
@@ -195,38 +148,34 @@
   .badge-neutral {
     @apply badge bg-slate-500/10 text-slate-400;
   }
-  /* Merit tag: Blue Wash fill, mono uppercase (brand "tags, badges"). */
-  .tag {
-    @apply inline-flex items-center gap-1 rounded-full bg-accent-wash px-2 py-0.5 font-mono text-2xs font-medium uppercase tracking-eyebrow text-accent-strong;
-  }
 
   /* Form inputs */
   .input {
-    @apply w-full rounded-brand border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-slate-100
-    placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500/25 focus:border-brand-500
+    @apply w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-slate-200
+    placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500
     transition-colors;
   }
   .input-error {
-    @apply input border-red-500 focus:ring-red-500/25 focus:border-red-500;
+    @apply input border-red-500 focus:ring-red-500/40 focus:border-red-500;
   }
 
-  /* Buttons — Electric Blue fill, white text, 10px radius (Merit digital spec). */
+  /* Buttons */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-brand px-4 py-2 text-sm font-medium
-    transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+    transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface-950
     disabled:opacity-50 disabled:pointer-events-none;
   }
   .btn-primary {
-    @apply btn bg-brand-500 text-white hover:bg-brand-600 focus-visible:ring-brand-500;
+    @apply btn bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500;
   }
   .btn-secondary {
-    @apply btn bg-surface-900 text-slate-200 border border-slate-700 hover:bg-slate-800 hover:border-slate-600 focus-visible:ring-brand-500;
+    @apply btn bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 focus:ring-slate-500;
   }
   .btn-ghost {
-    @apply btn text-slate-400 hover:text-slate-100 hover:bg-navy/[0.04] focus-visible:ring-brand-500;
+    @apply btn text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] focus:ring-slate-500;
   }
   .btn-danger {
-    @apply btn bg-red-500/10 text-red-400 hover:bg-red-500/15 focus-visible:ring-red-500;
+    @apply btn bg-red-500/10 text-red-400 hover:bg-red-500/20 focus:ring-red-500;
   }
   .btn-sm {
     @apply px-3 py-1.5 text-xs;
@@ -252,55 +201,36 @@
     animation: slide-up 0.3s ease-out both;
   }
 
-  /* Merit eyebrow / section label: JetBrains Mono, uppercase, 1.5–2.5px tracking. */
-  .eyebrow {
-    font-family: var(--font-mono), ui-monospace, monospace;
-    font-size: 0.6875rem;
-    line-height: 1rem;
-    font-weight: 500;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: rgb(var(--ink-mid));
-  }
-
-  /* Navy "dark section" with the brand's subtle grid-mesh overlay. Use for
-     hero bands / auth panels — never behind dense data. */
-  .section-navy {
-    background-color: rgb(var(--brand-navy));
-    color: rgb(var(--shell-fg));
-  }
-  .grid-mesh {
-    background-image: linear-gradient(rgb(255 255 255 / 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(255 255 255 / 0.04) 1px, transparent 1px);
-    background-size: 32px 32px;
-  }
-
-  /* ── Ledger utilities ── */
+  /* ── Ledger utilities (MeritBooks-Platform-Design-Criteria.md §3 Tables) ──
+     Reusable building blocks for the signature ledger pattern. */
 
   /* Mono figure cell: JetBrains Mono, tabular, right-aligned. */
   .mono-fig {
-    font-family: var(--font-mono), ui-monospace, monospace;
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     text-align: right;
   }
 
-  /* Negative figures. Parentheses are applied in formatting; this carries color. */
+  /* Negative figures: red-fig. Parentheses are applied in JS/formatting;
+     this class carries the color. */
   .fig-neg {
-    color: rgb(var(--red-fig));
+    color: var(--red-fig);
   }
 
-  /* Positive figures. */
+  /* Positive figures: em-bright. */
   .fig-pos {
-    color: rgb(var(--pos));
+    color: var(--pos);
   }
 
-  /* The balanced grand-total mark — the accountant's double-rule, in navy ink.
-     Use only for a balanced / final total row. */
+  /* The balanced grand-total mark — the accountant's double-rule and the
+     logo motif: a 2px emerald rule above and a 2px emerald rule below the
+     total, ~5px apart. Use only for a balanced / final total row. */
   .ledger-total {
-    color: rgb(var(--ink-hi));
+    color: var(--text-hi);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    border-top: 1px solid rgb(var(--ink-hi));
-    border-bottom: 3px double rgb(var(--ink-hi));
+    border-top: 2px solid var(--em);
+    border-bottom: 2px solid var(--em);
+    box-shadow: inset 0 -5px 0 -3px var(--em);
   }
 }

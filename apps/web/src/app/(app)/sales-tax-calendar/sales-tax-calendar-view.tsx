@@ -227,7 +227,7 @@ function JurisdictionCard(props: {
         <Landmark size={16} className="text-emerald-400 shrink-0" />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-ink-hi">{j.jurisdiction}</span>
+            <span className="text-sm font-semibold text-white">{j.jurisdiction}</span>
             <span className="badge badge-neutral text-2xs" title={j.frequencySource === 'recorded' ? 'From your recorded filing cadence' : 'Default cadence (tenant-tunable)'}>
               {freqLabel[j.frequency]}
             </span>
@@ -274,7 +274,7 @@ function JurisdictionCard(props: {
                     <div className="flex items-center justify-end gap-2">
                       <Link
                         href={`/sales-tax-return?start_date=${row.periodStart}&end_date=${row.periodEnd}&jurisdiction=${j.jurisdiction}`}
-                        className="text-2xs text-slate-400 hover:text-ink-hi inline-flex items-center gap-1"
+                        className="text-2xs text-slate-400 hover:text-white inline-flex items-center gap-1"
                         title="Open the return worksheet for this period"
                       >
                         Worksheet <ExternalLink size={11} />
@@ -350,10 +350,10 @@ function MarkFiledModal(props: { target: MarkTarget; onClose: () => void; onSave
       <div className="card w-full max-w-md p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-ink-hi">Mark filed — {jurisdiction} {row.label}</h2>
+            <h2 className="text-sm font-semibold text-white">Mark filed — {jurisdiction} {row.label}</h2>
             <p className="text-2xs text-slate-500 mt-0.5">Due {fmtDate(row.dueDate)} · records the filing only; no GL post.</p>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-ink-hi"><X size={16} /></button>
+          <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={16} /></button>
         </div>
 
         <div className="grid grid-cols-2 gap-3 text-2xs">
@@ -372,7 +372,7 @@ function MarkFiledModal(props: { target: MarkTarget; onClose: () => void; onSave
           <input
             type="number" min={0} step={0.01} value={remitted}
             onChange={(e) => setRemitted(e.target.value)}
-            className="w-full px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi text-right font-mono"
+            className="w-full px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white text-right font-mono"
           />
         </div>
         <div>
@@ -380,7 +380,7 @@ function MarkFiledModal(props: { target: MarkTarget; onClose: () => void; onSave
           <input
             value={confirmation} onChange={(e) => setConfirmation(e.target.value)}
             placeholder="State portal confirmation"
-            className="w-full px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-ink-hi"
+            className="w-full px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-white"
           />
         </div>
 
@@ -400,7 +400,7 @@ function SummaryCard(props: { label: string; valueCents: number; tone?: 'muted';
   return (
     <div className={clsx('card p-3', emphasize && 'border-emerald-500/40')}>
       <p className="text-2xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={clsx('mt-1 font-mono text-lg', emphasize ? 'text-emerald-300' : tone === 'muted' ? 'text-slate-400' : 'text-ink-hi')}>
+      <p className={clsx('mt-1 font-mono text-lg', emphasize ? 'text-emerald-300' : tone === 'muted' ? 'text-slate-400' : 'text-white')}>
         {fmt(valueCents)}
       </p>
     </div>

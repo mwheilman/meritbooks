@@ -121,7 +121,7 @@ export function AutonomyDial<V extends string = string>({
               optDisabled && 'cursor-not-allowed opacity-40',
               selected
                 // on = emerald tint + inset emerald ring
-                ? 'bg-em/10 text-ink-hi ring-1 ring-inset ring-em/50'
+                ? 'bg-em/10 text-white ring-1 ring-inset ring-em/50'
                 // off = --surface-2 + --hairline-2
                 : 'border border-hairline-strong bg-surface-850 text-ink-mid hover:text-ink-hi',
             )}

@@ -165,14 +165,14 @@ export function AssetDrawer({ asset, onClose, onChanged }: { asset: AssetLike | 
                 value={currentMethod}
                 disabled={started}
                 onChange={(e) => { setMethod(e.target.value); setSchedule(null); }}
-                className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi disabled:opacity-50"
+                className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white disabled:opacity-50"
               >
                 {METHOD_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}{o.book ? '' : ' — parallel tax book'}</option>)}
               </select>
               <button
                 onClick={saveMethod}
                 disabled={started || savingMethod || currentMethod === asset.depreciationMethod}
-                className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white"
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white"
               >
                 {savingMethod ? <Loader2 size={13} className="animate-spin" /> : 'Save'}
               </button>
@@ -195,17 +195,17 @@ export function AssetDrawer({ asset, onClose, onChanged }: { asset: AssetLike | 
                     <label className="block text-2xs text-slate-500 mb-1">Set total expected units</label>
                     <input type="number" min="0" step="any" value={totalUnits} placeholder={asset.totalExpectedUnits != null ? String(asset.totalExpectedUnits) : 'e.g. 100000'}
                       onChange={(e) => setTotalUnits(e.target.value)}
-                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono" />
+                      className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono" />
                   </div>
                 )}
                 <div>
                   <label className="block text-2xs text-slate-500 mb-1">Record units used to date (cumulative)</label>
                   <input type="number" min="0" step="any" value={unitsUsedInput} placeholder={String(asset.unitsUsed)}
                     onChange={(e) => setUnitsUsedInput(e.target.value)}
-                    className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono" />
+                    className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono" />
                 </div>
                 <button onClick={saveUnits} disabled={savingUnits}
-                  className="w-full px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 rounded-lg text-xs font-medium text-white flex items-center justify-center">
+                  className="w-full px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 rounded-lg text-xs font-medium text-white flex items-center justify-center">
                   {savingUnits ? <Loader2 size={13} className="animate-spin" /> : 'Save units'}
                 </button>
                 <p className="text-2xs text-slate-600">The next depreciation run charges the incremental usage since the last run.</p>
@@ -215,7 +215,7 @@ export function AssetDrawer({ asset, onClose, onChanged }: { asset: AssetLike | 
             <button onClick={() => loadSchedule(currentMethod)} className="text-2xs text-indigo-400 hover:text-indigo-300">
               Preview projected schedule
             </button>
-            {scheduleLoading && <div className="py-2"><Loader2 size={14} className="animate-spin text-brand-400" /></div>}
+            {scheduleLoading && <div className="py-2"><Loader2 size={14} className="animate-spin text-emerald-400" /></div>}
             {scheduleErr && <p className="text-2xs text-red-400">{scheduleErr}</p>}
             {schedule && schedule.length > 0 && (
               <div className="rounded-md bg-slate-800/40 max-h-48 overflow-y-auto">
@@ -264,20 +264,20 @@ export function AssetDrawer({ asset, onClose, onChanged }: { asset: AssetLike | 
                 <div>
                   <label className="block text-2xs uppercase text-slate-500 mb-1">Disposal date</label>
                   <input type="date" value={disposalDate} onChange={(e) => { setDisposalDate(e.target.value); setPreview(null); }}
-                    className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi" />
+                    className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white" />
                 </div>
                 <div>
                   <label className="block text-2xs uppercase text-slate-500 mb-1">Proceeds ($)</label>
                   <input type="number" min="0" step="0.01" value={proceeds} placeholder="0.00"
                     onChange={(e) => { setProceeds(e.target.value); setPreview(null); }}
-                    className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono" />
+                    className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono" />
                 </div>
               </div>
               {proceeds.trim() !== '' && Number(proceeds) > 0 && (
                 <div>
                   <label className="block text-2xs uppercase text-slate-500 mb-1">Receive via</label>
                   <select value={rail} onChange={(e) => { setRail(e.target.value); setPreview(null); }}
-                    className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi">
+                    className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
                     <option value="ach">Bank / ACH</option>
                     <option value="check">Check</option>
                     <option value="wire">Wire</option>

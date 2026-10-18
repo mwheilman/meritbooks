@@ -20,7 +20,7 @@ export default function AppError({
       <div className="h-12 w-12 rounded-xl bg-red-500/10 flex items-center justify-center mb-4">
         <AlertTriangle size={24} className="text-red-400" />
       </div>
-      <h2 className="text-lg font-semibold text-ink-hi mb-2">Something went wrong</h2>
+      <h2 className="text-lg font-semibold text-white mb-2">Something went wrong</h2>
       <p className="text-sm text-slate-400 text-center max-w-md mb-6">
         {error.message || 'An unexpected error occurred. Our team has been notified.'}
       </p>

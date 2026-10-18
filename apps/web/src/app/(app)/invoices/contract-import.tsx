@@ -89,7 +89,7 @@ const CADENCE_OPTIONS: RecurringFrequency[] = ['WEEKLY', 'BIWEEKLY', 'MONTHLY', 
 const NEW_CUSTOMER = '__NEW__';
 
 const inputCls =
-  'w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-ink-hi focus:border-brand-500 focus:outline-none';
+  'w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-white focus:border-emerald-500 focus:outline-none';
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -326,13 +326,13 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-indigo-400" />
             <div>
-              <h2 className="text-lg font-semibold text-ink-hi">Import from contract or SOW</h2>
+              <h2 className="text-lg font-semibold text-white">Import from contract or SOW</h2>
               <p className="text-[11px] text-slate-500">
                 Drop a signed customer contract — AI proposes the invoice(s) and rev-rec method; you review and confirm. Nothing is saved until you confirm.
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close">
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -355,7 +355,7 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
               phase === 'parsing'
                 ? 'border-indigo-500/40 bg-indigo-500/5 cursor-default'
                 : dragOver
-                  ? 'border-brand-500 bg-brand-500/5 cursor-pointer'
+                  ? 'border-emerald-500 bg-emerald-500/5 cursor-pointer'
                   : 'border-slate-700 hover:border-slate-600 cursor-pointer',
             )}
           >
@@ -460,7 +460,7 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-[10px] text-slate-500 uppercase tracking-wider">Line items</label>
-                  <button onClick={addLine} className="text-[11px] text-brand-400 hover:text-brand-300 flex items-center gap-1"><Plus size={11} /> Add line</button>
+                  <button onClick={addLine} className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1"><Plus size={11} /> Add line</button>
                 </div>
                 <div className="space-y-2">
                   {lines.map((l, i) => (
@@ -480,7 +480,7 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
               <div className={clsx(flag('milestones') && 'rounded-lg p-2', flag('milestones'))}>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-[10px] text-slate-500 uppercase tracking-wider">Milestones (one invoice each)</label>
-                  <button onClick={addMs} className="text-[11px] text-brand-400 hover:text-brand-300 flex items-center gap-1"><Plus size={11} /> Add milestone</button>
+                  <button onClick={addMs} className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1"><Plus size={11} /> Add milestone</button>
                 </div>
                 <div className="space-y-2">
                   {milestones.map((m, i) => (
@@ -540,11 +540,11 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
                 Confirmed invoices are created as drafts through the standard invoice / recurring-invoice paths — same numbering, rev-rec treatment, and validation as manual entry.
               </p>
               <div className="flex items-center gap-2">
-                <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-ink-hi">Cancel</button>
+                <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
                 <button
                   onClick={confirm}
                   disabled={phase === 'confirming'}
-                  className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2"
                 >
                   {phase === 'confirming' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                   {billingKind === 'RECURRING' ? 'Create recurring schedule' : billingKind === 'MILESTONE' ? `Create ${milestones.length} milestone invoice${milestones.length === 1 ? '' : 's'}` : 'Create invoice'}

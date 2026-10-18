@@ -61,10 +61,10 @@ export function AccountTree() {
               {/* Account Type level */}
               <button
                 onClick={() => toggle(typeKey)}
-                className="w-full flex items-center gap-3 px-5 py-3 hover:bg-navy/[0.02] transition-colors"
+                className="w-full flex items-center gap-3 px-5 py-3 hover:bg-white/[0.02] transition-colors"
               >
                 {typeExpanded ? <ChevronDown size={16} className="text-slate-500" /> : <ChevronRight size={16} className="text-slate-500" />}
-                <span className="text-sm font-semibold text-ink-hi">{type.name}</span>
+                <span className="text-sm font-semibold text-white">{type.name}</span>
                 <span className="text-2xs text-slate-600 font-mono">
                   {type.normal_balance === 'DEBIT' ? 'DR' : 'CR'}
                 </span>
@@ -85,7 +85,7 @@ export function AccountTree() {
                   <div key={stKey}>
                     <button
                       onClick={() => toggle(stKey)}
-                      className="w-full flex items-center gap-3 pl-10 pr-5 py-2.5 hover:bg-navy/[0.02] transition-colors"
+                      className="w-full flex items-center gap-3 pl-10 pr-5 py-2.5 hover:bg-white/[0.02] transition-colors"
                     >
                       {stExpanded ? <ChevronDown size={14} className="text-slate-500" /> : <ChevronRight size={14} className="text-slate-500" />}
                       <span className="text-sm font-medium text-slate-300">{subType.name}</span>
@@ -103,7 +103,7 @@ export function AccountTree() {
                         <div key={gKey}>
                           <button
                             onClick={() => toggle(gKey)}
-                            className="w-full flex items-center gap-3 pl-16 pr-5 py-2 hover:bg-navy/[0.02] transition-colors"
+                            className="w-full flex items-center gap-3 pl-16 pr-5 py-2 hover:bg-white/[0.02] transition-colors"
                           >
                             {gExpanded ? <ChevronDown size={12} className="text-slate-600" /> : <ChevronRight size={12} className="text-slate-600" />}
                             <span className="text-sm text-slate-400">{group.name}</span>
@@ -114,7 +114,7 @@ export function AccountTree() {
                           {gExpanded && group.accounts.map((account) => (
                             <div
                               key={account.number}
-                              className="flex items-center gap-3 pl-24 pr-5 py-2 min-w-[480px] hover:bg-navy/[0.02] transition-colors"
+                              className="flex items-center gap-3 pl-24 pr-5 py-2 min-w-[480px] hover:bg-white/[0.02] transition-colors"
                             >
                               <span className="text-xs font-mono text-brand-400 w-12 shrink-0">{account.number}</span>
                               <span className="text-sm text-slate-300">{account.name}</span>

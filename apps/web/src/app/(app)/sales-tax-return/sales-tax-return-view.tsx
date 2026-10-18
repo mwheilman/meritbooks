@@ -182,11 +182,11 @@ export function SalesTaxReturnView() {
         </div>
         <div className="flex items-center gap-1 ml-auto">
           {[1, 2, 3, 4].map((q) => (
-            <button key={q} onClick={() => setQuarter(q)} className="px-2.5 py-1.5 rounded text-xs font-medium text-slate-400 hover:text-ink-hi hover:bg-slate-800">
+            <button key={q} onClick={() => setQuarter(q)} className="px-2.5 py-1.5 rounded text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800">
               Q{q}
             </button>
           ))}
-          <button onClick={setCurrentMonth} className="px-2.5 py-1.5 rounded text-xs font-medium text-slate-400 hover:text-ink-hi hover:bg-slate-800">
+          <button onClick={setCurrentMonth} className="px-2.5 py-1.5 rounded text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800">
             This month
           </button>
         </div>
@@ -227,7 +227,7 @@ export function SalesTaxReturnView() {
               <div className="flex items-start gap-3">
                 <ShieldAlert size={18} className="text-amber-400 mt-0.5 shrink-0" />
                 <div className="space-y-1.5">
-                  <h2 className="text-sm font-semibold text-ink-hi">Nexus says you should be collecting here — but aren&apos;t</h2>
+                  <h2 className="text-sm font-semibold text-white">Nexus says you should be collecting here — but aren&apos;t</h2>
                   <p className="text-2xs text-slate-400">
                     The EC-7 economic-nexus tripwire flagged these states, yet no tax was collected in them this period. Confirm registration + start collecting, or dismiss the exception if already registered.
                   </p>
@@ -257,7 +257,7 @@ export function SalesTaxReturnView() {
               <section className="card overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
                   <div>
-                    <h2 className="text-sm font-semibold text-ink-hi">Liability by jurisdiction</h2>
+                    <h2 className="text-sm font-semibold text-white">Liability by jurisdiction</h2>
                     <p className="text-2xs text-slate-500 mt-0.5">
                       {data.window.startDate} → {data.window.endDate} · {totals?.jurisdictionCount ?? 0} jurisdiction{(totals?.jurisdictionCount ?? 0) === 1 ? '' : 's'}
                       {(totals?.rateFlaggedCount ?? 0) > 0 && <span className="text-amber-400"> · {totals?.rateFlaggedCount} rate variance{totals?.rateFlaggedCount === 1 ? '' : 's'} flagged</span>}
@@ -283,7 +283,7 @@ export function SalesTaxReturnView() {
                     {totals && (
                       <tfoot>
                         <tr className="border-t-2 border-slate-700 bg-slate-900/40 font-semibold">
-                          <td className="px-4 py-3 text-ink-hi">Total {data.jurisdictionFilter ? `(${data.jurisdictionFilter})` : ''}</td>
+                          <td className="px-4 py-3 text-white">Total {data.jurisdictionFilter ? `(${data.jurisdictionFilter})` : ''}</td>
                           <td className="px-4 py-3 text-right font-mono text-slate-200">{fmt(totals.grossSalesCents)}</td>
                           <td className="px-4 py-3 text-right font-mono text-slate-200">{fmt(totals.taxableSalesCents)}</td>
                           <td className="px-4 py-3 text-right font-mono text-slate-400">{fmt(totals.deductionsCents)}</td>
@@ -299,7 +299,7 @@ export function SalesTaxReturnView() {
               {/* Taxable / exempt breakdown detail */}
               <section className="card overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-800">
-                  <h2 className="text-sm font-semibold text-ink-hi">Taxable vs exempt breakdown</h2>
+                  <h2 className="text-sm font-semibold text-white">Taxable vs exempt breakdown</h2>
                   <p className="text-2xs text-slate-500 mt-0.5">Every non-taxed dollar a return deducts from gross, split into genuinely exempt (resale/nonprofit) vs simply untaxed.</p>
                 </div>
                 <table className="w-full text-sm">
@@ -339,7 +339,7 @@ export function SalesTaxReturnView() {
                 <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2">
                   <Scale size={15} className="text-slate-400" />
                   <div>
-                    <h2 className="text-sm font-semibold text-ink-hi">GL tie-out — Sales Tax Payable{gl?.accountNumber ? ` (${gl.accountNumber})` : ''}</h2>
+                    <h2 className="text-sm font-semibold text-white">GL tie-out — Sales Tax Payable{gl?.accountNumber ? ` (${gl.accountNumber})` : ''}</h2>
                     <p className="text-2xs text-slate-500 mt-0.5">Reconciles worksheet collected tax to the invoice-sourced credits posted to the liability account (all jurisdictions).</p>
                   </div>
                 </div>
@@ -380,7 +380,7 @@ function SummaryCard(props: { label: string; valueCents: number; tone?: 'muted';
   return (
     <div className={clsx('card p-3', emphasize && 'border-emerald-500/40')}>
       <p className="text-2xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={clsx('mt-1 font-mono text-lg', emphasize ? 'text-emerald-300' : tone === 'muted' ? 'text-slate-400' : 'text-ink-hi')}>
+      <p className={clsx('mt-1 font-mono text-lg', emphasize ? 'text-emerald-300' : tone === 'muted' ? 'text-slate-400' : 'text-white')}>
         {fmt(valueCents)}
       </p>
     </div>
@@ -392,7 +392,7 @@ function TieCell(props: { label: string; valueCents: number; tone?: 'muted'; emp
   return (
     <div>
       <p className="text-2xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={clsx('mt-0.5 font-mono text-sm', emphasize ? 'text-ink-hi' : tone === 'muted' ? 'text-slate-400' : 'text-slate-200')}>
+      <p className={clsx('mt-0.5 font-mono text-sm', emphasize ? 'text-white' : tone === 'muted' ? 'text-slate-400' : 'text-slate-200')}>
         {fmt(valueCents)}
       </p>
     </div>

@@ -17,7 +17,7 @@ export function CustomerPeek({ customerId }: { customerId: string }) {
   return (
     <div className="p-3">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-semibold text-ink-hi truncate">{data.name}</span>
+        <span className="text-sm font-semibold text-white truncate">{data.name}</span>
         {data.isPortfolioCompany && <span className="px-1.5 py-0.5 rounded text-2xs font-medium bg-emerald-500/15 text-emerald-400">Internal</span>}
       </div>
       {data.contactName && <div className="text-2xs text-slate-400 mb-1">{data.contactName}</div>}
@@ -28,7 +28,7 @@ export function CustomerPeek({ customerId }: { customerId: string }) {
       <div className="rounded-md bg-slate-800/40 px-3 py-2">
         <div className="flex items-center justify-between">
           <span className="text-2xs text-slate-500">Open A/R</span>
-          <span className="text-sm font-mono tabular-nums text-ink-hi">{formatMoney(data.ar.totalOutstanding)}</span>
+          <span className="text-sm font-mono tabular-nums text-white">{formatMoney(data.ar.totalOutstanding)}</span>
         </div>
         <div className="flex items-center justify-between mt-0.5">
           <span className="text-2xs text-slate-500">{data.ar.openInvoiceCount} open invoice{data.ar.openInvoiceCount !== 1 ? 's' : ''}</span>

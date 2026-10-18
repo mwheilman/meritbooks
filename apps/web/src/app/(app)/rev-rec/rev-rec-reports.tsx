@@ -69,7 +69,7 @@ export function RevRecReports() {
             type="month"
             value={month}
             onChange={(e) => setMonth(e.target.value || defaultMonth())}
-            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-ink-hi font-mono"
+            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-white font-mono"
           />
           {data?.period && <span className="text-2xs text-slate-500">{data.period.label}</span>}
         </div>
@@ -82,7 +82,7 @@ export function RevRecReports() {
                 onClick={() => setTab(t.id)}
                 className={clsx(
                   'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-                  tab === t.id ? 'bg-slate-700 text-ink-hi' : 'text-slate-400 hover:text-slate-200',
+                  tab === t.id ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200',
                 )}
               >
                 <Icon size={13} /> {t.label}
@@ -93,7 +93,7 @@ export function RevRecReports() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 text-brand-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 text-emerald-400 animate-spin" /></div>
       ) : error ? (
         <div className="card p-6 text-center"><AlertCircle className="mx-auto text-red-400 mb-2" size={20} /><p className="text-sm text-red-400">{error}</p></div>
       ) : !data ? (
@@ -158,7 +158,7 @@ function RollforwardView({ data, period }: { data: Rollforward; period: Period }
             </thead>
             <tbody className="divide-y divide-slate-800/30">
               {data.byCompany.map((r) => (
-                <tr key={r.locationId} className="hover:bg-navy/[0.02]">
+                <tr key={r.locationId} className="hover:bg-white/[0.02]">
                   <td className="px-4 py-2.5">
                     <p className="text-sm text-slate-200 truncate max-w-[260px]">{r.name}</p>
                     {r.shortCode && <span className="text-2xs font-mono text-slate-500">{r.shortCode}</span>}
@@ -308,7 +308,7 @@ function MethodsView({ data, period }: { data: MethodSummary; period: Period }) 
           </thead>
           <tbody className="divide-y divide-slate-800/30">
             {data.rows.map((r) => (
-              <tr key={r.method} className="hover:bg-navy/[0.02]">
+              <tr key={r.method} className="hover:bg-white/[0.02]">
                 <td className="px-4 py-2.5 text-sm text-slate-200">{r.methodLabel}</td>
                 <td className="px-4 py-2.5 text-right text-sm font-mono text-slate-400">{r.jobCount}</td>
                 <Money value={r.recognizedCents} />
@@ -360,7 +360,7 @@ function Stat({ label, value, tone, strong }: { label: string; value: string; to
       <p className={clsx(
         'font-mono mt-1',
         strong ? 'text-xl font-semibold' : 'text-lg font-semibold',
-        tone === 'brand' ? 'text-emerald-400' : tone === 'down' ? 'text-amber-400' : 'text-ink-hi',
+        tone === 'brand' ? 'text-emerald-400' : tone === 'down' ? 'text-amber-400' : 'text-white',
       )}>{value}</p>
     </div>
   );

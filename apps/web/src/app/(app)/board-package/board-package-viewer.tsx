@@ -158,14 +158,14 @@ export function BoardPackageViewer() {
       <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-800/20 border border-slate-800 flex-wrap">
         <div className="flex items-center gap-1.5">
           <Calendar size={13} className="text-slate-500" />
-          <select value={periodKey} onChange={(e) => setPeriodKey(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi">
+          <select value={periodKey} onChange={(e) => setPeriodKey(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
             {PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
           </select>
           {periodKey === 'custom' && (
             <>
-              <input type="date" value={customS} onChange={(e) => setCustomS(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono w-32" />
+              <input type="date" value={customS} onChange={(e) => setCustomS(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono w-32" />
               <span className="text-slate-600 text-xs">to</span>
-              <input type="date" value={customE} onChange={(e) => setCustomE(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono w-32" />
+              <input type="date" value={customE} onChange={(e) => setCustomE(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono w-32" />
             </>
           )}
         </div>
@@ -179,7 +179,7 @@ export function BoardPackageViewer() {
             <select
               value={selectedLocs[0] ?? ''}
               onChange={(e) => setSelectedLocs(e.target.value ? [e.target.value] : [])}
-              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi"
+              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"
               aria-label="Company"
             >
               {myCompanies.map((c) => (
@@ -221,7 +221,7 @@ export function BoardPackageViewer() {
         <div className="card p-8 text-center">
           <AlertCircle size={24} className="mx-auto text-red-400 mb-2" />
           <p className="text-sm text-red-400">{error}</p>
-          <button onClick={refetch} className="mt-2 text-xs text-brand-400 hover:text-brand-300 underline">Try again</button>
+          <button onClick={refetch} className="mt-2 text-xs text-emerald-400 hover:text-emerald-300 underline">Try again</button>
         </div>
       )}
 
@@ -255,7 +255,7 @@ function BoardPackagePreview({ data, entityLabel, onGenerateAi }: { data: BoardP
         <div className="card p-4 border-l-4 border-l-amber-500 flex items-start gap-2.5">
           <AlertCircle size={16} className="text-amber-400 mt-0.5 shrink-0" />
           <div>
-            <p className="text-sm font-medium text-ink-hi">No posted activity for this scope yet</p>
+            <p className="text-sm font-medium text-white">No posted activity for this scope yet</p>
             <p className="text-xs text-slate-400 mt-0.5">
               The package below is fully computed but every figure is zero — this company has no ledger
               activity in the selected period. It will populate as transactions are posted. You can still
@@ -268,7 +268,7 @@ function BoardPackagePreview({ data, entityLabel, onGenerateAi }: { data: BoardP
       {/* Cover */}
       <div className="card p-5 border-l-4 border-l-emerald-500">
         <p className="text-[10px] uppercase tracking-widest text-slate-500">Confidential · Prepared for the Board</p>
-        <h2 className="text-xl font-semibold text-ink-hi mt-1">{entityLabel}</h2>
+        <h2 className="text-xl font-semibold text-white mt-1">{entityLabel}</h2>
         <p className="text-sm text-emerald-400 font-medium">{data.cover.title}</p>
         <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-xs text-slate-400">
           <span>Period: <span className="text-slate-200 font-mono">{data.meta.periodLabel}</span></span>
@@ -288,7 +288,7 @@ function BoardPackagePreview({ data, entityLabel, onGenerateAi }: { data: BoardP
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-indigo-500/15 flex items-center justify-center"><Sparkles size={14} className="text-indigo-400" /></div>
             <div>
-              <p className="text-sm font-semibold text-ink-hi">Executive Summary</p>
+              <p className="text-sm font-semibold text-white">Executive Summary</p>
               <p className="text-[11px] text-slate-500">Phrased from computed figures — the model never invents a number</p>
             </div>
           </div>
@@ -316,7 +316,7 @@ function BoardPackagePreview({ data, entityLabel, onGenerateAi }: { data: BoardP
           {k.cards.map((c) => (
             <div key={c.key} className="card p-3 border-l-2 border-l-emerald-500/60">
               <p className="text-[10px] uppercase tracking-wide text-slate-500">{c.label}</p>
-              <p className="text-lg font-mono font-semibold text-ink-hi mt-0.5">{c.valueText}</p>
+              <p className="text-lg font-mono font-semibold text-white mt-0.5">{c.valueText}</p>
               {c.deltaPct != null ? (
                 <p className={clsx('text-[11px] font-medium flex items-center gap-0.5 mt-0.5', c.favorable ? 'text-emerald-400' : 'text-red-400')}>
                   {c.favorable ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
@@ -359,12 +359,12 @@ function BoardPackagePreview({ data, entityLabel, onGenerateAi }: { data: BoardP
       <div className="card p-5">
         <div className="flex items-center gap-2 mb-3">
           <BookOpen size={15} className="text-slate-400" />
-          <p className="text-sm font-semibold text-ink-hi">Notes to Financial Statements</p>
+          <p className="text-sm font-semibold text-white">Notes to Financial Statements</p>
         </div>
         <div className="space-y-4">
           {data.notes.notes.map((n) => (
             <div key={n.id} className="border-t border-slate-800 pt-3 first:border-t-0 first:pt-0">
-              <p className="text-sm font-medium text-ink-hi flex items-center gap-2">
+              <p className="text-sm font-medium text-white flex items-center gap-2">
                 {n.title}
                 {n.editable && <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 text-[10px]">Complete before issuing</span>}
               </p>
@@ -406,7 +406,7 @@ function StatementCard({ title, rows, footer, footerOk }: { title: string; rows:
       <div className="space-y-1.5">
         {rows.map(({ label, cents, emph }) => (
           <div key={label} className={clsx('flex justify-between items-baseline', emph && 'pt-1.5 mt-1 border-t border-slate-800')}>
-            <span className={clsx('text-xs', emph ? 'text-ink-hi font-medium' : 'text-slate-400')}>{label}</span>
+            <span className={clsx('text-xs', emph ? 'text-white font-medium' : 'text-slate-400')}>{label}</span>
             <span className={clsx('font-mono text-sm', emph ? (cents >= 0 ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold') : 'text-slate-200')}>{formatMoney(cents)}</span>
           </div>
         ))}
@@ -431,22 +431,22 @@ function CompanyMultiSelect({ options, selected, onChange }: { options: { value:
 
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi hover:border-slate-600 transition-colors">
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white hover:border-slate-600 transition-colors">
         <Building2 size={13} className="text-slate-500" />
-        <span className={isAll ? 'text-slate-400' : 'text-brand-400'}>{displayText}</span>
+        <span className={isAll ? 'text-slate-400' : 'text-emerald-400'}>{displayText}</span>
         <ChevronDown size={11} className="text-slate-500" />
       </button>
       {open && (
         <div className="absolute top-full mt-1 left-0 w-64 max-h-72 overflow-y-auto bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 py-1">
-          <button onClick={() => onChange([])} className={clsx('w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-800 transition-colors', isAll ? 'text-brand-400' : 'text-slate-400')}>
-            <div className={clsx('w-3.5 h-3.5 rounded border flex items-center justify-center', isAll ? 'bg-brand-600 border-brand-500' : 'border-slate-600')}>{isAll && <Check size={9} className="text-white" />}</div>
+          <button onClick={() => onChange([])} className={clsx('w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-800 transition-colors', isAll ? 'text-emerald-400' : 'text-slate-400')}>
+            <div className={clsx('w-3.5 h-3.5 rounded border flex items-center justify-center', isAll ? 'bg-emerald-600 border-emerald-500' : 'border-slate-600')}>{isAll && <Check size={9} className="text-white" />}</div>
             All Companies (Consolidated)
           </button>
           {options.map((opt) => {
             const checked = selected.includes(opt.value);
             return (
               <button key={opt.value} onClick={() => toggle(opt.value)} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 transition-colors">
-                <div className={clsx('w-3.5 h-3.5 rounded border flex items-center justify-center', checked ? 'bg-brand-600 border-brand-500' : 'border-slate-600')}>{checked && <Check size={9} className="text-white" />}</div>
+                <div className={clsx('w-3.5 h-3.5 rounded border flex items-center justify-center', checked ? 'bg-emerald-600 border-emerald-500' : 'border-slate-600')}>{checked && <Check size={9} className="text-white" />}</div>
                 {opt.label}
               </button>
             );

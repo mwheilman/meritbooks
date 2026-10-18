@@ -51,7 +51,7 @@ export function ReconciliationView() {
 
   const { data, isLoading, error, refetch } = useQuery<RecResponse>(`/api/reconciliation${qs ? '?' + qs : ''}`);
 
-  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>;
   if (error) return <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{String(error)}</p></div>;
 
   const recs = data?.reconciliations ?? [];
@@ -64,7 +64,7 @@ export function ReconciliationView() {
         <Building2 className="w-4 h-4 text-slate-500" />
         <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
           aria-label="Filter by company"
-          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi">
+          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white">
           <option value="">All Companies</option>
           {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
@@ -81,12 +81,12 @@ export function ReconciliationView() {
               <button
                 key={a.id}
                 onClick={() => setWorkspace({ account: { id: a.id, accountName: a.accountName, locationId: a.locationId, locationCode: a.locationCode }, periodId: null, year: null })}
-                className="text-left bg-slate-800/30 border border-amber-700/30 rounded-lg p-3 hover:border-brand-500/50 hover:bg-slate-800/50 transition-colors cursor-pointer group"
+                className="text-left bg-slate-800/30 border border-amber-700/30 rounded-lg p-3 hover:border-emerald-500/50 hover:bg-slate-800/50 transition-colors cursor-pointer group"
               >
                 <div className="flex items-center gap-2 mb-1">
                   <CreditCard className="w-4 h-4 text-slate-500" />
-                  <span className="text-sm text-ink-hi font-medium">{a.accountName}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-600 ml-auto group-hover:text-brand-400 transition-colors" />
+                  <span className="text-sm text-white font-medium">{a.accountName}</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-600 ml-auto group-hover:text-emerald-400 transition-colors" />
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-500">{a.locationCode} · {a.accountNumber}</span>
@@ -104,7 +104,7 @@ export function ReconciliationView() {
       {/* Completed reconciliations */}
       {recs.length > 0 ? (
         <div>
-          <h3 className="text-sm font-semibold text-ink-hi mb-3">Reconciliation History</h3>
+          <h3 className="text-sm font-semibold text-white mb-3">Reconciliation History</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -133,7 +133,7 @@ export function ReconciliationView() {
                     }
                     className="hover:bg-slate-800/20 cursor-pointer"
                   >
-                    <td className="py-2.5 pr-4 text-ink-hi">{r.bankAccountName}</td>
+                    <td className="py-2.5 pr-4 text-white">{r.bankAccountName}</td>
                     <td className="py-2.5 pr-4 text-xs text-slate-400">{r.locationCode}</td>
                     <td className="py-2.5 pr-4 font-mono text-xs text-slate-400">{r.periodYear}-{String(r.periodMonth).padStart(2, '0')}</td>
                     <td className="py-2.5 pr-4 text-right font-mono text-slate-300">{formatMoney(r.statementBalanceCents)}</td>

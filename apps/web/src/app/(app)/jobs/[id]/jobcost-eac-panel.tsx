@@ -44,7 +44,7 @@ function Metric({ label, value, sub, tone }: { label: string; value: string; sub
     <div className="rounded-lg bg-slate-800/30 p-3">
       <p className="text-2xs uppercase tracking-wider text-slate-500 font-semibold">{label}</p>
       <p className={clsx('text-base font-mono font-semibold mt-1',
-        tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-red-400' : tone === 'warn' ? 'text-amber-400' : 'text-ink-hi')}>
+        tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-red-400' : tone === 'warn' ? 'text-amber-400' : 'text-white')}>
         {value}
       </p>
       {sub && <p className="text-2xs text-slate-500 mt-0.5">{sub}</p>}
@@ -80,14 +80,14 @@ export function JobCostEacPanel({ jobId }: { jobId: string }) {
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <h2 className="text-sm font-semibold text-ink-hi flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
           <Gauge size={15} className="text-brand-400" /> Cost-to-Complete / EAC
         </h2>
         <div className="flex items-center gap-1 rounded-lg bg-slate-800/50 p-0.5">
           {METHODS.map((m) => (
             <button key={m.value} onClick={() => setMethod(m.value)} title={m.hint}
               className={clsx('px-2.5 py-1 rounded-md text-2xs font-medium transition-colors',
-                method === m.value ? 'bg-slate-700 text-ink-hi' : 'text-slate-400 hover:text-slate-200')}>
+                method === m.value ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200')}>
               {m.label}
             </button>
           ))}
@@ -95,7 +95,7 @@ export function JobCostEacPanel({ jobId }: { jobId: string }) {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 text-brand-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 text-emerald-400 animate-spin" /></div>
       ) : error || !data ? (
         <div className="py-6 text-center text-sm text-red-400"><AlertCircle size={18} className="mx-auto mb-1" />{error ?? 'Unable to compute EAC'}</div>
       ) : (

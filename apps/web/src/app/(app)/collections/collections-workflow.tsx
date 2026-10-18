@@ -203,7 +203,7 @@ export function CollectionsWorkflow({ embedded = false }: { embedded?: boolean }
           <Link href="/invoices" className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 mb-1">
             <ArrowLeft className="w-3.5 h-3.5" /> Invoices &amp; AR
           </Link>
-          <h1 className="text-2xl font-semibold text-ink-hi">Collections workflow</h1>
+          <h1 className="text-2xl font-semibold text-white">Collections workflow</h1>
           <p className="text-sm text-slate-400 mt-1">Prioritized worklist, dunning cadence, and promise-to-pay tracking. AI drafts; you approve every send.</p>
         </div>
       )}
@@ -213,7 +213,7 @@ export function CollectionsWorkflow({ embedded = false }: { embedded?: boolean }
         <div className="relative">
           <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
           <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
-            className="pl-9 pr-8 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi appearance-none cursor-pointer">
+            className="pl-9 pr-8 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white appearance-none cursor-pointer">
             <option value="">All companies</option>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
@@ -222,10 +222,10 @@ export function CollectionsWorkflow({ embedded = false }: { embedded?: boolean }
         <label className="inline-flex items-center gap-2 text-xs text-slate-400">
           As of
           <input type="date" value={asOf} max={today} onChange={(e) => setAsOf(e.target.value)}
-            className="px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi" />
+            className="px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white" />
         </label>
         {!embedded && (
-          <Link href="/collections?tab=aging" className="text-xs text-slate-400 hover:text-brand-300 ml-auto inline-flex items-center gap-1.5">
+          <Link href="/collections?tab=aging" className="text-xs text-slate-400 hover:text-emerald-300 ml-auto inline-flex items-center gap-1.5">
             View aging &amp; DSO <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         )}
@@ -240,7 +240,7 @@ export function CollectionsWorkflow({ embedded = false }: { embedded?: boolean }
       )}
 
       {isLoading && !data && (
-        <div className="flex items-center justify-center py-24"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-24"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
       )}
 
       {data && (
@@ -297,7 +297,7 @@ export function CollectionsWorkflow({ embedded = false }: { embedded?: boolean }
                           <td className="py-3 px-4">
                             <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] border ${RISK_BADGE[acc.riskLevel]}`}>{acc.riskLevel}</span>
                           </td>
-                          <td className="py-3 px-4 text-right font-mono text-ink-hi tabular-nums">{formatMoney(acc.overdueBalanceCents)}
+                          <td className="py-3 px-4 text-right font-mono text-white tabular-nums">{formatMoney(acc.overdueBalanceCents)}
                             <div className="text-[11px] text-slate-500">{acc.overdueInvoiceCount} inv</div>
                           </td>
                           <td className="py-3 px-4">
@@ -344,7 +344,7 @@ export function CollectionsWorkflow({ embedded = false }: { embedded?: boolean }
                                 onClick={() => acc.focusInvoiceId && openDraft(acc, acc.focusInvoiceId, acc.recommendedAction.stage ?? acc.currentStage)}
                                 disabled={!canSend}
                                 title={canSend ? 'Draft an AI reminder for review' : 'No overdue invoice at a cadence stage yet'}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed">
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed">
                                 <Sparkles className="w-3 h-3" /> Draft
                               </button>
                               <button
@@ -366,7 +366,7 @@ export function CollectionsWorkflow({ embedded = false }: { embedded?: boolean }
                                     <div className="flex items-center gap-3 text-xs">
                                       <FileText className="w-3.5 h-3.5 text-slate-600" />
                                       <span className="font-mono text-slate-300 w-28">{inv.invoiceNumber}</span>
-                                      <span className="font-mono text-ink-hi tabular-nums w-24 text-right">{formatMoney(inv.balanceCents)}</span>
+                                      <span className="font-mono text-white tabular-nums w-24 text-right">{formatMoney(inv.balanceCents)}</span>
                                       <span className={`w-20 text-right ${inv.daysOverdue > 0 ? 'text-red-300' : 'text-emerald-400'}`}>{inv.daysOverdue > 0 ? `${inv.daysOverdue}d late` : 'current'}</span>
                                       <span className="text-slate-500 w-28">due {inv.dueDate}</span>
                                       <span className="text-slate-500 flex-1">{inv.lastReminderAt ? `last reminded ${fmtWhen(inv.lastReminderAt)}${inv.reminderCount > 1 ? ` ·×${inv.reminderCount}` : ''}${inv.lastStageSent ? ` (${STAGE_LABEL[inv.lastStageSent]})` : ''}` : 'never reminded'}</span>
@@ -431,7 +431,7 @@ export function CollectionsWorkflow({ embedded = false }: { embedded?: boolean }
         <Modal onClose={() => !draft.sending && setDraft(null)} title="Review reminder before sending">
           {draft.loading ? (
             <div className="py-16 flex flex-col items-center gap-2 text-slate-400">
-              <Loader2 className="w-6 h-6 animate-spin text-brand-400" /><span className="text-sm">Drafting…</span>
+              <Loader2 className="w-6 h-6 animate-spin text-emerald-400" /><span className="text-sm">Drafting…</span>
             </div>
           ) : (
             <div className="space-y-4">
@@ -448,24 +448,24 @@ export function CollectionsWorkflow({ embedded = false }: { embedded?: boolean }
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Subject</label>
                 <input value={draft.subject} onChange={(e) => setDraft((d) => d && { ...d, subject: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi" />
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white" />
               </div>
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Message</label>
                 <textarea value={draft.body} onChange={(e) => setDraft((d) => d && { ...d, body: e.target.value })} rows={12}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi font-mono leading-relaxed" />
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono leading-relaxed" />
               </div>
               <div className="flex items-center justify-between gap-2 pt-1">
                 {draft.fallback && (
                   <button onClick={() => setDraft((d) => d && d.fallback ? { ...d, subject: d.fallback.subject, body: d.fallback.body, aiUsed: false } : d)}
-                    className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-ink-hi">
+                    className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white">
                     <RefreshCw className="w-3 h-3" /> Reset to template
                   </button>
                 )}
                 <div className="flex items-center gap-2 ml-auto">
-                  <button onClick={() => setDraft(null)} disabled={draft.sending} className="px-3 py-2 text-sm text-slate-400 hover:text-ink-hi">Cancel</button>
+                  <button onClick={() => setDraft(null)} disabled={draft.sending} className="px-3 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
                   <button onClick={sendDraft} disabled={draft.sending || !draft.customerEmail}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed">
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed">
                     {draft.sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                     {draft.sending ? 'Sending…' : 'Approve & send'}
                   </button>
@@ -484,7 +484,7 @@ export function CollectionsWorkflow({ embedded = false }: { embedded?: boolean }
             <div>
               <label className="block text-xs text-slate-400 mb-1">Against invoice</label>
               <select value={promiseModal.invoiceId ?? ''} onChange={(e) => setPromiseModal((p) => p && { ...p, invoiceId: e.target.value || null })}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi">
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white">
                 <option value="">Account-wide (no specific invoice)</option>
                 {promiseModal.account.invoices.map((inv) => (
                   <option key={inv.id} value={inv.id}>{inv.invoiceNumber} — {formatMoney(inv.balanceCents)}{inv.daysOverdue > 0 ? ` (${inv.daysOverdue}d late)` : ''}</option>
@@ -495,23 +495,23 @@ export function CollectionsWorkflow({ embedded = false }: { embedded?: boolean }
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Amount ($)</label>
                 <input value={promiseModal.amount} onChange={(e) => setPromiseModal((p) => p && { ...p, amount: e.target.value })} inputMode="decimal"
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi font-mono" />
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono" />
               </div>
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Promised by</label>
                 <input type="date" value={promiseModal.date} onChange={(e) => setPromiseModal((p) => p && { ...p, date: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi" />
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white" />
               </div>
             </div>
             <div>
               <label className="block text-xs text-slate-400 mb-1">Note (optional)</label>
               <input value={promiseModal.note} onChange={(e) => setPromiseModal((p) => p && { ...p, note: e.target.value })} placeholder="e.g. spoke with AP, check mailed Friday"
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi" />
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white" />
             </div>
             <div className="flex items-center justify-end gap-2 pt-1">
-              <button onClick={() => setPromiseModal(null)} disabled={promiseModal.saving} className="px-3 py-2 text-sm text-slate-400 hover:text-ink-hi">Cancel</button>
+              <button onClick={() => setPromiseModal(null)} disabled={promiseModal.saving} className="px-3 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
               <button onClick={savePromise} disabled={promiseModal.saving}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40">
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40">
                 {promiseModal.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <HandCoins className="w-4 h-4" />}
                 Log promise
               </button>
@@ -534,7 +534,7 @@ function Kpi({ icon: Icon, color, label, value, sub }: {
         <span className="text-xs text-slate-400">{label}</span>
         <Icon className={`w-4 h-4 ${color}`} />
       </div>
-      <p className="text-xl font-mono font-semibold text-ink-hi tabular-nums">{value}</p>
+      <p className="text-xl font-mono font-semibold text-white tabular-nums">{value}</p>
       <p className="text-xs text-slate-500 mt-1">{sub}</p>
     </div>
   );
@@ -557,8 +557,8 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-          <h3 id={titleId} className="text-sm font-semibold text-ink-hi">{title}</h3>
-          <button onClick={onClose} aria-label="Close dialog" className="text-slate-500 hover:text-ink-hi"><X className="w-4 h-4" /></button>
+          <h3 id={titleId} className="text-sm font-semibold text-white">{title}</h3>
+          <button onClick={onClose} aria-label="Close dialog" className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-5">{children}</div>
       </div>

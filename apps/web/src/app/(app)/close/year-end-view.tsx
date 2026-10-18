@@ -167,7 +167,7 @@ export function YearEndCloseView() {
 }
 
 function SummaryCard({ label, value, tone }: { label: string; value: string; tone?: 'emerald' | 'red' | 'neutral' }) {
-  const cls = tone === 'emerald' ? 'text-emerald-300' : tone === 'red' ? 'text-red-300' : tone === 'neutral' ? 'text-ink-hi' : 'text-slate-200';
+  const cls = tone === 'emerald' ? 'text-emerald-300' : tone === 'red' ? 'text-red-300' : tone === 'neutral' ? 'text-white' : 'text-slate-200';
   return (
     <div className="card p-4">
       <p className="text-xs text-slate-500">{label}</p>
@@ -185,7 +185,7 @@ function PreviewModal(props: {
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
       <div className="card w-full max-w-2xl p-5 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-ink-hi">Closing entry — {entityName} · FY{year}</h3>
+          <h3 className="text-base font-semibold text-white">Closing entry — {entityName} · FY{year}</h3>
           <button className="text-slate-500 hover:text-slate-300" onClick={onClose}><X size={18} /></button>
         </div>
 

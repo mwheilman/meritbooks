@@ -190,11 +190,11 @@ export function InviteHelper({ context, companyId = null, defaultRole, compact =
   ) : (
     <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-surface-900 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500/10 text-brand-300">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500/10 text-brand-400">
           <UserPlus size={17} aria-hidden />
         </div>
         <div>
-          <p className="text-sm font-medium text-ink-hi">Not the right person for this?</p>
+          <p className="text-sm font-medium text-white">Not the right person for this?</p>
           <p className="mt-0.5 text-xs text-slate-400">Invite your bookkeeper or accountant — they&apos;ll get an email with a link straight to <span className="text-slate-300">{context}</span>.</p>
         </div>
       </div>
@@ -203,7 +203,7 @@ export function InviteHelper({ context, companyId = null, defaultRole, compact =
         type="button"
         onClick={openDialog}
         aria-haspopup="dialog"
-        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-surface-950 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-brand-500/40 hover:text-ink-hi focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-surface-950 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-brand-500/40 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
       >
         Invite my bookkeeper
       </button>
@@ -226,7 +226,7 @@ export function InviteHelper({ context, companyId = null, defaultRole, compact =
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 id={`${ids}-title`} className="text-base font-semibold text-ink-hi">Invite someone to finish this</h2>
+                <h2 id={`${ids}-title`} className="text-base font-semibold text-white">Invite someone to finish this</h2>
                 <p id={`${ids}-desc`} className="mt-1 text-xs text-slate-400">
                   They&apos;ll be asked to finish: <span className="text-slate-200">{context}</span>
                 </p>
@@ -249,7 +249,7 @@ export function InviteHelper({ context, companyId = null, defaultRole, compact =
                     <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden /> {phase.message}
                   </div>
                   <div className="flex justify-end">
-                    <button type="button" onClick={close} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:text-ink-hi focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">Close</button>
+                    <button type="button" onClick={close} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">Close</button>
                   </div>
                 </div>
               )}
@@ -304,11 +304,11 @@ export function InviteHelper({ context, companyId = null, defaultRole, compact =
                   )}
 
                   <div className="flex items-center justify-end gap-2 pt-1">
-                    <button type="button" onClick={close} className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:text-ink-hi focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">Cancel</button>
+                    <button type="button" onClick={close} className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">Cancel</button>
                     <button
                       type="submit"
                       disabled={sending}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-brand-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-1.5 text-xs font-medium text-slate-900 hover:bg-brand-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
                     >
                       {sending ? <><Loader2 size={13} className="animate-spin" aria-hidden /> Sending…</> : <>Send invite</>}
                     </button>
@@ -320,10 +320,10 @@ export function InviteHelper({ context, companyId = null, defaultRole, compact =
                 <div className="space-y-4" role="status" aria-live="polite">
                   <div className="flex items-start gap-2 rounded-xl border border-brand-500/30 bg-brand-500/[0.06] px-3.5 py-3 text-sm text-slate-200">
                     <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-brand-400" aria-hidden />
-                    <span>Invite emailed to <span className="font-mono text-ink-hi">{phase.email}</span>. They&apos;ll sign up from the link and land right where they need to be.</span>
+                    <span>Invite emailed to <span className="font-mono text-white">{phase.email}</span>. They&apos;ll sign up from the link and land right where they need to be.</span>
                   </div>
                   <div className="flex justify-end">
-                    <button type="button" onClick={close} className="rounded-lg bg-brand-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-brand-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">Done</button>
+                    <button type="button" onClick={close} className="rounded-lg bg-brand-500 px-4 py-1.5 text-xs font-medium text-slate-900 hover:bg-brand-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">Done</button>
                   </div>
                 </div>
               )}
@@ -350,7 +350,7 @@ export function InviteHelper({ context, companyId = null, defaultRole, compact =
                     </div>
                   )}
                   <div className="flex justify-end">
-                    <button type="button" onClick={close} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:text-ink-hi focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">Done</button>
+                    <button type="button" onClick={close} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">Done</button>
                   </div>
                 </div>
               )}
@@ -363,4 +363,4 @@ export function InviteHelper({ context, companyId = null, defaultRole, compact =
 }
 
 const fieldCls =
-  'w-full rounded-lg border border-slate-700 bg-surface-950 px-3 py-2 text-sm text-ink-hi placeholder:text-slate-600 focus:border-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40';
+  'w-full rounded-lg border border-slate-700 bg-surface-950 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40';

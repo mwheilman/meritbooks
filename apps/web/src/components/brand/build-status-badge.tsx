@@ -23,7 +23,7 @@ const STATUS_META: Record<
   // Emerald = genuinely shipped and acting on real data.
   live: {
     label: 'Live',
-    chip: 'bg-em/10 text-accent-strong border border-em/25',
+    chip: 'bg-em/10 text-em-bright border border-em/25',
     dot: 'bg-em-bright',
     srPrefix: 'Build status: live —',
   },

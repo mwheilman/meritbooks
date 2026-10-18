@@ -111,7 +111,7 @@ function InvoiceList({
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-ink-hi">Invoices & AR</h1>
+          <h1 className="text-2xl font-semibold text-white">Invoices & AR</h1>
           <p className="text-sm text-gray-400 mt-1">Create, send, and track customer invoices</p>
         </div>
         <div className="flex items-center gap-2">
@@ -131,7 +131,7 @@ function InvoiceList({
           </button>
           <button
             onClick={onCreateClick}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
             New Invoice
@@ -152,7 +152,7 @@ function InvoiceList({
               <span className="text-sm text-gray-400">{card.label}</span>
               <card.icon className={`w-4 h-4 ${card.color}`} />
             </div>
-            <p className="text-xl font-mono font-semibold text-ink-hi">{formatMoney(card.value)}</p>
+            <p className="text-xl font-mono font-semibold text-white">{formatMoney(card.value)}</p>
             <p className="text-xs text-gray-500 mt-1">{counts[card.label === 'Outstanding' ? 'SENT' : card.label === 'Overdue' ? 'OVERDUE' : card.label === 'Paid This Month' ? 'PAID' : 'DRAFT']?.count ?? 0} invoices</p>
           </div>
         ))}
@@ -166,7 +166,7 @@ function InvoiceList({
             value={locationId}
             onChange={(e) => setLocationId(e.target.value)}
             aria-label="Filter invoices by company"
-            className="pl-9 pr-8 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi appearance-none cursor-pointer"
+            className="pl-9 pr-8 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white appearance-none cursor-pointer"
           >
             <option value="">All Companies</option>
             {locations.map((l) => (
@@ -183,7 +183,7 @@ function InvoiceList({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search invoices"
-            className="w-full pl-9 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi placeholder:text-gray-500"
+            className="w-full pl-9 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-500"
           />
         </div>
       </div>
@@ -198,8 +198,8 @@ function InvoiceList({
               onClick={() => setStatus(t)}
               className={`px-3 py-2 text-sm rounded-t-lg transition-colors ${
                 status === t
-                  ? 'bg-gray-800 text-brand-400 border-b-2 border-brand-500'
-                  : 'text-gray-400 hover:text-ink-hi'
+                  ? 'bg-gray-800 text-emerald-400 border-b-2 border-emerald-400'
+                  : 'text-gray-400 hover:text-white'
               }`}
             >
               {t.replace('_', ' ')} <span className="text-xs ml-1 opacity-70">{c?.count ?? 0}</span>
@@ -211,7 +211,7 @@ function InvoiceList({
       {/* Table */}
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
+          <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
         </div>
       ) : invoices.length === 0 ? (
         <EmptyState
@@ -241,7 +241,7 @@ function InvoiceList({
               {invoices.map((inv) => (
                 <tr key={inv.id} {...rowHandlers(inv)} onClick={() => onRowClick(inv.id)} className="border-b border-gray-800/50 row-clickable">
                   <td className="py-3 pr-4">
-                    <span className="font-mono text-ink-hi">{inv.invoiceNumber}</span>
+                    <span className="font-mono text-white">{inv.invoiceNumber}</span>
                     {inv.isProgressBill && (
                       <span className="ml-2 px-1.5 py-0.5 text-xs bg-indigo-500/20 text-indigo-300 rounded">AIA</span>
                     )}
@@ -266,14 +266,14 @@ function InvoiceList({
                       <span className="ml-1 text-[10px] text-red-400">{inv.daysOverdue}d late</span>
                     )}
                   </td>
-                  <td className="py-3 pr-4 text-right font-mono text-ink-hi">
+                  <td className="py-3 pr-4 text-right font-mono text-white">
                     <span className="inline-flex items-center justify-end gap-1.5">
                       <CurrencyTag code={inv.currency} homeCurrency={homeCurrency} onlyForeign />
                       {formatMoney(inv.totalCents, { currency: inv.currency })}
                     </span>
                   </td>
                   <td className="py-3 pr-4 text-right font-mono text-gray-400">{formatMoney(inv.amountPaidCents, { currency: inv.currency })}</td>
-                  <td className="py-3 pr-4 text-right font-mono text-ink-hi font-medium">{formatMoney(inv.balanceCents, { currency: inv.currency })}</td>
+                  <td className="py-3 pr-4 text-right font-mono text-white font-medium">{formatMoney(inv.balanceCents, { currency: inv.currency })}</td>
                   <td className="py-3 pr-4">
                     <StatusBadge status={inv.status} />
                   </td>
@@ -281,7 +281,7 @@ function InvoiceList({
                     {inv.status !== 'PAID' && inv.status !== 'VOIDED' && inv.status !== 'DRAFT' && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onPaymentClick(inv); }}
-                        className="p-1.5 text-gray-400 hover:text-brand-400 hover:bg-gray-700/50 rounded transition-colors"
+                        className="p-1.5 text-gray-400 hover:text-emerald-400 hover:bg-gray-700/50 rounded transition-colors"
                         title="Receive payment"
                         aria-label={`Receive payment for invoice ${inv.invoiceNumber}`}
                       >
@@ -480,8 +480,8 @@ function CreateInvoiceForm({
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center pt-8 overflow-y-auto">
       <div role="dialog" aria-modal="true" aria-label="Create invoice" className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-3xl mb-8">
         <div className="flex items-center justify-between p-6 border-b border-gray-700/50">
-          <h2 className="text-lg font-semibold text-ink-hi">Create Invoice</h2>
-          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-ink-hi"><X className="w-5 h-5" /></button>
+          <h2 className="text-lg font-semibold text-white">Create Invoice</h2>
+          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-6 space-y-5">
@@ -493,14 +493,14 @@ function CreateInvoiceForm({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Company *</label>
-              <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi">
+              <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
                 <option value="">Select company</option>
                 {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Customer *</label>
-              <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi">
+              <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
                 <option value="">Select customer</option>
                 {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -510,15 +510,15 @@ function CreateInvoiceForm({
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Invoice Date *</label>
-              <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi" />
+              <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white" />
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Due Date *</label>
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi" />
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white" />
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Memo</label>
-              <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Optional" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi placeholder:text-gray-500" />
+              <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Optional" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-500" />
             </div>
           </div>
 
@@ -526,7 +526,7 @@ function CreateInvoiceForm({
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs text-gray-400 uppercase tracking-wider">Line Items</label>
-              <button onClick={addLine} className="text-xs text-brand-400 hover:text-brand-300">+ Add line</button>
+              <button onClick={addLine} className="text-xs text-emerald-400 hover:text-emerald-300">+ Add line</button>
             </div>
             <div className="space-y-2">
               {lines.map((line, i) => (
@@ -536,13 +536,13 @@ function CreateInvoiceForm({
                     <input
                       type="text" value={line.description} onChange={(e) => updateLine(i, 'description', e.target.value)}
                       placeholder="Service or item description"
-                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-ink-hi placeholder:text-gray-600"
+                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white placeholder:text-gray-600"
                     />
                   </div>
                   <div className="col-span-3">
                     {i === 0 && <label className="block text-[10px] text-gray-500 mb-0.5">GL Account</label>}
                     <select value={line.account_id} onChange={(e) => updateLine(i, 'account_id', e.target.value)}
-                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-ink-hi">
+                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white">
                       <option value="">Select account</option>
                       {accounts.map((a) => <option key={a.id} value={a.id}>{a.account_number} · {a.name}</option>)}
                     </select>
@@ -551,17 +551,17 @@ function CreateInvoiceForm({
                     {i === 0 && <label className="block text-[10px] text-gray-500 mb-0.5">Qty</label>}
                     <input type="number" value={line.quantity} min={0} step={0.01}
                       onChange={(e) => updateLine(i, 'quantity', parseFloat(e.target.value) || 0)}
-                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-ink-hi text-right font-mono"
+                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono"
                     />
                   </div>
                   <div className="col-span-2">
                     {i === 0 && <label className="block text-[10px] text-gray-500 mb-0.5">Unit Price</label>}
                     <input type="number" value={(line.unit_price_cents / 100).toFixed(2)} min={0} step={0.01}
                       onChange={(e) => updateLine(i, 'unit_price_cents', Math.round(parseFloat(e.target.value) * 100) || 0)}
-                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-ink-hi text-right font-mono"
+                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono"
                     />
                   </div>
-                  <div className="col-span-1 text-right font-mono text-sm text-ink-hi py-1.5">
+                  <div className="col-span-1 text-right font-mono text-sm text-white py-1.5">
                     {formatMoney(Math.round(line.quantity * line.unit_price_cents))}
                   </div>
                   <div className="col-span-1">
@@ -578,23 +578,23 @@ function CreateInvoiceForm({
           <div className="border-t border-gray-700/50 pt-4 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">Subtotal</span>
-              <span className="font-mono text-ink-hi">{formatMoney(subtotal)}</span>
+              <span className="font-mono text-white">{formatMoney(subtotal)}</span>
             </div>
             <div className="flex justify-between text-sm items-center">
               <span className="flex items-center gap-2 text-gray-400">
                 Tax
                 <label className="flex items-center gap-1 text-[11px] text-gray-500 cursor-pointer select-none">
                   <input type="checkbox" checked={autoTax} onChange={(e) => setAutoTax(e.target.checked)}
-                    className="accent-brand-500" />
+                    className="accent-emerald-500" />
                   Auto
                 </label>
               </span>
               {autoTax ? (
-                <span className="font-mono text-ink-hi text-sm tabular-nums">{formatMoney(taxCents)}</span>
+                <span className="font-mono text-white text-sm tabular-nums">{formatMoney(taxCents)}</span>
               ) : (
                 <input type="number" value={(taxCents / 100).toFixed(2)} min={0} step={0.01}
                   onChange={(e) => setTaxCents(Math.round(parseFloat(e.target.value) * 100) || 0)}
-                  className="w-24 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-sm text-ink-hi text-right font-mono"
+                  className="w-24 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono"
                 />
               )}
             </div>
@@ -610,18 +610,18 @@ function CreateInvoiceForm({
               </div>
             )}
             <div className="flex justify-between text-base font-semibold border-t border-gray-700/50 pt-2">
-              <span className="text-ink-hi">Total</span>
+              <span className="text-white">Total</span>
               <span className="font-mono text-emerald-400">{formatMoney(total)}</span>
             </div>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-700/50">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-ink-hi">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             Create Invoice
@@ -695,10 +695,10 @@ function PaymentDialog({
       <div role="dialog" aria-modal="true" aria-label="Receive payment" className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-gray-700/50">
           <div>
-            <h2 className="text-base font-semibold text-ink-hi">Receive Payment</h2>
+            <h2 className="text-base font-semibold text-white">Receive Payment</h2>
             <p className="text-xs text-gray-400 mt-0.5">Invoice {invoice.invoiceNumber} — {invoice.customer?.name}</p>
           </div>
-          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-ink-hi"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -708,7 +708,7 @@ function PaymentDialog({
 
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-400">Invoice balance</span>
-            <span className="font-mono text-ink-hi font-medium">{formatMoney(invoice.balanceCents)}</span>
+            <span className="font-mono text-white font-medium">{formatMoney(invoice.balanceCents)}</span>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -716,13 +716,13 @@ function PaymentDialog({
               <label className="block text-xs text-gray-400 mb-1">Amount *</label>
               <input type="number" value={(amountCents / 100).toFixed(2)} min={0} step={0.01}
                 onChange={(e) => setAmountCents(Math.round(parseFloat(e.target.value) * 100) || 0)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi font-mono text-right"
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white font-mono text-right"
               />
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Date *</label>
               <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi"
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white"
               />
             </div>
           </div>
@@ -731,7 +731,7 @@ function PaymentDialog({
             <div>
               <label className="block text-xs text-gray-400 mb-1">Method</label>
               <select value={method} onChange={(e) => setMethod(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi">
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
                 <option value="CHECK">Check</option>
                 <option value="ACH">ACH</option>
                 <option value="WIRE">Wire</option>
@@ -743,16 +743,16 @@ function PaymentDialog({
               <label className="block text-xs text-gray-400 mb-1">Reference #</label>
               <input type="text" value={reference} onChange={(e) => setReference(e.target.value)}
                 placeholder="Check # or ref"
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi placeholder:text-gray-500"
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-500"
               />
             </div>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-3 p-5 border-t border-gray-700/50">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-ink-hi">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
           <button onClick={handleSubmit} disabled={submitting}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
             Apply Payment
           </button>
@@ -803,7 +803,7 @@ export function InvoiceManager() {
             key={v}
             onClick={() => setView(v)}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              view === v ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-ink-hi'
+              view === v ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-white'
             }`}
           >
             {v === 'invoices'
@@ -852,7 +852,7 @@ export function InvoiceManager() {
           <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-500/10">
             <CreditCard className="h-5 w-5 text-emerald-400" />
           </div>
-          <h3 className="text-base font-semibold text-ink-hi">Cash application — unapplied payments</h3>
+          <h3 className="text-base font-semibold text-white">Cash application — unapplied payments</h3>
           <p className="mx-auto mt-2 max-w-md text-sm text-gray-400">
             Received payments that aren&apos;t yet matched to an open invoice show up here. Apply them
             to clear customer balances and keep AR tied out. The full workspace lives on the Cash
@@ -860,7 +860,7 @@ export function InvoiceManager() {
           </p>
           <Link
             href="/cash-application"
-            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600"
+            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
           >
             Open Cash Application
             <ChevronRight className="h-4 w-4" />

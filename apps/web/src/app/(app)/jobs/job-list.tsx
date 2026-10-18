@@ -101,14 +101,14 @@ export function JobList() {
     <div className="space-y-4">
       {s && s.activeCount > 0 && (
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 rounded-lg bg-surface-900 border border-slate-800 text-sm">
-          <span className="text-slate-400">Active: <span className="text-ink-hi font-mono font-medium">{s.activeCount}</span>
+          <span className="text-slate-400">Active: <span className="text-white font-mono font-medium">{s.activeCount}</span>
             <span className="text-slate-600 text-2xs ml-1">({s.projectCount} projects · {s.serviceCount} service)</span></span>
           <div className="h-4 w-px bg-slate-800" />
-          <span className="text-slate-400">Est. Revenue: <span className="text-ink-hi font-mono font-medium">{formatMoney(s.totalEstRevCents, { compact: true })}</span></span>
+          <span className="text-slate-400">Est. Revenue: <span className="text-white font-mono font-medium">{formatMoney(s.totalEstRevCents, { compact: true })}</span></span>
           <div className="h-4 w-px bg-slate-800" />
-          <span className="text-slate-400">Costs: <span className="text-ink-hi font-mono font-medium">{formatMoney(s.totalActualCents, { compact: true })}</span></span>
+          <span className="text-slate-400">Costs: <span className="text-white font-mono font-medium">{formatMoney(s.totalActualCents, { compact: true })}</span></span>
           <div className="h-4 w-px bg-slate-800" />
-          <span className="text-slate-400">Billed: <span className="text-ink-hi font-mono font-medium">{formatMoney(s.totalBilledCents, { compact: true })}</span></span>
+          <span className="text-slate-400">Billed: <span className="text-white font-mono font-medium">{formatMoney(s.totalBilledCents, { compact: true })}</span></span>
           {s.overBudgetCount > 0 && <>
             <div className="h-4 w-px bg-slate-800" />
             <span className="text-red-400 font-medium flex items-center gap-1"><AlertTriangle size={12} />{s.overBudgetCount} over budget</span>
@@ -120,7 +120,7 @@ export function JobList() {
         <div className="flex items-center gap-1 p-1 rounded-lg bg-surface-900 border border-slate-800">
           {TABS.map((t) => (
             <button key={t.key} onClick={() => setTab(t.key)} className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors',
-              tab === t.key ? 'bg-slate-800 text-ink-hi font-medium' : 'text-slate-400 hover:text-slate-300')}>
+              tab === t.key ? 'bg-slate-800 text-white font-medium' : 'text-slate-400 hover:text-slate-300')}>
               {t.label} <span className={clsx('text-2xs font-mono', tab === t.key ? 'text-brand-400' : 'text-slate-600')}>{counts?.[t.key] ?? '--'}</span>
             </button>
           ))}

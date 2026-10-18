@@ -131,7 +131,7 @@ export function AttachmentsPanel({
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <Paperclip size={15} className="text-slate-400" />
-          <h3 className="text-sm font-semibold text-ink-hi">{title}</h3>
+          <h3 className="text-sm font-semibold text-white">{title}</h3>
           {docs && docs.length > 0 && (
             <span className="text-[11px] text-slate-500">{docs.length}</span>
           )}
@@ -140,7 +140,7 @@ export function AttachmentsPanel({
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={uploading}
-          className="px-3 py-1.5 text-xs font-medium bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-lg inline-flex items-center gap-1.5"
+          className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg inline-flex items-center gap-1.5"
         >
           {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
           {uploading ? 'Uploading…' : 'Attach'}
@@ -156,7 +156,7 @@ export function AttachmentsPanel({
 
       {docs === null ? (
         <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-5 h-5 text-brand-400 animate-spin" />
+          <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
         </div>
       ) : error ? (
         <div className="py-6 text-center">
@@ -182,7 +182,7 @@ export function AttachmentsPanel({
                 className="flex items-center gap-2 min-w-0 text-left group"
               >
                 <FileText size={14} className="text-slate-500 shrink-0" />
-                <span className="text-xs text-ink-hi truncate group-hover:text-brand-300">{doc.file_name}</span>
+                <span className="text-xs text-white truncate group-hover:text-emerald-300">{doc.file_name}</span>
                 <span className="text-[10px] text-slate-600 shrink-0">{DOC_TYPE_LABEL[doc.doc_type]}</span>
                 <span className="text-[10px] text-slate-600 shrink-0 font-mono">{formatBytes(doc.size_bytes)}</span>
               </button>
@@ -191,7 +191,7 @@ export function AttachmentsPanel({
                   type="button"
                   onClick={() => download(doc)}
                   title="Download"
-                  className="p-1.5 text-slate-500 hover:text-brand-300 rounded"
+                  className="p-1.5 text-slate-500 hover:text-emerald-300 rounded"
                 >
                   <Download size={13} />
                 </button>

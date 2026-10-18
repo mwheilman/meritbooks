@@ -23,7 +23,7 @@ function StatCard({ label, value, sub, tone }: { label: string; value: string; s
   return (
     <div className="card p-4">
       <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={clsx('mt-1 text-2xl font-semibold font-mono', tone ?? 'text-ink-hi')}>{value}</div>
+      <div className={clsx('mt-1 text-2xl font-semibold font-mono', tone ?? 'text-white')}>{value}</div>
       {sub && <div className="mt-0.5 text-xs text-slate-500">{sub}</div>}
     </div>
   );
@@ -43,13 +43,13 @@ export function RunRateSummary({ summary }: { summary: SubsSummary }) {
         label="Creep signals"
         value={String(creepSignals)}
         sub={`${summary.newCount} new · ${summary.priceIncreaseCount} price ↑ · ${summary.duplicateCount} overlap · ${summary.staleCount} stale`}
-        tone={creepSignals > 0 ? 'text-amber-400' : 'text-ink-hi'}
+        tone={creepSignals > 0 ? 'text-amber-400' : 'text-white'}
       />
       <StatCard
         label="Renewals due"
         value={String(summary.renewalsDue)}
         sub={summary.noticePassed > 0 ? `${summary.noticePassed} past notice deadline` : `next ${summary.windowDays} days`}
-        tone={summary.noticePassed > 0 ? 'text-red-400' : 'text-ink-hi'}
+        tone={summary.noticePassed > 0 ? 'text-red-400' : 'text-white'}
       />
     </div>
   );
@@ -67,7 +67,7 @@ export function SpendTrend({ trend, summary }: { trend: TrendPoint[]; summary: S
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between mb-3">
-        <div className="text-sm font-medium text-ink-hi">Recurring-spend trend</div>
+        <div className="text-sm font-medium text-white">Recurring-spend trend</div>
         <div className={clsx('flex items-center gap-1.5 text-xs font-mono', deltaTone)}>
           <DeltaIcon size={13} />
           {up ? '+' : ''}{formatMoney(summary.trendDeltaCents)}/mo
@@ -126,7 +126,7 @@ export function PriceCreepPanel({
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-ink-hi">
+        <div className="flex items-center gap-2 text-sm font-medium text-white">
           <TrendingUp size={15} className="text-red-400" /> Price creep
         </div>
         {items.length > 0 && (
@@ -157,7 +157,7 @@ export function PriceCreepPanel({
               {items.map((it) => (
                 <tr key={it.id} className="border-t border-slate-800/70">
                   <td className="px-1 py-2">
-                    <div className="text-ink-hi truncate max-w-[180px]">{it.vendor_name}</div>
+                    <div className="text-white truncate max-w-[180px]">{it.vendor_name}</div>
                     {it.category && <div className="text-[11px] text-slate-500 truncate max-w-[180px]">{it.category}</div>}
                   </td>
                   <td className="px-1 py-2 text-right font-mono text-slate-500 line-through">{formatMoney(it.priorCents)}</td>
@@ -170,7 +170,7 @@ export function PriceCreepPanel({
                   <td className="px-1 py-2">
                     <div className="flex items-center justify-end gap-1">
                       <button onClick={() => onDecide(it.id, 'cancel')} title="Flag to cancel" className="p-1 rounded text-amber-400 hover:bg-amber-500/10"><Ban size={14} /></button>
-                      <button onClick={() => onFind(it.id)} title="Find in list" className="p-1 rounded text-slate-400 hover:bg-slate-800 hover:text-ink-hi"><ArrowUpRight size={14} /></button>
+                      <button onClick={() => onFind(it.id)} title="Find in list" className="p-1 rounded text-slate-400 hover:bg-slate-800 hover:text-white"><ArrowUpRight size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -203,7 +203,7 @@ export function RenewalsPanel({
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-        <div className="flex items-center gap-2 text-sm font-medium text-ink-hi">
+        <div className="flex items-center gap-2 text-sm font-medium text-white">
           <CalendarClock size={15} className="text-amber-400" /> Renewals — next {windowDays} days
         </div>
         <div className="flex items-center gap-2">
@@ -212,7 +212,7 @@ export function RenewalsPanel({
               <button
                 key={d}
                 onClick={() => onWindowChange(d)}
-                className={clsx('px-2.5 py-1 text-xs font-mono', d === windowDays ? 'bg-slate-700 text-ink-hi' : 'text-slate-400 hover:bg-slate-800')}
+                className={clsx('px-2.5 py-1 text-xs font-mono', d === windowDays ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-800')}
               >
                 {d}d
               </button>
@@ -237,7 +237,7 @@ export function RenewalsPanel({
                 <span className={clsx('font-mono text-xs w-28 shrink-0', tone)}>
                   {r.noticeWindowPassed ? 'notice passed' : `${r.daysUntilNoticeDeadline}d to decide`}
                 </span>
-                <span className="text-ink-hi flex-1 truncate">{s.vendor_name}</span>
+                <span className="text-white flex-1 truncate">{s.vendor_name}</span>
                 <span className="text-slate-400 font-mono whitespace-nowrap">{fmtCents(s.amount_cents)}{CADENCE_LABEL[s.billing_cadence]}</span>
                 <span className="text-slate-500 text-xs w-24 text-right whitespace-nowrap">renews {fmtDate(s.next_renewal_date)}</span>
                 <span className="flex items-center gap-1 shrink-0">
@@ -281,7 +281,7 @@ function TriageCard({ s, onDecide, onEdit }: { s: Subscription; onDecide: Decide
     <div className="rounded-lg border border-slate-800 bg-surface-950 p-2.5">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <div className="text-sm text-ink-hi truncate">{s.vendor_name}</div>
+          <div className="text-sm text-white truncate">{s.vendor_name}</div>
           <div className="text-[11px] text-slate-500 font-mono">
             {fmtCents(s.amount_cents)}{CADENCE_LABEL[s.billing_cadence]} · {formatMoney(annualized(s))}/yr
           </div>
@@ -311,7 +311,7 @@ function TriageCard({ s, onDecide, onEdit }: { s: Subscription; onDecide: Decide
           {s.status !== 'CANCELLING' && s.status !== 'CANCELLED' && (
             <button onClick={() => onDecide(s, 'cancel')} title="Flag to cancel" className="p-1 rounded text-amber-400 hover:bg-amber-500/10"><Ban size={13} /></button>
           )}
-          <button onClick={() => onEdit(s)} title="Edit" className="p-1 rounded text-slate-400 hover:bg-slate-800 hover:text-ink-hi"><Pencil size={13} /></button>
+          <button onClick={() => onEdit(s)} title="Edit" className="p-1 rounded text-slate-400 hover:bg-slate-800 hover:text-white"><Pencil size={13} /></button>
         </div>
       </div>
     </div>

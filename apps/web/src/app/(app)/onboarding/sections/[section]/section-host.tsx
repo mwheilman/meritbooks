@@ -151,7 +151,7 @@ function Shell({ title, blurb, children }: { title: string; blurb: string; child
         <ArrowLeft size={13} /> Back to setup
       </Link>
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink-hi">{title}</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-white">{title}</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-400">{blurb}</p>
       </div>
       {children}

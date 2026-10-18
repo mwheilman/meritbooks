@@ -36,7 +36,7 @@ function RecurringPageInner() {
   const summary = data?.summary;
   const now = new Date().toISOString().split('T')[0];
 
-  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>;
   if (error) return <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-red-400 text-sm">{error}</p></div>;
 
   return (
@@ -73,7 +73,7 @@ function RecurringPageInner() {
                 return (
                   <tr key={t.id} className={clsx('hover:bg-slate-800/20', isDue && 'bg-amber-500/[0.03]')}>
                     <td className="px-4 py-3">
-                      <p className="text-sm text-ink-hi font-medium">{t.name}</p>
+                      <p className="text-sm text-white font-medium">{t.name}</p>
                       {t.description && <p className="text-xs text-slate-500 truncate max-w-[250px]">{t.description}</p>}
                     </td>
                     <td className="px-4 py-3">

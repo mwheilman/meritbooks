@@ -51,7 +51,7 @@ export function SetupHomeCard({ title, status, description, href, className }: S
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-sm font-semibold text-ink-hi">
+        <span className="flex items-center gap-1.5 text-sm font-semibold text-white">
           {title}
         </span>
         <span className={clsx('flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium', tag.cls)}>

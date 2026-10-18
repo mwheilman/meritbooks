@@ -219,7 +219,7 @@ export function ScenarioModeler({
       <AlertCircle size={22} className="mx-auto text-red-400 mb-2" />
       <p className="text-sm text-slate-300">Couldn’t load the scenario base.</p>
       <p className="text-xs text-slate-500 mt-1">{loadError}</p>
-      <button onClick={loadModel} className="mt-3 text-xs text-brand-400 hover:text-brand-300">Retry</button>
+      <button onClick={loadModel} className="mt-3 text-xs text-emerald-400 hover:text-emerald-300">Retry</button>
     </div>
   );
   if (!baseDrivers) return (
@@ -227,7 +227,7 @@ export function ScenarioModeler({
       <Info size={22} className="mx-auto text-slate-600 mb-2" />
       <p className="text-sm text-slate-300 font-medium">No driver budget to model yet</p>
       <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">Scenarios layer overrides on a driver-based budget. Build one for this company and year first.</p>
-      <Link href="/budgets/drivers" className="mt-3 inline-flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300">
+      <Link href="/budgets/drivers" className="mt-3 inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300">
         Go to Driver Budget <ArrowRight size={12} />
       </Link>
     </div>
@@ -251,7 +251,7 @@ export function ScenarioModeler({
         <label className="block">
           <span className="block text-2xs uppercase text-slate-500 mb-1">Headcount cost account</span>
           <select value={headcountAccountId} onChange={(e) => setHeadcountAccountId(e.target.value)}
-            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi max-w-[220px]">
+            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white max-w-[220px]">
             {accounts.length === 0 && <option value="">No OPEX accounts</option>}
             {accounts.map((a) => <option key={a.id} value={a.id}>{a.accountNumber} · {a.name}</option>)}
           </select>
@@ -260,11 +260,11 @@ export function ScenarioModeler({
           <label className="block">
             <span className="block text-2xs uppercase text-slate-500 mb-1">Scenario name</span>
             <input value={scenarioName} onChange={(e) => setScenarioName(e.target.value)} placeholder="e.g. FY plan swing"
-              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi w-[180px]" />
+              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white w-[180px]" />
           </label>
           <button onClick={save} disabled={saving}
             className={clsx('flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium',
-              saving ? 'bg-slate-800 text-slate-500 border border-slate-700' : 'bg-brand-500 text-white hover:bg-brand-600')}>
+              saving ? 'bg-slate-800 text-slate-500 border border-slate-700' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
             {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}{saving ? 'Saving…' : 'Save Scenario'}
           </button>
         </div>
@@ -324,7 +324,7 @@ export function ScenarioModeler({
             <SlidersHorizontal size={13} className="text-indigo-400" />
             <span className="text-xs font-semibold uppercase text-slate-400">One-driver sensitivity</span>
             <select value={axis} onChange={(e) => setAxis(e.target.value as SensitivityAxis)}
-              className="ml-2 px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi">
+              className="ml-2 px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
               {(Object.keys(AXIS_LABEL) as SensitivityAxis[]).map((a) => <option key={a} value={a}>{AXIS_LABEL[a]}</option>)}
             </select>
             <span className="text-2xs text-slate-500 ml-auto">Holds Base overrides; sweeps one lever.</span>
@@ -354,7 +354,7 @@ export function ScenarioModeler({
                     return (
                       <button key={i} onClick={() => setSensIndex(i)}
                         className={clsx('w-full flex items-center gap-2 text-2xs group', i === sensIndex && 'font-semibold')}>
-                        <span className={clsx('w-12 text-right font-mono shrink-0', i === sensIndex ? 'text-ink-hi' : 'text-slate-500')}>{label}</span>
+                        <span className={clsx('w-12 text-right font-mono shrink-0', i === sensIndex ? 'text-white' : 'text-slate-500')}>{label}</span>
                         <span className="flex-1 h-4 bg-slate-800/40 rounded overflow-hidden relative">
                           <span className={clsx('absolute inset-y-0 rounded', neg ? 'right-1/2 bg-red-500/60' : 'left-1/2 bg-emerald-500/60', i === sensIndex && 'ring-1 ring-white/40')}
                             style={{ width: `${w / 2}%` }} />
@@ -435,7 +435,7 @@ function LeverInput({ label, value, onChange, placeholder, suffix }: { label: st
       <span className="block text-2xs uppercase text-slate-500 mb-1">{label}</span>
       <div className="relative">
         <input type="text" inputMode="decimal" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)}
-          className="w-full px-2 py-1.5 bg-slate-900/60 border border-slate-800 rounded text-right font-mono text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50" />
+          className="w-full px-2 py-1.5 bg-slate-900/60 border border-slate-800 rounded text-right font-mono text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50" />
         {suffix && <span className="absolute right-2 top-1.5 text-2xs text-slate-500">{suffix}</span>}
       </div>
     </label>
@@ -447,7 +447,7 @@ function AssumptionInput({ icon: Icon, label, value, onChange, placeholder }: { 
     <label className="block">
       <span className="text-2xs uppercase text-slate-500 mb-1 flex items-center gap-1">{Icon && <Icon size={11} />}{label}</span>
       <input type="text" inputMode="decimal" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)}
-        className="w-[150px] px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-right font-mono text-xs text-ink-hi placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50" />
+        className="w-[150px] px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-right font-mono text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50" />
     </label>
   );
 }

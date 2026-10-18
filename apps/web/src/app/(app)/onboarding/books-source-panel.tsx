@@ -96,7 +96,7 @@ export function GuidedExportPanel({
   return (
     <div className="card p-5 space-y-3">
       <div>
-        <h3 className="text-sm font-semibold text-ink-hi flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
           <Upload size={15} className="text-brand-400" /> Export from {name} in 60 seconds
         </h3>
         <p className="text-xs text-slate-500 mt-1">
@@ -112,7 +112,7 @@ export function GuidedExportPanel({
           onClick={onUpload}
           disabled={!hasCompany}
           className={clsx('shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-            hasCompany ? 'bg-brand-500 text-white hover:bg-brand-400' : 'bg-slate-700 text-slate-500 cursor-not-allowed')}
+            hasCompany ? 'bg-brand-500 text-slate-900 hover:bg-brand-400' : 'bg-slate-700 text-slate-500 cursor-not-allowed')}
         >
           Upload my trial balance <ArrowRight size={14} />
         </button>
@@ -280,7 +280,7 @@ export function QuickBooksConnectPanel({
       <div className="card p-5 space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-ink-hi flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
               <Plug size={15} className="text-brand-400" /> QuickBooks Online
             </h3>
             <p className="text-xs text-slate-500 mt-1">
@@ -306,7 +306,7 @@ export function QuickBooksConnectPanel({
           <div className="flex flex-wrap items-center gap-3">
             <a
               href={qboConnectHref('/onboarding')}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand-500 text-slate-900 hover:bg-brand-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
             >
               <Plug size={14} /> {status?.status === 'error' ? 'Reconnect QuickBooks' : 'Connect QuickBooks'}
             </a>
@@ -323,7 +323,7 @@ export function QuickBooksConnectPanel({
                   <CalendarDays size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                   <input id="qbo-asof" type="date" value={asOfDate}
                     onChange={(e) => { setAsOfDate(e.target.value); setPull(null); }}
-                    className="w-full rounded-lg border border-slate-700 bg-surface-900 pl-9 pr-3 py-2 text-sm text-ink-hi" />
+                    className="w-full rounded-lg border border-slate-700 bg-surface-900 pl-9 pr-3 py-2 text-sm text-white" />
                 </div>
               </div>
               <button
@@ -331,7 +331,7 @@ export function QuickBooksConnectPanel({
                 onClick={() => void bringInBooks()}
                 disabled={pulling || !companyId || !isIsoDate(asOfDate)}
                 className={clsx('flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                  pulling || !companyId || !isIsoDate(asOfDate) ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-white hover:bg-brand-400')}
+                  pulling || !companyId || !isIsoDate(asOfDate) ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-slate-900 hover:bg-brand-400')}
               >
                 {pulling ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                 {pulling ? 'Reading your books…' : pull ? 'Read again' : 'Bring in my books'}
@@ -398,7 +398,7 @@ function PullPreview({
           <div key={f.id}
             className={clsx('rounded-lg border px-4 py-2.5 text-sm',
               f.severity === 'blocker' ? 'border-danger/30 bg-danger/5' : f.severity === 'warning' ? 'border-warning/30 bg-warning/5' : 'border-slate-800 bg-surface-900')}>
-            <p className="flex items-start gap-2 font-medium text-ink-hi">
+            <p className="flex items-start gap-2 font-medium text-white">
               {f.severity === 'blocker'
                 ? <AlertCircle size={15} className="mt-0.5 shrink-0 text-danger-fg" />
                 : <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning-fg" />}
@@ -421,7 +421,7 @@ function PullPreview({
           onClick={onContinue}
           disabled={staging || !canContinue}
           className={clsx('flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium transition-colors',
-            staging || !canContinue ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-white hover:bg-brand-400')}
+            staging || !canContinue ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-brand-500 text-slate-900 hover:bg-brand-400')}
         >
           {staging ? <Loader2 size={14} className="animate-spin" /> : null}
           {staging ? 'Matching your accounts…' : `Continue — match accounts${companyName ? ` for ${companyName}` : ''}`}
@@ -437,7 +437,7 @@ function Stat({ label, value, mono, tone }: { label: string; value: string; mono
     <div className="rounded-lg border border-slate-800 bg-surface-950 px-3 py-2">
       <p className="text-2xs text-slate-500">{label}</p>
       <p className={clsx('text-sm mt-0.5', mono && 'font-mono tabular-nums',
-        tone === 'good' ? 'text-brand-300' : tone === 'bad' ? 'text-danger-fg' : 'text-ink-hi')}>{value}</p>
+        tone === 'good' ? 'text-brand-300' : tone === 'bad' ? 'text-danger-fg' : 'text-white')}>{value}</p>
     </div>
   );
 }

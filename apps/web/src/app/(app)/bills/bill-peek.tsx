@@ -24,7 +24,7 @@ export function BillPeek({ billId }: { billId: string }) {
   const vendorName = data.vendor?.display_name ?? data.vendor?.name ?? 'Vendor';
 
   return (
-    <div className="bg-white text-slate-800 m-2 rounded-lg border border-slate-800 shadow-card p-3 text-[11px] leading-relaxed">
+    <div className="bg-white text-slate-800 m-2 rounded-lg p-3 text-[11px] leading-relaxed">
       <div className="flex items-start justify-between mb-2">
         <div>
           <div className="font-semibold text-slate-900 text-xs">{vendorName}</div>
@@ -36,22 +36,22 @@ export function BillPeek({ billId }: { billId: string }) {
         </div>
       </div>
       <div className="border-t border-slate-200 pt-1.5 mb-1.5 text-[10px] text-slate-500">
-        Due <span className="font-medium text-slate-300">{data.due_date}</span>
+        Due <span className="font-medium text-slate-700">{data.due_date}</span>
       </div>
       <table className="w-full">
         <tbody>
           {shown.map((l) => (
             <tr key={l.id} className="border-b border-slate-100">
-              <td className="py-0.5 pr-2 text-slate-300 truncate max-w-[180px]">{l.description ?? 'Line'}</td>
-              <td className="py-0.5 text-right font-mono text-slate-300 whitespace-nowrap">{formatMoney(l.amount_cents)}</td>
+              <td className="py-0.5 pr-2 text-slate-700 truncate max-w-[180px]">{l.description ?? 'Line'}</td>
+              <td className="py-0.5 text-right font-mono text-slate-700 whitespace-nowrap">{formatMoney(l.amount_cents)}</td>
             </tr>
           ))}
           {more > 0 && <tr><td className="py-0.5 text-[10px] text-slate-400 italic" colSpan={2}>+ {more} more line{more > 1 ? 's' : ''}</td></tr>}
         </tbody>
       </table>
       <div className="mt-1.5 pt-1.5 border-t border-slate-200 space-y-0.5">
-        <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span className="font-mono text-slate-300">{formatMoney(data.subtotal_cents)}</span></div>
-        {data.tax_cents > 0 && <div className="flex justify-between"><span className="text-slate-500">Tax</span><span className="font-mono text-slate-300">{formatMoney(data.tax_cents)}</span></div>}
+        <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span className="font-mono text-slate-700">{formatMoney(data.subtotal_cents)}</span></div>
+        {data.tax_cents > 0 && <div className="flex justify-between"><span className="text-slate-500">Tax</span><span className="font-mono text-slate-700">{formatMoney(data.tax_cents)}</span></div>}
         <div className="flex justify-between"><span className="font-semibold text-slate-900">Total</span><span className="font-mono font-semibold text-slate-900">{formatMoney(data.total_cents)}</span></div>
         <div className="flex justify-between"><span className="font-semibold text-slate-900">Balance</span><span className={`font-mono font-semibold ${data.balance_cents > 0 ? 'text-rose-600' : 'text-slate-900'}`}>{formatMoney(data.balance_cents)}</span></div>
       </div>

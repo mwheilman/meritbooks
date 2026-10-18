@@ -232,7 +232,7 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
                 </button>
                 <button onClick={sendInvoice} disabled={sending || !data.customerEmail}
                    title={data.customerEmail ? `Email this invoice to ${data.customerEmail}` : 'No customer email on file'}
-                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed">
                   {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
                   {sending ? 'Sending…' : data.delivery?.sentAt ? 'Resend' : 'Send'}
                 </button>
@@ -446,14 +446,14 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
                       className="w-full px-3 py-2 rounded-md bg-slate-900/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-red-500/40" />
                     <div className="flex items-center justify-end gap-2">
                       <button onClick={() => { setConfirmAction(null); setActionReason(''); }} disabled={actioning}
-                        className="px-3 py-1.5 rounded-md text-xs text-slate-400 hover:text-slate-200 hover:bg-navy/[0.04]">
+                        className="px-3 py-1.5 rounded-md text-xs text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]">
                         Cancel
                       </button>
                       <button onClick={() => runCorrection(confirmAction)} disabled={actioning}
                         className={clsx('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium',
                           actioning ? 'bg-slate-800 text-slate-600'
                             : confirmAction === 'void' ? 'bg-red-600 text-white hover:bg-red-500'
-                            : 'bg-amber-700 text-white hover:bg-amber-500')}>
+                            : 'bg-amber-600 text-white hover:bg-amber-500')}>
                         {actioning ? <Loader2 size={13} className="animate-spin" /> : confirmAction === 'void' ? <Ban size={13} /> : <FileX size={13} />}
                         {actioning ? 'Working…' : confirmAction === 'void' ? 'Void invoice' : 'Write off'}
                       </button>
@@ -507,7 +507,7 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Lines</h3>
             <button onClick={() => setLines((p) => [...p, { description: '', quantity: 1, unitPriceCents: 0, amountCents: 0, accountNumber: '', accountName: '' }])}
-              className="inline-flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300">
+              className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300">
               <Plus size={12} /> Add line
             </button>
           </div>
@@ -543,12 +543,12 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
           </div>
 
           <div className="mt-4 flex items-center justify-end gap-2">
-            <button onClick={() => { setEditing(false); setNeedsOverride(false); }} className="px-4 py-2 rounded-md text-sm text-slate-400 hover:text-slate-200 hover:bg-navy/[0.04]">
+            <button onClick={() => { setEditing(false); setNeedsOverride(false); }} className="px-4 py-2 rounded-md text-sm text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]">
               Cancel
             </button>
             <button onClick={save} disabled={saving}
               className={clsx('inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium',
-                saving ? 'bg-slate-800 text-slate-600' : 'bg-brand-500 text-white hover:bg-brand-600')}>
+                saving ? 'bg-slate-800 text-slate-600' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />} Save
             </button>
           </div>

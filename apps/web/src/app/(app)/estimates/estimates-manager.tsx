@@ -110,7 +110,7 @@ export function EstimatesManager() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-ink-hi">Estimates &amp; Quotes</h1>
+          <h1 className="text-2xl font-semibold text-white">Estimates &amp; Quotes</h1>
           <p className="text-sm text-slate-400 mt-1">
             Quote work, track your pipeline, and convert a won estimate into a posting invoice.
           </p>
@@ -118,7 +118,7 @@ export function EstimatesManager() {
         <button
           onClick={() => setShowCreate(true)}
           disabled={isAll}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
         >
           <Plus className="w-4 h-4" />
           New Estimate
@@ -167,7 +167,7 @@ export function EstimatesManager() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search estimates"
-            className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi placeholder:text-slate-500"
+            className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-500"
           />
         </div>
       </div>
@@ -182,8 +182,8 @@ export function EstimatesManager() {
               onClick={() => setStatus(t)}
               className={`px-3 py-2 text-sm rounded-t-lg whitespace-nowrap transition-colors ${
                 status === t
-                  ? 'bg-slate-800 text-brand-400 border-b-2 border-brand-500'
-                  : 'text-slate-400 hover:text-ink-hi'
+                  ? 'bg-slate-800 text-emerald-400 border-b-2 border-emerald-400'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
               {t.charAt(0) + t.slice(1).toLowerCase()}{' '}
@@ -196,7 +196,7 @@ export function EstimatesManager() {
       {/* Table */}
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
+          <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
         </div>
       ) : sorted.length === 0 ? (
         <EmptyState
@@ -267,7 +267,7 @@ function EstimateTableRow({ row, onClick }: { row: EstimateRow; onClick: () => v
   return (
     <tr onClick={onClick} className="border-b border-slate-800/50 cursor-pointer hover:bg-slate-800/40 transition-colors">
       <td className="py-3 pr-4">
-        <span className="font-mono text-ink-hi">{row.estimateNumber}</span>
+        <span className="font-mono text-white">{row.estimateNumber}</span>
       </td>
       <td className="py-3 pr-4 text-slate-300">{row.customer?.name ?? '—'}</td>
       <td className="py-3 pr-4 font-mono text-slate-400 text-xs tabular-nums">{row.estimateDate}</td>
@@ -277,7 +277,7 @@ function EstimateTableRow({ row, onClick }: { row: EstimateRow; onClick: () => v
         </span>
         {row.isPastExpiration && <span className="ml-1 text-[10px] text-amber-400">past</span>}
       </td>
-      <td className="py-3 pr-4 text-right font-mono text-ink-hi tabular-nums">
+      <td className="py-3 pr-4 text-right font-mono text-white tabular-nums">
         {formatMoney(row.totalCents, { currency: row.currency })}
       </td>
       <td className="py-3 pr-4">
@@ -342,7 +342,7 @@ function PipelineCard({
         <span className="text-sm text-slate-400">{label}</span>
         <Icon className={`w-4 h-4 ${color}`} />
       </div>
-      <p className="text-xl font-mono font-semibold text-ink-hi tabular-nums">{value}</p>
+      <p className="text-xl font-mono font-semibold text-white tabular-nums">{value}</p>
       <p className="text-xs text-slate-500 mt-1">{hint}</p>
     </div>
   );

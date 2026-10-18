@@ -69,7 +69,7 @@ export function BudgetVsActual({ locationId, fiscalYear, departmentId }: {
         <select
           value={period}
           onChange={(e) => setPeriod(parseInt(e.target.value, 10))}
-          className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi"
+          className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"
         >
           <option value={0}>Full Year (FY {fiscalYear})</option>
           {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m} {fiscalYear} (P{i + 1})</option>)}
@@ -120,9 +120,9 @@ export function BudgetVsActual({ locationId, fiscalYear, departmentId }: {
                 {/* Net income summary */}
                 <tr className="bg-brand-500/[0.04] border-t-2 border-slate-700">
                   <td />
-                  <td className="px-4 py-3 text-sm font-semibold text-ink-hi">Net Income</td>
+                  <td className="px-4 py-3 text-sm font-semibold text-white">Net Income</td>
                   <td className="px-4 py-3 text-right font-mono font-semibold text-slate-200">{formatMoney(net.budget)}</td>
-                  <td className={clsx('px-4 py-3 text-right font-mono font-semibold', net.actual >= 0 ? 'text-ink-hi' : 'text-red-400')}>{formatMoney(net.actual)}</td>
+                  <td className={clsx('px-4 py-3 text-right font-mono font-semibold', net.actual >= 0 ? 'text-white' : 'text-red-400')}>{formatMoney(net.actual)}</td>
                   <td className={clsx('px-4 py-3 text-right font-mono font-semibold flex items-center justify-end gap-1', net.favorable ? 'text-emerald-400' : 'text-red-400')}>
                     {net.favorable ? <TrendingUp size={12} /> : <TrendingDown size={12} />}{formatMoney(Math.abs(net.variance))}
                   </td>

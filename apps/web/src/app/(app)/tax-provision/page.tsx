@@ -187,7 +187,7 @@ export default function TaxProvisionPage() {
               <Info size={16} className="text-blue-400 mt-0.5 shrink-0" />
               <div className="text-sm text-slate-300">
                 No book-tax differences are tagged for this period, so taxable income equals book income and the provision is a
-                straight <span className="text-ink-hi font-medium">{r.statutoryRatePct}% </span> of pretax income with no deferred component.
+                straight <span className="text-white font-medium">{r.statutoryRatePct}% </span> of pretax income with no deferred component.
                 Tag accounts on the <span className="text-emerald-400">Book-to-Tax</span> screen to build the M-1 and drive DTA/DTL.
               </div>
             </div>
@@ -196,7 +196,7 @@ export default function TaxProvisionPage() {
           {/* Current vs deferred breakdown */}
           <section className="card overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800">
-              <h2 className="text-sm font-semibold text-ink-hi">Provision breakdown — current & deferred</h2>
+              <h2 className="text-sm font-semibold text-white">Provision breakdown — current & deferred</h2>
             </div>
             <table className="w-full text-sm">
               <tbody>
@@ -207,7 +207,7 @@ export default function TaxProvisionPage() {
                 <Row label={`Current tax @ ${r.statutoryRatePct}%`} amountCents={r.currentTaxCents} />
                 <Row label="Deferred tax (Δ DTL − Δ DTA)" amountCents={r.deferredTaxCents} />
                 <tr className="border-t-2 border-slate-700 bg-slate-900/40">
-                  <td className="px-4 py-3 font-semibold text-ink-hi">Total income tax provision</td>
+                  <td className="px-4 py-3 font-semibold text-white">Total income tax provision</td>
                   <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-300">{signed(r.totalProvisionCents)}</td>
                 </tr>
               </tbody>
@@ -218,7 +218,7 @@ export default function TaxProvisionPage() {
             {/* Effective-rate reconciliation */}
             <section className="card overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-800">
-                <h2 className="text-sm font-semibold text-ink-hi">Effective-rate reconciliation</h2>
+                <h2 className="text-sm font-semibold text-white">Effective-rate reconciliation</h2>
                 <p className="text-2xs text-slate-500 mt-0.5">Only permanent differences move the rate away from statutory.</p>
               </div>
               <table className="w-full text-sm">
@@ -226,8 +226,8 @@ export default function TaxProvisionPage() {
                   <ReconRow label="Tax at statutory rate" amountCents={r.statutoryTaxCents} pct={r.pretaxBookIncomeCents !== 0 ? r.statutoryRatePct : 0} />
                   <ReconRow label="Effect of permanent differences" amountCents={r.permanentTaxEffectCents} pct={r.pretaxBookIncomeCents !== 0 ? +(r.permanentTaxEffectCents / r.pretaxBookIncomeCents * 100).toFixed(2) : 0} />
                   <tr className="border-t-2 border-slate-700 bg-slate-900/40">
-                    <td className="px-4 py-2.5 font-semibold text-ink-hi">Total provision</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-ink-hi">{signed(r.totalProvisionCents)}</td>
+                    <td className="px-4 py-2.5 font-semibold text-white">Total provision</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-white">{signed(r.totalProvisionCents)}</td>
                     <td className="px-4 py-2.5 text-right font-mono text-emerald-300">{r.effectiveRatePct.toFixed(2)}%</td>
                   </tr>
                 </tbody>
@@ -237,7 +237,7 @@ export default function TaxProvisionPage() {
             {/* DTA / DTL rollforward + roll */}
             <section className="card overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-800">
-                <h2 className="text-sm font-semibold text-ink-hi">Deferred tax rollforward — DTA / DTL</h2>
+                <h2 className="text-sm font-semibold text-white">Deferred tax rollforward — DTA / DTL</h2>
                 <p className="text-2xs text-slate-500 mt-0.5">
                   {comp.rollforward?.hasPriorHistory
                     ? 'Beginning balances carried from prior filed provisions for this entity.'
@@ -256,7 +256,7 @@ export default function TaxProvisionPage() {
                   <RollRow label="Beginning balance" dta={comp.rollforward?.beginningDtaCents ?? 0} dtl={comp.rollforward?.beginningDtlCents ?? 0} />
                   <RollRow label="Change this period" dta={comp.rollforward?.dtaChangeCents ?? r.dtaChangeCents} dtl={comp.rollforward?.dtlChangeCents ?? r.dtlChangeCents} />
                   <tr className="border-t border-slate-700 bg-slate-900/40">
-                    <td className="px-4 py-2.5 font-semibold text-ink-hi">Ending balance</td>
+                    <td className="px-4 py-2.5 font-semibold text-white">Ending balance</td>
                     <td className="px-4 py-2.5 text-right font-mono font-semibold text-emerald-300">{fmt(comp.rollforward?.endingDtaCents ?? r.dtaChangeCents)}</td>
                     <td className="px-4 py-2.5 text-right font-mono font-semibold text-red-300">{fmt(comp.rollforward?.endingDtlCents ?? r.dtlChangeCents)}</td>
                   </tr>
@@ -310,7 +310,7 @@ export default function TaxProvisionPage() {
           {/* Provision JE preview + propose/post */}
           <section className="card overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800">
-              <h2 className="text-sm font-semibold text-ink-hi">Provision journal entry</h2>
+              <h2 className="text-sm font-semibold text-white">Provision journal entry</h2>
               <p className="text-2xs text-slate-500 mt-0.5">DR Income Tax Expense · CR Income Taxes Payable + DR/CR Deferred Tax Asset/Liability — balanced, posted on approval.</p>
             </div>
             <table className="w-full text-sm">
@@ -361,7 +361,7 @@ function SummaryCard(props: { label: string; valueCents?: number; rawText?: stri
   return (
     <div className={clsx('card p-3', emphasize && 'border-emerald-500/40')}>
       <p className="text-2xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={clsx('mt-1 font-mono text-lg', emphasize ? 'text-emerald-300' : tone === 'add' ? 'text-emerald-400' : tone === 'sub' ? 'text-red-400' : 'text-ink-hi')}>
+      <p className={clsx('mt-1 font-mono text-lg', emphasize ? 'text-emerald-300' : tone === 'add' ? 'text-emerald-400' : tone === 'sub' ? 'text-red-400' : 'text-white')}>
         {rawText ?? (valueCents !== undefined ? signed(valueCents) : '—')}
       </p>
     </div>
@@ -371,8 +371,8 @@ function SummaryCard(props: { label: string; valueCents?: number; rawText?: stri
 function Row(props: { label: string; amountCents: number; bold?: boolean; indent?: boolean; muted?: boolean; divide?: boolean }) {
   return (
     <tr className={clsx(props.divide && 'border-t border-slate-700')}>
-      <td className={clsx('px-4 py-2.5', props.indent && 'pl-8', props.bold ? 'font-semibold text-ink-hi' : props.muted ? 'text-slate-400' : 'text-slate-300')}>{props.label}</td>
-      <td className={clsx('px-4 py-2.5 text-right font-mono', props.bold ? 'font-semibold text-ink-hi' : props.muted ? 'text-slate-400' : 'text-slate-200')}>{signed(props.amountCents)}</td>
+      <td className={clsx('px-4 py-2.5', props.indent && 'pl-8', props.bold ? 'font-semibold text-white' : props.muted ? 'text-slate-400' : 'text-slate-300')}>{props.label}</td>
+      <td className={clsx('px-4 py-2.5 text-right font-mono', props.bold ? 'font-semibold text-white' : props.muted ? 'text-slate-400' : 'text-slate-200')}>{signed(props.amountCents)}</td>
     </tr>
   );
 }

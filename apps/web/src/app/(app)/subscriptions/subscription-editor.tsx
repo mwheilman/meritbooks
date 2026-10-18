@@ -127,15 +127,15 @@ export function SubscriptionEditor({
   }
 
   const inputCls =
-    'w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-sm text-ink-hi focus:border-brand-500 focus:outline-none';
+    'w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-sm text-white focus:border-emerald-500 focus:outline-none';
   const labelCls = 'block text-[11px] text-slate-500 mb-1';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="card w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit subscription' : 'Add subscription'}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-ink-hi">{isEdit ? 'Edit subscription' : 'Add subscription'}</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close">
+          <h2 className="text-lg font-semibold text-white">{isEdit ? 'Edit subscription' : 'Add subscription'}</h2>
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -186,7 +186,7 @@ export function SubscriptionEditor({
           </div>
           <div className="col-span-6 flex items-end pb-1">
             <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={s.auto_renews} onChange={(e) => set('auto_renews', e.target.checked)} className="accent-brand-500" />
+              <input type="checkbox" checked={s.auto_renews} onChange={(e) => set('auto_renews', e.target.checked)} className="accent-emerald-500" />
               Auto-renews
             </label>
           </div>
@@ -202,8 +202,8 @@ export function SubscriptionEditor({
         </div>
 
         <div className="mt-5 flex items-center justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-ink-hi">Cancel</button>
-          <button onClick={save} disabled={saving} className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+          <button onClick={save} disabled={saving} className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
             {saving && <Loader2 size={14} className="animate-spin" />}
             {isEdit ? 'Save changes' : 'Add subscription'}
           </button>

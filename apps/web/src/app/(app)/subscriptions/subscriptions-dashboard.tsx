@@ -138,10 +138,10 @@ export function SubscriptionsDashboard() {
         <button onClick={() => setParsing(true)} className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg flex items-center gap-1.5">
           <Sparkles size={13} /> Upload agreement
         </button>
-        <button onClick={() => setEditing('new')} className="px-3 py-1.5 text-xs font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg flex items-center gap-1.5">
+        <button onClick={() => setEditing('new')} className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-1.5">
           <Plus size={13} /> Add subscription
         </button>
-        <button onClick={bump} className="ml-auto p-1.5 rounded-lg text-slate-500 hover:text-ink-hi hover:bg-slate-800" aria-label="Refresh">
+        <button onClick={bump} className="ml-auto p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800" aria-label="Refresh">
           <RefreshCw size={15} />
         </button>
       </div>
@@ -164,12 +164,12 @@ export function SubscriptionsDashboard() {
               onClick={() => setView(t.key)}
               className={clsx(
                 'px-3 py-2 text-xs font-medium flex items-center gap-1.5 border-b-2 -mb-px whitespace-nowrap',
-                active ? 'border-brand-500 text-ink-hi' : 'border-transparent text-slate-400 hover:text-slate-200',
+                active ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200',
               )}
             >
               <Icon size={13} /> {t.label}
               {badge !== undefined && badge > 0 && (
-                <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-mono', active ? 'bg-brand-500/20 text-brand-300' : 'bg-slate-800 text-slate-400')}>{badge}</span>
+                <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full font-mono', active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400')}>{badge}</span>
               )}
             </button>
           );
@@ -217,12 +217,12 @@ export function SubscriptionsDashboard() {
                 <div
                   key={s.id}
                   ref={focusId === s.id ? (el) => el?.scrollIntoView({ behavior: 'smooth', block: 'center' }) : undefined}
-                  className={clsx('card p-4', focusId === s.id && 'ring-2 ring-brand-500/60')}
+                  className={clsx('card p-4', focusId === s.id && 'ring-2 ring-emerald-500/60')}
                 >
                   <div className="flex items-start gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-ink-hi font-medium truncate">{s.vendor_name}</span>
+                        <span className="text-white font-medium truncate">{s.vendor_name}</span>
                         {s.product && <span className="text-slate-500 text-sm truncate">· {s.product}</span>}
                         <span className={clsx('text-[10px] px-1.5 py-0.5 rounded border', STATUS_STYLE[s.status])}>{s.status.replace('_', ' ')}</span>
                         {(s.creep_flags ?? []).map((f) => (
@@ -260,7 +260,7 @@ export function SubscriptionsDashboard() {
                       {(s.status === 'DETECTED' || s.status === 'ACTIVE') && (
                         <button onClick={() => decide(s, 'review')} title="Mark under review" className="p-1.5 rounded text-blue-400 hover:bg-blue-500/10"><XCircle size={15} /></button>
                       )}
-                      <button onClick={() => setEditing(toEditor(s))} title="Edit" className="p-1.5 rounded text-slate-400 hover:bg-slate-800 hover:text-ink-hi"><Pencil size={15} /></button>
+                      <button onClick={() => setEditing(toEditor(s))} title="Edit" className="p-1.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white"><Pencil size={15} /></button>
                       <button onClick={() => remove(s)} title="Remove" className="p-1.5 rounded text-slate-500 hover:bg-red-500/10 hover:text-red-400"><Trash2 size={15} /></button>
                     </div>
                   </div>

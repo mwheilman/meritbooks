@@ -228,7 +228,7 @@ export function CommandBar() {
         {/* Input row */}
         <div className="flex items-center gap-3 border-b border-slate-800 px-4 py-3">
           {phase.kind === 'loading'
-            ? <Loader2 size={18} className="shrink-0 animate-spin text-brand-400" />
+            ? <Loader2 size={18} className="shrink-0 animate-spin text-emerald-400" />
             : <Search size={18} className="shrink-0 text-slate-500" />}
           <input
             ref={inputRef}
@@ -236,7 +236,7 @@ export function CommandBar() {
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Ask or command… e.g. “accrue $4,200 rent for Coho” or “why did OpEx jump?”"
             aria-label="Command prompt"
-            className="flex-1 bg-transparent text-[15px] text-ink-hi placeholder:text-slate-500 focus:outline-none"
+            className="flex-1 bg-transparent text-[15px] text-white placeholder:text-slate-500 focus:outline-none"
           />
           <button
             onClick={() => savePrompt(prompt)}
@@ -250,7 +250,7 @@ export function CommandBar() {
           <button
             onClick={() => run(prompt)}
             disabled={prompt.trim().length < 2 || phase.kind === 'loading'}
-            className="inline-flex items-center gap-1 rounded-md bg-brand-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-40 transition-colors"
+            className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-40 transition-colors"
           >
             Run <CornerDownLeft size={12} />
           </button>
@@ -301,7 +301,7 @@ export function CommandBar() {
                         onMouseEnter={() => setActiveIdx(i)}
                         onClick={() => { setPrompt(s); run(s); }}
                         className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                          i === activeIdx ? 'bg-slate-800 text-ink-hi' : 'text-slate-300 hover:bg-slate-800/60'
+                          i === activeIdx ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800/60'
                         }`}
                       >
                         {s}
@@ -320,7 +320,7 @@ export function CommandBar() {
                     <button
                       key={ex.metric}
                       onClick={() => { setPrompt(ex.prompt); run(ex.prompt); }}
-                      className="rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-xs text-slate-300 hover:border-indigo-500/50 hover:text-ink-hi transition-colors"
+                      className="rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-xs text-slate-300 hover:border-indigo-500/50 hover:text-white transition-colors"
                     >
                       {ex.prompt}
                     </button>

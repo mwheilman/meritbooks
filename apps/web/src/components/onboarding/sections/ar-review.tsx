@@ -182,13 +182,13 @@ export function ArReviewComponent({ companyId, companyName, onCommitted, initial
     return (
       <div className="rounded-2xl border border-brand-500/30 bg-brand-500/[0.05] px-5 py-6 text-center" role="status">
         <CheckCircle2 size={20} className="mx-auto mb-2 text-brand-400" aria-hidden />
-        <p className="text-sm font-semibold text-ink-hi">Receivables imported.</p>
+        <p className="text-sm font-semibold text-white">Receivables imported.</p>
         <p className="mt-2 text-xs text-slate-400">
           {committed.insertedCustomers} customer{committed.insertedCustomers === 1 ? '' : 's'} ·{' '}
           {committed.insertedInvoices} open invoice{committed.insertedInvoices === 1 ? '' : 's'}
           {committed.skippedInvoices > 0 ? ` · ${committed.skippedInvoices} already present` : ''}
         </p>
-        <p className="mt-3 font-mono text-lg tabular-nums text-ink-hi">{formatMoney(committed.openArCents)}</p>
+        <p className="mt-3 font-mono text-lg tabular-nums text-white">{formatMoney(committed.openArCents)}</p>
         <p className="mt-1 text-xs text-slate-500">
           {committed.subledgerAttached
             ? 'Tied to your opening trial balance — this foots to the A/R control before go-live.'
@@ -333,7 +333,7 @@ function ArProposalReview({ proposal, committing, onCommit }: { proposal: ArImpo
         type="button"
         onClick={onCommit}
         disabled={committing}
-        className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+        className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-brand-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
       >
         {committing ? <><Loader2 size={15} className="animate-spin" aria-hidden /> Importing…</> : <>Accept &amp; import {proposal.openInvoiceCount} receivable{proposal.openInvoiceCount === 1 ? '' : 's'}</>}
       </button>
@@ -344,7 +344,7 @@ function ArProposalReview({ proposal, committing, onCommit }: { proposal: ArImpo
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-slate-800 bg-surface-900/60 px-3 py-2.5">
-      <p className="font-mono text-lg tabular-nums text-ink-hi">{value}</p>
+      <p className="font-mono text-lg tabular-nums text-white">{value}</p>
       <p className="text-[11px] text-slate-500">{label}</p>
     </div>
   );
@@ -406,7 +406,7 @@ function ManualEntry({
         </ul>
       )}
 
-      <button type="button" onClick={onPreview} disabled={items.length === 0} className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">
+      <button type="button" onClick={onPreview} disabled={items.length === 0} className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-brand-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">
         Review {items.length} receivable{items.length === 1 ? '' : 's'}
       </button>
     </div>
@@ -414,4 +414,4 @@ function ManualEntry({
 }
 
 const fieldCls =
-  'rounded-lg border border-slate-700 bg-surface-950 px-2.5 py-1.5 text-sm text-ink-hi placeholder:text-slate-600 focus:border-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40';
+  'rounded-lg border border-slate-700 bg-surface-950 px-2.5 py-1.5 text-sm text-white placeholder:text-slate-600 focus:border-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40';

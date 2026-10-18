@@ -35,7 +35,7 @@ function defaultLabel(pct: number): string {
 }
 
 const TONE_CHIP: Record<Exclude<ChipTone, 'auto'>, string> = {
-  emerald: 'bg-em/10 text-accent-strong border border-em/25',
+  emerald: 'bg-em/10 text-em-bright border border-em/25',
   amber: 'bg-amber-500/10 text-amber-400 border border-amber-500/25',
   red: 'bg-red-500/10 text-red-fig border border-red-500/25',
 };

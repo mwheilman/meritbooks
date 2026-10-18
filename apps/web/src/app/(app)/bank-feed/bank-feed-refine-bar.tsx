@@ -102,7 +102,7 @@ export function BankFeedRefineBar({
                 aria-pressed={active}
                 className={clsx(
                   'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-2xs transition-colors',
-                  active ? 'bg-slate-800 text-ink-hi font-medium' : 'text-slate-400 hover:text-slate-300',
+                  active ? 'bg-slate-800 text-white font-medium' : 'text-slate-400 hover:text-slate-300',
                 )}
               >
                 <span>{b.label}</span>
@@ -124,7 +124,7 @@ export function BankFeedRefineBar({
             className={clsx(
               'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-2xs border transition-colors',
               vendor
-                ? 'border-brand-500/40 bg-brand-500/10 text-brand-300'
+                ? 'border-brand-500/40 bg-brand-500/10 text-brand-400'
                 : 'border-slate-800 bg-surface-900 text-slate-400 hover:text-slate-300 disabled:opacity-40',
             )}
           >
@@ -139,7 +139,7 @@ export function BankFeedRefineBar({
                   setVendorOpen(false);
                 }}
                 aria-label="Clear vendor filter"
-                className="hover:text-ink-hi"
+                className="hover:text-white"
               />
             ) : (
               <ChevronDown size={12} />
@@ -158,7 +158,7 @@ export function BankFeedRefineBar({
                   onVendorChange(null);
                   setVendorOpen(false);
                 }}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-2xs text-slate-300 hover:bg-navy/[0.04] border-b border-slate-800/50"
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-2xs text-slate-300 hover:bg-white/[0.04] border-b border-slate-800/50"
               >
                 {vendor == null && <Check size={11} className="text-brand-400" />}
                 <span className={clsx(vendor != null && 'ml-[19px]')}>All vendors</span>
@@ -174,7 +174,7 @@ export function BankFeedRefineBar({
                   }}
                   className={clsx(
                     'w-full flex items-center gap-2 px-3 py-1.5 text-left text-2xs transition-colors',
-                    vendor === v ? 'bg-brand-500/10 text-brand-300' : 'text-slate-300 hover:bg-navy/[0.04]',
+                    vendor === v ? 'bg-brand-500/10 text-brand-400' : 'text-slate-300 hover:bg-white/[0.04]',
                   )}
                 >
                   {vendor === v ? <Check size={11} className="text-brand-400" /> : <span className="w-[11px]" />}
@@ -245,7 +245,7 @@ export function BankFeedRefineBar({
                 className={clsx(
                   'group inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full text-2xs border transition-colors',
                   active
-                    ? 'border-brand-500/40 bg-brand-500/10 text-brand-300'
+                    ? 'border-brand-500/40 bg-brand-500/10 text-brand-400'
                     : 'border-slate-800 bg-surface-900 text-slate-400 hover:text-slate-200',
                 )}
               >

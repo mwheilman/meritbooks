@@ -101,21 +101,21 @@ export function BankAccountManager({ refreshKey }: { refreshKey?: number }) {
                   <input
                     value={draft.label}
                     onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
-                    className="px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-ink-hi"
+                    className="px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white"
                     aria-label="Account label"
                   />
                   <select
                     value={draft.glAccountId}
                     onChange={(e) => setDraft((d) => ({ ...d, glAccountId: e.target.value }))}
-                    className="px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-ink-hi"
+                    className="px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white"
                     aria-label="GL account"
                   >
                     {opts.map((g) => <option key={g.id} value={g.id}>{g.account_number} · {g.name}</option>)}
                   </select>
                 </div>
                 <div className="flex items-center gap-2 justify-end">
-                  <button onClick={() => setEditId(null)} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-slate-400 hover:text-ink-hi hover:bg-slate-800 disabled:opacity-50"><X size={12} /> Cancel</button>
-                  <button onClick={() => save(a)} disabled={busy} className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-brand-500 text-white text-xs font-medium hover:bg-brand-600 disabled:opacity-50">
+                  <button onClick={() => setEditId(null)} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-50"><X size={12} /> Cancel</button>
+                  <button onClick={() => save(a)} disabled={busy} className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-500 text-slate-900 text-xs font-medium hover:bg-emerald-400 disabled:opacity-50">
                     {busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save
                   </button>
                 </div>

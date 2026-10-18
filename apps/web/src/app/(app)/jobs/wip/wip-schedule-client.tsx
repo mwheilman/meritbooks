@@ -76,7 +76,7 @@ function SummaryTile({ label, value, sub, tone }: { label: string; value: string
     <div className="card p-4">
       <p className="text-2xs uppercase tracking-wider text-slate-500 font-semibold">{label}</p>
       <p className={clsx('text-xl font-mono font-semibold mt-1',
-        tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-red-400' : tone === 'warn' ? 'text-amber-400' : tone === 'info' ? 'text-blue-400' : 'text-ink-hi')}>
+        tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-red-400' : tone === 'warn' ? 'text-amber-400' : tone === 'info' ? 'text-blue-400' : 'text-white')}>
         {value}
       </p>
       {sub && <p className="text-2xs text-slate-500 mt-0.5">{sub}</p>}
@@ -103,7 +103,7 @@ export function WipScheduleClient() {
 
   return (
     <div>
-      <Link href="/jobs" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-ink-hi mb-3"><ArrowLeft size={14} /> Jobs</Link>
+      <Link href="/jobs" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white mb-3"><ArrowLeft size={14} /> Jobs</Link>
       <PageHeader
         title="WIP Schedule"
         description="Work-in-progress across all open jobs — earned revenue vs billings, EAC, and margin at completion"
@@ -112,7 +112,7 @@ export function WipScheduleClient() {
             {METHODS.map((m) => (
               <button key={m.value} onClick={() => setMethod(m.value)} title={m.hint}
                 className={clsx('px-2.5 py-1 rounded-md text-2xs font-medium transition-colors',
-                  method === m.value ? 'bg-slate-700 text-ink-hi' : 'text-slate-400 hover:text-slate-200')}>
+                  method === m.value ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200')}>
                 {m.label}
               </button>
             ))}
@@ -121,7 +121,7 @@ export function WipScheduleClient() {
       />
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
       ) : error ? (
         <div className="card p-8 text-center"><AlertCircle size={24} className="mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{error}</p></div>
       ) : !data || data.jobs.length === 0 ? (
@@ -174,7 +174,7 @@ export function WipScheduleClient() {
           <div className="card overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2">
               <Layers size={14} className="text-brand-400" />
-              <h2 className="text-sm font-semibold text-ink-hi">Schedule · {data.totals.jobs} open job{data.totals.jobs === 1 ? '' : 's'}</h2>
+              <h2 className="text-sm font-semibold text-white">Schedule · {data.totals.jobs} open job{data.totals.jobs === 1 ? '' : 's'}</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1040px]">
@@ -197,7 +197,7 @@ export function WipScheduleClient() {
                     <tr key={j.jobId} className="table-row-hover">
                       <td className="px-3 py-2.5">
                         <Link href={`/jobs/${j.jobId}`} className="group inline-flex flex-col">
-                          <span className="text-sm text-slate-200 group-hover:text-ink-hi truncate max-w-[220px]">{j.jobName}</span>
+                          <span className="text-sm text-slate-200 group-hover:text-white truncate max-w-[220px]">{j.jobName}</span>
                           <span className="text-2xs font-mono text-slate-500">{j.jobNumber}{j.company ? ` · ${j.company}` : ''}</span>
                         </Link>
                       </td>
@@ -242,7 +242,7 @@ export function WipScheduleClient() {
                     <td className="px-3 py-2.5 text-right text-sm font-mono text-slate-200">{formatMoney(data.totals.contractValueCents)}</td>
                     <td className="px-3 py-2.5 text-right text-sm font-mono text-slate-300">{formatMoney(data.totals.costsToDateCents)}</td>
                     <td className="px-3 py-2.5 text-right text-sm font-mono text-slate-300">{formatMoney(data.totals.eacCents)}</td>
-                    <td className="px-3 py-2.5 text-right text-sm font-mono text-ink-hi">{formatMoney(data.totals.billedToDateCents)}</td>
+                    <td className="px-3 py-2.5 text-right text-sm font-mono text-white">{formatMoney(data.totals.billedToDateCents)}</td>
                     <td className="px-3 py-2.5 text-right text-sm font-mono text-amber-300">{formatMoney(data.totals.overBillingCents)}</td>
                     <td className="px-3 py-2.5 text-right text-sm font-mono text-blue-300">{formatMoney(data.totals.underBillingCents)}</td>
                     <td className={clsx('px-3 py-2.5 text-right text-sm font-mono font-semibold', marginColor(data.totals.projectedFinalMarginPct))}>

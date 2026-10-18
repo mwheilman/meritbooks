@@ -11,7 +11,6 @@ import { toCsv, downloadBlob } from '@/lib/reports/export/csv';
 import { buildExportFilename, type StatementModel } from '@/lib/reports/export/statement-model';
 import type { BasisOverlay } from './use-basis-overlay';
 import { applyOverlayToExportPayload } from './export-overlay';
-import { getTenantBrand } from '@/lib/brand/tenant-brand';
 
 /**
  * Export the currently-viewed statement (PDF or CSV) for the active
@@ -83,7 +82,7 @@ export function ExportMenu({
       }
 
       // 2. Project it into the normalized statement model.
-      const meta: ExportMeta = { reportLabel, entityLabel, periodLabel, basisLabel, accent: getTenantBrand().colors.accent };
+      const meta: ExportMeta = { reportLabel, entityLabel, periodLabel, basisLabel, accent: '#10b981' };
       const model = spec.build(primary, meta, cmp);
 
       if (!model.rows.some((r) => r.kind === 'account' || r.kind === 'total')) {

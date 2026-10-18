@@ -29,7 +29,7 @@ export async function ActivityFeed() {
   return (
     <div className="card">
       <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-ink-hi">Activity</h2>
+        <h2 className="text-sm font-semibold text-white">Activity</h2>
         <span className="text-2xs text-slate-500">{activity.length > 0 ? 'Latest' : 'No activity'}</span>
       </div>
       <div className="divide-y divide-slate-800/30">

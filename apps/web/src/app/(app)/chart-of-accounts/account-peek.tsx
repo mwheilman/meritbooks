@@ -17,13 +17,13 @@ export function AccountPeek({ accountId }: { accountId: string }) {
     <div className="p-3">
       <div className="flex items-center gap-2 mb-1">
         <span className="font-mono text-xs text-brand-400">{data.accountNumber}</span>
-        <span className="text-sm font-semibold text-ink-hi truncate">{data.name}</span>
+        <span className="text-sm font-semibold text-white truncate">{data.name}</span>
         {data.isControl && <Lock size={11} className="text-amber-500/70" />}
       </div>
       <div className="text-2xs text-slate-500 mb-2">{data.accountType}{data.accountSubType ? ` · ${data.accountSubType}` : ''}</div>
       <div className="rounded-md bg-slate-800/40 px-3 py-2 flex items-center justify-between">
         <span className="text-2xs text-slate-500">Balance ({data.normalBalance})</span>
-        <span className="text-sm font-mono tabular-nums text-ink-hi">{formatMoney(data.naturalBalanceCents)}</span>
+        <span className="text-sm font-mono tabular-nums text-white">{formatMoney(data.naturalBalanceCents)}</span>
       </div>
       {data.recentActivity.length > 0 && (
         <div className="mt-2">

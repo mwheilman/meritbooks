@@ -190,7 +190,7 @@ export function CovenantsDashboard() {
       <button
         onClick={runTests}
         disabled={running || entries.length === 0}
-        className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-ink-hi rounded-lg disabled:opacity-40 flex items-center gap-1.5"
+        className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-white rounded-lg disabled:opacity-40 flex items-center gap-1.5"
       >
         {running ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
         Run covenant test
@@ -203,7 +203,7 @@ export function CovenantsDashboard() {
       </button>
       <button
         onClick={() => setEditing('new')}
-        className="px-3 py-1.5 text-xs font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg flex items-center gap-1.5"
+        className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-1.5"
       >
         <Plus size={13} /> Add covenant
       </button>
@@ -213,7 +213,7 @@ export function CovenantsDashboard() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
+        <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
       </div>
     );
   }
@@ -257,7 +257,7 @@ export function CovenantsDashboard() {
             <button onClick={() => setParsing(true)} className="px-4 py-2 text-sm font-medium bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 rounded-lg inline-flex items-center gap-1.5">
               <Sparkles size={14} /> Upload loan document
             </button>
-            <button onClick={() => setEditing('new')} className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg inline-flex items-center gap-1.5">
+            <button onClick={() => setEditing('new')} className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg inline-flex items-center gap-1.5">
               <Plus size={14} /> Add manually
             </button>
           </div>
@@ -275,7 +275,7 @@ export function CovenantsDashboard() {
               <div key={c.id} className={clsx('card p-4 border', band === 'BREACH' ? 'border-red-500/30' : band === 'WARN' ? 'border-amber-500/25' : 'border-slate-800')}>
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink-hi truncate">{c.loan_name}</p>
+                    <p className="text-sm font-semibold text-white truncate">{c.loan_name}</p>
                     <p className="text-[11px] text-slate-500 truncate">
                       {c.facility ? `${c.facility} · ` : ''}{c.lender_name ?? 'No lender'} · {c.test_frequency.toLowerCase()}
                     </p>
@@ -290,7 +290,7 @@ export function CovenantsDashboard() {
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider">
                       {c.covenant_type} · {c.direction === 'MIN' ? 'min' : 'max'} {fmtValue(Number(c.threshold), e?.unit ?? 'RATIO')}
                     </p>
-                    <p className={clsx('text-2xl font-mono font-semibold mt-0.5', band === 'BREACH' ? 'text-red-400' : band === 'WARN' ? 'text-amber-300' : band === 'UNKNOWN' ? 'text-slate-500' : 'text-ink-hi')}>
+                    <p className={clsx('text-2xl font-mono font-semibold mt-0.5', band === 'BREACH' ? 'text-red-400' : band === 'WARN' ? 'text-amber-300' : band === 'UNKNOWN' ? 'text-slate-500' : 'text-white')}>
                       {fmtValue(e?.value ?? null, e?.unit ?? 'RATIO')}
                     </p>
                   </div>
@@ -332,7 +332,7 @@ export function CovenantsDashboard() {
                     {certLoadingId === c.id ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
                     Draft certificate
                   </button>
-                  <button onClick={() => setEditing(toEditor(c))} className="px-2 py-1 text-[11px] text-slate-400 hover:text-ink-hi rounded-md hover:bg-slate-800 flex items-center gap-1">
+                  <button onClick={() => setEditing(toEditor(c))} className="px-2 py-1 text-[11px] text-slate-400 hover:text-white rounded-md hover:bg-slate-800 flex items-center gap-1">
                     <Pencil size={11} /> Edit
                   </button>
                   <button onClick={() => remove(c)} className="px-2 py-1 text-[11px] text-slate-500 hover:text-red-400 rounded-md hover:bg-slate-800 flex items-center gap-1">
@@ -381,12 +381,12 @@ export function CovenantsDashboard() {
           <div className="card w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6" onClick={(ev) => ev.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h2 className="text-lg font-semibold text-ink-hi">Compliance certificate — draft</h2>
+                <h2 className="text-lg font-semibold text-white">Compliance certificate — draft</h2>
                 <p className="text-[11px] text-slate-500">
                   {cert.name} · {cert.result.meta.source === 'ai' ? `drafted by ${cert.result.meta.model ?? 'AI'}` : 'deterministic template'} · human sign-off required
                 </p>
               </div>
-              <button onClick={() => setCert(null)} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close">
+              <button onClick={() => setCert(null)} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close">
                 <X size={18} />
               </button>
             </div>
@@ -396,11 +396,11 @@ export function CovenantsDashboard() {
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => { navigator.clipboard?.writeText(cert.result.narrative); addToast('success', 'Copied'); }}
-                className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-ink-hi rounded-lg"
+                className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-white rounded-lg"
               >
                 Copy
               </button>
-              <button onClick={() => setCert(null)} className="px-3 py-1.5 text-xs font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg">Done</button>
+              <button onClick={() => setCert(null)} className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg">Done</button>
             </div>
           </div>
         </div>

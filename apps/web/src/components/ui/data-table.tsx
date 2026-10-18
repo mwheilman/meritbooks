@@ -60,12 +60,12 @@ export function DataTable<T extends Record<string, unknown>>({
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-slate-800 bg-canvas/60">
+            <tr className="border-b border-slate-800">
               {columns.map((col) => (
                 <th
                   key={col.key}
                   className={clsx(
-                    'px-4 py-2.5 font-mono text-2xs font-medium uppercase tracking-eyebrow text-slate-500',
+                    'px-4 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500',
                     col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
                     col.sortable && 'cursor-pointer select-none hover:text-slate-300 transition-colors'
                   )}

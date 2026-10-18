@@ -108,9 +108,9 @@ export function ControlTower({ data, loading, refreshing, error, onRetry, onChan
     const Icon = !active ? ArrowUpDown : sort.dir === 'asc' ? ArrowUp : ArrowDown;
     return (
       <th key={k} className={clsx('px-4 py-3 font-medium', className)} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-        <button type="button" onClick={() => toggleSort(k)} className="inline-flex items-center gap-1 hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 rounded">
+        <button type="button" onClick={() => toggleSort(k)} className="inline-flex items-center gap-1 hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded">
           {label}
-          <Icon size={12} aria-hidden className={active ? 'text-brand-400' : 'text-slate-600'} />
+          <Icon size={12} aria-hidden className={active ? 'text-emerald-400' : 'text-slate-600'} />
         </button>
       </th>
     );
@@ -129,12 +129,12 @@ export function ControlTower({ data, loading, refreshing, error, onRetry, onChan
             onClick={() => setStageFilter(stageFilter === s ? 'all' : s)}
             aria-pressed={stageFilter === s}
             className={clsx(
-              'card px-3 py-2.5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50',
+              'card px-3 py-2.5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50',
               stageFilter === s ? 'border-emerald-500/60' : 'hover:border-slate-700',
             )}
           >
             <div className="text-2xs uppercase tracking-wide text-slate-500">{s === 'live' ? 'Live' : `At ${TOWER_STAGE_LABEL[s]}`}</div>
-            <div className={clsx('mt-1 text-lg font-semibold font-mono tabular-nums', s === 'live' ? 'text-emerald-400' : 'text-ink-hi')}>
+            <div className={clsx('mt-1 text-lg font-semibold font-mono tabular-nums', s === 'live' ? 'text-emerald-400' : 'text-white')}>
               {data.counts[s]}
             </div>
           </button>
@@ -215,7 +215,7 @@ export function ControlTower({ data, loading, refreshing, error, onRetry, onChan
         </table>
       </div>
       <p className="text-2xs text-slate-500">
-        Assign who owns each company’s onboarding from <Link href="/portfolio" className="text-brand-400 hover:underline">Portfolio</Link>. Status there updates automatically as companies move through these steps.
+        Assign who owns each company’s onboarding from <Link href="/portfolio" className="text-emerald-400 hover:underline">Portfolio</Link>. Status there updates automatically as companies move through these steps.
       </p>
     </div>
   );

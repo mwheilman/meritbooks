@@ -95,7 +95,7 @@ export function ReviewStep({ session, coa, busy, onBack, onSaveMapping, onTieOut
       </button>
 
       <p className="text-sm text-slate-300 mb-4">
-        <span className="font-medium text-ink-hi">{companyLabel}</span> — balances as of{' '}
+        <span className="font-medium text-white">{companyLabel}</span> — balances as of{' '}
         <span className="font-mono text-slate-200">{formatLongDate(session.asOfDate)}</span>
         {session.takeoverDate && <> · MeritBooks takes over on <span className="text-slate-200">{formatLongDate(session.takeoverDate)}</span></>}
       </p>
@@ -120,7 +120,7 @@ export function ReviewStep({ session, coa, busy, onBack, onSaveMapping, onTieOut
       <div className="mt-4 rounded-xl border border-slate-800 bg-surface-900 px-4 py-3" aria-live="polite">
         <div className="flex items-center gap-2 mb-2">
           <ListChecks size={15} className="text-brand-400" />
-          <p className="text-sm font-semibold text-ink-hi">What&apos;s left before you can confirm</p>
+          <p className="text-sm font-semibold text-white">What&apos;s left before you can confirm</p>
         </div>
         {blockers.length === 0 ? (
           <p className="text-sm text-emerald-300 flex items-center gap-2"><Check size={15} /> Nothing — every check passes.</p>
@@ -183,7 +183,7 @@ export function ReviewStep({ session, coa, busy, onBack, onSaveMapping, onTieOut
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="inline-flex items-center gap-1.5 text-2xs text-slate-400 cursor-pointer">
-            <input type="checkbox" className="accent-brand-500" checked={onlyToCheck} onChange={(e) => setOnlyToCheck(e.target.checked)} />
+            <input type="checkbox" className="accent-emerald-500" checked={onlyToCheck} onChange={(e) => setOnlyToCheck(e.target.checked)} />
             Only show ones to check ({toCheckCount})
           </label>
           <button type="button" disabled={busy || session.posted || strongCount === 0} onClick={() => save(true)}
@@ -199,7 +199,7 @@ export function ReviewStep({ session, coa, busy, onBack, onSaveMapping, onTieOut
           <span className="text-slate-200">{pendingCount} unsaved change{pendingCount === 1 ? '' : 's'}</span>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setPending({})} disabled={busy}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-navy/[0.03] disabled:opacity-40">
+              className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-white/[0.03] disabled:opacity-40">
               <Undo2 size={12} /> Discard
             </button>
             <button type="button" onClick={() => save(false)} disabled={busy}
@@ -244,7 +244,7 @@ export function ReviewStep({ session, coa, busy, onBack, onSaveMapping, onTieOut
                   <td className="px-3 py-2">
                     <select id={selectId} value={value} disabled={busy || session.posted}
                       onChange={(e) => stage(r.sourceAccount, e.target.value)}
-                      className={`w-full min-w-[12rem] rounded-md border px-2 py-1 text-xs text-ink-hi bg-surface-950 ${strength === 'missing' ? 'border-amber-500/40' : isPending ? 'border-brand-500/50' : 'border-slate-700'}`}>
+                      className={`w-full min-w-[12rem] rounded-md border px-2 py-1 text-xs text-white bg-surface-950 ${strength === 'missing' ? 'border-amber-500/40' : isPending ? 'border-brand-500/50' : 'border-slate-700'}`}>
                       <option value={NONE}>— Choose an account —</option>
                       {coa.length === 0 && m?.targetAccountNumber && <option value={m.targetAccountNumber}>{m.targetAccountNumber}</option>}
                       {coa.map((a) => <option key={a.accountNumber} value={a.accountNumber}>{a.accountNumber} — {a.name}</option>)}
@@ -278,7 +278,7 @@ export function ReviewStep({ session, coa, busy, onBack, onSaveMapping, onTieOut
           <div className="flex items-start gap-3">
             <ShieldCheck size={18} className="mt-0.5 shrink-0 text-brand-400" />
             <div className="flex-1">
-              <p className="text-sm font-semibold text-ink-hi">Check the numbers match</p>
+              <p className="text-sm font-semibold text-white">Check the numbers match</p>
               <p className="text-xs text-slate-400 mt-0.5">
                 Open the trial balance in your old system for {formatLongDate(session.asOfDate)} and compare it with the
                 totals above. When they match, confirm — this is your sign-off before anything is posted.
@@ -312,7 +312,7 @@ export function ReviewStep({ session, coa, busy, onBack, onSaveMapping, onTieOut
                 Post opening balances &amp; go live
               </button>
               <button type="button" disabled={busy || session.posted} onClick={() => onTieOut(false)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:bg-navy/[0.03] disabled:opacity-40 transition-colors">
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.03] disabled:opacity-40 transition-colors">
                 <Lock size={13} /> Reopen for edits
               </button>
             </div>

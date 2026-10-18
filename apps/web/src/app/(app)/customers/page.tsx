@@ -223,7 +223,7 @@ export default function CustomersPage() {
     <div className="p-6 max-w-[1400px] mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-ink-hi flex items-center gap-2">
+          <h1 className="text-xl font-semibold text-white flex items-center gap-2">
             <Users className="w-5 h-5 text-emerald-400" />
             Customers
           </h1>
@@ -231,7 +231,7 @@ export default function CustomersPage() {
         </div>
         <button
           onClick={() => { setShowCreate(true); setEditingId(null); setForm(EMPTY_FORM); setError(null); }}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-medium transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors"
         >
           <Plus className="w-4 h-4" />
           New Customer
@@ -244,7 +244,7 @@ export default function CustomersPage() {
           <input
             type="text" placeholder="Search customers..." aria-label="Search customers" value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-ink-hi placeholder:text-zinc-500 focus:outline-none focus:border-brand-500/50"
+            className="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/50"
           />
         </div>
       </div>
@@ -252,7 +252,7 @@ export default function CustomersPage() {
       {isFormOpen && (
         <div className="mb-6 bg-zinc-800/50 border border-zinc-700 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-ink-hi">{showCreate ? 'New Customer' : 'Edit Customer'}</h3>
+            <h3 className="text-sm font-medium text-white">{showCreate ? 'New Customer' : 'Edit Customer'}</h3>
             <button onClick={() => { setShowCreate(false); setEditingId(null); setError(null); }} className="text-zinc-500 hover:text-zinc-300"><X className="w-4 h-4" /></button>
           </div>
 
@@ -264,84 +264,84 @@ export default function CustomersPage() {
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Customer Name *</label>
               <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50"
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
                 placeholder="Acme Corp" />
             </div>
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Display Name</label>
               <input type="text" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50" />
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50" />
             </div>
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Payment Terms</label>
               <select value={form.payment_terms} onChange={(e) => setForm({ ...form, payment_terms: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50">
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50">
                 {PAYMENT_TERMS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Primary Contact First Name</label>
               <input type="text" value={form.contact_first_name} onChange={(e) => setForm({ ...form, contact_first_name: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50" />
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50" />
             </div>
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Primary Contact Last Name</label>
               <input type="text" value={form.contact_last_name} onChange={(e) => setForm({ ...form, contact_last_name: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50" />
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50" />
             </div>
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Email</label>
               <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50" />
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50" />
             </div>
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Phone</label>
               <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50" />
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50" />
             </div>
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Credit Limit ($)</label>
               <input type="number" value={form.credit_limit} onChange={(e) => setForm({ ...form, credit_limit: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50"
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
                 placeholder="0.00" step="0.01" />
             </div>
             <div className="md:col-span-2">
               <label className="block text-xs text-zinc-400 mb-1">Address</label>
               <input type="text" value={form.address_line1} onChange={(e) => setForm({ ...form, address_line1: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50" />
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50" />
             </div>
             <div className="grid grid-cols-3 gap-2">
               <input type="text" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })}
-                className="px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50" placeholder="City" />
+                className="px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50" placeholder="City" />
               <input type="text" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })}
-                className="px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50" placeholder="State" maxLength={2} />
+                className="px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50" placeholder="State" maxLength={2} />
               <input type="text" value={form.zip} onChange={(e) => setForm({ ...form, zip: e.target.value })}
-                className="px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50" placeholder="ZIP" />
+                className="px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50" placeholder="ZIP" />
             </div>
             <div className="flex items-center gap-6">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={form.tax_exempt} onChange={(e) => setForm({ ...form, tax_exempt: e.target.checked })}
-                  className="rounded border-zinc-600 accent-brand-500 focus:ring-brand-500/30 bg-zinc-900" />
+                  className="rounded border-zinc-600 text-emerald-500 focus:ring-emerald-500/30 bg-zinc-900" />
                 <span className="text-sm text-zinc-300">Tax Exempt</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={form.is_portfolio_company} onChange={(e) => setForm({ ...form, is_portfolio_company: e.target.checked })}
-                  className="rounded border-zinc-600 accent-brand-500 focus:ring-brand-500/30 bg-zinc-900" />
+                  className="rounded border-zinc-600 text-emerald-500 focus:ring-emerald-500/30 bg-zinc-900" />
                 <span className="text-sm text-zinc-300">Internal company</span>
               </label>
             </div>
             <div className="md:col-span-3">
               <label className="block text-xs text-zinc-400 mb-1">Notes</label>
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50"
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
                 rows={2} />
             </div>
           </div>
 
           <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-zinc-700">
-            <button onClick={() => { setShowCreate(false); setEditingId(null); }} className="px-4 py-2 text-sm text-zinc-400 hover:text-ink-hi transition-colors">Cancel</button>
+            <button onClick={() => { setShowCreate(false); setEditingId(null); }} className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors">Cancel</button>
             <button onClick={showCreate ? handleCreate : handleUpdate} disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:bg-brand-500/50 text-white rounded-lg text-sm font-medium transition-colors">
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/50 text-white rounded-lg text-sm font-medium transition-colors">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               {showCreate ? 'Create Customer' : 'Save Changes'}
             </button>
@@ -350,13 +350,13 @@ export default function CustomersPage() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-brand-400" /></div>
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-emerald-400" /></div>
       ) : customers.length === 0 ? (
         <div className="text-center py-16">
           <Users className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
           <p className="text-zinc-400 text-sm">{search ? 'No customers match your search' : 'No customers yet'}</p>
           {!search && (
-            <button onClick={() => { setShowCreate(true); setForm(EMPTY_FORM); }} className="mt-3 text-brand-400 hover:text-brand-300 text-sm">
+            <button onClick={() => { setShowCreate(true); setForm(EMPTY_FORM); }} className="mt-3 text-emerald-400 hover:text-emerald-300 text-sm">
               Create your first customer
             </button>
           )}
@@ -381,7 +381,7 @@ export default function CustomersPage() {
               {customers.map((c) => (
                 <tr key={c.id} {...rowHandlers(c)} onClick={() => setSelectedCustomerId(c.id)} className="border-b border-zinc-800 row-clickable">
                   <td className="px-4 py-3">
-                    <div className="text-sm font-medium text-ink-hi">{c.display_name || c.name}</div>
+                    <div className="text-sm font-medium text-white">{c.display_name || c.name}</div>
                     {c.city && c.state && <div className="text-xs text-zinc-500">{c.city}, {c.state}</div>}
                   </td>
                   <td className="px-4 py-3">
@@ -399,7 +399,7 @@ export default function CustomersPage() {
                   <td className="px-4 py-3 text-right">
                     {c.ar.totalOutstanding > 0 ? (
                       <div>
-                        <span className="text-sm font-mono tabular-nums text-ink-hi">{formatMoney(c.ar.totalOutstanding)}</span>
+                        <span className="text-sm font-mono tabular-nums text-white">{formatMoney(c.ar.totalOutstanding)}</span>
                         {c.ar.overdueCount > 0 && (
                           <div className="flex items-center justify-end gap-1 mt-0.5">
                             <AlertTriangle className="w-3 h-3 text-red-400" />
@@ -419,7 +419,7 @@ export default function CustomersPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button onClick={(e) => { e.stopPropagation(); startEdit(c); }} className="text-xs text-brand-400 hover:text-brand-300 transition-colors">Edit</button>
+                    <button onClick={(e) => { e.stopPropagation(); startEdit(c); }} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">Edit</button>
                     <ChevronRight size={14} className="row-chevron inline ml-2 align-middle" />
                   </td>
                 </tr>

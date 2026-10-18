@@ -149,7 +149,7 @@ export function AgentsClient() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-ink-hi flex items-center gap-2">
+          <h1 className="text-2xl font-semibold text-white flex items-center gap-2">
             <Bot className="h-6 w-6 text-emerald-400" /> Supervised Agents
           </h1>
           <p className="text-sm text-slate-400 mt-1 max-w-2xl">
@@ -166,7 +166,7 @@ export function AgentsClient() {
       <div className="rounded-xl border border-slate-800 bg-surface-900 p-5">
         <div className="flex items-center gap-2 mb-3">
           <Play className="h-4 w-4 text-emerald-400" />
-          <h2 className="text-sm font-semibold text-ink-hi">Run the AP Invoice Intake agent</h2>
+          <h2 className="text-sm font-semibold text-white">Run the AP Invoice Intake agent</h2>
         </div>
         <p className="text-xs text-slate-500 mb-4">
           Reads an already-intaken bill, proposes its GL coding (M10 dial-governed), routes it to the approval workflow,
@@ -177,12 +177,12 @@ export function AgentsClient() {
             value={billId}
             onChange={(e) => setBillId(e.target.value)}
             placeholder="bill_id (uuid of a PENDING / ON_HOLD bill)"
-            className="flex-1 min-w-[280px] rounded-lg border border-slate-700 bg-surface-950 px-3 py-2 text-sm text-ink-hi font-mono placeholder:text-slate-600 focus:border-brand-500/50 focus:outline-none"
+            className="flex-1 min-w-[280px] rounded-lg border border-slate-700 bg-surface-950 px-3 py-2 text-sm text-white font-mono placeholder:text-slate-600 focus:border-emerald-500/50 focus:outline-none"
           />
           <button
             onClick={start}
             disabled={starting}
-            className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
           >
             {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             Start agent
@@ -227,11 +227,11 @@ export function AgentsClient() {
                 onClick={() => setSelectedId(r.id)}
                 className={clsx(
                   'w-full text-left rounded-lg border p-3 transition-colors',
-                  selected?.id === r.id ? 'border-brand-500/50 bg-brand-500/5' : 'border-slate-800 bg-surface-900 hover:border-slate-700',
+                  selected?.id === r.id ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-slate-800 bg-surface-900 hover:border-slate-700',
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium text-ink-hi truncate">{r.title}</span>
+                  <span className="text-sm font-medium text-white truncate">{r.title}</span>
                   <span className={clsx('shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium', runTone(r.status))}>{r.status}</span>
                 </div>
                 <div className="mt-1 text-[11px] text-slate-500">
@@ -250,7 +250,7 @@ export function AgentsClient() {
             <>
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
-                  <div className="text-ink-hi font-semibold">{selected.title}</div>
+                  <div className="text-white font-semibold">{selected.title}</div>
                   <div className="text-[11px] text-slate-500 mt-0.5 font-mono">{selected.id}</div>
                 </div>
                 <span className={clsx('shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium', runTone(selected.status))}>{selected.status}</span>
@@ -269,7 +269,7 @@ export function AgentsClient() {
                     {i < selected.steps.length - 1 && <span className="absolute left-[7px] top-5 bottom-[-1rem] w-px bg-slate-800" aria-hidden />}
                     <span className="absolute left-0 top-0.5"><StepIcon status={s.status} /></span>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-ink-hi">{s.label}</span>
+                      <span className="text-sm font-medium text-white">{s.label}</span>
                       <KindBadge kind={s.kind} />
                       {s.disposition && (
                         <span className="rounded-full border border-slate-700 bg-slate-800/40 px-2 py-0.5 text-[10px] text-slate-300">
@@ -303,13 +303,13 @@ export function AgentsClient() {
                     onChange={(e) => setNote(e.target.value)}
                     placeholder="Optional note (recorded on the audit trail)…"
                     rows={2}
-                    className="mt-3 w-full rounded-lg border border-slate-700 bg-surface-950 px-3 py-2 text-sm text-ink-hi placeholder:text-slate-600 focus:border-brand-500/50 focus:outline-none"
+                    className="mt-3 w-full rounded-lg border border-slate-700 bg-surface-950 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:outline-none"
                   />
                   <div className="mt-3 flex items-center gap-2">
                     <button
                       onClick={() => advance('APPROVE')}
                       disabled={advancing}
-                      className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
                     >
                       {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CircleCheck className="h-4 w-4" />}
                       {waitingStep.kind === 'HUMAN_GATE' ? 'Continue' : 'Approve & continue'}
@@ -327,7 +327,7 @@ export function AgentsClient() {
 
               {selected.subjectTable === 'bills' && selected.subjectId && (
                 <div className="mt-4 text-xs">
-                  <a href={`/bills`} className="inline-flex items-center gap-1 text-brand-400 hover:text-brand-300">
+                  <a href={`/bills`} className="inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300">
                     Open Bills <ChevronRight className="h-3 w-3" />
                   </a>
                 </div>

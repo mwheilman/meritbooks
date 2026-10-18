@@ -22,8 +22,8 @@ export default function PaymentsRefreshPage() {
   }, []);
 
   return (
-    <div style={{ maxWidth: 520, margin: '64px auto', textAlign: 'center', fontFamily: 'system-ui, sans-serif', color: '#3D4F65' }}>
-      {error ? <p style={{ color: '#b91c1c' }}>{error}</p> : <p>Reopening Stripe onboarding…</p>}
+    <div style={{ maxWidth: 520, margin: '64px auto', textAlign: 'center', fontFamily: 'system-ui, sans-serif', color: '#AEB8B2' }}>
+      {error ? <p style={{ color: '#f87171' }}>{error}</p> : <p>Reopening Stripe onboarding…</p>}
     </div>
   );
 }

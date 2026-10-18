@@ -188,7 +188,7 @@ export function MigrationConnectors() {
       <div className="flex items-start gap-2">
         <Database size={18} className="text-brand-400 mt-0.5 shrink-0" />
         <div>
-          <p className="text-sm font-semibold text-ink-hi">Migrate your prior books (QuickBooks, Xero, Sage)</p>
+          <p className="text-sm font-semibold text-white">Migrate your prior books (QuickBooks, Xero, Sage)</p>
           <p className="text-xs text-slate-400 mt-0.5 max-w-2xl">
             MeritBooks owns the general ledger — these are one-time migration sources. Connect to pull your prior
             books over the provider&apos;s API{sampleEnabled ? ', or try the pipeline on sample (demo) books' : ''}. Every
@@ -205,7 +205,7 @@ export function MigrationConnectors() {
             id="migration-company"
             value={companyId}
             onChange={(e) => setCompanyId(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi"
+            className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white"
           >
             <option value="">Select a company…</option>
             {companies.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.short_code})</option>)}
@@ -221,7 +221,7 @@ export function MigrationConnectors() {
             type="date"
             value={asOfDate}
             onChange={(e) => setAsOfDate(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi"
+            className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white"
           />
         </div>
       </div>
@@ -250,7 +250,7 @@ export function MigrationConnectors() {
                   {monogram(p.name)}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-ink-hi leading-tight">{p.name}</p>
+                  <p className="text-sm font-medium text-white leading-tight">{p.name}</p>
                   <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{p.description}</p>
                 </div>
               </div>
@@ -286,7 +286,7 @@ export function MigrationConnectors() {
                     'w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
                     connectingId === p.id
                       ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                      : 'bg-surface-950 border border-slate-700 text-slate-200 hover:border-brand-500/40 hover:text-ink-hi',
+                      : 'bg-surface-950 border border-slate-700 text-slate-200 hover:border-brand-500/40 hover:text-white',
                   )}
                 >
                   {connectingId === p.id ? <Loader2 size={12} className="animate-spin" /> : <Plug size={12} />}

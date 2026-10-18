@@ -79,7 +79,7 @@ function Row({
 }) {
   return (
     <div className={clsx('flex items-baseline justify-between py-1.5', indent && 'pl-4')}>
-      <span className={clsx('text-sm', strong ? 'text-ink-hi font-medium' : 'text-slate-400')}>
+      <span className={clsx('text-sm', strong ? 'text-white font-medium' : 'text-slate-400')}>
         {label}
         {sub && <span className="text-2xs text-slate-600 ml-2">{sub}</span>}
       </span>
@@ -87,7 +87,7 @@ function Row({
         strong && 'font-semibold',
         tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-red-400'
           : tone === 'warn' ? 'text-amber-400' : tone === 'muted' ? 'text-slate-500'
-          : strong ? 'text-ink-hi' : 'text-slate-300')}>
+          : strong ? 'text-white' : 'text-slate-300')}>
         {value}
       </span>
     </div>
@@ -107,14 +107,14 @@ export function JobPLStatement({ jobId }: { jobId: string }) {
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-        <h2 className="text-sm font-semibold text-ink-hi flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
           <FileBarChart size={15} className="text-brand-400" /> Job P&amp;L Statement
         </h2>
         <div className="flex items-center gap-1 rounded-lg bg-slate-800/50 p-0.5">
           {METHODS.map((m) => (
             <button key={m.value} onClick={() => setMethod(m.value)} title={m.hint}
               className={clsx('px-2.5 py-1 rounded-md text-2xs font-medium transition-colors',
-                method === m.value ? 'bg-slate-700 text-ink-hi' : 'text-slate-400 hover:text-slate-200')}>
+                method === m.value ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200')}>
               {m.label}
             </button>
           ))}
@@ -125,7 +125,7 @@ export function JobPLStatement({ jobId }: { jobId: string }) {
       </p>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 text-brand-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 text-emerald-400 animate-spin" /></div>
       ) : error || !p ? (
         <div className="py-6 text-center text-sm text-red-400"><AlertCircle size={18} className="mx-auto mb-1" />{error ?? 'Unable to compute P&L'}</div>
       ) : (

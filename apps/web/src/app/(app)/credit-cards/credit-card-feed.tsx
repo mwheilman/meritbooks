@@ -141,7 +141,7 @@ export function CreditCardFeed() {
               className={clsx(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors',
                 activeTab === tab.key
-                  ? 'bg-slate-800 text-ink-hi font-medium'
+                  ? 'bg-slate-800 text-white font-medium'
                   : 'text-slate-400 hover:text-slate-300'
               )}
             >
@@ -261,7 +261,7 @@ export function CreditCardFeed() {
                             'p-1.5 rounded-md transition-colors',
                             !account || isPosted
                               ? 'text-slate-700 cursor-not-allowed'
-                              : 'text-slate-500 hover:text-brand-400 hover:bg-brand-500/10'
+                              : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'
                           )}
                           title="Approve"
                           aria-label={`Approve transaction ${txn.description}`}
@@ -288,10 +288,10 @@ export function CreditCardFeed() {
       >
         {peek && (
           <div className="p-3">
-            <div className="text-sm font-semibold text-ink-hi truncate mb-1">{peek.item.description}</div>
+            <div className="text-sm font-semibold text-white truncate mb-1">{peek.item.description}</div>
             <div className="rounded-md bg-slate-800/40 px-3 py-2 flex items-center justify-between">
               <span className="text-2xs text-slate-500">{peek.item.transaction_date}</span>
-              <span className="text-sm font-mono text-ink-hi">{formatMoney(Math.abs(peek.item.amount_cents))}</span>
+              <span className="text-sm font-mono text-white">{formatMoney(Math.abs(peek.item.amount_cents))}</span>
             </div>
             <div className="mt-2 text-2xs text-slate-500">
               {(peek.item.final_account ?? peek.item.ai_account) ? `${(peek.item.final_account ?? peek.item.ai_account)!.account_number} · ${(peek.item.final_account ?? peek.item.ai_account)!.name}` : 'Uncategorized'}

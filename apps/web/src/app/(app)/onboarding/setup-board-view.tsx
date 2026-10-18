@@ -35,7 +35,7 @@ export function SetupBoardView({
       <div className="card p-6 space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-ink-hi">Your companies</h2>
+            <h2 className="text-lg font-semibold text-white">Your companies</h2>
             <p className="text-xs text-slate-500 mt-0.5">
               A company is live once its opening balances are posted — or you&apos;ve chosen to start it fresh.
             </p>
@@ -62,7 +62,7 @@ export function SetupBoardView({
                     <Building2 size={14} className="text-brand-400" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm text-ink-hi truncate">{c.name}</p>
+                    <p className="text-sm text-white truncate">{c.name}</p>
                     <p className="text-[11px] text-slate-500">
                       <span className="font-mono">{c.shortCode}</span> · Opening balances: {OPENING_STATE_LABEL[c.opening]}
                     </p>
@@ -74,7 +74,7 @@ export function SetupBoardView({
                   <button
                     type="button"
                     onClick={() => onSetUpCompany(c.id)}
-                    className={clsx('shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500 text-white hover:bg-brand-400 transition-colors')}
+                    className={clsx('shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500 text-slate-900 hover:bg-brand-400 transition-colors')}
                   >
                     Finish setup
                   </button>
@@ -92,7 +92,7 @@ export function SetupBoardView({
 
       <div className="card p-6 space-y-4">
         <div>
-          <h3 className="text-base font-semibold text-ink-hi">Everything else</h3>
+          <h3 className="text-base font-semibold text-white">Everything else</h3>
           <p className="text-xs text-slate-500 mt-0.5">
             Add each when you&apos;re ready, or never if it doesn&apos;t apply. None of this blocks going live.
           </p>

@@ -110,7 +110,7 @@ export function ReadinessChecklist({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className={clsx('text-sm font-medium truncate', done ? 'text-slate-200' : 'text-ink-hi')}>{section.label}</p>
+            <p className={clsx('text-sm font-medium truncate', done ? 'text-slate-200' : 'text-white')}>{section.label}</p>
             {badge && <span className={clsx('text-[10px] px-1.5 py-0.5 rounded shrink-0', badge.cls)}>{badge.label}</span>}
           </div>
         </div>
@@ -147,7 +147,7 @@ export function ReadinessChecklist({
     <div className="card p-5 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-ink-hi">
+          <p className="text-sm font-semibold text-white">
             {ready ? 'Ready to operate' : `Ready to operate — ${criteriaDone} of ${criteria.length}`}
           </p>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -180,10 +180,10 @@ export function ReadinessChecklist({
           {criteria.map((c) => (
             <div key={c.key} className="flex items-center gap-2.5">
               <span className={clsx('flex h-4 w-4 items-center justify-center rounded-full shrink-0',
-                c.done ? 'bg-brand-500 text-white' : 'bg-slate-800 text-slate-500')}>
+                c.done ? 'bg-brand-500/80 text-slate-900' : 'bg-slate-800 text-slate-500')}>
                 {c.done ? <Check size={10} /> : <Circle size={6} className="fill-slate-600 text-slate-600" />}
               </span>
-              <span className={clsx('text-sm', c.done ? 'text-slate-300' : 'text-ink-hi')}>{c.label}</span>
+              <span className={clsx('text-sm', c.done ? 'text-slate-300' : 'text-white')}>{c.label}</span>
               <span className="text-xs text-slate-500 truncate">— {c.detail}</span>
             </div>
           ))}

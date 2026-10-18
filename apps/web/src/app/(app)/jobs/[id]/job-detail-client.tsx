@@ -59,7 +59,7 @@ function Metric({ label, value, sub, tone }: { label: string; value: string; sub
     <div className="card p-4">
       <p className="text-2xs uppercase tracking-wider text-slate-500 font-semibold">{label}</p>
       <p className={clsx('text-lg font-mono font-semibold mt-1',
-        tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-red-400' : tone === 'warn' ? 'text-amber-400' : 'text-ink-hi')}>
+        tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-red-400' : tone === 'warn' ? 'text-amber-400' : 'text-white')}>
         {value}
       </p>
       {sub && <p className="text-2xs text-slate-500 mt-0.5">{sub}</p>}
@@ -70,11 +70,11 @@ function Metric({ label, value, sub, tone }: { label: string; value: string; sub
 export function JobDetailClient({ jobId }: { jobId: string }) {
   const { data, isLoading, error, refetch } = useQuery<JobDetail>(`/api/jobs/${jobId}`);
 
-  if (isLoading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>;
   if (error || !data) {
     return (
       <div className="space-y-4">
-        <Link href="/jobs" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-ink-hi"><ArrowLeft size={14} /> Jobs</Link>
+        <Link href="/jobs" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white"><ArrowLeft size={14} /> Jobs</Link>
         <div className="card p-8 text-center"><AlertCircle size={24} className="mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{error ?? 'Job not found'}</p></div>
       </div>
     );
@@ -85,7 +85,7 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
 
   return (
     <div className="space-y-6">
-      <Link href="/jobs" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-ink-hi"><ArrowLeft size={14} /> Jobs</Link>
+      <Link href="/jobs" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white"><ArrowLeft size={14} /> Jobs</Link>
 
       {/* Header */}
       <div className="flex items-start justify-between">
@@ -93,7 +93,7 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
           <div className="flex items-center gap-3">
             <Briefcase size={18} className="text-brand-400" />
             <span className="text-sm font-mono text-slate-500">{job.job_number}</span>
-            <h1 className="text-xl font-semibold text-ink-hi">{job.name}</h1>
+            <h1 className="text-xl font-semibold text-white">{job.name}</h1>
             <StatusBadge status={job.status} />
             {job.external_source && <span className="text-2xs font-mono text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">via {job.external_source}</span>}
           </div>
@@ -105,7 +105,7 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
         </div>
         <div className="text-right">
           <p className="text-2xs uppercase tracking-wider text-slate-500">% Complete</p>
-          <p className="text-2xl font-mono font-semibold text-ink-hi">{m.pctComplete}%</p>
+          <p className="text-2xl font-mono font-semibold text-white">{m.pctComplete}%</p>
         </div>
       </div>
 
@@ -127,7 +127,7 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
       {(m.committedCents > 0 || m.clearedCents > 0) && (
         <div className="card p-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-ink-hi">Cost Pipeline</h2>
+            <h2 className="text-sm font-semibold text-white">Cost Pipeline</h2>
             <span className="text-2xs text-slate-500">committed costs awaiting bill approval clear into actuals</span>
           </div>
           <div className="grid grid-cols-3 gap-4">
@@ -143,7 +143,7 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
             </div>
             <div>
               <p className="text-2xs uppercase tracking-wider text-slate-400 font-semibold">Committed + Actual</p>
-              <p className={clsx('text-lg font-mono mt-1', committedPlusActual > m.estimatedCostCents ? 'text-red-400' : 'text-ink-hi')}>{formatMoney(committedPlusActual)}</p>
+              <p className={clsx('text-lg font-mono mt-1', committedPlusActual > m.estimatedCostCents ? 'text-red-400' : 'text-white')}>{formatMoney(committedPlusActual)}</p>
               <p className="text-2xs text-slate-500">vs {formatMoney(m.estimatedCostCents)} budget</p>
             </div>
           </div>
@@ -160,7 +160,7 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
       <RevRecInputs job={job} onSaved={refetch} />
 
       <div className="card p-4 space-y-4">
-        <h2 className="text-sm font-semibold text-ink-hi">Invoice settings &amp; text — this job</h2>
+        <h2 className="text-sm font-semibold text-white">Invoice settings &amp; text — this job</h2>
         <EntityInvoiceSettings scope="JOB" id={job.id} />
         <div className="pt-3 border-t border-slate-800">
           <InvoiceTextOverrides scope="JOB" refId={job.id} />
@@ -169,7 +169,7 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
 
       {/* Budget vs actual by category */}
       <div className="card overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-800"><h2 className="text-sm font-semibold text-ink-hi">Budget vs Actual by Category</h2></div>
+        <div className="px-4 py-3 border-b border-slate-800"><h2 className="text-sm font-semibold text-white">Budget vs Actual by Category</h2></div>
         <div className="overflow-x-auto">
         <table className="w-full min-w-[640px]">
           <thead>
@@ -214,7 +214,7 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
       {/* Change orders */}
       {changeOrders.length > 0 && (
         <div className="card p-4">
-          <h2 className="text-sm font-semibold text-ink-hi mb-3">Change Orders</h2>
+          <h2 className="text-sm font-semibold text-white mb-3">Change Orders</h2>
           <div className="space-y-1.5">
             {changeOrders.map((co) => (
               <div key={co.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-800/30">
@@ -230,7 +230,7 @@ export function JobDetailClient({ jobId }: { jobId: string }) {
 
       {/* Cost ledger */}
       <div className="card overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-800"><h2 className="text-sm font-semibold text-ink-hi">Cost Ledger</h2></div>
+        <div className="px-4 py-3 border-b border-slate-800"><h2 className="text-sm font-semibold text-white">Cost Ledger</h2></div>
         {ledger.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-500"><Inbox size={20} className="mx-auto mb-2 text-slate-600" />No costs posted to this job yet.</div>
         ) : (
@@ -301,7 +301,7 @@ function RevRecInputs({ job, onSaved }: { job: JobDetail['job']; onSaved: () => 
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-ink-hi flex items-center gap-2"><Percent size={15} className="text-brand-400" /> Recognition Inputs</h2>
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2"><Percent size={15} className="text-brand-400" /> Recognition Inputs</h2>
         <span className="text-2xs text-slate-500">
           {job.revenue_recognized_cents != null ? `Recognized to date: ${formatMoney(job.revenue_recognized_cents)}` : ''}
           {job.rev_rec_last_run_on ? ` · last run ${job.rev_rec_last_run_on}` : ''}
@@ -310,19 +310,19 @@ function RevRecInputs({ job, onSaved }: { job: JobDetail['job']; onSaved: () => 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Field label="Contract value">
           <input value={contract} onChange={(e) => setContract(e.target.value)} inputMode="decimal"
-            className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-ink-hi font-mono" />
+            className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-white font-mono" />
         </Field>
         <Field label="Cost estimate">
           <input value={estimate} onChange={(e) => setEstimate(e.target.value)} inputMode="decimal"
-            className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-ink-hi font-mono" />
+            className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-white font-mono" />
         </Field>
         <Field label="% complete">
           <input value={pct} onChange={(e) => setPct(e.target.value)} inputMode="decimal"
-            className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-ink-hi font-mono" />
+            className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-white font-mono" />
         </Field>
         <Field label="Method override">
           <select value={override} onChange={(e) => setOverride(e.target.value)}
-            className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-ink-hi">
+            className="w-full px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-white">
             <option value="">(use mapping / default)</option>
             {REV_REC_METHOD_OPTS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
@@ -333,7 +333,7 @@ function RevRecInputs({ job, onSaved }: { job: JobDetail['job']; onSaved: () => 
           % complete is used only when the resolved method is physical-% POC; cost-to-cost derives its own % from cost ÷ estimate.
         </p>
         <button onClick={save} disabled={!dirty || saving}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-40">
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40">
           {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save
         </button>
       </div>

@@ -107,7 +107,7 @@ export default function TaxDepreciationPage() {
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
-        <Link href="/book-to-tax" className="text-xs text-brand-400 hover:text-brand-300 inline-flex items-center gap-1">
+        <Link href="/book-to-tax" className="text-xs text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1">
           <Scale size={13} /> View Schedule M-1
         </Link>
       </div>
@@ -130,7 +130,7 @@ export default function TaxDepreciationPage() {
             {/* Per-asset MACRS schedules */}
             <section className="card overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-800">
-                <h2 className="text-sm font-semibold text-ink-hi">Per-asset tax depreciation schedule</h2>
+                <h2 className="text-sm font-semibold text-white">Per-asset tax depreciation schedule</h2>
                 <p className="text-2xs text-slate-500 mt-0.5">MACRS GDS with the published half-year / mid-quarter conventions; §179 and bonus are year-1 special allowances. Tax depreciation never posts to the book GL.</p>
               </div>
               <table className="w-full text-sm">
@@ -168,7 +168,7 @@ function ReconCard(props: { data: Payload; busy: boolean; onPropose: () => void;
     <section className="card overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-ink-hi">Book-vs-tax reconciliation — {data.taxYear}</h2>
+          <h2 className="text-sm font-semibold text-white">Book-vs-tax reconciliation — {data.taxYear}</h2>
           <p className="text-2xs text-slate-500 mt-0.5">Posted book depreciation vs the deterministic MACRS tax schedule. The net delta is a temporary difference for Schedule M-1.</p>
         </div>
         <Calculator size={16} className="text-slate-600" />
@@ -190,8 +190,8 @@ function ReconCard(props: { data: Payload; busy: boolean; onPropose: () => void;
           <div className="rounded border border-emerald-500/30 bg-emerald-500/5 p-3 flex items-start gap-2 text-sm text-slate-300">
             <CheckCircle2 size={15} className="text-emerald-400 mt-0.5 shrink-0" />
             <div>
-              A <span className="font-medium text-ink-hi">{isAdd ? 'BOOK_DEPR_EXCESS' : 'TAX_DEPR_EXCESS'}</span> temporary difference of {fmt(diff.amountCents)} is feeding Schedule M-1 (line {isAdd ? '5a' : '8a'}).{' '}
-              <Link href="/book-to-tax" className="text-brand-400 hover:text-brand-300">View the reconciliation →</Link>
+              A <span className="font-medium text-white">{isAdd ? 'BOOK_DEPR_EXCESS' : 'TAX_DEPR_EXCESS'}</span> temporary difference of {fmt(diff.amountCents)} is feeding Schedule M-1 (line {isAdd ? '5a' : '8a'}).{' '}
+              <Link href="/book-to-tax" className="text-emerald-400 hover:text-emerald-300">View the reconciliation →</Link>
             </div>
           </div>
         ) : data.openProposal ? (
@@ -199,7 +199,7 @@ function ReconCard(props: { data: Payload; busy: boolean; onPropose: () => void;
             <div className="flex items-start gap-2 text-sm text-slate-300">
               <Sparkles size={15} className="text-indigo-400 mt-0.5 shrink-0" />
               <div>
-                Proposed: <span className="font-medium text-ink-hi">{isAdd ? 'Book depreciation over tax' : 'Tax depreciation over book (§179/bonus)'}</span> — a {diff.differenceType.toLowerCase()} {isAdd ? 'addition' : 'subtraction'} of {fmt(diff.amountCents)} on M-1 line {isAdd ? '5a' : '8a'}.
+                Proposed: <span className="font-medium text-white">{isAdd ? 'Book depreciation over tax' : 'Tax depreciation over book (§179/bonus)'}</span> — a {diff.differenceType.toLowerCase()} {isAdd ? 'addition' : 'subtraction'} of {fmt(diff.amountCents)} on M-1 line {isAdd ? '5a' : '8a'}.
                 {!data.openProposal.targetLineFound && (
                   <span className="block text-2xs text-amber-400 mt-1">No posted book depreciation line was found in {data.taxYear} to anchor the M-1 override — post book depreciation first.</span>
                 )}
@@ -234,7 +234,7 @@ function Stat(props: { label: string; valueCents: number; tone?: 'add' | 'sub'; 
   return (
     <div className={clsx('card p-3', emphasize && 'border-emerald-500/40')}>
       <p className="text-2xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={clsx('mt-1 font-mono text-lg', emphasize ? (valueCents >= 0 ? 'text-emerald-300' : 'text-red-300') : 'text-ink-hi')}>
+      <p className={clsx('mt-1 font-mono text-lg', emphasize ? (valueCents >= 0 ? 'text-emerald-300' : 'text-red-300') : 'text-white')}>
         {tone === 'sub' || valueCents < 0 ? '−' : tone === 'add' ? '+' : ''}{fmt(Math.abs(valueCents))}
       </p>
     </div>
@@ -256,7 +256,7 @@ function AssetRows(props: { asset: AssetLine; taxYear: number; expanded: boolean
           {asset.recoveryYears && <span className="ml-1 text-2xs text-slate-600">{asset.recoveryYears}-yr · {asset.convention === 'MID_QUARTER' ? 'MQ' : 'HY'}</span>}
         </td>
         <td className="px-4 py-2.5 text-right font-mono text-slate-300">{fmt(asset.costCents)}</td>
-        <td className="px-4 py-2.5 text-right font-mono text-ink-hi">{fmt(asset.taxYearCents)}</td>
+        <td className="px-4 py-2.5 text-right font-mono text-white">{fmt(asset.taxYearCents)}</td>
         <td className="px-4 py-2.5 text-right font-mono text-slate-300">{fmt(asset.bookYearCents)}</td>
         <td className={clsx('px-4 py-2.5 text-right font-mono', asset.differenceCents === 0 ? 'text-slate-500' : asset.differenceCents > 0 ? 'text-emerald-400' : 'text-red-400')}>
           {asset.differenceCents === 0 ? '—' : `${asset.differenceCents > 0 ? '+' : '−'}${fmt(Math.abs(asset.differenceCents))}`}
@@ -286,7 +286,7 @@ function AssetRows(props: { asset: AssetLine; taxYear: number; expanded: boolean
                     <td className="py-1 text-right text-slate-400">{y.section179Cents ? fmt(y.section179Cents) : '—'}</td>
                     <td className="py-1 text-right text-slate-400">{y.bonusCents ? fmt(y.bonusCents) : '—'}</td>
                     <td className="py-1 text-right text-slate-400">{fmt(y.regularCents)}</td>
-                    <td className="py-1 text-right text-ink-hi">{fmt(y.totalCents)}</td>
+                    <td className="py-1 text-right text-white">{fmt(y.totalCents)}</td>
                     <td className="py-1 text-right text-slate-400">{fmt(y.accumulatedCents)}</td>
                   </tr>
                 ))}

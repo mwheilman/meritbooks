@@ -135,7 +135,7 @@ export function OpsHealthDashboard() {
           onChange={(e) => setRouteInput(e.target.value)}
           placeholder="Filter by route…"
           aria-label="Filter by route"
-          className="w-44 pl-8 pr-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-ink-hi placeholder:text-slate-600 focus:border-indigo-500 focus:outline-none"
+          className="w-44 pl-8 pr-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-600 focus:border-indigo-500 focus:outline-none"
         />
       </div>
       <FilterSelect label="Level" value={level} options={[...LEVELS]} onChange={setLevel} />
@@ -148,7 +148,7 @@ export function OpsHealthDashboard() {
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-base font-semibold text-ink-hi flex items-center gap-2">
+          <h2 className="text-base font-semibold text-white flex items-center gap-2">
             <ActivitySquare size={16} className="text-indigo-400" /> Ops health
           </h2>
           <p className="text-sm text-slate-500">
@@ -368,7 +368,7 @@ function SegGroup({
           aria-pressed={value === o.key}
           className={clsx(
             'px-2.5 py-1 text-2xs font-medium rounded-md transition-colors',
-            value === o.key ? 'bg-slate-700 text-ink-hi' : 'text-slate-400 hover:text-slate-200',
+            value === o.key ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200',
           )}
         >
           {o.label}
@@ -394,7 +394,7 @@ function FilterSelect({
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value || null)}
       aria-label={`Filter by ${label.toLowerCase()}`}
-      className="px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-2xs text-ink-hi focus:border-indigo-500 focus:outline-none"
+      className="px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-2xs text-white focus:border-indigo-500 focus:outline-none"
     >
       <option value="">All {label.toLowerCase()}s</option>
       {options.map((o) => (

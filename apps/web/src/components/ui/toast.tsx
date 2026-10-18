@@ -8,11 +8,11 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
   return (
     <div
       className={clsx(
-        'flex items-center gap-3 px-4 py-3 rounded-brand shadow-pop border border-l-[3px] bg-surface-900 text-slate-200',
+        'flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border backdrop-blur-sm',
         'animate-in slide-in-from-right-full fade-in duration-300',
-        toast.type === 'success' && 'border-slate-800 border-l-emerald-500',
-        toast.type === 'error' && 'border-slate-800 border-l-red-500',
-        toast.type === 'info' && 'border-slate-800 border-l-brand-500',
+        toast.type === 'success' && 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300',
+        toast.type === 'error' && 'bg-red-500/10 border-red-500/20 text-red-300',
+        toast.type === 'info' && 'bg-blue-500/10 border-blue-500/20 text-blue-300',
       )}
     >
       {toast.type === 'success' ? (
@@ -25,7 +25,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
       <p className="text-sm flex-1">{toast.message}</p>
       <button
         onClick={onDismiss}
-        className="shrink-0 p-0.5 rounded hover:bg-navy/10 transition-colors"
+        className="shrink-0 p-0.5 rounded hover:bg-white/10 transition-colors"
       >
         <X size={14} className="text-slate-500" />
       </button>

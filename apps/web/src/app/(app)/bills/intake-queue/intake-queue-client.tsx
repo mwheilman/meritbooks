@@ -192,7 +192,7 @@ export function IntakeQueueClient() {
         <div>
           <div className="flex items-center gap-2">
             <Bot size={20} className="text-indigo-400" />
-            <h1 className="text-xl font-semibold text-ink-hi">AP Intake Queue</h1>
+            <h1 className="text-xl font-semibold text-white">AP Intake Queue</h1>
           </div>
           <p className="text-sm text-slate-400 mt-1 max-w-2xl">
             Drop or receive vendor invoices — the machine reads each one and drafts a bill for your
@@ -202,7 +202,7 @@ export function IntakeQueueClient() {
         </div>
         <button
           onClick={() => setUploadOpen(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-medium text-white"
+          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-sm font-medium text-white"
         >
           <Upload size={16} /> Upload document
         </button>
@@ -261,12 +261,12 @@ export function IntakeQueueClient() {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-ink-hi truncate">
+                      <p className="text-sm font-medium text-white truncate">
                         {ex.vendorName || 'Unknown vendor'}
                       </p>
                       <p className="text-xs text-slate-500 truncate">{locationName(d.proposal.locationId)}</p>
                     </div>
-                    <span className="font-mono text-sm text-ink-hi tabular-nums shrink-0">
+                    <span className="font-mono text-sm text-white tabular-nums shrink-0">
                       {formatMoney(ex.totalCents)}
                     </span>
                   </div>
@@ -390,9 +390,9 @@ function UploadModal({
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
           <div className="flex items-center gap-2">
             <Upload size={16} className="text-emerald-400" />
-            <h2 className="text-base font-semibold text-ink-hi">Upload invoice</h2>
+            <h2 className="text-base font-semibold text-white">Upload invoice</h2>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-ink-hi" aria-label="Close">
+          <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -403,7 +403,7 @@ function UploadModal({
               value={locationId}
               onChange={(e) => setLocationId(e.target.value)}
               disabled={busy}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-ink-hi disabled:opacity-50"
+              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white disabled:opacity-50"
             >
               <option value="">Select...</option>
               {locations.map((l) => (
@@ -418,7 +418,7 @@ function UploadModal({
             type="button"
             disabled={busy}
             onClick={() => fileRef.current?.click()}
-            className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-700 bg-slate-950/40 py-10 text-slate-400 hover:border-brand-600 hover:text-brand-300 disabled:opacity-50"
+            className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-700 bg-slate-950/40 py-10 text-slate-400 hover:border-emerald-600 hover:text-emerald-300 disabled:opacity-50"
           >
             {busy ? (
               <>
@@ -603,7 +603,7 @@ function ReviewPanel({
     </div>
   );
 
-  const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-ink-hi';
+  const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white';
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900">
@@ -611,11 +611,11 @@ function ReviewPanel({
         <div>
           <div className="flex items-center gap-2">
             <FileText size={16} className="text-indigo-400" />
-            <h2 className="text-base font-semibold text-ink-hi">Review extracted bill</h2>
+            <h2 className="text-base font-semibold text-white">Review extracted bill</h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">{draft.proposal.fileName}</p>
         </div>
-        <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-ink-hi" aria-label="Close">
+        <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" aria-label="Close">
           <X size={18} />
         </button>
       </div>
@@ -720,10 +720,10 @@ function ReviewPanel({
                   <input
                     value={l.description}
                     onChange={(e) => updateLine(i, { description: e.target.value })}
-                    className="flex-1 bg-transparent text-sm text-ink-hi outline-none"
+                    className="flex-1 bg-transparent text-sm text-white outline-none"
                     placeholder="Description"
                   />
-                  <span className="font-mono text-sm text-ink-hi tabular-nums">{formatMoney(l.amountCents)}</span>
+                  <span className="font-mono text-sm text-white tabular-nums">{formatMoney(l.amountCents)}</span>
                 </div>
                 <select
                   value={l.accountId}
@@ -753,11 +753,11 @@ function ReviewPanel({
             <input
               value={taxDollars}
               onChange={(e) => setTaxDollars(e.target.value)}
-              className="w-28 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-right font-mono text-sm text-ink-hi"
+              className="w-28 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-right font-mono text-sm text-white"
               inputMode="decimal"
             />
           </div>
-          <div className="flex items-center justify-between border-t border-slate-800 pt-2 text-ink-hi">
+          <div className="flex items-center justify-between border-t border-slate-800 pt-2 text-white">
             <span className="font-medium">Total</span>
             <span className="font-mono tabular-nums font-semibold">{formatMoney(grandTotal)}</span>
           </div>
@@ -780,7 +780,7 @@ function ReviewPanel({
         <button
           onClick={() => void approve()}
           disabled={busy !== null || !canApprove}
-          className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
         >
           {busy === 'approve' ? (
             <>

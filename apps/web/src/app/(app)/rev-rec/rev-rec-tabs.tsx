@@ -30,7 +30,7 @@ export function RevRecTabs() {
               onClick={() => setTab(t.id)}
               className={clsx(
                 'inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
-                active ? 'border-brand-500 text-ink-hi' : 'border-transparent text-slate-400 hover:text-slate-200',
+                active ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200',
               )}
             >
               <Icon size={14} /> {t.label}

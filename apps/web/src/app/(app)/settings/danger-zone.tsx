@@ -181,7 +181,7 @@ export function DangerZone() {
         <div className="flex items-center gap-3">
           <Lock className="w-5 h-5 text-slate-400" />
           <div>
-            <h2 className="text-sm font-semibold text-ink-hi">Restricted</h2>
+            <h2 className="text-sm font-semibold text-white">Restricted</h2>
             <p className="text-xs text-slate-500 mt-1">
               Resetting a tenant requires a company administrator who is also platform staff.
               You do not have access to this action.
@@ -197,7 +197,7 @@ export function DangerZone() {
       <div className="card p-6 border border-red-500/30">
         <div className="flex items-center justify-between">
           <p className="text-sm text-red-400">{error || 'Unable to load.'}</p>
-          <button onClick={() => void loadPlan()} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-ink-hi">
+          <button onClick={() => void loadPlan()} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white">
             <RefreshCw size={12} /> Retry
           </button>
         </div>
@@ -205,7 +205,7 @@ export function DangerZone() {
     );
   }
 
-  const inputCls = 'w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-red-500/50';
+  const inputCls = 'w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-red-500/50';
 
   return (
     <div className="space-y-5">
@@ -216,7 +216,7 @@ export function DangerZone() {
           <div>
             <h2 className="text-lg font-semibold text-red-300">Danger Zone — Reset Tenant</h2>
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              Clears demo/seed and transactional data for <span className="font-semibold text-ink-hi">{plan.org.name}</span> so
+              Clears demo/seed and transactional data for <span className="font-semibold text-white">{plan.org.name}</span> so
               you can go live from a clean slate. This is irreversible in the app. The organization,
               its users and memberships are never deleted. Export first — always.
             </p>
@@ -236,7 +236,7 @@ export function DangerZone() {
 
       {/* What is preserved */}
       <div className="card p-5">
-        <h3 className="text-sm font-semibold text-ink-hi mb-3 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
           <Check className="w-4 h-4 text-emerald-400" /> Always preserved
         </h3>
         <ul className="grid sm:grid-cols-2 gap-2">
@@ -251,7 +251,7 @@ export function DangerZone() {
 
       {/* Scope selection + counts */}
       <div className="card p-5 space-y-4">
-        <h3 className="text-sm font-semibold text-ink-hi">What will be cleared</h3>
+        <h3 className="text-sm font-semibold text-white">What will be cleared</h3>
 
         {/* Transactional — always */}
         <ScopeRow
@@ -284,7 +284,7 @@ export function DangerZone() {
 
         {/* Per-table detail */}
         <details className="text-xs">
-          <summary className="cursor-pointer text-slate-400 hover:text-ink-hi select-none">
+          <summary className="cursor-pointer text-slate-400 hover:text-white select-none">
             Show table-by-table breakdown ({inScopeTables.length} tables)
           </summary>
           <div className="mt-3 max-h-64 overflow-auto rounded-lg border border-slate-800">
@@ -319,7 +319,7 @@ export function DangerZone() {
       <div className="card p-5">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h3 className="text-sm font-semibold text-ink-hi">1. Export a backup first</h3>
+            <h3 className="text-sm font-semibold text-white">1. Export a backup first</h3>
             <p className="text-xs text-slate-500 mt-1">
               Download a JSON snapshot of everything the current selection would clear. Required before reset.
             </p>
@@ -329,7 +329,7 @@ export function DangerZone() {
             disabled={exporting}
             className={clsx(
               'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium shrink-0 transition-colors',
-              exporting ? 'bg-slate-700 text-slate-500' : 'bg-slate-700 text-ink-hi hover:bg-slate-600',
+              exporting ? 'bg-slate-700 text-slate-500' : 'bg-slate-700 text-white hover:bg-slate-600',
             )}
           >
             {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
@@ -348,7 +348,7 @@ export function DangerZone() {
         <div>
           <h3 className="text-sm font-semibold text-red-300">2. Confirm and reset</h3>
           <p className="text-xs text-slate-400 mt-1">
-            Type the organization name <span className="font-mono text-ink-hi">{plan.org.name}</span> to confirm.
+            Type the organization name <span className="font-mono text-white">{plan.org.name}</span> to confirm.
           </p>
         </div>
 

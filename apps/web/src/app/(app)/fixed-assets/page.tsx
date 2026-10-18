@@ -92,7 +92,7 @@ function FixedAssetsPageInner() {
       <div className="flex items-start justify-between gap-3">
         <PageHeader title="Fixed Assets" description={`${summary?.count ?? 0} assets registered`} />
         <button onClick={() => setImportOpen(true)}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-brand-500 hover:bg-brand-600 rounded-lg text-xs font-medium text-white">
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-medium text-white">
           <UploadCloud size={14} /> Add from invoice
         </button>
       </div>
@@ -104,7 +104,7 @@ function FixedAssetsPageInner() {
         {([['registry', 'Registry'], ['roll-forward', 'Roll-Forward']] as const).map(([v, label]) => (
           <button key={v} onClick={() => setView(v)}
             className={clsx('px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors',
-              view === v ? 'border-brand-500 text-ink-hi' : 'border-transparent text-slate-500 hover:text-slate-300')}>
+              view === v ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300')}>
             {label}
           </button>
         ))}
@@ -115,7 +115,7 @@ function FixedAssetsPageInner() {
       {view === 'roll-forward' ? (
         <RollForwardView />
       ) : isLoading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
       ) : error ? (
         <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-red-400 text-sm">{error}</p></div>
       ) : (
@@ -124,7 +124,7 @@ function FixedAssetsPageInner() {
       <div className="grid grid-cols-3 gap-4">
         <div className="card p-4">
           <div className="flex items-center gap-2 mb-1"><DollarSign size={14} className="text-slate-400" /><span className="text-xs text-slate-500 uppercase">Total Cost</span></div>
-          <p className="text-xl font-mono font-semibold text-ink-hi">{formatMoney(summary?.totalCostCents ?? 0, { compact: true })}</p>
+          <p className="text-xl font-mono font-semibold text-white">{formatMoney(summary?.totalCostCents ?? 0, { compact: true })}</p>
         </div>
         <div className="card p-4">
           <div className="flex items-center gap-2 mb-1"><TrendingDown size={14} className="text-amber-400" /><span className="text-xs text-slate-500 uppercase">Accum Dep</span></div>
@@ -140,9 +140,9 @@ function FixedAssetsPageInner() {
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-xs">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search assets..." className="w-full pl-9 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi placeholder:text-slate-500" />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search assets..." className="w-full pl-9 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500" />
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi">
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
           <option value="">All Status</option>
           <option value="ACTIVE">Active</option>
           <option value="FULLY_DEPRECIATED">Fully Depreciated</option>
@@ -182,7 +182,7 @@ function FixedAssetsPageInner() {
                   return (
                     <tr key={asset.id} {...rowHandlers(asset as unknown as AssetLike)} onClick={() => setSelectedAsset(asset as unknown as AssetLike)} className="row-clickable">
                       <td className="px-4 py-3">
-                        <p className="text-sm text-ink-hi font-medium">{asset.name}</p>
+                        <p className="text-sm text-white font-medium">{asset.name}</p>
                         <p className="text-[10px] text-slate-600 font-mono">{asset.assetTag ?? '—'}{asset.serialNumber ? ` · SN: ${asset.serialNumber}` : ''}</p>
                       </td>
                       <td className="px-4 py-3">
@@ -197,7 +197,7 @@ function FixedAssetsPageInner() {
                         <span className="text-xs font-mono text-amber-400">{formatMoney(asset.accumulatedDepreciationCents)}</span>
                         <span className="text-[10px] text-slate-600 ml-1">{depPct}%</span>
                       </td>
-                      <td className="px-4 py-3 text-right text-xs font-mono font-medium text-ink-hi">{formatMoney(asset.netBookValueCents)}</td>
+                      <td className="px-4 py-3 text-right text-xs font-mono font-medium text-white">{formatMoney(asset.netBookValueCents)}</td>
                       <td className="px-4 py-3 text-center text-xs font-mono text-slate-500">{asset.usefulLifeMonths}mo</td>
                       <td className="px-4 py-3 text-center">
                         <span className={clsx('px-1.5 py-0.5 rounded text-[10px] font-medium', STATUS_CLS[asset.status] ?? 'bg-slate-500/10 text-slate-500')}>
@@ -221,13 +221,13 @@ function FixedAssetsPageInner() {
         {peek && (
           <div className="p-3">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-semibold text-ink-hi truncate">{peek.item.name}</span>
+              <span className="text-sm font-semibold text-white truncate">{peek.item.name}</span>
             </div>
             <div className="text-2xs text-slate-500 mb-2">{[peek.item.assetTag, peek.item.category].filter(Boolean).join(' · ') || '--'}</div>
             <div className="rounded-md bg-slate-800/40 px-3 py-2 space-y-0.5">
               <div className="flex justify-between text-2xs"><span className="text-slate-500">Cost</span><span className="font-mono text-slate-300">{formatMoney(peek.item.acquisitionCostCents)}</span></div>
               <div className="flex justify-between text-2xs"><span className="text-slate-500">Accumulated</span><span className="font-mono text-amber-400">{formatMoney(peek.item.accumulatedDepreciationCents)}</span></div>
-              <div className="flex justify-between text-2xs"><span className="text-slate-500">Net book value</span><span className="font-mono text-ink-hi">{formatMoney(peek.item.netBookValueCents)}</span></div>
+              <div className="flex justify-between text-2xs"><span className="text-slate-500">Net book value</span><span className="font-mono text-white">{formatMoney(peek.item.netBookValueCents)}</span></div>
             </div>
             <div className="mt-2 text-2xs text-slate-500">{peek.item.depreciationMethod.replace(/_/g, ' ')} · {peek.item.usefulLifeMonths}mo</div>
           </div>

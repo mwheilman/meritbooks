@@ -63,11 +63,11 @@ export function JobProfitabilityReport({ params }: { params: Record<string, stri
       <div className="grid grid-cols-5 gap-3">
         <div className="card p-4">
           <p className="text-[10px] text-slate-500 uppercase mb-1">Jobs</p>
-          <p className="text-xl font-mono font-semibold text-ink-hi">{s.jobCount}</p>
+          <p className="text-xl font-mono font-semibold text-white">{s.jobCount}</p>
         </div>
         <div className="card p-4">
           <p className="text-[10px] text-slate-500 uppercase mb-1">Contract Value</p>
-          <p className="text-xl font-mono font-semibold text-ink-hi">{formatMoney(s.totalContractCents, { compact: true })}</p>
+          <p className="text-xl font-mono font-semibold text-white">{formatMoney(s.totalContractCents, { compact: true })}</p>
         </div>
         <div className="card p-4">
           <p className="text-[10px] text-slate-500 uppercase mb-1">Total Cost</p>
@@ -107,7 +107,7 @@ export function JobProfitabilityReport({ params }: { params: Record<string, stri
               return (
                 <tr key={job.jobNumber} className="hover:bg-slate-800/20">
                   <td className="px-4 py-3">
-                    <p className="text-sm text-ink-hi font-medium">{job.jobName}</p>
+                    <p className="text-sm text-white font-medium">{job.jobName}</p>
                     <p className="text-[10px] text-slate-600 font-mono">{job.jobNumber}</p>
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-400">{job.customerName || '—'}</td>
@@ -143,10 +143,10 @@ export function JobProfitabilityReport({ params }: { params: Record<string, stri
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-slate-700 bg-slate-800/30">
-              <td colSpan={3} className="px-4 py-2.5 text-sm font-semibold text-ink-hi">Totals</td>
-              <td className="px-4 py-2.5 text-right text-xs font-mono font-semibold text-ink-hi">{formatMoney(s.totalContractCents)}</td>
+              <td colSpan={3} className="px-4 py-2.5 text-sm font-semibold text-white">Totals</td>
+              <td className="px-4 py-2.5 text-right text-xs font-mono font-semibold text-white">{formatMoney(s.totalContractCents)}</td>
               <td className="px-4 py-2.5 text-right text-xs font-mono font-semibold text-slate-400">{formatMoney(s.totalCostCents)}</td>
-              <td className="px-4 py-2.5 text-right text-xs font-mono font-semibold text-ink-hi">{formatMoney(s.totalBilledCents)}</td>
+              <td className="px-4 py-2.5 text-right text-xs font-mono font-semibold text-white">{formatMoney(s.totalBilledCents)}</td>
               <td colSpan={2} />
               <td className={clsx('px-4 py-2.5 text-center text-sm font-mono font-bold', marginColor(s.avgMarginPct))}>{s.avgMarginPct}%</td>
             </tr>

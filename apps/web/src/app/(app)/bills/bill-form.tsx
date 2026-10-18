@@ -125,7 +125,7 @@ function AccountPicker({ value, label, onChange, locationId }: {
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen(!open)}
         className={clsx('w-full text-left px-2 py-1.5 rounded-lg border text-xs truncate',
-          value ? 'bg-slate-800 border-slate-700 text-ink-hi' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}>
+          value ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}>
         {label || 'Select account...'}
         <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />
       </button>
@@ -135,7 +135,7 @@ function AccountPicker({ value, label, onChange, locationId }: {
             <div className="relative">
               <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
               <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." autoFocus
-                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi placeholder:text-slate-500 focus:outline-none focus:border-brand-500/50" />
+                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50" />
             </div>
           </div>
           <div className="max-h-40 overflow-y-auto">
@@ -197,7 +197,7 @@ function JobPicker({ value, label, onChange, locationId }: {
             <div className="relative">
               <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
               <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search jobs..." autoFocus
-                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi placeholder:text-slate-500 focus:outline-none focus:border-brand-500/50" />
+                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50" />
             </div>
           </div>
           <div className="max-h-40 overflow-y-auto">
@@ -398,14 +398,14 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-ink-hi">New Bill</h2>
+          <h2 className="text-lg font-semibold text-white">New Bill</h2>
           {isAiParsed && (
             <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
               <Sparkles size={10} /> AI Extracted
             </span>
           )}
         </div>
-        <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-ink-hi"><X size={18} /></button>
+        <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"><X size={18} /></button>
       </div>
 
       <div className="flex">
@@ -469,7 +469,7 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium">Company</label>
               <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi">
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white">
                 <option value="">Select...</option>
                 {locations.map((l) => <option key={l.id} value={l.id}>{l.short_code} · {l.name}</option>)}
               </select>
@@ -477,7 +477,7 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Vendor <ConfBadge score={vendorConfidence} /></label>
               <select value={vendorId} onChange={(e) => { setVendorId(e.target.value); setVendorConfidence(null); }}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi">
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white">
                 <option value="">{vendorName && !vendorId ? `"${vendorName}" (no match)` : 'Select vendor...'}</option>
                 {vendors.map((v) => <option key={v.id} value={v.id}>{v.display_name ?? v.name}</option>)}
               </select>
@@ -485,14 +485,14 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Bill # <ConfBadge score={billNumberConf} /></label>
               <input type="text" value={billNumber} onChange={(e) => { setBillNumber(e.target.value); setBillNumberConf(null); }}
-                placeholder="INV-001" className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi font-mono placeholder:text-slate-600" />
+                placeholder="INV-001" className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono placeholder:text-slate-600" />
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium">Tax</label>
               <div className="relative">
                 <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500">$</span>
                 <input type="number" value={taxCents / 100} onChange={(e) => setTaxCents(Math.round(parseFloat(e.target.value || '0') * 100))}
-                  step="0.01" min="0" className="w-full pl-6 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi font-mono" />
+                  step="0.01" min="0" className="w-full pl-6 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono" />
               </div>
             </div>
           </div>
@@ -501,19 +501,19 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Bill Date <ConfBadge score={billDateConf} /></label>
               <input type="date" value={billDate} onChange={(e) => { setBillDate(e.target.value); setBillDateConf(null); }}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi font-mono" />
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono" />
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Due Date <ConfBadge score={dueDateConf} /></label>
               <input type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); setDueDateConf(null); }}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi font-mono" />
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono" />
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1 font-medium">Retainage %</label>
               <div className="relative">
                 <input type="number" value={retainagePct || ''} onChange={(e) => setRetainagePct(Math.min(100, Math.max(0, parseFloat(e.target.value || '0'))))}
                   step="0.5" min="0" max="100" placeholder="0"
-                  className="w-full pr-7 pl-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi font-mono placeholder:text-slate-600" />
+                  className="w-full pr-7 pl-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono placeholder:text-slate-600" />
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500">%</span>
               </div>
             </div>
@@ -541,15 +541,15 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
                     </td>
                     <td className="px-3 py-2">
                       <input type="text" value={line.description} onChange={(e) => updateLine(line.key, 'description', e.target.value)}
-                        placeholder="Line description" className="w-full px-2 py-1 bg-slate-800/50 border border-slate-700/50 rounded text-xs text-ink-hi placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50" />
+                        placeholder="Line description" className="w-full px-2 py-1 bg-slate-800/50 border border-slate-700/50 rounded text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50" />
                       <div className="flex items-center gap-1 mt-1">
                         <input type="number" value={line.quantity} onChange={(e) => updateLine(line.key, 'quantity', e.target.value)}
-                          min="0" step="1" title="Qty" className="w-12 px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs text-ink-hi font-mono text-right focus:outline-none" />
+                          min="0" step="1" title="Qty" className="w-12 px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs text-white font-mono text-right focus:outline-none" />
                         <span className="text-2xs text-slate-600">×</span>
                         <div className="relative flex-1">
                           <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">$</span>
                           <input type="text" value={line.unitCost} onChange={(e) => updateLine(line.key, 'unitCost', e.target.value.replace(/[^0-9.]/g, ''))}
-                            placeholder="0.00" title="Unit cost" className="w-full pl-4 pr-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs text-ink-hi font-mono text-right focus:outline-none" />
+                            placeholder="0.00" title="Unit cost" className="w-full pl-4 pr-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs text-white font-mono text-right focus:outline-none" />
                         </div>
                       </div>
                     </td>
@@ -576,7 +576,7 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
                       <div className="relative">
                         <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">$</span>
                         <input type="text" value={line.amount} onChange={(e) => updateLine(line.key, 'amount', e.target.value.replace(/[^0-9.]/g, ''))}
-                          placeholder="0.00" className="w-full pl-4 pr-1 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-ink-hi font-mono text-right focus:outline-none focus:border-brand-500/50" />
+                          placeholder="0.00" className="w-full pl-4 pr-1 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-white font-mono text-right focus:outline-none focus:border-emerald-500/50" />
                       </div>
                     </td>
                     <td className="px-3 py-2">
@@ -593,12 +593,12 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
                 <tr className="border-t border-slate-700">
                   <td colSpan={3} className="px-3 py-2">
                     <button type="button" onClick={() => setLines((p) => [...p, emptyLine()])}
-                      className="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300">
+                      className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300">
                       <Plus size={12} /> Add line
                     </button>
                   </td>
                   <td className="px-3 py-2 text-right text-xs text-slate-500">Subtotal</td>
-                  <td className="px-3 py-2 text-right text-sm font-mono font-semibold text-ink-hi">{formatMoney(subtotalCents)}</td>
+                  <td className="px-3 py-2 text-right text-sm font-mono font-semibold text-white">{formatMoney(subtotalCents)}</td>
                   <td />
                 </tr>
                 {taxCents > 0 && (
@@ -616,8 +616,8 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
                   </tr>
                 )}
                 <tr className="bg-slate-800/20">
-                  <td colSpan={4} className="px-3 py-2.5 text-right text-sm font-medium text-ink-hi">{retainageCents > 0 ? 'Due now' : 'Total'}</td>
-                  <td className="px-3 py-2.5 text-right text-base font-mono font-bold text-ink-hi">{formatMoney(totalCents)}</td>
+                  <td colSpan={4} className="px-3 py-2.5 text-right text-sm font-medium text-white">{retainageCents > 0 ? 'Due now' : 'Total'}</td>
+                  <td className="px-3 py-2.5 text-right text-base font-mono font-bold text-white">{formatMoney(totalCents)}</td>
                   <td />
                 </tr>
               </tfoot>
@@ -636,12 +636,12 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
           )}
 
           <div className="flex items-center justify-end gap-3 pt-2">
-            <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-ink-hi hover:bg-slate-800">Cancel</button>
+            <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800">Cancel</button>
             <button onClick={handleSubmit} disabled={submitting || !locationId || !vendorId || subtotalCents === 0}
               className={clsx('flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium',
                 submitting || !locationId || !vendorId || subtotalCents === 0
                   ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                  : 'bg-brand-500 text-white hover:bg-brand-600')}>
+                  : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
               {submitting ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : <><Send size={14} /> Create Bill</>}
             </button>
           </div>

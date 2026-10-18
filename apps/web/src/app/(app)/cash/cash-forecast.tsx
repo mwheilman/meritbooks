@@ -30,7 +30,7 @@ interface DriverForecastResponse {
 }
 
 function Stat({ icon: Icon, label, value, tone }: { icon: typeof Wallet; label: string; value: string; tone?: 'good' | 'bad' | 'warn' }) {
-  const cls = tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-red-400' : tone === 'warn' ? 'text-amber-400' : 'text-ink-hi';
+  const cls = tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-red-400' : tone === 'warn' ? 'text-amber-400' : 'text-white';
   const iconCls = tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-red-400' : tone === 'warn' ? 'text-amber-400' : 'text-slate-400';
   return (
     <div className="card p-4">
@@ -75,7 +75,7 @@ export function CashForecast({ locationId }: { locationId?: string }) {
       {/* Header + driver controls */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-base font-semibold text-ink-hi flex items-center gap-2">
+          <h2 className="text-base font-semibold text-white flex items-center gap-2">
             <TrendingUp size={16} className="text-emerald-400" /> Driver-Based Cash Forecast
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -87,19 +87,19 @@ export function CashForecast({ locationId }: { locationId?: string }) {
           <label className="flex items-center gap-1.5 text-xs text-slate-400">
             Collection lag
             <input type="number" min={0} max={120} value={collectionLag} onChange={(e) => setCollectionLag(Math.max(0, Number(e.target.value) || 0))}
-              className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono" />
+              className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white font-mono" />
             <span className="text-slate-600">days</span>
           </label>
           <label className="flex items-center gap-1.5 text-xs text-slate-400">
             Payment lag
             <input type="number" min={0} max={120} value={paymentLag} onChange={(e) => setPaymentLag(Math.max(0, Number(e.target.value) || 0))}
-              className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono" />
+              className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white font-mono" />
             <span className="text-slate-600">days</span>
           </label>
           <label className="flex items-center gap-1.5 text-xs text-slate-400">
             Min buffer $
             <input type="number" min={0} step={1000} value={bufferDollars} onChange={(e) => setBufferDollars(Math.max(0, Number(e.target.value) || 0))}
-              className="w-24 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono" />
+              className="w-24 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white font-mono" />
           </label>
         </div>
       </div>
@@ -168,7 +168,7 @@ export function CashForecast({ locationId }: { locationId?: string }) {
                     <p className="text-slate-400 font-mono mb-1">Wk {w.weekNumber} · {w.startDate}</p>
                     <div className="flex justify-between text-emerald-400"><span>Collections</span><span className="font-mono">{formatMoney(w.collectionsCents)}</span></div>
                     <div className="flex justify-between text-red-400"><span>Disbursements</span><span className="font-mono">{formatMoney(w.disbursementsCents)}</span></div>
-                    <div className={clsx('flex justify-between font-semibold border-t border-slate-800 mt-1 pt-1', w.closingCents < data.minimumBufferCents ? 'text-red-400' : 'text-ink-hi')}>
+                    <div className={clsx('flex justify-between font-semibold border-t border-slate-800 mt-1 pt-1', w.closingCents < data.minimumBufferCents ? 'text-red-400' : 'text-white')}>
                       <span>Closing</span><span className="font-mono">{formatMoney(w.closingCents)}</span>
                     </div>
                   </div>
@@ -202,7 +202,7 @@ export function CashForecast({ locationId }: { locationId?: string }) {
                     <td className="px-4 py-1.5 text-right font-mono tabular-nums text-emerald-400">{w.collectionsCents ? formatMoney(w.collectionsCents) : '—'}</td>
                     <td className="px-4 py-1.5 text-right font-mono tabular-nums text-red-400">{w.disbursementsCents ? `(${formatMoney(w.disbursementsCents)})` : '—'}</td>
                     <td className={clsx('px-4 py-1.5 text-right font-mono tabular-nums', w.netCents < 0 ? 'text-red-400' : 'text-slate-300')}>{formatMoney(w.netCents)}</td>
-                    <td className={clsx('px-6 py-1.5 text-right font-mono tabular-nums font-semibold', w.closingCents < data.minimumBufferCents ? 'text-red-400' : 'text-ink-hi')}>{formatMoney(w.closingCents)}</td>
+                    <td className={clsx('px-6 py-1.5 text-right font-mono tabular-nums font-semibold', w.closingCents < data.minimumBufferCents ? 'text-red-400' : 'text-white')}>{formatMoney(w.closingCents)}</td>
                   </tr>
                 ))}
               </tbody>

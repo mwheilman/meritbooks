@@ -90,7 +90,7 @@ export function TieOutBanner({ state, debitsCents, creditsCents, note, className
       <div className="flex items-center justify-center gap-2 text-base font-semibold text-brand-400">
         <CircleCheck size={18} aria-hidden /> Balanced to the penny.
       </div>
-      <p className="mt-3 font-mono text-lg tabular-nums text-ink-hi">
+      <p className="mt-3 font-mono text-lg tabular-nums text-white">
         {formatMoney(debitsCents)} <span className="text-brand-400">=</span> {formatMoney(creditsCents)}
       </p>
       <p className="mt-2 text-xs text-slate-500">{note ?? 'Total debits = total credits · Assets = Liabilities + Equity'}</p>

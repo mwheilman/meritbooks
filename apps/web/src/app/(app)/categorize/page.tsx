@@ -126,7 +126,7 @@ export default function CategorizePage() {
       {suggestion && (
         <div className="card p-5 mt-4 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-ink-hi flex items-center gap-2"><Sparkles size={15} className="text-emerald-400" /> Proposed coding</h3>
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Sparkles size={15} className="text-emerald-400" /> Proposed coding</h3>
             <span className={clsx('inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-2xs font-medium',
               suggestion.source === 'ai' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-sky-400 border-sky-500/30 bg-sky-500/10')}>
               {suggestion.source === 'ai' ? 'AI' : 'Pattern match'} · {(suggestion.confidence * 100).toFixed(0)}%

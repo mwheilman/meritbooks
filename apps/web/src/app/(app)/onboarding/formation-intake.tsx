@@ -174,7 +174,7 @@ export function FormationIntake({ companyId, initialStoragePath = null, onSaved,
   }
 
   const lowCls = (f: string) => (low.includes(f) ? 'border-amber-500/60 ring-1 ring-amber-500/30' : '');
-  const inputCls = 'w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-ink-hi focus:border-brand-500 focus:outline-none';
+  const inputCls = 'w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-white focus:border-emerald-500 focus:outline-none';
   const label = 'block text-[10px] text-slate-500 mb-1 uppercase tracking-wide';
 
   return (
@@ -182,7 +182,7 @@ export function FormationIntake({ companyId, initialStoragePath = null, onSaved,
       <div className={clsx('flex items-center gap-2', embedded && 'hidden')}>
         <ScrollText size={15} className="text-brand-400" />
         <div>
-          <p className="text-sm font-medium text-ink-hi">Company legal record</p>
+          <p className="text-sm font-medium text-white">Company legal record</p>
           <p className="text-[11px] text-slate-500">
             Drop your EIN letter, articles of organization, or operating agreement — AI reads the legal details; you confirm.
           </p>
@@ -303,9 +303,9 @@ export function FormationIntake({ companyId, initialStoragePath = null, onSaved,
           </div>
 
           <div className="flex items-center justify-end gap-2">
-            <button onClick={() => { setPhase('upload'); setError(null); }} className="px-3 py-1.5 text-xs text-slate-400 hover:text-ink-hi">Cancel</button>
+            <button onClick={() => { setPhase('upload'); setError(null); }} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Cancel</button>
             <button onClick={() => void save()} disabled={saving}
-              className="px-4 py-1.5 text-xs font-medium bg-brand-500 text-white hover:bg-brand-400 rounded-lg disabled:opacity-50 flex items-center gap-1.5">
+              className="px-4 py-1.5 text-xs font-medium bg-brand-500 text-slate-900 hover:bg-brand-400 rounded-lg disabled:opacity-50 flex items-center gap-1.5">
               {saving ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Save legal record
             </button>
           </div>

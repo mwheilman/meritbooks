@@ -35,7 +35,7 @@ const DISPOSITION_ORDER: Disposition[] = ['AUTO', 'REVIEW', 'ESCALATE', 'BLOCKED
 const DISPOSITION_META: Record<Disposition, { label: string; badgeClass: string; help: string }> = {
   AUTO: {
     label: 'AUTO-eligible',
-    badgeClass: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-inset ring-brand-500/20',
+    badgeClass: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-inset ring-emerald-500/20',
     help: 'The dial would let the machine apply this — but auto-post is off, so it still needs your approval.',
   },
   REVIEW: {
@@ -138,7 +138,7 @@ function ExceptionRow({
       data-active={active}
       className={clsx(
         'group flex w-full items-center gap-4 px-4 py-3 transition-colors',
-        active ? 'bg-brand-500/[0.06] ring-1 ring-inset ring-brand-500/20' : 'hover:bg-slate-800/30',
+        active ? 'bg-emerald-500/[0.06] ring-1 ring-inset ring-emerald-500/20' : 'hover:bg-slate-800/30',
       )}
     >
       <button
@@ -151,7 +151,7 @@ function ExceptionRow({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-medium text-ink-hi">{item.title}</p>
+            <p className="truncate text-sm font-medium text-white">{item.title}</p>
             <span
               className={clsx('inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium', meta.badgeClass)}
             >
@@ -200,7 +200,7 @@ function ExceptionRow({
           }}
           className={clsx(
             'inline-flex w-20 shrink-0 items-center justify-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
-            'border-slate-700 bg-slate-800/40 text-slate-300 hover:border-brand-500/40 hover:bg-brand-500/10 hover:text-brand-400',
+            'border-slate-700 bg-slate-800/40 text-slate-300 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400',
             'disabled:cursor-not-allowed disabled:opacity-50',
           )}
         >
@@ -365,7 +365,7 @@ export function ExceptionsQueue({ data, isLoading, error, refetch }: ExceptionsQ
               <span
                 className={clsx(
                   'rounded px-1.5 py-0.5 font-mono text-[10px]',
-                  filter === chip.key ? 'bg-brand-500/20' : 'bg-slate-700/50 text-slate-400',
+                  filter === chip.key ? 'bg-emerald-500/20' : 'bg-slate-700/50 text-slate-400',
                 )}
               >
                 {chip.count}
@@ -424,7 +424,7 @@ export function ExceptionsQueue({ data, isLoading, error, refetch }: ExceptionsQ
       {/* Content states */}
       {isLoading && !data ? (
         <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
         </div>
       ) : error ? (
         <div className="card p-10 text-center">
@@ -440,7 +440,7 @@ export function ExceptionsQueue({ data, isLoading, error, refetch }: ExceptionsQ
       ) : items.length === 0 ? (
         <div className="card p-16 text-center">
           <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-emerald-500/70" />
-          <p className="text-sm font-medium text-ink-hi">You&apos;re all caught up</p>
+          <p className="text-sm font-medium text-white">You&apos;re all caught up</p>
           <p className="mt-1 text-xs text-slate-500">
             Nothing needs your attention right now. New flags, proposals, and approvals will land
             here.

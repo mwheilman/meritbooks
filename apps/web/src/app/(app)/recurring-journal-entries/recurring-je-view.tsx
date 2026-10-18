@@ -169,7 +169,7 @@ export function RecurringJeView() {
             </button>
             <button
               type="button" onClick={openNew}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-600"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500"
             >
               <Plus size={14} /> New template
             </button>
@@ -190,7 +190,7 @@ export function RecurringJeView() {
           <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-amber-500/[0.04]">
             <div className="flex items-center gap-2">
               <Send size={15} className="text-amber-400" />
-              <h2 className="text-sm font-semibold text-ink-hi">Awaiting approval</h2>
+              <h2 className="text-sm font-semibold text-white">Awaiting approval</h2>
               <span className="text-xs text-slate-500">{runs.length} entr{runs.length === 1 ? 'y' : 'ies'} · {formatMoney(rData?.summary.amount_cents ?? 0)}</span>
             </div>
           </div>
@@ -208,11 +208,11 @@ export function RecurringJeView() {
             <tbody className="divide-y divide-slate-800/30">
               {runs.map((run) => (
                 <tr key={run.id} className="hover:bg-slate-800/20">
-                  <td className="px-5 py-3 text-ink-hi">{run.template_name}</td>
+                  <td className="px-5 py-3 text-white">{run.template_name}</td>
                   <td className="px-4 py-3 text-center text-xs font-mono text-slate-300">{run.period}</td>
                   <td className="px-4 py-3 text-center text-xs font-mono text-slate-400">{run.entry_date}</td>
                   <td className="px-4 py-3 text-center text-xs font-mono text-slate-500">{run.lines.length}</td>
-                  <td className="px-4 py-3 text-right text-sm font-mono text-ink-hi">{formatMoney(run.amount_cents)}</td>
+                  <td className="px-4 py-3 text-right text-sm font-mono text-white">{formatMoney(run.amount_cents)}</td>
                   <td className="px-5 py-3">
                     <div className="flex items-center justify-end gap-2">
                       <button
@@ -223,7 +223,7 @@ export function RecurringJeView() {
                       </button>
                       <button
                         type="button" onClick={() => reviewRun(run, 'approve')} disabled={busyRun === run.id}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50"
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
                       >
                         {busyRun === run.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                         Approve &amp; post
@@ -240,7 +240,7 @@ export function RecurringJeView() {
       {/* ── Templates ───────────────────────────────────────────────────── */}
       {tLoading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
+          <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
         </div>
       ) : templates.length === 0 && !tError ? (
         <div className="card p-12 text-center">
@@ -252,7 +252,7 @@ export function RecurringJeView() {
           </p>
           <button
             type="button" onClick={openNew}
-            className="mt-4 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-600"
+            className="mt-4 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500"
           >
             <Plus size={14} /> New template
           </button>
@@ -280,7 +280,7 @@ export function RecurringJeView() {
                   <tr key={t.id} className="hover:bg-slate-800/20">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm text-ink-hi font-medium">{t.name}</p>
+                        <p className="text-sm text-white font-medium">{t.name}</p>
                         {t.pending_count > 0 && (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400">
                             <Clock size={9} /> {t.pending_count} pending
@@ -290,7 +290,7 @@ export function RecurringJeView() {
                       {t.memo && <p className="text-xs text-slate-500 truncate max-w-[280px]">{t.memo}</p>}
                     </td>
                     <td className="px-4 py-3 text-center text-xs text-slate-400">{CADENCE_LABEL[t.cadence] ?? t.cadence}</td>
-                    <td className="px-4 py-3 text-right text-sm font-mono text-ink-hi">{formatMoney(t.amount_per_period_cents)}</td>
+                    <td className="px-4 py-3 text-right text-sm font-mono text-white">{formatMoney(t.amount_per_period_cents)}</td>
                     <td className="px-4 py-3 text-center text-xs font-mono text-slate-500">{t.line_count}</td>
                     <td className="px-4 py-3 text-center">
                       {t.next_post_date ? (
@@ -310,7 +310,7 @@ export function RecurringJeView() {
                           <>
                             <button
                               type="button" onClick={() => openEdit(t)} disabled={busy}
-                              title="Edit" className="p-1.5 rounded-lg text-slate-500 hover:text-ink-hi hover:bg-slate-800 disabled:opacity-40"
+                              title="Edit" className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 disabled:opacity-40"
                             >
                               <Pencil size={14} />
                             </button>
@@ -324,7 +324,7 @@ export function RecurringJeView() {
                             ) : (
                               <button
                                 type="button" onClick={() => setStatus(t, 'ACTIVE')} disabled={busy}
-                                title="Resume" className="p-1.5 rounded-lg text-slate-500 hover:text-brand-400 hover:bg-slate-800 disabled:opacity-40"
+                                title="Resume" className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-400 hover:bg-slate-800 disabled:opacity-40"
                               >
                                 <Play size={14} />
                               </button>

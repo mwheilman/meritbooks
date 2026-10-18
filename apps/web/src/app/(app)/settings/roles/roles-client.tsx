@@ -97,8 +97,8 @@ function Toggle({
       disabled={disabled || busy}
       onClick={onClick}
       className={clsx(
-        'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/50',
-        on ? 'bg-brand-500' : 'bg-slate-700',
+        'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/50',
+        on ? 'bg-emerald-500' : 'bg-slate-700',
         (disabled || busy) && 'opacity-50 cursor-not-allowed',
       )}
     >
@@ -340,7 +340,7 @@ export function RolesClient() {
     return (
       <div className="mx-auto max-w-lg rounded-xl border border-slate-800 bg-surface-900 p-8 text-center">
         <Lock className="mx-auto mb-3 h-8 w-8 text-slate-500" />
-        <h3 className="text-lg font-semibold text-ink-hi">Admin access required</h3>
+        <h3 className="text-lg font-semibold text-white">Admin access required</h3>
         <p className="mt-2 text-sm text-slate-400">
           Creating roles and changing permissions is limited to organization administrators
           (user-management access). Ask an admin to grant you access or make the change.
@@ -428,7 +428,7 @@ export function RolesClient() {
                           )}
                         >
                           <div className="min-w-0 sm:max-w-md">
-                            <div className="text-sm font-medium text-ink-hi">{feat.featureName}</div>
+                            <div className="text-sm font-medium text-white">{feat.featureName}</div>
                             <div className="mt-0.5 text-xs text-slate-400">
                               {meta?.description ?? ''}
                             </div>
@@ -528,7 +528,7 @@ function RoleGroup({
             className={clsx(
               'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
               selected === r.key
-                ? 'bg-emerald-500/15 text-ink-hi'
+                ? 'bg-emerald-500/15 text-white'
                 : 'text-slate-300 hover:bg-surface-900',
             )}
           >
@@ -565,7 +565,7 @@ function RoleHeader({
           ) : (
             <ShieldCheck className="h-4 w-4 text-emerald-400" />
           )}
-          <h2 className="text-base font-semibold text-ink-hi">{label}</h2>
+          <h2 className="text-base font-semibold text-white">{label}</h2>
           <span
             className={clsx(
               'rounded px-1.5 py-0.5 text-[10px] font-medium uppercase',
@@ -679,7 +679,7 @@ function ExternalAuditorPanel() {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Eye className="h-4 w-4 text-indigo-300" />
-            <h2 className="text-base font-semibold text-ink-hi">External auditor access</h2>
+            <h2 className="text-base font-semibold text-white">External auditor access</h2>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-slate-400">
             Give an outside CPA / auditor <span className="text-slate-200">view-only</span> access to the books plus a
@@ -705,7 +705,7 @@ function ExternalAuditorPanel() {
           {active.map((s) => (
             <div key={s.id} className="flex items-center justify-between gap-3 px-3 py-2">
               <div className="min-w-0">
-                <div className="truncate text-sm text-ink-hi">{s.name}</div>
+                <div className="truncate text-sm text-white">{s.name}</div>
                 <div className="truncate text-xs text-slate-500">{s.email}</div>
               </div>
               <div className="flex items-center gap-2">
@@ -781,8 +781,8 @@ function InviteAuditorModal({ onClose, onInvited }: { onClose: () => void; onInv
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-md rounded-xl border border-slate-800 bg-surface-950 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-ink-hi">Invite external auditor</h3>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-ink-hi">
+          <h3 className="text-base font-semibold text-white">Invite external auditor</h3>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-white">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -790,7 +790,7 @@ function InviteAuditorModal({ onClose, onInvited }: { onClose: () => void; onInv
           <div className="space-y-3">
             <p className="text-sm text-slate-300">
               The auditor seat is created. Email isn’t configured, so share this sign-up link — they must sign up with{' '}
-              <span className="text-ink-hi">{email.trim().toLowerCase()}</span>.
+              <span className="text-white">{email.trim().toLowerCase()}</span>.
             </p>
             <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-surface-900 p-2">
               <input readOnly value={link} className="min-w-0 flex-1 bg-transparent text-xs text-slate-300 focus:outline-none" />
@@ -809,7 +809,7 @@ function InviteAuditorModal({ onClose, onInvited }: { onClose: () => void; onInv
               <button
                 type="button"
                 onClick={onInvited}
-                className="rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600"
+                className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-600"
               >
                 Done
               </button>
@@ -824,7 +824,7 @@ function InviteAuditorModal({ onClose, onInvited }: { onClose: () => void; onInv
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="auditor@cpafirm.com"
-                  className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi placeholder:text-slate-600 focus:border-brand-500 focus:outline-none"
+                  className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -835,7 +835,7 @@ function InviteAuditorModal({ onClose, onInvited }: { onClose: () => void; onInv
                   <input
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi focus:border-brand-500 focus:outline-none"
+                    className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -845,7 +845,7 @@ function InviteAuditorModal({ onClose, onInvited }: { onClose: () => void; onInv
                   <input
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi focus:border-brand-500 focus:outline-none"
+                    className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -912,8 +912,8 @@ function CreateRoleModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-md rounded-xl border border-slate-800 bg-surface-950 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-ink-hi">New custom role</h3>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-ink-hi">
+          <h3 className="text-base font-semibold text-white">New custom role</h3>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-white">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -924,7 +924,7 @@ function CreateRoleModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. AP Clerk, Read-only Auditor"
-              className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi placeholder:text-slate-600 focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
             />
           </div>
           <div>
@@ -936,7 +936,7 @@ function CreateRoleModal({
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
               placeholder="What is this role for?"
-              className="w-full resize-none rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi placeholder:text-slate-600 focus:border-brand-500 focus:outline-none"
+              className="w-full resize-none rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
             />
           </div>
           <div>
@@ -944,7 +944,7 @@ function CreateRoleModal({
             <select
               value={baseRole}
               onChange={(e) => setBaseRole(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
             >
               {systemRoles.map((r) => (
                 <option key={r.key} value={r.key}>
@@ -970,7 +970,7 @@ function CreateRoleModal({
             type="button"
             onClick={submit}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             Create role

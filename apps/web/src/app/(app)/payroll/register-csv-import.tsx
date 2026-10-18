@@ -95,7 +95,7 @@ function AccountPicker({
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen(!open)}
         className={clsx('w-full text-left px-2 py-1.5 rounded-lg border text-xs truncate relative',
-          selected ? 'bg-slate-800 border-slate-700 text-ink-hi' : invalid ? 'bg-slate-800/50 border-amber-500/50 text-slate-400' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}>
+          selected ? 'bg-slate-800 border-slate-700 text-white' : invalid ? 'bg-slate-800/50 border-amber-500/50 text-slate-400' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}>
         {selected ? `${selected.accountNumber} · ${selected.name}` : placeholder}
         <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />
       </button>
@@ -105,7 +105,7 @@ function AccountPicker({
             <div className="relative">
               <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
               <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search accounts..." autoFocus
-                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi placeholder:text-slate-500 focus:outline-none focus:border-brand-500/50" />
+                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50" />
             </div>
           </div>
           <div className="max-h-44 overflow-y-auto">
@@ -353,7 +353,7 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
           <div>
-            <h2 className="text-sm font-semibold text-ink-hi flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
               <FileSpreadsheet size={16} className="text-emerald-400" /> Import register from spreadsheet
             </h2>
             <p className="text-2xs text-slate-500 mt-0.5">
@@ -373,7 +373,7 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
                 onDragLeave={() => setDragOver(false)}
                 onDrop={onDrop}
                 className={clsx('cursor-pointer rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors',
-                  dragOver ? 'border-brand-500 bg-brand-500/5' : 'border-slate-700 hover:border-slate-600 bg-slate-800/20')}>
+                  dragOver ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-700 hover:border-slate-600 bg-slate-800/20')}>
                 <FileSpreadsheet size={28} className="mx-auto text-slate-500 mb-3" />
                 <p className="text-sm text-slate-300">Drop a payroll register spreadsheet, or <span className="text-emerald-400">browse</span></p>
                 <p className="text-2xs text-slate-500 mt-1">CSV, TSV, or XLSX · up to 10MB · first row must be column headers</p>
@@ -394,7 +394,7 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
 
           {(phase === 'parsing' || phase === 'building') && (
             <div className="py-16 text-center">
-              <Loader2 size={28} className="mx-auto text-brand-400 animate-spin mb-3" />
+              <Loader2 size={28} className="mx-auto text-emerald-400 animate-spin mb-3" />
               <p className="text-sm text-slate-300">{phase === 'parsing' ? `Reading ${fileName ?? 'file'}…` : 'Building the balanced payroll entry…'}</p>
               <p className="text-2xs text-slate-500 mt-1">{phase === 'parsing' ? 'Parsing rows and detecting the column mapping.' : 'Summing the mapped columns and resolving accounts.'}</p>
             </div>
@@ -414,7 +414,7 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
               <p className="text-sm text-emerald-300">Payroll register posted{postedEntryNumber ? ` — entry ${postedEntryNumber}` : ''}.</p>
               <div className="mt-4 flex items-center justify-center gap-2">
                 <button onClick={() => { setPhase('idle'); setDrafts([]); setPostedEntryNumber(null); }} className="px-3 py-1.5 border border-slate-700 rounded-lg text-xs text-slate-300 hover:bg-slate-800">Import another</button>
-                <button onClick={onClose} className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 rounded-lg text-xs font-medium text-white">Done</button>
+                <button onClick={onClose} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-medium text-white">Done</button>
               </div>
             </div>
           )}
@@ -465,7 +465,7 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
                             <td className="px-3 py-2">
                               <select value={m.target} onChange={(e) => setColTarget(m.index, e.target.value as PayrollFieldTarget)}
                                 className={clsx('w-full px-2 py-1.5 rounded-lg text-xs bg-slate-800 border',
-                                  m.target === 'ignore' ? 'border-slate-700 text-slate-500' : 'border-emerald-600/40 text-ink-hi')}>
+                                  m.target === 'ignore' ? 'border-slate-700 text-slate-500' : 'border-emerald-600/40 text-white')}>
                                 {TARGET_ORDER.map((t) => <option key={t} value={t}>{TARGET_LABELS[t]}</option>)}
                               </select>
                               {isLabelled && (
@@ -507,17 +507,17 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
                 <div>
                   <label className="block text-2xs uppercase text-slate-500 mb-1">Pay date</label>
                   <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi bg-slate-800 border border-slate-700" />
+                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700" />
                 </div>
                 <div>
                   <label className="block text-2xs uppercase text-slate-500 mb-1">Period start (optional)</label>
                   <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi bg-slate-800 border border-slate-700" />
+                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700" />
                 </div>
                 <div>
                   <label className="block text-2xs uppercase text-slate-500 mb-1">Period end (optional)</label>
                   <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi bg-slate-800 border border-slate-700" />
+                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700" />
                 </div>
               </div>
 
@@ -525,7 +525,7 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
                 <Save size={13} className="text-slate-500" />
                 <span className="text-2xs text-slate-400">Reuse this mapping next time:</span>
                 <input type="text" value={providerName} onChange={(e) => setProviderName(e.target.value)}
-                  placeholder="e.g. ADP, Gusto" className="px-2 py-1 rounded-lg text-2xs text-ink-hi bg-slate-800 border border-slate-700 placeholder:text-slate-600 w-32" />
+                  placeholder="e.g. ADP, Gusto" className="px-2 py-1 rounded-lg text-2xs text-white bg-slate-800 border border-slate-700 placeholder:text-slate-600 w-32" />
                 <button onClick={() => void saveMapping()} disabled={savingMapping || !providerName.trim()}
                   className="px-2.5 py-1 rounded-lg text-2xs text-slate-200 border border-slate-700 hover:bg-slate-800 disabled:opacity-40 flex items-center gap-1">
                   {savingMapping ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Save mapping
@@ -541,7 +541,7 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
               <div className="flex items-center justify-between pt-1">
                 <button onClick={() => { setPhase('idle'); }} className="text-2xs text-slate-500 hover:text-slate-300">Upload a different file</button>
                 <button onClick={() => void buildEntry()} disabled={!canBuild}
-                  className="px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center gap-1.5">
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center gap-1.5">
                   Build balanced entry <ArrowRight size={13} />
                 </button>
               </div>
@@ -588,7 +588,7 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
                 <div>
                   <label className="block text-2xs uppercase text-slate-500 mb-1">Company</label>
                   <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi bg-slate-800 border border-slate-700">
+                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700">
                     <option value="">Select company…</option>
                     {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
@@ -596,7 +596,7 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
                 <div>
                   <label className="block text-2xs uppercase text-slate-500 mb-1">Pay date</label>
                   <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-ink-hi bg-slate-800 border border-slate-700" />
+                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700" />
                 </div>
               </div>
 
@@ -665,7 +665,7 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
               <div className="flex items-center justify-between pt-1">
                 <button onClick={() => setPhase('map')} className="text-2xs text-slate-500 hover:text-slate-300">Back to column mapping</button>
                 <button onClick={() => void confirmPost()} disabled={!canPost}
-                  className="px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center gap-1.5">
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center gap-1.5">
                   {saving ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
                   Confirm &amp; post payroll entry
                 </button>

@@ -126,7 +126,7 @@ export function InsuranceAmortization({
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <ShieldCheck size={15} className="text-indigo-400" />
-          <h3 className="text-sm font-semibold text-ink-hi">Premium amortization</h3>
+          <h3 className="text-sm font-semibold text-white">Premium amortization</h3>
           {summary && summary.total > 0 && (
             <span className="text-[11px] text-slate-500">
               {summary.active} active · {summary.completed} completed · prepaid on BS{' '}
@@ -138,7 +138,7 @@ export function InsuranceAmortization({
           <button
             onClick={runAll}
             disabled={running || dueCount === 0}
-            className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-ink-hi rounded-lg disabled:opacity-40 flex items-center gap-1.5"
+            className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-white rounded-lg disabled:opacity-40 flex items-center gap-1.5"
             title={dueCount === 0 ? 'No amortizations due' : `${dueCount} schedule(s) with a due period`}
           >
             {running ? <Loader2 size={13} className="animate-spin" /> : <PlayCircle size={13} />}
@@ -148,7 +148,7 @@ export function InsuranceAmortization({
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 text-brand-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 text-emerald-400 animate-spin" /></div>
       ) : error ? (
         <div className="card p-6 text-center">
           <AlertCircle className="w-6 h-6 mx-auto text-red-400 mb-2" />
@@ -172,7 +172,7 @@ export function InsuranceAmortization({
               <div key={s.id} className="card p-4 border border-slate-800">
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink-hi truncate">{title}</p>
+                    <p className="text-sm font-semibold text-white truncate">{title}</p>
                     <p className="text-[11px] text-slate-500 truncate">
                       {s.expense_account_name ?? 'insurance expense'} ← {s.prepaid_account_name ?? 'prepaid insurance'} · {s.months} mo
                     </p>
@@ -186,7 +186,7 @@ export function InsuranceAmortization({
                 <div className="flex items-end justify-between mb-1">
                   <div>
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider">Remaining prepaid</p>
-                    <p className="text-2xl font-mono font-semibold text-ink-hi mt-0.5">{formatMoney(s.remaining_cents)}</p>
+                    <p className="text-2xl font-mono font-semibold text-white mt-0.5">{formatMoney(s.remaining_cents)}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider">Amortized</p>
@@ -215,7 +215,7 @@ export function InsuranceAmortization({
                     <button
                       onClick={() => recordOne(s)}
                       disabled={rowBusy === s.id || !s.next_period}
-                      className="px-2.5 py-1 text-[11px] font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-md flex items-center gap-1 disabled:opacity-40"
+                      className="px-2.5 py-1 text-[11px] font-medium bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-md flex items-center gap-1 disabled:opacity-40"
                     >
                       {rowBusy === s.id ? <Loader2 size={11} className="animate-spin" /> : <PlayCircle size={11} />}
                       Record this period
@@ -314,8 +314,8 @@ function AmortizeSetup({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="w-full max-w-md card p-5 border border-slate-700" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-ink-hi">Amortize premium</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-ink-hi"><X size={16} /></button>
+          <h3 className="text-sm font-semibold text-white">Amortize premium</h3>
+          <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={16} /></button>
         </div>
 
         <p className="text-[11px] text-slate-500 mb-4">
@@ -330,7 +330,7 @@ function AmortizeSetup({
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">$</span>
               <input
                 type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
-                className="w-full pl-6 pr-3 py-2 bg-slate-950/60 border border-slate-700 rounded-lg text-sm text-ink-hi font-mono focus:border-brand-500 focus:outline-none"
+                className="w-full pl-6 pr-3 py-2 bg-slate-950/60 border border-slate-700 rounded-lg text-sm text-white font-mono focus:border-emerald-500 focus:outline-none"
                 placeholder="0.00"
               />
             </div>
@@ -341,14 +341,14 @@ function AmortizeSetup({
               <span className="text-[11px] text-slate-400">Start date</span>
               <input
                 type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-                className="mt-1 w-full px-3 py-2 bg-slate-950/60 border border-slate-700 rounded-lg text-sm text-ink-hi focus:border-brand-500 focus:outline-none"
+                className="mt-1 w-full px-3 py-2 bg-slate-950/60 border border-slate-700 rounded-lg text-sm text-white focus:border-emerald-500 focus:outline-none"
               />
             </label>
             <label className="block">
               <span className="text-[11px] text-slate-400">Term (months)</span>
               <input
                 type="number" min="1" max="600" value={months} onChange={(e) => setMonths(e.target.value)}
-                className="mt-1 w-full px-3 py-2 bg-slate-950/60 border border-slate-700 rounded-lg text-sm text-ink-hi font-mono focus:border-brand-500 focus:outline-none"
+                className="mt-1 w-full px-3 py-2 bg-slate-950/60 border border-slate-700 rounded-lg text-sm text-white font-mono focus:border-emerald-500 focus:outline-none"
               />
             </label>
           </div>
@@ -357,7 +357,7 @@ function AmortizeSetup({
             <span className="text-[11px] text-slate-400">Memo</span>
             <input
               type="text" value={memo} onChange={(e) => setMemo(e.target.value)} maxLength={500}
-              className="mt-1 w-full px-3 py-2 bg-slate-950/60 border border-slate-700 rounded-lg text-sm text-ink-hi focus:border-brand-500 focus:outline-none"
+              className="mt-1 w-full px-3 py-2 bg-slate-950/60 border border-slate-700 rounded-lg text-sm text-white focus:border-emerald-500 focus:outline-none"
             />
           </label>
 
@@ -370,11 +370,11 @@ function AmortizeSetup({
         </div>
 
         <div className="mt-5 flex items-center justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-400 hover:text-ink-hi rounded-lg">Cancel</button>
+          <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white rounded-lg">Cancel</button>
           <button
             onClick={save}
             disabled={!valid || saving}
-            className="px-4 py-1.5 text-xs font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-40 flex items-center gap-1.5"
+            className="px-4 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-40 flex items-center gap-1.5"
           >
             {saving && <Loader2 size={13} className="animate-spin" />}
             Create schedule

@@ -45,7 +45,7 @@ interface EntryLine {
   credit_cents: number;
 }
 
-const inputCls = 'w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-ink-hi focus:border-brand-500 focus:outline-none';
+const inputCls = 'w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-white focus:border-emerald-500 focus:outline-none';
 const labelCls = 'block text-[10px] text-slate-500 mb-1 uppercase tracking-wide';
 
 /** Outstanding principal = balance after the last paid period, else the full principal. */
@@ -66,8 +66,8 @@ function Shell({ title, icon, onClose, children }: { title: string; icon: React.
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div className="card w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-ink-hi flex items-center gap-2">{icon} {title}</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-ink-hi" aria-label="Close"><X size={18} /></button>
+          <h2 className="text-base font-semibold text-white flex items-center gap-2">{icon} {title}</h2>
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close"><X size={18} /></button>
         </div>
         {children}
       </div>
@@ -167,11 +167,11 @@ export function ResetModal({ inst, onClose, onDone }: { inst: ActionInstrument; 
       {preview && (
         <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs space-y-2">
           <div className="grid grid-cols-2 gap-2 text-slate-300">
-            <div>Rate <span className="font-mono text-ink-hi">{preview.currentRatePercent}% → {preview.newRatePercent}%</span></div>
-            <div>Reset at period <span className="font-mono text-ink-hi">{preview.resetAtPeriod}</span> ({preview.preservedCount} preserved)</div>
-            <div>Outstanding <span className="font-mono text-ink-hi">{formatMoney(preview.outstandingBalanceCents)}</span></div>
-            <div>Payment <span className="font-mono text-ink-hi">{formatMoney(preview.previousPaymentCents)} → {formatMoney(preview.newPaymentCents)}</span></div>
-            <div>Remaining periods <span className="font-mono text-ink-hi">{preview.remainingPeriods}</span></div>
+            <div>Rate <span className="font-mono text-white">{preview.currentRatePercent}% → {preview.newRatePercent}%</span></div>
+            <div>Reset at period <span className="font-mono text-white">{preview.resetAtPeriod}</span> ({preview.preservedCount} preserved)</div>
+            <div>Outstanding <span className="font-mono text-white">{formatMoney(preview.outstandingBalanceCents)}</span></div>
+            <div>Payment <span className="font-mono text-white">{formatMoney(preview.previousPaymentCents)} → {formatMoney(preview.newPaymentCents)}</span></div>
+            <div>Remaining periods <span className="font-mono text-white">{preview.remainingPeriods}</span></div>
           </div>
           <div className="text-[10px] text-slate-500">First recomputed periods:</div>
           <table className="w-full text-[11px] font-mono">
@@ -191,13 +191,13 @@ export function ResetModal({ inst, onClose, onDone }: { inst: ActionInstrument; 
       )}
 
       <div className="flex items-center justify-end gap-2 mt-4">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-ink-hi">Cancel</button>
+        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
         {!preview ? (
-          <button onClick={() => run('preview')} disabled={busy} className="px-4 py-2 text-sm font-medium bg-slate-800 hover:bg-slate-700 text-ink-hi rounded-lg disabled:opacity-50 flex items-center gap-2">
+          <button onClick={() => run('preview')} disabled={busy} className="px-4 py-2 text-sm font-medium bg-slate-800 hover:bg-slate-700 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
             {busy && <Loader2 size={14} className="animate-spin" />} Preview
           </button>
         ) : (
-          <button onClick={() => run('confirm')} disabled={busy} className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
+          <button onClick={() => run('confirm')} disabled={busy} className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
             {busy && <Loader2 size={14} className="animate-spin" />} Apply reset
           </button>
         )}
@@ -283,7 +283,7 @@ export function RefinanceModal({ inst, lines, onClose, onDone }: { inst: ActionI
   return (
     <Shell title={`Refinance · ${inst.loan_name}`} icon={<ArrowLeftRight size={16} className="text-amber-300" />} onClose={onClose}>
       <p className="text-[11px] text-slate-500 mb-3">
-        Current outstanding balance <span className="font-mono text-ink-hi">{formatMoney(outstanding)}</span>. Borrowing more books cash-out
+        Current outstanding balance <span className="font-mono text-white">{formatMoney(outstanding)}</span>. Borrowing more books cash-out
         proceeds; borrowing less pays cash at close. The old loan is closed and the debt rolls into the new note.
       </p>
       <div className="grid grid-cols-12 gap-3">
@@ -349,8 +349,8 @@ export function RefinanceModal({ inst, lines, onClose, onDone }: { inst: ActionI
       {preview && (
         <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs">
           <div className="flex items-center gap-4 text-slate-300">
-            <span>Old balance <span className="font-mono text-ink-hi">{formatMoney(preview.oldBalanceCents)}</span></span>
-            <span>New principal <span className="font-mono text-ink-hi">{formatMoney(preview.newPrincipalCents)}</span></span>
+            <span>Old balance <span className="font-mono text-white">{formatMoney(preview.oldBalanceCents)}</span></span>
+            <span>New principal <span className="font-mono text-white">{formatMoney(preview.newPrincipalCents)}</span></span>
             {preview.cashDebitCents > 0 && <span className="text-emerald-300">Cash-out {formatMoney(preview.cashDebitCents)}</span>}
             {preview.cashCreditCents > 0 && <span className="text-red-300">Cash paid {formatMoney(preview.cashCreditCents)}</span>}
           </div>
@@ -362,13 +362,13 @@ export function RefinanceModal({ inst, lines, onClose, onDone }: { inst: ActionI
       )}
 
       <div className="flex items-center justify-end gap-2 mt-4">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-ink-hi">Cancel</button>
+        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
         {!preview ? (
-          <button onClick={() => run('preview')} disabled={busy} className="px-4 py-2 text-sm font-medium bg-slate-800 hover:bg-slate-700 text-ink-hi rounded-lg disabled:opacity-50 flex items-center gap-2">
+          <button onClick={() => run('preview')} disabled={busy} className="px-4 py-2 text-sm font-medium bg-slate-800 hover:bg-slate-700 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
             {busy && <Loader2 size={14} className="animate-spin" />} Preview rollover
           </button>
         ) : (
-          <button onClick={() => run('confirm')} disabled={busy} className="px-4 py-2 text-sm font-medium bg-amber-700 hover:bg-amber-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
+          <button onClick={() => run('confirm')} disabled={busy} className="px-4 py-2 text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
             {busy && <Loader2 size={14} className="animate-spin" />} Confirm refinance
           </button>
         )}
@@ -425,23 +425,23 @@ export function PayoffModal({ inst, onClose, onDone }: { inst: ActionInstrument;
       {preview && (
         <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs">
           <div className="flex items-center gap-4 text-slate-300">
-            <span>Principal <span className="font-mono text-ink-hi">{formatMoney(preview.remainingPrincipalCents)}</span></span>
-            {preview.accruedPayableCents > 0 && <span>Accrued <span className="font-mono text-ink-hi">{formatMoney(preview.accruedPayableCents)}</span></span>}
-            {preview.additionalInterestCents > 0 && <span>Per-diem <span className="font-mono text-ink-hi">{formatMoney(preview.additionalInterestCents)}</span></span>}
-            <span className="ml-auto">Cash out <span className="font-mono text-ink-hi">{formatMoney(preview.totalCashCents)}</span></span>
+            <span>Principal <span className="font-mono text-white">{formatMoney(preview.remainingPrincipalCents)}</span></span>
+            {preview.accruedPayableCents > 0 && <span>Accrued <span className="font-mono text-white">{formatMoney(preview.accruedPayableCents)}</span></span>}
+            {preview.additionalInterestCents > 0 && <span>Per-diem <span className="font-mono text-white">{formatMoney(preview.additionalInterestCents)}</span></span>}
+            <span className="ml-auto">Cash out <span className="font-mono text-white">{formatMoney(preview.totalCashCents)}</span></span>
           </div>
           <EntryTable lines={preview.entryLines} />
         </div>
       )}
 
       <div className="flex items-center justify-end gap-2 mt-4">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-ink-hi">Cancel</button>
+        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
         {!preview ? (
-          <button onClick={() => run('preview')} disabled={busy} className="px-4 py-2 text-sm font-medium bg-slate-800 hover:bg-slate-700 text-ink-hi rounded-lg disabled:opacity-50 flex items-center gap-2">
+          <button onClick={() => run('preview')} disabled={busy} className="px-4 py-2 text-sm font-medium bg-slate-800 hover:bg-slate-700 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
             {busy && <Loader2 size={14} className="animate-spin" />} Preview settlement
           </button>
         ) : (
-          <button onClick={() => run('confirm')} disabled={busy} className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
+          <button onClick={() => run('confirm')} disabled={busy} className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
             {busy && <Loader2 size={14} className="animate-spin" />} Confirm payoff
           </button>
         )}

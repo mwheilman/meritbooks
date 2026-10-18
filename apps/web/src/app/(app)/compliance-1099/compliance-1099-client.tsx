@@ -71,7 +71,7 @@ interface Ten99Report {
 // ── Presentation maps ────────────────────────────────────────────────────────────
 
 const READINESS_META: Record<Readiness, { label: string; className: string }> = {
-  READY: { label: 'Ready', className: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-brand-500/20' },
+  READY: { label: 'Ready', className: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20' },
   MISSING_W9: { label: 'Missing W-9', className: 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20' },
   NOT_MARKED_1099: { label: 'Not marked 1099', className: 'bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20' },
 };
@@ -114,7 +114,7 @@ function Tile({
       </div>
       <div className="min-w-0">
         <p className="truncate text-xs text-slate-500">{label}</p>
-        <p className="font-mono text-lg font-semibold text-ink-hi">{value}</p>
+        <p className="font-mono text-lg font-semibold text-white">{value}</p>
       </div>
     </div>
   );
@@ -179,7 +179,7 @@ export function Compliance1099Client() {
             id="tax-year"
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
-            className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-sm text-ink-hi focus:border-brand-500/50 focus:outline-none"
+            className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-sm text-white focus:border-emerald-500/50 focus:outline-none"
           >
             {years.map((y) => (
               <option key={y} value={y}>
@@ -222,14 +222,14 @@ export function Compliance1099Client() {
           <button
             type="button"
             onClick={() => setGenerateForm('NEC')}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/50 px-3.5 py-1.5 text-sm font-semibold text-slate-200 transition-colors hover:border-brand-500/40 hover:text-brand-400"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/50 px-3.5 py-1.5 text-sm font-semibold text-slate-200 transition-colors hover:border-emerald-500/40 hover:text-emerald-400"
           >
             <FileOutput size={15} /> Generate 1099-NEC
           </button>
           <button
             type="button"
             onClick={() => setGenerateForm('MISC')}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3.5 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3.5 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-400"
           >
             <FileOutput size={15} /> Generate 1099-MISC
           </button>
@@ -252,7 +252,7 @@ export function Compliance1099Client() {
       {/* Content states */}
       {isLoading ? (
         <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
         </div>
       ) : error ? (
         <div className="card p-10 text-center">
@@ -270,14 +270,14 @@ export function Compliance1099Client() {
           <Inbox className="mx-auto mb-3 h-10 w-10 text-slate-600" />
           {allRows.length === 0 ? (
             <>
-              <p className="text-sm font-medium text-ink-hi">No 1099 candidates for {year}</p>
+              <p className="text-sm font-medium text-white">No 1099 candidates for {year}</p>
               <p className="mt-1 text-xs text-slate-500">
                 No vendor was paid $600 or more by a reportable rail in this tax year.
               </p>
             </>
           ) : (
             <>
-              <p className="text-sm font-medium text-ink-hi">
+              <p className="text-sm font-medium text-white">
                 No {formFilter === 'NEC' ? '1099-NEC' : '1099-MISC'} candidates for {year}
               </p>
               <p className="mt-1 text-xs text-slate-500">
@@ -285,7 +285,7 @@ export function Compliance1099Client() {
                 <button
                   type="button"
                   onClick={() => setFormFilter('ALL')}
-                  className="text-brand-400 hover:underline"
+                  className="text-emerald-400 hover:underline"
                 >
                   Show all
                 </button>
@@ -318,7 +318,7 @@ export function Compliance1099Client() {
                   return (
                     <tr key={row.vendorId} className="transition-colors hover:bg-slate-800/30">
                       <td className="px-4 py-3">
-                        <span className="font-medium text-ink-hi">{row.vendorName}</span>
+                        <span className="font-medium text-white">{row.vendorName}</span>
                         <span className="ml-2 text-xs text-slate-500">
                           {row.paymentCount} pmt{row.paymentCount === 1 ? '' : 's'}
                         </span>
@@ -387,7 +387,7 @@ export function Compliance1099Client() {
                               'inline-flex items-center justify-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
                               isQueued
                                 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-                                : 'border-slate-700 bg-slate-800/40 text-slate-300 hover:border-brand-500/40 hover:bg-brand-500/10 hover:text-brand-400',
+                                : 'border-slate-700 bg-slate-800/40 text-slate-300 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400',
                               'disabled:cursor-not-allowed disabled:opacity-60',
                             )}
                           >

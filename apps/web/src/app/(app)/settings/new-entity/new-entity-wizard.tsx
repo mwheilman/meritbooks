@@ -93,7 +93,7 @@ export function NewEntityWizard() {
     setSubmitting(false);
   }, [name, codeUpper, industry, effectiveFiscalMonth, revRec]);
 
-  const inputCls = 'w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-ink-hi focus:outline-none focus:border-brand-500/50';
+  const inputCls = 'w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50';
   const labelCls = 'block text-xs text-slate-500 mb-1.5 font-medium';
 
   // ── Success state ──────────────────────────────────────────
@@ -105,30 +105,30 @@ export function NewEntityWizard() {
             <Check className="w-7 h-7 text-emerald-400" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-ink-hi">{name.trim()} is ready</h2>
+            <h2 className="text-xl font-semibold text-white">{name.trim()} is ready</h2>
             <p className="text-sm text-slate-400 mt-1">The entity, its fiscal calendar, and its chart of accounts are set up.</p>
           </div>
           <div className="grid grid-cols-3 gap-3 text-left">
             <div className="rounded-lg bg-slate-800/50 border border-slate-800 p-3">
               <p className="text-[10px] uppercase tracking-wide text-slate-500">Short Code</p>
-              <p className="text-sm font-mono text-ink-hi mt-0.5">{codeUpper}</p>
+              <p className="text-sm font-mono text-white mt-0.5">{codeUpper}</p>
             </div>
             <div className="rounded-lg bg-slate-800/50 border border-slate-800 p-3">
               <p className="text-[10px] uppercase tracking-wide text-slate-500">Fiscal Periods</p>
-              <p className="text-sm text-ink-hi mt-0.5">{result.periodsCreated}</p>
+              <p className="text-sm text-white mt-0.5">{result.periodsCreated}</p>
             </div>
             <div className="rounded-lg bg-slate-800/50 border border-slate-800 p-3">
               <p className="text-[10px] uppercase tracking-wide text-slate-500">GL Accounts</p>
-              <p className="text-sm text-ink-hi mt-0.5">{result.accountCount}</p>
+              <p className="text-sm text-white mt-0.5">{result.accountCount}</p>
             </div>
           </div>
           <div className="flex items-center justify-center gap-3 pt-2">
-            <Link href="/settings" className="px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-ink-hi hover:bg-slate-800/50 transition-colors">
+            <Link href="/settings" className="px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/50 transition-colors">
               Back to Settings
             </Link>
             <button
               onClick={() => { setResult(null); setStep('identity'); setName(''); setShortCode(''); setIndustry(''); setFiscalMonth(null); setRevRec('POINT_OF_SALE'); }}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
             >
               Add Another
             </button>
@@ -149,7 +149,7 @@ export function NewEntityWizard() {
           return (
             <div key={s.key} className="flex items-center gap-2">
               <div className={clsx('flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
-                active ? 'bg-brand-500/10 text-brand-300 font-medium'
+                active ? 'bg-emerald-500/10 text-emerald-400 font-medium'
                   : done ? 'text-emerald-400/70' : 'text-slate-500')}>
                 {done ? <Check size={15} /> : <Icon size={15} />}
                 {s.label}
@@ -162,7 +162,7 @@ export function NewEntityWizard() {
 
       {metaLoading ? (
         <div className="card p-6 flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
+          <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
         </div>
       ) : (
         <>
@@ -170,7 +170,7 @@ export function NewEntityWizard() {
           {step === 'identity' && (
             <div className="card p-6 space-y-5">
               <div>
-                <h2 className="text-lg font-semibold text-ink-hi flex items-center gap-2"><Building2 size={18} className="text-emerald-400" /> Entity Identity</h2>
+                <h2 className="text-lg font-semibold text-white flex items-center gap-2"><Building2 size={18} className="text-emerald-400" /> Entity Identity</h2>
                 <p className="text-xs text-slate-500 mt-1">Every company you track is its own book of record inside this tenant.</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -197,7 +197,7 @@ export function NewEntityWizard() {
           {step === 'fiscal' && (
             <div className="card p-6 space-y-5">
               <div>
-                <h2 className="text-lg font-semibold text-ink-hi flex items-center gap-2"><CalendarDays size={18} className="text-emerald-400" /> Fiscal & Accounting</h2>
+                <h2 className="text-lg font-semibold text-white flex items-center gap-2"><CalendarDays size={18} className="text-emerald-400" /> Fiscal & Accounting</h2>
                 <p className="text-xs text-slate-500 mt-1">Drives the reporting calendar and how revenue is recognized for this entity.</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -235,7 +235,7 @@ export function NewEntityWizard() {
           {step === 'review' && (
             <div className="card p-6 space-y-5">
               <div>
-                <h2 className="text-lg font-semibold text-ink-hi flex items-center gap-2"><Check size={18} className="text-emerald-400" /> Review & Create</h2>
+                <h2 className="text-lg font-semibold text-white flex items-center gap-2"><Check size={18} className="text-emerald-400" /> Review & Create</h2>
                 <p className="text-xs text-slate-500 mt-1">We&apos;ll create the entity, generate three years of fiscal periods, and seed its chart of accounts.</p>
               </div>
               <dl className="divide-y divide-slate-800 rounded-lg border border-slate-800 overflow-hidden">
@@ -249,7 +249,7 @@ export function NewEntityWizard() {
                 ].map(([k, v]) => (
                   <div key={k} className="flex items-center justify-between px-4 py-2.5 bg-slate-800/20">
                     <dt className="text-xs text-slate-500">{k}</dt>
-                    <dd className="text-sm text-ink-hi">{v}</dd>
+                    <dd className="text-sm text-white">{v}</dd>
                   </div>
                 ))}
               </dl>
@@ -269,11 +269,11 @@ export function NewEntityWizard() {
           <div className="flex items-center justify-between">
             {stepIndex > 0 ? (
               <button onClick={() => setStep(STEPS[stepIndex - 1].key)} disabled={submitting}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-ink-hi hover:bg-slate-800/50 transition-colors">
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/50 transition-colors">
                 <ArrowLeft size={14} /> Back
               </button>
             ) : (
-              <Link href="/settings" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-ink-hi hover:bg-slate-800/50 transition-colors">
+              <Link href="/settings" className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors">
                 <ArrowLeft size={14} /> Cancel
               </Link>
             )}
@@ -281,20 +281,20 @@ export function NewEntityWizard() {
             {step === 'identity' && (
               <button onClick={() => setStep('fiscal')} disabled={!identityValid}
                 className={clsx('flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium transition-colors',
-                  identityValid ? 'bg-brand-500 text-white hover:bg-brand-600' : 'bg-slate-700 text-slate-500 cursor-not-allowed')}>
+                  identityValid ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-slate-700 text-slate-500 cursor-not-allowed')}>
                 Continue <ArrowRight size={14} />
               </button>
             )}
             {step === 'fiscal' && (
               <button onClick={() => setStep('review')}
-                className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 transition-colors">
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 transition-colors">
                 Review <ArrowRight size={14} />
               </button>
             )}
             {step === 'review' && (
               <button onClick={submit} disabled={submitting || !identityValid}
                 className={clsx('flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors',
-                  submitting || !identityValid ? 'bg-slate-700 text-slate-500' : 'bg-brand-500 text-white hover:bg-brand-600')}>
+                  submitting || !identityValid ? 'bg-slate-700 text-slate-500' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
                 {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 Create Entity
               </button>

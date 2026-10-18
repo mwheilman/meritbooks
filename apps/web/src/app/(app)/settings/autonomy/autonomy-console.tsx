@@ -148,7 +148,7 @@ function FeatureCard({
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium text-ink-hi">{feature.label}</p>
+            <p className="text-sm font-medium text-white">{feature.label}</p>
             <span className={clsx('rounded px-1.5 py-0.5 text-[10px] font-medium', meta.badge)}>
               {meta.label}
             </span>
@@ -169,7 +169,7 @@ function FeatureCard({
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-brand-500/40 hover:text-brand-400"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-emerald-500/40 hover:text-emerald-400"
           >
             <SlidersHorizontal size={13} /> Edit
           </button>
@@ -203,7 +203,7 @@ function FeatureCard({
                   value={capDollars}
                   onChange={(e) => setCapDollars(e.target.value)}
                   placeholder="1000"
-                  className="w-40 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-ink-hi focus:border-brand-500/50 focus:outline-none"
+                  className="w-40 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white focus:border-emerald-500/50 focus:outline-none"
                 />
               </div>
             </div>
@@ -214,7 +214,7 @@ function FeatureCard({
               type="button"
               onClick={cancel}
               disabled={saving}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-ink-hi disabled:opacity-50"
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white disabled:opacity-50"
             >
               Cancel
             </button>
@@ -222,7 +222,7 @@ function FeatureCard({
               type="button"
               onClick={save}
               disabled={saving}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
             >
               {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save
             </button>
@@ -260,7 +260,7 @@ function KillSwitchDialog({
             {engaging ? <ShieldAlert size={20} /> : <ShieldCheck size={20} />}
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-ink-hi">
+            <h3 className="text-base font-semibold text-white">
               {engaging ? 'Engage the kill switch?' : 'Disengage the kill switch?'}
             </h3>
             <p className="mt-1 text-xs text-slate-400">
@@ -269,7 +269,7 @@ function KillSwitchDialog({
                 : 'Autonomous action resumes per each capability’s configured dial. Capabilities set to Auto under limit can auto-apply again.'}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-500 hover:text-ink-hi">
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-white">
             <X size={18} />
           </button>
         </div>
@@ -285,7 +285,7 @@ function KillSwitchDialog({
               rows={2}
               maxLength={500}
               placeholder="e.g. investigating an anomalous batch of auto-categorizations"
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-ink-hi focus:border-brand-500/50 focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white focus:border-emerald-500/50 focus:outline-none"
             />
           </div>
         )}
@@ -295,7 +295,7 @@ function KillSwitchDialog({
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded-lg px-3 py-2 text-sm font-medium text-slate-400 hover:text-ink-hi disabled:opacity-50"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-slate-400 hover:text-white disabled:opacity-50"
           >
             Cancel
           </button>
@@ -355,7 +355,7 @@ export function AutonomyConsole() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
       </div>
     );
   }
@@ -399,7 +399,7 @@ export function AutonomyConsole() {
               {killSwitch.engaged ? <Lock size={20} /> : <ShieldCheck size={20} />}
             </div>
             <div>
-              <p className="text-sm font-semibold text-ink-hi">Global kill switch</p>
+              <p className="text-sm font-semibold text-white">Global kill switch</p>
               <p className="text-xs text-slate-400">
                 {killSwitch.engaged
                   ? 'ENGAGED — all autonomous AI action is suspended org-wide.'
@@ -434,7 +434,7 @@ export function AutonomyConsole() {
           <div key={cat} className="space-y-3">
             <div className="flex items-center gap-2">
               <CIcon size={16} className="text-indigo-300" />
-              <h2 className="text-sm font-semibold text-ink-hi">{cmeta.label}</h2>
+              <h2 className="text-sm font-semibold text-white">{cmeta.label}</h2>
               <span className="text-xs text-slate-500">· {cmeta.blurb}</span>
             </div>
             <div

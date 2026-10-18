@@ -76,7 +76,7 @@ export function CashDashboard() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
+        <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
       </div>
     );
   }
@@ -102,7 +102,7 @@ export function CashDashboard() {
             <Wallet size={14} className="text-emerald-400" />
             <span className="text-xs text-slate-500 uppercase tracking-wider">Total Cash</span>
           </div>
-          <p className="text-2xl font-mono font-semibold text-ink-hi">
+          <p className="text-2xl font-mono font-semibold text-white">
             {formatMoney(summary?.totalCashCents ?? 0, { compact: true })}
           </p>
           {summary?.asOfDate && (
@@ -116,7 +116,7 @@ export function CashDashboard() {
             <Building2 size={14} className="text-slate-400" />
             <span className="text-xs text-slate-500 uppercase tracking-wider">Entities</span>
           </div>
-          <p className="text-2xl font-mono font-semibold text-ink-hi">{summary?.entityCount ?? 0}</p>
+          <p className="text-2xl font-mono font-semibold text-white">{summary?.entityCount ?? 0}</p>
           <p className="text-xs text-slate-500">{summary?.accountCount ?? 0} accounts</p>
         </div>
         <div className="card p-4">
@@ -124,7 +124,7 @@ export function CashDashboard() {
             <AlertTriangle size={14} className="text-red-400" />
             <span className="text-xs text-slate-500 uppercase tracking-wider">Critical</span>
           </div>
-          <p className={clsx('text-2xl font-mono font-semibold', (summary?.criticalCount ?? 0) > 0 ? 'text-red-400' : 'text-ink-hi')}>
+          <p className={clsx('text-2xl font-mono font-semibold', (summary?.criticalCount ?? 0) > 0 ? 'text-red-400' : 'text-white')}>
             {summary?.criticalCount ?? 0}
           </p>
         </div>
@@ -133,7 +133,7 @@ export function CashDashboard() {
             <TrendingDown size={14} className="text-amber-400" />
             <span className="text-xs text-slate-500 uppercase tracking-wider">Near Min</span>
           </div>
-          <p className={clsx('text-2xl font-mono font-semibold', (summary?.nearMinCount ?? 0) > 0 ? 'text-amber-400' : 'text-ink-hi')}>
+          <p className={clsx('text-2xl font-mono font-semibold', (summary?.nearMinCount ?? 0) > 0 ? 'text-amber-400' : 'text-white')}>
             {summary?.nearMinCount ?? 0}
           </p>
         </div>
@@ -162,7 +162,7 @@ export function CashDashboard() {
           <select
             value={filterLoc}
             onChange={(e) => { setFilterLoc(e.target.value); setExpandedLoc(null); }}
-            className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-ink-hi focus:border-brand-500 focus:outline-none"
+            className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:border-emerald-500 focus:outline-none"
           >
             <option value="">All companies</option>
             {entities.map((e) => (
@@ -170,7 +170,7 @@ export function CashDashboard() {
             ))}
           </select>
         </div>
-        <button onClick={() => refetch()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-ink-hi hover:bg-slate-800 transition-colors shrink-0">
+        <button onClick={() => refetch()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0">
           <RefreshCw size={12} /> Refresh
         </button>
       </div>
@@ -202,7 +202,7 @@ export function CashDashboard() {
                     ? <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
                     : <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />}
 
-                  <span className="text-sm font-medium text-ink-hi flex-1">{loc.locationName}</span>
+                  <span className="text-sm font-medium text-white flex-1">{loc.locationName}</span>
 
                   {pctOfMin !== null && (
                     <div className="flex items-center gap-2 mr-4">
@@ -216,7 +216,7 @@ export function CashDashboard() {
                     </div>
                   )}
 
-                  <span className="text-lg font-mono font-semibold text-ink-hi mr-3">
+                  <span className="text-lg font-mono font-semibold text-white mr-3">
                     {formatMoney(loc.totalCashCents)}
                   </span>
 
@@ -257,7 +257,7 @@ export function CashDashboard() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-mono text-ink-hi">{formatMoney(acct.balanceCents)}</p>
+                          <p className="text-sm font-mono text-white">{formatMoney(acct.balanceCents)}</p>
                           {acct.availableCents !== acct.balanceCents && (
                             <p className="text-[10px] text-slate-600 font-mono">Avail: {formatMoney(acct.availableCents)}</p>
                           )}

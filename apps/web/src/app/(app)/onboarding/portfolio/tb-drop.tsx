@@ -243,7 +243,7 @@ export function TbDrop({ companies, companiesLoading, onCompaniesChanged, onSess
         </div>
         <p className="text-sm text-slate-300 flex-1 min-w-[260px]">
           {/^\d{4}-\d{2}-\d{2}$/.test(cutover)
-            ? <>MeritBooks takes over on <span className="text-ink-hi font-medium">{dayAfter(cutover)}</span>. Everything before that stays in your old system — we only bring in the ending balances.</>
+            ? <>MeritBooks takes over on <span className="text-white font-medium">{dayAfter(cutover)}</span>. Everything before that stays in your old system — we only bring in the ending balances.</>
             : 'Pick the date your trial balances are as of.'}
         </p>
         {suggestDate && (
@@ -262,7 +262,7 @@ export function TbDrop({ companies, companiesLoading, onCompaniesChanged, onSess
         onDrop={onDrop}
         className={clsx(
           'rounded-xl border-2 border-dashed p-8 text-center transition-colors',
-          dragging ? 'border-brand-500 bg-brand-500/5' : 'border-slate-700 bg-surface-900/50',
+          dragging ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-700 bg-surface-900/50',
         )}
       >
         <UploadCloud size={28} className="mx-auto text-slate-500" aria-hidden />
@@ -366,7 +366,7 @@ export function TbDrop({ companies, companiesLoading, onCompaniesChanged, onSess
                         {x.status === 'ready' && (x.companyId && !dup ? <span className="text-slate-400">Ready</span> : <span className="text-amber-400">Needs a company</span>)}
                         {x.status === 'creating' && <span className="inline-flex items-center gap-1 text-slate-300"><Loader2 size={13} className="animate-spin" aria-hidden />Matching accounts…</span>}
                         {x.status === 'created' && x.sessionId && (
-                          <Link href={`/onboarding/conversion?sessionId=${encodeURIComponent(x.sessionId)}`} className="inline-flex items-center gap-1 text-brand-400 hover:underline">
+                          <Link href={`/onboarding/conversion?sessionId=${encodeURIComponent(x.sessionId)}`} className="inline-flex items-center gap-1 text-emerald-400 hover:underline">
                             <CheckCircle2 size={13} aria-hidden /> Review <ChevronRight size={12} aria-hidden />
                           </Link>
                         )}

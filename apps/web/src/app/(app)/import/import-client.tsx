@@ -144,7 +144,7 @@ export default function ImportClient() {
       {step === 'upload' && def && (
         <div>
           <BackBtn onClick={() => setStep('select')} label="Choose a different type" />
-          <h2 className="text-lg font-semibold text-ink-hi mb-1">{def.label}</h2>
+          <h2 className="text-lg font-semibold text-white mb-1">{def.label}</h2>
           <p className="text-sm text-slate-400 mb-5">{def.description} <span className="text-slate-500">→ {def.destination}</span></p>
           <label className="block cursor-pointer rounded-xl border-2 border-dashed border-slate-700 hover:border-brand-500/60 bg-surface-900 px-6 py-12 text-center transition-colors">
             <input type="file" accept=".csv,text/csv" className="hidden"
@@ -172,7 +172,7 @@ export default function ImportClient() {
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">Post to company</label>
                   <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
-                    className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi">
+                    className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white">
                     <option value="">Select a company…</option>
                     {companies.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.short_code})</option>)}
                   </select>
@@ -183,7 +183,7 @@ export default function ImportClient() {
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">Balances as of</label>
                   <input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)}
-                    className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-ink-hi" />
+                    className="w-full rounded-lg border border-slate-700 bg-surface-900 px-3 py-2 text-sm text-white" />
                 </div>
               )}
             </div>
@@ -201,7 +201,7 @@ export default function ImportClient() {
                 <ArrowRight size={14} className="text-slate-600 shrink-0" />
                 <select value={mapping[f.key] || NONE}
                   onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value }))}
-                  className="flex-1 rounded-lg border border-slate-700 bg-surface-950 px-2.5 py-1.5 text-sm text-ink-hi">
+                  className="flex-1 rounded-lg border border-slate-700 bg-surface-950 px-2.5 py-1.5 text-sm text-white">
                   <option value={NONE}>— Not mapped —</option>
                   {csv.headers.map((h) => <option key={h} value={h}>{h}</option>)}
                 </select>
@@ -221,7 +221,7 @@ export default function ImportClient() {
       {step === 'review' && def && preview && (
         <div>
           <BackBtn onClick={() => setStep('map')} label="Adjust mapping" />
-          <h2 className="text-lg font-semibold text-ink-hi mb-4">Review</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">Review</h2>
           <div className="grid grid-cols-3 gap-3 mb-5">
             <Stat label="Will import" value={preview.willInsert ?? 0} tone="ok" />
             <Stat label="Skipped (duplicates)" value={preview.skipped ?? 0} tone="muted" />
@@ -257,7 +257,7 @@ export default function ImportClient() {
           <div className="mx-auto mb-4 h-14 w-14 rounded-full bg-brand-500/15 flex items-center justify-center">
             <CircleCheck size={30} className="text-brand-400" />
           </div>
-          <h2 className="text-lg font-semibold text-ink-hi">Import complete</h2>
+          <h2 className="text-lg font-semibold text-white">Import complete</h2>
           <p className="text-sm text-slate-400 mt-1">
             {result.inserted ?? 0} record{(result.inserted ?? 0) === 1 ? '' : 's'} imported
             {result.lines ? ` (${result.lines} lines)` : ''}
@@ -271,7 +271,7 @@ export default function ImportClient() {
             </div>
           )}
           <button onClick={reset}
-            className="mt-6 inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-navy/[0.03] transition-colors">
+            className="mt-6 inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-white/[0.03] transition-colors">
             Import more data
           </button>
         </div>
@@ -303,12 +303,12 @@ function Stepper({ step }: { step: Step }) {
 function TypeGroup({ title, sub, icon, types, onPick }: { title: string; sub: string; icon: React.ReactNode; types: ImportTypeDef[]; onPick: (t: ImportTypeDef) => void }) {
   return (
     <div>
-      <div className="flex items-center gap-2 mb-1">{icon}<h3 className="text-sm font-semibold text-ink-hi">{title}</h3></div>
+      <div className="flex items-center gap-2 mb-1">{icon}<h3 className="text-sm font-semibold text-white">{title}</h3></div>
       <p className="text-xs text-slate-500 mb-3">{sub}</p>
       <div className="grid grid-cols-2 gap-3">
         {types.map((t) => (
           <button key={t.key} onClick={() => onPick(t)}
-            className="text-left rounded-xl border border-slate-800 bg-surface-900 hover:border-brand-500/50 hover:bg-navy/[0.02] px-4 py-3 transition-colors">
+            className="text-left rounded-xl border border-slate-800 bg-surface-900 hover:border-brand-500/50 hover:bg-white/[0.02] px-4 py-3 transition-colors">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-slate-100">{t.label}</span>
               <ArrowRight size={14} className="text-slate-600" />

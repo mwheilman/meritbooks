@@ -157,7 +157,7 @@ function SummaryCard({ label, value, tone }: { label: string; value: string; ton
     <div className="card p-4">
       <p className="text-xs text-slate-500">{label}</p>
       <p className={clsx('text-xl font-mono tabular-nums font-semibold mt-1',
-        tone === 'amber' ? 'text-amber-300' : tone === 'muted' ? 'text-slate-400' : 'text-ink-hi')}>
+        tone === 'amber' ? 'text-amber-300' : tone === 'muted' ? 'text-slate-400' : 'text-white')}>
         {value}
       </p>
     </div>
@@ -202,7 +202,7 @@ function ReleaseModal({ row, onClose, onDone }: { row: Row; onClose: () => void;
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
       <div className="card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Release retainage">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-ink-hi">Release retainage</h3>
+          <h3 className="text-base font-semibold text-white">Release retainage</h3>
           <button className="text-slate-500 hover:text-slate-300" onClick={onClose}><X size={18} /></button>
         </div>
 

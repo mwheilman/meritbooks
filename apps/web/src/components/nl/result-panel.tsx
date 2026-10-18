@@ -78,7 +78,7 @@ export function ResultPanel({ result, onDone }: { result: NlRouteResult; onDone:
             </div>
             <button
               onClick={() => { router.push(result.navigation!.href); onDone(); }}
-              className="inline-flex w-full items-center justify-between rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-ink-hi hover:border-brand-500/50 transition-colors"
+              className="inline-flex w-full items-center justify-between rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-white hover:border-emerald-500/50 transition-colors"
             >
               <span>Go to <span className="font-semibold">{result.navigation.label}</span></span>
               <ArrowRight size={16} className="text-emerald-400" />

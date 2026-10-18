@@ -188,7 +188,7 @@ export function DriverBuilder() {
         <select
           value={locationId}
           onChange={(e) => { setCompanyTouched(true); setLocationId(e.target.value); }}
-          className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi max-w-[260px]"
+          className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white max-w-[260px]"
         >
           <option value="">Select a company…</option>
           {locations.map((l) => <option key={l.id} value={l.id}>{l.short_code} · {l.name}</option>)}
@@ -196,7 +196,7 @@ export function DriverBuilder() {
         <select
           value={fiscalYear}
           onChange={(e) => setFiscalYear(parseInt(e.target.value, 10))}
-          className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-ink-hi font-mono"
+          className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono"
         >
           {FISCAL_YEARS.map((y) => <option key={y} value={y}>FY {y}</option>)}
         </select>
@@ -213,7 +213,7 @@ export function DriverBuilder() {
             onClick={save}
             disabled={saving || drivers.length === 0}
             className={clsx('flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium',
-              drivers.length > 0 && !saving ? 'bg-brand-500 text-white hover:bg-brand-600' : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed')}
+              drivers.length > 0 && !saving ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed')}
           >
             {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
             {saving ? 'Building…' : 'Build Budget'}
@@ -246,7 +246,7 @@ export function DriverBuilder() {
             {rows.length === 0 && (
               <div className="card p-8 text-center">
                 <p className="text-sm text-slate-400">No drivers yet.</p>
-                <button onClick={() => setRows([newRow()])} className="mt-2 text-xs text-brand-400 hover:text-brand-300">+ Add your first driver</button>
+                <button onClick={() => setRows([newRow()])} className="mt-2 text-xs text-emerald-400 hover:text-emerald-300">+ Add your first driver</button>
               </div>
             )}
             {rows.map((r) => (
@@ -316,7 +316,7 @@ function DriverCard({ row, accounts, onChange, onRemove }: {
   onChange: (patch: Partial<DriftRow>) => void;
   onRemove: () => void;
 }) {
-  const field = 'w-full px-2 py-1.5 bg-slate-900/60 border border-slate-800 rounded text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50';
+  const field = 'w-full px-2 py-1.5 bg-slate-900/60 border border-slate-800 rounded text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50';
   return (
     <div className="card p-3 space-y-2.5">
       <div className="flex items-center gap-2">
@@ -375,7 +375,7 @@ function LabeledInput({ label, value, onChange, placeholder, suffix }: {
           value={value}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full px-2 py-1.5 bg-slate-900/60 border border-slate-800 rounded text-right font-mono text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-brand-500/50"
+          className="w-full px-2 py-1.5 bg-slate-900/60 border border-slate-800 rounded text-right font-mono text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50"
         />
         {suffix && <span className="absolute right-2 top-1.5 text-2xs text-slate-500">{suffix}</span>}
       </div>

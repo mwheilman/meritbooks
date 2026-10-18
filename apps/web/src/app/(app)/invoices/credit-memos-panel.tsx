@@ -73,12 +73,12 @@ export function CreditMemosPanel({ prefill, onConsumePrefill }: {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-lg font-semibold text-ink-hi">Credit Memos</h2>
+          <h2 className="text-lg font-semibold text-white">Credit Memos</h2>
           <p className="text-sm text-gray-400 mt-1">Issue customer credits, post to the GL, and apply against open invoices</p>
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-medium transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
         >
           <Plus className="w-4 h-4" /> New Credit Memo
         </button>
@@ -94,7 +94,7 @@ export function CreditMemosPanel({ prefill, onConsumePrefill }: {
         ].map((c) => (
           <div key={c.label} className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
             <span className="text-sm text-gray-400">{c.label}</span>
-            <p className="text-xl font-mono font-semibold text-ink-hi mt-2">{c.value}</p>
+            <p className="text-xl font-mono font-semibold text-white mt-2">{c.value}</p>
             <p className="text-xs text-gray-500 mt-1">{c.sub}</p>
           </div>
         ))}
@@ -107,7 +107,7 @@ export function CreditMemosPanel({ prefill, onConsumePrefill }: {
           <p className="text-sm text-gray-500 mt-1">{error}</p>
         </div>
       ) : isLoading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-400 animate-spin" /></div>
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
       ) : memos.length === 0 ? (
         <EmptyState
           icon={Receipt}
@@ -134,11 +134,11 @@ export function CreditMemosPanel({ prefill, onConsumePrefill }: {
             <tbody>
               {memos.map((m) => (
                 <tr key={m.id} onClick={() => setDetailId(m.id)} className="border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/30">
-                  <td className="py-3 pr-4 font-mono text-ink-hi">{m.creditNumber ?? '—'}</td>
+                  <td className="py-3 pr-4 font-mono text-white">{m.creditNumber ?? '—'}</td>
                   <td className="py-3 pr-4 text-gray-300">{m.customer?.name ?? '—'}</td>
                   <td className="py-3 pr-4 text-gray-400 text-xs">{m.location?.name ?? '—'}</td>
                   <td className="py-3 pr-4 font-mono text-gray-400 text-xs">{m.creditDate}</td>
-                  <td className="py-3 pr-4 text-right font-mono text-ink-hi">{formatMoney(m.totalCents)}</td>
+                  <td className="py-3 pr-4 text-right font-mono text-white">{formatMoney(m.totalCents)}</td>
                   <td className="py-3 pr-4 text-right font-mono text-gray-400">{formatMoney(m.appliedCents)}</td>
                   <td className="py-3 pr-4 text-right font-mono text-emerald-400">{formatMoney(m.unappliedCents)}</td>
                   <td className="py-3 pr-4"><MemoStatusBadge status={m.status} /></td>
@@ -273,7 +273,7 @@ function CreditMemoDrawer({ memoId, onClose, onChanged }: {
             {data.status === 'DRAFT' && (
               <div className="flex items-center gap-2">
                 <button onClick={() => act('post', undefined, 'Credit memo posted to GL')} disabled={busy === 'post'}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50">
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50">
                   {busy === 'post' ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Post to GL
                 </button>
                 <button onClick={() => { if (confirm('Void this draft credit memo? The number is retained for audit.')) act('void', undefined, 'Credit memo voided'); }} disabled={busy === 'void'}
@@ -304,7 +304,7 @@ function CreditMemoDrawer({ memoId, onClose, onChanged }: {
                 <button
                   onClick={() => act('apply', applyTarget ? { invoice_id: applyTarget } : {}, 'Credit applied to invoice')}
                   disabled={busy === 'apply' || !applyTarget}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50">
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50">
                   {busy === 'apply' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Apply credit
                 </button>
               </div>
@@ -405,8 +405,8 @@ function CreateCreditMemoModal({ prefill, onClose, onCreated }: {
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center pt-8 overflow-y-auto">
       <div role="dialog" aria-modal="true" aria-label="Create credit memo" className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl mb-8">
         <div className="flex items-center justify-between p-6 border-b border-gray-700/50">
-          <h2 className="text-lg font-semibold text-ink-hi">Create Credit Memo</h2>
-          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-ink-hi"><X className="w-5 h-5" /></button>
+          <h2 className="text-lg font-semibold text-white">Create Credit Memo</h2>
+          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-6 space-y-5">
@@ -415,14 +415,14 @@ function CreateCreditMemoModal({ prefill, onClose, onCreated }: {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Company *</label>
-              <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi">
+              <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
                 <option value="">Select company</option>
                 {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Customer *</label>
-              <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setInvoiceId(''); }} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi">
+              <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setInvoiceId(''); }} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
                 <option value="">Select customer</option>
                 {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -432,11 +432,11 @@ function CreateCreditMemoModal({ prefill, onClose, onCreated }: {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Credit date *</label>
-              <input type="date" value={creditDate} onChange={(e) => setCreditDate(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi" />
+              <input type="date" value={creditDate} onChange={(e) => setCreditDate(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white" />
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Apply to invoice (optional)</label>
-              <select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)} disabled={!customerId} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi disabled:opacity-50">
+              <select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)} disabled={!customerId} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white disabled:opacity-50">
                 <option value="">No linked invoice</option>
                 {linkableInvoices.map((i) => <option key={i.id} value={i.id}>{i.invoiceNumber} · open {formatMoney(i.balanceCents)}</option>)}
               </select>
@@ -446,11 +446,11 @@ function CreateCreditMemoModal({ prefill, onClose, onCreated }: {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Reason</label>
-              <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Overbilled, returned goods" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi placeholder:text-gray-600" />
+              <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Overbilled, returned goods" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-600" />
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Memo</label>
-              <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Internal note" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-ink-hi placeholder:text-gray-600" />
+              <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Internal note" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-600" />
             </div>
           </div>
 
@@ -458,17 +458,17 @@ function CreateCreditMemoModal({ prefill, onClose, onCreated }: {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs text-gray-400 uppercase tracking-wider">Credit lines (revenue account to reverse)</label>
-              <button onClick={() => setLines((p) => [...p, { account_id: '', description: '', amount_cents: 0 }])} className="text-xs text-brand-400 hover:text-brand-300">+ Add line</button>
+              <button onClick={() => setLines((p) => [...p, { account_id: '', description: '', amount_cents: 0 }])} className="text-xs text-emerald-400 hover:text-emerald-300">+ Add line</button>
             </div>
             <div className="space-y-2">
               {lines.map((l, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                  <select value={l.account_id} onChange={(e) => updateLine(i, { account_id: e.target.value })} className="col-span-5 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-ink-hi">
+                  <select value={l.account_id} onChange={(e) => updateLine(i, { account_id: e.target.value })} className="col-span-5 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white">
                     <option value="">GL account…</option>
                     {accounts.map((a) => <option key={a.id} value={a.id}>{a.account_number} · {a.name}</option>)}
                   </select>
-                  <input type="text" value={l.description} onChange={(e) => updateLine(i, { description: e.target.value })} placeholder="Description" className="col-span-4 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-ink-hi placeholder:text-gray-600" />
-                  <input type="number" min={0} step={0.01} value={(l.amount_cents / 100).toFixed(2)} onChange={(e) => updateLine(i, { amount_cents: Math.round((parseFloat(e.target.value) || 0) * 100) })} className="col-span-2 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-ink-hi text-right font-mono" />
+                  <input type="text" value={l.description} onChange={(e) => updateLine(i, { description: e.target.value })} placeholder="Description" className="col-span-4 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white placeholder:text-gray-600" />
+                  <input type="number" min={0} step={0.01} value={(l.amount_cents / 100).toFixed(2)} onChange={(e) => updateLine(i, { amount_cents: Math.round((parseFloat(e.target.value) || 0) * 100) })} className="col-span-2 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono" />
                   <button onClick={() => setLines((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : p))} className="col-span-1 p-1 text-gray-500 hover:text-red-400"><X className="w-4 h-4" /></button>
                 </div>
               ))}
@@ -477,18 +477,18 @@ function CreateCreditMemoModal({ prefill, onClose, onCreated }: {
 
           {/* Totals */}
           <div className="border-t border-gray-700/50 pt-4 space-y-2">
-            <div className="flex justify-between text-sm"><span className="text-gray-400">Subtotal</span><span className="font-mono text-ink-hi">{formatMoney(subtotal)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-gray-400">Subtotal</span><span className="font-mono text-white">{formatMoney(subtotal)}</span></div>
             <div className="flex justify-between text-sm items-center">
               <span className="text-gray-400">Tax to reverse</span>
-              <input type="number" min={0} step={0.01} value={(taxCents / 100).toFixed(2)} onChange={(e) => setTaxCents(Math.round((parseFloat(e.target.value) || 0) * 100))} className="w-24 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-sm text-ink-hi text-right font-mono" />
+              <input type="number" min={0} step={0.01} value={(taxCents / 100).toFixed(2)} onChange={(e) => setTaxCents(Math.round((parseFloat(e.target.value) || 0) * 100))} className="w-24 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono" />
             </div>
-            <div className="flex justify-between text-base font-semibold border-t border-gray-700/50 pt-2"><span className="text-ink-hi">Total credit</span><span className="font-mono text-emerald-400">{formatMoney(total)}</span></div>
+            <div className="flex justify-between text-base font-semibold border-t border-gray-700/50 pt-2"><span className="text-white">Total credit</span><span className="font-mono text-emerald-400">{formatMoney(total)}</span></div>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-700/50">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-ink-hi">Cancel</button>
-          <button onClick={submit} disabled={submitting} className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+          <button onClick={submit} disabled={submitting} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Create Credit Memo
           </button>
         </div>

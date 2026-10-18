@@ -37,7 +37,7 @@ function SectionTotal({ label, amount }: { label: string; amount: number }) {
   const Icon = amount > 0 ? TrendingUp : amount < 0 ? TrendingDown : Minus;
   return (
     <tr className={clsx(LEDGER_SUBTOTAL, 'bg-slate-800/30')}>
-      <td className="px-6 py-2 text-sm font-semibold text-ink-hi flex items-center gap-2">
+      <td className="px-6 py-2 text-sm font-semibold text-white flex items-center gap-2">
         <Icon size={14} className={amount > 0 ? 'text-emerald-400' : amount < 0 ? 'text-red-fig' : 'text-slate-500'} />
         {label}
       </td>
@@ -92,7 +92,7 @@ export function CashFlowDirectReport({ startDate, endDate, locIds }: { startDate
 
       <div className="card overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-800">
-          <h2 className="text-base font-semibold text-ink-hi">Statement of Cash Flows</h2>
+          <h2 className="text-base font-semibold text-white">Statement of Cash Flows</h2>
           <p className="text-2xs text-slate-500 mt-0.5 font-mono">{startDate} through {endDate} — Direct Method</p>
         </div>
 
@@ -113,12 +113,12 @@ export function CashFlowDirectReport({ startDate, endDate, locIds }: { startDate
 
               <tr className="border-t-2 border-slate-700"><td colSpan={2} className="h-1" /></tr>
               <tr className="hover:bg-slate-800/20">
-                <td className="px-6 py-1.5 text-sm font-semibold text-ink-hi">Net Change in Cash</td>
-                <td className={`px-6 py-1.5 text-right font-mono tabular-nums text-sm font-semibold ${data.netChangeCents < 0 ? 'text-red-fig' : 'text-ink-hi'}`}>{formatMoney(data.netChangeCents)}</td>
+                <td className="px-6 py-1.5 text-sm font-semibold text-white">Net Change in Cash</td>
+                <td className={`px-6 py-1.5 text-right font-mono tabular-nums text-sm font-semibold ${data.netChangeCents < 0 ? 'text-red-fig' : 'text-white'}`}>{formatMoney(data.netChangeCents)}</td>
               </tr>
               <CfLine label="Beginning Cash Balance" amount={data.beginningCashCents} />
               <tr className={clsx(LEDGER_TOTAL, 'bg-emerald-500/[0.04]')}>
-                <td className="px-6 py-3 text-base font-semibold text-ink-hi">Ending Cash Balance</td>
+                <td className="px-6 py-3 text-base font-semibold text-white">Ending Cash Balance</td>
                 <td className="px-6 py-3 text-right text-lg font-mono tabular-nums font-semibold text-emerald-400">{formatMoney(data.endingCashCents)}</td>
               </tr>
             </tbody>

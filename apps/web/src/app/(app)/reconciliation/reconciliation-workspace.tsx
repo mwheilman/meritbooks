@@ -625,7 +625,7 @@ export function ReconciliationWorkspace({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
           <div>
-            <h2 className="flex items-center gap-2 text-base font-semibold text-ink-hi">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-white">
               Reconcile {account.accountName}
               {finalized && (
                 <span className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-medium text-emerald-400">
@@ -639,7 +639,7 @@ export function ReconciliationWorkspace({
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-1.5 text-slate-500 hover:bg-navy/[0.04] hover:text-slate-200"
+            className="rounded-md p-1.5 text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"
             aria-label="Close"
           >
             <X size={18} />
@@ -714,7 +714,7 @@ export function ReconciliationWorkspace({
               className={clsx(
                 'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium',
                 periodId && !finalized
-                  ? 'bg-slate-700 text-ink-hi hover:bg-slate-600'
+                  ? 'bg-slate-700 text-white hover:bg-slate-600'
                   : 'cursor-not-allowed bg-slate-800 text-slate-600',
               )}
             >
@@ -765,7 +765,7 @@ export function ReconciliationWorkspace({
             </div>
           ) : isLoading ? (
             <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-6 w-6 animate-spin text-brand-400" />
+              <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
             </div>
           ) : error ? (
             <div className="py-12 text-center">
@@ -783,13 +783,13 @@ export function ReconciliationWorkspace({
               {/* Statement import result — anchored balance + auto-cleared vs needs-review split */}
               {importResult && (
                 <div className="mb-4 rounded-lg border border-indigo-500/25 bg-indigo-500/[0.06] p-4">
-                  <div className="mb-3 flex items-center gap-1.5 text-sm font-medium text-ink-hi">
+                  <div className="mb-3 flex items-center gap-1.5 text-sm font-medium text-white">
                     <Wand2 size={14} className="text-indigo-400" />
                     Statement imported
                     <span className="ml-1 truncate text-2xs font-normal text-slate-500">{importResult.meta.fileName}</span>
                     <button
                       onClick={() => setImportResult(null)}
-                      className="ml-auto rounded p-1 text-slate-500 hover:bg-navy/[0.04] hover:text-slate-300"
+                      className="ml-auto rounded p-1 text-slate-500 hover:bg-white/[0.04] hover:text-slate-300"
                       aria-label="Dismiss import summary"
                     >
                       <X size={14} />
@@ -799,7 +799,7 @@ export function ReconciliationWorkspace({
                   <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                     <div className="rounded-md bg-slate-800/50 px-3 py-2">
                       <p className="text-2xs uppercase tracking-wider text-slate-500">Ending balance</p>
-                      <p className="mt-0.5 font-mono text-sm text-ink-hi">
+                      <p className="mt-0.5 font-mono text-sm text-white">
                         {importResult.anchored && importResult.statementEndingBalanceCents != null
                           ? formatMoney(importResult.statementEndingBalanceCents)
                           : '—'}
@@ -979,7 +979,7 @@ export function ReconciliationWorkspace({
               {/* Stale reconciling items — aged, never-cleared items to investigate */}
               {data.staleItems.length > 0 && (
                 <div className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/[0.05] p-4">
-                  <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-ink-hi">
+                  <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-white">
                     <Clock size={14} className="text-amber-400" />
                     Stale reconciling items
                     <span className="ml-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
@@ -1040,7 +1040,7 @@ export function ReconciliationWorkspace({
               {/* Authorized override of the must-tie gate — reason required */}
               {rec && !finalized && overrideOpen && (
                 <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] p-4">
-                  <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-ink-hi">
+                  <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-white">
                     <ShieldAlert size={14} className="text-amber-400" /> Override the tie-out gate
                   </div>
                   {data.capabilities.overrideAvailable ? (
@@ -1062,14 +1062,14 @@ export function ReconciliationWorkspace({
                       <div className="mt-3 flex items-center justify-end gap-2">
                         <button
                           onClick={() => { setOverrideOpen(false); setOverrideReason(''); }}
-                          className="rounded-md px-3 py-1.5 text-xs text-slate-400 hover:bg-navy/[0.04] hover:text-slate-200"
+                          className="rounded-md px-3 py-1.5 text-xs text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
                         >
                           Cancel
                         </button>
                         <button
                           onClick={submitOverride}
                           disabled={busy === 'finalize' || overrideReason.trim().length < 8}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-amber-700 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {busy === 'finalize' ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />}
                           Override &amp; finalize
@@ -1088,7 +1088,7 @@ export function ReconciliationWorkspace({
               {/* AI-drafted adjusting entries (RECON_ADJUSTMENT) — propose → human approves */}
               {rec && !finalized && proposals.length > 0 && (
                 <div className="mb-4 rounded-lg border border-indigo-500/25 bg-indigo-500/[0.05] p-4">
-                  <div className="mb-3 flex items-center gap-1.5 text-sm font-medium text-ink-hi">
+                  <div className="mb-3 flex items-center gap-1.5 text-sm font-medium text-white">
                     <Sparkles size={14} className="text-indigo-400" />
                     Suggested adjustments
                     <span className="ml-1 rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-medium text-indigo-300">
@@ -1155,7 +1155,7 @@ export function ReconciliationWorkspace({
               {rec && !finalized && !showAdjust && (
                 <button
                   onClick={openAdjust}
-                  className="mb-4 inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-brand-500/40 hover:text-ink-hi"
+                  className="mb-4 inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-brand-500/40 hover:text-white"
                 >
                   <Plus size={13} /> Add adjustment
                 </button>
@@ -1164,12 +1164,12 @@ export function ReconciliationWorkspace({
               {rec && !finalized && showAdjust && (
                 <div className="mb-4 rounded-lg border border-slate-700 bg-slate-800/40 p-4">
                   <div className="mb-3 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 text-sm font-medium text-ink-hi">
+                    <span className="flex items-center gap-1.5 text-sm font-medium text-white">
                       <Receipt size={14} className="text-indigo-400" /> Adjusting entry
                     </span>
                     <button
                       onClick={() => setShowAdjust(false)}
-                      className="rounded p-1 text-slate-500 hover:bg-navy/[0.04] hover:text-slate-300"
+                      className="rounded p-1 text-slate-500 hover:bg-white/[0.04] hover:text-slate-300"
                       aria-label="Cancel adjustment"
                     >
                       <X size={15} />
@@ -1336,7 +1336,7 @@ export function ReconciliationWorkspace({
                                 className={clsx(
                                   'flex h-5 w-5 items-center justify-center rounded border transition-colors',
                                   line.cleared
-                                    ? 'border-brand-500 bg-brand-500/20 text-brand-300'
+                                    ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400'
                                     : 'border-slate-600 text-transparent hover:border-slate-400',
                                   disabled && 'cursor-not-allowed opacity-50',
                                 )}
@@ -1396,7 +1396,7 @@ export function ReconciliationWorkspace({
             {rec && (
               <button
                 onClick={loadMemo}
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:border-indigo-500/40 hover:text-ink-hi"
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:border-indigo-500/40 hover:text-white"
               >
                 <FileText size={13} className="text-indigo-400" /> Draft memo
               </button>
@@ -1404,7 +1404,7 @@ export function ReconciliationWorkspace({
             <button
               onClick={() => setHistoryOpen(true)}
               title="View prior finalized reconciliations for this account"
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:border-indigo-500/40 hover:text-ink-hi"
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:border-indigo-500/40 hover:text-white"
             >
               <History size={13} className="text-indigo-400" /> History
             </button>
@@ -1412,7 +1412,7 @@ export function ReconciliationWorkspace({
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="rounded-md px-4 py-2 text-sm text-slate-400 hover:bg-navy/[0.04] hover:text-slate-200"
+              className="rounded-md px-4 py-2 text-sm text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
             >
               Close
             </button>
@@ -1430,7 +1430,7 @@ export function ReconciliationWorkspace({
                 onClick={() => finalize()}
                 disabled={busy === 'finalize'}
                 title="Finalize and lock"
-                className="inline-flex items-center gap-2 rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+                className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
               >
                 {busy === 'finalize' ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
                 Finalize &amp; lock
@@ -1468,12 +1468,12 @@ export function ReconciliationWorkspace({
             className="fixed left-1/2 top-1/2 z-[70] flex max-h-[85vh] w-[620px] max-w-[94vw] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-slate-700 bg-surface-900 shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-              <h3 className="flex items-center gap-2 text-base font-semibold text-ink-hi">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-white">
                 <FileText size={16} className="text-indigo-400" /> Reconciliation memo
               </h3>
               <button
                 onClick={() => setMemoOpen(false)}
-                className="rounded-md p-1.5 text-slate-500 hover:bg-navy/[0.04] hover:text-slate-200"
+                className="rounded-md p-1.5 text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"
                 aria-label="Close memo"
               >
                 <X size={18} />
@@ -1542,7 +1542,7 @@ export function ReconciliationWorkspace({
             <div className="flex items-center justify-end gap-2 border-t border-slate-800 px-5 py-4">
               <button
                 onClick={() => setMemoOpen(false)}
-                className="rounded-md px-4 py-2 text-sm text-slate-400 hover:bg-navy/[0.04] hover:text-slate-200"
+                className="rounded-md px-4 py-2 text-sm text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
               >
                 Close
               </button>
@@ -1588,7 +1588,7 @@ function Stat({
         ? 'text-red-400'
         : tone === 'muted'
           ? 'text-slate-500'
-          : 'text-ink-hi';
+          : 'text-white';
   return (
     <div className="rounded-lg bg-slate-800/40 px-3 py-2.5">
       <p className="text-[11px] uppercase tracking-wider text-slate-500">{label}</p>

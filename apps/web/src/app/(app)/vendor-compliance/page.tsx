@@ -216,7 +216,7 @@ function VendorCompliancePageInner() {
                     )}
                   >
                     {f.label}
-                    <span className={clsx('rounded px-1.5 py-0.5 font-mono text-[10px]', filter === f.key ? 'bg-brand-500/20' : 'bg-slate-700/50 text-slate-400')}>
+                    <span className={clsx('rounded px-1.5 py-0.5 font-mono text-[10px]', filter === f.key ? 'bg-emerald-500/20' : 'bg-slate-700/50 text-slate-400')}>
                       {counts[f.key]}
                     </span>
                   </button>
@@ -337,7 +337,7 @@ function SummaryCard({ label, value, tone, icon: Icon }: {
 }) {
   const cls =
     tone === 'red' ? 'text-red-400' : tone === 'amber' ? 'text-amber-300' : tone === 'emerald' ? 'text-emerald-400'
-    : tone === 'indigo' ? 'text-indigo-300' : tone === 'muted' ? 'text-slate-400' : 'text-ink-hi';
+    : tone === 'indigo' ? 'text-indigo-300' : tone === 'muted' ? 'text-slate-400' : 'text-white';
   return (
     <div className="card p-4">
       <p className="text-xs text-slate-500 flex items-center gap-1.5">{Icon && <Icon size={12} />} {label}</p>
@@ -375,7 +375,7 @@ function GrantOverrideModal({ row, onClose, onDone }: { row: Row; onClose: () =>
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
       <div className="card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-ink-hi">Override payment hold</h3>
+          <h3 className="text-base font-semibold text-white">Override payment hold</h3>
           <button className="text-slate-500 hover:text-slate-300" onClick={onClose}><X size={18} /></button>
         </div>
 

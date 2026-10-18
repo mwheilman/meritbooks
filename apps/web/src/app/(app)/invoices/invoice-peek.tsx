@@ -24,7 +24,7 @@ export function InvoicePeek({ invoiceId }: { invoiceId: string }) {
   const more = (data.lines?.length ?? 0) - shown.length;
 
   return (
-    <div className="bg-white text-slate-800 m-2 rounded-lg border border-slate-800 shadow-card p-3 text-[11px] leading-relaxed">
+    <div className="bg-white text-slate-800 m-2 rounded-lg p-3 text-[11px] leading-relaxed">
       <div className="flex items-start justify-between mb-2">
         <div>
           <div className="font-semibold text-slate-900 text-xs">{data.locationName || 'Company'}</div>
@@ -37,15 +37,15 @@ export function InvoicePeek({ invoiceId }: { invoiceId: string }) {
       </div>
       <div className="border-t border-slate-200 pt-1.5 mb-1.5">
         <span className="text-[10px] text-slate-500">Bill to </span>
-        <span className="font-medium text-slate-300">{data.customerName || '--'}</span>
+        <span className="font-medium text-slate-700">{data.customerName || '--'}</span>
         <span className="float-right text-[10px] text-slate-500">Due {data.dueDate}</span>
       </div>
       <table className="w-full">
         <tbody>
           {shown.map((l) => (
             <tr key={l.id} className="border-b border-slate-100">
-              <td className="py-0.5 pr-2 text-slate-300 truncate max-w-[180px]">{l.description}</td>
-              <td className="py-0.5 text-right font-mono text-slate-300 whitespace-nowrap">{formatMoney(l.amountCents)}</td>
+              <td className="py-0.5 pr-2 text-slate-700 truncate max-w-[180px]">{l.description}</td>
+              <td className="py-0.5 text-right font-mono text-slate-700 whitespace-nowrap">{formatMoney(l.amountCents)}</td>
             </tr>
           ))}
           {more > 0 && (
@@ -67,7 +67,7 @@ function Row({ label, value, bold, accent }: { label: string; value: string; bol
   return (
     <div className="flex justify-between">
       <span className={bold ? 'font-semibold text-slate-900' : 'text-slate-500'}>{label}</span>
-      <span className={`font-mono ${accent ? 'text-rose-600 font-semibold' : bold ? 'text-slate-900 font-semibold' : 'text-slate-300'}`}>{value}</span>
+      <span className={`font-mono ${accent ? 'text-rose-600 font-semibold' : bold ? 'text-slate-900 font-semibold' : 'text-slate-700'}`}>{value}</span>
     </div>
   );
 }

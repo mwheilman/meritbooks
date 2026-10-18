@@ -310,7 +310,7 @@ export function DocumentsCenter() {
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={uploading}
-            className="px-3 py-1.5 text-xs font-medium bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-lg inline-flex items-center gap-1.5"
+            className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg inline-flex items-center gap-1.5"
           >
             {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
             {uploading ? 'Uploading…' : 'Upload'}
@@ -389,7 +389,7 @@ export function DocumentsCenter() {
               type="button"
               onClick={downloadSelected}
               disabled={bulkBusy}
-              className="px-3 py-1.5 text-xs font-medium bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-lg inline-flex items-center gap-1.5"
+              className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg inline-flex items-center gap-1.5"
             >
               {bulkBusy ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
               Download selected
@@ -408,7 +408,7 @@ export function DocumentsCenter() {
       {/* List */}
       {docs === null ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
+          <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
         </div>
       ) : error ? (
         <div className="card p-10 text-center">
@@ -437,7 +437,7 @@ export function DocumentsCenter() {
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className="px-4 py-2 text-sm font-medium bg-brand-500 hover:bg-brand-600 text-white rounded-lg inline-flex items-center gap-1.5"
+              className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg inline-flex items-center gap-1.5"
             >
               <Upload size={14} /> Upload a document
             </button>
@@ -454,7 +454,7 @@ export function DocumentsCenter() {
                       type="checkbox"
                       checked={allSelected}
                       onChange={toggleSelectAll}
-                      className="accent-brand-500 cursor-pointer"
+                      className="accent-emerald-500 cursor-pointer"
                       aria-label="Select all"
                     />
                   </th>
@@ -477,7 +477,7 @@ export function DocumentsCenter() {
                           type="checkbox"
                           checked={isSel}
                           onChange={() => toggleOne(doc.id)}
-                          className="accent-brand-500 cursor-pointer"
+                          className="accent-emerald-500 cursor-pointer"
                           aria-label={`Select ${doc.file_name}`}
                         />
                       </td>
@@ -489,7 +489,7 @@ export function DocumentsCenter() {
                           title="View"
                         >
                           <FileText size={14} className="text-slate-500 shrink-0" />
-                          <span className="text-xs text-ink-hi truncate group-hover:text-brand-300 max-w-xs">{doc.file_name}</span>
+                          <span className="text-xs text-white truncate group-hover:text-emerald-300 max-w-xs">{doc.file_name}</span>
                         </button>
                         {doc.notes && <p className="text-[10px] text-slate-600 mt-0.5 truncate max-w-xs">{doc.notes}</p>}
                       </td>
@@ -501,7 +501,7 @@ export function DocumentsCenter() {
                           href ? (
                             <Link
                               href={href}
-                              className="inline-flex items-center gap-1 text-[11px] text-slate-300 hover:text-brand-300 group"
+                              className="inline-flex items-center gap-1 text-[11px] text-slate-300 hover:text-emerald-300 group"
                               title={`Open ${entityTypeLabel(doc.entity_type)} record`}
                             >
                               <Link2 size={11} className="text-emerald-500" />
@@ -529,7 +529,7 @@ export function DocumentsCenter() {
                           <button type="button" onClick={() => openDoc(doc, 'view')} title="View" className="p-1.5 text-slate-500 hover:text-blue-300 rounded">
                             <Eye size={13} />
                           </button>
-                          <button type="button" onClick={() => openDoc(doc, 'download')} title="Download" className="p-1.5 text-slate-500 hover:text-brand-300 rounded">
+                          <button type="button" onClick={() => openDoc(doc, 'download')} title="Download" className="p-1.5 text-slate-500 hover:text-emerald-300 rounded">
                             <Download size={13} />
                           </button>
                           <button type="button" onClick={() => remove(doc)} title="Delete" className="p-1.5 text-slate-500 hover:text-red-400 rounded">
