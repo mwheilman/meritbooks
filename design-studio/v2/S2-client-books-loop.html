@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=1440">
+<title>S2 · Client books — books-review loop · MeritBooks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="system.css">
+<style>
+/* Board chrome (review sheet only — not part of the product) */
+.sheet-top{display:flex;align-items:center;gap:24px;height:48px;padding:0 48px;background:var(--midnight);color:var(--grey-300)}
+.sheet-top img{height:24px;width:auto}
+.sheet-top nav{margin-left:auto;display:flex;gap:4px}
+.sheet-top nav a{height:32px;display:inline-flex;align-items:center;padding:0 12px;color:var(--grey-300);font-weight:500;white-space:nowrap}
+.sheet-top nav a:hover,.sheet-top nav a[aria-current=page]{background:var(--night-800);color:var(--warm)}
+.sample{color:var(--slate);font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:500;white-space:nowrap}
+.sheet{padding:0 48px 96px}
+.board-h{display:flex;align-items:center;gap:16px;height:56px;border-bottom:1px solid var(--electric)}
+.board-h .t-head{white-space:nowrap}
+.board-h .sp{flex:1}
+.board-h2{margin-top:56px}
+.frame{border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);position:relative;margin:0 -48px;background:var(--warm)}
+.frame-cap{display:flex;justify-content:space-between;gap:24px;margin-top:8px;font-size:12px;line-height:16px;color:var(--ink-3)}
+.anno{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:24px}
+.anno div{border-top:1px solid var(--line-2);padding-top:12px}
+.anno b{display:block;font-weight:600;margin-bottom:4px}
+.anno p{color:var(--ink-2)}
+body{min-width:1440px}
+/* ---- S2 screen-specific layout ---- */
+.ctxline .warn{color:var(--warn)}
+/* Four-step header: a real sequence, so it is numbered. Outline Syne numerals
+   from the guide; the current step fills, a finished step becomes a check. */
+.loop-h{display:flex;align-items:center;gap:16px;margin-bottom:12px}
+.loop-h .sp{flex:1}
+.loop{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line-2);background:var(--white)}
+.lstep:last-child{border-right:0}
+.lstep{display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:12px;align-items:start;padding:16px 16px 14px;border-right:1px solid var(--line);text-align:left;min-width:0;transition:background-color var(--fast)}
+.lstep:hover{background:var(--grey-100)}
+.lstep .num{font:700 28px/32px var(--f-display);color:transparent;-webkit-text-stroke:1px var(--electric);font-variant-numeric:tabular-nums}
+.lstep[aria-selected=true]{background:var(--sky);box-shadow:inset 0 -2px var(--electric)}
+.lstep[aria-selected=true] .num{color:var(--electric);-webkit-text-stroke:0}
+.lstep.is-done .num{display:grid;place-items:center;width:32px;height:32px;border:1.5px solid var(--pos);color:var(--pos);-webkit-text-stroke:0}
+.lstep .top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.lstep .nm{font:600 15px/24px var(--f-text);color:var(--ink)}
+.lstep .est{color:var(--ink-3);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.lstep .cnt{color:var(--ink);font-weight:500;white-space:nowrap}
+.lstep .l2{margin-top:2px}
+.lact{display:flex;flex-direction:column;justify-content:center;gap:6px;padding:12px 16px;background:var(--canvas)}
+.lact .t-cap{white-space:nowrap}
+.lact .btn{width:100%}
+
+.body{display:grid;grid-template-columns:minmax(0,8fr) minmax(0,4fr);column-gap:24px;margin-top:24px;align-items:start}
+.blk{background:var(--white);border:1px solid var(--line)}
+.blk+.blk{margin-top:24px}
+.blk-h{display:flex;align-items:center;gap:12px;height:48px;padding:0 8px 0 16px;border-bottom:1px solid var(--line)}
+.blk-h h3{font:600 15px/24px var(--f-text);white-space:nowrap}
+.blk-h .meta{color:var(--ink-3);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.blk-h .act{margin-left:auto;display:flex;gap:4px;flex:none}
+.blk-f{display:flex;align-items:center;gap:12px;height:48px;padding:0 8px 0 16px;border-top:1px solid var(--line);color:var(--ink-2)}
+.blk-f .sp{flex:1}
+.ret{margin-bottom:24px}
+.ret .note-title{margin-top:8px}
+.ret p{color:var(--ink-2);margin-top:4px;max-width:80ch}
+.ret .note-acts{margin-left:0}
+.bands-in{border:0;border-bottom:1px solid var(--line)}
+.bands-in .band-tab{min-width:0}
+.bands-in .t-cap{white-space:nowrap}
+.tbl-q td .l1 .code{font-weight:600}
+.asks{color:var(--warn);font-weight:500}
+.chk{list-style:none}
+.chk li{display:grid;grid-template-columns:24px minmax(0,1fr) auto;column-gap:12px;align-items:center;min-height:48px;padding:6px 8px 6px 16px;border-bottom:1px solid var(--line)}
+.chk li:last-child{border-bottom:0}
+.chk .mk{display:grid;place-items:center;width:20px;height:20px;border:1.5px solid var(--pos);color:var(--pos)}
+.chk .mk.open{border:1.5px solid var(--ink-2);color:var(--ink-2)}
+.chk .l1{white-space:normal}
+.donewhen{display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--canvas);color:var(--ink-2);border-top:1px solid var(--line)}
+.donewhen b{color:var(--ink)}
+.side .blk-h h3{font-size:15px}
+.dfy{list-style:none;padding:8px 0}
+.dfy li{display:grid;grid-template-columns:minmax(0,1fr) 56px;column-gap:12px;align-items:center;height:32px;padding:0 16px}
+.dfy .lab{display:flex;align-items:baseline;gap:8px;min-width:0;white-space:nowrap}
+.dfy .lab .dl{flex:1;border-bottom:1px dotted var(--grey-400);transform:translateY(-4px);min-width:12px}
+.dfy .c{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.nlink{color:inherit;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px;transition:text-decoration-color var(--fast)}
+.nlink:hover,.nlink:focus-visible{text-decoration-color:var(--electric);color:var(--electric)}
+.rq{list-style:none}
+.rq li{display:grid;grid-template-columns:minmax(0,1fr) 36px auto;column-gap:8px;align-items:center;min-height:52px;padding:6px 8px 6px 16px;border-bottom:1px solid var(--line)}
+.rq li:last-child{border-bottom:0}
+.rq li.is-attn{box-shadow:inset 3px 0 var(--neg)}
+.ppl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 12px;padding:16px;align-items:center}
+.ppl .l2{white-space:normal}
+/* completion */
+.handoff{display:grid;grid-template-columns:minmax(0,8fr) minmax(0,4fr);column-gap:24px;margin-top:24px;align-items:start}
+.ho-main{background:var(--white);border:1px solid var(--line-2);border-top:2px solid var(--pos)}
+.ho-top{display:flex;align-items:flex-start;gap:16px;padding:24px 24px 8px}
+.ho-top .t-section{color:var(--ink)}
+.ho-top p{color:var(--ink-2);margin-top:4px}
+.ho-led{padding:8px 24px 16px 72px}
+.ho-led .ev li{line-height:32px}
+.next{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:24px;margin:8px 24px 24px 72px;padding:16px;background:var(--sky);box-shadow:inset 3px 0 var(--electric)}
+.next .t-head{margin-top:2px}
+.skip-note{display:flex;align-items:center;gap:12px;margin:0 24px 24px 72px;color:var(--ink-2)}
+.steps-after{list-style:none;padding:8px 16px 16px}
+.steps-after li{display:grid;grid-template-columns:24px minmax(0,1fr);column-gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.steps-after li:last-child{border-bottom:0}
+.steps-after .no{font:700 15px/20px var(--f-display);color:var(--electric)}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></symbol>
+<symbol id="i-down" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></symbol>
+<symbol id="i-right" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></symbol>
+<symbol id="i-left" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 8H3M7 4 3 8l4 4"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></symbol>
+<symbol id="i-x" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+<symbol id="i-receipt" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h8v12l-2-1.2L8 14l-2-1.2L4 14Z"/><path d="M6 6h4M6 9h4"/></symbol>
+<symbol id="i-bill" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h5.5L12 4.5V14H4Z"/><path d="M6 7.5h4M6 10.5h3"/></symbol>
+<symbol id="i-none" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"><rect x="3" y="3" width="10" height="10"/></symbol>
+<symbol id="i-copy" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="8.5" height="8.5"/><path d="M3 11V2.5h8.5"/></symbol>
+<symbol id="i-swap" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 5.5h10l-2.5-2.5M13.5 10.5h-10l2.5 2.5"/></symbol>
+<symbol id="i-sched" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M2.5 6h11M6 6v7.5"/></symbol>
+<symbol id="i-grid" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h12M2 11h12"/><rect x="9" y="3" width="2.5" height="4" fill="#fff"/><rect x="4.5" y="9" width="2.5" height="4" fill="#fff"/></symbol>
+<symbol id="i-plug" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2v3.5M10 2v3.5M4 5.5h8v2a4 4 0 0 1-8 0Z"/><path d="M8 11.5V14"/></symbol>
+<symbol id="i-ask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 3h11v8H7l-3 2.5V11H2.5Z"/></symbol>
+<symbol id="i-phone" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 2.5h3l1 3-1.75 1.25a8 8 0 0 0 4 4L10.5 9l3 1v3a1 1 0 0 1-1 1A10.5 10.5 0 0 1 2 3.5a1 1 0 0 1 1-1Z"/></symbol>
+<symbol id="i-flag" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3.5 14V2.5h8l-1.5 3 1.5 3h-8"/></symbol>
+<symbol id="i-undo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 3.5 2.5 6.5l3 3"/><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7"/></symbol>
+<symbol id="i-dice" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="11" height="11"/><circle cx="5.5" cy="5.5" r=".6" fill="currentColor"/><circle cx="10.5" cy="10.5" r=".6" fill="currentColor"/><circle cx="8" cy="8" r=".6" fill="currentColor"/></symbol>
+<symbol id="i-card" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="3.5" width="13" height="9"/><path d="M1.5 6.5h13M4 10h3"/></symbol>
+<symbol id="i-bank" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 6 8 2.5 14 6Z"/><path d="M3.5 6.5v5M6.5 6.5v5M9.5 6.5v5M12.5 6.5v5M2 13.5h12"/></symbol>
+<symbol id="i-rule" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h10M3 8h6M3 12h8"/><path d="M12 9.5l1.5 1.5L12 12.5"/></symbol>
+<symbol id="i-clip" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.5 4.5 5.8 9.2a1.5 1.5 0 0 0 2.1 2.1l5-5a3 3 0 0 0-4.2-4.2l-5 5a4.5 4.5 0 0 0 6.4 6.4l3.4-3.4"/></symbol>
+<symbol id="i-camera" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M1.5 5h3l1.5-2h4l1.5 2h3v8h-13Z"/><circle cx="8" cy="8.75" r="2.5"/></symbol>
+<symbol id="i-mail" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="3.5" width="13" height="9"/><path d="M1.5 4 8 9l6.5-5"/></symbol>
+<symbol id="i-lock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="7" width="9" height="6.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></symbol>
+<symbol id="i-book" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 2.5h7.5L13 5v8.5H3Z"/><path d="M5.5 6.5h5M5.5 9h5M5.5 11.5h3"/></symbol>
+<symbol id="i-eye" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></symbol>
+<symbol id="i-text" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h10M3 8h10M3 12h6"/></symbol>
+</defs></svg>
+<a class="skip" href="#main">Skip to content</a>
+<header class="sheet-top on-dark">
+  <img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24">
+  <span class="eyebrow" style="color:var(--slate)">MeritBooks<span class="sl">//</span>Bookkeeper tier</span>
+  <span class="sample">Sample data</span>
+  <nav aria-label="Design pages"><a href="index.html">Index</a><a href="S1-bookkeeper-home.html">S1 Home</a><a href="S2-client-books-loop.html" aria-current="page">S2 Client books</a><a href="S3-review-queue.html">S3 Review queue</a><a href="S4-client-request-mobile.html">S4 Client request</a></nav>
+</header>
+<main id="main" class="sheet">
+  <div class="board-h">
+    <span class="eyebrow">S2<span class="sl">//</span>IA-SPEC §4.1 · client home</span>
+    <span class="t-head">Inside Clive Power Equipment. Four steps, step 1 open, one item returned by the reviewer.</span>
+    <span class="sp"></span><a class="btn btn--quiet" href="#done-h">Jump to the completion state<svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg></a>
+  </div>
+  <div class="frame" id="open">
+  <div class="app app--frame density-cockpit" data-context="client">
+    <aside class="rail" aria-label="Primary">
+      <div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"><span class="prod">BOOKS</span></div>
+      <nav class="rail-nav">
+        <div class="rail-group">Home</div>
+        <a class="rail-link" href="#" aria-current="page">Client home</a>
+        <a class="rail-link" href="S3-review-queue.html">To review<span class="count">18</span></a>
+        <a class="rail-link" href="#">Requests<span class="count">3</span></a>
+        <a class="rail-link" href="#">Close<span class="count">14/22</span></a>
+        <div class="rail-group">Payables</div>
+        <a class="rail-link" href="#">Bills</a>
+        <a class="rail-link" href="#">Receipts</a>
+        <a class="rail-link" href="#">Pay runs</a>
+        <a class="rail-link" href="#">Vendors</a>
+        <div class="rail-group">Receivables</div>
+        <a class="rail-link" href="#">Invoices</a>
+        <a class="rail-link" href="#">Customers</a>
+        <div class="rail-group">Banking &amp; cash</div>
+        <a class="rail-link" href="#">Bank feed</a>
+        <a class="rail-link" href="#">Reconciliation<span class="count">3</span></a>
+        <a class="rail-link" href="#">Debt &amp; loans</a>
+        <div class="rail-group">Accounting</div>
+        <a class="rail-link" href="#">Journal entries</a>
+        <a class="rail-link" href="#">Chart of accounts</a>
+        <div class="rail-group">Reports</div>
+        <a class="rail-link" href="#">Reports</a>
+      </nav>
+      <div class="rail-foot"><div class="rail-user"><span class="avatar">DL</span><span>Dana Lee<small>Preparer · Clive</small></span></div></div>
+    </aside>
+    <header class="bar">
+      <button class="ctx" type="button" aria-haspopup="dialog"><i class="pip pip--open" aria-hidden="true"></i><span class="ctx-name">Clive Power Equipment</span><span class="ctx-meta tnum">C-102 · Sep open</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg><span class="kbd">⌘J</span></button>
+      <span class="crumbs"><b>Client home</b></span>
+      <button class="cmdk" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><span>Jump to vendor, account, JE…</span><span class="kbd">⌘K</span></button>
+      <span class="sync"><i aria-hidden="true"></i>Synced 9:38 AM</span>
+    </header>
+    <div class="main">
+      <div class="ctxline">
+        <span>Mon Oct 19</span><span class="sl">//</span><span>September books review</span><span class="sl">//</span><span>Due Wed Oct 21</span><span class="sl">//</span><b class="warn">At risk · 9h 30m of work, 5h 45m open before due</b>
+        <span class="sp"></span><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-sliders"/></svg>Customize</button>
+      </div>
+      <div class="page">
+        <div class="loop-h"><span class="t-head">September books review</span><span class="t-cap">Preparer Dana Lee · reviewer Jordan Smith · 4 steps, in order</span><span class="sp"></span><span class="t-cap">4 steps open · 9h 30m left</span><button class="btn btn--primary" type="button" disabled>Mark ready for review</button></div>
+        <div class="loop" role="tablist" aria-label="September books review">
+          <button class="lstep" role="tab" aria-selected="true" aria-controls="step1"><span class="num" aria-hidden="true">1</span><span><span class="top"><span class="nm">Review</span><span class="est">1h 30m</span></span><span class="cnt tnum">18 need you · 212 ready</span><span class="l2">1,108 of 1,338 already posted</span></span></button>
+          <button class="lstep" role="tab" aria-selected="false"><span class="num" aria-hidden="true">2</span><span><span class="top"><span class="nm">Reconcile</span><span class="est">1h 55m</span></span><span class="cnt tnum">3 accounts · 2 off, 1 to sign</span><span class="l2">Statements imported for all 3</span></span></button>
+          <button class="lstep" role="tab" aria-selected="false"><span class="num" aria-hidden="true">3</span><span><span class="top"><span class="nm">Check</span><span class="est">2h 05m</span></span><span class="cnt tnum">5 exceptions</span><span class="l2">Detectors ran 6:00 AM today</span></span></button>
+          <button class="lstep" role="tab" aria-selected="false"><span class="num" aria-hidden="true">4</span><span><span class="top"><span class="nm">Close</span><span class="est">4h 00m</span></span><span class="cnt tnum">14 of 22 tasks</span><span class="l2">6 auto-verified · packet drafted</span></span></button>
+        </div>
+
+        <div class="body" id="step1" role="tabpanel" aria-label="Step 1 Review">
+          <div>
+            <div class="note note--panel ret">
+              <div class="row row--between"><span class="tag tag--neg">Returned by Jordan Smith · Fri Oct 16</span><span class="t-cap">Belongs to step 1 · in Decide</span></div>
+              <h4 class="note-title">Stihl Inc. · Sep 22 · 2,140.00 is a co-op advertising rebate, not a parts credit</h4>
+              <p>“Reclass to 4910 Vendor rebates and make it a rule, so the quarterly ones land there.” It posted to 5110 Parts inventory on Sep 23.</p>
+              <div class="note-acts"><button class="btn btn--primary" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-rule"/></svg>Reclass to 4910 and add rule</button><button class="btn btn--quiet" type="button">Reply to Jordan</button></div>
+            </div>
+
+            <section class="blk" aria-labelledby="feed-h">
+              <div class="blk-h"><h3 id="feed-h">Bank &amp; card feed</h3><span class="meta">Farmers State ••2210, ••2238 · Ramp, 14 cards · 230 open of 1,338</span><span class="act"><a class="btn" href="S3-review-queue.html">Open To review<span class="kbd">R</span></a></span></div>
+              <div class="bands bands-in" role="tablist" aria-label="Confidence bands">
+                <a class="band-tab" role="tab" aria-selected="true" href="S3-review-queue.html"><span class="eyebrow">Decide</span><span class="v">6</span><span class="t-cap tnum">Under 70, or a question · (6,169.90)</span></a>
+                <a class="band-tab" role="tab" aria-selected="false" href="S3-review-queue.html"><span class="eyebrow">Check</span><span class="v">12</span><span class="t-cap tnum">70–89 · one look each · 1,058.58</span></a>
+                <a class="band-tab" role="tab" aria-selected="false" href="S3-review-queue.html"><span class="eyebrow">Ready</span><span class="v">212</span><span class="t-cap tnum">90+ · preselected · (318,904.66)</span></a>
+              </div>
+              <table class="tbl tbl-q tbl-q--flush" aria-label="Decide band, lowest confidence first">
+                <colgroup><col style="width:240px"><col><col style="width:108px"><col style="width:120px"></colgroup>
+                <thead><tr><th>Payee</th><th>Coding or question</th><th>Confidence</th><th class="n">Amount</th></tr></thead>
+                <tbody>
+<tr class="q-row"><td><span class="l1">Check 10482</span><span class="l2">Sep 25 · Farmers State ••2210</span></td><td><span class="l1 asks">AI asks: who was it paid to?</span><span class="l2">No check image from the bank · uncategorized</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 12 of 100"><i class="part"></i><i></i><i></i><i></i><i></i></span><b>12</b></span></td><td class="n">(1,950.00)</td></tr>
+<tr class="q-row is-attn"><td><span class="l1">Venmo · J. Ortega</span><span class="l2">Sep 28 · Farmers State ••2210</span></td><td><span class="l1 asks">AI asks: subcontractor or owner draw?</span><span class="l2">Asked Rob Hartley 4 days ago · blocks close</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 22 of 100"><i class="on"></i><i></i><i></i><i></i><i></i></span><b>22</b></span></td><td class="n">(4,812.00)</td></tr>
+<tr class="q-row"><td><span class="l1">Grainger</span><span class="l2">Sep 14 · Ramp ••4410 · Tom Becker</span></td><td><span class="l1 asks">Possible duplicate</span><span class="l2">Same card, amount, day as 11:02 AM</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 35 of 100"><i class="on"></i><i class="part"></i><i></i><i></i><i></i></span><b>35</b></span></td><td class="n">(486.12)</td></tr>
+<tr class="q-row is-attn"><td><span class="l1">Stihl Inc.</span><span class="l2">Sep 22 · Farmers State ••2210</span></td><td><span class="l1"><span class="code">4910</span>Vendor rebates</span><span class="l2">Returned by Jordan Smith · posted to 5110</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 41 of 100"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span><b>41</b></span></td><td class="n">2,140.00<span class="hp">)</span></td></tr>
+<tr class="q-row"><td><span class="l1">Amazon Business</span><span class="l2">Sep 19 · Ramp ••4417 · Kyle Meyer</span></td><td><span class="l1"><span class="code">6420</span>Shop supplies</span><span class="l2">Receipt mixes shop supplies and a tablet</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 48 of 100"><i class="on"></i><i class="on"></i><i class="part"></i><i></i><i></i></span><b>48</b></span></td><td class="n">(643.18)</td></tr>
+<tr class="q-row"><td><span class="l1">Justin’s Steakhouse</span><span class="l2">Sep 24 · Ramp ••4402 · Rob Hartley</span></td><td><span class="l1"><span class="code">6610</span>Meals · customers</span><span class="l2">No attendees on the receipt</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 52 of 100"><i class="on"></i><i class="on"></i><i class="part"></i><i></i><i></i></span><b>52</b></span></td><td class="n">(418.60)</td></tr>
+                <tr class="tot"><td class="b" style="border-bottom:0">6 to decide</td><td style="border-bottom:0"></td><td style="border-bottom:0"></td><td class="n b" style="border-bottom:0;border-top:1px solid var(--midnight)">(6,169.90)</td></tr>
+                </tbody>
+              </table>
+              <div class="blk-f"><span>Then 12 to check, then the Ready batch</span><span class="sp"></span><button class="btn" type="button">Approve 212 Ready<span class="kbd">⇧</span><span class="kbd">A</span></button><a class="btn btn--primary" href="S3-review-queue.html">Start Decide<span class="kbd">D</span></a></div>
+            </section>
+
+            <section class="blk" aria-labelledby="also-h">
+              <div class="blk-h"><h3 id="also-h">Also in Review</h3><span class="meta">the system does these first; you confirm</span></div>
+              <ul class="chk">
+                <li><span class="mk" aria-label="Done"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></span><span><span class="l1">Receipts</span><span class="l2">112 uploaded receipts matched to bank charges · 0 unmatched</span></span><a class="btn btn--quiet" href="#">See 112</a></li>
+                <li><span class="mk" aria-label="Done"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></span><span><span class="l1">Draft bills from the AP inbox</span><span class="l2">9 drafted from email · 9 approved by you</span></span><a class="btn btn--quiet" href="#">See 9</a></li>
+                <li><span class="mk open" aria-label="Open"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-copy"/></svg></span><span><span class="l1">Duplicate check (EC-1)</span><span class="l2">1 flagged: Grainger, Sep 14, (486.12) twice on Tom Becker’s card · in Decide</span></span><a class="btn btn--quiet" href="S3-review-queue.html">Open</a></li>
+                <li><span class="mk open" aria-label="Open"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-flag"/></svg></span><span><span class="l1">Uncategorized (EC-4)</span><span class="l2">2 in 6999 Ask My Accountant · (6,762.00) · check 10482 and the Venmo · in Decide</span></span><a class="btn btn--quiet" href="S3-review-queue.html">Open</a></li>
+              </ul>
+              <div class="donewhen"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg><span><b>Review is done when</b> Decide and Check are empty and the Ready batch is approved. Now: 6 · 12 · 212.</span></div>
+            </section>
+          </div>
+
+          <div class="side">
+            <section class="blk" aria-labelledby="dfy-h">
+              <div class="blk-h"><h3 id="dfy-h">Done for you</h3><span class="meta">September · Clive</span></div>
+              <ul class="dfy">
+                <li><span class="lab">Auto-posted by the firm’s rule<span class="dl"></span></span><a class="c nlink" href="#">846</a></li>
+                <li><span class="lab">Approved by you in batches<span class="dl"></span></span><a class="c nlink" href="#">262</a></li>
+                <li><span class="lab">Matched to open bills<span class="dl"></span></span><a class="c nlink" href="#">38</a></li>
+                <li><span class="lab">Ramp charges with receipts<span class="dl"></span></span><a class="c nlink" href="#">164</a></li>
+                <li><span class="lab">Transfers paired<span class="dl"></span></span><a class="c nlink" href="#">14</a></li>
+                <li><span class="lab">Duplicates caught<span class="dl"></span></span><a class="c nlink" href="#">1</a></li>
+              </ul>
+              <div class="blk-f"><span class="t-cap">846 + 262 = 1,108 posted</span><span class="sp"></span><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-dice"/></svg>Spot-check 5</button></div>
+            </section>
+
+            <section class="blk" aria-labelledby="rq-h">
+              <div class="blk-h"><h3 id="rq-h">Waiting on Rob Hartley</h3><span class="meta">Owner · answers by text</span></div>
+              <ul class="rq">
+                <li class="is-attn"><span><span class="l1">Venmo to J. Ortega · <span class="tnum">(4,812.00)</span></span><span class="l2">Blocks close · 1 reminder sent</span></span><span class="tnum neg b">4d</span><button class="btn" type="button">Nudge</button></li>
+                <li><span><span class="l1">Kubota lease agreement (PDF)</span><span class="l2">For the step 3 lease check</span></span><span class="tnum">2d</span><button class="btn" type="button">Nudge</button></li>
+                <li><span><span class="l1">Who holds Ramp card ••4431?</span><span class="l2">New card, no owner in Ramp</span></span><span class="tnum">1d</span><button class="btn" type="button">Nudge</button></li>
+              </ul>
+            </section>
+
+            <section class="blk" aria-labelledby="ppl-h">
+              <div class="blk-h"><h3 id="ppl-h">On Clive</h3><span class="act"><a class="btn btn--quiet" href="#">Assignments</a></span></div>
+              <div class="ppl">
+                <span class="avatar" style="background:var(--electric)">DL</span><span><span class="l1">Dana Lee · you</span><span class="l2">Preparer</span></span>
+                <span class="avatar">JS</span><span><span class="l1">Jordan Smith</span><span class="l2">Reviewer · signs off the close</span></span>
+                <span class="avatar" style="background:var(--steel)">RH</span><span><span class="l1">Rob Hartley</span><span class="l2">Client contact · owner · magic link, no login</span></span>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <div class="frame-cap"><span>Open state · Mon Oct 19, 10:30 AM · step 1 expanded. Every count opens the filtered list behind it.</span><span>Sample data · Clive Power Equipment, C-102</span></div>
+  <div class="anno">
+    <div><b>The steps are the page</b><p>Review, Reconcile, Check, Close: a real sequence, so the numerals are real. Each step shows what needs you, what the machine already did, and roughly how long it will take.</p></div>
+    <div><b>Returns go where they belong</b><p>Jordan’s note is a recode, so it sits at the top of Review, not Check. It names the fix and offers it as one button: reclass and add the rule.</p></div>
+    <div><b>“Done when” is written down</b><p>The step can’t be ticked by feel. Review is done when Decide and Check are empty and the Ready batch is approved. Counts underneath it show how far.</p></div>
+    <div><b>The button waits</b><p>Mark ready for review stays disabled with the reason: 4 steps open, 9h 30m left. It never hides.</p></div>
+  </div>
+  <div class="board-h board-h2" id="done-h">
+    <span class="eyebrow">S2<span class="sl">//</span>Completion</span>
+    <span class="t-head">Tuesday 3:12 PM. Marked ready for review. The page hands Dana to the next client.</span>
+    <span class="sp"></span><a class="btn btn--quiet" href="#open">Back to the open state</a>
+  </div>
+  <div class="frame" id="done">
+  <div class="app app--frame density-cockpit" data-context="client">
+    <aside class="rail" aria-label="Primary">
+      <div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"><span class="prod">BOOKS</span></div>
+      <nav class="rail-nav">
+        <div class="rail-group">Home</div>
+        <a class="rail-link" href="#" aria-current="page">Client home</a>
+        <a class="rail-link" href="S3-review-queue.html">To review</a>
+        <a class="rail-link" href="#">Requests</a>
+        <a class="rail-link" href="#">Close</a>
+        <div class="rail-group">Payables</div>
+        <a class="rail-link" href="#">Bills</a>
+        <a class="rail-link" href="#">Receipts</a>
+        <a class="rail-link" href="#">Pay runs</a>
+        <a class="rail-link" href="#">Vendors</a>
+        <div class="rail-group">Receivables</div>
+        <a class="rail-link" href="#">Invoices</a>
+        <a class="rail-link" href="#">Customers</a>
+        <div class="rail-group">Banking &amp; cash</div>
+        <a class="rail-link" href="#">Bank feed</a>
+        <a class="rail-link" href="#">Reconciliation</a>
+        <a class="rail-link" href="#">Debt &amp; loans</a>
+        <div class="rail-group">Accounting</div>
+        <a class="rail-link" href="#">Journal entries</a>
+        <a class="rail-link" href="#">Chart of accounts</a>
+        <div class="rail-group">Reports</div>
+        <a class="rail-link" href="#">Reports</a>
+      </nav>
+      <div class="rail-foot"><div class="rail-user"><span class="avatar">DL</span><span>Dana Lee<small>Preparer · Clive</small></span></div></div>
+    </aside>
+    <header class="bar">
+      <button class="ctx" type="button" aria-haspopup="dialog"><i class="pip pip--open" aria-hidden="true"></i><span class="ctx-name">Clive Power Equipment</span><span class="ctx-meta tnum">C-102 · Sep open</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg><span class="kbd">⌘J</span></button>
+      <span class="crumbs"><b>Client home</b></span>
+      <button class="cmdk" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><span>Jump to vendor, account, JE…</span><span class="kbd">⌘K</span></button>
+      <span class="sync"><i aria-hidden="true"></i>Synced 3:12 PM</span>
+    </header>
+    <div class="main">
+      <div class="ctxline">
+        <span>Tue Oct 20</span><span class="sl">//</span><span>September books review</span><span class="sl">//</span><span>Due Wed Oct 21</span><span class="sl">//</span><b class="pos">Ready for review · 1 day early</b>
+        <span class="sp"></span><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-sliders"/></svg>Customize</button>
+      </div>
+      <div class="page">
+        <div class="loop-h"><span class="t-head">September books review</span><span class="t-cap">Preparer Dana Lee · reviewer Jordan Smith</span><span class="sp"></span><span class="status status--ready"><i class="pip pip--ready" aria-hidden="true"></i>Sent for review 3:12 PM</span><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-undo"/></svg>Undo, until Jordan opens it</button></div>
+        <div class="loop" role="tablist" aria-label="September books review">
+          <button class="lstep is-done" role="tab" aria-selected="false"><span class="num" aria-label="Done"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></span><span><span class="top"><span class="nm">Review</span><span class="est">done 11:48 AM</span></span><span class="cnt tnum">1,338 posted</span><span class="l2">0 decide · 0 check · 0 ready</span></span></button>
+          <button class="lstep is-done" role="tab" aria-selected="false"><span class="num" aria-label="Done"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></span><span><span class="top"><span class="nm">Reconcile</span><span class="est">done 1:20 PM</span></span><span class="cnt tnum">3 of 3 signed</span><span class="l2">Every difference 0.00</span></span></button>
+          <button class="lstep is-done" role="tab" aria-selected="false"><span class="num" aria-label="Done"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></span><span><span class="top"><span class="nm">Check</span><span class="est">done 2:35 PM</span></span><span class="cnt tnum">5 of 5 resolved</span><span class="l2">3 fixed · 1 explained · 1 accepted</span></span></button>
+          <button class="lstep is-done" role="tab" aria-selected="false"><span class="num" aria-label="Done"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></span><span><span class="top"><span class="nm">Close</span><span class="est">done 3:10 PM</span></span><span class="cnt tnum">22 of 22 tasks</span><span class="l2">6 auto-verified · packet ready</span></span></button>
+        </div>
+
+        <div class="handoff">
+          <section class="ho-main" aria-labelledby="ho-h">
+            <div class="ho-top"><span class="wg-done-mark" aria-hidden="true"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></span><div><h3 class="t-section" id="ho-h">September is with Jordan Smith for review</h3><p>Clive Power Equipment, C-102 · handed over Tue Oct 20, 3:12 PM, one day before it was due.</p></div></div>
+            <div class="ho-led"><div class="eyebrow">What you handed over</div>
+              <ul class="ev">
+                <li>Transactions posted, bank and Ramp<span class="dl"></span><a class="v nlink" href="#">1,338</a></li>
+                <li>Reconciliations signed, difference 0.00<span class="dl"></span><a class="v nlink" href="#">3</a></li>
+                <li>Exceptions resolved, notes attached<span class="dl"></span><a class="v nlink" href="#">5</a></li>
+                <li>Close tasks complete, 6 by the system<span class="dl"></span><a class="v nlink" href="#">22</a></li>
+                <li>Client answers used, from Rob Hartley<span class="dl"></span><a class="v nlink" href="#">6</a></li>
+                </ul><ul class="ev" style="margin-top:8px"><li>Client packet drafted: P&amp;L, balance sheet, cash<span class="dl"></span><a class="v link" href="#">Preview packet</a></li>
+              </ul>
+            </div>
+            <div class="next">
+              <div><span class="eyebrow">Next by time to spare</span><div class="t-head">Heritage Interiors · C-101</div><span class="l2">Check · 1h 00m left · due Fri Oct 23 · 5h 15m spare</span></div>
+              <a class="btn btn--primary btn--lg" href="#">Next client: Heritage Interiors<svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-right"/></svg><span class="kbd">N</span></a>
+            </div>
+            <div class="skip-note"><i class="pip pip--blocked" aria-hidden="true"></i><span><b class="neg">Dorrian HVAC skipped.</b> Still blocked: Bank of Iowa feed down 4 days, and it was due today.</span><span class="sp" style="flex:1"></span><button class="btn" type="button">Ask Mark to reconnect</button></div>
+          </section>
+          <aside class="blk" aria-labelledby="wn-h">
+            <div class="blk-h"><h3 id="wn-h">What happens next</h3></div>
+            <ol class="steps-after">
+              <li><span class="no">1</span><span><span class="l1">Jordan reviews</span><span class="l2" style="white-space:normal">He usually takes about a day. You’ll see his notes on this page.</span></span></li>
+              <li><span class="no">2</span><span><span class="l1">Returns land where they belong</span><span class="l2" style="white-space:normal">A recode reopens Review, a rec note reopens Reconcile. Clive goes back to the top of My clients.</span></span></li>
+              <li><span class="no">3</span><span><span class="l1">Rob gets his packet</span><span class="l2" style="white-space:normal">After sign-off, the drafted packet goes to Rob Hartley with a short narrative.</span></span></li>
+            </ol>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <div class="frame-cap"><span>Completion · Next client is chosen by the same ranking as My clients. Blocked clients are skipped and say why.</span><span>Sample data</span></div>
+</main>
+</body></html>

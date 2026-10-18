@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S4 · Client request, answered on a phone · MeritBooks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="system.css">
+<style>
+/* Board chrome (review sheet only — not part of the product) */
+.sheet-top{display:flex;align-items:center;gap:24px;height:48px;padding:0 48px;background:var(--midnight);color:var(--grey-300)}
+.sheet-top img{height:24px;width:auto}
+.sheet-top nav{margin-left:auto;display:flex;gap:4px}
+.sheet-top nav a{height:32px;display:inline-flex;align-items:center;padding:0 12px;color:var(--grey-300);font-weight:500;white-space:nowrap}
+.sheet-top nav a:hover,.sheet-top nav a[aria-current=page]{background:var(--night-800);color:var(--warm)}
+.sample{color:var(--slate);font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:500;white-space:nowrap}
+.sheet{padding:0 48px 96px;min-width:1344px}
+body{min-width:1440px}
+.board-h{display:flex;align-items:center;gap:16px;height:56px;border-bottom:1px solid var(--electric)}
+.board-h .t-head{white-space:nowrap}
+.board-h .sp{flex:1}
+.phones{display:grid;grid-template-columns:repeat(3,390px);justify-content:space-between;row-gap:40px;margin-top:32px}
+.cap{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+.cap{align-items:center}
+.cap b{font-weight:600}
+.cap span.t-cap{margin-left:auto}
+.anno{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:40px}
+.anno div{border-top:1px solid var(--line-2);padding-top:12px}
+.anno b{display:block;font-weight:600;margin-bottom:4px}
+.anno p{color:var(--ink-2)}
+
+/* ---- S4 screen: the client contact's phone. 390 wide, 15px base, 44px+ targets ---- */
+.phone{position:relative;width:390px;height:844px;display:flex;flex-direction:column;background:var(--warm);border:1px solid var(--midnight);overflow:hidden;font-size:15px;line-height:24px}
+.ph-status{display:flex;align-items:center;justify-content:space-between;height:44px;padding:0 24px;flex:none;font-weight:600;font-variant-numeric:tabular-nums}
+.ph-status .sig{display:flex;gap:2px;align-items:flex-end}
+.ph-status .sig i{display:block;width:3px;background:var(--ink)}
+.ph-top{display:flex;align-items:center;justify-content:space-between;height:56px;padding:0 20px;flex:none;border-bottom:1px solid var(--line)}
+.ph-top img{height:24px;width:auto}
+.ph-prog{display:flex;align-items:center;gap:8px;font-size:12px;line-height:16px;color:var(--ink-2);font-weight:500;font-variant-numeric:tabular-nums}
+.ph-prog .meter{padding:0}
+.ph-body{flex:1;min-height:0;overflow:auto;padding:12px 20px 24px;scrollbar-width:none}
+.ph-body::-webkit-scrollbar{display:none}
+.ph-who{color:var(--ink-2)}
+.ph-who b{color:var(--ink);font-weight:600}
+.txn{margin-top:16px;padding:16px;background:var(--white);border:1px solid var(--line)}
+.txn-top{display:flex;justify-content:space-between;gap:12px;font-size:12px;line-height:16px;color:var(--ink-3)}
+.txn-amt{font:600 28px/32px var(--f-text);font-variant-numeric:tabular-nums;margin-top:8px;color:var(--ink)}
+.txn-pay{font-weight:600;margin-top:4px}
+.txn-note{font-size:12px;line-height:16px;color:var(--ink-3)}
+.ph-q{font:700 20px/28px var(--f-display);color:var(--electric);margin-top:20px}
+.ans{display:grid;gap:8px;margin-top:16px}
+.ans-b{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;padding:12px 16px;background:var(--white);border:1px solid var(--line-2);text-align:left;font-weight:500;color:var(--ink);transition:border-color var(--fast),background-color var(--fast)}
+.ans-b:hover{border-color:var(--electric)}
+.ans-b .hint{font-size:12px;line-height:16px;color:var(--ink-3);font-weight:400}
+.ans-b[aria-pressed=true]{background:var(--sky);border-color:var(--electric);box-shadow:inset 3px 0 var(--electric)}
+.ans-b .mark{flex:none;display:grid;place-items:center;width:24px;height:24px;border:1.5px solid var(--grey-400);color:transparent}
+.ans-b[aria-pressed=true] .mark{border-color:var(--electric);background:var(--electric);color:var(--white)}
+.ans-b--quiet{background:transparent;border-style:dashed;color:var(--ink-2)}
+.more-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.more-row .btn{height:48px;font-size:15px}
+.expand{padding:12px 16px;margin-top:-8px;background:var(--white);border:1px solid var(--electric);border-top:0}
+.expand .field-label{font-size:12px}
+.expand .input{height:48px;font-size:15px}
+.expand .kv{margin-top:8px;font-size:15px}
+.rc-line{display:flex;justify-content:space-between;gap:12px;margin-top:12px;padding:8px 12px;background:var(--canvas);font-size:12px;line-height:16px;color:var(--ink-2)}
+.rc-line b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.ph-foot{flex:none;padding:12px 20px 28px;border-top:1px solid var(--line);background:var(--warm)}
+.ph-foot .btn{width:100%;height:52px;font-size:15px}
+.ph-legal{margin-top:8px;font-size:12px;line-height:16px;color:var(--ink-3);text-align:center}
+.photo{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:12px;align-items:center;margin-top:12px;padding:8px;background:var(--white);border:1px solid var(--line)}
+.rcpt{width:64px;height:80px;background:var(--white);border:1px solid var(--line-2);padding:8px 8px;display:flex;flex-direction:column;gap:5px;box-shadow:0 1px 0 var(--line)}
+.rcpt i{display:block;height:3px;background:var(--grey-300)}
+.rcpt i.s{width:55%}.rcpt i.b{background:var(--ink-2);height:4px}
+.photo .btn{height:44px}
+/* sheet + scrim */
+.ph-scrim{position:absolute;inset:0;background:rgba(10,22,40,.48);display:flex;align-items:flex-end}
+.ph-sheet{width:100%;background:var(--white);border-top:1px solid var(--midnight);padding:16px 20px 28px}
+.ph-sheet h3{font:700 20px/28px var(--f-display);color:var(--ink)}
+.ph-sheet p{color:var(--ink-2);font-size:12px;line-height:16px;margin-top:4px}
+.sheet-opt{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:0 4px;border-bottom:1px solid var(--line);font-weight:500;text-align:left}
+.sheet-opt:hover{color:var(--electric)}
+.sheet-opts{margin-top:8px}
+.ph-sheet .btn{width:100%;height:52px;margin-top:16px;font-size:15px}
+/* confirmation + done */
+.ok-mark{display:grid;place-items:center;width:44px;height:44px;border:1.5px solid var(--pos);color:var(--pos);background:var(--white)}
+.ph-h{font:700 20px/28px var(--f-display);color:var(--ink);margin-top:16px}
+.sent{list-style:none;margin-top:16px;border-top:1px solid var(--electric)}
+.sent li{display:grid;grid-template-columns:minmax(0,1fr) auto 64px;gap:4px 8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.sent .pay{font-weight:600}
+.sent .amt{font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+.sent .a{color:var(--ink-2);font-size:12px;line-height:16px}
+.sent .btn{height:44px;justify-self:end;padding:0 8px}
+.sent .a{white-space:normal}
+.contact{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:24px}
+.contact .btn{height:56px;flex-direction:column;gap:2px;font-size:12px;line-height:16px}
+.bk{display:flex;align-items:center;gap:12px;margin-top:24px;padding:16px;background:var(--white);border:1px solid var(--line)}
+.bk .avatar{width:44px;height:44px;background:var(--electric)}
+.toast-in{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 8px 0 16px;margin-top:12px;background:var(--midnight);color:var(--warm)}
+.toast-in .btn--quiet{color:var(--blue-300);height:44px}
+.toast-in .btn--quiet:hover{background:var(--night-800);color:var(--warm)}
+.toast-in .toast-mark{width:3px;align-self:stretch;margin:14px 0;background:var(--signal)}
+.toast-in .sp{flex:1}
+
+/* On a real phone: just the live prototype, full screen. */
+@media (max-width:640px){
+  body{min-width:0}
+  .sheet-top,.board-h,.anno,.cap,.phones>div:not(.live){display:none}
+  .sheet{padding:0;min-width:0}
+  .phones{display:block;margin:0}
+  .phone{width:100%;height:100svh;border:0}
+  .ph-status{display:none}
+}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-right" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3.5 10.5 8 6 12.5"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></symbol>
+<symbol id="i-camera" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M1.5 5h3l1.5-2h4l1.5 2h3v8h-13Z"/><circle cx="8" cy="8.75" r="2.5"/></symbol>
+<symbol id="i-image" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="2" y="2.5" width="12" height="11"/><path d="M2 11l3.5-3.5L9 11l2-2 3 3"/><circle cx="10.5" cy="5.5" r="1"/></symbol>
+<symbol id="i-file" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h5.5L12 4.5V14H4Z"/><path d="M9.5 2v2.5H12"/></symbol>
+<symbol id="i-text" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h10M3 8h10M3 12h6"/></symbol>
+<symbol id="i-phone" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 2.5h3l1 3-1.75 1.25a8 8 0 0 0 4 4L10.5 9l3 1v3a1 1 0 0 1-1 1A10.5 10.5 0 0 1 2 3.5a1 1 0 0 1 1-1Z"/></symbol>
+<symbol id="i-ask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 3h11v8H7l-3 2.5V11H2.5Z"/></symbol>
+<symbol id="i-mail" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="3.5" width="13" height="9"/><path d="M1.5 4 8 9l6.5-5"/></symbol>
+<symbol id="i-lock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="7" width="9" height="6.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></symbol>
+</defs></svg>
+
+<a class="skip" href="#main">Skip to content</a>
+<header class="sheet-top on-dark">
+  <img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24">
+  <span class="eyebrow" style="color:var(--slate)">MeritBooks<span class="sl">//</span>Bookkeeper tier</span>
+  <span class="sample">Sample data</span>
+  <nav aria-label="Design pages"><a href="index.html">Index</a><a href="S1-bookkeeper-home.html">S1 Home</a><a href="S2-client-books-loop.html">S2 Client books</a><a href="S3-review-queue.html">S3 Review queue</a><a href="S4-client-request-mobile.html" aria-current="page">S4 Client request</a></nav>
+</header>
+
+<main id="main" class="sheet">
+  <div class="board-h">
+    <span class="eyebrow">S4<span class="sl">//</span>IA-SPEC §4.12 · M-7</span>
+    <span class="t-head">Rob Hartley, owner of Clive Power Equipment, opens Dana’s text. Three questions, one minute, no login.</span>
+    <span class="sp"></span><span class="t-cap">390 × 844 · open this page on a phone for the live flow only</span>
+  </div>
+
+  <div class="phones">
+    <!-- 1 · LIVE -->
+    <div class="live">
+      <div class="cap"><span class="outline-num">1</span><b>Live · tap through it</b><span class="t-cap">Question 1 of 3 on open</span></div>
+      <div class="phone" id="live" aria-label="Live prototype"></div>
+    </div>
+
+    <!-- 2 · Split answer -->
+    <div>
+      <div class="cap"><span class="outline-num">2</span><b>An answer that needs a number</b><span class="t-cap">Prefilled from the receipt</span></div>
+      <div class="phone">
+        <div class="ph-status"><span>10:02</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div>
+        <div class="ph-top"><img src="assets/merit-logo-on-light.png" alt="Merit" width="80" height="24"><span class="ph-prog"><span class="meter" role="img" aria-label="Question 2 of 3"><i class="on"></i><i class="cur"></i><i></i></span>2 of 3</span></div>
+        <div class="ph-body">
+          <div class="txn" style="margin-top:0"><div class="txn-top"><span>Sat Sep 19</span><span>Ramp ••4417 · Kyle Meyer</span></div><div class="txn-amt">(643.18)</div><div class="txn-pay">Amazon Business</div></div>
+          <h2 class="ph-q">Is the Fire tablet in this order for the business?</h2>
+          <div class="ans">
+            <button class="ans-b" type="button" aria-pressed="false">All business<span class="mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span></button>
+            <button class="ans-b" type="button" aria-pressed="true">The tablet is personal<span class="mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span></button>
+            <div class="expand">
+              <label class="field"><span class="field-label">Personal part</span><input class="input input--money" inputmode="decimal" value="119.99" aria-label="Personal part, dollars"></label>
+              <span class="field-help" style="display:block;margin-top:4px">From the receipt: Fire HD 10 tablet, 119.99</span>
+              <dl class="kv"><dt>Business · shop supplies</dt><dd>523.19</dd><dt>Personal · your draw</dt><dd>119.99</dd><dt class="b" style="color:var(--ink)">Order total</dt><dd style="border-top:1px solid var(--midnight)">643.18</dd></dl>
+            </div>
+            <button class="ans-b" type="button" aria-pressed="false">All personal<span class="mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span></button>
+          </div>
+        </div>
+        <div class="ph-foot"><button class="btn btn--primary" type="button">Send answer</button><div class="ph-legal">Sample data · secure link for Rob Hartley</div></div>
+      </div>
+    </div>
+
+    <!-- 3 · Camera sheet -->
+    <div>
+      <div class="cap"><span class="outline-num">3</span><b>Add a photo</b><span class="t-cap">Camera, library or a file</span></div>
+      <div class="phone">
+        <div class="ph-status"><span>10:02</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div>
+        <div class="ph-top"><img src="assets/merit-logo-on-light.png" alt="Merit" width="80" height="24"><span class="ph-prog"><span class="meter" role="img" aria-label="Question 3 of 3"><i class="on"></i><i class="on"></i><i class="cur"></i></span>3 of 3</span></div>
+        <div class="ph-body">
+          <p class="ph-who"><b>Dana Lee</b>, your bookkeeper at Merit</p>
+          <div class="txn"><div class="txn-top"><span>Thu Sep 24</span><span>Ramp ••4402 · your card</span></div><div class="txn-amt">(418.60)</div><div class="txn-pay">Justin’s Steakhouse</div><div class="txn-note">7:40 PM · includes tip</div></div>
+          <h2 class="ph-q">Who was this dinner at Justin’s with?</h2>
+          <div class="ans">
+            <button class="ans-b" type="button" aria-pressed="true">A customer<span class="mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span></button>
+          </div>
+        </div>
+        <div class="ph-scrim">
+          <div class="ph-sheet" role="dialog" aria-modal="true" aria-labelledby="sh-h">
+            <h3 id="sh-h">Add a photo of the receipt</h3>
+            <p>Your phone asks for camera access the first time. Only Dana sees the photo.</p>
+            <div class="sheet-opts">
+              <button class="sheet-opt" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-camera"/></svg>Take a photo</button>
+              <button class="sheet-opt" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-image"/></svg>Choose from your photos</button>
+              <button class="sheet-opt" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-file"/></svg>Choose a file</button>
+            </div>
+            <button class="btn" type="button">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4 · Photo attached -->
+    <div>
+      <div class="cap"><span class="outline-num">4</span><b>Photo attached, guests named</b><span class="t-cap">Last question</span></div>
+      <div class="phone">
+        <div class="ph-status"><span>10:03</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div>
+        <div class="ph-top"><img src="assets/merit-logo-on-light.png" alt="Merit" width="80" height="24"><span class="ph-prog"><span class="meter" role="img" aria-label="Question 3 of 3"><i class="on"></i><i class="on"></i><i class="cur"></i></span>3 of 3</span></div>
+        <div class="ph-body">
+          <div class="txn" style="margin-top:0"><div class="txn-top"><span>Thu Sep 24</span><span>Ramp ••4402 · your card</span></div><div class="txn-amt">(418.60)</div><div class="txn-pay">Justin’s Steakhouse</div></div>
+          <h2 class="ph-q">Who was this dinner at Justin’s with?</h2>
+          <div class="ans">
+            <button class="ans-b" type="button" aria-pressed="true">A customer<span class="mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span></button>
+            <div class="expand">
+              <label class="field"><span class="field-label">Who, and what was it about?</span><input class="input" value="Mike Dahl, Dahl Lawn Care · fleet quote" aria-label="Who, and what was it about"></label>
+              <div class="photo"><span class="rcpt" aria-hidden="true"><i class="b"></i><i class="s"></i><i></i><i></i><i class="s"></i><i class="b"></i></span><span><span class="l1">Receipt photo</span><span class="l2">Taken 10:03 AM · 1.4 MB</span></span><button class="btn btn--quiet" type="button">Retake</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="ph-foot"><button class="btn btn--primary" type="button">Send answer</button><div class="ph-legal">Sample data · secure link for Rob Hartley</div></div>
+      </div>
+    </div>
+
+    <!-- 5 · Confirmation -->
+    <div>
+      <div class="cap"><span class="outline-num">5</span><b>Confirmation</b><span class="t-cap">Answers can still change</span></div>
+      <div class="phone">
+        <div class="ph-status"><span>10:03</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div>
+        <div class="ph-top"><img src="assets/merit-logo-on-light.png" alt="Merit" width="80" height="24"><span class="ph-prog"><span class="meter" role="img" aria-label="3 of 3 answered"><i class="on"></i><i class="on"></i><i class="on"></i></span>3 of 3</span></div>
+        <div class="ph-body">
+          <span class="ok-mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span>
+          <h2 class="ph-h">Sent. Dana has all 3 answers.</h2>
+          <p class="ink-2" style="margin-top:4px">You can change an answer until Dana posts it, usually the same day.</p>
+          <ul class="sent">
+            <li><span><span class="pay">Check 10482</span><span class="a" style="display:block">Parts supplier · coded to parts inventory</span></span><span class="amt">(1,950.00)</span><button class="btn btn--quiet" type="button">Change</button></li>
+            <li><span><span class="pay">Amazon Business</span><span class="a" style="display:block">Tablet personal: 119.99 · rest business</span></span><span class="amt">(643.18)</span><button class="btn btn--quiet" type="button">Change</button></li>
+            <li><span><span class="pay">Justin’s Steakhouse</span><span class="a" style="display:block">Customer · Mike Dahl · photo attached</span></span><span class="amt">(418.60)</span><button class="btn btn--quiet" type="button">Change</button></li>
+            <li style="border-bottom:0"><span class="pay">3 answers</span><span class="amt" style="border-top:1px solid var(--midnight);padding-top:4px">(3,011.78)</span><span></span></li>
+          </ul>
+        </div>
+        <div class="ph-foot"><button class="btn btn--primary" type="button">Done</button><div class="ph-legal">Sample data · secure link for Rob Hartley</div></div>
+      </div>
+    </div>
+
+    <!-- 6 · All caught up -->
+    <div>
+      <div class="cap"><span class="outline-num">6</span><b>All caught up</b><span class="t-cap">Opening the link again later</span></div>
+      <div class="phone">
+        <div class="ph-status"><span>4:20</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div>
+        <div class="ph-top"><img src="assets/merit-logo-on-light.png" alt="Merit" width="80" height="24"><span class="ph-prog">Clive Power Equipment</span></div>
+        <div class="ph-body">
+          <span class="ok-mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span>
+          <h2 class="ph-h">You’re all caught up.</h2>
+          <p class="ink-2" style="margin-top:4px">Nothing needs you right now. We’ll text you when something does.</p>
+          <div class="bk"><span class="avatar">DL</span><span><span class="l1">Your bookkeeper is Dana Lee</span><span class="l2">Merit Management Group · Mon–Fri, 8–5</span></span></div>
+          <div class="contact">
+            <a class="btn" href="#"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-ask"/></svg>Text Dana</a>
+            <a class="btn" href="#"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-phone"/></svg>Call Dana</a>
+            <a class="btn" href="#"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-mail"/></svg>Email</a>
+          </div>
+          <p class="t-cap" style="margin-top:24px">This month you answered 6 questions, all within a day. Dana closed September a day early.</p>
+        </div>
+        <div class="ph-foot" style="border-top:0"><div class="ph-legal" style="margin-top:0"><svg class="ico" width="16" height="16" aria-hidden="true" style="vertical-align:-3px"><use href="#i-lock"/></svg> Secure link for Rob Hartley · sample data</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="anno">
+    <div><b>The question is the screen</b><p>No dashboard and no login. The transaction, the question in the firm’s blue Syne, and the answers Dana picked in S3. Nothing else to read.</p></div>
+    <div><b>One tap when one tap is enough</b><p>Simple answers send on tap and show Undo. Answers that need a number or a name open in place, prefilled from the receipt where we can.</p></div>
+    <div><b>The way out is always there</b><p>“I don’t know, call me” is on every question. It turns into a call task for Dana instead of a guess in the books.</p></div>
+    <div><b>Big enough for a thumb</b><p>Answers are 52px tall, every target is at least 44px, and the base size is 15px. The progress uses the brand slash, one stroke per question.</p></div>
+  </div>
+</main>
+
+<script>
+(function(){
+  var Qs=[
+    {date:'Fri Sep 25',src:'Farmers State ••2210',amt:'(1,950.00)',pay:'Check 10482',note:'No check image from the bank',
+     q:'Who was check 10482 paid to, and what was it for?',
+     a:[['Parts supplier','Codes to parts inventory',1],['Contract labor','Codes to contract labor',1],['Owner draw','Comes out of your draw',0]]},
+    {date:'Sat Sep 19',src:'Ramp ••4417 · Kyle Meyer',amt:'(643.18)',pay:'Amazon Business',note:'Receipt from Ramp · shop supplies and a tablet',
+     q:'Is the Fire tablet in this order for the business?',
+     a:[['All business','',0],['The tablet is personal','','split'],['All personal','',0]]},
+    {date:'Thu Sep 24',src:'Ramp ••4402 · your card',amt:'(418.60)',pay:'Justin’s Steakhouse',note:'7:40 PM · includes tip',
+     q:'Who was this dinner at Justin’s with?',
+     a:[['A customer','',  'name'],['Staff','',0],['Personal','',0]]}
+  ];
+  var el=document.getElementById('live'), i=0, picked=null, sentMsg='';
+  var CHK='<span class="mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span>';
+  var STATUS='<div class="ph-status"><span>10:02</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div>';
+  function meter(n,done){var h='';for(var k=0;k<3;k++)h+=k<n?'<i class="on"></i>':(k==n&&!done?'<i class="cur"></i>':'<i></i>');return '<span class="meter" role="img" aria-label="Question '+(n+1)+' of 3">'+h+'</span>';}
+  function top(n,done){return '<div class="ph-top"><img src="assets/merit-logo-on-light.png" alt="Merit" width="80" height="24"><span class="ph-prog">'+(n==null?'Clive Power Equipment':meter(n,done)+(done?3:n+1)+' of 3')+'</span></div>';}
+  function card(){
+    var c=Qs[i], h=STATUS+top(i)+'<div class="ph-body">';
+    h+= i==0?'<p class="ph-who"><b>Dana Lee</b>, your bookkeeper at Merit, has 3 quick questions about September. About a minute.</p>':'<p class="ph-who"><b>Dana Lee</b>, your bookkeeper at Merit</p>';
+    h+='<div class="txn"><div class="txn-top"><span>'+c.date+'</span><span>'+c.src+'</span></div><div class="txn-amt">'+c.amt+'</div><div class="txn-pay">'+c.pay+'</div><div class="txn-note">'+c.note+'</div></div>';
+    h+='<h2 class="ph-q">'+c.q+'</h2><div class="ans">';
+    c.a.forEach(function(a,k){h+='<button class="ans-b" type="button" data-k="'+k+'" aria-pressed="'+(picked===k)+'"><span>'+a[0]+(a[1]?'<span class="hint" style="display:block">'+a[1]+'</span>':'')+'</span>'+CHK+'</button>';
+      if(picked===k&&a[2]=='split')h+='<div class="expand"><label class="field"><span class="field-label">Personal part</span><input class="input input--money" inputmode="decimal" value="119.99" aria-label="Personal part, dollars"></label><div class="rc-line"><span>Receipt line: Fire HD 10 tablet</span><b>119.99</b></div></div>';
+      if(picked===k&&a[2]=='name')h+='<div class="expand"><label class="field"><span class="field-label">Who, and what was it about?</span><input class="input" placeholder="Name and company" aria-label="Who, and what was it about"></label></div>';});
+    h+='<button class="ans-b ans-b--quiet" type="button" data-k="call">I don’t know, call me'+'</button></div>';
+    h+='<div class="more-row"><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-camera"/></svg>Add a photo</button><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-text"/></svg>Type an answer</button></div>';
+    if(sentMsg)h+='<div class="toast-in" role="status"><span class="toast-mark"></span><span>'+sentMsg+'</span><span class="sp"></span><button class="btn btn--quiet" type="button" data-undo>Undo</button></div>';
+    h+='</div>';
+    var needs=picked!=null&&typeof c.a[picked]!=='undefined'&&c.a[picked][2];
+    h+='<div class="ph-foot">'+(needs?'<button class="btn btn--primary" type="button" data-send>Send answer</button>':'<div class="ph-legal" style="margin-top:0">Tap an answer to send it · sample data</div>')+'</div>';
+    el.innerHTML=h;
+  }
+  function confirm(){
+    el.innerHTML=STATUS+top(2,true)+'<div class="ph-body"><span class="ok-mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span><h2 class="ph-h">Sent. Dana has all 3 answers.</h2><p class="ink-2" style="margin-top:4px">You can change an answer until Dana posts it, usually the same day.</p></div><div class="ph-foot"><button class="btn btn--primary" type="button" data-done>Done</button></div>';
+  }
+  function caught(){
+    el.innerHTML=STATUS+top(null)+'<div class="ph-body"><span class="ok-mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span><h2 class="ph-h">You’re all caught up.</h2><p class="ink-2" style="margin-top:4px">Nothing needs you right now. We’ll text you when something does.</p><div class="bk"><span class="avatar">DL</span><span><span class="l1">Your bookkeeper is Dana Lee</span><span class="l2">Merit Management Group · Mon–Fri, 8–5</span></span></div><button class="btn" type="button" data-restart style="margin-top:24px;height:44px">Start the demo again</button></div>';
+  }
+  function next(){picked=null;i++;if(i>=Qs.length){sentMsg='';confirm();}else card();}
+  el.addEventListener('click',function(e){
+    var b=e.target.closest('[data-k]');
+    if(b){var k=b.dataset.k;
+      if(k==='call'){sentMsg='Dana will call you about '+Qs[i].pay;next();return;}
+      k=+k;picked=k;var a=Qs[i].a[k];
+      if(a[2]){sentMsg='';card();var inp=el.querySelector('.expand input');if(inp)inp.focus();return;}
+      sentMsg='Sent: '+a[0];card();setTimeout(function(){if(picked===k)next();},900);return;}
+    if(e.target.closest('[data-send]')){sentMsg='Sent: '+Qs[i].a[picked][0];next();return;}
+    if(e.target.closest('[data-undo]')){if(i>0){i--;}picked=null;sentMsg='';card();return;}
+    if(e.target.closest('[data-done]')){caught();return;}
+    if(e.target.closest('[data-restart]')){i=0;picked=null;sentMsg='';card();}
+  });
+  card();
+})();
+</script>
+</body></html>

@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=1440">
+<title>S1 · Bookkeeper home · MeritBooks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="system.css">
+<style>
+/* Board chrome (review sheet only — not part of the product) */
+body{min-width:1440px}
+.sheet-top{display:flex;align-items:center;gap:24px;height:48px;padding:0 48px;background:var(--midnight);color:var(--grey-300)}
+.sheet-top img{height:24px;width:auto}
+.sheet-top nav{margin-left:auto;display:flex;gap:4px}
+.sheet-top nav a{height:32px;display:inline-flex;align-items:center;padding:0 12px;color:var(--grey-300);font-weight:500}
+.sheet-top nav a:hover,.sheet-top nav a[aria-current=page]{background:var(--night-800);color:var(--warm)}
+.sample{color:var(--slate);font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:500}
+.sheet{padding:0 48px 96px}
+.board-h{display:flex;align-items:center;gap:16px;height:56px;border-bottom:1px solid var(--electric)}
+.board-h .t-head{white-space:nowrap}
+.board-h .sp{flex:1}
+.frame{border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);position:relative;margin:0 -48px;background:var(--warm)}
+.frame-cap{display:flex;justify-content:space-between;gap:24px;margin-top:8px;font-size:12px;line-height:16px;color:var(--ink-3)}
+.anno{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:24px}
+.anno div{border-top:1px solid var(--line-2);padding-top:12px}
+.anno b{display:block;font-weight:600;margin-bottom:4px}
+.anno p{color:var(--ink-2)}
+.board-h2{margin-top:56px}
+
+/* ---- S1 screen-specific layout ---- */
+.nlink{color:inherit;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px;transition:text-decoration-color var(--fast)}
+.nlink:hover,.nlink:focus-visible{text-decoration-color:var(--electric);color:var(--electric)}
+.tbl-q td .nlink{display:inline-block;min-width:32px;line-height:32px}
+.ctxline .warn{color:var(--warn)}
+
+/* My clients: client cell with pip */
+.cl{display:grid;grid-template-columns:10px minmax(0,1fr);column-gap:10px;align-items:center}
+.cl .pip{grid-row:1/3}
+.st-overdue{color:var(--neg);font-weight:500}.st-risk{color:var(--warn);font-weight:500}.st-blocked{color:var(--neg);font-weight:500}.st-track{color:var(--ink-2)}.st-ready{color:var(--pos);font-weight:500}
+.stepc{display:flex;align-items:center}
+.stepc .meter{padding-left:0}
+
+/* The runway: work left (Electric) against your open hours before this client's
+   due date (Sky track, ended by a Midnight tick). Overrun shows in brick.     */
+.wl{display:flex;flex-direction:column;align-items:flex-end;gap:0}
+.wl-top{display:flex;align-items:center;gap:8px}
+.wl-top b{font-weight:600;min-width:48px;text-align:right;font-variant-numeric:tabular-nums}
+.runway{position:relative;width:96px;height:8px;background:linear-gradient(var(--line-2),var(--line-2)) 0 50%/100% 1px no-repeat}
+.runway i{position:absolute;top:0;bottom:0;left:0}
+.runway .av{background:var(--blue-100)}
+.runway .wk{background:var(--electric)}
+.runway .ov{background:var(--neg)}
+.runway .hatch{background:repeating-linear-gradient(135deg,var(--neg) 0 2px,transparent 2px 5px)}
+.runway .tk{width:1px;top:-3px;bottom:-3px;background:var(--midnight)}
+.wl .l2{text-align:right}
+.legend{display:inline-flex;align-items:center;gap:12px;color:var(--ink-3);font-size:12px;line-height:16px;white-space:nowrap}
+.legend i{display:inline-block;width:12px;height:8px;margin-right:4px;vertical-align:0}
+.tot td{font-weight:600;border-bottom:0!important}
+.tot td.n,.tot td .wl-top b{border-top:1px solid var(--midnight)}
+.tot td.wlc{border-top:0}
+
+
+/* Week plan: the runway for the whole week. Dana's open hours as a 24h track split by day;
+   client work laid in due-date order; due ticks at each day's end. Overrun past a tick = short. */
+.plan{padding:14px 16px 12px;border-top:1px solid var(--line)}
+.plan-h{display:flex;justify-content:space-between;align-items:baseline}
+.plan-h .tnum{color:var(--ink-2);font-size:12px;line-height:16px}
+.plan-due,.plan-days{position:relative;height:16px;font-size:12px;line-height:16px;color:var(--ink-3);margin-top:8px}
+.plan-days{margin-top:4px}
+.plan-due span,.plan-days span{position:absolute;top:0;white-space:nowrap}
+.plan-due span.r{transform:translateX(-100%);padding-right:4px}
+.plan-days span{padding-left:4px}
+.plan-bar{position:relative;height:28px;margin-top:4px;background:var(--grey-100)}
+.plan-bar b{position:absolute;top:0;bottom:0;display:flex;align-items:center;padding:0 6px;font-size:12px;font-weight:600;color:var(--white);white-space:nowrap;overflow:hidden;border-right:2px solid var(--white)}
+.plan-bar b.w{background:var(--electric)}
+.plan-bar b.late,.plan-bar b.short{background:var(--neg)}
+.plan-bar b.blk{background:var(--white);color:var(--neg);box-shadow:inset 0 0 0 1.5px var(--neg)}
+.plan-bar .free{position:absolute;top:0;bottom:0;display:flex;align-items:center;padding-left:8px;font-size:12px;color:var(--ink-3);white-space:nowrap}
+.plan-bar i{position:absolute;top:-4px;bottom:-4px;width:1px;background:var(--midnight)}
+.plan-bar i.day{background:var(--line-2);top:0;bottom:0}
+
+.sept{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:12px}
+.sept .fig{padding:4px 0;transition:background-color var(--fast)}
+.sept .fig:hover .fig-v{color:var(--electric)}
+/* Agenda */
+.agenda{list-style:none}
+.agenda li{display:grid;grid-template-columns:48px minmax(0,1fr) 18px;column-gap:8px;align-items:center;height:40px;padding:0 16px;border-bottom:1px solid var(--line)}
+.agenda li:last-child{border-bottom:0}
+.agenda a{display:contents}
+.agenda li:hover{background:var(--grey-100)}
+.agenda .d{font-weight:600}
+.agenda .d.neg{color:var(--neg)}
+.agenda .txt{min-width:0}
+.agenda .pip{justify-self:end}
+.agenda li.out .txt{color:var(--ink-2)}
+
+/* Feeds */
+.feed-bad{padding:12px 16px 12px 16px;border-bottom:1px solid var(--line);box-shadow:inset 3px 0 var(--neg)}
+.feed-bad .btn-row{margin-top:8px}
+.feed-ok{list-style:none;padding:4px 0}
+.feed-ok li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;height:32px;padding:0 16px;color:var(--ink-2)}
+.feed-ok li b{color:var(--ink);font-weight:500}
+.feed-ok .t{white-space:nowrap}
+
+/* Bands mini */
+.mbands{display:grid;grid-template-columns:repeat(3,1fr);height:100%}
+.mband{display:flex;flex-direction:column;gap:4px;padding:16px;border-right:1px solid var(--line);transition:background-color var(--fast)}
+.mband:last-child{border-right:0}
+.mband:hover{background:var(--grey-100)}
+.mband .v{font:600 20px/28px var(--f-text);font-variant-numeric:tabular-nums;color:var(--ink)}
+.mband .split{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;margin-top:4px;font-size:12px;line-height:16px;color:var(--ink-2)}
+.mband .split span:nth-child(even){text-align:right;font-variant-numeric:tabular-nums;color:var(--ink)}
+.mband .meter{padding-left:0;margin-top:4px}
+
+/* Done for you ledger */
+.dfy{list-style:none;padding:4px 0}
+.dfy li{display:grid;grid-template-columns:minmax(0,1fr) 56px 128px;column-gap:12px;align-items:center;height:32px;padding:0 16px}
+.dfy .lab{display:flex;align-items:baseline;gap:8px;min-width:0;white-space:nowrap}
+.dfy .lab .dl{flex:1;border-bottom:1px dotted var(--grey-400);transform:translateY(-4px);min-width:16px}
+.dfy .c{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.dfy .dfy-x{color:var(--ink-3);font-size:12px;white-space:nowrap}
+.dfy .dfy-x .btn{height:32px;margin-left:-8px}
+
+/* Requests + recs compact tables */
+.tag-gap{margin-left:0}
+.rq-act{display:flex;justify-content:flex-end;gap:4px}
+.rq-act .btn{height:32px;flex:none}
+.wg-head .wg-meta{flex:1}
+.rq-t td{height:44px}
+
+/* Done state helpers */
+.done-strip{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--pos-wash)}
+.done-strip .wg-done-mark{background:var(--white)}
+.done-strip b{color:var(--ink)}
+.done-strip span{color:var(--ink-2)}
+.wg-state .btn{margin-top:4px}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></symbol>
+<symbol id="i-down" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></symbol>
+<symbol id="i-right" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></symbol>
+<symbol id="i-grid" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h12M2 11h12"/><rect x="9" y="3" width="2.5" height="4" fill="#fff"/><rect x="4.5" y="9" width="2.5" height="4" fill="#fff"/></symbol>
+<symbol id="i-plug" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2v3.5M10 2v3.5M4 5.5h8v2a4 4 0 0 1-8 0Z"/><path d="M8 11.5V14"/></symbol>
+<symbol id="i-ask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 3h11v8H7l-3 2.5V11H2.5Z"/></symbol>
+<symbol id="i-phone" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 2.5h3l1 3-1.75 1.25a8 8 0 0 0 4 4L10.5 9l3 1v3a1 1 0 0 1-1 1A10.5 10.5 0 0 1 2 3.5a1 1 0 0 1 1-1Z"/></symbol>
+<symbol id="i-book" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 2.5h7.5L13 5v8.5H3Z"/><path d="M5.5 6.5h5M5.5 9h5M5.5 11.5h3"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 9.5 4 3h8l1.5 6.5V13h-11Z"/><path d="M2.5 9.5h3l1 1.5h3l1-1.5h3"/></symbol>
+<symbol id="i-flag" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3.5 14V2.5h8l-1.5 3 1.5 3h-8"/></symbol>
+<symbol id="i-cal" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3.5" width="11" height="10"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/></symbol>
+<symbol id="i-undo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 3.5 2.5 6.5l3 3"/><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7"/></symbol>
+<symbol id="i-dice" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="11" height="11"/><circle cx="5.5" cy="5.5" r=".6" fill="currentColor"/><circle cx="10.5" cy="10.5" r=".6" fill="currentColor"/><circle cx="8" cy="8" r=".6" fill="currentColor"/></symbol>
+</defs></svg>
+
+<a class="skip" href="#main">Skip to content</a>
+<header class="sheet-top on-dark">
+  <img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24">
+  <span class="eyebrow" style="color:var(--slate)">MeritBooks<span class="sl">//</span>Bookkeeper tier</span>
+  <span class="sample">Sample data</span>
+  <nav aria-label="Design pages"><a href="index.html">Index</a><a href="S1-bookkeeper-home.html" aria-current="page">S1 Home</a><a href="S2-client-books-loop.html">S2 Client books</a><a href="S3-review-queue.html">S3 Review queue</a><a href="S4-client-request-mobile.html">S4 Client request</a></nav>
+</header>
+
+<main id="main" class="sheet">
+  <div class="board-h">
+    <span class="eyebrow">S1<span class="sl">//</span>IA-SPEC §4.1</span>
+    <span class="t-head">Dana Lee’s home, Monday 9:40 AM. Six clients, one week to finish September.</span>
+    <span class="sp"></span>
+    <a class="btn btn--quiet" href="#done">Jump to the all-ready state<svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg></a>
+  </div>
+
+  <!-- ================= OPEN STATE ================= -->
+  <div class="frame" id="open">
+  <div class="app app--frame density-cockpit" data-context="workspace">
+    <aside class="rail" aria-label="Primary">
+      <div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"><span class="prod">BOOKS</span></div>
+      <nav class="rail-nav">
+        <div class="rail-group">Home</div>
+        <a class="rail-link" href="#" aria-current="page">Home<span class="keys"><span class="kbd">G</span><span class="kbd">H</span></span></a>
+        <a class="rail-link" href="#">Inbox<span class="count">4</span></a>
+        <div class="rail-group">Work</div>
+        <a class="rail-link" href="#">Close grid</a>
+        <a class="rail-link" href="#">Review queue<span class="count">41</span></a>
+        <a class="rail-link" href="#">Requests<span class="count">6</span></a>
+        <a class="rail-link" href="#">Exceptions<span class="count">10</span></a>
+        <div class="rail-group">My clients</div>
+        <a class="rail-link" href="#">Crystal Kitchen &amp; Bath</a>
+        <a class="rail-link" href="S2-client-books-loop.html">Clive Power Equipment<span class="count">18</span></a>
+        <a class="rail-link" href="#">Dorrian HVAC<span class="count count--alert">Blocked</span></a>
+        <a class="rail-link" href="#">Heritage Interiors</a>
+        <a class="rail-link" href="#">Swan Creek</a>
+        <a class="rail-link" href="#">Wild Rose</a>
+      </nav>
+      <div class="rail-foot">
+        <div class="eyebrow">September close</div>
+        <div class="rail-period">Day 12 <span>of 15</span></div>
+        <div class="rail-user"><span class="avatar">DL</span><span>Dana Lee<small>Bookkeeper · 6 clients</small></span></div>
+      </div>
+    </aside>
+    <header class="bar">
+      <button class="ctx" type="button" aria-haspopup="dialog"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-grid"/></svg><span class="ctx-name">Merit Management Group</span><span class="ctx-meta">Workspace</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg><span class="kbd">⌘J</span></button>
+      <span class="crumbs"><b>Home</b></span>
+      <button class="cmdk" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><span>Jump to client, vendor, account…</span><span class="kbd">⌘K</span></button>
+      <span class="sync"><i aria-hidden="true"></i>Synced 9:38 AM</span>
+    </header>
+    <div class="main">
+      <div class="ctxline">
+        <span>Mon Oct 19</span><span class="sl">//</span><span>September close</span><span class="sl">//</span><span>Day 12 of 15</span><span class="sl">//</span><b>1 of 6 clients ready for review</b><span class="sl">//</span><span class="tnum">18h 45m of work left · 24h open this week</span>
+        <span class="sp"></span><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-sliders"/></svg>Customize</button>
+      </div>
+      <div class="page">
+        <div class="dash" style="grid-auto-flow:row">
+
+          <!-- 1 · My clients (primary) -->
+          <section class="wg wg--primary" style="--x:1;--y:1;--w:8;--h:4" aria-labelledby="w-mc">
+            <div class="wg-head">
+              <h2 class="wg-title" id="w-mc">My clients</h2><span class="wg-count">6</span>
+              <span class="wg-act"><span class="legend" aria-hidden="true"><span><i style="background:var(--electric)"></i>Work left</span><span><i style="background:var(--blue-100)"></i>Your open hours before due</span><span><i style="background:var(--neg)"></i>Short</span></span></span>
+            </div>
+            <div class="wg-body">
+              <table class="tbl tbl-q tbl-q--flush" aria-label="My clients, ranked by time to spare">
+                <colgroup><col><col style="width:120px"><col style="width:72px"><col style="width:64px"><col style="width:88px"><col style="width:200px"></colgroup>
+                <thead><tr><th>Client</th><th>Step</th><th class="n">Review</th><th class="n">Unrec</th><th class="n">Requests</th><th class="n">Work left</th></tr></thead>
+                <tbody>
+                  <tr class="q-row is-attn is-cursor">
+                    <td><a class="cl" href="#"><i class="pip pip--overdue" aria-hidden="true"></i><span class="l1">Crystal Kitchen &amp; Bath</span><span class="l2">C-104 · <span class="st-overdue">Overdue</span></span></a></td>
+                    <td><span class="stepc"><span class="meter" role="img" aria-label="Step 3 of 4"><i class="on"></i><i class="on"></i><i class="cur"></i><i></i></span>Check</span></td>
+                    <td class="n"><a class="nlink" href="#">0</a></td><td class="n"><a class="nlink" href="#">0</a></td><td class="n"><a class="nlink" href="#">1 · 2d</a></td>
+                    <td class="n wlc"><div class="wl"><div class="wl-top"><span class="runway" role="img" aria-label="45 minutes of work, no open time before the due date"><i class="ov" style="width:6px"></i></span><b>0h 45m</b></div><span class="l2"><span class="st-overdue">Due Oct 16 · 1 day late</span></span></div></td>
+                  </tr>
+                  <tr class="q-row">
+                    <td><a class="cl" href="S2-client-books-loop.html"><i class="pip pip--risk" aria-hidden="true"></i><span class="l1">Clive Power Equipment</span><span class="l2">C-102 · <span class="st-risk">At risk</span></span></a></td>
+                    <td><span class="stepc"><span class="meter" role="img" aria-label="Step 1 of 4"><i class="cur"></i><i></i><i></i><i></i></span>Review</span></td>
+                    <td class="n"><a class="nlink" href="S3-review-queue.html">18</a></td><td class="n"><a class="nlink" href="#">3</a></td><td class="n"><a class="nlink" href="#">3 · 4d</a></td>
+                    <td class="n wlc"><div class="wl"><div class="wl-top"><span class="runway" role="img" aria-label="9 hours 30 minutes of work against 5 hours 45 minutes open: 3 hours 45 minutes short"><i class="av" style="width:46px"></i><i class="wk" style="width:46px"></i><i class="ov" style="left:46px;width:30px"></i><i class="tk" style="left:46px"></i></span><b>9h 30m</b></div><span class="l2"><span class="st-risk">Due Oct 21 · 3h 45m short</span></span></div></td>
+                  </tr>
+                  <tr class="q-row is-attn">
+                    <td><a class="cl" href="#"><i class="pip pip--blocked" aria-hidden="true"></i><span class="l1">Dorrian HVAC</span><span class="l2">C-105 · <span class="st-blocked">Blocked</span></span></a></td>
+                    <td><span class="stepc"><span class="meter" role="img" aria-label="Blocked at step 1 of 4"><i class="bad"></i><i></i><i></i><i></i></span>Review</span></td>
+                    <td class="n"><a class="nlink" href="#">23</a></td><td class="n"><a class="nlink" href="#">3</a></td><td class="n"><a class="nlink" href="#">1 · 5d</a></td>
+                    <td class="n wlc"><div class="wl"><div class="wl-top"><span class="runway" role="img" aria-label="4 hours 30 minutes of work, 10 hours 15 minutes open, blocked"><i class="av" style="width:82px"></i><i class="hatch" style="width:36px"></i><i class="tk" style="left:82px"></i></span><b>4h 30m</b></div><span class="l2"><span class="st-blocked">Due Oct 20 · feed down 3 days</span></span></div></td>
+                  </tr>
+                  <tr class="q-row">
+                    <td><a class="cl" href="#"><i class="pip pip--track" aria-hidden="true"></i><span class="l1">Heritage Interiors</span><span class="l2">C-101 · <span class="st-track">On track</span></span></a></td>
+                    <td><span class="stepc"><span class="meter" role="img" aria-label="Step 3 of 4"><i class="on"></i><i class="on"></i><i class="cur"></i><i></i></span>Check</span></td>
+                    <td class="n"><a class="nlink" href="#">0</a></td><td class="n"><a class="nlink" href="#">0</a></td><td class="n"><a class="nlink" href="#">1 · 1d</a></td>
+                    <td class="n wlc"><div class="wl"><div class="wl-top"><span class="runway" role="img" aria-label="1 hour of work, 6 hours 15 minutes open"><i class="av" style="width:50px"></i><i class="wk" style="width:8px"></i><i class="tk" style="left:50px"></i></span><b>1h 00m</b></div><span class="l2">Due Oct 23 · 5h 15m spare</span></div></td>
+                  </tr>
+                  <tr class="q-row">
+                    <td><a class="cl" href="#"><i class="pip pip--track" aria-hidden="true"></i><span class="l1">Swan Creek</span><span class="l2">C-107 · <span class="st-track">On track</span></span></a></td>
+                    <td><span class="stepc"><span class="meter" role="img" aria-label="Step 2 of 4"><i class="on"></i><i class="cur"></i><i></i><i></i></span>Reconcile</span></td>
+                    <td class="n"><a class="nlink" href="#">0</a></td><td class="n"><a class="nlink" href="#">1</a></td><td class="n"><a class="nlink" href="#">0</a></td>
+                    <td class="n wlc"><div class="wl"><div class="wl-top"><span class="runway" role="img" aria-label="3 hours of work, 8 hours 45 minutes open"><i class="av" style="width:70px"></i><i class="wk" style="width:24px"></i><i class="tk" style="left:70px"></i></span><b>3h 00m</b></div><span class="l2">Due Oct 21 · 5h 45m spare</span></div></td>
+                  </tr>
+                  <tr class="q-row is-done">
+                    <td><a class="cl" href="#"><i class="pip pip--ready" aria-hidden="true"></i><span class="l1">Wild Rose</span><span class="l2">C-112 · <span class="st-ready">Ready</span></span></a></td>
+                    <td><span class="stepc"><span class="meter" role="img" aria-label="All 4 steps done"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>Ready</span></td>
+                    <td class="n">—</td><td class="n">—</td><td class="n">—</td>
+                    <td class="n wlc"><div class="wl"><div class="wl-top"><b>0h 00m</b></div><span class="l2">With Jordan Smith for review</span></div></td>
+                  </tr>
+                  <tr class="tot">
+                    <td>6 clients</td><td></td>
+                    <td class="n">41</td><td class="n">7</td><td class="n">6</td>
+                    <td class="n wlc"><div class="wl"><div class="wl-top"><b>18h 45m</b></div><span class="l2" style="font-weight:400">of 24h open this week</span></div></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="plan" aria-label="Your week in due-date order">
+                <div class="plan-h"><span class="eyebrow">Your week, in due-date order</span><span class="tnum">18h 45m of work · 24h open · outlined = blocked</span></div>
+                <div class="plan-due" aria-hidden="true"><span style="left:0">Crystal 45m · already late</span><span class="r" style="left:45.8333%">Dorrian due Tue</span><span style="left:58.3333%;padding-left:4px">Clive, Swan due Wed</span><span class="r" style="left:100%">Heritage due Fri</span></div>
+                <div class="plan-bar" role="img" aria-label="Crystal 45 minutes, late. Dorrian 4 hours 30, blocked, due Tuesday. Swan Creek 3 hours and Clive 9 hours 30 due Wednesday: 3 hours 45 short. Heritage 1 hour due Friday, then 5 hours 15 free."><b class="late" style="left:0.0000%;width:3.1250%" title="Crystal Kitchen &amp; Bath, 45m, already late"></b><b class="blk" style="left:3.1250%;width:18.7500%">Dorrian 4h 30m</b><b class="w" style="left:21.8750%;width:12.5000%">Swan 3h</b><b class="w" style="left:34.3750%;width:23.9583%">Clive 9h 30m</b><b class="short" style="left:58.3333%;width:15.6250%">3h 45m short</b><b class="w" style="left:73.9583%;width:4.1667%" title="Heritage Interiors, 1h"></b><i class="day" style="left:20.8333%"></i><i class="day" style="left:45.8333%"></i><i class="day" style="left:58.3333%"></i><i class="day" style="left:83.3333%"></i><i style="left:calc(45.8333% - 1px)"></i><i style="left:calc(58.3333% - 1px)"></i><span class="free" style="left:78.1250%">Heritage 1h, then 5h 15m free</span></div>
+                <div class="plan-days" aria-hidden="true"><span style="left:0.0000%">Mon · 5h</span><span style="left:20.8333%">Tue · 6h</span><span style="left:45.8333%">Wed · 3h</span><span style="left:58.3333%">Thu · 6h</span><span style="left:83.3333%">Fri · 4h</span></div>
+              </div>
+            </div>
+            <div class="wg-foot"><span>Overdue, at risk, blocked, then least time to spare</span><span class="keys"><span class="kbd">J</span><span class="kbd">K</span> move <span class="kbd">↵</span> open</span><a class="btn btn--primary" href="#">Start Crystal Kitchen &amp; Bath<span class="kbd">S</span></a></div>
+          </section>
+
+          <!-- 2 · Due this week -->
+          <section class="wg" style="--x:9;--y:1;--w:4;--h:2" aria-labelledby="w-due">
+            <div class="wg-head"><h2 class="wg-title" id="w-due">Due this week</h2><span class="wg-count">8</span><span class="wg-act"><a class="btn btn--quiet" href="#"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-cal"/></svg>Week</a></span></div>
+            <div class="wg-body">
+              <ul class="agenda">
+                <li><a href="#"><span class="d neg">Today</span><span class="txt"><span class="l1">Crystal Kitchen &amp; Bath close</span><span class="l2">Was due Fri Oct 16</span></span><i class="pip pip--overdue" aria-label="Overdue"></i></a></li>
+                <li><a href="#"><span class="d neg">Today</span><span class="txt"><span class="l1">Reconnect Dorrian’s bank feed</span><span class="l2">Bank of Iowa · 2 accounts</span></span><i class="pip pip--blocked" aria-label="Blocked"></i></a></li>
+                <li><a href="#"><span class="d">Tue</span><span class="txt"><span class="l1">Dorrian HVAC close</span><span class="l2">4h 30m once the feed is back</span></span><i class="pip pip--blocked" aria-label="Blocked"></i></a></li>
+                <li><a href="S2-client-books-loop.html"><span class="d">Wed</span><span class="txt"><span class="l1">Clive close · Swan Creek close</span><span class="l2">12h 30m of work, 8h 45m open</span></span><i class="pip pip--risk" aria-label="At risk"></i></a></li>
+                <li class="out"><a href="#"><span class="d">Wed</span><span class="txt"><span class="l1">You’re out from 12:00</span><span class="l2">3h open on Wednesday</span></span><span></span></a></li>
+              </ul>
+            </div>
+            <div class="wg-foot"><span>Thu–Fri: Heritage payroll, 2 closes</span><a class="btn btn--quiet" href="#">3 more</a></div>
+          </section>
+
+          <!-- 7 · Feeds & connections -->
+          <section class="wg" style="--x:9;--y:3;--w:4;--h:2" aria-labelledby="w-feeds">
+            <div class="wg-head"><h2 class="wg-title" id="w-feeds">Feeds &amp; connections</h2><span class="wg-count">1 broken</span><span class="wg-meta">3 healthy sources</span></div>
+            <div class="wg-body">
+              <div class="feed-bad">
+                <span class="status status--blocked"><i class="pip pip--blocked" aria-hidden="true"></i>Dorrian HVAC · Bank of Iowa</span>
+                <span class="l2" style="margin-top:2px">••4471 and ••4489 · no sync since Oct 16, 4:02 PM</span>
+                <div class="btn-row"><button class="btn btn--primary" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-plug"/></svg>Reconnect</button><button class="btn" type="button">Ask client to reconnect</button></div>
+              </div>
+              <ul class="feed-ok">
+                <li><span class="t"><b>Plaid</b> · 15 bank accounts</span><a class="nlink t-cap" href="#">synced 9:38 AM</a></li>
+                <li><span class="t"><b>Ramp</b> · 31 cards, 3 clients</span><a class="nlink t-cap" href="#">synced 9:30 AM</a></li>
+                <li><span class="t"><b>AP inbox</b> · 6 clients</span><a class="nlink t-cap" href="#">9 bills today</a></li>
+              </ul>
+            </div>
+          </section>
+
+          <!-- 3 · Needs your judgment -->
+          <section class="wg" style="--x:1;--y:5;--w:6;--h:2" aria-labelledby="w-ai">
+            <div class="wg-head"><h2 class="wg-title" id="w-ai">Needs your judgment</h2><span class="wg-count">41 + 276 ready</span></div>
+            <div class="wg-body">
+              <div class="mbands">
+                <a class="mband" href="S3-review-queue.html"><span class="eyebrow">Decide</span><span class="v">15</span><span class="t-cap">Under 70, or a question</span><span class="split"><span>Clive</span><span>6</span><span>Dorrian</span><span>9</span></span></a>
+                <a class="mband" href="S3-review-queue.html"><span class="eyebrow">Check</span><span class="v">26</span><span class="t-cap">70–89 · one look each</span><span class="split"><span>Clive</span><span>12</span><span>Dorrian</span><span>14</span></span></a>
+                <a class="mband" href="S3-review-queue.html"><span class="eyebrow">Ready</span><span class="v">276</span><span class="t-cap">90+ · preselected</span><span class="split"><span>Clive</span><span>212</span><span>Dorrian</span><span>64</span></span></a>
+              </div>
+            </div>
+            <div class="wg-foot"><span class="tnum">15 + 26 + 276 = 317 · about 2h 05m</span><a class="btn btn--primary" href="S3-review-queue.html">Start with Clive’s Decide</a></div>
+          </section>
+
+          <!-- 4 · Waiting on clients -->
+          <section class="wg" style="--x:7;--y:5;--w:6;--h:2" aria-labelledby="w-req">
+            <div class="wg-head"><h2 class="wg-title" id="w-req">Waiting on clients</h2><span class="wg-count">6</span><span class="wg-meta">2 block close</span></div>
+            <div class="wg-body">
+              <table class="tbl tbl-q tbl-q--compact tbl-q--flush rq-t" aria-label="Open client requests">
+                <colgroup><col><col style="width:48px"><col style="width:104px"><col style="width:132px"></colgroup>
+                <tbody>
+                  <tr class="q-row is-attn"><td><span class="l1">September bank statement</span><span class="l2">Dorrian HVAC · Mark Dorrian · 2 reminders</span></td><td class="n neg b">5d</td><td><span class="tag tag--neg">Blocks close</span></td><td><span class="rq-act"><button class="btn" type="button">Nudge</button><button class="btn btn--icon" type="button" aria-label="Record an answer from a call"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-phone"/></svg></button></span></td></tr>
+                  <tr class="q-row is-attn"><td><span class="l1">Venmo to J. Ortega · <span class="tnum">(4,812.00)</span></span><span class="l2">Clive · Rob Hartley · 1 reminder</span></td><td class="n b">4d</td><td><span class="tag tag--neg">Blocks close</span></td><td><span class="rq-act"><button class="btn" type="button">Nudge</button><button class="btn btn--icon" type="button" aria-label="Record an answer from a call"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-phone"/></svg></button></span></td></tr>
+                  <tr class="q-row"><td><span class="l1">3 Menards charges · <span class="tnum">(1,284.77)</span></span><span class="l2">Crystal K&amp;B · Ana Ruiz</span></td><td class="n">2d</td><td></td><td><span class="rq-act"><button class="btn" type="button">Nudge</button><button class="btn btn--icon" type="button" aria-label="Record an answer from a call"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-phone"/></svg></button></span></td></tr>
+                  <tr class="q-row"><td><span class="l1">Kubota lease agreement (PDF)</span><span class="l2">Clive · Rob Hartley</span></td><td class="n">2d</td><td></td><td><span class="rq-act"><button class="btn" type="button">Nudge</button><button class="btn btn--icon" type="button" aria-label="Record an answer from a call"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-phone"/></svg></button></span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="wg-foot"><span>2 more from yesterday</span><a class="btn btn--quiet" href="#">All requests</a></div>
+          </section>
+
+          <!-- 6 · Done for you -->
+          <section class="wg" style="--x:1;--y:7;--w:6;--h:2" aria-labelledby="w-dfy">
+            <div class="wg-head"><h2 class="wg-title" id="w-dfy">Done for you</h2><span class="wg-meta">worth a glance · since Fri 5:00 PM · 6 clients</span></div>
+            <div class="wg-body">
+              <ul class="dfy">
+                <li><span class="lab">Posted under the firm’s auto-post rule<span class="dl"></span></span><a class="c nlink" href="#">1,012</a><span class="dfy-x">of 1,329 new items</span></li>
+                <li><span class="lab">Matched to open bills<span class="dl"></span></span><a class="c nlink" href="#">38</a><span class="dfy-x tnum">worth 214,880.40</span></li>
+                <li><span class="lab">Matched to receipts, incl. Ramp<span class="dl"></span></span><a class="c nlink" href="#">112</a><span class="dfy-x">0 unmatched</span></li>
+                <li><span class="lab">Transfers paired between own accounts<span class="dl"></span></span><a class="c nlink" href="#">14</a><span class="dfy-x">no double count</span></li>
+                <li><span class="lab">Close tasks auto-verified<span class="dl"></span></span><a class="c nlink" href="#">6</a><span class="dfy-x">of 31 open</span></li>
+                <li><span class="lab">Vendor rules learned from your approvals<span class="dl"></span></span><a class="c nlink" href="#">4</a><span class="dfy-x"><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-undo"/></svg>Review</button></span></li>
+              </ul>
+            </div>
+            <div class="wg-foot"><span>Sample always includes the largest: Kubota Tractor <span class="tnum">(48,620.00)</span></span><button class="btn btn--primary" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-dice"/></svg>Spot-check 5</button></div>
+          </section>
+
+          <!-- 5 · Unreconciled accounts -->
+          <section class="wg" style="--x:7;--y:7;--w:6;--h:2" aria-labelledby="w-rec">
+            <div class="wg-head"><h2 class="wg-title" id="w-rec">Unreconciled accounts</h2><span class="wg-count">7 of 19</span><span class="wg-meta">through Sep 30</span></div>
+            <div class="wg-body">
+              <table class="tbl tbl-q tbl-q--compact tbl-q--flush" aria-label="Unreconciled accounts">
+                <colgroup><col><col style="width:104px"><col style="width:96px"><col style="width:128px"></colgroup>
+                <thead><tr><th>Account</th><th class="n">Statement</th><th class="n">Difference</th><th class="n"><span class="sr">Action</span></th></tr></thead>
+                <tbody>
+                  <tr class="q-row is-attn"><td><span class="l1">Bank of Iowa ••4471 · Operating</span><span class="l2">Dorrian HVAC</span></td><td class="n ink-3">Missing</td><td class="n">—</td><td class="n"><a class="btn btn--quiet" href="#">Requested</a></td></tr>
+                  <tr class="q-row"><td><span class="l1">Farmers State ••2210 · Operating</span><span class="l2">Clive Power Equipment</span></td><td class="n">184,312.06</td><td class="n">1,240.00</td><td class="n"><a class="btn" href="#">Reconcile</a></td></tr>
+                  <tr class="q-row"><td><span class="l1">Amex ••1006</span><span class="l2">Dorrian HVAC</span></td><td class="n">18,402.77</td><td class="n">(1,083.15)</td><td class="n"><a class="btn" href="#">Reconcile</a></td></tr>
+                  <tr class="q-row"><td><span class="l1">Ramp · 14 cards</span><span class="l2">Clive Power Equipment</span></td><td class="n">38,914.22</td><td class="n">(212.40)</td><td class="n"><a class="btn" href="#">Reconcile</a></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="wg-foot"><span>3 more: Swan Creek 46.20 · 2 at 0.00, ready to sign</span><a class="btn btn--quiet" href="#">All 7</a></div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <div class="frame-cap"><span>Open state · 1440 wide. Primary module top-left, 8 of 12. Nothing above it but the bar and a 32px context line.</span><span>Sample data · Merit Management Group · September 2026 close</span></div>
+
+  <div class="anno">
+    <div><b>Ranked by time to spare</b><p>Distance from close alone would put Clive’s nine hours above Crystal’s 45 minutes, which is already late. So the order is: overdue, at risk, blocked, then least time to spare.</p></div>
+    <div><b>The runway explains “at risk”</b><p>Blue is work left. The pale track is Dana’s open hours before that due date, after the clients due sooner. Clive needs 9h 30m and has 5h 45m. The red overrun is the 3h 45m she’s short.</p></div>
+    <div><b>Start skips what can’t start</b><p>Dorrian is blocked: its bank feed has been down 3 days. You can’t start a blocked client, so the button starts Crystal, and Dorrian’s fix (Reconnect) sits in Feeds and on today’s agenda.</p></div>
+    <div><b>Done for you, with receipts</b><p>Every count opens the list behind it. No percentages. Spot-check 5 pulls a random sample and always includes the largest item, so the riskiest one gets a human look.</p></div>
+  </div>
+
+  <!-- ================= DONE STATE ================= -->
+  <div class="board-h board-h2" id="done">
+    <span class="eyebrow">S1<span class="sl">//</span>Done state</span>
+    <span class="t-head">Friday 4:10 PM. All six clients ready for review. Feeds are healthy, so that module steps aside.</span>
+    <span class="sp"></span>
+    <a class="btn btn--quiet" href="#open">Back to the open state</a>
+  </div>
+  <div class="frame">
+  <div class="app app--frame density-cockpit" data-context="workspace">
+    <aside class="rail" aria-label="Primary">
+      <div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"><span class="prod">BOOKS</span></div>
+      <nav class="rail-nav">
+        <div class="rail-group">Home</div>
+        <a class="rail-link" href="#" aria-current="page">Home</a>
+        <a class="rail-link" href="#">Inbox</a>
+        <div class="rail-group">Work</div>
+        <a class="rail-link" href="#">Close grid</a>
+        <a class="rail-link" href="#">Review queue<span class="count">0</span></a>
+        <a class="rail-link" href="#">Requests<span class="count">0</span></a>
+        <a class="rail-link" href="#">Exceptions<span class="count">0</span></a>
+        <div class="rail-group">My clients</div>
+        <a class="rail-link" href="#">Crystal Kitchen &amp; Bath</a>
+        <a class="rail-link" href="#">Clive Power Equipment</a>
+        <a class="rail-link" href="#">Dorrian HVAC</a>
+        <a class="rail-link" href="#">Heritage Interiors</a>
+        <a class="rail-link" href="#">Swan Creek</a>
+        <a class="rail-link" href="#">Wild Rose</a>
+      </nav>
+      <div class="rail-foot">
+        <div class="eyebrow">September close</div>
+        <div class="rail-period">Day 15 <span>of 15</span></div>
+        <div class="rail-user"><span class="avatar">DL</span><span>Dana Lee<small>Bookkeeper · 6 clients</small></span></div>
+      </div>
+    </aside>
+    <header class="bar">
+      <button class="ctx" type="button" aria-haspopup="dialog"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-grid"/></svg><span class="ctx-name">Merit Management Group</span><span class="ctx-meta">Workspace</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg><span class="kbd">⌘J</span></button>
+      <span class="crumbs"><b>Home</b></span>
+      <button class="cmdk" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><span>Jump to client, vendor, account…</span><span class="kbd">⌘K</span></button>
+      <span class="sync"><i aria-hidden="true"></i>Synced 4:08 PM</span>
+    </header>
+    <div class="main">
+      <div class="ctxline">
+        <span>Fri Oct 23</span><span class="sl">//</span><span>September close</span><span class="sl">//</span><span>Day 15 of 15</span><span class="sl">//</span><b class="pos">6 of 6 clients ready for review</b><span class="sl">//</span><span>October close opens Nov 2</span>
+        <span class="sp"></span><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-sliders"/></svg>Customize</button>
+      </div>
+      <div class="page">
+        <div class="dash" style="grid-auto-flow:row">
+          <section class="wg wg--primary" style="--x:1;--y:1;--w:8;--h:4" aria-labelledby="d-mc">
+            <div class="wg-head"><h2 class="wg-title" id="d-mc">My clients</h2><span class="wg-count">6</span></div>
+            <div class="done-strip"><span class="wg-done-mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span><span><b>September is ready for review on all 6.</b> Jordan Smith has signed off 4; 2 are with him now.</span></div>
+            <div class="wg-body">
+              <table class="tbl tbl-q tbl-q--flush" aria-label="My clients">
+                <colgroup><col><col style="width:120px"><col style="width:72px"><col style="width:64px"><col style="width:88px"><col style="width:200px"></colgroup>
+                <thead><tr><th>Client</th><th>Step</th><th class="n">Review</th><th class="n">Unrec</th><th class="n">Requests</th><th class="n">Handed over</th></tr></thead>
+                <tbody>
+                  <tr class="q-row"><td><span class="cl"><i class="pip pip--ready" aria-hidden="true"></i><span class="l1">Crystal Kitchen &amp; Bath</span><span class="l2">C-104 · <span class="st-ready">Signed off</span></span></span></td><td><span class="stepc"><span class="meter" role="img" aria-label="All 4 steps done"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>Ready</span></td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n"><span class="l1">Mon Oct 19</span><span class="l2">1 day after due</span></td></tr>
+                  <tr class="q-row"><td><span class="cl"><i class="pip pip--ready" aria-hidden="true"></i><span class="l1">Clive Power Equipment</span><span class="l2">C-102 · <span class="st-ready">Signed off</span></span></span></td><td><span class="stepc"><span class="meter" role="img" aria-label="All 4 steps done"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>Ready</span></td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n"><span class="l1">Tue Oct 20</span><span class="l2">1 day early</span></td></tr>
+                  <tr class="q-row"><td><span class="cl"><i class="pip pip--ready" aria-hidden="true"></i><span class="l1">Dorrian HVAC</span><span class="l2">C-105 · <span class="st-ready">With Jordan Smith</span></span></span></td><td><span class="stepc"><span class="meter" role="img" aria-label="All 4 steps done"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>Ready</span></td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n"><span class="l1">Thu Oct 22</span><span class="l2">2 days after due</span></td></tr>
+                  <tr class="q-row"><td><span class="cl"><i class="pip pip--ready" aria-hidden="true"></i><span class="l1">Heritage Interiors</span><span class="l2">C-101 · <span class="st-ready">Signed off</span></span></span></td><td><span class="stepc"><span class="meter" role="img" aria-label="All 4 steps done"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>Ready</span></td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n"><span class="l1">Tue Oct 20</span><span class="l2">3 days early</span></td></tr>
+                  <tr class="q-row"><td><span class="cl"><i class="pip pip--ready" aria-hidden="true"></i><span class="l1">Swan Creek</span><span class="l2">C-107 · <span class="st-ready">With Jordan Smith</span></span></span></td><td><span class="stepc"><span class="meter" role="img" aria-label="All 4 steps done"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>Ready</span></td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n"><span class="l1">Wed Oct 21</span><span class="l2">on the due date</span></td></tr>
+                  <tr class="q-row"><td><span class="cl"><i class="pip pip--ready" aria-hidden="true"></i><span class="l1">Wild Rose</span><span class="l2">C-112 · <span class="st-ready">Signed off</span></span></span></td><td><span class="stepc"><span class="meter" role="img" aria-label="All 4 steps done"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>Ready</span></td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n"><span class="l1">Fri Oct 16</span><span class="l2">7 days early</span></td></tr>
+                </tbody>
+              </table>
+              <div class="plan" aria-label="September in numbers">
+                <div class="plan-h"><span class="eyebrow">Your September, handed over</span><span class="tnum">vs August</span></div>
+                <div class="sept">
+                  <a class="fig" href="#"><span class="fig-l">Your hours</span><span class="fig-v fig-v--dense">41h 20m</span><span class="fig-vs"><span class="pos">6h 40m less</span><span>Aug 48h 00m</span></span></a>
+                  <a class="fig" href="#"><span class="fig-l">Items you touched</span><span class="fig-v fig-v--dense">712</span><span class="fig-vs"><span>of 4,118</span><span>Aug 1,104 of 3,962</span></span></a>
+                  <a class="fig" href="#"><span class="fig-l">Returned by Jordan</span><span class="fig-v fig-v--dense">1</span><span class="fig-vs"><span>Stihl rebate</span><span>Aug 4</span></span></a>
+                  <a class="fig" href="#"><span class="fig-l">On time or early</span><span class="fig-v fig-v--dense">4 of 6</span><span class="fig-vs"><span>2 late: Crystal, Dorrian</span></span></a>
+                </div>
+              </div>
+            </div>
+            <div class="wg-foot"><span>Nothing to start until October opens · 214 October items already coded</span><a class="btn" href="#">Get ahead on October<svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-right"/></svg></a></div>
+          </section>
+
+          <!-- Feeds hidden (all healthy) — Due this week takes its rows -->
+          <section class="wg" style="--x:9;--y:1;--w:4;--h:4" aria-labelledby="d-due">
+            <div class="wg-head"><h2 class="wg-title" id="d-due">Due this week</h2><span class="wg-count">0</span></div>
+            <div class="wg-body">
+              <div class="wg-state" style="height:auto;padding:24px 16px 16px">
+                <span class="wg-done-mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span>
+                <span class="t-head">Nothing due until Mon Oct 26</span>
+                <p>Next week, in order:</p>
+              </div>
+              <ul class="agenda">
+                <li><a href="#"><span class="d">Mon</span><span class="txt"><span class="l1">Wild Rose 1099 review</span><span class="l2">14 vendors · 2 missing W-9s</span></span><span></span></a></li>
+                <li><a href="#"><span class="d">Tue</span><span class="txt"><span class="l1">Heritage payroll register</span><span class="l2">Pay date Fri Oct 30</span></span><span></span></a></li>
+                <li><a href="#"><span class="d">Fri</span><span class="txt"><span class="l1">Iowa sales tax · Q3</span><span class="l2">Crystal, Swan Creek, Wild Rose</span></span><span></span></a></li>
+              </ul>
+            </div>
+            <div class="wg-foot"><span>Feeds hidden: every connection healthy</span><a class="btn btn--quiet" href="#">Next week</a></div>
+          </section>
+
+          <section class="wg" style="--x:1;--y:5;--w:6;--h:2" aria-labelledby="d-ai">
+            <div class="wg-head"><h2 class="wg-title" id="d-ai">Needs your judgment</h2><span class="wg-count">0</span></div>
+            <div class="wg-body"><div class="wg-state"><span class="wg-done-mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span><span class="t-head">Every September item has a confident code</span><p>October so far: 214 Ready for batch approval across 6 clients.</p><a class="btn" href="#">Approve October’s Ready batch</a></div></div>
+          </section>
+          <section class="wg" style="--x:7;--y:5;--w:6;--h:2" aria-labelledby="d-req">
+            <div class="wg-head"><h2 class="wg-title" id="d-req">Waiting on clients</h2><span class="wg-count">0</span></div>
+            <div class="wg-body"><div class="wg-state"><span class="wg-done-mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span><span class="t-head">No open requests</span><p>This week 9 of 9 were answered, in 1 day on average. Rob Hartley answered 3 in under a minute.</p><a class="btn btn--quiet" href="#">See answered requests</a></div></div>
+          </section>
+          <section class="wg" style="--x:1;--y:7;--w:6;--h:2" aria-labelledby="d-dfy">
+            <div class="wg-head"><h2 class="wg-title" id="d-dfy">Done for you</h2><span class="wg-meta">worth a glance · this week · 6 clients</span></div>
+            <div class="wg-body">
+              <ul class="dfy">
+                <li><span class="lab">Posted under the firm’s auto-post rule<span class="dl"></span></span><a class="c nlink" href="#">3,406</a><span class="dfy-x">of 4,118 items</span></li>
+                <li><span class="lab">Matched to open bills<span class="dl"></span></span><a class="c nlink" href="#">97</a><span class="dfy-x">0 left open</span></li>
+                <li><span class="lab">Matched to receipts, incl. Ramp<span class="dl"></span></span><a class="c nlink" href="#">388</a><span class="dfy-x">0 unmatched</span></li>
+                <li><span class="lab">Close tasks auto-verified<span class="dl"></span></span><a class="c nlink" href="#">41</a><span class="dfy-x">of 128 tasks</span></li>
+                <li><span class="lab">Client answers re-coded and learned<span class="dl"></span></span><a class="c nlink" href="#">9</a><span class="dfy-x">from 9 requests</span></li>
+              </ul>
+            </div>
+            <div class="wg-foot"><span>You spot-checked 15 this week · 0 changed</span><button class="btn btn--primary" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-dice"/></svg>Spot-check 5</button></div>
+          </section>
+          <section class="wg" style="--x:7;--y:7;--w:6;--h:2" aria-labelledby="d-rec">
+            <div class="wg-head"><h2 class="wg-title" id="d-rec">Unreconciled accounts</h2><span class="wg-count">0 of 19</span></div>
+            <div class="wg-body"><div class="wg-state"><span class="wg-done-mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span><span class="t-head">All 19 accounts reconciled through Sep 30</span><p>Every difference is 0.00 and signed by you. October statements arrive from Nov 2.</p><a class="btn btn--quiet" href="#">Open reconciliations</a></div></div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <div class="frame-cap"><span>Done state · each module says what’s next instead of “No data”. Feeds &amp; connections is the one module allowed to disappear; Due this week grows into its rows.</span><span>Sample data</span></div>
+</main>
+<script>
+/* J/K move the cursor through My clients (open state); Enter opens. */
+(function(){
+  var rows=[].slice.call(document.querySelectorAll('#open .wg--primary tr.q-row'));var i=0;
+  function set(n){rows[i].classList.remove('is-cursor');i=Math.max(0,Math.min(rows.length-1,n));rows[i].classList.add('is-cursor');}
+  rows.forEach(function(r,n){r.addEventListener('mouseenter',function(){set(n)})});
+  document.addEventListener('keydown',function(e){if(e.target.closest('input,textarea'))return;
+    if(e.key==='j')set(i+1);if(e.key==='k')set(i-1);
+    if(e.key==='Enter'&&document.activeElement===document.body){var a=rows[i].querySelector('a.cl');if(a)location.href=a.getAttribute('href');}});
+})();
+</script>
+</body></html>

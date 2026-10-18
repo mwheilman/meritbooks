@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=1440">
+<title>Components · MeritBooks Design System v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="system.css">
+<style>
+/* Board layout only — not part of the system */
+body{min-width:1440px}
+.sheet-top{display:flex;align-items:center;gap:24px;height:48px;padding:0 48px;background:var(--midnight);color:var(--grey-300)}
+.sheet-top img{height:24px;width:auto}
+.sheet-top nav{margin-left:auto;display:flex;gap:4px}
+.sheet-top nav a{height:32px;display:inline-flex;align-items:center;padding:0 12px;color:var(--grey-300);font-weight:500}
+.sheet-top nav a:hover,.sheet-top nav a[aria-current=page]{background:var(--night-800);color:var(--warm)}
+.sheet{padding:0 48px 96px}
+.sheet-intro{display:grid;grid-template-columns:repeat(12,1fr);column-gap:24px;padding:40px 0 8px}
+.sheet-intro h1{grid-column:1/8}
+.sheet-intro p{grid-column:1/8;margin-top:12px;color:var(--ink-2);font-size:15px;line-height:24px}
+.sheet-intro dl{grid-column:9/13;align-self:end;display:grid;grid-template-columns:auto 1fr;gap:4px 16px;border-top:2px solid var(--electric);padding-top:12px}
+.sheet-intro dt{color:var(--ink-2)} .sheet-intro dd{font-weight:500}
+.sec{display:grid;grid-template-columns:repeat(12,1fr);column-gap:24px;padding-top:56px}
+.sec-label{grid-column:1/4}
+.sec-label .t-title{margin-top:8px}
+.sec-label p{margin-top:12px;color:var(--ink-2)}
+.sec-label ul{margin-top:12px;padding-left:16px;color:var(--ink-2)}
+.sec-label li+li{margin-top:4px}
+.sec-label code{font:600 12px/16px var(--f-text);color:var(--electric)}
+.sec-body{grid-column:4/13;border-top:1px solid var(--electric);padding-top:24px;min-width:0}
+.sec-pg{grid-column:12/13;justify-self:end;font-variant-numeric:tabular-nums;color:var(--ink)}
+.spec{display:grid;grid-template-columns:repeat(9,1fr);column-gap:24px;row-gap:32px}
+.cap{font-size:12px;line-height:16px;color:var(--ink-3);margin-top:8px}
+.cap code,.k{font:600 12px/16px var(--f-text);color:var(--electric)}
+.swatches{display:grid;grid-template-columns:repeat(9,1fr);gap:0;border-top:1px solid var(--line)}
+.sw{padding:12px 12px 16px 0;border-bottom:1px solid var(--line)}
+.sw i{display:block;height:56px;border:1px solid var(--line);margin-bottom:8px}
+.sw b{display:block;font-weight:600}
+.sw span{display:block;font-size:12px;line-height:16px;color:var(--ink-3)}
+.ramp{display:grid;grid-template-columns:160px repeat(5,1fr);align-items:stretch;height:40px;margin-top:8px}
+.ramp b{align-self:center;font-weight:600}
+.ramp i{display:flex;align-items:flex-end;padding:4px 6px;font:500 12px/16px var(--f-text);font-style:normal}
+.typetbl td{padding:12px 0;border-bottom:1px solid var(--line);vertical-align:baseline}
+.typetbl td:nth-child(2),.typetbl td:nth-child(3){color:var(--ink-2);white-space:nowrap;padding-left:24px}
+.spacebar{display:flex;align-items:flex-end;gap:24px}
+.spacebar div{display:flex;flex-direction:column;gap:8px;align-items:flex-start;font-size:12px;color:var(--ink-3)}
+.spacebar i{display:block;background:var(--electric)}
+.frame{border:1px solid var(--line-2);overflow:hidden;position:relative}
+.demo-row{display:flex;flex-wrap:wrap;align-items:center;gap:16px}
+.demo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.mini-dash{display:grid;grid-template-columns:repeat(12,1fr);grid-auto-rows:24px;gap:6px}
+.mini-dash div{grid-column:span var(--w);grid-row:span var(--h);border:1px solid var(--electric);background:var(--sky);display:flex;align-items:flex-end;justify-content:space-between;padding:6px 8px;font:600 12px/16px var(--f-text);color:var(--electric)}
+.mini-dash div.p{background:var(--electric);color:var(--white)}
+.mini-dash div.gone{border-style:dashed;background:transparent;color:var(--ink-3)}
+.pairs td{padding:8px 0;border-bottom:1px solid var(--line)}
+.pairs td+td{padding-left:16px}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></symbol>
+<symbol id="i-down" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></symbol>
+<symbol id="i-right" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></symbol>
+<symbol id="i-layers" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2 14 5 8 8 2 5Z"/><path d="M2 8.2l6 3 6-3"/><path d="M2 11.2l6 3 6-3"/></symbol>
+<symbol id="i-grid" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/></symbol>
+<symbol id="i-pin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M5.5 2h5l-.7 4.2L12 8.5H4l2.2-2.3Z"/><path d="M8 8.5V14"/></symbol>
+<symbol id="i-lock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="7" width="9" height="6.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></symbol>
+<symbol id="i-drag" viewBox="0 0 16 16" fill="currentColor"><rect x="5" y="3" width="2" height="2"/><rect x="9" y="3" width="2" height="2"/><rect x="5" y="7" width="2" height="2"/><rect x="9" y="7" width="2" height="2"/><rect x="5" y="11" width="2" height="2"/><rect x="9" y="11" width="2" height="2"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h12M2 11h12"/><rect x="9" y="3" width="2.5" height="4" fill="#fff"/><rect x="4.5" y="9" width="2.5" height="4" fill="#fff"/></symbol>
+<symbol id="i-x" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></symbol>
+<symbol id="i-receipt" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h8v12l-2-1.2L8 14l-2-1.2L4 14Z"/><path d="M6 6h4M6 9h4"/></symbol>
+<symbol id="i-bill" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h5.5L12 4.5V14H4Z"/><path d="M6 7.5h4M6 10.5h3"/></symbol>
+<symbol id="i-none" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"><rect x="3" y="3" width="10" height="10"/></symbol>
+<symbol id="i-eye" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></symbol>
+<symbol id="i-undo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 3.5 2.5 6.5l3 3"/><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7"/></symbol>
+<symbol id="i-plug" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2v3.5M10 2v3.5M4 5.5h8v2a4 4 0 0 1-8 0Z"/><path d="M8 11.5V14"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></symbol>
+<symbol id="i-flag" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3.5 14V2.5h8l-1.5 3 1.5 3h-8"/></symbol>
+<symbol id="i-ask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 3h11v8H7l-3 2.5V11H2.5Z"/></symbol>
+<symbol id="i-resize" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 3h4v4M7 13H3V9M13 3 3 13"/></symbol>
+<symbol id="i-history" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9"/><path d="M2.5 2.5v2.5H5"/><path d="M8 5v3.2l2 1.3"/></symbol>
+<symbol id="i-book" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 2.5h7.5L13 5v8.5H3Z"/><path d="M5.5 6.5h5M5.5 9h5M5.5 11.5h3"/></symbol>
+</defs></svg>
+
+<a class="skip" href="#main">Skip to content</a>
+<header class="sheet-top on-dark">
+  <img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24">
+  <span class="eyebrow" style="color:var(--slate)">MeritBooks<span class="sl">//</span>Design System v2</span>
+  <nav aria-label="Design system pages"><a href="index.html">Index</a><a href="components.html" aria-current="page">Components</a><a href="S6-owner-home.html">S6 Owner</a><a href="S6b-cfo-home.html">S6b CFO</a><a href="S6c-controller-home.html">S6c Controller</a><a href="S7-switcher-and-contexts.html">S7 Switcher</a><a href="S8-dashboard-edit.html">S8 Edit</a><a href="S9-platform-console-home.html">S9 Platform</a></nav>
+</header>
+
+<main id="main" class="sheet">
+<section class="sheet-intro">
+  <div style="grid-column:1/8"><div class="eyebrow">Component sheet<span class="sl">//</span>v2.0<span class="sl">//</span>Oct 2026</div></div>
+  <h1 class="t-title" style="margin-top:8px">One system, two densities</h1>
+  <p>Annual Report sets the owner’s screens: editorial type, statement rules, notes to the figures. Operator Cockpit sets the work screens: a Midnight frame, 48px rows, keys printed next to the verbs, the slash meter. Both use the same tokens and components. Only density changes, through <span class="k">.density-report</span> and <span class="k">.density-cockpit</span> on the page.</p>
+  <dl><dt>Type</dt><dd>Syne 700 · DM Sans 400–700</dd><dt>Figures</dt><dd>DM Sans tabular, right-aligned</dd><dt>Grid</dt><dd>12 col · 24 gutter · 32 margin</dd><dt>Corners</dt><dd>Square. Keycaps only: 2px</dd><dt>Sample data</dt><dd>Merit Management Group, Sep 2026 close</dd></dl>
+</section>
+
+<!-- 01 FOUNDATIONS ======================================================= -->
+<section class="sec" aria-labelledby="s1">
+  <div class="sec-label"><div class="eyebrow">01<span class="sl">//</span>Foundations</div><h2 class="t-title" id="s1">Colour</h2>
+    <p>Brand hexes are exact. Ramps are sampled from the guide’s Usage page; nothing else enters the palette. Functional colours are dark enough to sit beside Midnight and Steel.</p>
+    <ul><li>Electric Blue: titles, rules, buttons, focus, links.</li><li>Signal Blue: on Midnight only.</li><li>Slate: labels on Midnight only. At 3.1:1 it never sets text on a light surface.</li></ul></div>
+  <div class="sec-body">
+    <div class="swatches">
+      <div class="sw"><i style="background:#2563EB"></i><b>Electric Blue</b><span>#2563EB</span><span>5.2:1 on white</span></div>
+      <div class="sw"><i style="background:#0A1628"></i><b>Midnight</b><span>#0A1628</span><span>17.7:1 on Warm</span></div>
+      <div class="sw"><i style="background:#3B82F6"></i><b>Signal Blue</b><span>#3B82F6</span><span>4.9:1 on Midnight</span></div>
+      <div class="sw"><i style="background:#3D4F65"></i><b>Steel</b><span>#3D4F65</span><span>8.2:1 · body 2</span></div>
+      <div class="sw"><i style="background:#8494A7"></i><b>Slate</b><span>#8494A7</span><span>5.9:1 on Midnight</span></div>
+      <div class="sw"><i style="background:#FDFCFA"></i><b>Warm White</b><span>#FDFCFA</span><span>Page</span></div>
+      <div class="sw"><i style="background:#F5F3EF"></i><b>Canvas</b><span>#F5F3EF</span><span>Insets, notes</span></div>
+      <div class="sw"><i style="background:#EBF2FE"></i><b>Sky</b><span>#EBF2FE</span><span>Selection, AI</span></div>
+      <div class="sw"><i style="background:#536A82"></i><b>Ink 3</b><span>#536A82</span><span>5.5:1 · caption floor</span></div>
+    </div>
+    <div style="margin-top:24px">
+      <div class="ramp"><b>Blue ramp</b><i style="background:#2563EB;color:#fff">--electric</i><i style="background:#3B82F6;color:#0A1628">--signal</i><i style="background:#6AA8FF;color:#0A1628">--blue-300</i><i style="background:#A9CCFF;color:#0A1628">--blue-200</i><i style="background:#DCEBFF;color:#0A1628">--blue-100</i></div>
+      <div class="ramp"><b>Grey ramp</b><i style="background:#F2F3F5">--grey-100</i><i style="background:#E1E5EA">--grey-200 · line</i><i style="background:#CCD3DB">--grey-300 · line-2</i><i style="background:#B5BEC8">--grey-400</i><i style="background:#FDFCFA;border:1px solid var(--line)">--warm</i></div>
+      <div class="ramp"><b>Midnight ramp</b><i style="background:#0A1628;color:#CCD3DB">--midnight</i><i style="background:#1A2A3F;color:#CCD3DB">--night-800</i><i style="background:#2A3E57;color:#fff">--night-700</i><i style="background:#3F566F;color:#fff">--night-600</i><i style="background:#5A738D;color:#fff">--night-500</i></div>
+      <div class="ramp"><b>Functional</b><i style="background:#1F6E50;color:#fff">--pos 6.2:1</i><i style="background:#B42318;color:#fff">--neg 6.6:1</i><i style="background:#8A5A00;color:#fff">--warn 5.9:1</i><i style="background:#E6F1EC;color:#1F6E50">wash 5.3:1</i><i style="background:#FBEAE8;color:#B42318">wash 5.7:1</i></div>
+    </div>
+    <p class="cap">Green is never a call to action. Emerald and red are not used for debits and credits; amounts use parentheses for negatives, and colour only for status.</p>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s1b">
+  <div class="sec-label"><div class="eyebrow">01<span class="sl">//</span>Foundations</div><h2 class="t-title" id="s1b">Type</h2>
+    <p>Five sizes per screen at most. Syne appears where a title or a bottom line deserves it, never in a table cell. Every figure is DM Sans with tabular, lining numerals.</p></div>
+  <div class="sec-body">
+    <table class="typetbl">
+      <tr><td><span class="t-display">306,659</span></td><td>Syne 40 / 48</td><td><span class="k">.t-display</span> · a statement’s bottom line, once per screen</td></tr>
+      <tr><td><span class="t-title">Consolidated income statement</span></td><td>Syne 28 / 32</td><td><span class="k">.t-title</span> · page title, Electric Blue</td></tr>
+      <tr><td><span class="t-section">Notes to the figures</span></td><td>Syne 20 / 28</td><td><span class="k">.t-section</span> · report-density widget and section titles</td></tr>
+      <tr><td><span class="t-head">Waiting on clients</span></td><td>DM Sans 15 / 24 · 600</td><td><span class="k">.t-head</span> · cockpit widget titles, note claims</td></tr>
+      <tr><td><span class="t-body">Dorrian HVAC’s bank feed has been disconnected for 3 days.</span></td><td>DM Sans 15 / 24</td><td><span class="k">.t-body</span> · reading copy</td></tr>
+      <tr><td><span class="t-ui">5230 Equipment rental · <span class="tnum">(3,184.62)</span></span></td><td>DM Sans 13 / 20</td><td><span class="k">.t-ui</span> · tables, controls, the default</td></tr>
+      <tr><td><span class="t-cap">Oldest 6 days · 2 block close</span></td><td>DM Sans 12 / 16</td><td><span class="k">.t-cap</span> · captions, Ink 3 minimum</td></tr>
+      <tr><td><span class="eyebrow">Books<span class="sl">//</span>Review queue</span></td><td>DM Sans 12 / 16 · 500 · +14%</td><td><span class="k">.eyebrow</span> + <span class="k">.sl</span> · the guide’s “02 // Label”</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s1c">
+  <div class="sec-label"><div class="eyebrow">01<span class="sl">//</span>Foundations</div><h2 class="t-title" id="s1c">Space &amp; grid</h2>
+    <p>Everything lands on 8. Four is for optical nudges only. Rows are 32 (statement), 40 (compact queue, popover) or 48 (queue, widget header).</p></div>
+  <div class="sec-body">
+    <div class="spacebar">
+      <div><i style="width:4px;height:4px"></i>4 · s-half</div><div><i style="width:8px;height:8px"></i>8 · s1</div><div><i style="width:16px;height:16px"></i>16 · s2</div><div><i style="width:24px;height:24px"></i>24 · s3</div><div><i style="width:32px;height:32px"></i>32 · s4</div><div><i style="width:40px;height:40px"></i>40 · s5</div><div><i style="width:48px;height:48px"></i>48 · s6</div><div><i style="width:64px;height:64px"></i>64 · s8</div>
+    </div>
+    <table class="pairs" style="margin-top:32px">
+      <tr><td class="b">Rail</td><td>232px Midnight · 64px collapsed in edit mode</td><td class="b">Top bar</td><td>48px · context chip, crumbs, ⌘K</td></tr>
+      <tr><td class="b">Context line</td><td>32px · date // period // close day // one status phrase</td><td class="b">Content</td><td>12 columns · 24 gutter · 32 margin</td></tr>
+      <tr><td class="b">Dashboard row</td><td>136px · h2 = 296 · h4 = 616</td><td class="b">Hit targets</td><td>32px minimum, including chips and handles</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- 02 SHELL ============================================================= -->
+<section class="sec" aria-labelledby="s2">
+  <div class="sec-label"><div class="eyebrow">02<span class="sl">//</span>Shell</div><h2 class="t-title" id="s2">App shell</h2>
+    <p>Left rail, 48px top bar, 32px context line. Then the primary module. Nothing else sits above the fold: no banner, no greeting, no paragraph.</p>
+    <ul><li><code>.app[data-context]</code> drives the shell state. See <a class="link" href="S7-switcher-and-contexts.html">S7</a>.</li><li><code>.ctx</code> is the switcher trigger, <span class="kbd">⌘</span><span class="kbd">J</span>.</li><li><code>.ctxline</code> holds the only sentence a home is allowed.</li></ul></div>
+  <div class="sec-body">
+    <div class="frame" style="height:360px">
+      <div class="app app--frame density-cockpit" data-context="workspace" style="height:360px">
+        <aside class="rail" aria-label="Primary">
+          <div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"><span class="prod">BOOKS</span></div>
+          <nav class="rail-nav"><div class="rail-group">Home</div>
+            <a class="rail-link" href="#" aria-current="page">Home<span class="keys"><span class="kbd">G</span><span class="kbd">H</span></span></a>
+            <a class="rail-link" href="#">Inbox<span class="count">4</span></a>
+            <div class="rail-group">Work</div>
+            <a class="rail-link" href="#">Review queue<span class="count">125</span></a>
+            <a class="rail-link" href="#">Requests<span class="count">7</span></a>
+          </nav>
+        </aside>
+        <header class="bar">
+          <button class="ctx" type="button" aria-haspopup="dialog" aria-expanded="false"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-grid"/></svg><span class="ctx-name">Merit Management Group</span><span class="ctx-meta">Workspace</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg><span class="kbd">⌘J</span></button>
+          <span class="crumbs"><b>Home</b></span>
+          <button class="cmdk" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><span>Jump to client, vendor, account…</span><span class="kbd">⌘K</span></button>
+          <span class="sync"><i aria-hidden="true"></i>Plaid synced 7:42 AM</span>
+        </header>
+        <div class="main">
+          <div class="ctxline"><span>Mon Oct 19</span><span class="sl">//</span><span>September close</span><span class="sl">//</span><span>Day 12 of 15</span><span class="sl">//</span><b>1 of 6 clients ready for review</b><span class="sp"></span><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-sliders"/></svg>Customize</button></div>
+          <div class="page" style="padding-top:24px">
+            <div class="wg wg--primary" style="height:220px"><div class="wg-head"><h3 class="wg-title">My clients</h3><span class="wg-count">6</span><span class="wg-meta">Ranked by distance from close</span><div class="wg-act"><a class="btn btn--primary" href="#">Start Dorrian HVAC<svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-right"/></svg></a></div></div>
+              <div class="wg-body wg-body--pad ink-3">The primary module occupies the top-left 8 of 12 columns and renders first from one query.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="cap">Workspace state shown. Height cropped to 360px for the sheet.</p>
+  </div>
+</section>
+
+<!-- 03 ACTIONS =========================================================== -->
+<section class="sec" aria-labelledby="s3">
+  <div class="sec-label"><div class="eyebrow">03<span class="sl">//</span>Actions</div><h2 class="t-title" id="s3">Buttons &amp; keys</h2>
+    <p>One primary per region. Labels are verbs that say what happens, and the toast repeats the verb: Approve 3 → “Approved 3”.</p>
+    <ul><li><code>.btn</code> · <code>--primary</code> · <code>--quiet</code> · <code>--danger</code> · <code>--dark</code> · <code>--lg</code> · <code>--icon</code></li><li>Primary hover goes to Midnight, never to a lighter blue. White on Signal Blue fails AA.</li></ul></div>
+  <div class="sec-body">
+    <div class="spec">
+      <div style="grid-column:1/10" class="demo-row">
+        <button class="btn btn--primary" type="button">Approve 23 Ready<span class="kbd">⇧</span><span class="kbd">A</span></button>
+        <button class="btn" type="button">Ask client<span class="kbd">Q</span></button>
+        <button class="btn btn--quiet" type="button">Spot-check 5</button>
+        <button class="btn btn--danger" type="button">Revoke access</button>
+        <button class="btn" type="button" disabled>Mark ready for review</button>
+        <button class="btn btn--icon" type="button" aria-label="Flag"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-flag"/></svg></button>
+        <button class="btn btn--primary btn--lg" type="button">Publish v5</button>
+      </div>
+      <div style="grid-column:1/5">
+        <div class="eyebrow">States</div>
+        <div class="demo-row" style="margin-top:12px">
+          <button class="btn" type="button">Default</button>
+          <button class="btn" type="button" style="border-color:var(--electric);color:var(--electric)">Hover</button>
+          <button class="btn" type="button" style="outline:2px solid var(--electric);outline-offset:2px">Focus</button>
+          <button class="btn btn--primary" type="button" style="background:var(--midnight);border-color:var(--midnight)">Primary hover</button>
+        </div>
+      </div>
+      <div style="grid-column:5/10">
+        <div class="eyebrow">Keycaps</div>
+        <div class="demo-row" style="margin-top:12px">
+          <span class="keys"><span class="kbd">J</span><span class="kbd">K</span> move</span>
+          <span class="keys"><span class="kbd">X</span> select</span>
+          <span class="keys"><span class="kbd">A</span> approve</span>
+          <span class="keys"><span class="kbd">F</span> flag</span>
+          <span class="keys"><span class="kbd">E</span> edit</span>
+          <span class="keys"><span class="kbd">⌘</span><span class="kbd">Z</span> undo</span>
+        </div>
+      </div>
+      <div style="grid-column:1/10">
+        <div class="keybar"><span class="keys"><span class="kbd">J</span><span class="kbd">K</span> move</span><span class="keys"><span class="kbd">X</span> select</span><span class="keys"><span class="kbd">A</span> approve</span><span class="keys"><span class="kbd">F</span> flag</span><span class="keys"><span class="kbd">E</span> edit</span><span class="keys"><span class="kbd">Q</span> ask client</span><span class="sp"></span><span>Nothing posts until you approve it</span></div>
+        <p class="cap"><code>.keybar</code> · the bottom strip on every queue. Keys are printed where the action lives, not in a tooltip.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 04 INPUTS ============================================================ -->
+<section class="sec" aria-labelledby="s4">
+  <div class="sec-label"><div class="eyebrow">04<span class="sl">//</span>Inputs</div><h2 class="t-title" id="s4">Fields</h2>
+    <p>32px controls with a 1px border; focus adds a 1px Electric Blue ring so the box never shifts. Errors say what’s wrong and how to fix it.</p>
+    <ul><li><code>.field</code> › <code>.field-label</code> <code>.input</code> <code>.field-help</code> / <code>.field-error</code></li><li><code>.input--money</code> right-aligns tabular figures.</li></ul></div>
+  <div class="sec-body">
+    <div class="spec">
+      <label class="field" style="grid-column:1/4"><span class="field-label">Vendor</span><input class="input" value="Sunbelt Rentals"><span class="field-help">Raw: SUNBELT RENTALS #0738</span></label>
+      <label class="field" style="grid-column:4/7"><span class="field-label">Amount</span><input class="input input--money is-focus" value="3,184.62"><span class="field-help">Matches receipt R-5521</span></label>
+      <label class="field" style="grid-column:7/10"><span class="field-label">Job</span><select class="select"><option>S-1142 · Clive Parks fleet service</option></select><span class="field-help">2 open jobs on Oct 12</span></label>
+      <label class="field" style="grid-column:1/4"><span class="field-label">Statement ending balance</span><input class="input input--money is-error" value="412,880.15" aria-invalid="true"><span class="field-error">Off by 1,240.00 from the GL. Check outstanding deposits.</span></label>
+      <label class="field" style="grid-column:4/7"><span class="field-label">Period</span><input class="input" value="September 2026 · soft-closed" disabled><span class="field-help">Reopen requires a controller</span></label>
+      <div class="field" style="grid-column:7/10"><span class="field-label">Search</span><label class="search"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><input type="search" placeholder="Vendor, amount, account" aria-label="Search transactions"><span class="kbd">/</span></label></div>
+      <div style="grid-column:1/10" class="demo-row">
+        <label class="check"><input type="checkbox" checked><i></i>Show eliminations</label>
+        <label class="check"><input type="checkbox" id="indet"><i></i>Select all Ready</label>
+        <label class="check"><input type="checkbox" disabled><i></i>Auto-post (autonomy off)</label>
+        <label class="radio"><input type="radio" name="r1" checked><i></i>New users only</label>
+        <label class="radio"><input type="radio" name="r1"><i></i>Everyone</label>
+        <label class="switch"><input type="checkbox" checked><i></i>Privacy blur</label>
+      </div>
+      <label class="field" style="grid-column:1/7"><span class="field-label">Release note</span><textarea class="textarea">Moved Waiting on clients up. Feeds is now required.</textarea></label>
+    </div>
+  </div>
+</section>
+
+<!-- 05 NAVIGATION ======================================================== -->
+<section class="sec" aria-labelledby="s5">
+  <div class="sec-label"><div class="eyebrow">05<span class="sl">//</span>Navigation</div><h2 class="t-title" id="s5">Tabs</h2>
+    <p>Underline tabs switch views of the same thing. Segmented controls switch a mode. Band tabs are the queue’s three judgment bands, each with its count and a meter.</p>
+    <ul><li><code>.tabs .tab[aria-selected]</code></li><li><code>.seg button[aria-pressed]</code></li><li><code>.bands .band-tab</code></li></ul></div>
+  <div class="sec-body">
+    <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="true">To review <span class="n">41</span></button><button class="tab" role="tab" aria-selected="false">Flagged <span class="n">3</span></button><button class="tab" role="tab" aria-selected="false">Approved today <span class="n">188</span></button><button class="tab" role="tab" aria-selected="false">Posted</button></div>
+    <div class="demo-row" style="margin-top:24px">
+      <div class="seg" role="group" aria-label="Columns"><button aria-pressed="true">Consolidated</button><button aria-pressed="false">By client</button><button aria-pressed="false">By segment</button></div>
+      <div class="seg" role="group" aria-label="Period"><button aria-pressed="false">MTD</button><button aria-pressed="true">Sep 2026</button><button aria-pressed="false">YTD</button></div>
+    </div>
+    <div class="bands" role="tablist" style="margin-top:24px;max-width:720px">
+      <button class="band-tab" role="tab" aria-selected="true"><span class="eyebrow">Decide</span><span class="v">6</span><span class="t-cap">Under 70, or the AI has a question</span></button>
+      <button class="band-tab" role="tab" aria-selected="false"><span class="eyebrow">Check</span><span class="v">12</span><span class="t-cap">70–89 · one look each</span></button>
+      <button class="band-tab" role="tab" aria-selected="false"><span class="eyebrow">Ready</span><span class="v">23</span><span class="t-cap">90 and up · preselected for batch</span></button>
+    </div>
+    <p class="cap">Clive Power Equipment, 41 to review = 6 + 12 + 23.</p>
+  </div>
+</section>
+
+<!-- 06 STATUS ============================================================ -->
+<section class="sec" aria-labelledby="s6">
+  <div class="sec-label"><div class="eyebrow">06<span class="sl">//</span>Status</div><h2 class="t-title" id="s6">Status system</h2>
+    <p>Every status has a shape and a word. Colour is the third signal, never the only one. The square pip comes from the guide’s flat, square geometry.</p>
+    <ul><li><code>.status.status--{ready|track|risk|overdue|blocked}</code> › <code>.pip</code></li><li><code>.tag--{ai|pos|neg|warn|solid}</code> · <code>.match--{none|partial}</code></li></ul></div>
+  <div class="sec-body">
+    <table class="tbl tbl-q tbl-q--compact tbl-q--flush" style="max-width:880px">
+      <colgroup><col style="width:180px"><col style="width:200px"><col></colgroup>
+      <thead><tr><th>Close status</th><th>Shape</th><th>Rule (IA-SPEC §4.1)</th></tr></thead>
+      <tbody>
+        <tr><td><span class="status status--ready"><i class="pip pip--ready"></i>Ready</span></td><td class="ink-2">Filled square</td><td class="ink-2">Step 4 done or signed off</td></tr>
+        <tr><td><span class="status status--track"><i class="pip pip--track"></i>On track</span></td><td class="ink-2">Open square</td><td class="ink-2">Remaining work fits before the due date</td></tr>
+        <tr><td><span class="status status--risk"><i class="pip pip--risk"></i>At risk</span></td><td class="ink-2">Half square, cut at 45°</td><td class="ink-2">Remaining minutes exceed my available minutes before due</td></tr>
+        <tr><td><span class="status status--overdue"><i class="pip pip--overdue"></i>Overdue</span></td><td class="ink-2">Filled square, brick</td><td class="ink-2">Past the client’s close due date</td></tr>
+        <tr><td><span class="status status--blocked"><i class="pip pip--blocked"></i>Blocked</span></td><td class="ink-2">Square struck through</td><td class="ink-2">Feed down &gt; 2 days, blocking request &gt; 5 business days, or missing statement</td></tr>
+      </tbody>
+    </table>
+    <div class="demo-row" style="margin-top:24px">
+      <span class="status status--track"><i class="pip pip--open"></i>Sep open</span>
+      <span class="status status--track"><i class="pip pip--soft"></i>Aug soft-closed</span>
+      <span class="status status--track"><i class="pip pip--closed"></i>Jul hard-closed</span>
+      <span class="tag tag--ai">AI · 74</span><span class="tag tag--pos">Balanced</span><span class="tag tag--neg">Blocks close</span><span class="tag tag--warn">Returned by reviewer</span><span class="tag">Required</span><span class="tag tag--solid">Read-only</span>
+    </div>
+    <div class="demo-row" style="margin-top:16px">
+      <span class="match"><svg class="ico pos" width="16" height="16" aria-hidden="true"><use href="#i-bill"/></svg>Bill B-22870</span>
+      <span class="match"><svg class="ico pos" width="16" height="16" aria-hidden="true"><use href="#i-receipt"/></svg>Receipt R-5521</span>
+      <span class="match match--partial"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-bill"/></svg>2 bills · pick one</span>
+      <span class="match match--none"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-none"/></svg>No match</span>
+    </div>
+    <div class="spec" style="margin-top:24px;row-gap:12px">
+      <div class="inline-notice" style="grid-column:1/6"><svg class="ico" width="16" height="16" aria-hidden="true" style="margin-top:2px"><use href="#i-plug"/></svg><div><b>AI paused — rules and vendor memory still coding.</b> 31 of today’s 44 items were coded by rules. <a class="link" href="#">Gateway status</a></div></div>
+      <div class="inline-notice inline-notice--neg" style="grid-column:6/10"><div><b>Bank of Iowa ••4471 disconnected 3 days.</b> Dorrian HVAC can’t close until it reconnects.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 07 SLASH METER ======================================================= -->
+<section class="sec" aria-labelledby="s7">
+  <div class="sec-label"><div class="eyebrow">07<span class="sl">//</span>Signature</div><h2 class="t-title" id="s7">Slash meter</h2>
+    <p>The monogram’s 45° stroke, spaced like the guide’s “//”. Read it by count. The number always sits beside it. An outlined slash is the current step. A brick slash is the one that’s stuck.</p>
+    <ul><li><code>.meter</code> › <code>i.on</code> <code>i.part</code> <code>i.cur</code> <code>i.bad</code></li><li>Pure CSS. Give the meter <code>role="img"</code> and an <code>aria-label</code>.</li></ul></div>
+  <div class="sec-body">
+    <table class="tbl tbl-q tbl-q--compact tbl-q--flush" style="max-width:880px">
+      <colgroup><col style="width:220px"><col style="width:220px"><col></colgroup>
+      <tbody>
+        <tr><td class="b">Confidence 97</td><td><span class="conf"><span class="meter" role="img" aria-label="Confidence 97 of 100"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span><b>97</b></span></td><td class="ink-2">Ready band · preselected for batch</td></tr>
+        <tr><td class="b">Confidence 74</td><td><span class="conf"><span class="meter" role="img" aria-label="Confidence 74 of 100"><i class="on"></i><i class="on"></i><i class="on"></i><i class="part"></i><i></i></span><b>74</b></span></td><td class="ink-2">Check band · one look</td></tr>
+        <tr><td class="b">Confidence 41</td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 41 of 100"><i class="on"></i><i class="on"></i><i class="part"></i><i></i><i></i></span><b>41</b></span></td><td class="ink-2">Decide band · the AI says it’s guessing</td></tr>
+        <tr><td class="b">Books review · step 2 of 4</td><td><span class="meter meter--lg" role="img" aria-label="Step 2 of 4, Reconcile, current"><i class="on"></i><i class="cur"></i><i></i><i></i></span></td><td class="ink-2">Review → Reconcile → Check → Close</td></tr>
+        <tr><td class="b">Books review · blocked</td><td><span class="meter meter--lg" role="img" aria-label="Blocked at step 1, Review"><i class="bad"></i><i></i><i></i><i></i></span></td><td class="ink-2">Brick = the step that’s stuck</td></tr>
+        <tr><td class="b">Clients ready · 4 of 13</td><td><span class="meter" role="img" aria-label="4 of 13 clients ready"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="part"></i><i class="part"></i><i class="part"></i><i></i><i></i><i></i><i></i><i></i><i></i></span></td><td class="ink-2">One slash per client · pale = in review</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 08 TABLES ============================================================ -->
+<section class="sec" aria-labelledby="s8">
+  <div class="sec-label"><div class="eyebrow">08<span class="sl">//</span>Tables</div><h2 class="t-title" id="s8">Statement</h2>
+    <p>Annual-report rules. Blue rule under the header, single Midnight rule over a subtotal, blue double rule under the total. Negatives in parentheses, with a hidden hanging paren so digits align. Current period sits on white.</p>
+    <ul><li><code>.tbl.tbl-fs</code> · rows <code>.fs-head .fs-line .fs-elim .fs-sub .fs-grand .fs-gap</code></li><li><code>.hp</code> = hanging paren · <code>.fu--f/--u</code></li><li>Variances of $100,000 or more set in 600.</li></ul></div>
+  <div class="sec-body density-report">
+    <div class="grid-12" style="grid-template-columns:repeat(9,1fr)">
+      <div style="grid-column:1/7;min-width:0">
+        <div class="row row--between" style="align-items:flex-end"><div><div class="eyebrow">Merit Management Group — Consolidated<span class="sl">//</span>9 clients</div><h3 class="t-section" style="margin-top:4px">Income statement · September 2026</h3></div><span class="t-cap">In US dollars · unaudited</span></div>
+        <table class="tbl tbl-fs" style="margin-top:16px">
+          <colgroup><col><col style="width:40px"><col style="width:84px"><col style="width:84px"><col style="width:84px"><col style="width:80px"><col style="width:60px"><col style="width:20px"></colgroup>
+          <thead><tr><th>Line</th><th class="nt">Note</th><th class="n cur">Sep 2026</th><th class="n">Aug 2026</th><th class="n">Budget</th><th class="n">Variance</th><th class="n">Var %</th><th></th></tr></thead>
+          <tbody>
+<tr class="fs-head"><td colspan="8">Revenue</td></tr>
+<tr class="fs-line" data-note=2><td>HVAC</td><td class="nt"><a class="nref" href="#n2" data-note="2" aria-label="See note 2">2</a></td><td class="n cur">3,503,500<span class="hp">)</span></td><td class="n">3,712,900<span class="hp">)</span></td><td class="n">3,600,000<span class="hp">)</span></td><td class="n">(96,500)</td><td class="n">(2.7%)</td><td><span class="fu fu--u" aria-label="unfavorable">U</span></td></tr>
+<tr class="fs-line"><td>Interiors and cabinetry</td><td class="nt"></td><td class="n cur">2,598,400<span class="hp">)</span></td><td class="n">2,511,300<span class="hp">)</span></td><td class="n">2,550,000<span class="hp">)</span></td><td class="n">48,400<span class="hp">)</span></td><td class="n">1.9%<span class="hp">)</span></td><td><span class="fu fu--f" aria-label="favorable">F</span></td></tr>
+<tr class="fs-line" data-note=3><td>Homebuilding</td><td class="nt"><a class="nref" href="#n3" data-note="3" aria-label="See note 3">3</a></td><td class="n cur">1,986,000<span class="hp">)</span></td><td class="n">1,742,000<span class="hp">)</span></td><td class="n">2,100,000<span class="hp">)</span></td><td class="n b">(114,000)</td><td class="n b">(5.4%)</td><td><span class="fu fu--u" aria-label="unfavorable">U</span></td></tr>
+<tr class="fs-line"><td>Equipment sales and service</td><td class="nt"></td><td class="n cur">1,248,500<span class="hp">)</span></td><td class="n">1,301,200<span class="hp">)</span></td><td class="n">1,200,000<span class="hp">)</span></td><td class="n">48,500<span class="hp">)</span></td><td class="n">4.0%<span class="hp">)</span></td><td><span class="fu fu--f" aria-label="favorable">F</span></td></tr>
+<tr class="fs-line fs-elim"><td>Management fees</td><td class="nt"></td><td class="n cur">312,000<span class="hp">)</span></td><td class="n">312,000<span class="hp">)</span></td><td class="n">312,000<span class="hp">)</span></td><td class="n">—<span class="hp">)</span></td><td class="n">—<span class="hp">)</span></td><td><span class="fu ink-3">–</span></td></tr>
+<tr class="fs-line fs-elim"><td>Intercompany eliminations</td><td class="nt"></td><td class="n cur">(312,000)</td><td class="n">(312,000)</td><td class="n">(312,000)</td><td class="n">—<span class="hp">)</span></td><td class="n">—<span class="hp">)</span></td><td><span class="fu ink-3">–</span></td></tr>
+<tr class="fs-sub"><td>Total revenue</td><td class="nt"></td><td class="n cur">9,336,400<span class="hp">)</span></td><td class="n">9,267,400<span class="hp">)</span></td><td class="n">9,450,000<span class="hp">)</span></td><td class="n b">(113,600)</td><td class="n b">(1.2%)</td><td><span class="fu fu--u" aria-label="unfavorable">U</span></td></tr>
+<tr class="fs-head"><td colspan="8">Cost of revenue</td></tr>
+<tr class="fs-line" data-note=1><td>Materials and equipment</td><td class="nt"><a class="nref" href="#n1" data-note="1" aria-label="See note 1">1</a></td><td class="n cur">4,287,791<span class="hp">)</span></td><td class="n">4,144,950<span class="hp">)</span></td><td class="n">4,215,400<span class="hp">)</span></td><td class="n">72,391<span class="hp">)</span></td><td class="n">1.7%<span class="hp">)</span></td><td><span class="fu fu--u" aria-label="unfavorable">U</span></td></tr>
+<tr class="fs-line"><td>Direct labor</td><td class="nt"></td><td class="n cur">2,214,600<span class="hp">)</span></td><td class="n">2,198,300<span class="hp">)</span></td><td class="n">2,240,000<span class="hp">)</span></td><td class="n">(25,400)</td><td class="n">(1.1%)</td><td><span class="fu fu--f" aria-label="favorable">F</span></td></tr>
+<tr class="fs-line"><td>Subcontractors</td><td class="nt"></td><td class="n cur">812,450<span class="hp">)</span></td><td class="n">701,200<span class="hp">)</span></td><td class="n">790,000<span class="hp">)</span></td><td class="n">22,450<span class="hp">)</span></td><td class="n">2.8%<span class="hp">)</span></td><td><span class="fu fu--u" aria-label="unfavorable">U</span></td></tr>
+<tr class="fs-sub"><td>Total cost of revenue</td><td class="nt"></td><td class="n cur">7,314,841<span class="hp">)</span></td><td class="n">7,044,450<span class="hp">)</span></td><td class="n">7,245,400<span class="hp">)</span></td><td class="n">69,441<span class="hp">)</span></td><td class="n">1.0%<span class="hp">)</span></td><td><span class="fu fu--u" aria-label="unfavorable">U</span></td></tr>
+<tr class="fs-gap"><td colspan="8"></td></tr>
+<tr class="fs-sub"><td>Gross profit</td><td class="nt"></td><td class="n cur">2,021,559<span class="hp">)</span></td><td class="n">2,222,950<span class="hp">)</span></td><td class="n">2,204,600<span class="hp">)</span></td><td class="n b">(183,041)</td><td class="n b">(8.3%)</td><td><span class="fu fu--u" aria-label="unfavorable">U</span></td></tr>
+<tr class="fs-head"><td colspan="8">Operating expenses</td></tr>
+<tr class="fs-line"><td>Salaries and benefits</td><td class="nt"></td><td class="n cur">1,104,300<span class="hp">)</span></td><td class="n">1,098,700<span class="hp">)</span></td><td class="n">1,110,000<span class="hp">)</span></td><td class="n">(5,700)</td><td class="n">(0.5%)</td><td><span class="fu fu--f" aria-label="favorable">F</span></td></tr>
+<tr class="fs-line"><td>Facilities and vehicles</td><td class="nt"></td><td class="n cur">268,900<span class="hp">)</span></td><td class="n">266,400<span class="hp">)</span></td><td class="n">270,000<span class="hp">)</span></td><td class="n">(1,100)</td><td class="n">(0.4%)</td><td><span class="fu fu--f" aria-label="favorable">F</span></td></tr>
+<tr class="fs-line fs-elim"><td>Management fees</td><td class="nt"></td><td class="n cur">312,000<span class="hp">)</span></td><td class="n">312,000<span class="hp">)</span></td><td class="n">312,000<span class="hp">)</span></td><td class="n">—<span class="hp">)</span></td><td class="n">—<span class="hp">)</span></td><td><span class="fu ink-3">–</span></td></tr>
+<tr class="fs-line fs-elim"><td>Intercompany eliminations</td><td class="nt"></td><td class="n cur">(312,000)</td><td class="n">(312,000)</td><td class="n">(312,000)</td><td class="n">—<span class="hp">)</span></td><td class="n">—<span class="hp">)</span></td><td><span class="fu ink-3">–</span></td></tr>
+<tr class="fs-line"><td>Other operating expenses</td><td class="nt"></td><td class="n cur">341,700<span class="hp">)</span></td><td class="n">329,800<span class="hp">)</span></td><td class="n">335,000<span class="hp">)</span></td><td class="n">6,700<span class="hp">)</span></td><td class="n">2.0%<span class="hp">)</span></td><td><span class="fu fu--u" aria-label="unfavorable">U</span></td></tr>
+<tr class="fs-sub"><td>Total operating expenses</td><td class="nt"></td><td class="n cur">1,714,900<span class="hp">)</span></td><td class="n">1,694,900<span class="hp">)</span></td><td class="n">1,715,000<span class="hp">)</span></td><td class="n">(100)</td><td class="n">(0.0%)</td><td><span class="fu fu--f" aria-label="favorable">F</span></td></tr>
+<tr class="fs-gap"><td colspan="8"></td></tr>
+<tr class="fs-grand"><td>Operating income</td><td class="nt"></td><td class="n cur">306,659<span class="hp">)</span></td><td class="n">528,050<span class="hp">)</span></td><td class="n">489,600<span class="hp">)</span></td><td class="n b">(182,941)</td><td class="n b">(37.4%)</td><td><span class="fu fu--u" aria-label="unfavorable">U</span></td></tr>
+          </tbody>
+        </table>
+        <p class="cap">Totals tie: revenue 9,336,400 − cost of revenue 7,314,841 = gross profit 2,021,559; less operating expenses 1,714,900 = operating income 306,659. Management fees eliminate on both sides.</p>
+      </div>
+      <aside class="notes" style="grid-column:7/10" aria-labelledby="notes-h">
+        <div class="notes-head"><h3 class="t-section" id="notes-h">Notes</h3><span class="t-cap">Hover a note or a figure</span></div>
+        <article class="note" id="n1" data-note="1">
+          <div class="note-top"><span class="note-no" aria-hidden="true">1</span><div><div class="note-kind">Note 1 · Margin</div><h4 class="note-title">Heartland’s materials ran $81,941 over budget</h4></div></div>
+          <p>Two supplier increases hit jobs quoted before they took effect. The other clients came in <b>$9,550</b> under.</p>
+          <ul class="ev"><li>Ferguson, +7.5% from Aug 15<span class="dl"></span><span class="v">21,400</span></li><li>Johnstone Supply, +4.0% from Sep 1<span class="dl"></span><span class="v">8,900</span></li><li>More jobs started than budgeted<span class="dl"></span><span class="v">51,641</span></li><li class="ev-total">Heartland over budget<span class="dl"></span><span class="v">81,941</span></li></ul>
+          <div class="basis"><span><b>88</b> confidence</span><span>612 GL lines · 3 price letters</span></div>
+          <div class="note-acts"><a class="btn btn--quiet" href="#">List the 14 jobs</a></div>
+        </article>
+        <article class="note" id="n2" data-note="2">
+          <div class="note-top"><span class="note-no" aria-hidden="true">2</span><div><div class="note-kind">Note 2 · Revenue</div><h4 class="note-title">HVAC came in $96,500 under budget</h4></div></div>
+          <p>Cooling season ended two weeks early. Service calls fell <b>18%</b> against August; installs held.</p>
+          <div class="basis"><span><b>Exact</b> · posted GL</span><span>3 clients</span></div>
+        </article>
+        <article class="note" id="n3" data-note="3">
+          <div class="note-top"><span class="note-no" aria-hidden="true">3</span><div><div class="note-kind">Note 3 · Timing</div><h4 class="note-title">Two Artistry draws slipped into October</h4></div></div>
+          <p>Lender inspections moved. Neither is disputed; together they cover the gap to budget.</p>
+          <div class="basis"><span><b>Exact</b> · AR aging</span></div>
+        </article>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s8b">
+  <div class="sec-label"><div class="eyebrow">08<span class="sl">//</span>Tables</div><h2 class="t-title" id="s8b">Queue</h2>
+    <p>Cockpit rules. 48px rows grouped by judgment band, lowest confidence first. Selection is Sky. The cursor row is white with a blue inset, so selection and cursor never look alike.</p>
+    <ul><li><code>.tbl.tbl-q</code> · <code>tr.q-group</code> · <code>tr.q-row.is-selected / .is-cursor / .is-done / .is-attn</code></li><li><code>.bulk</code> appears on selection · <code>.keybar</code> closes the queue</li><li>Try <span class="kbd">J</span> <span class="kbd">K</span> <span class="kbd">X</span> with the table focused.</li></ul></div>
+  <div class="sec-body">
+    <div class="frame density-cockpit">
+      <div class="bulk" id="bulk" role="status"><b><span class="tnum" id="bulk-n">3</span> selected</b><span class="sl">//</span><span>Ready band</span><span class="sl">//</span><span class="tnum" id="bulk-amt">(15,461.30)</span><span class="sp"></span><button class="btn btn--primary" type="button">Approve <span id="bulk-n2">3</span><span class="kbd">⇧</span><span class="kbd">A</span></button><button class="btn" type="button">Ask client<span class="kbd">Q</span></button><button class="btn btn--quiet" type="button">Clear<span class="kbd">Esc</span></button></div>
+      <table class="tbl tbl-q" id="q" tabindex="0" aria-label="Clive Power Equipment, transactions to review">
+        <colgroup><col style="width:56px"><col style="width:72px"><col><col style="width:240px"><col style="width:150px"><col style="width:96px"><col style="width:120px"></colgroup>
+        <thead><tr><th><label class="check"><input type="checkbox" id="q-all" aria-label="Select all"><i></i></label></th><th>Date</th><th>Vendor / payer</th><th>Account · job</th><th>Match</th><th><button class="th-sort" type="button" aria-label="Confidence, lowest first">Conf. ↑</button></th><th class="n">Amount</th></tr></thead>
+        <tbody>
+          <tr class="q-group"><td colspan="7"><span class="q-group-t">Decide</span><span class="tnum b">6</span><span class="ink-3" style="margin-left:12px">Under 70, or the AI has a question</span></td></tr>
+          <tr class="q-row is-attn" data-amt="-4812.00"><td><label class="check"><input type="checkbox" aria-label="Select Venmo, J. Ortega, 4,812.00"><i></i></label></td><td class="tnum ink-2">Oct 14</td><td><span class="l1">Venmo · J. Ortega</span><span class="l2">VENMO PAYMENT 1023884</span></td><td><span class="l1 warn">AI asks: wages or a subcontractor?</span><span class="l2">Draft request ready</span></td><td><span class="match match--none"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-none"/></svg>No match</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 38"><i class="on"></i><i class="part"></i><i></i><i></i><i></i></span><b>38</b></span></td><td class="n">(4,812.00)</td></tr>
+          <tr class="q-row" data-amt="-642.18"><td><label class="check"><input type="checkbox" aria-label="Select Amazon Business, 642.18"><i></i></label></td><td class="tnum ink-2">Oct 9</td><td><span class="l1">Amazon Business</span><span class="l2">AMZN Mktp US*2K4T19</span></td><td><span class="l1"><span class="code">6420</span>Shop supplies</span><span class="l2">No job</span></td><td><span class="match match--none"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-none"/></svg>No match</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 58"><i class="on"></i><i class="on"></i><i class="part"></i><i></i><i></i></span><b>58</b></span></td><td class="n">(642.18)</td></tr>
+          <tr class="q-group"><td colspan="7"><span class="q-group-t">Check</span><span class="tnum b">12</span><span class="ink-3" style="margin-left:12px">70–89 · showing 2</span></td></tr>
+          <tr class="q-row is-cursor" data-amt="-3184.62"><td><label class="check"><input type="checkbox" aria-label="Select Sunbelt Rentals, 3,184.62"><i></i></label></td><td class="tnum ink-2">Oct 12</td><td><span class="l1">Sunbelt Rentals</span><span class="l2">SUNBELT RENTALS #0738</span></td><td><span class="l1"><span class="code">5230</span>Equipment rental</span><span class="l2">S-1142 · Clive Parks fleet service</span></td><td><span class="match"><svg class="ico pos" width="16" height="16" aria-hidden="true"><use href="#i-receipt"/></svg>Receipt R-5521</span></td><td><span class="conf"><span class="meter" role="img" aria-label="Confidence 74"><i class="on"></i><i class="on"></i><i class="on"></i><i class="part"></i><i></i></span><b>74</b></span></td><td class="n">(3,184.62)</td></tr>
+          <tr class="q-row" data-amt="-1962.33"><td><label class="check"><input type="checkbox" aria-label="Select MidAmerican Energy, 1,962.33"><i></i></label></td><td class="tnum ink-2">Oct 15</td><td><span class="l1">MidAmerican Energy</span><span class="l2">MIDAMERICAN ENERGY WEB</span></td><td><span class="l1"><span class="code">6230</span>Utilities</span><span class="l2">No job</span></td><td><span class="match match--none"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-none"/></svg>No match</span></td><td><span class="conf"><span class="meter" role="img" aria-label="Confidence 81"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span><b>81</b></span></td><td class="n">(1,962.33)</td></tr>
+          <tr class="q-group"><td colspan="7"><span class="q-group-t">Ready</span><span class="tnum b">23</span><span class="ink-3" style="margin-left:12px">90 and up · preselected · showing 3</span></td></tr>
+          <tr class="q-row is-selected" data-amt="-7412.90"><td><label class="check"><input type="checkbox" checked aria-label="Select Ferguson Enterprises, 7,412.90"><i></i></label></td><td class="tnum ink-2">Oct 13</td><td><span class="l1">Ferguson Enterprises</span><span class="l2">FERGUSON ENT #1182</span></td><td><span class="l1"><span class="code">5110</span>Parts inventory</span><span class="l2">No job</span></td><td><span class="match"><svg class="ico pos" width="16" height="16" aria-hidden="true"><use href="#i-bill"/></svg>Bill B-22870</span></td><td><span class="conf"><span class="meter" role="img" aria-label="Confidence 97"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span><b>97</b></span></td><td class="n">(7,412.90)</td></tr>
+          <tr class="q-row is-selected" data-amt="-5108.40"><td><label class="check"><input type="checkbox" checked aria-label="Select Ferguson Enterprises, 5,108.40"><i></i></label></td><td class="tnum ink-2">Oct 15</td><td><span class="l1">Ferguson Enterprises</span><span class="l2">FERGUSON ENT #1182</span></td><td><span class="l1"><span class="code">5110</span>Parts inventory</span><span class="l2">No job</span></td><td><span class="match"><svg class="ico pos" width="16" height="16" aria-hidden="true"><use href="#i-bill"/></svg>Bill B-22911</span></td><td><span class="conf"><span class="meter" role="img" aria-label="Confidence 96"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span><b>96</b></span></td><td class="n">(5,108.40)</td></tr>
+          <tr class="q-row is-selected" data-amt="-2940.00"><td><label class="check"><input type="checkbox" checked aria-label="Select Stihl Inc., 2,940.00"><i></i></label></td><td class="tnum ink-2">Oct 16</td><td><span class="l1">Stihl Inc.</span><span class="l2">STIHL INC DEALER ACH</span></td><td><span class="l1"><span class="code">5110</span>Parts inventory</span><span class="l2">No job</span></td><td><span class="match"><svg class="ico pos" width="16" height="16" aria-hidden="true"><use href="#i-bill"/></svg>Bill B-22934</span></td><td><span class="conf"><span class="meter" role="img" aria-label="Confidence 94"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="part"></i></span><b>94</b></span></td><td class="n">(2,940.00)</td></tr>
+        </tbody>
+      </table>
+      <div class="keybar"><span class="keys"><span class="kbd">J</span><span class="kbd">K</span> move</span><span class="keys"><span class="kbd">X</span> select</span><span class="keys"><span class="kbd">A</span> approve</span><span class="keys"><span class="kbd">F</span> flag</span><span class="keys"><span class="kbd">E</span> edit</span><span class="keys"><span class="kbd">Q</span> ask client</span><span class="sp"></span><span>41 to review · 6 + 12 + 23</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 09 NOTES ============================================================= -->
+<section class="sec" aria-labelledby="s9">
+  <div class="sec-label"><div class="eyebrow">09<span class="sl">//</span>Evidence</div><h2 class="t-title" id="s9">Notes to the figures</h2>
+    <p>The AI never appears as a chat bubble or a sparkle. It appears as an auditor’s footnote: a claim, the evidence as a dotted-leader ledger that sums, its basis and confidence, and the next action. On owner screens notes live in a Canvas margin. In a work panel the same note sits inline on Sky.</p>
+    <ul><li><code>.nref</code> on the figure ⇄ <code>.note[data-note]</code></li><li><code>.ev</code> evidence · <code>.ev-total</code> must equal the claim</li><li><code>.why</code> for reasons for and <code>.against</code></li></ul></div>
+  <div class="sec-body">
+    <div class="spec">
+      <div style="grid-column:1/5">
+        <div class="eyebrow" style="margin-bottom:8px">In a margin · report density</div>
+        <article class="note">
+          <div class="note-top"><span class="note-no" aria-hidden="true">4</span><div><div class="note-kind">Note 4 · Covenant</div><h4 class="note-title">Dorrian HVAC is $84,000 short of its 1.25× test</h4></div></div>
+          <p>At September’s run-rate the November 30 test lands at <b>1.16×</b>. Dorrian needs $84,000 more trailing cash flow, or a waiver from its senior lender.</p>
+          <ul class="ev"><li>Cash flow for debt service, T12<span class="dl"></span><span class="v">1,412,000</span></li><li>Debt service, T12<span class="dl"></span><span class="v">1,197,000</span></li><li>Coverage<span class="dl"></span><span class="v">1.18×</span></li><li class="ev-total">Shortfall to 1.25×<span class="dl"></span><span class="v">84,250</span></li></ul>
+          <div class="basis"><span><b>Exact</b> · computed from posted GL</span><span>Test date Nov 30</span></div>
+          <div class="note-acts"><a class="btn btn--quiet" href="#">Open covenant workpaper</a><a class="btn btn--quiet" href="#">Draft lender note</a></div>
+        </article>
+        <p class="cap">1.25 × 1,197,000 = 1,496,250 − 1,412,000 = 84,250. The title rounds to the nearest thousand.</p>
+      </div>
+      <div style="grid-column:5/10">
+        <div class="eyebrow" style="margin-bottom:8px">In a panel · cockpit density</div>
+        <div class="note note--panel">
+          <div class="row row--between"><span class="tag tag--ai">AI suggestion</span><span class="conf"><span class="meter" role="img" aria-label="Confidence 74"><i class="on"></i><i class="on"></i><i class="on"></i><i class="part"></i><i></i></span><b>74</b></span></div>
+          <h4 class="note-title" style="margin-top:8px">5230 Equipment rental, job S-1142</h4>
+          <ul class="why">
+            <li><b>9 of 11</b> prior Sunbelt bills went to 5230. Two went to 5110 Parts inventory.</li>
+            <li>Receipt R-5521 matches to the cent: <b>3,184.62</b>, Oct 12, “Boom lift · 3 days”.</li>
+            <li class="against">Job is a guess. Two service jobs were open on Oct 12. S-1142 has the lift on its work order.</li>
+          </ul>
+          <div class="basis"><span><b>Vendor memory</b> + receipt</span><span>Nothing posts until you approve</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 10 OVERLAYS ========================================================== -->
+<section class="sec" aria-labelledby="s10">
+  <div class="sec-label"><div class="eyebrow">10<span class="sl">//</span>Overlays</div><h2 class="t-title" id="s10">Toast, popover, panel, dialog</h2>
+    <p>Things that float get a Midnight edge and the only shadow in the system. Panels slide in from the right at 400px and never cover the row they describe.</p>
+    <ul><li><code>.toast</code> · Midnight, verb + count + Undo</li><li><code>.popover</code> › <code>-head -list -group -item -foot</code></li><li><code>.panel</code> › <code>-head -body -sec -foot</code></li><li><code>.scrim</code> › <code>.dialog</code></li></ul></div>
+  <div class="sec-body">
+    <div class="spec">
+      <div style="grid-column:1/10" class="demo-row">
+        <div class="toast" role="status"><span class="toast-mark"></span><span>Approved 3 · posted to Clive Power Equipment</span><button class="btn btn--quiet" type="button">Undo<span class="kbd">⌘</span><span class="kbd">Z</span></button></div>
+        <div class="toast toast--neg" role="alert"><span class="toast-mark"></span><span>Couldn’t post 1. September is soft-closed for Clive.</span><button class="btn btn--quiet" type="button">Ask to reopen</button></div>
+      </div>
+      <div style="grid-column:1/5;position:relative;height:392px">
+        <div class="eyebrow" style="margin-bottom:8px">Popover · account picker with vendor recents</div>
+        <label class="field" style="width:300px"><span class="field-label">Account</span><input class="input is-focus" value="rent"></label>
+        <div class="popover" style="top:72px;left:0;width:360px" role="listbox" aria-label="Accounts">
+          <ul class="popover-list">
+            <li class="popover-group" role="presentation"><span>Sunbelt Rentals used</span><span>Times</span></li>
+            <li class="popover-item" role="option" aria-selected="true"><span class="code">5230</span>Equipment rental<span class="r tnum">9</span></li>
+            <li class="popover-item" role="option" aria-selected="false"><span class="code">5110</span>Parts inventory<span class="r tnum">2</span></li>
+            <li class="popover-group" role="presentation"><span>All accounts matching “rent”</span></li>
+            <li class="popover-item" role="option" aria-selected="false"><span class="code">5235</span>Vehicle rental</li>
+            <li class="popover-item" role="option" aria-selected="false"><span class="code">6310</span>Rent — shop</li>
+            <li class="popover-item" role="option" aria-selected="false"><span class="code">6315</span>Rent — equipment yard</li>
+          </ul>
+          <div class="popover-foot"><span class="keys"><span class="kbd">↑</span><span class="kbd">↓</span> move</span><span class="keys"><span class="kbd">↵</span> choose</span><span class="keys"><span class="kbd">Esc</span> close</span></div>
+        </div>
+      </div>
+      <div style="grid-column:5/10">
+        <div class="eyebrow" style="margin-bottom:8px">Side panel · transaction detail</div>
+        <div class="panel frame" style="height:520px;width:400px">
+          <div class="panel-head">
+            <div class="row row--between"><span class="eyebrow">Check band<span class="sl">//</span>3 of 12</span><button class="btn btn--icon btn--quiet" type="button" aria-label="Close panel"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+            <div class="row row--between" style="margin-top:8px;align-items:flex-end"><div><div class="t-head">Sunbelt Rentals</div><div class="t-cap">Oct 12 · Bank of Iowa operating ••2208</div></div><div class="t-title tnum" style="color:var(--ink)">(3,184.62)</div></div>
+          </div>
+          <div class="panel-body">
+            <div class="panel-sec"><div class="note note--panel"><div class="row row--between"><span class="tag tag--ai">AI suggestion</span><span class="conf"><span class="meter" role="img" aria-label="Confidence 74"><i class="on"></i><i class="on"></i><i class="on"></i><i class="part"></i><i></i></span><b>74</b></span></div><ul class="why"><li><b>9 of 11</b> prior bills to 5230</li><li>Receipt R-5521 matches to the cent</li><li class="against">Job S-1142 is a guess</li></ul></div></div>
+            <div class="panel-sec"><div class="panel-sec-h"><h3>Posting preview</h3><span class="tag tag--pos">Balanced</span></div>
+              <table class="tbl tbl-fs"><colgroup><col><col style="width:88px"><col style="width:88px"></colgroup><thead><tr><th>Account</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead><tbody>
+                <tr><td><span class="code">5230</span>Equipment rental</td><td class="n">3,184.62</td><td class="n"></td></tr>
+                <tr><td><span class="code">1010</span>Operating — Bank of Iowa</td><td class="n"></td><td class="n">3,184.62</td></tr>
+                <tr class="fs-grand"><td>Total</td><td class="n">3,184.62</td><td class="n">3,184.62</td></tr></tbody></table></div>
+          </div>
+          <div class="panel-foot"><button class="btn btn--primary" type="button">Approve<span class="kbd">A</span></button><button class="btn" type="button">Edit<span class="kbd">E</span></button><span class="sp"></span><button class="btn btn--quiet" type="button">Ask client<span class="kbd">Q</span></button></div>
+        </div>
+      </div>
+      <div style="grid-column:1/10;position:relative;height:360px" class="frame inset">
+        <div class="scrim" style="padding-top:40px">
+          <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-h">
+            <div class="dialog-head"><h3 class="t-section" id="dlg-h">Reset to the Bookkeeper default?</h3></div>
+            <div class="dialog-body"><p class="ink-2">Your home goes back to Merit Management Group’s published Bookkeeper layout, v4. You’ll lose three changes:</p>
+              <ul class="ev" style="margin-top:12px"><li>Feeds &amp; connections moved to the top row<span class="dl"></span><span class="v">Oct 3</span></li><li>Due this week resized to L<span class="dl"></span><span class="v">Oct 3</span></li><li>Team quality added<span class="dl"></span><span class="v">Oct 9</span></li></ul></div>
+            <div class="dialog-foot"><span class="t-cap">Widget settings such as band filters are kept.</span><span class="sp"></span><button class="btn" type="button">Cancel</button><button class="btn btn--danger" type="button">Reset my home</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 11 FIGURES =========================================================== -->
+<section class="sec" aria-labelledby="s11">
+  <div class="sec-label"><div class="eyebrow">11<span class="sl">//</span>Figures</div><h2 class="t-title" id="s11">A number is never alone</h2>
+    <p>Value, a comparison, and a destination. A tile with no “vs” and nowhere to go is cut. Report density sets the value in Syne. Cockpit density sets it in DM Sans 20.</p>
+    <ul><li><code>.fig</code> › <code>.fig-l .fig-v .fig-vs</code> + a link</li><li><code>.fig-v--dense</code> for cockpit strips</li></ul></div>
+  <div class="sec-body">
+    <div class="spec">
+      <div class="fig" style="grid-column:1/4"><span class="fig-l">Cash today · 9 clients</span><span class="fig-v tnum">8,411,220</span><span class="fig-vs"><span>+612,034 vs Sep 30</span><span>13-week low 7,590,400 on Dec 4</span></span><a class="link" href="#">Cash position</a></div>
+      <div class="fig" style="grid-column:4/7"><span class="fig-l">Gross margin · Sep</span><span class="fig-v tnum">21.7%</span><span class="fig-vs"><span class="neg">−2.3 pts vs Aug</span><span>−1.6 pts vs budget 23.3%</span></span><a class="link" href="#">Margin by client</a></div>
+      <div class="fig" style="grid-column:7/10"><span class="fig-l">To review · my clients</span><span class="fig-v fig-v--dense">125</span><span class="fig-vs"><span>75 Ready</span><span>−61 since Friday</span></span><a class="link" href="#">Open review queue</a></div>
+    </div>
+  </div>
+</section>
+
+<!-- 12 WIDGET FRAME ====================================================== -->
+<section class="sec" aria-labelledby="s12">
+  <div class="sec-label"><div class="eyebrow">12<span class="sl">//</span>Dashboard</div><h2 class="t-title" id="s12">Widget frame</h2>
+    <p>Every widget answers one question, has one primary action, and defines an empty state and a done state. A widget the user lacks rights for is never rendered. The grid reflows.</p>
+    <ul><li><code>.dash</code> › <code>.wg[style="--w:8;--h:4"]</code></li><li><code>.wg-head</code> title · count · meta · action</li><li><code>.wg-state</code> + <code>.wg-done-mark</code> / <code>.wg-empty-mark</code></li><li><code>.wg--primary</code> carries the blue rule</li></ul></div>
+  <div class="sec-body">
+    <div class="spec">
+      <div style="grid-column:1/6">
+        <div class="eyebrow" style="margin-bottom:12px">Sizes · 12 columns</div>
+        <div class="mini-dash" aria-label="Allowed widget sizes">
+          <div class="p" style="--w:8;--h:4"><span>Primary 8×4</span><span>bk.my_clients</span></div><div style="--w:4;--h:4"><span>4×4</span></div>
+          <div style="--w:3;--h:2"><span>S 3×2</span></div><div style="--w:3;--h:2"><span>S</span></div><div style="--w:6;--h:2"><span>M 6×2</span></div>
+          <div style="--w:6;--h:4"><span>L 6×4</span></div><div style="--w:6;--h:2"><span>M</span></div><div style="--w:6;--h:2"><span>M</span></div>
+          <div style="--w:12;--h:2"><span>W 12×2</span></div>
+        </div>
+      </div>
+      <div style="grid-column:6/10">
+        <div class="eyebrow" style="margin-bottom:12px">Permission reflow · owner, with and without a group grant</div>
+        <div class="mini-dash"><div class="p" style="--w:6;--h:3"><span>ow.decisions</span></div><div style="--w:6;--h:3"><span>ow.glance</span></div><div style="--w:6;--h:3"><span>ow.consolidated</span></div><div style="--w:6;--h:3"><span>ow.clients_compare</span></div></div>
+        <div class="mini-dash" style="margin-top:16px"><div class="p" style="--w:6;--h:3"><span>ow.decisions</span></div><div style="--w:6;--h:3"><span>ow.glance</span></div><div style="--w:12;--h:3"><span>ow.clients_compare · widened to fill</span></div></div>
+        <p class="cap">No grant, no tile. Never a blank or disabled widget.</p>
+      </div>
+      <div style="grid-column:1/10">
+        <div class="eyebrow" style="margin-bottom:12px">Anatomy · M 6×2 · populated</div>
+        <div class="dash" style="grid-template-columns:repeat(9,minmax(0,1fr))">
+          <div class="wg" style="--w:6;--h:2">
+            <div class="wg-head"><h3 class="wg-title">Waiting on clients</h3><span class="wg-count">7</span><span class="wg-meta">2 block close</span><div class="wg-act"><a class="btn btn--quiet" href="#">Open requests</a></div></div>
+            <div class="wg-body"><table class="tbl tbl-q tbl-q--compact tbl-q--flush"><colgroup><col><col style="width:72px"><col style="width:120px"><col style="width:88px"></colgroup><tbody>
+              <tr class="q-row is-attn"><td><span class="l1">Venmo · J. Ortega (4,812.00)</span><span class="l2">Clive Power Equipment · asked Sam Kovac</span></td><td class="tnum neg b">6 days</td><td><span class="tag tag--neg">Blocks close</span></td><td class="n"><button class="btn" type="button">Nudge</button></td></tr>
+              <tr class="q-row"><td><span class="l1">September Bank of Iowa statement</span><span class="l2">Dorrian HVAC · asked Pat Dorrian</span></td><td class="tnum b">5 days</td><td><span class="tag tag--neg">Blocks close</span></td><td class="n"><button class="btn" type="button">Nudge</button></td></tr>
+              <tr class="q-row"><td><span class="l1">3 card charges at Menards</span><span class="l2">Crystal Kitchen &amp; Bath · 2 reminders sent</span></td><td class="tnum">2 days</td><td></td><td class="n"><button class="btn" type="button">Nudge</button></td></tr>
+            </tbody></table></div>
+            <div class="wg-foot"><span>Oldest 6 days · next reminder 4:00 PM</span></div>
+          </div>
+          <div class="wg" style="--w:3;--h:2">
+            <div class="wg-head"><h3 class="wg-title">Feeds</h3><span class="wg-count">1 broken</span></div>
+            <div class="wg-body wg-body--pad"><span class="status status--blocked"><i class="pip pip--blocked"></i>Dorrian HVAC</span><p class="ink-2" style="margin-top:4px">Bank of Iowa ••4471 · disconnected 3 days</p><div class="btn-row" style="margin-top:12px"><button class="btn btn--primary" type="button">Reconnect</button><button class="btn" type="button">Ask client</button></div></div>
+            <div class="wg-foot"><span>Hidden when every feed is healthy</span></div>
+          </div>
+        </div>
+      </div>
+      <div style="grid-column:1/10">
+        <div class="eyebrow" style="margin-bottom:12px">States · empty · done · AI paused · loading</div>
+        <div class="dash" style="grid-template-columns:repeat(12,minmax(0,1fr))">
+          <div class="wg" style="--w:3;--h:2"><div class="wg-head"><h3 class="wg-title">My clients</h3></div><div class="wg-body"><div class="wg-state"><span class="wg-empty-mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-plus"/></svg></span><span class="t-head">No clients assigned yet</span><p>Jordan Smith, your manager, assigns clients.</p><a class="btn" href="#">Message Jordan</a></div></div></div>
+          <div class="wg" style="--w:3;--h:2"><div class="wg-head"><h3 class="wg-title">Due this week</h3></div><div class="wg-body"><div class="wg-state"><span class="wg-done-mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span><span class="t-head">Nothing due until Oct 26</span><p>Wild Rose 1099 review is next.</p><a class="btn btn--quiet" href="#">See October</a></div></div></div>
+          <div class="wg" style="--w:3;--h:2"><div class="wg-head"><h3 class="wg-title">Needs your judgment</h3></div><div class="wg-body"><div class="wg-state"><span class="tag">AI paused</span><span class="t-head">Rules and vendor memory still coding</span><p>31 of today’s 44 items coded by rules.</p><a class="btn" href="#">Review the 13 left</a></div></div></div>
+          <div class="wg wg-loading" style="--w:3;--h:2" aria-busy="true"><div class="wg-head"><h3 class="wg-title">Unreconciled</h3></div><div class="wg-body wg-body--pad" style="display:flex;flex-direction:column;gap:16px"><span class="bar-l" style="width:80%"></span><span class="bar-l" style="width:60%"></span><span class="bar-l" style="width:72%"></span><span class="t-cap">Loading 11 accounts…</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 13 EDIT MODE ========================================================= -->
+<section class="sec" aria-labelledby="s13">
+  <div class="sec-label"><div class="eyebrow">13<span class="sl">//</span>Dashboard</div><h2 class="t-title" id="s13">Edit-mode affordances</h2>
+    <p>Customize keeps the data live. Each widget gains a drag handle, settings, remove, and a resize corner that snaps only to allowed sizes. Required widgets show a lock and can’t be removed.</p>
+    <ul><li><code>.dash.is-editing</code> + <code>.dash-guides</code></li><li><code>.wg-handle .wg-tool .wg-lock .wg-resize</code></li><li><code>.wg.is-lifted</code> · <code>.wg-drop</code> · <code>.wg.is-resizing</code></li><li><code>.size-chips .size-chip</code> · <code>.cat-card</code></li><li>Keyboard: focus a handle, arrows move, <span class="kbd">⇧</span> + arrows resize, <span class="kbd">↵</span> drops.</li></ul>
+    <p>Full flow on <a class="link" href="S8-dashboard-edit.html">S8</a>.</p></div>
+  <div class="sec-body">
+    <div class="editbar"><span class="b">Editing your home</span><span class="sl">//</span><span class="ink-2">Bookkeeper layout v4 · Add &amp; move</span><span class="sp"></span><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-undo"/></svg>Undo<span class="kbd">⌘Z</span></button><button class="btn" type="button">Reset to role default</button><button class="btn btn--primary" type="button">Done</button></div>
+    <div class="dash-wrap" style="margin-top:24px">
+      <div class="dash-guides" aria-hidden="true" style="grid-template-columns:repeat(9,minmax(0,1fr))"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="dash is-editing" style="grid-template-columns:repeat(9,minmax(0,1fr))">
+        <div class="wg is-required" style="--x:1;--y:1;--w:5;--h:2">
+          <div class="wg-head"><button class="wg-handle" type="button" aria-label="Move My clients"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-drag"/></svg></button><h3 class="wg-title">My clients</h3><span class="wg-lock"><svg class="ico" width="12" height="12" aria-hidden="true"><use href="#i-lock"/></svg>Required</span><div class="wg-act"><button class="wg-tool" type="button" aria-label="Settings"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-sliders"/></svg></button><span class="wg-tool" role="button" aria-disabled="true" aria-label="Can't remove: required by your firm's Bookkeeper layout" title="Required by your firm’s Bookkeeper layout"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-x"/></svg></span></div></div>
+          <div class="wg-body wg-body--pad ink-2">Live data stays visible while editing. Remove is disabled with the reason on hover.</div><span class="wg-resize" aria-hidden="true"></span>
+        </div>
+        <div class="wg-drop" style="--x:6;--y:1;--w:4;--h:2">Drop here · 4×2</div>
+        <div class="wg is-lifted" style="--x:6;--y:1;--w:4;--h:2;transform:translate(-40px,-20px) rotate(-.6deg)">
+          <div class="wg-head"><button class="wg-handle" type="button" aria-label="Moving Feeds"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-drag"/></svg></button><h3 class="wg-title">Feeds</h3></div>
+          <div class="wg-body wg-body--pad ink-2">Lifted · <span class="kbd">↵</span> drop · <span class="kbd">Esc</span> cancel</div>
+        </div>
+        <div class="wg is-resizing" style="--x:1;--y:3;--w:5;--h:2">
+          <div class="wg-head"><button class="wg-handle" type="button" aria-label="Move Due this week"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-drag"/></svg></button><h3 class="wg-title">Due this week</h3><div class="wg-act"><span class="size-chips" role="group" aria-label="Size"><button class="size-chip" type="button" aria-pressed="false">S</button><button class="size-chip" type="button" aria-pressed="true">M</button><button class="size-chip" type="button" aria-pressed="false">L</button><button class="size-chip" type="button" aria-disabled="true" title="Not allowed for this widget">W</button></span></div></div>
+          <div class="wg-body wg-body--pad ink-2">Resizing. Snaps to S 3×2, M 6×2 or L 6×4 only. W isn’t offered for this widget.</div><span class="wg-resize" aria-hidden="true"></span>
+        </div>
+        <div style="grid-column:6/span 4;grid-row:3/span 2">
+          <article class="cat-card"><div class="cat-thumb" aria-hidden="true"><i class="b"></i><i></i><i class="s"></i><i></i><i class="s"></i></div><div><div class="t-head">Unreconciled accounts</div><p>Which accounts still need reconciling, and how far off are they?</p><div class="cat-card-foot"><span class="size-chips"><span class="size-chip">S</span><span class="size-chip">M</span></span><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-plus"/></svg>Add</button></div></div></article>
+          <article class="cat-card is-placed"><div class="cat-thumb" aria-hidden="true"><i class="b"></i><span class="meter"><i class="on"></i><i class="on"></i><i class="part"></i><i></i></span><i class="s"></i></div><div><div class="t-head">Needs your judgment</div><p>What did the AI not get, across my clients?</p><div class="cat-card-foot"><span class="t-cap">On your home</span><button class="btn btn--quiet" type="button">Show me</button></div></div></article>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<script>
+(function(){
+  /* note ⇄ figure linking */
+  function lit(id,on){document.querySelectorAll('[data-note="'+id+'"]').forEach(function(el){
+    el.classList.toggle(el.classList.contains('nref')?'is-lit':(el.classList.contains('note')?'is-lit':'is-lit-fig'),on);});}
+  document.querySelectorAll('.nref[data-note],.note[data-note]').forEach(function(el){var id=el.getAttribute('data-note');
+    ['mouseenter','focus'].forEach(function(e){el.addEventListener(e,function(){lit(id,true)})});
+    ['mouseleave','blur'].forEach(function(e){el.addEventListener(e,function(){lit(id,false)})});});
+  document.getElementById('indet').indeterminate=true;
+  /* queue: J/K/X + bulk sum */
+  var q=document.getElementById('q'),rows=[].slice.call(q.querySelectorAll('tr.q-row'));
+  function fmt(c){var v=Math.abs(c)/100,s=v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});return c<0?'('+s+')':s;}
+  function sync(){var n=0,t=0;rows.forEach(function(r){var on=r.querySelector('input').checked;r.classList.toggle('is-selected',on);if(on){n++;t+=Math.round(parseFloat(r.dataset.amt)*100);}});
+    document.getElementById('bulk-n').textContent=n;document.getElementById('bulk-n2').textContent=n;document.getElementById('bulk-amt').textContent=fmt(t);
+    document.getElementById('bulk').style.visibility=n?'visible':'hidden';}
+  rows.forEach(function(r){r.querySelector('input').addEventListener('change',sync);r.addEventListener('click',function(e){if(e.target.closest('label'))return;rows.forEach(function(x){x.classList.remove('is-cursor')});r.classList.add('is-cursor');});});
+  document.getElementById('q-all').addEventListener('change',function(e){rows.forEach(function(r){r.querySelector('input').checked=e.target.checked});sync();});
+  q.addEventListener('keydown',function(e){var i=rows.findIndex(function(r){return r.classList.contains('is-cursor')});
+    if(e.key==='j'||e.key==='k'){e.preventDefault();var n=Math.max(0,Math.min(rows.length-1,i+(e.key==='j'?1:-1)));rows.forEach(function(x){x.classList.remove('is-cursor')});rows[n].classList.add('is-cursor');}
+    if(e.key==='x'&&i>-1){e.preventDefault();var c=rows[i].querySelector('input');c.checked=!c.checked;sync();}});
+})();
+</script>
+</body></html>

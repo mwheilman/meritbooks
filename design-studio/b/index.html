@@ -1,0 +1,166 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Direction B · Operator Cockpit · MeritBooks</title><meta name="theme-color" content="#0A1628"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet"><style>
+:root{
+--blue:#2563EB; --signal:#3B82F6; --midnight:#0A1628; --warm:#FDFCFA;
+--steel:#3D4F65; --slate:#8494A7; --canvas:#F5F3EF; --sky:#EBF2FE;
+--m1:#1A2A3F; --m2:#2A3E57; --m3:#3F566F; --m4:#5A738D;
+--b3:#6AA8FF; --b4:#A9CCFF; --b5:#DCEBFF;
+--g1:#F2F3F5; --g2:#E1E5EA; --g3:#CCD3DB; --g4:#B5BEC8;
+--neg:#B42318; --pos:#1F6E50; --warn:#8A5A00;
+--ink:#0A1628; --ink2:#3D4F65; --ink3:#536A82; 
+--line:#E1E5EA; --line2:#CCD3DB;
+--rail:216px; --bar:72px;
+--ease:cubic-bezier(.2,.7,.2,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{color-scheme:light;-webkit-text-size-adjust:100%}
+body{font:400 13px/20px "DM Sans",system-ui,sans-serif;color:var(--ink);background:var(--warm);
+font-feature-settings:"ss01" 0;-webkit-font-smoothing:antialiased;min-width:1280px}
+a{color:inherit;text-decoration:none}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+.num{font-variant-numeric:tabular-nums lining-nums;text-align:right;white-space:nowrap}
+.syne{font-family:Syne,"DM Sans",sans-serif;font-weight:700;letter-spacing:-.01em}
+.eyebrow{font:500 12px/16px "DM Sans";letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+.sep{color:var(--ink3);margin:0 .5em;letter-spacing:0}
+.dark .sep,.bar .sep,.rail .sep{color:var(--slate)}
+.skip{position:absolute;left:-9999px;top:8px;background:var(--blue);color:#fff;padding:8px 16px;z-index:99}
+.skip:focus{left:8px}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.dark :focus-visible,.rail :focus-visible,.bar :focus-visible{outline-color:var(--signal)}
+.app{display:grid;grid-template-columns:var(--rail) 1fr;grid-template-rows:var(--bar) 1fr;height:100vh;min-height:760px}
+.rail{grid-row:1/3;background:var(--midnight);color:var(--warm);display:flex;flex-direction:column;border-right:1px solid var(--m1)}
+.rail-logo{height:var(--bar);display:flex;align-items:center;gap:24px;padding:0 24px}
+.rail-logo img{height:24px;width:auto;display:block}
+.rail-logo .prod{font:500 12px/16px "DM Sans";letter-spacing:.12em;color:var(--slate)}
+.rail nav{padding:8px 0;flex:1;overflow:auto}
+.rail h2{font:500 12px/16px "DM Sans";letter-spacing:.12em;color:var(--slate);text-transform:uppercase;padding:16px 24px 8px}
+.nav-a{position:relative;display:flex;align-items:center;height:36px;padding:0 16px 0 24px;color:#CCD3DB;font-weight:500;
+transition:background-color .12s var(--ease),color .12s var(--ease)}
+.nav-a:hover{background:var(--m1);color:var(--warm)}
+.nav-a .ct{margin-left:auto;color:var(--slate)}
+.nav-a .go{margin-left:auto;display:none;gap:2px}
+.nav-a:hover .go,.nav-a.hint .go{display:inline-flex}
+.nav-a:hover .ct,.nav-a.hint .ct{display:none}
+.nav-a[aria-current=page]{background:var(--m1);color:var(--warm)}
+.nav-a[aria-current=page]::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;background:var(--signal)}
+.nav-a .alert{margin-left:auto;font-weight:600;color:var(--warm);background:var(--neg);padding:0 6px;line-height:20px}
+.scope{border-top:1px solid var(--m1);padding:16px 24px 24px}
+.scope-btn{display:flex;align-items:center;justify-content:space-between;width:100%;height:40px;padding:0 12px;
+background:var(--m1);color:var(--warm);font-weight:500;border:1px solid var(--m2);transition:border-color .12s}
+.scope-btn:hover{border-color:var(--m4)}
+.scope .who{display:flex;align-items:center;gap:12px;margin-top:16px;color:#CCD3DB}
+.av{width:32px;height:32px;display:grid;place-items:center;background:var(--m2);color:var(--warm);font-weight:600;font-size:12px;letter-spacing:.04em}
+.bar{background:var(--midnight);color:var(--warm);display:flex;align-items:center;gap:24px;padding:0 32px;border-bottom:1px solid var(--m1)}
+.crumbs{font-weight:500;color:#CCD3DB;white-space:nowrap}
+.crumbs b{color:var(--warm);font-weight:600}
+.cmd{margin-left:auto;display:flex;align-items:center;gap:12px;width:400px;height:40px;padding:0 8px 0 12px;background:var(--m1);
+border:1px solid var(--m2);color:var(--slate);transition:border-color .12s}
+.cmd:hover{border-color:var(--m4)}
+.cmd svg{flex:none}
+.cmd span{flex:1;text-align:left}
+.sync{display:flex;align-items:center;gap:8px;color:var(--slate);white-space:nowrap}
+.sync i{width:8px;height:8px;background:var(--signal);display:block}
+main{overflow:auto;background:var(--warm);position:relative}
+.kbd{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;font:500 12px/1 "DM Sans";color:var(--ink2);
+background:#fff;border:1px solid var(--line2);border-bottom-width:2px;border-radius:2px;font-variant-numeric:tabular-nums}
+.dark .kbd,.rail .kbd,.bar .kbd,.kbd.d{background:var(--m1);border-color:var(--m3);color:#CCD3DB}
+.btn .kbd{margin-left:8px}
+.btn-p .kbd{background:transparent;border-color:rgba(253,252,250,.55);color:var(--warm)}
+.btn{display:inline-flex;align-items:center;height:32px;padding:0 12px;font-weight:500;white-space:nowrap;
+border:1px solid var(--line2);background:#fff;color:var(--ink);transition:border-color .12s,color .12s,background-color .12s}
+.btn:hover{border-color:var(--blue);color:var(--blue)}
+.btn-p{background:var(--blue);border-color:var(--blue);color:var(--warm)}
+.btn-p:hover{background:var(--midnight);border-color:var(--midnight);color:var(--warm)}
+.btn-g{border-color:transparent;background:transparent}
+.btn-g:hover{background:var(--g1);border-color:transparent;color:var(--ink)}
+.slash{display:block;flex:none}
+.slash .s-on{fill:var(--blue)}
+.slash .s-part{fill:var(--b4)}
+.slash .s-off{fill:var(--g3)}
+.slash .s-cur{fill:none;stroke:var(--blue);stroke-width:1}
+.slash .s-bad{fill:var(--neg)}
+.dark .slash .s-on{fill:var(--signal)}
+.dark .slash .s-off{fill:var(--m2)}
+.dark .slash .s-part{fill:var(--m4)}
+.dark .slash .s-cur{stroke:var(--signal)}
+.conf{display:inline-flex;align-items:center;gap:8px}
+.conf-n{min-width:20px;font-weight:600}
+.conf-lo .conf-n{color:var(--warn)}
+.conf-lo .slash .s-on{fill:var(--warn)}
+.conf-lo .slash .s-part{fill:#E4C690}
+table{border-collapse:collapse;width:100%}
+th{font:500 12px/16px "DM Sans";letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);text-align:left;white-space:nowrap}
+.tag{display:inline-flex;align-items:center;height:20px;padding:0 6px;font:600 12px/20px "DM Sans";letter-spacing:.02em;background:var(--g1);color:var(--ink2)}
+.tag.ai{background:var(--sky);color:var(--blue)}
+.tag.neg{background:#FBEAE8;color:var(--neg)}
+.tag.warn{background:#F7EFDF;color:var(--warn)}
+.neg{color:var(--neg)}
+.pos{color:var(--pos)}
+.muted{color:var(--ink2)}
+.faint{color:var(--ink3)}
+.pal-wrap{position:fixed;inset:0;background:rgba(10,22,40,.48);display:none;align-items:flex-start;justify-content:center;padding-top:120px;z-index:50}
+.pal-wrap.open{display:flex}
+.pal{width:640px;background:#fff;border:1px solid var(--midnight);box-shadow:0 1px 0 var(--midnight),0 24px 48px -16px rgba(10,22,40,.45)}
+.pal input{width:100%;height:56px;border:0;border-bottom:1px solid var(--line);padding:0 24px;font-size:15px;outline:none;background:#fff}
+.pal ul{list-style:none;padding:8px 0}
+.pal li{display:flex;align-items:center;gap:12px;height:40px;padding:0 24px;color:var(--ink)}
+.pal li .k{margin-left:auto;display:flex;gap:4px}
+.pal li[aria-selected=true]{background:var(--sky);box-shadow:inset 3px 0 var(--blue)}
+.pal .grp{font:500 12px/16px "DM Sans";letter-spacing:.12em;color:var(--ink3);text-transform:uppercase;padding:12px 24px 4px;height:auto}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+body{min-width:0;background:#fff}
+.cover{background:var(--midnight);color:var(--warm);min-height:720px;display:flex;flex-direction:column;padding:64px 64px 40px}
+.cover-top{display:flex;justify-content:space-between;align-items:flex-start}
+.cover-top img{height:48px;width:auto}
+.cover .eyebrow{color:var(--slate)}
+.letter{font-family:Syne;font-weight:700;font-size:120px;line-height:1;color:transparent;-webkit-text-stroke:1.5px var(--warm);margin-top:auto}
+.cover h1{font-size:120px;line-height:120px;letter-spacing:-.03em;color:var(--warm);margin-top:16px}
+.cover-rule{height:3px;background:var(--blue);margin-top:48px}
+.cover-foot{display:flex;justify-content:space-between;align-items:center;margin-top:24px}
+.cover-foot img{height:24px}
+.wrap{max-width:1384px;margin:0 auto;padding:96px 64px}
+.two{display:grid;grid-template-columns:repeat(12,1fr);column-gap:24px}
+.wrap h2{grid-column:1/13;font-size:48px;line-height:56px;color:var(--blue);letter-spacing:-.02em}
+.lede{grid-column:1/8;font-size:15px;line-height:28px;margin-top:32px;color:var(--ink)}
+.lede p+p{margin-top:16px}
+.aside{grid-column:9/13;margin-top:32px;border-top:2px solid var(--blue);padding-top:16px}
+.aside dl{display:grid;grid-template-columns:96px 1fr;gap:12px 16px;margin-top:12px}
+.aside dt{font-weight:600}
+.aside dd{color:var(--ink2)}
+.sig{background:var(--canvas)}
+.demo{grid-column:7/13;background:#fff;border:1px solid var(--line);padding:24px 32px;margin-top:32px}
+.d-row{display:grid;grid-template-columns:168px 120px 1fr;align-items:center;height:48px;border-bottom:1px solid var(--line)}
+.d-row:last-child{border-bottom:0}
+.d-l{font-weight:600}
+.sig .lede{grid-column:1/6}
+.tokens{list-style:none;grid-column:1/13;display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:48px;border-top:1px solid var(--line)}
+.tokens li{display:grid;grid-template-columns:48px 1fr;grid-template-rows:auto auto auto;column-gap:16px;padding:16px 16px 16px 0;border-bottom:1px solid var(--line)}
+.chip-c{grid-row:1/4;width:48px;height:48px;border:1px solid var(--line)}
+.tokens .num{text-align:left;color:var(--ink2)}
+.tokens .faint{font-size:12px;line-height:16px}
+.type{grid-column:1/13;margin-top:48px;border-top:2px solid var(--blue)}
+.type div{display:grid;grid-template-columns:1fr 280px 120px;align-items:baseline;padding:12px 0;border-bottom:1px solid var(--line)}
+.type .num{text-align:right}
+.screens{list-style:none;grid-column:1/13;margin-top:32px;border-top:2px solid var(--blue)}
+.toc{display:grid;grid-template-columns:96px 280px 200px 1fr 40px;align-items:center;gap:16px;min-height:96px;padding:16px 0;border-bottom:1px solid var(--line);transition:background-color .12s}
+.toc:hover{background:var(--g1)}
+.toc:hover .toc-n,.toc:hover .toc-a{color:var(--blue)}
+.toc-k{display:flex;gap:4px}
+.toc-n{font-size:24px;line-height:32px;color:var(--ink)}
+.toc-w{color:var(--ink2);font-weight:500}
+.toc-d{color:var(--ink2)}
+.toc-a{font-size:24px;color:var(--ink3);text-align:right;padding-right:8px}
+footer.f{background:var(--midnight);color:var(--slate);padding:24px 64px;display:flex;justify-content:space-between;align-items:center}
+@media (max-width:1100px){
+.cover{padding:32px 24px;min-height:560px}.cover h1{font-size:64px;line-height:68px}.letter{font-size:96px}
+.wrap{padding:64px 24px}.wrap h2{font-size:40px;line-height:48px}
+.lede,.aside,.demo,.sig .lede{grid-column:1/13}
+.tokens{grid-template-columns:1fr 1fr}
+.toc{grid-template-columns:80px 1fr;}.toc-w,.toc-d{grid-column:2}.toc-a{display:none}
+.type div{grid-template-columns:1fr}.d-row{grid-template-columns:1fr auto;height:auto;padding:8px 0}.d-row .faint{grid-column:1/3}
+}
+</style></head><body><a class="skip" href="#main">Skip to content</a><header class="cover dark"><div class="cover-top"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="160" height="48"><span class="eyebrow">MeritBooks · Design review · Round 1</span></div><div class="letter" aria-hidden="true">B</div><h1 class="syne">Operator Cockpit</h1><div class="cover-rule"></div><div class="cover-foot"><span class="eyebrow">2026<span class="sep" aria-hidden="true">//</span>MeritBooks<span class="sep" aria-hidden="true">//</span>Direction B</span><img src="assets/merit-icon.png" alt="" width="27" height="24"></div></header><main id="main"><section class="wrap two" aria-labelledby="r-h"><h2 id="r-h" class="syne">Rationale</h2><div class="lede"><p>Merit is professional services built by operators, so MeritBooks should feel like an instrument, not a dashboard. The brand guide gives us the system: Midnight is the frame — rail, command bar, the full-bleed band that states the portfolio’s position, the bottom line of the income statement. Everything you read and act on sits on Warm White, where Midnight body text and DM Sans tabular figures stay crisp. Electric Blue is the only signal: the title, the focused row, the primary action, the focus ring. Syne appears a handful of times per screen, where a number or a headline deserves it.</p><p>Speed is the product. Every action has a key, every key is printed where the action lives, and the review queue works like a triage inbox: AI proposes, a person approves with one keystroke, the engine posts the balanced entry it already showed you.</p></div><div class="aside"><div class="eyebrow">What we took from the best</div><dl><dt>Linear</dt><dd>Elevation from lightness steps, not shadows. One chromatic accent. 32–48px rows.</dd><dt>Superhuman</dt><dd>The queue is a to-do list. One question per item. J/K and single-letter verbs.</dd><dt>Raycast</dt><dd>Shortcuts printed next to the action, never hidden in a tooltip. ⌘K finds the rest.</dd><dt>Vercel</dt><dd>:focus-visible rings, tabular figures, status never by color alone, one decimal convention per context.</dd><dt>Ramp</dt><dd>Group repeat spend so a person approves a batch, not 4 rows.</dd></dl></div></section>
+<section class="sig" aria-labelledby="s-h"><div class="wrap two"><h2 id="s-h" class="syne">Signature: the Slash Meter</h2><div class="lede"><p>The guide separates every label with “//”. The monogram is built from 45° strokes. We drew a single glyph from both: a parallelogram tick at the M’s exact 45°, spaced like the separator. Lined up, the ticks measure things.</p><p>It’s one system everywhere: five slashes for AI confidence, six for the close steps on each entity, one per book for the consolidated lock count. You read it by count, not by color — the number always sits beside it, an open slash marks the current step, a red slash marks the one that’s stuck. Nobody else can own it, because it’s cut from Merit’s mark.</p></div>
+<div class="demo"><div class="d-row"><span class="d-l">Confidence 97</span><span class="conf conf-hi"><svg class="slash " width="44" height="12" viewBox="0 0 44 12" role="img" aria-label="AI confidence 97 percent"><polygon class="s-on" points="12,0 16,0 4,12 0,12"/><polygon class="s-on" points="19,0 23,0 11,12 7,12"/><polygon class="s-on" points="26,0 30,0 18,12 14,12"/><polygon class="s-on" points="33,0 37,0 25,12 21,12"/><polygon class="s-part" points="40,0 44,0 32,12 28,12"/></svg><span class="conf-n num">97</span></span><span class="faint">Ready to approve in a batch</span></div><div class="d-row"><span class="d-l">Confidence 74</span><span class="conf conf-mid"><svg class="slash " width="44" height="12" viewBox="0 0 44 12" role="img" aria-label="AI confidence 74 percent"><polygon class="s-on" points="12,0 16,0 4,12 0,12"/><polygon class="s-on" points="19,0 23,0 11,12 7,12"/><polygon class="s-on" points="26,0 30,0 18,12 14,12"/><polygon class="s-part" points="33,0 37,0 25,12 21,12"/><polygon class="s-off" points="40,0 44,0 32,12 28,12"/></svg><span class="conf-n num">74</span></span><span class="faint">Needs a person</span></div><div class="d-row"><span class="d-l">Confidence 41</span><span class="conf conf-lo"><svg class="slash " width="44" height="12" viewBox="0 0 44 12" role="img" aria-label="AI confidence 41 percent"><polygon class="s-on" points="12,0 16,0 4,12 0,12"/><polygon class="s-on" points="19,0 23,0 11,12 7,12"/><polygon class="s-off" points="26,0 30,0 18,12 14,12"/><polygon class="s-off" points="33,0 37,0 25,12 21,12"/><polygon class="s-off" points="40,0 44,0 32,12 28,12"/></svg><span class="conf-n num">41</span></span><span class="faint">AI is guessing — says so</span></div><div class="d-row"><span class="d-l">Close · step 4 of 6</span><svg class="slash " width="51" height="12" viewBox="0 0 51 12" role="img" aria-label="Close step 4 of 6"><polygon class="s-on" points="12,0 16,0 4,12 0,12"/><polygon class="s-on" points="19,0 23,0 11,12 7,12"/><polygon class="s-on" points="26,0 30,0 18,12 14,12"/><polygon class="s-cur" points="33,0 37,0 25,12 21,12"/><polygon class="s-off" points="40,0 44,0 32,12 28,12"/><polygon class="s-off" points="47,0 51,0 39,12 35,12"/></svg><span class="faint">Open slash = current step</span></div><div class="d-row"><span class="d-l">Close · blocked</span><svg class="slash " width="51" height="12" viewBox="0 0 51 12" role="img" aria-label="Close step 1 of 6, blocked"><polygon class="s-bad" points="12,0 16,0 4,12 0,12"/><polygon class="s-off" points="19,0 23,0 11,12 7,12"/><polygon class="s-off" points="26,0 30,0 18,12 14,12"/><polygon class="s-off" points="33,0 37,0 25,12 21,12"/><polygon class="s-off" points="40,0 44,0 32,12 28,12"/><polygon class="s-off" points="47,0 51,0 39,12 35,12"/></svg><span class="faint">Red slash = the step that’s stuck</span></div><div class="d-row"><span class="d-l">Books locked</span><svg class="slash " width="121" height="12" viewBox="0 0 121 12" role="img" aria-label="9 of 16 books locked"><polygon class="s-on" points="12,0 16,0 4,12 0,12"/><polygon class="s-on" points="19,0 23,0 11,12 7,12"/><polygon class="s-on" points="26,0 30,0 18,12 14,12"/><polygon class="s-on" points="33,0 37,0 25,12 21,12"/><polygon class="s-on" points="40,0 44,0 32,12 28,12"/><polygon class="s-on" points="47,0 51,0 39,12 35,12"/><polygon class="s-on" points="54,0 58,0 46,12 42,12"/><polygon class="s-on" points="61,0 65,0 53,12 49,12"/><polygon class="s-on" points="68,0 72,0 60,12 56,12"/><polygon class="s-off" points="75,0 79,0 67,12 63,12"/><polygon class="s-off" points="82,0 86,0 74,12 70,12"/><polygon class="s-off" points="89,0 93,0 81,12 77,12"/><polygon class="s-off" points="96,0 100,0 88,12 84,12"/><polygon class="s-off" points="103,0 107,0 95,12 91,12"/><polygon class="s-off" points="110,0 114,0 102,12 98,12"/><polygon class="s-off" points="117,0 121,0 109,12 105,12"/></svg><span class="faint">9 of 16 — one slash per book</span></div></div></div></section>
+<section class="wrap two" aria-labelledby="t-h"><h2 id="t-h" class="syne">Tokens</h2><ul class="tokens"><li><span class="chip-c" style="background:#2563EB"></span><b>Electric Blue</b><span class="num">#2563EB</span><span class="faint">Signal: buttons, focus, active, titles</span></li><li><span class="chip-c" style="background:#0A1628"></span><b>Midnight</b><span class="num">#0A1628</span><span class="faint">Structure: rail, command bar, totals</span></li><li><span class="chip-c" style="background:#3B82F6"></span><b>Signal Blue</b><span class="num">#3B82F6</span><span class="faint">Signal on Midnight only</span></li><li><span class="chip-c" style="background:#FDFCFA"></span><b>Warm White</b><span class="num">#FDFCFA</span><span class="faint">Where content lives</span></li><li><span class="chip-c" style="background:#3D4F65"></span><b>Steel</b><span class="num">#3D4F65</span><span class="faint">Secondary text</span></li><li><span class="chip-c" style="background:#8494A7"></span><b>Slate</b><span class="num">#8494A7</span><span class="faint">Labels on Midnight</span></li><li><span class="chip-c" style="background:#F5F3EF"></span><b>Canvas</b><span class="num">#F5F3EF</span><span class="faint">Group rows, subtotals</span></li><li><span class="chip-c" style="background:#EBF2FE"></span><b>Sky</b><span class="num">#EBF2FE</span><span class="faint">AI + selection</span></li></ul><div class="type"><div><span class="syne" style="font-size:40px;line-height:48px">Syne 40</span><span class="muted">Owner headline · statement title · net income</span><span class="num faint">1 per screen</span></div><div><span class="syne" style="font-size:24px;line-height:32px">Syne 24</span><span class="muted">Section titles · the selected amount</span><span class="num faint">≤ 3 per screen</span></div><div><span style="font-size:15px;line-height:24px;font-weight:600">DM Sans 15 Semibold</span><span class="muted">Card titles, AI headline</span><span class="num faint">24 line</span></div><div><span style="font-size:13px;line-height:20px">DM Sans 13 · tabular figures 1,234,567.89</span><span class="muted">Tables, body, controls</span><span class="num faint">20 line</span></div><div><span class="eyebrow">DM Sans 12 caps · Books<span class="sep" aria-hidden="true">//</span>Review queue</span><span class="muted">Labels, keycaps, captions</span><span class="num faint">16 line</span></div></div><p class="lede faint" style="grid-column:1/13;font-size:13px;line-height:20px">8-pt spacing (4 for optical nudges). 12-column grid, 24 gutters, 32 page margin. Rows: 32 statement · 48 queue and entity board. Square corners everywhere except keycaps (2px, so they read as keys). Status colors are tuned dark to sit beside Midnight and Steel: brick #B42318, spruce #1F6E50, ochre #8A5A00 — all AA on white.</p></section>
+<section class="wrap two" aria-labelledby="sc-h" style="padding-top:0"><h2 id="sc-h" class="syne">Screens</h2><ol class="screens"><li><a class="toc" href="portfolio.html"><span class="toc-k"><kbd class="kbd ">G</kbd><kbd class="kbd ">P</kbd></span><span class="toc-n syne">Portfolio</span><span class="toc-w">Owner · Mike</span><span class="toc-d">The whole portfolio in ten seconds: a Midnight band that states the cash position and what broke, the entity board beneath it, and the three decisions waiting.</span><span class="toc-a" aria-hidden="true">→</span></a></li><li><a class="toc" href="bank-feed.html"><span class="toc-k"><kbd class="kbd ">G</kbd><kbd class="kbd ">R</kbd></span><span class="toc-n syne">Review queue</span><span class="toc-w">Bookkeeper · Jess</span><span class="toc-d">A triage inbox for transactions. Lowest confidence first, vendor batches, J/K/X/A/F/E, and a detail panel that shows the AI’s reasoning and the exact entry the engine will post.</span><span class="toc-a" aria-hidden="true">→</span></a></li><li><a class="toc" href="statement.html"><span class="toc-k"><kbd class="kbd ">G</kbd><kbd class="kbd ">S</kbd></span><span class="toc-n syne">Income statement</span><span class="toc-w">Controller · Rachel</span><span class="toc-d">Consolidated October with September and budget, Materials drilled to entity, and AI variance notes pinned to the lines they explain.</span><span class="toc-a" aria-hidden="true">→</span></a></li></ol></section></main><footer class="f"><span class="eyebrow" style="color:var(--slate)">2026<span class="sep" aria-hidden="true">//</span>Merit Management Group<span class="sep" aria-hidden="true">//</span>Confidential</span><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"></footer></body></html>

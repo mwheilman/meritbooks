@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=1440">
+<title>S5 · Accounting manager home · MeritBooks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="system.css">
+<style>
+/* Board layout + screen-specific layout only. Tokens and components come from system.css */
+body{min-width:1440px}
+.sheet-top{display:flex;align-items:center;gap:24px;height:48px;padding:0 48px;background:var(--midnight);color:var(--grey-300)}
+.sheet-top img{height:24px;width:auto}
+.sheet-top nav{margin-left:auto;display:flex;gap:4px}
+.sheet-top nav a{height:32px;display:inline-flex;align-items:center;padding:0 10px;color:var(--grey-300);font-weight:500;white-space:nowrap}
+.sheet-top nav a:hover,.sheet-top nav a[aria-current=page]{background:var(--night-800);color:var(--warm)}
+.sheet{padding:0 48px 96px}
+.board-h{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding:40px 0 16px;border-bottom:1px solid var(--electric)}
+.board-h p{margin-top:8px;color:var(--ink-2);max-width:80ch}
+.board-h .pg{display:flex;align-items:center;gap:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.frame{border:1px solid var(--line-2);border-left:0;border-right:0;overflow:hidden;position:relative;margin:24px -48px 0;background:var(--warm)}
+.frame--boxed{margin:24px 0 0;border:1px solid var(--line-2)}
+.frame-cap{display:flex;justify-content:space-between;gap:24px;margin-top:8px;font-size:12px;line-height:16px;color:var(--ink-3)}
+.anno{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:24px}
+.anno div{border-top:1px solid var(--line-2);padding-top:12px}
+.anno b{display:block;font-weight:600;margin-bottom:4px}
+.anno p{color:var(--ink-2)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.pair-h{display:flex;align-items:baseline;gap:12px;margin-top:32px}
+.pair-h .t-section{color:var(--ink)}
+.toast-region{bottom:32px}
+.l1.neg,.l2.neg{color:var(--neg)} .l1.warn,.l2.warn{color:var(--warn)} .l1.pos,.l2.pos{color:var(--pos)} .l1.ink-2,.l2.ink-2{color:var(--ink-2)}
+.audit-badge{position:fixed;right:16px;bottom:16px;z-index:999;max-width:420px;max-height:50vh;overflow:auto;padding:8px 12px;background:var(--midnight);color:var(--warm);font-size:12px;line-height:16px}
+.audit-hit{outline:2px solid var(--neg)!important;outline-offset:-2px}
+
+.page{padding-top:24px}
+/* Close grid — the staircase. Each client is a row, each step a cell; done cells go green and the
+   current step is outlined, so progress reads as a diagonal down the table. */
+.cg{table-layout:fixed}
+.tbl-q.cg th{height:36px}
+.tbl-q.cg td{height:37px;cursor:pointer}
+.cg td.st{padding:0 6px}
+.cg tr>th.n,.cg tr>td.st{text-align:right}
+.stp{display:flex;align-items:center;justify-content:flex-end;height:24px;padding:0 8px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--ink-2);background:var(--canvas)}
+.stp--done{justify-content:center;background:var(--pos-wash);color:var(--pos)}
+.stp--cur{background:var(--white);color:var(--ink);font-weight:600;box-shadow:inset 0 0 0 1.5px var(--electric)}
+.stp--bad{background:var(--neg-wash);color:var(--neg);font-weight:600;box-shadow:inset 0 0 0 1.5px var(--neg)}
+.pr .ar{color:var(--ink-3);margin:0 6px}
+.pr .r{color:var(--ink-2)}
+.cg .rowlink{display:inline;font-weight:500}
+.cg .rowlink:hover{color:var(--electric)}
+.stl{display:flex;align-items:center;gap:10px;min-width:0}
+.why-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2);font-size:12px}
+.cg .rs{color:var(--ink-3)}
+.cg .rs:hover{color:var(--electric)}
+.cg tr.cg-total td{cursor:default;font-weight:600;border-bottom:0;height:36px}
+.cg tr.cg-total td.n{padding:0 14px 0 6px}
+.cg tr.cg-total .tot{display:inline-block;min-width:32px;padding-top:6px;border-top:1px solid var(--midnight);text-align:right}
+.cg tr.cg-total td.ink-2{font-weight:500}
+.wg-head .seg{height:32px}
+.wg-head .select{width:156px}
+.rq-chip{gap:8px}
+.rq-chip b{font-variant-numeric:tabular-nums}
+/* Review queue */
+.rq td{height:48px}
+.rq tr.q-group td{height:32px}
+.rq .q-group-r{text-align:right;color:var(--ink-3);font-size:12px}
+.rq tr.q-row{cursor:pointer}
+.rq-foot{height:48px}
+.rq-foot .btn{margin-left:0}
+/* Capacity — hours as blocks on a shared 0–50h scale, capacity as a Midnight rule */
+.capx{display:grid;grid-template-columns:184px minmax(0,1fr) 120px;column-gap:16px;align-items:center;padding:0 16px}
+.cap-axis{height:28px;border-bottom:1px solid var(--line);color:var(--ink-3);font-size:12px}
+.cap-axis .ticks{position:relative;height:16px}
+.cap-axis .ticks span{position:absolute;top:0;transform:translateX(-50%);font-variant-numeric:tabular-nums}
+.cap-axis .ticks span:first-child{transform:none}
+.cap-axis .ticks span:last-child{transform:translateX(-100%)}
+.cap-row{height:64px;border-bottom:1px solid var(--line);transition:background-color var(--fast)}
+.cap-row.is-target{background:var(--sky);box-shadow:inset 3px 0 var(--electric)}
+.cap-who{display:flex;align-items:center;gap:12px;min-width:0}
+.cap-who>span:last-child{min-width:0}
+.cap-who .avatar{background:var(--grey-100);color:var(--ink);border:1px solid var(--line-2)}
+.trk{position:relative;height:48px}
+.trk-free{position:absolute;left:0;bottom:0;height:32px;background:var(--canvas)}
+.cseg{position:absolute;bottom:0;height:32px;display:flex;align-items:center;padding:0 6px;background:var(--electric);color:var(--white);
+  font:600 12px/16px var(--f-text);white-space:nowrap;overflow:hidden;box-shadow:inset -1px 0 var(--white);cursor:grab;
+  transition:transform var(--med) var(--ease),box-shadow var(--med) var(--ease)}
+.cseg:hover{background:var(--midnight)}
+.cseg--rev{background:var(--blue-200);color:var(--midnight);cursor:default}
+.cseg--rev:hover{background:var(--blue-200)}
+.cseg--pay{background:var(--steel);color:var(--white);cursor:default}
+.cseg--pay:hover{background:var(--steel)}
+.cseg:focus-visible{outline:2px solid var(--midnight);outline-offset:2px;z-index:3}
+.cseg.is-lifted{z-index:4;box-shadow:var(--lift);transform:translate(-4px,-8px) rotate(-1.2deg);background:var(--midnight)}
+.cseg.is-moving{opacity:.35}
+.cap-line{position:absolute;bottom:-4px;height:40px;width:2px;margin-left:-1px;background:var(--midnight);z-index:2;pointer-events:none}
+.cap-lab{position:absolute;top:0;font-size:12px;line-height:14px;color:var(--ink-2);transform:translateX(-50%);white-space:nowrap;font-variant-numeric:tabular-nums}
+.over{position:absolute;bottom:-6px;height:3px;background:var(--neg)}
+.trk-empty{position:absolute;left:8px;bottom:8px;font-size:12px;line-height:16px;color:var(--ink-2)}
+.cap-fig{text-align:right;min-width:0}
+.cap-fig .l1{font-variant-numeric:tabular-nums}
+.cap-note{display:flex;align-items:center;gap:16px;margin:12px 16px 0;padding:12px 12px 12px 16px}
+.cap-note .note-title{margin-top:2px}
+.cap-note .basis{margin-top:4px}
+.cap-note .btn-row{flex:none;margin-left:auto}
+.legend{display:inline-flex;align-items:center;gap:16px}
+.legend i{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-2px}
+.lg-prep{background:var(--electric)} .lg-rev{background:var(--blue-200)} .lg-pay{background:var(--steel)}
+.lg-cap{width:2px!important;height:14px!important;background:var(--midnight)}
+.pop-move{width:360px}
+.pop-move .popover-item{min-height:44px}
+.pop-move .popover-item .r{font-variant-numeric:tabular-nums}
+.pop-confirm{width:400px}
+.pop-confirm .ev li .v{white-space:nowrap}
+/* Blocked / stale */
+.tbl-q--flush.mini td{height:48px}
+.age .l1{font-variant-numeric:tabular-nums}
+/* States strip */
+.states{padding:24px 32px 32px}
+
+.drag-demo{padding:24px 32px 32px}
+
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></symbol>
+<symbol id="i-down" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></symbol>
+<symbol id="i-right" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></symbol>
+<symbol id="i-layers" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2 14 5 8 8 2 5Z"/><path d="M2 8.2l6 3 6-3"/><path d="M2 11.2l6 3 6-3"/></symbol>
+<symbol id="i-grid" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/></symbol>
+<symbol id="i-pin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M5.5 2h5l-.7 4.2L12 8.5H4l2.2-2.3Z"/><path d="M8 8.5V14"/></symbol>
+<symbol id="i-lock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="7" width="9" height="6.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></symbol>
+<symbol id="i-drag" viewBox="0 0 16 16" fill="currentColor"><rect x="5" y="3" width="2" height="2"/><rect x="9" y="3" width="2" height="2"/><rect x="5" y="7" width="2" height="2"/><rect x="9" y="7" width="2" height="2"/><rect x="5" y="11" width="2" height="2"/><rect x="9" y="11" width="2" height="2"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h12M2 11h12"/><rect x="9" y="3" width="2.5" height="4" fill="#fff"/><rect x="4.5" y="9" width="2.5" height="4" fill="#fff"/></symbol>
+<symbol id="i-x" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></symbol>
+<symbol id="i-receipt" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h8v12l-2-1.2L8 14l-2-1.2L4 14Z"/><path d="M6 6h4M6 9h4"/></symbol>
+<symbol id="i-bill" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h5.5L12 4.5V14H4Z"/><path d="M6 7.5h4M6 10.5h3"/></symbol>
+<symbol id="i-none" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"><rect x="3" y="3" width="10" height="10"/></symbol>
+<symbol id="i-eye" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></symbol>
+<symbol id="i-undo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 3.5 2.5 6.5l3 3"/><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7"/></symbol>
+<symbol id="i-plug" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2v3.5M10 2v3.5M4 5.5h8v2a4 4 0 0 1-8 0Z"/><path d="M8 11.5V14"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></symbol>
+<symbol id="i-flag" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3.5 14V2.5h8l-1.5 3 1.5 3h-8"/></symbol>
+<symbol id="i-ask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 3h11v8H7l-3 2.5V11H2.5Z"/></symbol>
+<symbol id="i-resize" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 3h4v4M7 13H3V9M13 3 3 13"/></symbol>
+<symbol id="i-history" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9"/><path d="M2.5 2.5v2.5H5"/><path d="M8 5v3.2l2 1.3"/></symbol>
+<symbol id="i-book" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 2.5h7.5L13 5v8.5H3Z"/><path d="M5.5 6.5h5M5.5 9h5M5.5 11.5h3"/></symbol>
+
+<symbol id="i-swap" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 5.5h10M10 3l2.5 2.5L10 8"/><path d="M13.5 10.5h-10M6 8l-2.5 2.5L6 13"/></symbol>
+<symbol id="i-alert" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2.2 14.2 13.5H1.8Z"/><path d="M8 6.5v3.2M8 11.2v1"/></symbol>
+<symbol id="i-shield" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 1.8 13.2 3.8v4.1c0 3-2.3 5.2-5.2 6.4C5.1 13.1 2.8 10.9 2.8 7.9V3.8Z"/></symbol>
+<symbol id="i-clock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.4"/></symbol>
+<symbol id="i-user" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="2.6"/><path d="M2.8 14c.6-2.8 2.7-4.3 5.2-4.3s4.6 1.5 5.2 4.3"/></symbol>
+<symbol id="i-user-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="5.5" r="2.6"/><path d="M1.5 14c.6-2.8 2.6-4.3 5-4.3 1.2 0 2.3.3 3.1 1M12.5 9v5M10 11.5h5"/></symbol>
+<symbol id="i-mail" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="2" y="3.5" width="12" height="9"/><path d="M2 4l6 5 6-5"/></symbol>
+<symbol id="i-unplug" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2v3.5M10 2v3.5M4 5.5h8v2a4 4 0 0 1-8 0Z"/><path d="M8 11.5V14M2 14 14 2"/></symbol>
+<symbol id="i-log" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 4h8M5.5 8h8M5.5 12h8"/><path d="M2.5 4h1M2.5 8h1M2.5 12h1"/></symbol>
+<symbol id="i-key" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="10.5" r="2.8"/><path d="M7 8.5 13.5 2M11 4.5l2 2M9.5 6l1.5 1.5"/></symbol>
+<symbol id="i-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3.5 10.5 8 6 12.5"/></symbol>
+<symbol id="i-minus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 8h9"/></symbol>
+<symbol id="i-send" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 8 14 2.5 10.5 14 8 9Z"/><path d="M8 9l6-6.5"/></symbol>
+<symbol id="i-return" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3 2.5 6.5 6 10"/><path d="M2.5 6.5h7a4 4 0 0 1 0 8H8"/></symbol>
+</defs></svg>
+<a class="skip" href="#main">Skip to content</a>
+<header class="sheet-top on-dark">
+  <img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24">
+  <span class="eyebrow" style="color:var(--slate)">MeritBooks<span class="sl">//</span>Design System v2</span>
+  <nav aria-label="Design system pages"><a href="index.html">Index</a><a href="components.html">Components</a><a href="S5-accounting-manager-home.html" aria-current="page">S5 Manager home</a><a href="S7-switcher-and-contexts.html">S7 Switcher</a><a href="S8-dashboard-edit.html">S8 Edit mode</a><a href="S10-support-access.html">S10 Support access</a><a href="S11-team-and-access.html">S11 Team &amp; access</a><a href="S12-consolidation-group.html">S12 Consolidation</a></nav>
+</header>
+<main id="main" class="sheet"><div class="board-h"><div><div class="eyebrow">S5<span class="sl">//</span>IA-SPEC §4.2</div><h1 class="t-title" style="margin-top:8px">Every client’s close, and who’s carrying it</h1><p>Jordan Smith, accounting manager at Merit Management Group, supervises 13 clients and six people. Monday of close week she opens on the close grid, not a greeting. Four clients are off track; the capacity view shows why: Dana Lee has 45 hours of work and 35 hours to do it in.</p></div><span class="pg"><span class="tag">Sample data</span>S5.1</span></div><div class="frame" style="height:2048px"><div class="app app--frame density-cockpit" data-context="workspace" style="height:2048px"><aside class="rail" aria-label="Primary"><div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"><span class="prod">BOOKS</span></div><nav class="rail-nav"><div class="rail-group">Home</div><a class="rail-link" href="#" aria-current="page">Home</a><a class="rail-link" href="#">Inbox<span class="count">6</span></a><div class="rail-group">Clients</div><a class="rail-link" href="#">Client registry<span class="count">13</span></a><a class="rail-link" href="#">Onboarding tracker</a><div class="rail-group">Work</div><a class="rail-link" href="#">Close grid<span class="count count--alert">4</span></a><a class="rail-link" href="#">Review queue<span class="count">8</span></a><a class="rail-link" href="#">Requests<span class="count">11</span></a><a class="rail-link" href="#">Exceptions<span class="count">3</span></a><div class="rail-group">Team</div><a class="rail-link" href="#">Staff &amp; capacity</a><a class="rail-link" href="#">Assignments</a><a class="rail-link" href="#">Access</a><div class="rail-group">Consolidations</div><a class="rail-link" href="#">Groups</a><a class="rail-link" href="#">HVAC companies — Combined</a><div class="rail-group">Insights</div><a class="rail-link" href="#">Books health</a><a class="rail-link" href="#">Team performance</a><div class="rail-group">Settings</div><a class="rail-link" href="#">Approval workflows</a><a class="rail-link" href="#">AI autonomy</a><a class="rail-link" href="#">Dashboard layouts</a></nav><div class="rail-foot"><div class="rail-user"><span class="avatar">JS</span><span>Jordan Smith<small>Accounting manager</small></span></div></div></aside><header class="bar"><button class="ctx" type="button" aria-haspopup="dialog" aria-expanded="false"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-grid"/></svg><span class="ctx-name">Merit Management Group</span><span class="ctx-meta">Workspace</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg><span class="kbd">⌘J</span></button><span class="crumbs"><b>Home</b></span><button class="cmdk" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><span>Jump to client, person, request…</span><span class="kbd">⌘K</span></button><span class="sync"><i aria-hidden="true"></i>Synced 7:42 AM</span></header><main class="main" style="overflow:visible"><div class="ctxline"><span>Mon Oct 19</span><span class="sl">//</span><span>September close</span><span class="sl">//</span><span>Day 12 of 15</span><span class="sl">//</span><b id="ctx-ready">2 of 13 ready for review</b><span class="sl">//</span><b class="neg" id="ctx-off">4 off track</b><span class="sp"></span><span class="tag" style="margin-right:16px">Sample data</span><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-sliders"/></svg>Customize</button></div><div class="page"><div class="dash"><section class="wg wg--primary" style="--w:12;--h:4" aria-labelledby="cg-h" id="w-cg"><div class="wg-head"><h2 class="wg-title" id="cg-h">Close grid</h2><span class="wg-count">September · 13 clients</span><div class="seg" role="group" aria-label="Filter by status" id="cg-filter" style="margin-left:8px"><button type="button" aria-pressed="true" data-f="all">All<span class="n">13</span></button><button type="button" aria-pressed="false" data-f="off">Off track<span class="n" id="f-off">4</span></button><button type="button" aria-pressed="false" data-f="ready">Ready<span class="n" id="f-ready">2</span></button></div><label class="sr" for="cg-staff">Preparer</label><select class="select" id="cg-staff"><option value="">Every preparer</option><option>Dana Lee</option><option>Sam Kovac</option><option>Priya Natarajan</option><option>Luis Ortiz</option></select><span class="wg-meta">Ranked by distance from close</span><div class="wg-act"><a class="btn rq-chip" href="#w-rq" id="rq-chip"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-book"/></svg>Review queue <b id="rq-chip-n">8</b><span class="ink-3" style="font-weight:400">· oldest 3 days</span></a></div></div><div class="wg-body" style="overflow:hidden"><table class="tbl tbl-q cg" id="cg" aria-label="September close for every client in your scope"><colgroup><col style="width:228px"><col style="width:220px"><col style="width:72px"><col style="width:96px"><col style="width:72px"><col style="width:80px"><col style="width:72px"><col><col style="width:64px"></colgroup><thead><tr><th scope="col">Client</th><th scope="col">Preparer → reviewer</th><th scope="col" class="n">Review</th><th scope="col" class="n">Reconcile</th><th scope="col" class="n">Check</th><th scope="col" class="n">Close</th><th scope="col">Due</th><th scope="col">Status</th><th scope="col"><span class="sr">Reassign</span></th></tr></thead><tbody id="cg-body"><tr class="q-row is-attn" data-code="CKB" data-status="overdue" data-prep="Dana Lee" data-h="10.5" tabindex="-1"><td><a class="l1 rowlink" href="#" title="C-104">Crystal Kitchen &amp; Bath</a></td><td class="pr"><span class="p" data-f="prep">Dana Lee</span><span class="ar" aria-label="reviewed by">→</span><span class="r">You</span></td><td class="n st"><span class="stp stp--cur">26<span class="sr"> (current step)</span></span></td><td class="n st"><span class="stp ">1<span class="sr"></span></span></td><td class="n st"><span class="stp ">3<span class="sr"></span></span></td><td class="n st"><span class="stp ">4/12<span class="sr"></span></span></td><td class="tnum neg b">Oct 16</td><td class="stc"><span class="stl"><span class="status status--overdue"><i class="pip pip--overdue" aria-hidden="true"></i>Overdue</span><span class="why-t" data-f="why">3 days past due</span></span></td><td><button class="btn btn--quiet btn--icon rs" type="button" data-code="CKB" aria-label="Reassign Crystal Kitchen &amp; Bath" title="Reassign"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-swap"/></svg></button></td></tr><tr class="q-row is-attn" data-code="DOR" data-status="blocked" data-prep="Dana Lee" data-h="14.0" tabindex="-1"><td><a class="l1 rowlink" href="#" title="C-105">Dorrian HVAC</a></td><td class="pr"><span class="p" data-f="prep">Dana Lee</span><span class="ar" aria-label="reviewed by">→</span><span class="r">You</span></td><td class="n st"><span class="stp stp--bad">58<span class="sr"> (stuck here)</span></span></td><td class="n st"><span class="stp ">3<span class="sr"></span></span></td><td class="n st"><span class="stp ">6<span class="sr"></span></span></td><td class="n st"><span class="stp ">2/12<span class="sr"></span></span></td><td class="tnum">Oct 20</td><td class="stc"><span class="stl"><span class="status status--blocked"><i class="pip pip--blocked" aria-hidden="true"></i>Blocked</span><span class="why-t" data-f="why">bank feed down 3 days</span></span></td><td><button class="btn btn--quiet btn--icon rs" type="button" data-code="DOR" aria-label="Reassign Dorrian HVAC" title="Reassign"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-swap"/></svg></button></td></tr><tr class="q-row is-attn" data-code="REV" data-status="blocked" data-prep="Priya Natarajan" data-h="3.5" tabindex="-1"><td><a class="l1 rowlink" href="#" title="C-109">Revived Interiors</a></td><td class="pr"><span class="p" data-f="prep">Priya Natarajan</span><span class="ar" aria-label="reviewed by">→</span><span class="r">You</span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Review done</span></span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Reconcile done</span></span></td><td class="n st"><span class="stp stp--bad">2<span class="sr"> (stuck here)</span></span></td><td class="n st"><span class="stp ">9/12<span class="sr"></span></span></td><td class="tnum">Oct 23</td><td class="stc"><span class="stl"><span class="status status--blocked"><i class="pip pip--blocked" aria-hidden="true"></i>Blocked</span><span class="why-t" data-f="why">request open 9 days</span></span></td><td><button class="btn btn--quiet btn--icon rs" type="button" data-code="REV" aria-label="Reassign Revived Interiors" title="Reassign"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-swap"/></svg></button></td></tr><tr class="q-row" data-code="CPE" data-status="risk" data-prep="Dana Lee" data-h="12.0" tabindex="-1"><td><a class="l1 rowlink" href="#" title="C-102">Clive Power Equipment</a></td><td class="pr"><span class="p" data-f="prep">Dana Lee</span><span class="ar" aria-label="reviewed by">→</span><span class="r">You</span></td><td class="n st"><span class="stp stp--cur">41<span class="sr"> (current step)</span></span></td><td class="n st"><span class="stp ">2<span class="sr"></span></span></td><td class="n st"><span class="stp ">4<span class="sr"></span></span></td><td class="n st"><span class="stp ">7/12<span class="sr"></span></span></td><td class="tnum">Oct 21</td><td class="stc"><span class="stl"><span class="status status--risk"><i class="pip pip--risk" aria-hidden="true"></i>At risk</span><span class="why-t" data-f="why">Dana 10.0h over</span></span></td><td><button class="btn btn--quiet btn--icon rs" type="button" data-code="CPE" aria-label="Reassign Clive Power Equipment" title="Reassign"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-swap"/></svg></button></td></tr><tr class="q-row" data-code="ART" data-status="track" data-prep="Sam Kovac" data-h="8.5" tabindex="-1"><td><a class="l1 rowlink" href="#" title="C-110">Artistry Homes</a></td><td class="pr"><span class="p" data-f="prep">Sam Kovac</span><span class="ar" aria-label="reviewed by">→</span><span class="r">Priya Natarajan</span></td><td class="n st"><span class="stp stp--cur">24<span class="sr"> (current step)</span></span></td><td class="n st"><span class="stp ">2<span class="sr"></span></span></td><td class="n st"><span class="stp ">5<span class="sr"></span></span></td><td class="n st"><span class="stp ">4/12<span class="sr"></span></span></td><td class="tnum">Oct 22</td><td class="stc"><span class="stl"><span class="status status--track"><i class="pip pip--track" aria-hidden="true"></i>On track</span><span class="why-t" data-f="why">8.5h left</span></span></td><td><button class="btn btn--quiet btn--icon rs" type="button" data-code="ART" aria-label="Reassign Artistry Homes" title="Reassign"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-swap"/></svg></button></td></tr><tr class="q-row" data-code="MHC" data-status="track" data-prep="Sam Kovac" data-h="7.0" tabindex="-1"><td><a class="l1 rowlink" href="#" title="C-106">Metro Heating &amp; Cooling</a></td><td class="pr"><span class="p" data-f="prep">Sam Kovac</span><span class="ar" aria-label="reviewed by">→</span><span class="r">Priya Natarajan</span></td><td class="n st"><span class="stp stp--cur">14<span class="sr"> (current step)</span></span></td><td class="n st"><span class="stp ">2<span class="sr"></span></span></td><td class="n st"><span class="stp ">3<span class="sr"></span></span></td><td class="n st"><span class="stp ">5/12<span class="sr"></span></span></td><td class="tnum">Oct 22</td><td class="stc"><span class="stl"><span class="status status--track"><i class="pip pip--track" aria-hidden="true"></i>On track</span><span class="why-t" data-f="why">7.0h left</span></span></td><td><button class="btn btn--quiet btn--icon rs" type="button" data-code="MHC" aria-label="Reassign Metro Heating &amp; Cooling" title="Reassign"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-swap"/></svg></button></td></tr><tr class="q-row" data-code="MF3" data-status="track" data-prep="Luis Ortiz" data-h="5.5" tabindex="-1"><td><a class="l1 rowlink" href="#" title="C-113">Merit Fund III</a></td><td class="pr"><span class="p" data-f="prep">Luis Ortiz</span><span class="ar" aria-label="reviewed by">→</span><span class="r">You</span></td><td class="n st"><span class="stp stp--cur">6<span class="sr"> (current step)</span></span></td><td class="n st"><span class="stp ">1<span class="sr"></span></span></td><td class="n st"><span class="stp ">2<span class="sr"></span></span></td><td class="n st"><span class="stp ">3/12<span class="sr"></span></span></td><td class="tnum">Oct 23</td><td class="stc"><span class="stl"><span class="status status--track"><i class="pip pip--track" aria-hidden="true"></i>On track</span><span class="why-t" data-f="why">5.5h left</span></span></td><td><button class="btn btn--quiet btn--icon rs" type="button" data-code="MF3" aria-label="Reassign Merit Fund III" title="Reassign"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-swap"/></svg></button></td></tr><tr class="q-row" data-code="SWC" data-status="track" data-prep="Dana Lee" data-h="5.0" tabindex="-1"><td><a class="l1 rowlink" href="#" title="C-107">Swan Creek</a></td><td class="pr"><span class="p" data-f="prep">Dana Lee</span><span class="ar" aria-label="reviewed by">→</span><span class="r">You</span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Review done</span></span></td><td class="n st"><span class="stp stp--cur">1<span class="sr"> (current step)</span></span></td><td class="n st"><span class="stp ">2<span class="sr"></span></span></td><td class="n st"><span class="stp ">6/12<span class="sr"></span></span></td><td class="tnum">Oct 21</td><td class="stc"><span class="stl"><span class="status status--track"><i class="pip pip--track" aria-hidden="true"></i>On track</span><span class="why-t" data-f="why">5.0h left</span></span></td><td><button class="btn btn--quiet btn--icon rs" type="button" data-code="SWC" aria-label="Reassign Swan Creek" title="Reassign"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-swap"/></svg></button></td></tr><tr class="q-row" data-code="HHC" data-status="track" data-prep="Sam Kovac" data-h="4.5" tabindex="-1"><td><a class="l1 rowlink" href="#" title="C-103">Heartland Heating &amp; Cooling</a></td><td class="pr"><span class="p" data-f="prep">Sam Kovac</span><span class="ar" aria-label="reviewed by">→</span><span class="r">Priya Natarajan</span></td><td class="n st"><span class="stp stp--cur">9<span class="sr"> (current step)</span></span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Reconcile done</span></span></td><td class="n st"><span class="stp ">1<span class="sr"></span></span></td><td class="n st"><span class="stp ">8/12<span class="sr"></span></span></td><td class="tnum">Oct 22</td><td class="stc"><span class="stl"><span class="status status--track"><i class="pip pip--track" aria-hidden="true"></i>On track</span><span class="why-t" data-f="why">4.5h left</span></span></td><td><button class="btn btn--quiet btn--icon rs" type="button" data-code="HHC" aria-label="Reassign Heartland Heating &amp; Cooling" title="Reassign"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-swap"/></svg></button></td></tr><tr class="q-row" data-code="ICC" data-status="track" data-prep="Priya Natarajan" data-h="4.0" tabindex="-1"><td><a class="l1 rowlink" href="#" title="C-108">Iowa Custom Cabinets</a></td><td class="pr"><span class="p" data-f="prep">Priya Natarajan</span><span class="ar" aria-label="reviewed by">→</span><span class="r">You</span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Review done</span></span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Reconcile done</span></span></td><td class="n st"><span class="stp stp--cur">1<span class="sr"> (current step)</span></span></td><td class="n st"><span class="stp ">10/12<span class="sr"></span></span></td><td class="tnum">Oct 22</td><td class="stc"><span class="stl"><span class="status status--track"><i class="pip pip--track" aria-hidden="true"></i>On track</span><span class="why-t" data-f="why">4.0h left</span></span></td><td><button class="btn btn--quiet btn--icon rs" type="button" data-code="ICC" aria-label="Reassign Iowa Custom Cabinets" title="Reassign"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-swap"/></svg></button></td></tr><tr class="q-row" data-code="HER" data-status="track" data-prep="Dana Lee" data-h="3.5" tabindex="-1"><td><a class="l1 rowlink" href="#" title="C-101">Heritage Interiors</a></td><td class="pr"><span class="p" data-f="prep">Dana Lee</span><span class="ar" aria-label="reviewed by">→</span><span class="r">You</span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Review done</span></span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Reconcile done</span></span></td><td class="n st"><span class="stp stp--cur">1<span class="sr"> (current step)</span></span></td><td class="n st"><span class="stp ">8/12<span class="sr"></span></span></td><td class="tnum">Oct 23</td><td class="stc"><span class="stl"><span class="status status--track"><i class="pip pip--track" aria-hidden="true"></i>On track</span><span class="why-t" data-f="why">3.5h left</span></span></td><td><button class="btn btn--quiet btn--icon rs" type="button" data-code="HER" aria-label="Reassign Heritage Interiors" title="Reassign"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-swap"/></svg></button></td></tr><tr class="q-row" data-code="AIM" data-status="ready" data-prep="Luis Ortiz" data-h="0" tabindex="-1"><td><a class="l1 rowlink" href="#" title="C-111">AIM</a></td><td class="pr"><span class="p" data-f="prep">Luis Ortiz</span><span class="ar" aria-label="reviewed by">→</span><span class="r">You</span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Review done</span></span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Reconcile done</span></span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Check done</span></span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Close done</span></span></td><td class="tnum">Oct 20</td><td class="stc"><span class="stl"><span class="status status--ready"><i class="pip pip--ready" aria-hidden="true"></i>Ready</span><span class="why-t" data-f="why">in your queue 3 days</span></span></td><td><button class="btn btn--quiet btn--icon rs" type="button" data-code="AIM" aria-label="Reassign AIM" title="Reassign"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-swap"/></svg></button></td></tr><tr class="q-row" data-code="WRS" data-status="ready" data-prep="Dana Lee" data-h="0" tabindex="-1"><td><a class="l1 rowlink" href="#" title="C-112">Wild Rose</a></td><td class="pr"><span class="p" data-f="prep">Dana Lee</span><span class="ar" aria-label="reviewed by">→</span><span class="r">You</span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Review done</span></span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Reconcile done</span></span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Check done</span></span></td><td class="n st"><span class="stp stp--done"><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Close done</span></span></td><td class="tnum">Oct 23</td><td class="stc"><span class="stl"><span class="status status--ready"><i class="pip pip--ready" aria-hidden="true"></i>Ready</span><span class="why-t" data-f="why">in your queue 1 day</span></span></td><td><button class="btn btn--quiet btn--icon rs" type="button" data-code="WRS" aria-label="Reassign Wild Rose" title="Reassign"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-swap"/></svg></button></td></tr><tr class="cg-total" aria-label="Totals for the clients shown"><td><span id="cg-n">13 clients</span></td><td class="ink-2">Open items</td><td class="n"><span class="tot" id="t-rev">178</span></td><td class="n"><span class="tot" id="t-rec">12</span></td><td class="n"><span class="tot" id="t-chk">30</span></td><td class="n"><span class="tot" id="t-cls">90/156</span></td><td></td><td class="ink-2" id="t-stat">2 ready · 4 off track</td><td></td></tr></tbody></table></div></section><section class="wg" style="--w:4;--h:4" aria-labelledby="rq-h" id="w-rq"><div class="wg-head"><h2 class="wg-title" id="rq-h">Review queue</h2><span class="wg-count" id="rq-n">8</span><span class="wg-meta">waiting on you</span><div class="wg-act"><span class="keys ink-3 t-cap"><span class="kbd">J</span><span class="kbd">K</span></span></div></div><div class="wg-body" id="rq-body"><table class="tbl tbl-q tbl-q--flush rq" id="rq" aria-label="Waiting for your review"><colgroup><col><col style="width:104px"></colgroup><tbody><tr class="q-group"><td><span class="q-group-t">Close sign-off</span><span class="tnum b gcount">2</span></td><td class="q-group-r">Waiting</td></tr><tr class="q-row is-cursor" data-verb="Sign off" data-prep="Dana Lee" data-name="Wild Rose" tabindex="-1"><td><span class="l1">Wild Rose</span><span class="l2">Sep close · Dana Lee · 4 notes</span></td><td class="n ">1 day</td></tr><tr class="q-row" data-verb="Sign off" data-prep="Luis Ortiz" data-name="AIM" tabindex="-1"><td><span class="l1">AIM</span><span class="l2">Sep close · Luis Ortiz · 2 notes</span></td><td class="n warn b">3 days</td></tr><tr class="q-group"><td><span class="q-group-t">Post journal entries</span><span class="tnum b gcount">3</span></td><td class="q-group-r">Amount</td></tr><tr class="q-row" data-verb="Post" data-prep="Dana Lee" data-name="Clive Power Equipment" tabindex="-1"><td><span class="l1">Clive Power Equipment</span><span class="l2">JE-2610-014 accrual · Dana Lee</span></td><td class="n ">12,400.00</td></tr><tr class="q-row" data-verb="Post" data-prep="Sam Kovac" data-name="Heartland Heating &amp; Cooling" tabindex="-1"><td><span class="l1">Heartland Heating &amp; Cooling</span><span class="l2">JE-2610-009 reclass · Sam Kovac</span></td><td class="n ">3,180.00</td></tr><tr class="q-row" data-verb="Post" data-prep="Luis Ortiz" data-name="Merit Fund III" tabindex="-1"><td><span class="l1">Merit Fund III</span><span class="l2">JE-2610-002 accrual · Luis Ortiz</span></td><td class="n ">18,750.00</td></tr><tr class="q-group"><td><span class="q-group-t">Sign reconciliations</span><span class="tnum b gcount">2</span></td><td class="q-group-r">Difference</td></tr><tr class="q-row" data-verb="Sign off" data-prep="Sam Kovac" data-name="Heartland Heating &amp; Cooling" tabindex="-1"><td><span class="l1">Heartland Heating &amp; Cooling</span><span class="l2">Operating ••2210 · Sam Kovac</span></td><td class="n ">0.00</td></tr><tr class="q-row" data-verb="Sign off" data-prep="Priya Natarajan" data-name="Iowa Custom Cabinets" tabindex="-1"><td><span class="l1">Iowa Custom Cabinets</span><span class="l2">Payroll ••8834 · Priya Natarajan</span></td><td class="n ">0.00</td></tr><tr class="q-group"><td><span class="q-group-t">Approve accounts</span><span class="tnum b gcount">1</span></td><td class="q-group-r">Request</td></tr><tr class="q-row" data-verb="Approve" data-prep="Sam Kovac" data-name="Artistry Homes" tabindex="-1"><td><span class="l1">Artistry Homes</span><span class="l2">5415 Permit fees · Sam Kovac</span></td><td class="n ink-2">New</td></tr></tbody></table></div><div class="wg-foot rq-foot" id="rq-foot"><button class="btn btn--primary" type="button" id="rq-do">Sign off<span class="kbd">A</span></button><button class="btn" type="button" id="rq-ret"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-return"/></svg>Return<span class="kbd">R</span></button><span class="sp"></span><span class="keys"><span class="kbd">↵</span> open</span></div></section><section class="wg" style="--w:8;--h:4" aria-labelledby="cap-h" id="w-cap"><div class="wg-head"><h2 class="wg-title" id="cap-h">Capacity this week</h2><span class="wg-count">6 people</span><span class="wg-meta">Drag a client to someone with room, or focus it and press <span class="kbd">↵</span></span></div><div class="wg-body" style="overflow:visible;position:relative" id="cap-body"></div><div class="wg-foot"><span class="legend"><span><i class="lg-prep"></i>Preparing</span><span><i class="lg-rev"></i>Reviewing</span><span><i class="lg-pay"></i>Payroll only</span><span><i class="lg-cap"></i>Capacity</span></span><span class="sp"></span><span>Hours left on clients due by Fri Oct 23</span></div></section><section class="wg" style="--w:6;--h:2" aria-labelledby="bl-h"><div class="wg-head"><h2 class="wg-title" id="bl-h">Blocked work</h2><span class="wg-count">4</span><span class="wg-meta">2 clients can’t close until these move</span></div><div class="wg-body"><table class="tbl tbl-q tbl-q--flush mini"><colgroup><col><col style="width:136px"><col style="width:156px"></colgroup><tbody><tr class="q-row is-attn"><td><span class="l1">Dorrian HVAC</span><span class="l2">Bank feed down 3 days · ••4471</span></td><td class="ink-2">Dana Lee</td><td class="n"><button class="btn" type="button" title="Asks the client contact to reconnect Bank of Iowa">Ask client</button></td></tr><tr class="q-row is-attn"><td><span class="l1">Dorrian HVAC</span><span class="l2">No September statement · ••4471</span></td><td class="ink-2">Dana Lee</td><td class="n"><button class="btn" type="button">Escalate</button></td></tr><tr class="q-row is-attn"><td><span class="l1">Revived Interiors</span><span class="l2">Owner hasn’t replied in 7 business days</span></td><td class="ink-2">Priya Natarajan</td><td class="n"><button class="btn" type="button">Escalate</button></td></tr><tr class="q-row"><td><span class="l1">Heritage Interiors</span><span class="l2">August is locked · 1 bill dated Aug 28</span></td><td class="ink-2">Dana Lee</td><td class="n"><button class="btn" type="button">Request unlock</button></td></tr></tbody></table></div></section><section class="wg" style="--w:6;--h:2" aria-labelledby="st-h"><div class="wg-head"><h2 class="wg-title" id="st-h">Stale client requests</h2><span class="wg-count">3</span><span class="wg-meta">open more than 3 days</span></div><div class="wg-body"><table class="tbl tbl-q tbl-q--flush tbl-q--compact"><colgroup><col><col style="width:104px"><col style="width:104px"></colgroup><tbody><tr class="q-row is-attn"><td><span class="l1">Owner transfer 18,400.00: loan or draw?</span><span class="l2">Revived Interiors · asked by Priya Natarajan</span></td><td class="age"><span class="l1 neg b">9 days</span><span class="l2">Blocks close</span></td><td class="n ink-2">3 reminders</td></tr><tr class="q-row is-attn"><td><span class="l1">Venmo · J. Ortega 4,812.00</span><span class="l2">Clive Power Equipment · asked by Dana Lee</span></td><td class="age"><span class="l1 neg b">6 days</span><span class="l2">Blocks close</span></td><td class="n ink-2">2 reminders</td></tr><tr class="q-row is-attn"><td><span class="l1">September bank statement ••4471</span><span class="l2">Dorrian HVAC · asked by Dana Lee</span></td><td class="age"><span class="l1 neg b">5 days</span><span class="l2">Blocks close</span></td><td class="n ink-2">2 reminders</td></tr></tbody></table></div><div class="wg-foot"><span>Re-sends a firm reminder, cc the client owner</span><button class="btn btn--primary" type="button" id="esc">Escalate 3 blocking</button></div></section><section class="wg" style="--w:6;--h:2" aria-labelledby="ex-h"><div class="wg-head"><h2 class="wg-title" id="ex-h">Exceptions across clients</h2><span class="wg-count">3</span><span class="wg-meta">high and medium · last run 6:00 AM</span></div><div class="wg-body"><table class="tbl tbl-q tbl-q--flush mini"><colgroup><col style="width:96px"><col><col style="width:112px"></colgroup><tbody><tr class="q-row"><td><span class="tag tag--neg">High</span></td><td><span class="l1">Possible duplicate payment · Lennox</span><span class="l2">Metro Heating &amp; Cooling · EC-1</span></td><td class="n">14,880.00</td></tr><tr class="q-row"><td><span class="tag tag--neg">High</span></td><td><span class="l1">Intercompany with Dorrian HVAC doesn’t agree</span><span class="l2">Heartland Heating &amp; Cooling · EC-3</span></td><td class="n">2,400.00</td></tr><tr class="q-row"><td><span class="tag tag--warn">Medium</span></td><td><span class="l1">Manual entry above materiality</span><span class="l2">Swan Creek · JE-2610-011 · EC-10</span></td><td class="n">9,800.00</td></tr></tbody></table></div><div class="wg-foot"><span>Detectors run nightly and on demand</span><a class="btn btn--quiet" href="#">Open exceptions<svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-right"/></svg></a></div></section><section class="wg" style="--w:6;--h:2" aria-labelledby="tq-h"><div class="wg-head"><h2 class="wg-title" id="tq-h">Team quality</h2></div><div class="wg-body"><div class="wg-state"><span class="wg-empty-mark" aria-hidden="true"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-clock"/></svg></span><span class="t-head">Starts after 30 days of history: Nov 1</span><p>Return rate, reconciliation re-opens and AI override rate per person need a closed month to mean anything. Merit went live Oct 1.</p><a class="btn btn--quiet" href="#">What gets measured</a></div></div></section></div></div></main></div></div><div class="frame-cap"><span>Open state · 1440 wide · Jordan’s scope is 13 clients; Merit Management Group LLC (own books) is kept by the controller and isn’t in it.</span><span>Close grid 12 × 4 · rows 38px · capacity scale 0–50h</span></div><div class="anno"><div><b>The staircase</b><p>Each step is a cell: green with a tick when done, outlined where the work is, red-outlined where it’s stuck. Sorted by distance from close, the done cells march right as you read down.</p></div><div><b>Status says why</b><p>Every off-track row carries its reason beside the word: the feed, the unanswered request, the person who is over. Numbers are open items; the totals row re-sums whatever the filter shows.</p></div><div><b>Move people where the work is</b><p>Capacity is drawn in hours on one scale, so 45 against 35 is visible from across the room. Drag a client block to a person; the confirm states both loads and any access it grants.</p></div><div><b>Below the fold, still work</b><p>Blocked work has a fix on every row; stale requests escalate in one press. Team quality shows an honest empty state until there’s a closed month to measure.</p></div></div><div class="board-h" style="margin-top:56px"><div><div class="eyebrow">S5<span class="sl">//</span>Drag to reassign</div><h2 class="t-title" style="margin-top:8px">The move, before it’s made</h2><p>Jordan drags Clive Power Equipment off Dana’s track and holds it over Luis Ortiz, who covered Clive in June and July. Luis’s row lights; nothing is written until she confirms. Keyboard path: focus the block, <span class="kbd">↵</span>, pick a person.</p></div><span class="pg">S5.2</span></div><div class="frame"><div class="drag-demo density-cockpit"><div class="dash" style="--row:144px"><section class="wg" style="--w:8;--h:3;--x:1" aria-label="Capacity, mid-drag" id="w-cap2"><div class="wg-head"><h3 class="wg-title">Capacity this week</h3><span class="wg-count">6 people</span><span class="wg-meta">Dropping Clive Power Equipment on Luis Ortiz</span></div><div class="wg-body" style="overflow:visible;position:relative" id="cap-body2"></div></section><div style="grid-column:9/span 4;align-self:start;position:relative"><div class="popover pop-confirm" role="dialog" aria-labelledby="pc-h" style="position:relative"><div style="padding:16px 16px 4px"><div class="eyebrow">Reassign<span class="sl">//</span>Preparer, all functions</div><div class="t-head" id="pc-h" style="margin-top:4px">Move Clive Power Equipment to Luis Ortiz?</div><ul class="ev"><li>Effective<span class="dl"></span><span class="v">Mon Oct 19</span></li><li>Dana Lee this week<span class="dl"></span><span class="v">45.0 → 33.0h of 35</span></li><li>Luis Ortiz this week<span class="dl"></span><span class="v">5.5 → 17.5h of 35</span></li></ul><p class="t-cap" style="margin-top:8px">Luis already has access to Clive. Tess Morgan keeps Clive payroll. Dana and Luis are told, and the change is written to the access log.</p></div><div class="dialog-foot" style="margin-top:12px"><span class="sp"></span><button class="btn" type="button">Cancel<span class="kbd">Esc</span></button><button class="btn btn--primary" type="button">Reassign<span class="kbd">↵</span></button></div></div></div></div></div></div><div class="frame-cap"><span>Mid-drag. Dana’s Clive block is lifted; the projected loads are in the confirm, not guessed from the bars.</span><span>Assignment is effective-dated; payroll stays with Tess</span></div><div class="board-h" style="margin-top:56px"><div><div class="eyebrow">S5<span class="sl">//</span>States</div><h2 class="t-title" style="margin-top:8px">Done and empty, said plainly</h2><p>Done means configured and nothing to do: say what’s next. Empty means not set up: say what to do. Onboarding tracker isn’t on this home because no client is onboarding; it appears when one is.</p></div><span class="pg">S5.3</span></div><div class="frame"><div class="states density-cockpit"><div class="dash"><section class="wg wg--primary" style="--w:3;--h:2"><div class="wg-head"><h3 class="wg-title">Close grid</h3><span class="wg-count">Done</span></div><div class="wg-body"><div class="wg-state"><span class="wg-done-mark" aria-hidden="true"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></span><span class="t-head">September closed on all 13 clients</span><p>2 days early on average. October opens Nov 1.</p><a class="btn btn--quiet" href="#">See close times</a></div></div></section><section class="wg" style="--w:3;--h:2"><div class="wg-head"><h3 class="wg-title">Review queue</h3><span class="wg-count">Done</span></div><div class="wg-body"><div class="wg-state"><span class="wg-done-mark" aria-hidden="true"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></span><span class="t-head">Nothing waiting on you</span><p>Merit Fund III is next, due Oct 23.</p><a class="btn btn--quiet" href="#">See what’s coming</a></div></div></section><section class="wg" style="--w:3;--h:2"><div class="wg-head"><h3 class="wg-title">Blocked work</h3><span class="wg-count">Done</span></div><div class="wg-body"><div class="wg-state"><span class="wg-done-mark" aria-hidden="true"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></span><span class="t-head">Nothing blocked</span><p>Every feed is connected and no client request is older than 3 days.</p></div></div></section><section class="wg" style="--w:3;--h:2"><div class="wg-head"><h3 class="wg-title">Capacity this week</h3><span class="wg-count">Empty</span></div><div class="wg-body"><div class="wg-state"><span class="wg-empty-mark" aria-hidden="true"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-user"/></svg></span><span class="t-head">Set weekly capacity for your team</span><p>Hours per person let us flag who’s over before a close slips.</p><a class="btn" href="S11-team-and-access.html">Open Team</a></div></div></section></div></div></div></main>
+<script>
+(function(){
+var SCALE=50;
+var CL={CKB:'Crystal Kitchen & Bath',DOR:'Dorrian HVAC',REV:'Revived Interiors',CPE:'Clive Power Equipment',ART:'Artistry Homes',MHC:'Metro Heating & Cooling',
+  MF3:'Merit Fund III',SWC:'Swan Creek',HHC:'Heartland Heating & Cooling',ICC:'Iowa Custom Cabinets',HER:'Heritage Interiors',AIM:'AIM',WRS:'Wild Rose'};
+var SHORT={CKB:'Crystal',DOR:'Dorrian',REV:'Revived',CPE:'Clive',ART:'Artistry',MHC:'Metro',MF3:'Fund III',SWC:'Swan Creek',HHC:'Heartland',ICC:'Iowa Cabinets',HER:'Heritage',AIM:'AIM',WRS:'Wild Rose'};
+var HRS={CKB:10.5,DOR:14,REV:3.5,CPE:12,ART:8.5,MHC:7,MF3:5.5,SWC:5,HHC:4.5,ICC:4,HER:3.5,AIM:0,WRS:0};
+var people=[
+ {n:'Dana Lee',i:'DL',cap:35,segs:['CKB','DOR','CPE','SWC','HER'],extra:['WRS'],acc:['CKB','DOR','CPE','SWC','HER','WRS']},
+ {n:'Sam Kovac',i:'SK',cap:35,segs:['ART','MHC','HHC'],acc:['ART','MHC','HHC']},
+ {n:'Priya Natarajan',i:'PN',cap:30,segs:['ICC','REV'],fixed:[{k:'rev',l:'Reviews',h:9,t:'Reviewing Artistry Homes, Metro and Heartland, 3.0h each'}],acc:['ICC','REV','ART','MHC','HHC']},
+ {n:'Luis Ortiz',i:'LO',cap:35,segs:['MF3'],extra:['AIM'],acc:['MF3','AIM','CPE'],hist:{CPE:'covered Clive in June and July'}},
+ {n:'Tess Morgan',i:'TM',cap:20,segs:[],fixed:[{k:'pay',l:'Payroll',h:6,t:'Payroll for Heritage, Clive and Crystal, 2.0h each'}],acc:['HER','CPE','CKB'],role:'Payroll on 3 clients'},
+ {n:'Ben Okafor',i:'BO',cap:35,segs:[],acc:[],role:'Joined Oct 12'}
+];
+function P(n){return people.filter(function(p){return p.n===n})[0]}
+function load(p){var h=0;p.segs.forEach(function(c){h+=HRS[c]});(p.fixed||[]).forEach(function(f){h+=f.h});return h}
+function f1(x){return x.toFixed(1)}
+function first(n){return n.split(' ')[0]}
+function nClients(p){return p.segs.length+(p.extra||[]).length}
+var ctx2=document.createElement('canvas').getContext('2d');
+function tw(t){ctx2.font='600 12px "DM Sans", system-ui, sans-serif';return ctx2.measureText(t).width}
+
+function render(body,opt){
+  opt=opt||{};
+  var h='<div class="capx cap-axis" aria-hidden="true"><span>Person</span><div class="ticks">';
+  for(var t=0;t<=SCALE;t+=10)h+='<span style="left:'+(t/SCALE*100)+'%">'+t+(t===SCALE?'h':'')+'</span>';
+  h+='</div><span style="text-align:right">Left / capacity</span></div>';
+  people.forEach(function(p,pi){
+    var L=load(p),over=L-p.cap,pct=Math.round(L/p.cap*100);
+    var tgt=opt.target===p.n?' is-target':'';
+    var role=p.role||(nClients(p)+' client'+(nClients(p)===1?'':'s')+(p.fixed&&p.fixed[0].k==='rev'?' · 3 reviews':''));
+    h+='<div class="capx cap-row'+tgt+'" data-p="'+pi+'" role="group" aria-label="'+p.n+', '+f1(L)+' of '+p.cap+' hours">';
+    h+='<div class="cap-who"><span class="avatar">'+p.i+'</span><span><span class="l1">'+p.n+'</span><span class="l2">'+role+'</span></span></div>';
+    h+='<div class="trk"><span class="trk-free" style="width:'+(p.cap/SCALE*100)+'%"></span>';
+    var x=0;
+    p.segs.forEach(function(c){
+      var w=HRS[c]/SCALE*100,cls='cseg'+(opt.lifted===c?' is-lifted':'');
+      h+='<span class="'+cls+'" draggable="true" tabindex="0" role="button" data-c="'+c+'" data-p="'+pi+'" style="left:'+(x/SCALE*100)+'%;width:'+w+'%" aria-label="'+CL[c]+', '+f1(HRS[c])+' hours. Press Enter to reassign" title="'+CL[c]+' · '+f1(HRS[c])+'h">'+'<span class="fit-l" data-full="'+SHORT[c]+' '+f1(HRS[c])+'" data-mid="'+SHORT[c]+'" data-min="'+c+'"></span></span>';
+      x+=HRS[c];
+    });
+    (p.fixed||[]).forEach(function(f){
+      var w=f.h/SCALE*100;
+      h+='<span class="cseg cseg--'+f.k+'" style="left:'+(x/SCALE*100)+'%;width:'+w+'%" title="'+f.t+'" aria-label="'+f.t+'"><span class="fit-l" data-full="'+f.l+' '+f1(f.h)+'" data-mid="'+f.l+'" data-min=""></span></span>';
+      x+=f.h;
+    });
+    if(opt.ghost&&opt.target===p.n){var gw=HRS[opt.ghost]/SCALE*100;
+      h+='<span class="cseg" style="left:'+(x/SCALE*100)+'%;width:'+gw+'%;background:repeating-linear-gradient(135deg,var(--sky) 0 6px,var(--white) 6px 10px);box-shadow:inset 0 0 0 2px var(--electric);color:var(--electric)"><span class="fit-l" data-full="Clive 12.0" data-mid="Clive" data-min="CPE"></span></span>';}
+    if(!p.segs.length&&!p.fixed)h+='<span class="trk-empty">No clients yet. <a class="link" href="S11-team-and-access.html">Assign in Team</a></span>';
+    h+='<span class="cap-line" style="left:'+(p.cap/SCALE*100)+'%"></span><span class="cap-lab" style="left:'+(p.cap/SCALE*100)+'%">'+p.cap+'h</span>';
+    if(over>0)h+='<span class="over" style="left:'+(p.cap/SCALE*100)+'%;width:'+(over/SCALE*100)+'%"></span>';
+    h+='</div><div class="cap-fig"><span class="l1 '+(over>0?'neg b':'')+'">'+f1(L)+' / '+p.cap+'h</span><span class="l2 '+(over>0?'neg':'')+'">'+pct+'%'+(over>0?' · '+f1(over)+'h over':(p.cap-L>0?' · '+f1(p.cap-L)+'h free':''))+'</span></div></div>';
+  });
+  if(!opt.static){
+    var d=P('Dana Lee'),L=load(d);
+    if(L>d.cap&&d.segs.indexOf('CPE')>-1){
+      h+='<div class="note note--panel cap-note" id="cap-note"><div><div class="note-kind">Suggestion</div><div class="note-title">Move Clive Power Equipment to Luis Ortiz: Dana drops to 33.0 of 35h, Luis rises to 17.5</div>'+
+      '<div class="basis"><span>Basis <b>Luis covered Clive in June and July</b></span><span>Already has access</span><span>Clive due Oct 21 fits his week</span></div></div>'+
+      '<div class="btn-row"><button class="btn btn--primary" type="button" id="apply-sug">Reassign Clive</button><button class="btn btn--quiet" type="button" id="dismiss-sug">Dismiss</button></div></div>';
+    }
+  }
+  body.innerHTML=h;
+  fit(body);
+}
+function fit(root){
+  root.querySelectorAll('.fit-l').forEach(function(s){
+    var w=s.parentElement.clientWidth-12,o=[s.dataset.full,s.dataset.mid,s.dataset.min,''];
+    for(var i=0;i<o.length;i++){if(tw(o[i])<=w){s.textContent=o[i];break}}
+  });
+}
+
+var body=document.getElementById('cap-body');
+function draw(){render(body);wire();}
+
+/* ---------- reassign flow ---------- */
+var pop=null;
+function closePop(){if(pop){pop.remove();pop=null;}}
+function anchorIn(el,host){var a=el.getBoundingClientRect(),b=host.getBoundingClientRect();return {top:a.bottom-b.top+6,left:Math.max(8,Math.min(a.left-b.left,b.width-410))}}
+function menu(code,anchor,host){
+  closePop();var from=people.filter(function(p){return p.segs.indexOf(code)>-1})[0];
+  var h='<div class="popover pop-move" role="dialog" aria-label="Reassign '+CL[code]+'"><div class="popover-head" style="height:auto;padding:12px 16px"><div><div class="eyebrow">Reassign preparer</div><div class="t-head">'+CL[code]+' · '+f1(HRS[code])+'h</div></div></div><ul class="popover-list" role="listbox">';
+  people.forEach(function(p,i){if(p===from)return;var a=load(p),b=a+HRS[code];
+    h+='<li class="popover-item" role="option" tabindex="-1" data-to="'+i+'" aria-selected="false"><span class="avatar" style="width:24px;height:24px;background:var(--grey-100);color:var(--ink);border:1px solid var(--line-2)">'+p.i+'</span><span>'+p.n+'</span><span class="r"><span class="'+(b>p.cap?'neg b':'')+'">'+f1(a)+' → '+f1(b)+' / '+p.cap+'h</span></span></li>';});
+  h+='</ul><div class="popover-foot"><span class="keys"><span class="kbd">↑</span><span class="kbd">↓</span> choose</span><span class="keys"><span class="kbd">↵</span> next</span><span class="keys"><span class="kbd">Esc</span> close</span></div></div>';
+  host.insertAdjacentHTML('beforeend',h);pop=host.lastElementChild;var pos=anchorIn(anchor,host);pop.style.top=pos.top+'px';pop.style.left=pos.left+'px';
+  var items=[].slice.call(pop.querySelectorAll('.popover-item'));items[0].setAttribute('aria-selected','true');items[0].focus();
+  items.forEach(function(it,k){it.addEventListener('click',function(){confirmMove(code,people[+it.dataset.to],anchor,host)});
+    it.addEventListener('keydown',function(e){if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();var n=items[(k+(e.key==='ArrowDown'?1:items.length-1))%items.length];items.forEach(function(x){x.setAttribute('aria-selected','false')});n.setAttribute('aria-selected','true');n.focus();}
+      if(e.key==='Enter'){e.preventDefault();it.click();} if(e.key==='Escape'){closePop();anchor.focus();}});});
+}
+function confirmMove(code,to,anchor,host){
+  closePop();var from=people.filter(function(p){return p.segs.indexOf(code)>-1})[0];
+  var fa=load(from),ta=load(to),hh=HRS[code];var access=to.acc.indexOf(code)>-1;
+  var lines='<li>Effective<span class="dl"></span><span class="v">Mon Oct 19</span></li><li>'+from.n+' this week<span class="dl"></span><span class="v">'+f1(fa)+' → '+f1(fa-hh)+'h of '+from.cap+'</span></li><li>'+to.n+' this week<span class="dl"></span><span class="v '+(ta+hh>to.cap?'neg':'')+'">'+f1(ta)+' → '+f1(ta+hh)+'h of '+to.cap+'</span></li>';
+  var note=(access?first(to.n)+' already has access to '+SHORT[code]+'.':'Also gives '+first(to.n)+' access to '+CL[code]+'. It’s in your scope, so you can.')+(code==='CPE'||code==='HER'||code==='CKB'?' Tess Morgan keeps payroll.':'')+' Both are told; the change goes to the access log.';
+  if(ta+hh>to.cap)note='<b class="neg">'+first(to.n)+' would be '+f1(ta+hh-to.cap)+'h over.</b> '+note;
+  var h='<div class="popover pop-confirm" role="dialog" aria-label="Confirm reassignment"><div style="padding:16px 16px 4px"><div class="eyebrow">Reassign<span class="sl">//</span>Preparer, all functions</div><div class="t-head" style="margin-top:4px">Move '+CL[code]+' to '+to.n+'?</div><ul class="ev">'+lines+'</ul><p class="t-cap" style="margin-top:8px">'+note+'</p></div><div class="dialog-foot" style="margin-top:12px"><span class="sp"></span><button class="btn" type="button" data-x>Cancel<span class="kbd">Esc</span></button><button class="btn btn--primary" type="button" data-ok>Reassign<span class="kbd">↵</span></button></div></div>';
+  host.insertAdjacentHTML('beforeend',h);pop=host.lastElementChild;var pos=anchorIn(anchor,host);pop.style.top=pos.top+'px';pop.style.left=pos.left+'px';
+  var ok=pop.querySelector('[data-ok]');ok.focus();
+  pop.querySelector('[data-x]').onclick=function(){closePop();};
+  pop.addEventListener('keydown',function(e){if(e.key==='Escape')closePop();});
+  ok.onclick=function(){closePop();move(code,from,to);mbToast('Reassigned '+CL[code]+' to '+to.n,function(){move(code,to,from)});};
+}
+function move(code,from,to){
+  from.segs.splice(from.segs.indexOf(code),1);to.segs.push(code);if(to.acc.indexOf(code)<0)to.acc.push(code);
+  /* close grid row follows */
+  var tr=document.querySelector('#cg-body tr[data-code="'+code+'"]');
+  if(tr){tr.dataset.prep=to.n;tr.querySelector('[data-f=prep]').textContent=to.n;}
+  people.forEach(function(p){var over=load(p)>p.cap;
+    document.querySelectorAll('#cg-body tr.q-row').forEach(function(r){if(r.dataset.prep!==p.n)return;var s=r.dataset.status;
+      if(s==='risk'&&!over)setStatus(r,'track',f1(+r.dataset.h)+'h left');
+      if(s==='track'&&over&&r.dataset.code===code)setStatus(r,'risk',first(p.n)+' '+f1(load(p)-p.cap)+'h over');});});
+  draw();recount();
+}
+function setStatus(r,s,why){var w={overdue:'Overdue',blocked:'Blocked',risk:'At risk',track:'On track',ready:'Ready'}[s];r.dataset.status=s;
+  r.querySelector('.stc').innerHTML='<span class="stl"><span class="status status--'+s+'"><i class="pip pip--'+s+'" aria-hidden="true"></i>'+w+'</span><span class="why-t" data-f="why">'+why+'</span></span>';}
+
+function wire(){
+  body.querySelectorAll('.cseg[draggable]').forEach(function(s){
+    s.addEventListener('dragstart',function(e){e.dataTransfer.setData('text/plain',s.dataset.c);e.dataTransfer.effectAllowed='move';setTimeout(function(){s.classList.add('is-moving')},0);});
+    s.addEventListener('dragend',function(){s.classList.remove('is-moving');body.querySelectorAll('.cap-row').forEach(function(r){r.classList.remove('is-target')});});
+    s.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();menu(s.dataset.c,s,document.getElementById('w-cap'));}});
+    s.addEventListener('click',function(){menu(s.dataset.c,s,document.getElementById('w-cap'));});
+  });
+  body.querySelectorAll('.cap-row').forEach(function(r){
+    r.addEventListener('dragover',function(e){e.preventDefault();body.querySelectorAll('.cap-row').forEach(function(x){x.classList.toggle('is-target',x===r)});});
+    r.addEventListener('drop',function(e){e.preventDefault();var c=e.dataTransfer.getData('text/plain');r.classList.remove('is-target');var to=people[+r.dataset.p];
+      if(to.segs.indexOf(c)>-1)return;confirmMove(c,to,r.querySelector('.trk'),document.getElementById('w-cap'));});
+  });
+  var a=document.getElementById('apply-sug');if(a)a.onclick=function(){confirmMove('CPE',P('Luis Ortiz'),a,document.getElementById('w-cap'))};
+  var d=document.getElementById('dismiss-sug');if(d)d.onclick=function(){document.getElementById('cap-note').remove()};
+}
+draw();
+render(document.getElementById('cap-body2'),{static:true,lifted:'CPE',target:'Luis Ortiz',ghost:'CPE'});
+document.addEventListener('click',function(e){if(!document.body.contains(e.target))return;if(pop&&!pop.contains(e.target)&&!e.target.closest('.cseg,.rs,#apply-sug'))closePop();});
+
+/* ---------- close grid: filters, totals, row open, reassign ---------- */
+var filt='all',staff='';
+function recount(){
+  var rows=[].slice.call(document.querySelectorAll('#cg-body tr.q-row'));
+  var off=rows.filter(function(r){return /overdue|blocked|risk/.test(r.dataset.status)}).length,ready=rows.filter(function(r){return r.dataset.status==='ready'}).length;
+  document.getElementById('f-off').textContent=off;document.getElementById('f-ready').textContent=ready;
+  document.getElementById('ctx-off').textContent=off+' off track';
+  var vis=rows.filter(function(r){var s=r.dataset.status;var ok=filt==='all'||(filt==='off'&&/overdue|blocked|risk/.test(s))||(filt==='ready'&&s==='ready');if(staff&&r.dataset.prep!==staff)ok=false;r.style.display=ok?'':'none';return ok});
+  var t=[0,0,0,0];vis.forEach(function(r){var c=r.querySelectorAll('td.st');for(var i=0;i<3;i++){var v=parseInt(c[i].textContent,10);t[i]+=isNaN(v)?0:v;}var m=c[3].textContent.match(/(\d+)\/12/);t[3]+=m?+m[1]:12;});
+  document.getElementById('t-rev').textContent=t[0];document.getElementById('t-rec').textContent=t[1];document.getElementById('t-chk').textContent=t[2];document.getElementById('t-cls').textContent=t[3]+'/'+(vis.length*12);
+  document.getElementById('cg-n').textContent=vis.length+' client'+(vis.length===1?'':'s');
+  var vo=vis.filter(function(r){return /overdue|blocked|risk/.test(r.dataset.status)}).length,vr=vis.filter(function(r){return r.dataset.status==='ready'}).length;
+  document.getElementById('t-stat').textContent=vr+' ready · '+vo+' off track';
+}
+document.querySelectorAll('#cg-filter button').forEach(function(b){b.addEventListener('click',function(){filt=b.dataset.f;document.querySelectorAll('#cg-filter button').forEach(function(x){x.setAttribute('aria-pressed',String(x===b))});recount();});});
+document.getElementById('cg-staff').addEventListener('change',function(e){staff=e.target.value;recount();});
+document.querySelectorAll('#cg-body tr.q-row').forEach(function(r){r.addEventListener('click',function(e){if(e.target.closest('button,a'))return;r.querySelector('.rowlink').focus();});});
+document.querySelectorAll('.rs').forEach(function(b){b.addEventListener('click',function(e){e.stopPropagation();var c=b.dataset.code;
+  if(!people.some(function(p){return p.segs.indexOf(c)>-1})){mbToast(CL[c]+' is ready, nothing left to move');return;}
+  menu(c,b,document.getElementById('w-cg'));});});
+
+/* ---------- review queue: J/K cursor, A act, R return ---------- */
+var rq=document.getElementById('rq'),doB=document.getElementById('rq-do'),retB=document.getElementById('rq-ret');
+function qrows(){return [].slice.call(rq.querySelectorAll('tr.q-row:not(.is-done)'))}
+function cur(){return rq.querySelector('tr.is-cursor')}
+function setCur(r){rq.querySelectorAll('tr.q-row').forEach(function(x){x.classList.remove('is-cursor')});if(r){r.classList.add('is-cursor');doB.firstChild.textContent=r.dataset.verb;}}
+rq.querySelectorAll('tr.q-row').forEach(function(r){r.addEventListener('click',function(){setCur(r);r.focus();});});
+function act(kind){var r=cur();if(!r)return;var rs=qrows(),i=rs.indexOf(r);r.classList.add('is-done');var nm=r.dataset.name.replace('&amp;','&');
+  var verb=r.dataset.verb,past={'Sign off':'Signed off','Post':'Posted','Approve':'Approved'}[verb];
+  var g=r.previousElementSibling;while(g&&!g.classList.contains('q-group'))g=g.previousElementSibling;var gc=g.querySelector('.gcount');gc.textContent=Math.max(0,+gc.textContent-1);
+  mbToast(kind==='ret'?'Returned to '+r.dataset.prep+' with your note':past+' · '+nm,function(){r.classList.remove('is-done');gc.textContent=+gc.textContent+1;setCur(r);upd();});
+  var left=qrows();setCur(left[Math.min(i,left.length-1)]);upd();}
+function upd(){var n=qrows().length;document.getElementById('rq-n').textContent=n;document.getElementById('rq-chip-n').textContent=n;
+  if(!n){document.getElementById('rq-body').innerHTML='<div class="wg-state"><span class="wg-done-mark" aria-hidden="true"><svg class="ico" width="16" height="16"><use href="#i-check"/></svg></span><span class="t-head">Nothing waiting on you</span><p>Merit Fund III is next, due Oct 23.</p></div>';document.getElementById('rq-foot').style.display='none';}}
+doB.onclick=function(){act('do')};retB.onclick=function(){act('ret')};
+document.getElementById('w-rq').addEventListener('keydown',function(e){if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;var rs=qrows(),i=rs.indexOf(cur());
+  if(e.key==='j'||e.key==='ArrowDown'){e.preventDefault();var n=rs[Math.min(rs.length-1,i+1)];setCur(n);n.focus();}
+  if(e.key==='k'||e.key==='ArrowUp'){e.preventDefault();var p=rs[Math.max(0,i-1)];setCur(p);p.focus();}
+  if(e.key==='a'){e.preventDefault();act('do');} if(e.key==='r'){e.preventDefault();act('ret');}});
+document.getElementById('esc').onclick=function(){mbToast('Escalated 3 blocking requests · client owners copied')};
+window.addEventListener('resize',function(){fit(document)});
+(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(function(){fit(document)});
+})();
+</script>
+
+<div class="toast-region" aria-live="polite" id="toasts"></div>
+<script>
+window.mbToast=function(msg,undo){
+  var r=document.getElementById('toasts');r.innerHTML='';
+  var t=document.createElement('div');t.className='toast';t.setAttribute('role','status');
+  t.innerHTML='<span class="toast-mark"></span><span></span>';t.children[1].textContent=msg;
+  if(undo){var b=document.createElement('button');b.className='btn btn--quiet';b.type='button';b.innerHTML='Undo<span class="kbd">⌘</span><span class="kbd">Z</span>';
+    b.onclick=function(){undo();r.innerHTML=''};t.appendChild(b);}
+  r.appendChild(t);clearTimeout(window.__tt);window.__tt=setTimeout(function(){r.innerHTML=''},6000);
+};
+</script>
+
+<script>
+/* Layout audit. Add ?audit to the URL: outlines any text that clips or overflows its box and any
+   control under 32px, and lists them bottom right. Runs after web fonts load. */
+(function(){
+  var on=/[?&]audit/.test(location.search)||window.__AUDIT;
+  function run(){
+    var bad=[],small=[];
+    document.querySelectorAll('.l1,.l2,td,th,.btn,.tag,.ctx-name,.wg-meta,.wg-title,.status,.field-label,.seg button,.fit,.kv dd,.kv dt').forEach(function(el){
+      if(!el.offsetParent&&getComputedStyle(el).position!=='fixed')return;
+      if(el.closest('[data-audit-skip]'))return;
+      if(el.scrollWidth>el.clientWidth+1&&getComputedStyle(el).overflow!=='visible'){bad.push(el)}
+    });
+    document.querySelectorAll('button,a.btn,.btn,input[type=checkbox],input[type=radio],select,.input,.rail-link,.popover-item').forEach(function(el){
+      if(!el.offsetParent)return; if(el.closest('[data-audit-skip]'))return;
+      var t=el.matches('input[type=checkbox],input[type=radio]')?el.parentElement:el;
+      var r=t.getBoundingClientRect(); if(r.width===0)return;
+      if(r.height<31.5){small.push(t)}
+    });
+    if(on){
+      bad.concat(small).forEach(function(e){e.classList.add('audit-hit')});
+      var b=document.createElement('div');b.className='audit-badge';b.setAttribute('data-audit-skip','');
+      b.innerHTML='<b>Layout audit</b> · '+bad.length+' overflow · '+small.length+' small targets<br>'+
+        bad.slice(0,12).map(function(e){return 'overflow: '+(e.textContent||'').trim().slice(0,48)+' ('+e.scrollWidth+'>'+e.clientWidth+')'}).join('<br>')+
+        (small.length?'<br>'+small.slice(0,8).map(function(e){return 'small: '+(e.textContent||e.getAttribute('aria-label')||e.tagName).trim().slice(0,40)+' h'+Math.round(e.getBoundingClientRect().height)}).join('<br>'):'');
+      document.body.appendChild(b);
+    }
+    window.__auditResult={overflow:bad.length,small:small.length};
+    if(bad.length||small.length)console.warn('Layout audit',window.__auditResult,bad,small);
+  }
+  (document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(function(){setTimeout(run,300)});
+})();
+</script>
+</body></html>

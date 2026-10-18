@@ -1,0 +1,1097 @@
+<!doctype html> <html lang='en'>
+<head>
+<meta charset='utf-8'> <meta name='viewport' content='width=1512'> <title>Consolidated income statement — MeritBooks</title> <link rel='preconnect' href='https://fonts.googleapis.com'>
+<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+<link href='https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap' rel='stylesheet'> <link rel='stylesheet' href='assets/annual-report.css'> <style> .wrap{display:grid;grid-template-columns:minmax(0,1fr) 352px} 
+.colm{padding:0 40px 64px} 
+.head2{display:flex;justify-content:space-between;align-items:flex-start;margin-top:24px;gap:24px} 
+.head2 .sub{margin-top:8px} 
+.ctrl{display:flex;gap:16px;align-items:center;margin-top:24px;padding:16px 0;border-top:1px solid var(--grey-200);border-bottom:1px solid var(--grey-200)} 
+.ctrl .lbl{font-size:var(--t-xs);letter-spacing:.14em;text-transform:uppercase;font-weight:500;color:var(--steel);margin-right:8px} 
+.ctrl .sp{flex:1} 
+.chk{display:inline-flex;align-items:center;gap:8px;height:32px;font-size:var(--t-sm);color:var(--midnight);cursor:pointer} 
+.chk input{appearance:none;width:16px;height:16px;border:1px solid var(--steel);background:var(--white);display:grid;place-content:center;margin:0} 
+.chk input:checked{background:var(--blue);border-color:var(--blue)} 
+.chk input:checked::after{content:'';width:8px;height:4px;border:2px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)} 
+table.is{margin-top:24px} 
+table.is th.cur,table.is td.cur{background:var(--white)} 
+table.is{table-layout:fixed} 
+table.is td{height:32px;padding:4px 8px} 
+table.is th{padding-left:8px;padding-right:8px} 
+table.is td.nt{width:40px;text-align:center;padding:0} 
+table.is td.nt .nref{top:0;vertical-align:middle;padding:2px 4px} 
+table.is th.nt{width:40px;text-align:center;padding-left:0;padding-right:0} 
+table.is td.fuc{width:28px;padding-left:4px;padding-right:0;text-align:center} 
+table.is td.n.mat{font-weight:600} 
+table.is tbody tr:not(.head):not(.gap):not(.drill-end):hover{background:var(--sky)} 
+table.is tbody tr:not(.head):not(.gap):not(.drill-end):hover td.cur{background:var(--sky)} 
+tr.elim td{color:var(--steel)} 
+tr.open td{font-weight:600} 
+tr.open td.l{color:var(--blue)} 
+.tw{display:inline-grid;place-content:center;width:32px;height:32px;margin:-4px 0 -4px -8px;color:var(--blue);vertical-align:middle} 
+.tw:hover{background:var(--sky)} 
+tr.drill td{font-size:var(--t-xs);color:var(--steel);height:28px;background:var(--canvas)} 
+tr.drill td.cur{background:#EFECE6} 
+tr.drill td.l.ind{padding-left:28px;color:var(--midnight)} 
+tr.drill.hot td,tr.drill.hot td.cur{background:var(--sky)} 
+tr.drill.hot td.l{box-shadow:inset 2px 0 0 var(--blue)} 
+tr.drill-end td{height:8px;padding:0;background:var(--canvas)} 
+.pre{display:inline-block;margin-left:8px;font-size:var(--t-xs);font-weight:700;color:var(--warn);border:1px solid var(--warn);width:16px;height:16px;line-height:14px;text-align:center} 
+tr.ratio td{color:var(--steel);font-size:var(--t-xs)} 
+.foot{margin-top:24px;display:flex;gap:32px;font-size:var(--t-xs);line-height:16px;color:var(--steel)} 
+.notes{padding:32px 28px 64px;border-left:1px solid var(--grey-200)} 
+.notes .title{margin-bottom:8px} 
+.notes .sub{margin-bottom:24px} 
+.signoff{margin-top:8px;border-top:1px solid var(--grey-300);padding-top:16px;font-size:var(--t-sm);line-height:20px;color:var(--steel)} 
+</style>
+</head> <body>
+<div class='app'>
+<aside class='shell' aria-label='MeritBooks'> <a class='logo' href='index.html'>
+<img src='assets/merit-logo-on-dark@2x.png' alt='Merit' width='106' height='32'>
+</a> <div class='product'>MeritBooks<b>Merit Management Group</b>
+</div> <nav aria-label='Primary'>
+<a href='portfolio.html'>
+<span class='k'>01</span>
+<span>Portfolio</span>
+<span>
+</span>
+</a>
+<a href='bank-feed.html'>
+<span class='k'>02</span>
+<span>Bank feed</span>
+<span class='c'>142</span>
+</a>
+<a href='statement.html' aria-current='page'>
+<span class='k'>03</span>
+<span>Statements</span>
+<span>
+</span>
+</a>
+<a href='#'>
+<span class='k'>04</span>
+<span>Close</span>
+<span class='c'>4</span>
+</a>
+<a href='#'>
+<span class='k'>05</span>
+<span>Payables</span>
+<span>
+</span>
+</a>
+<a href='#'>
+<span class='k'>06</span>
+<span>Receivables</span>
+<span>
+</span>
+</a>
+<a href='#'>
+<span class='k'>07</span>
+<span>Journal</span>
+<span>
+</span>
+</a>
+<a href='#'>
+<span class='k'>08</span>
+<span>Covenants</span>
+<span class='c'>1</span>
+</a>
+</nav> <p class='navhint'>Press <span style='color:#CDD2D9'>G</span> then a number to jump.</p> <div class='period'>
+<div class='lbl'>Closing</div>
+<div class='v'>October 2026 · 11 of 15 closed</div> <div class='bar' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+<i>
+</i>
+<i>
+</i>
+<i>
+</i>
+</div>
+</div> <div class='who'>
+<b>Dana Ruiz</b>
+<span>Controller</span>
+</div> </aside>
+<main class='main' id='main'> <div class='wrap'> <div class='colm'> <div class='pagehead' style='padding:32px 0 0'>
+<div class='eyebrow'>03<span class='sl'>//</span>Statements</div>
+<div class='pageno'>03</div>
+</div> <div class='head2'> <div>
+<h1 class='title'>Consolidated income statement</h1> <p class='sub'>Merit Management Group and subsidiaries · Month ended October 31, 
+2026 · Unaudited draft, 
+11 of 15 entities closed</p>
+</div> <div style='display:flex;gap:8px'>
+<button class='btn'>Export PDF</button>
+<button class='btn primary'>Add to board pack</button>
+</div> </div> <div class='ctrl' role='toolbar' aria-label='Statement options'> <button class='btn' aria-haspopup='listbox' aria-label='Period: October 2026'>October 2026 <svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='currentColor' stroke-width='1.5'/>
+</svg>
+</button> <div class='seg' role='group' aria-label='Columns'>
+<button aria-pressed='true'>Consolidated</button>
+<button aria-pressed='false'>By segment</button>
+<button aria-pressed='false'>By entity</button>
+</div> <span class='sp'>
+</span> <label class='chk'>
+<input type='checkbox' checked> Show eliminations</label> <label class='chk'>
+<input type='checkbox' checked> Bold material variances</label> </div> <table class='ledger is' aria-describedby='isfoot'> <colgroup>
+<col>
+<col style='width:36px'>
+<col style='width:96px'>
+<col style='width:96px'>
+<col style='width:88px'>
+<col style='width:96px'>
+<col style='width:88px'>
+<col style='width:68px'>
+<col style='width:24px'>
+</colgroup> <thead>
+<tr>
+<th>In US dollars</th>
+<th class='nt'>Note</th>
+<th class='n cur'>Oct 2026</th>
+<th class='n'>Sep 2026</th>
+<th class='n'>Change</th> <th class='n'>Budget</th>
+<th class='n'>Variance</th>
+<th class='n'>Var %</th>
+<th>
+</th>
+</tr>
+</thead> <tbody>
+<tr class='head'>
+<td colspan='9'>Revenue</td>
+</tr>
+<tr class=''>
+<td class='l'>HVAC</td>
+<td class='nt'>
+<a class='nref' href='#note-3' data-note='3' aria-label='See note 3'>3</a>
+</td>
+<td class='n cur'>3,503,500<span class='hp'>)</span>
+</td>
+<td class='n'>3,712,900<span class='hp'>)</span>
+</td>
+<td class='n mut'>(209,400)</td>
+<td class='n'>3,600,000<span class='hp'>)</span>
+</td>
+<td class='n'>(96,500)</td>
+<td class='n'>(2.7%)</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Interiors and cabinetry</td>
+<td class='nt'>
+</td>
+<td class='n cur'>2,598,400<span class='hp'>)</span>
+</td>
+<td class='n'>2,511,300<span class='hp'>)</span>
+</td>
+<td class='n mut'>87,100<span class='hp'>)</span>
+</td>
+<td class='n'>2,550,000<span class='hp'>)</span>
+</td>
+<td class='n'>48,400<span class='hp'>)</span>
+</td>
+<td class='n'>1.9%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu pos-t' aria-label='favorable'>F</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Homebuilding</td>
+<td class='nt'>
+<a class='nref' href='#note-2' data-note='2' aria-label='See note 2'>2</a>
+</td>
+<td class='n cur'>1,986,000<span class='hp'>)</span>
+</td>
+<td class='n'>1,742,000<span class='hp'>)</span>
+</td>
+<td class='n mut'>244,000<span class='hp'>)</span>
+</td>
+<td class='n'>2,100,000<span class='hp'>)</span>
+</td>
+<td class='n mat'>(114,000)</td>
+<td class='n mat'>(5.4%)</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Equipment sales and service</td>
+<td class='nt'>
+</td>
+<td class='n cur'>1,248,500<span class='hp'>)</span>
+</td>
+<td class='n'>1,301,200<span class='hp'>)</span>
+</td>
+<td class='n mut'>(52,700)</td>
+<td class='n'>1,200,000<span class='hp'>)</span>
+</td>
+<td class='n'>48,500<span class='hp'>)</span>
+</td>
+<td class='n'>4.0%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu pos-t' aria-label='favorable'>F</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Other operating</td>
+<td class='nt'>
+</td>
+<td class='n cur'>859,100<span class='hp'>)</span>
+</td>
+<td class='n'>842,700<span class='hp'>)</span>
+</td>
+<td class='n mut'>16,400<span class='hp'>)</span>
+</td>
+<td class='n'>850,000<span class='hp'>)</span>
+</td>
+<td class='n'>9,100<span class='hp'>)</span>
+</td>
+<td class='n'>1.1%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu pos-t' aria-label='favorable'>F</span>
+</td>
+</tr>
+<tr class='elim'>
+<td class='l'>Management fees</td>
+<td class='nt'>
+</td>
+<td class='n cur'>312,000<span class='hp'>)</span>
+</td>
+<td class='n'>312,000<span class='hp'>)</span>
+</td>
+<td class='n mut'>—<span class='hp'>)</span>
+</td>
+<td class='n'>312,000<span class='hp'>)</span>
+</td>
+<td class='n'>—<span class='hp'>)</span>
+</td>
+<td class='n'>—<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu mut'>–</span>
+</td>
+</tr>
+<tr class='elim'>
+<td class='l'>Intercompany eliminations</td>
+<td class='nt'>
+</td>
+<td class='n cur'>(312,000)</td>
+<td class='n'>(312,000)</td>
+<td class='n mut'>—<span class='hp'>)</span>
+</td>
+<td class='n'>(312,000)</td>
+<td class='n'>—<span class='hp'>)</span>
+</td>
+<td class='n'>—<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu mut'>–</span>
+</td>
+</tr>
+<tr class='sub'>
+<td class='l'>Total revenue</td>
+<td class='nt'>
+</td>
+<td class='n cur'>10,195,500<span class='hp'>)</span>
+</td>
+<td class='n'>10,110,100<span class='hp'>)</span>
+</td>
+<td class='n mut'>85,400<span class='hp'>)</span>
+</td>
+<td class='n'>10,300,000<span class='hp'>)</span>
+</td>
+<td class='n'>(104,500)</td>
+<td class='n'>(1.0%)</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='head'>
+<td colspan='9'>Cost of revenue</td>
+</tr>
+<tr class='open' aria-expanded='true' data-note='1'>
+<td class='l'>
+<button class='tw' aria-label='Collapse materials by entity'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='currentColor' stroke-width='1.5'/>
+</svg>
+</button>Materials and equipment</td>
+<td class='nt'>
+<a class='nref' href='#note-1' data-note='1' aria-label='See note 1'>1</a>
+</td>
+<td class='n cur'>4,287,791<span class='hp'>)</span>
+</td>
+<td class='n'>4,144,950<span class='hp'>)</span>
+</td>
+<td class='n mut'>142,841<span class='hp'>)</span>
+</td>
+<td class='n'>4,215,400<span class='hp'>)</span>
+</td>
+<td class='n'>72,391<span class='hp'>)</span>
+</td>
+<td class='n'>1.7%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='drill hot' data-note='1'>
+<td class='l ind'>Heartland Heating & Cooling</td>
+<td class='nt'>
+</td>
+<td class='n cur'>590,341<span class='hp'>)</span>
+</td>
+<td class='n'>512,880<span class='hp'>)</span>
+</td>
+<td class='n mut'>77,461<span class='hp'>)</span>
+</td>
+<td class='n'>508,400<span class='hp'>)</span>
+</td>
+<td class='n mat'>81,941<span class='hp'>)</span>
+</td>
+<td class='n mat'>16.1%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='drill'>
+<td class='l ind'>Dorrian HVAC<span class='pre' title='Entity not yet closed'>P</span>
+</td>
+<td class='nt'>
+</td>
+<td class='n cur'>368,940<span class='hp'>)</span>
+</td>
+<td class='n'>381,220<span class='hp'>)</span>
+</td>
+<td class='n mut'>(12,280)</td>
+<td class='n'>372,000<span class='hp'>)</span>
+</td>
+<td class='n'>(3,060)</td>
+<td class='n'>(0.8%)</td>
+<td class='fuc'>
+<span class='fu pos-t' aria-label='favorable'>F</span>
+</td>
+</tr>
+<tr class='drill'>
+<td class='l ind'>Metro Heating & Cooling</td>
+<td class='nt'>
+</td>
+<td class='n cur'>412,610<span class='hp'>)</span>
+</td>
+<td class='n'>431,050<span class='hp'>)</span>
+</td>
+<td class='n mut'>(18,440)</td>
+<td class='n'>418,000<span class='hp'>)</span>
+</td>
+<td class='n'>(5,390)</td>
+<td class='n'>(1.3%)</td>
+<td class='fuc'>
+<span class='fu pos-t' aria-label='favorable'>F</span>
+</td>
+</tr>
+<tr class='drill'>
+<td class='l ind'>Heritage Interiors</td>
+<td class='nt'>
+</td>
+<td class='n cur'>271,050<span class='hp'>)</span>
+</td>
+<td class='n'>262,330<span class='hp'>)</span>
+</td>
+<td class='n mut'>8,720<span class='hp'>)</span>
+</td>
+<td class='n'>270,000<span class='hp'>)</span>
+</td>
+<td class='n'>1,050<span class='hp'>)</span>
+</td>
+<td class='n'>0.4%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='drill'>
+<td class='l ind'>Crystal Kitchen & Bath<span class='pre' title='Entity not yet closed'>P</span>
+</td>
+<td class='nt'>
+</td>
+<td class='n cur'>244,470<span class='hp'>)</span>
+</td>
+<td class='n'>236,910<span class='hp'>)</span>
+</td>
+<td class='n mut'>7,560<span class='hp'>)</span>
+</td>
+<td class='n'>238,000<span class='hp'>)</span>
+</td>
+<td class='n'>6,470<span class='hp'>)</span>
+</td>
+<td class='n'>2.7%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='drill'>
+<td class='l ind'>Iowa Custom Cabinets</td>
+<td class='nt'>
+</td>
+<td class='n cur'>309,480<span class='hp'>)</span>
+</td>
+<td class='n'>301,770<span class='hp'>)</span>
+</td>
+<td class='n mut'>7,710<span class='hp'>)</span>
+</td>
+<td class='n'>305,000<span class='hp'>)</span>
+</td>
+<td class='n'>4,480<span class='hp'>)</span>
+</td>
+<td class='n'>1.5%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='drill'>
+<td class='l ind'>Revived Interiors</td>
+<td class='nt'>
+</td>
+<td class='n cur'>152,220<span class='hp'>)</span>
+</td>
+<td class='n'>149,600<span class='hp'>)</span>
+</td>
+<td class='n mut'>2,620<span class='hp'>)</span>
+</td>
+<td class='n'>150,000<span class='hp'>)</span>
+</td>
+<td class='n'>2,220<span class='hp'>)</span>
+</td>
+<td class='n'>1.5%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='drill'>
+<td class='l ind'>Artistry Homes<span class='pre' title='Entity not yet closed'>P</span>
+</td>
+<td class='nt'>
+</td>
+<td class='n cur'>873,840<span class='hp'>)</span>
+</td>
+<td class='n'>774,190<span class='hp'>)</span>
+</td>
+<td class='n mut'>99,650<span class='hp'>)</span>
+</td>
+<td class='n'>924,000<span class='hp'>)</span>
+</td>
+<td class='n mat'>(50,160)</td>
+<td class='n mat'>(5.4%)</td>
+<td class='fuc'>
+<span class='fu pos-t' aria-label='favorable'>F</span>
+</td>
+</tr>
+<tr class='drill'>
+<td class='l ind'>Clive Power Equipment</td>
+<td class='nt'>
+</td>
+<td class='n cur'>836,500<span class='hp'>)</span>
+</td>
+<td class='n'>870,800<span class='hp'>)</span>
+</td>
+<td class='n mut'>(34,300)</td>
+<td class='n'>804,000<span class='hp'>)</span>
+</td>
+<td class='n'>32,500<span class='hp'>)</span>
+</td>
+<td class='n'>4.0%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='drill'>
+<td class='l ind'>Swan Creek</td>
+<td class='nt'>
+</td>
+<td class='n cur'>96,150<span class='hp'>)</span>
+</td>
+<td class='n'>94,400<span class='hp'>)</span>
+</td>
+<td class='n mut'>1,750<span class='hp'>)</span>
+</td>
+<td class='n'>95,000<span class='hp'>)</span>
+</td>
+<td class='n'>1,150<span class='hp'>)</span>
+</td>
+<td class='n'>1.2%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='drill'>
+<td class='l ind'>AIM</td>
+<td class='nt'>
+</td>
+<td class='n cur'>72,100<span class='hp'>)</span>
+</td>
+<td class='n'>70,500<span class='hp'>)</span>
+</td>
+<td class='n mut'>1,600<span class='hp'>)</span>
+</td>
+<td class='n'>71,000<span class='hp'>)</span>
+</td>
+<td class='n'>1,100<span class='hp'>)</span>
+</td>
+<td class='n'>1.5%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='drill'>
+<td class='l ind'>Wild Rose<span class='pre' title='Entity not yet closed'>P</span>
+</td>
+<td class='nt'>
+</td>
+<td class='n cur'>60,090<span class='hp'>)</span>
+</td>
+<td class='n'>59,300<span class='hp'>)</span>
+</td>
+<td class='n mut'>790<span class='hp'>)</span>
+</td>
+<td class='n'>60,000<span class='hp'>)</span>
+</td>
+<td class='n'>90<span class='hp'>)</span>
+</td>
+<td class='n'>0.1%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='drill-end'>
+<td colspan='9'>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Direct labor</td>
+<td class='nt'>
+</td>
+<td class='n cur'>1,486,200<span class='hp'>)</span>
+</td>
+<td class='n'>1,522,800<span class='hp'>)</span>
+</td>
+<td class='n mut'>(36,600)</td>
+<td class='n'>1,505,000<span class='hp'>)</span>
+</td>
+<td class='n'>(18,800)</td>
+<td class='n'>(1.2%)</td>
+<td class='fuc'>
+<span class='fu pos-t' aria-label='favorable'>F</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Subcontractors</td>
+<td class='nt'>
+</td>
+<td class='n cur'>1,062,400<span class='hp'>)</span>
+</td>
+<td class='n'>948,300<span class='hp'>)</span>
+</td>
+<td class='n mut'>114,100<span class='hp'>)</span>
+</td>
+<td class='n'>1,040,000<span class='hp'>)</span>
+</td>
+<td class='n'>22,400<span class='hp'>)</span>
+</td>
+<td class='n'>2.2%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Job overhead and vehicles</td>
+<td class='nt'>
+</td>
+<td class='n cur'>318,700<span class='hp'>)</span>
+</td>
+<td class='n'>309,400<span class='hp'>)</span>
+</td>
+<td class='n mut'>9,300<span class='hp'>)</span>
+</td>
+<td class='n'>315,000<span class='hp'>)</span>
+</td>
+<td class='n'>3,700<span class='hp'>)</span>
+</td>
+<td class='n'>1.2%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='sub'>
+<td class='l'>Total cost of revenue</td>
+<td class='nt'>
+</td>
+<td class='n cur'>7,155,091<span class='hp'>)</span>
+</td>
+<td class='n'>6,925,450<span class='hp'>)</span>
+</td>
+<td class='n mut'>229,641<span class='hp'>)</span>
+</td>
+<td class='n'>7,075,400<span class='hp'>)</span>
+</td>
+<td class='n'>79,691<span class='hp'>)</span>
+</td>
+<td class='n'>1.1%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='gap'>
+<td colspan='9'>
+</td>
+</tr>
+<tr class='sub'>
+<td class='l'>Gross profit</td>
+<td class='nt'>
+</td>
+<td class='n cur'>3,040,409<span class='hp'>)</span>
+</td>
+<td class='n'>3,184,650<span class='hp'>)</span>
+</td>
+<td class='n mut'>(144,241)</td>
+<td class='n'>3,224,600<span class='hp'>)</span>
+</td>
+<td class='n mat'>(184,191)</td>
+<td class='n mat'>(5.7%)</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='ratio'>
+<td class='l'>Gross margin</td>
+<td class='nt'>
+</td>
+<td class='n cur'>29.8%<span class='hp'>)</span>
+</td>
+<td class='n'>31.5%<span class='hp'>)</span>
+</td>
+<td class='n mut'>(1.7) pts</td>
+<td class='n'>31.3%<span class='hp'>)</span>
+</td>
+<td class='n'>(1.5) pts</td>
+<td>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='head'>
+<td colspan='9'>Operating expenses</td>
+</tr>
+<tr class=''>
+<td class='l'>Indirect salaries and wages</td>
+<td class='nt'>
+</td>
+<td class='n cur'>912,300<span class='hp'>)</span>
+</td>
+<td class='n'>905,800<span class='hp'>)</span>
+</td>
+<td class='n mut'>6,500<span class='hp'>)</span>
+</td>
+<td class='n'>920,000<span class='hp'>)</span>
+</td>
+<td class='n'>(7,700)</td>
+<td class='n'>(0.8%)</td>
+<td class='fuc'>
+<span class='fu pos-t' aria-label='favorable'>F</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Rent and occupancy</td>
+<td class='nt'>
+</td>
+<td class='n cur'>214,600<span class='hp'>)</span>
+</td>
+<td class='n'>214,600<span class='hp'>)</span>
+</td>
+<td class='n mut'>—<span class='hp'>)</span>
+</td>
+<td class='n'>216,000<span class='hp'>)</span>
+</td>
+<td class='n'>(1,400)</td>
+<td class='n'>(0.6%)</td>
+<td class='fuc'>
+<span class='fu pos-t' aria-label='favorable'>F</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Insurance</td>
+<td class='nt'>
+<a class='nref' href='#note-4' data-note='4' aria-label='See note 4'>4</a>
+</td>
+<td class='n cur'>148,900<span class='hp'>)</span>
+</td>
+<td class='n'>130,500<span class='hp'>)</span>
+</td>
+<td class='n mut'>18,400<span class='hp'>)</span>
+</td>
+<td class='n'>131,000<span class='hp'>)</span>
+</td>
+<td class='n mat'>17,900<span class='hp'>)</span>
+</td>
+<td class='n mat'>13.7%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Marketing</td>
+<td class='nt'>
+</td>
+<td class='n cur'>96,400<span class='hp'>)</span>
+</td>
+<td class='n'>112,800<span class='hp'>)</span>
+</td>
+<td class='n mut'>(16,400)</td>
+<td class='n'>105,000<span class='hp'>)</span>
+</td>
+<td class='n'>(8,600)</td>
+<td class='n'>(8.2%)</td>
+<td class='fuc'>
+<span class='fu pos-t' aria-label='favorable'>F</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Professional fees</td>
+<td class='nt'>
+</td>
+<td class='n cur'>71,200<span class='hp'>)</span>
+</td>
+<td class='n'>58,900<span class='hp'>)</span>
+</td>
+<td class='n mut'>12,300<span class='hp'>)</span>
+</td>
+<td class='n'>65,000<span class='hp'>)</span>
+</td>
+<td class='n'>6,200<span class='hp'>)</span>
+</td>
+<td class='n'>9.5%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Software and IT</td>
+<td class='nt'>
+</td>
+<td class='n cur'>44,800<span class='hp'>)</span>
+</td>
+<td class='n'>43,900<span class='hp'>)</span>
+</td>
+<td class='n mut'>900<span class='hp'>)</span>
+</td>
+<td class='n'>45,000<span class='hp'>)</span>
+</td>
+<td class='n'>(200)</td>
+<td class='n'>(0.4%)</td>
+<td class='fuc'>
+<span class='fu pos-t' aria-label='favorable'>F</span>
+</td>
+</tr>
+<tr class='elim'>
+<td class='l'>Management fees</td>
+<td class='nt'>
+</td>
+<td class='n cur'>312,000<span class='hp'>)</span>
+</td>
+<td class='n'>312,000<span class='hp'>)</span>
+</td>
+<td class='n mut'>—<span class='hp'>)</span>
+</td>
+<td class='n'>312,000<span class='hp'>)</span>
+</td>
+<td class='n'>—<span class='hp'>)</span>
+</td>
+<td class='n'>—<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu mut'>–</span>
+</td>
+</tr>
+<tr class='elim'>
+<td class='l'>Intercompany eliminations</td>
+<td class='nt'>
+</td>
+<td class='n cur'>(312,000)</td>
+<td class='n'>(312,000)</td>
+<td class='n mut'>—<span class='hp'>)</span>
+</td>
+<td class='n'>(312,000)</td>
+<td class='n'>—<span class='hp'>)</span>
+</td>
+<td class='n'>—<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu mut'>–</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Other general and administrative</td>
+<td class='nt'>
+</td>
+<td class='n cur'>88,300<span class='hp'>)</span>
+</td>
+<td class='n'>91,200<span class='hp'>)</span>
+</td>
+<td class='n mut'>(2,900)</td>
+<td class='n'>90,000<span class='hp'>)</span>
+</td>
+<td class='n'>(1,700)</td>
+<td class='n'>(1.9%)</td>
+<td class='fuc'>
+<span class='fu pos-t' aria-label='favorable'>F</span>
+</td>
+</tr>
+<tr class='sub'>
+<td class='l'>Total operating expenses</td>
+<td class='nt'>
+</td>
+<td class='n cur'>1,576,500<span class='hp'>)</span>
+</td>
+<td class='n'>1,557,700<span class='hp'>)</span>
+</td>
+<td class='n mut'>18,800<span class='hp'>)</span>
+</td>
+<td class='n'>1,572,000<span class='hp'>)</span>
+</td>
+<td class='n'>4,500<span class='hp'>)</span>
+</td>
+<td class='n'>0.3%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='gap'>
+<td colspan='9'>
+</td>
+</tr>
+<tr class='sub'>
+<td class='l'>EBITDA</td>
+<td class='nt'>
+</td>
+<td class='n cur'>1,463,909<span class='hp'>)</span>
+</td>
+<td class='n'>1,626,950<span class='hp'>)</span>
+</td>
+<td class='n mut'>(163,041)</td>
+<td class='n'>1,652,600<span class='hp'>)</span>
+</td>
+<td class='n mat'>(188,691)</td>
+<td class='n mat'>(11.4%)</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Depreciation and amortization</td>
+<td class='nt'>
+</td>
+<td class='n cur'>142,800<span class='hp'>)</span>
+</td>
+<td class='n'>141,900<span class='hp'>)</span>
+</td>
+<td class='n mut'>900<span class='hp'>)</span>
+</td>
+<td class='n'>143,000<span class='hp'>)</span>
+</td>
+<td class='n'>(200)</td>
+<td class='n'>(0.1%)</td>
+<td class='fuc'>
+<span class='fu pos-t' aria-label='favorable'>F</span>
+</td>
+</tr>
+<tr class=''>
+<td class='l'>Interest expense</td>
+<td class='nt'>
+</td>
+<td class='n cur'>118,400<span class='hp'>)</span>
+</td>
+<td class='n'>119,700<span class='hp'>)</span>
+</td>
+<td class='n mut'>(1,300)</td>
+<td class='n'>118,000<span class='hp'>)</span>
+</td>
+<td class='n'>400<span class='hp'>)</span>
+</td>
+<td class='n'>0.3%<span class='hp'>)</span>
+</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+<tr class='grand'>
+<td class='l'>Net income before taxes</td>
+<td class='nt'>
+</td>
+<td class='n cur'>1,202,709<span class='hp'>)</span>
+</td>
+<td class='n'>1,365,350<span class='hp'>)</span>
+</td>
+<td class='n mut'>(162,641)</td>
+<td class='n'>1,391,600<span class='hp'>)</span>
+</td>
+<td class='n mat'>(188,891)</td>
+<td class='n mat'>(13.6%)</td>
+<td class='fuc'>
+<span class='fu neg-t' aria-label='unfavorable'>U</span>
+</td>
+</tr>
+</tbody> </table> <div class='foot' id='isfoot'>
+<span>
+<b style='color:var(--midnight)'>F / U</b> favorable or unfavorable to budget</span> <span>
+<span class='pre' style='margin:0 4px 0 0'>P</span> preliminary — entity not yet closed</span> <span>
+<b style='color:var(--midnight)'>Bold variance</b> exceeds 5% and $10,000</span> <span>Variance = actual − budget</span>
+</div> </div> <aside class='notes' aria-labelledby='nt'> <div class='pagehead' style='padding:0 0 24px'>
+<div class='eyebrow'>Commentary</div>
+</div> <h2 class='title' id='nt'>Notes to the statement</h2> <p class='sub'>Drafted by MeritBooks from posted GL detail. 
+The controller signs off before this goes in the board pack.</p> <article class='note' id='note-1' data-note='1'> <div class='note-top'>
+<span class='note-no' aria-hidden='true'>1</span>
+<div> <div class='kind'>Note 1 · Materials and equipment</div> <h3>$72,391 over budget, 
+driven by Heartland’s $81,941</h3>
+</div>
+</div> <p>Heartland absorbed two supplier price increases on 14 jobs quoted before they took effect. 
+Artistry ran under budget only because a closing slipped (note 2), 
+so the underlying overage is larger than it looks.</p> <ul class='ev'> <li>Heartland Heating &amp; 
+Cooling<span class='dl'>
+</span>
+<span class='v'>81,941<span class='hp'>)</span>
+</span>
+</li> <li>Artistry Homes, 
+timing<span class='dl'>
+</span>
+<span class='v'>(50,160)</span>
+</li> <li>All other entities<span class='dl'>
+</span>
+<span class='v'>40,610<span class='hp'>)</span>
+</span>
+</li> <li style='font-weight:600'>Total variance<span class='dl'>
+</span>
+<span class='v'>72,391<span class='hp'>)</span>
+</span>
+</li> </ul> <div class='basis'>
+<span>
+<b>88%</b> confidence</span>
+<span>612 GL lines · 3 price letters</span>
+</div> <div class='acts'>
+<a class='btn ghost' href='#'>Open GL detail</a>
+<a class='btn ghost' href='#'>Edit note</a>
+</div> </article> <article class='note' id='note-2' data-note='2'> <div class='note-top'>
+<span class='note-no' aria-hidden='true'>2</span>
+<div> <div class='kind'>Note 2 · Homebuilding revenue</div> <h3>One closing moved to November 12</h3>
+</div>
+</div> <p>Lot 6 at Prairie Trail was set to close October 29. 
+The appraisal came in late, 
+and revenue is recognized at closing. 
+An unbudgeted spec-home sale offset part of it.</p> <ul class='ev'> <li>Lot 6, 
+Prairie Trail, 
+moved to Nov<span class='dl'>
+</span>
+<span class='v'>(412,000)</span>
+</li> <li>Spec home, 
+2210 Aspen Ct, 
+not budgeted<span class='dl'>
+</span>
+<span class='v'>298,000<span class='hp'>)</span>
+</span>
+</li> <li style='font-weight:600'>Revenue vs budget<span class='dl'>
+</span>
+<span class='v'>(114,000)</span>
+</li> </ul> <div class='basis'>
+<span>
+<b>Exact</b> · closing schedule</span>
+<span>Recognized at closing</span>
+</div> </article> <article class='note' id='note-3' data-note='3'> <div class='note-top'>
+<span class='note-no' aria-hidden='true'>3</span>
+<div> <div class='kind'>Note 3 · HVAC revenue</div> <h3>Down $209,400 on September — seasonal</h3>
+</div>
+</div> <p>Service calls fell 14% as cooling season ended. 
+Replacement installs held flat. 
+The same shoulder dip appeared in October 2025.</p> <ul class='ev'> <li>Service calls, 
+Oct vs Sep<span class='dl'>
+</span>
+<span class='v'>1,212 vs 1,409</span>
+</li> <li>Installs, 
+Oct vs Sep<span class='dl'>
+</span>
+<span class='v'>187 vs 189</span>
+</li> </ul> <div class='basis'>
+<span>
+<b>81%</b> confidence</span>
+<span>Work orders, 
+3 entities</span>
+</div> </article> <article class='note' id='note-4' data-note='4'> <div class='note-top'>
+<span class='note-no' aria-hidden='true'>4</span>
+<div> <div class='kind'>Note 4 · Insurance</div> <h3>Renewal landed in October, 
+not January</h3>
+</div>
+</div> <p>General liability and auto renewed October 1 at 14.1% higher premiums. 
+The budget assumed a January renewal. 
+Reforecast the remaining two months.</p> <ul class='ev'> <li>Change vs September<span class='dl'>
+</span>
+<span class='v'>18,400<span class='hp'>)</span>
+</span>
+</li> <li>Variance to budget<span class='dl'>
+</span>
+<span class='v'>17,900<span class='hp'>)</span>
+</span>
+</li> </ul> <div class='basis'>
+<span>
+<b>Exact</b> · policy schedule</span>
+</div> </article> <p class='signoff'>Controller sign-off pending · 4 notes drafted · 0 edited</p> </aside> </div> </main>
+</div> <script> (function(){ function lit(id,on){ document.querySelectorAll('[data-note='+id+']').forEach(function(el){ el.classList.toggle(el.classList.contains('nref')?'lit':(el.classList.contains('note')?'lit':'lit-fig'),on); 
+}); 
+} 
+document.querySelectorAll('.nref,.note').forEach(function(el){ var id=el.getAttribute('data-note'); 
+if(!id) return; 
+['mouseenter','focus'].forEach(function(e){el.addEventListener(e,function(){lit(id,true)})}); 
+['mouseleave','blur'].forEach(function(e){el.addEventListener(e,function(){lit(id,false)})}); 
+}); 
+})(); 
+document.querySelectorAll('.tw').forEach(function(b){b.addEventListener('click',function(){ var tr=b.closest('tr'),open=tr.getAttribute('aria-expanded')==='true';tr.setAttribute('aria-expanded',!open); 
+var n=tr.nextElementSibling;while(n&&(n.classList.contains('drill')||n.classList.contains('drill-end'))){n.hidden=open;n=n.nextElementSibling} 
+b.style.transform=open?'rotate(-90deg)':'';});}); 
+</script>
+</body>
+</html>

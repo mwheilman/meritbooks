@@ -1,0 +1,1031 @@
+<!doctype html> <html lang='en'>
+<head>
+<meta charset='utf-8'> <meta name='viewport' content='width=1512'> <title>Portfolio — MeritBooks</title> <link rel='preconnect' href='https://fonts.googleapis.com'>
+<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+<link href='https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap' rel='stylesheet'> <link rel='stylesheet' href='assets/annual-report.css'> <style> .band{background:var(--midnight);color:var(--white);padding:32px 40px 0} 
+.band-top{display:flex;justify-content:space-between;align-items:baseline} 
+.band .pageno{color:var(--white)} 
+.band-grid{display:grid;grid-template-columns:repeat(12,1fr);column-gap:24px;margin-top:48px;align-items:end} 
+.band h1{grid-column:1/10;font-family:'Syne',sans-serif;font-weight:700;font-size:var(--t-xl);line-height:64px;letter-spacing:-.02em;color:var(--warm)} 
+.band .lede{grid-column:1/9;margin-top:24px;font-size:var(--t-md);line-height:24px;color:var(--grey-300)} 
+.band .lede b{color:var(--white);font-weight:500} 
+.band .lede .nref{color:var(--signal)} 
+.band .lede .nref:hover,.band .lede .nref.lit{color:var(--midnight);background:var(--signal)} 
+.closebox{grid-column:10/13;grid-row:1/3;align-self:end} 
+.closebox .big{display:flex;align-items:baseline;gap:8px} 
+.closebox .o{font-family:'Syne',sans-serif;font-weight:700;font-size:var(--t-xl);line-height:64px;color:transparent;-webkit-text-stroke:1.25px var(--warm);letter-spacing:-.02em} 
+.closebox .s{font-family:'Syne',sans-serif;font-weight:700;font-size:var(--t-lg);line-height:32px;color:var(--warm)} 
+.closebox .cap{font-size:var(--t-sm);line-height:20px;color:var(--grey-300);margin-top:8px} 
+.closebox .cells{display:grid;grid-template-columns:repeat(15,1fr);gap:2px;margin-top:16px} 
+.closebox .cells i{height:24px;background:var(--mid-800);position:relative} 
+.closebox .cells i.on{background:var(--signal)} 
+.closebox .cells i.part{background:linear-gradient(to top,var(--signal) var(--p),var(--mid-800) var(--p))} 
+.closebox .legend{display:flex;justify-content:space-between;margin-top:8px;font-size:var(--t-xs);line-height:16px;color:var(--slate)} 
+.band-foot{display:flex;justify-content:space-between;align-items:center;margin-top:40px;padding:16px 0 24px;border-top:2px solid var(--blue)} 
+.band-foot .eyebrow{color:var(--slate)} 
+.body{display:grid;grid-template-columns:minmax(0,1fr) 384px;column-gap:0} 
+.col{padding:40px 40px 64px} 
+.sec-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px} 
+.sec-h .title{font-size:var(--t-lg)} 
+.sec+.sec{margin-top:56px} 
+td.spk{width:112px;padding-left:24px!important;text-align:right} 
+td.spk svg{display:block;margin-left:auto} 
+table.ent td{height:48px;padding-left:8px;padding-right:8px} 
+table.ent th{padding-left:8px;padding-right:8px} 
+table.ent tbody tr{cursor:pointer;transition:background .15s var(--ease)} 
+table.ent tbody tr:hover,table.ent tbody tr.hot{background:var(--sky);box-shadow:-12px 0 0 var(--sky),12px 0 0 var(--sky)} 
+table.ent tbody tr:focus-visible{outline:2px solid var(--blue);outline-offset:-2px} 
+table.ent tr.sub,table.ent tr.grand,table.ent tr.sub:hover,table.ent tr.grand:hover{background:none;box-shadow:none;cursor:default} 
+.en{font-weight:500;color:var(--midnight)} 
+.seg-l{display:block;font-size:var(--t-xs);line-height:16px;color:var(--steel)} 
+td.l .nref{top:-8px} 
+td.cov{width:136px} 
+.hr{display:inline-block;position:relative;width:56px;height:8px;background:var(--grey-200);vertical-align:middle;margin-right:8px} 
+.hr b{position:absolute;left:0;top:0;bottom:0;background:var(--steel)} 
+.hr b.bad{background:var(--neg)} 
+.hr em{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--midnight)} 
+td.cl{width:168px} 
+.steps{display:inline-grid;grid-template-columns:repeat(6,8px);gap:2px;vertical-align:middle;margin-right:8px} 
+.steps i{height:8px;border:1px solid var(--grey-400)} 
+.steps i.on{background:var(--blue);border-color:var(--blue)} 
+.notes{padding:40px 32px 64px;border-left:1px solid var(--grey-200)} 
+.notes .title{margin-bottom:8px} 
+.notes .sub{margin-bottom:24px} 
+.done{border-top:1px solid var(--grey-300);padding:16px 0} 
+.done h3{font-size:var(--t-md);font-weight:600;line-height:24px} 
+.done p{font-size:var(--t-sm);line-height:20px;color:var(--steel);margin-top:4px} 
+</style>
+</head> <body>
+<div class='app'>
+<aside class='shell' aria-label='MeritBooks'> <a class='logo' href='index.html'>
+<img src='assets/merit-logo-on-dark@2x.png' alt='Merit' width='106' height='32'>
+</a> <div class='product'>MeritBooks<b>Merit Management Group</b>
+</div> <nav aria-label='Primary'>
+<a href='portfolio.html' aria-current='page'>
+<span class='k'>01</span>
+<span>Portfolio</span>
+<span>
+</span>
+</a>
+<a href='bank-feed.html'>
+<span class='k'>02</span>
+<span>Bank feed</span>
+<span class='c'>142</span>
+</a>
+<a href='statement.html'>
+<span class='k'>03</span>
+<span>Statements</span>
+<span>
+</span>
+</a>
+<a href='#'>
+<span class='k'>04</span>
+<span>Close</span>
+<span class='c'>4</span>
+</a>
+<a href='#'>
+<span class='k'>05</span>
+<span>Payables</span>
+<span>
+</span>
+</a>
+<a href='#'>
+<span class='k'>06</span>
+<span>Receivables</span>
+<span>
+</span>
+</a>
+<a href='#'>
+<span class='k'>07</span>
+<span>Journal</span>
+<span>
+</span>
+</a>
+<a href='#'>
+<span class='k'>08</span>
+<span>Covenants</span>
+<span class='c'>1</span>
+</a>
+</nav> <p class='navhint'>Press <span style='color:#CDD2D9'>G</span> then a number to jump.</p> <div class='period'>
+<div class='lbl'>Closing</div>
+<div class='v'>October 2026 · 11 of 15 closed</div> <div class='bar' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+<i>
+</i>
+<i>
+</i>
+<i>
+</i>
+</div>
+</div> <div class='who'>
+<b>Mike Heilman</b>
+<span>Owner</span>
+</div> </aside>
+<main class='main' id='main'> <section class='band' aria-labelledby='h1'> <div class='band-top'>
+<div class='eyebrow'>01<span class='sl'>//</span>Portfolio</div>
+<div class='pageno'>Thursday, 
+November 5, 
+2026</div>
+</div> <div class='band-grid'> <h1 id='h1'>Cash up $612K.<br>One covenant at risk.</h1> <div class='closebox'> <div class='big'>
+<span class='o'>11</span>
+<span class='s'>/ 15</span>
+</div> <div class='cap'>entities closed for October. 
+Target: Friday, 
+Nov 6.</div> <div class='cells' role='img' aria-label='11 of 15 entities closed; 
+4 in progress'>
+<i class='on' title='Merit Management Group — closed'>
+</i>
+<i class='on' title='Heartland Heating & Cooling — closed'>
+</i>
+<i class='on' title='Metro Heating & Cooling — closed'>
+</i>
+<i class='on' title='Heritage Interiors — closed'>
+</i>
+<i class='on' title='Iowa Custom Cabinets — closed'>
+</i>
+<i class='on' title='Revived Interiors — closed'>
+</i>
+<i class='on' title='Clive Power Equipment — closed'>
+</i>
+<i class='on' title='Swan Creek — closed'>
+</i>
+<i class='on' title='AIM — closed'>
+</i>
+<i class='on' title='Merit Fund III — closed'>
+</i>
+<i class='on' title='Handbuilt Capital — closed'>
+</i>
+<i class='part' style='--p:67%' title='Dorrian HVAC — 4 of 6 steps'>
+</i>
+<i class='part' style='--p:50%' title='Crystal Kitchen & Bath — 3 of 6 steps'>
+</i>
+<i class='part' style='--p:83%' title='Artistry Homes — 5 of 6 steps'>
+</i>
+<i class='part' style='--p:83%' title='Wild Rose — 5 of 6 steps'>
+</i>
+</div> <div class='legend'>
+<span>Closed</span>
+<span>In progress →</span>
+</div> </div> <p class='lede'>Consolidated cash is <b>$8,411K</b> across 15 entities, 
+up $612K on September 30. 
+Dorrian HVAC’s debt service coverage is <b>1.18×</b> against a 1.25× minimum<a class='nref' href='#note-1' data-note='1' aria-label='See note 1'>1</a>. 
+Everything else is inside its covenants.</p> </div> <div class='band-foot'>
+<span class='eyebrow'>2026<span class='sl'>//</span>Merit Management Group · Consolidated · $ in thousands</span> <a class='btn ghost' style='color:var(--signal)' href='statement.html'>Open October statements →</a>
+</div> </section> <div class='body'> <div class='col'> <section class='sec' aria-labelledby='hl'> <div class='sec-h'>
+<h2 class='title' id='hl'>Financial highlights</h2>
+<span class='sub'>$ in thousands · unaudited</span>
+</div> <table class='ledger'> <thead>
+<tr>
+<th>Position</th>
+<th class='n'>Oct 31, 
+2026</th>
+<th class='n'>Sep 30, 
+2026</th>
+<th class='n'>Change</th>
+<th class='n'>13 weeks</th>
+</tr>
+</thead> <tbody>
+<tr>
+<td class='l'>Cash and equivalents</td>
+<td class='n'>8,411<span class='hp'>)</span>
+</td>
+<td class='n mut'>7,799<span class='hp'>)</span>
+</td>
+<td class='n '>612<span class='hp'>)</span>
+</td>
+<td class='spk'>
+<svg width='96' height='24' viewBox='0 0 96 24' role='img' aria-label='13-week trend, 
+low 7,590, 
+high 8,411'>
+<polyline points='2.0,22.0 9.7,19.0 17.3,20.4 25.0,16.8 32.7,17.7 40.3,16.9 48.0,14.0 55.7,15.3 63.3,18.2 71.0,16.9 78.7,12.3 86.3,7.0 94.0,2.0' fill='none' stroke='#3D4F65' stroke-width='1.25'/>
+<rect x='92.0' y='0.0' width='4' height='4' fill='#2563EB'/>
+</svg>
+</td>
+</tr>
+<tr>
+<td class='l'>Accounts receivable, 
+net of intercompany</td>
+<td class='n'>11,002<span class='hp'>)</span>
+</td>
+<td class='n mut'>11,290<span class='hp'>)</span>
+</td>
+<td class='n '>(288)</td>
+<td class='spk'>
+<svg width='96' height='24' viewBox='0 0 96 24' role='img' aria-label='13-week trend, 
+low 10,840, 
+high 11,290'>
+<polyline points='2.0,22.0 9.7,18.8 17.3,12.7 25.0,9.4 32.7,5.7 40.3,6.5 48.0,3.2 55.7,4.2 63.3,2.0 71.0,5.4 78.7,7.8 86.3,11.1 94.0,14.8' fill='none' stroke='#3D4F65' stroke-width='1.25'/>
+<rect x='92.0' y='12.8' width='4' height='4' fill='#2563EB'/>
+</svg>
+</td>
+</tr>
+<tr>
+<td class='l'>Accounts payable, 
+net of intercompany</td>
+<td class='n'>5,833<span class='hp'>)</span>
+</td>
+<td class='n mut'>5,692<span class='hp'>)</span>
+</td>
+<td class='n '>141<span class='hp'>)</span>
+</td>
+<td class='spk'>
+<svg width='96' height='24' viewBox='0 0 96 24' role='img' aria-label='13-week trend, 
+low 5,398, 
+high 5,833'>
+<polyline points='2.0,21.4 9.7,19.1 17.3,22.0 25.0,16.4 32.7,13.9 40.3,15.4 48.0,12.3 55.7,10.2 63.3,8.5 71.0,8.1 78.7,5.9 86.3,4.0 94.0,2.0' fill='none' stroke='#3D4F65' stroke-width='1.25'/>
+<rect x='92.0' y='0.0' width='4' height='4' fill='#2563EB'/>
+</svg>
+</td>
+</tr>
+<tr>
+<td class='l'>Revolver availability</td>
+<td class='n'>2,150<span class='hp'>)</span>
+</td>
+<td class='n mut'>1,880<span class='hp'>)</span>
+</td>
+<td class='n '>270<span class='hp'>)</span>
+</td>
+<td class='spk'>
+<svg width='96' height='24' viewBox='0 0 96 24' role='img' aria-label='13-week trend, 
+low 1,720, 
+high 2,150'>
+<polyline points='2.0,22.0 9.7,21.1 17.3,17.8 25.0,18.7 32.7,20.1 40.3,16.9 48.0,16.0 55.7,16.4 63.3,14.6 71.0,11.3 78.7,8.5 86.3,4.8 94.0,2.0' fill='none' stroke='#3D4F65' stroke-width='1.25'/>
+<rect x='92.0' y='0.0' width='4' height='4' fill='#2563EB'/>
+</svg>
+</td>
+</tr>
+<tr class='sub'>
+<td class='l'>Net working capital</td>
+<td class='n'>13,580<span class='hp'>)</span>
+</td>
+<td class='n'>13,397<span class='hp'>)</span>
+</td>
+<td class='n'>183<span class='hp'>)</span>
+</td>
+<td>
+</td>
+</tr>
+</tbody> </table> </section> <section class='sec' aria-labelledby='ents'> <div class='sec-h'>
+<h2 class='title' id='ents'>Entities</h2> <div class='seg' role='group' aria-label='Sort'>
+<button aria-pressed='false'>A–Z</button>
+<button aria-pressed='true'>Needs attention</button>
+<button aria-pressed='false'>Cash</button>
+</div>
+</div> <table class='ledger ent'> <thead>
+<tr>
+<th>Entity</th>
+<th class='n'>Cash</th>
+<th class='n'>Receivables</th>
+<th class='n'>Payables</th> <th class='n'>DSCR, 
+T12</th>
+<th>Headroom</th>
+<th>October close</th>
+</tr>
+</thead> <tbody>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>Merit Management Group</span>
+<span class='seg-l'>Holding</span>
+</td>
+<td class='n'>412<span class='hp'>)</span>
+</td>
+<td class='n'>1,046<span class='hp'>)</span>
+</td>
+<td class='n'>88<span class='hp'>)</span>
+</td>
+<td class='n mut'>—<span class='hp'>)</span>
+</td>
+<td class='mut'>Not tested</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Merit Management Group: 6 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='on' title='Accruals'>
+</i>
+<i class='on' title='Review'>
+</i>
+</span>
+<span class='mut'>Closed Nov 2</span>
+</td>
+</tr>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>Heartland Heating & Cooling</span>
+<a class='nref' href='#note-2' data-note='2' aria-label='See note 2, 
+materials cost'>2</a>
+<span class='seg-l'>HVAC</span>
+</td>
+<td class='n'>1,284<span class='hp'>)</span>
+</td>
+<td class='n'>1,962<span class='hp'>)</span>
+</td>
+<td class='n'>742<span class='hp'>)</span>
+</td>
+<td class='n '>1.71×<span class='hp'>)</span>
+</td>
+<td class='cov'>
+<span class='hr' aria-hidden='true'>
+<b style='width:33px' class=''>
+</b>
+<em style='left:12px'>
+</em>
+</span>
+<span class='mut tnum'>≥ 1.25×</span>
+</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Heartland Heating & Cooling: 6 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='on' title='Accruals'>
+</i>
+<i class='on' title='Review'>
+</i>
+</span>
+<span class='mut'>Closed Nov 3</span>
+</td>
+</tr>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>Dorrian HVAC</span>
+<a class='nref' href='#note-1' data-note='1' aria-label='See note 1, 
+covenant'>1</a>
+<span class='seg-l'>HVAC</span>
+</td>
+<td class='n'>238<span class='hp'>)</span>
+</td>
+<td class='n'>1,118<span class='hp'>)</span>
+</td>
+<td class='n'>864<span class='hp'>)</span>
+</td>
+<td class='n neg-t'>1.18×<span class='hp'>)</span>
+</td>
+<td class='cov'>
+<span class='hr' aria-hidden='true'>
+<b style='width:8px' class='bad'>
+</b>
+<em style='left:12px'>
+</em>
+</span>
+<span class='mut tnum'>≥ 1.25×</span>
+</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Dorrian HVAC: 4 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='' title='Accruals'>
+</i>
+<i class='' title='Review'>
+</i>
+</span>
+<span class=''>Accruals open</span>
+</td>
+</tr>
+<tr class='hot' tabindex='0'>
+<td class='l'>
+<span class='en'>Metro Heating & Cooling</span>
+<span class='seg-l'>HVAC</span>
+</td>
+<td class='n'>906<span class='hp'>)</span>
+</td>
+<td class='n'>1,374<span class='hp'>)</span>
+</td>
+<td class='n'>615<span class='hp'>)</span>
+</td>
+<td class='n '>1.52×<span class='hp'>)</span>
+</td>
+<td class='cov'>
+<span class='hr' aria-hidden='true'>
+<b style='width:24px' class=''>
+</b>
+<em style='left:12px'>
+</em>
+</span>
+<span class='mut tnum'>≥ 1.25×</span>
+</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Metro Heating & Cooling: 6 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='on' title='Accruals'>
+</i>
+<i class='on' title='Review'>
+</i>
+</span>
+<span class='mut'>Closed Nov 3</span>
+</td>
+</tr>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>Heritage Interiors</span>
+<span class='seg-l'>Interiors</span>
+</td>
+<td class='n'>344<span class='hp'>)</span>
+</td>
+<td class='n'>902<span class='hp'>)</span>
+</td>
+<td class='n'>488<span class='hp'>)</span>
+</td>
+<td class='n '>1.34×<span class='hp'>)</span>
+</td>
+<td class='cov'>
+<span class='hr' aria-hidden='true'>
+<b style='width:16px' class=''>
+</b>
+<em style='left:9px'>
+</em>
+</span>
+<span class='mut tnum'>≥ 1.20×</span>
+</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Heritage Interiors: 6 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='on' title='Accruals'>
+</i>
+<i class='on' title='Review'>
+</i>
+</span>
+<span class='mut'>Closed Nov 2</span>
+</td>
+</tr>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>Crystal Kitchen & Bath</span>
+<span class='seg-l'>Interiors</span>
+</td>
+<td class='n'>196<span class='hp'>)</span>
+</td>
+<td class='n'>611<span class='hp'>)</span>
+</td>
+<td class='n'>402<span class='hp'>)</span>
+</td>
+<td class='n warn-t'>1.29×<span class='hp'>)</span>
+</td>
+<td class='cov'>
+<span class='hr' aria-hidden='true'>
+<b style='width:14px' class=''>
+</b>
+<em style='left:12px'>
+</em>
+</span>
+<span class='mut tnum'>≥ 1.25×</span>
+</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Crystal Kitchen & Bath: 3 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='' title='Payroll'>
+</i>
+<i class='' title='Accruals'>
+</i>
+<i class='' title='Review'>
+</i>
+</span>
+<span class=''>Payroll open</span>
+</td>
+</tr>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>Iowa Custom Cabinets</span>
+<span class='seg-l'>Interiors</span>
+</td>
+<td class='n'>522<span class='hp'>)</span>
+</td>
+<td class='n'>788<span class='hp'>)</span>
+</td>
+<td class='n'>377<span class='hp'>)</span>
+</td>
+<td class='n '>1.61×<span class='hp'>)</span>
+</td>
+<td class='cov'>
+<span class='hr' aria-hidden='true'>
+<b style='width:28px' class=''>
+</b>
+<em style='left:12px'>
+</em>
+</span>
+<span class='mut tnum'>≥ 1.25×</span>
+</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Iowa Custom Cabinets: 6 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='on' title='Accruals'>
+</i>
+<i class='on' title='Review'>
+</i>
+</span>
+<span class='mut'>Closed Nov 3</span>
+</td>
+</tr>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>Revived Interiors</span>
+<span class='seg-l'>Interiors</span>
+</td>
+<td class='n'>141<span class='hp'>)</span>
+</td>
+<td class='n'>296<span class='hp'>)</span>
+</td>
+<td class='n'>214<span class='hp'>)</span>
+</td>
+<td class='n '>1.44×<span class='hp'>)</span>
+</td>
+<td class='cov'>
+<span class='hr' aria-hidden='true'>
+<b style='width:21px' class=''>
+</b>
+<em style='left:9px'>
+</em>
+</span>
+<span class='mut tnum'>≥ 1.20×</span>
+</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Revived Interiors: 6 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='on' title='Accruals'>
+</i>
+<i class='on' title='Review'>
+</i>
+</span>
+<span class='mut'>Closed Nov 4</span>
+</td>
+</tr>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>Artistry Homes</span>
+<a class='nref' href='#note-3' data-note='3' aria-label='See note 3, 
+draws'>3</a>
+<span class='seg-l'>Homebuilding</span>
+</td>
+<td class='n'>1,708<span class='hp'>)</span>
+</td>
+<td class='n'>2,140<span class='hp'>)</span>
+</td>
+<td class='n'>1,312<span class='hp'>)</span>
+</td>
+<td class='n '>1.38×<span class='hp'>)</span>
+</td>
+<td class='cov'>
+<span class='hr' aria-hidden='true'>
+<b style='width:18px' class=''>
+</b>
+<em style='left:9px'>
+</em>
+</span>
+<span class='mut tnum'>≥ 1.20×</span>
+</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Artistry Homes: 5 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='on' title='Accruals'>
+</i>
+<i class='' title='Review'>
+</i>
+</span>
+<span class=''>In review</span>
+</td>
+</tr>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>Clive Power Equipment</span>
+<span class='seg-l'>Equipment</span>
+</td>
+<td class='n'>615<span class='hp'>)</span>
+</td>
+<td class='n'>702<span class='hp'>)</span>
+</td>
+<td class='n'>958<span class='hp'>)</span>
+</td>
+<td class='n '>1.47×<span class='hp'>)</span>
+</td>
+<td class='cov'>
+<span class='hr' aria-hidden='true'>
+<b style='width:22px' class=''>
+</b>
+<em style='left:12px'>
+</em>
+</span>
+<span class='mut tnum'>≥ 1.25×</span>
+</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Clive Power Equipment: 6 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='on' title='Accruals'>
+</i>
+<i class='on' title='Review'>
+</i>
+</span>
+<span class='mut'>Closed Nov 3</span>
+</td>
+</tr>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>Swan Creek</span>
+<span class='seg-l'>Operating</span>
+</td>
+<td class='n'>377<span class='hp'>)</span>
+</td>
+<td class='n'>164<span class='hp'>)</span>
+</td>
+<td class='n'>92<span class='hp'>)</span>
+</td>
+<td class='n '>2.06×<span class='hp'>)</span>
+</td>
+<td class='cov'>
+<span class='hr' aria-hidden='true'>
+<b style='width:49px' class=''>
+</b>
+<em style='left:14px'>
+</em>
+</span>
+<span class='mut tnum'>≥ 1.30×</span>
+</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Swan Creek: 6 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='on' title='Accruals'>
+</i>
+<i class='on' title='Review'>
+</i>
+</span>
+<span class='mut'>Closed Nov 2</span>
+</td>
+</tr>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>AIM</span>
+<span class='seg-l'>Operating</span>
+</td>
+<td class='n'>289<span class='hp'>)</span>
+</td>
+<td class='n'>318<span class='hp'>)</span>
+</td>
+<td class='n'>141<span class='hp'>)</span>
+</td>
+<td class='n '>1.88×<span class='hp'>)</span>
+</td>
+<td class='cov'>
+<span class='hr' aria-hidden='true'>
+<b style='width:41px' class=''>
+</b>
+<em style='left:12px'>
+</em>
+</span>
+<span class='mut tnum'>≥ 1.25×</span>
+</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='AIM: 6 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='on' title='Accruals'>
+</i>
+<i class='on' title='Review'>
+</i>
+</span>
+<span class='mut'>Closed Nov 4</span>
+</td>
+</tr>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>Wild Rose</span>
+<span class='seg-l'>Operating</span>
+</td>
+<td class='n'>167<span class='hp'>)</span>
+</td>
+<td class='n'>205<span class='hp'>)</span>
+</td>
+<td class='n'>133<span class='hp'>)</span>
+</td>
+<td class='n '>1.56×<span class='hp'>)</span>
+</td>
+<td class='cov'>
+<span class='hr' aria-hidden='true'>
+<b style='width:26px' class=''>
+</b>
+<em style='left:12px'>
+</em>
+</span>
+<span class='mut tnum'>≥ 1.25×</span>
+</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Wild Rose: 5 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='on' title='Accruals'>
+</i>
+<i class='' title='Review'>
+</i>
+</span>
+<span class=''>In review</span>
+</td>
+</tr>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>Merit Fund III</span>
+<span class='seg-l'>Fund</span>
+</td>
+<td class='n'>864<span class='hp'>)</span>
+</td>
+<td class='n'>—<span class='hp'>)</span>
+</td>
+<td class='n'>22<span class='hp'>)</span>
+</td>
+<td class='n mut'>—<span class='hp'>)</span>
+</td>
+<td class='mut'>Not tested</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Merit Fund III: 6 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='on' title='Accruals'>
+</i>
+<i class='on' title='Review'>
+</i>
+</span>
+<span class='mut'>Closed Nov 2</span>
+</td>
+</tr>
+<tr tabindex='0'>
+<td class='l'>
+<span class='en'>Handbuilt Capital</span>
+<span class='seg-l'>Fund</span>
+</td>
+<td class='n'>348<span class='hp'>)</span>
+</td>
+<td class='n'>—<span class='hp'>)</span>
+</td>
+<td class='n'>9<span class='hp'>)</span>
+</td>
+<td class='n mut'>—<span class='hp'>)</span>
+</td>
+<td class='mut'>Not tested</td>
+<td class='cl'>
+<span class='steps' role='img' aria-label='Handbuilt Capital: 6 of 6 close steps done'>
+<i class='on' title='Bank rec'>
+</i>
+<i class='on' title='AP cutoff'>
+</i>
+<i class='on' title='AR'>
+</i>
+<i class='on' title='Payroll'>
+</i>
+<i class='on' title='Accruals'>
+</i>
+<i class='on' title='Review'>
+</i>
+</span>
+<span class='mut'>Closed Nov 2</span>
+</td>
+</tr>
+<tr class='sub'>
+<td class='l'>Total, 
+before eliminations</td>
+<td class='n'>8,411<span class='hp'>)</span>
+</td>
+<td class='n'>11,626<span class='hp'>)</span>
+</td>
+<td class='n'>6,457<span class='hp'>)</span>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+<tr>
+<td class='l mut'>Intercompany management fees</td>
+<td class='n mut'>—<span class='hp'>)</span>
+</td>
+<td class='n mut'>(624)</td>
+<td class='n mut'>(624)</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+<tr class='grand'>
+<td class='l'>Consolidated</td>
+<td class='n'>8,411<span class='hp'>)</span>
+</td>
+<td class='n'>11,002<span class='hp'>)</span>
+</td>
+<td class='n'>5,833<span class='hp'>)</span>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+</tbody> </table> <p class='sub' style='margin-top:16px'>DSCR is tested on trailing-twelve-month cash flow available for debt service. 
+The vertical tick marks each lender’s minimum. 
+Close steps: Bank rec · AP cutoff · AR · Payroll · Accruals · Review.</p> </section> </div> <aside class='notes' aria-labelledby='nt'> <h2 class='title' id='nt'>Notes to the figures</h2> <p class='sub'>What changed, 
+why, 
+and what it needs from you. 
+Every figure links to its evidence.</p> <article class='note' id='note-1' data-note='1'> <div class='note-top'>
+<span class='note-no' aria-hidden='true'>1</span>
+<div> <div class='kind'>Note 1 · Covenant</div> <h3>Dorrian HVAC is $84K short of its 1.25× test</h3>
+</div>
+</div> <p>At September’s run-rate, 
+the November 30 test lands at <b>1.16×</b>. 
+Dorrian needs <b>$84K</b> more trailing cash flow to pass, 
+or a waiver from its senior lender before the test date.</p> <ul class='ev'> <li>Cash flow for debt service, 
+T12<span class='dl'>
+</span>
+<span class='v'>$1,412K</span>
+</li> <li>Debt service, 
+T12<span class='dl'>
+</span>
+<span class='v'>$1,197K</span>
+</li> <li>Coverage<span class='dl'>
+</span>
+<span class='v'>1.18×</span>
+</li> <li>Shortfall to 1.25×<span class='dl'>
+</span>
+<span class='v'>$84K</span>
+</li> </ul> <div class='basis'>
+<span>
+<b>Exact</b> · computed from posted GL</span>
+<span>Test date Nov 30</span>
+</div> <div class='acts'>
+<a class='btn ghost' href='#'>Open covenant workpaper</a>
+<a class='btn ghost' href='#'>Draft lender note</a>
+</div> </article> <article class='note' id='note-2' data-note='2'> <div class='note-top'>
+<span class='note-no' aria-hidden='true'>2</span>
+<div> <div class='kind'>Note 2 · Margin</div> <h3>Heartland’s materials ran 41.8% of revenue</h3>
+</div>
+</div> <p>Up from a 36.2% six-month average. 
+Two supplier price increases hit jobs that were quoted before they took effect. 
+The other HVAC companies held flat.</p> <ul class='ev'> <li>Ferguson, 
++7.5% effective Sep 15<span class='dl'>
+</span>
+<span class='v'>$21.4K</span>
+</li> <li>Johnstone Supply, 
++4.0% effective Oct 1<span class='dl'>
+</span>
+<span class='v'>$8.9K</span>
+</li> <li>Jobs quoted before the increase<span class='dl'>
+</span>
+<span class='v'>14</span>
+</li> <li>October materials, 
+Heartland<span class='dl'>
+</span>
+<span class='v'>$590,341</span>
+</li> </ul> <div class='basis'>
+<span>
+<b>88%</b> confidence</span>
+<span>612 GL lines · 3 price letters</span>
+</div> <div class='acts'>
+<a class='btn ghost' href='statement.html#note-1'>See it on the statement</a>
+<a class='btn ghost' href='#'>List the 14 jobs</a>
+</div> </article> <article class='note' id='note-3' data-note='3'> <div class='note-top'>
+<span class='note-no' aria-hidden='true'>3</span>
+<div> <div class='kind'>Note 3 · Receivables</div> <h3>Artistry Homes has $612K in draws past 45 days</h3>
+</div>
+</div> <p>Three construction draws are waiting on lender inspection. 
+None is disputed. 
+Collecting them moves Artistry’s cash from 21 to 32 days of operating cost.</p> <ul class='ev'> <li>Lot 14, 
+Prairie Trail · 52 days<span class='dl'>
+</span>
+<span class='v'>$248,600</span>
+</li> <li>Lot 9, 
+Prairie Trail · 49 days<span class='dl'>
+</span>
+<span class='v'>$201,150</span>
+</li> <li>Lot 3, 
+Beaverdale Infill · 46 days<span class='dl'>
+</span>
+<span class='v'>$162,250</span>
+</li> </ul> <div class='basis'>
+<span>
+<b>Exact</b> · AR aging</span>
+<span>Draws total $612,000</span>
+</div> </article> <div class='done'> <h3>Nothing else needs you.</h3> <p>11 entities closed without exceptions. 
+The bookkeeping team has 142 transactions to review; 
+at today’s pace the queue clears Friday morning.</p> </div> </aside> </div> </main>
+</div> <script> (function(){ function lit(id,on){ document.querySelectorAll('[data-note='+id+']').forEach(function(el){ el.classList.toggle(el.classList.contains('nref')?'lit':(el.classList.contains('note')?'lit':'lit-fig'),on); 
+}); 
+} 
+document.querySelectorAll('.nref,.note').forEach(function(el){ var id=el.getAttribute('data-note'); 
+if(!id) return; 
+['mouseenter','focus'].forEach(function(e){el.addEventListener(e,function(){lit(id,true)})}); 
+['mouseleave','blur'].forEach(function(e){el.addEventListener(e,function(){lit(id,false)})}); 
+}); 
+})(); 
+</script>
+</body>
+</html>

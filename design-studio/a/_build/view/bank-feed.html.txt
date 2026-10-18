@@ -1,0 +1,1583 @@
+<!doctype html> <html lang='en'>
+<head>
+<meta charset='utf-8'> <meta name='viewport' content='width=1512'> <title>Bank feed — MeritBooks</title> <link rel='preconnect' href='https://fonts.googleapis.com'>
+<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+<link href='https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap' rel='stylesheet'> <link rel='stylesheet' href='assets/annual-report.css'> <style> .feed{display:grid;grid-template-columns:minmax(0,1fr) 432px;height:100vh} 
+.q{display:flex;flex-direction:column;min-width:0;height:100vh} 
+.qhead{padding:24px 32px 0} 
+.qtitle{display:flex;align-items:flex-end;justify-content:space-between;margin-top:16px} 
+.qtitle .sub{margin-top:4px} 
+.keys{display:flex;gap:12px;font-size:var(--t-xs);color:var(--steel);align-items:center} 
+.keys span{display:inline-flex;gap:4px;align-items:center} 
+.estrip{display:flex;gap:0;margin-top:16px;border-top:1px solid var(--grey-200);border-bottom:1px solid var(--grey-200);overflow:hidden} 
+.es{display:flex;gap:8px;align-items:center;height:40px;padding:0 8px;font-size:var(--t-sm);color:var(--steel);border-bottom:2px solid transparent;white-space:nowrap} 
+.es .tnum{color:var(--midnight);font-weight:500} 
+.es:hover{background:var(--sky);color:var(--midnight)} 
+.es.on{color:var(--midnight);font-weight:600;border-bottom-color:var(--blue)} 
+.es.clear .tnum{color:var(--pos);font-weight:600} 
+.tools{display:flex;align-items:center;gap:8px;padding:12px 0} 
+.search{display:flex;align-items:center;gap:8px;height:32px;width:280px;padding:0 8px;border:1px solid var(--grey-300);background:var(--white);font-size:var(--t-sm);color:var(--steel)} 
+.search kbd{margin-left:auto} 
+.tools .sp{flex:1} 
+.tools .sortby{font-size:var(--t-xs);color:var(--steel)} 
+.tw{flex:1;overflow:auto;padding:0 32px;position:relative} 
+table.bf{width:100%;border-collapse:collapse;table-layout:fixed} 
+table.bf th{position:sticky;top:0;z-index:1;background:var(--warm);font-size:var(--t-xs);line-height:16px;letter-spacing:.08em;text-transform:uppercase;font-weight:500;color:var(--steel); 
+text-align:left;padding:8px 8px;border-bottom:1px solid var(--blue);white-space:nowrap} 
+table.bf th.n{text-align:right} 
+table.bf th[aria-sort] {color:var(--midnight)} 
+table.bf th .arr{color:var(--blue);margin-left:4px} 
+table.bf td{padding:0 8px;height:44px;font-size:var(--t-sm);line-height:20px;border-bottom:1px solid var(--grey-200);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle} 
+table.bf tr>*:first-child{padding-left:8px} 
+table.bf td.n{text-align:right;font-variant-numeric:tabular-nums} 
+tr.r{transition:background .12s var(--ease)} 
+tr.r:hover,tr.r.hov{background:var(--grey-100)} 
+tr.r.sel{background:#F6F9FE} 
+tr.r.focus,tr.r.focus:hover{background:var(--sky);box-shadow:inset 2px 0 0 var(--blue)} 
+tr.r.done{opacity:.5} 
+tr.r.flag td.v .vn{color:var(--warn)} 
+td.cb label{display:grid;place-content:center;width:32px;height:32px;margin-left:-8px;cursor:pointer} 
+td.cb input{position:absolute;opacity:0} 
+td.cb span{width:16px;height:16px;border:1px solid var(--steel);background:var(--white);display:grid;place-content:center} 
+td.cb input:checked+span{background:var(--blue);border-color:var(--blue)} 
+td.cb input:checked+span::after{content:'';width:8px;height:4px;border:2px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)} 
+td.cb input:focus-visible+span{outline:2px solid var(--blue);outline-offset:2px} 
+td.d{color:var(--steel)} 
+td.v{position:relative} 
+td.v .vn{display:block;font-weight:500;color:var(--midnight);text-align:left;line-height:20px;padding:6px 0;margin:-6px 0;max-width:100%;overflow:hidden;text-overflow:ellipsis} 
+td.v .vn:hover{color:var(--blue);text-decoration:underline;text-underline-offset:3px} 
+td.v .raw{display:block;font-size:var(--t-xs);line-height:16px;color:var(--steel);overflow:hidden;text-overflow:ellipsis} 
+.vb{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:inline-flex;gap:8px;align-items:center;background:var(--midnight);color:var(--white);font-size:var(--t-xs);height:28px;padding:0 4px 0 8px} 
+.vb kbd{background:transparent;color:var(--white);border-color:rgba(255,255,255,.55)} 
+td.a .ac{color:var(--midnight)} 
+td.a .nref{top:-4px} 
+td.m{display:table-cell} 
+td.m svg{vertical-align:-1px;margin-right:8px} 
+.m-ok{color:var(--midnight)} 
+.m-ok svg{color:var(--pos)} 
+.m-warn{color:var(--warn);font-weight:500} 
+.m-none{color:var(--steel)} 
+td.c span:last-child{display:inline-block;width:20px;text-align:right} 
+.c-lo span:last-child{color:var(--neg);font-weight:600} 
+.c-lo .conf i.on{background:var(--neg)} 
+.c-mid .conf i.on{background:var(--steel)} 
+td.amt{font-weight:500} 
+.bulk{display:flex;align-items:center;gap:16px;height:56px;padding:0 32px;background:var(--midnight);color:var(--white);font-size:var(--t-sm)} 
+.bulk b{font-weight:600} 
+.bulk .mut2{color:var(--grey-300)} 
+.bulk .sp{flex:1} 
+.bulk .btn{border-color:var(--mid-700);background:transparent;color:var(--white)} 
+.bulk .btn:hover{border-color:var(--signal);color:var(--white);background:var(--mid-800)} 
+.bulk .btn.primary{background:var(--blue);border-color:var(--blue)} 
+.bulk .btn kbd{background:transparent;color:var(--white);border-color:rgba(255,255,255,.55)} 
+.toast{position:fixed;left:96px;bottom:72px;display:flex;gap:16px;align-items:center;background:var(--white);border:1px solid var(--grey-300);box-shadow:0 8px 24px rgba(10,22,40,.12); 
+padding:12px 16px;font-size:var(--t-sm);color:var(--midnight);border-left:2px solid var(--pos)} 
+.toast a{color:var(--blue);font-weight:600} 
+/* Detail panel = a Note */ .panel{background:var(--canvas);border-left:1px solid var(--grey-300);display:flex;flex-direction:column;height:100vh} 
+.pscroll{flex:1;overflow:auto;padding:24px 32px 24px} 
+.ptop{display:flex;justify-content:space-between;align-items:flex-start} 
+.pclose{display:grid;place-content:center;width:32px;height:32px;color:var(--steel);margin:-4px -8px 0 0} 
+.pclose:hover{background:var(--grey-200);color:var(--midnight)} 
+.pamt{display:flex;justify-content:space-between;align-items:baseline;margin-top:16px;padding-bottom:16px;border-bottom:1px solid var(--blue)} 
+.pamt .big{font-family:'Syne',
+sans-serif;font-weight:700;font-size:var(--t-lg);line-height:32px;color:var(--midnight);letter-spacing:-.01em} 
+.pamt .meta{font-size:var(--t-xs);line-height:16px;color:var(--steel);text-align:right} 
+.pv{font-size:var(--t-md);font-weight:600;margin-top:16px} 
+.pv small{display:block;font-size:var(--t-xs);font-weight:400;color:var(--steel);line-height:16px} 
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;margin-top:16px} 
+.fld{display:flex;flex-direction:column;gap:4px} 
+.fld.w{grid-column:1/3} 
+.fld label{font-size:var(--t-xs);line-height:16px;letter-spacing:.08em;text-transform:uppercase;font-weight:500;color:var(--steel)} 
+.fld .in{display:flex;align-items:center;justify-content:space-between;height:36px;padding:0 12px;background:var(--white);border:1px solid var(--grey-300);font-size:var(--t-sm);color:var(--midnight)} 
+.fld .in:hover{border-color:var(--steel)} 
+.fld .in.ai{box-shadow:inset 2px 0 0 var(--blue)} 
+.fld .in .tag{font-size:var(--t-xs);color:var(--blue);font-weight:600} 
+.psec{margin-top:24px} 
+.psec h4{font-size:var(--t-xs);line-height:16px;letter-spacing:.14em;text-transform:uppercase;font-weight:500;color:var(--steel);display:flex;justify-content:space-between} 
+.psec h4 b{color:var(--midnight);font-weight:600;letter-spacing:.08em} 
+table.mini{width:100%;border-collapse:collapse;margin-top:8px} 
+table.mini th{font-size:var(--t-xs);line-height:16px;font-weight:500;color:var(--steel);text-align:left;padding:4px 0;border-bottom:1px solid var(--blue)} 
+table.mini th.n,table.mini td.n{text-align:right;font-variant-numeric:tabular-nums} 
+table.mini td{font-size:var(--t-sm);line-height:20px;padding:4px 0;color:var(--midnight)} 
+table.mini tr.t td.n{border-top:1px solid var(--midnight);border-bottom:3px double var(--blue);font-weight:700} 
+table.mini tr.t td{font-weight:600} 
+table.mini td.mut{color:var(--steel)} 
+ol.why{list-style:none;margin-top:8px;counter-reset:w} 
+ol.why li{counter-increment:w;display:grid;grid-template-columns:24px 1fr;font-size:var(--t-sm);line-height:20px;color:var(--midnight);padding:8px 0;border-bottom:1px solid var(--grey-200)} 
+ol.why li::before{content:counter(w);font-weight:700;color:var(--blue);font-variant-numeric:tabular-nums} 
+.pact{display:flex;gap:8px;padding:16px 32px;border-top:1px solid var(--grey-300);background:var(--canvas)} 
+.pact .btn.primary{flex:1;justify-content:center} 
+</style>
+</head> <body>
+<div class='app mini'>
+<aside class='shell mini' aria-label='MeritBooks'> <a class='logo' href='index.html'>
+<img src='assets/merit-icon@2x.png' alt='Merit' width='27' height='24'>
+</a> <nav aria-label='Primary'>
+<a href='portfolio.html' aria-label='Portfolio' title='Portfolio (G 1)'>
+<span class='k'>01</span>
+</a>
+<a href='bank-feed.html' aria-current='page' aria-label='Bank feed' title='Bank feed (G 2)'>
+<span class='k'>02</span>
+</a>
+<a href='statement.html' aria-label='Statements' title='Statements (G 3)'>
+<span class='k'>03</span>
+</a>
+<a href='#' aria-label='Close' title='Close (G 4)'>
+<span class='k'>04</span>
+</a>
+<a href='#' aria-label='Payables' title='Payables (G 5)'>
+<span class='k'>05</span>
+</a>
+<a href='#' aria-label='Receivables' title='Receivables (G 6)'>
+<span class='k'>06</span>
+</a>
+<a href='#' aria-label='Journal' title='Journal (G 7)'>
+<span class='k'>07</span>
+</a>
+<a href='#' aria-label='Covenants' title='Covenants (G 8)'>
+<span class='k'>08</span>
+</a>
+</nav> <div class='period' title='October close: 11 of 15 entities closed'>
+<div class='v tnum'>11/15</div>
+</div> <div class='who' title='Jess Olsen, 
+Bookkeeper'>
+<b>JO</b>
+</div> </aside>
+<main class='main' id='main'> <div class='feed'> <section class='q' aria-labelledby='qt'> <div class='qhead'> <div style='display:flex;justify-content:space-between'>
+<div class='eyebrow'>02<span class='sl'>//</span>Bank feed</div>
+<div class='pageno'>02</div>
+</div> <div class='qtitle'>
+<div>
+<h1 class='title' id='qt'>Review queue</h1> <p class='sub'>142 to review · 61 at 90% or higher · nothing posts until you approve it</p>
+</div> <div class='seg' role='group' aria-label='Status'>
+<button aria-pressed='true'>To review <span class='tnum'>142</span>
+</button>
+<button aria-pressed='false'>Flagged <span class='tnum'>6</span>
+</button>
+<button aria-pressed='false'>Approved today <span class='tnum'>188</span>
+</button>
+</div>
+</div> <div class='estrip' role='group' aria-label='Filter by entity'>
+<button class='es on' aria-pressed='true'>
+<span title='All entities'>All</span>
+<span class='tnum'>142</span>
+</button>
+<button class='es' aria-pressed='false'>
+<span title='Heartland Heating & Cooling'>HHC</span>
+<span class='tnum'>24</span>
+</button>
+<button class='es' aria-pressed='false'>
+<span title='Artistry Homes'>ART</span>
+<span class='tnum'>21</span>
+</button>
+<button class='es' aria-pressed='false'>
+<span title='Metro Heating & Cooling'>MHC</span>
+<span class='tnum'>19</span>
+</button>
+<button class='es' aria-pressed='false'>
+<span title='Dorrian HVAC'>DOR</span>
+<span class='tnum'>17</span>
+</button>
+<button class='es' aria-pressed='false'>
+<span title='Crystal Kitchen & Bath'>CKB</span>
+<span class='tnum'>12</span>
+</button>
+<button class='es' aria-pressed='false'>
+<span title='Heritage Interiors'>HER</span>
+<span class='tnum'>11</span>
+</button>
+<button class='es' aria-pressed='false'>
+<span title='Iowa Custom Cabinets'>ICC</span>
+<span class='tnum'>9</span>
+</button>
+<button class='es' aria-pressed='false'>
+<span title='Revived Interiors'>REV</span>
+<span class='tnum'>8</span>
+</button>
+<button class='es' aria-pressed='false'>
+<span title='Merit Management Group'>MMG</span>
+<span class='tnum'>6</span>
+</button>
+<button class='es' aria-pressed='false'>
+<span title='Swan Creek'>SWC</span>
+<span class='tnum'>6</span>
+</button>
+<button class='es' aria-pressed='false'>
+<span title='AIM'>AIM</span>
+<span class='tnum'>5</span>
+</button>
+<button class='es' aria-pressed='false'>
+<span title='Wild Rose'>WRS</span>
+<span class='tnum'>4</span>
+</button>
+<button class='es clear' aria-pressed='false'>
+<span title='Clive Power Equipment'>CPE</span>
+<span class='tnum'>✓ Clear</span>
+</button>
+</div> <div class='tools'> <div class='search' role='search'>
+<svg width='14' height='14' viewBox='0 0 14 14' aria-hidden='true'>
+<circle cx='6' cy='6' r='4.25' fill='none' stroke='currentColor' stroke-width='1.5'/>
+<path d='M9.2 9.2 12.5 12.5' stroke='currentColor' stroke-width='1.5'/>
+</svg>Vendor, 
+amount, 
+account<kbd>/</kbd>
+</div> <button class='btn' id='sel90' title='Selects every transaction at 90% or higher on this page'>Select ≥ 90% <span class='tnum' style='color:var(--steel);font-weight:500'>11</span>
+</button> <span class='sp'>
+</span> <div class='keys' aria-label='Keyboard shortcuts'>
+<span>
+<kbd>J</kbd>
+<kbd>K</kbd> move</span>
+<span>
+<kbd>X</kbd> select</span>
+<span>
+<kbd>A</kbd> approve</span> <span>
+<kbd>F</kbd> flag</span>
+<span>
+<kbd>E</kbd> edit</span>
+<span>
+<kbd>V</kbd> batch</span>
+</div> </div> </div> <div class='tw'> <table class='bf' aria-label='Transactions to review'> <colgroup>
+<col style='width:36px'>
+<col style='width:60px'>
+<col>
+<col style='width:56px'>
+<col style='width:184px'>
+<col style='width:76px'>
+<col style='width:112px'>
+<col style='width:88px'>
+<col style='width:104px'>
+</colgroup> <thead>
+<tr>
+<th>
+<span class='sr'>Select</span>
+</th>
+<th>Date</th>
+<th>Vendor</th>
+<th title='Entity code'>Ent.</th>
+<th>Account</th>
+<th>Job</th>
+<th>Match</th>
+<th aria-sort='ascending'>Conf.<span class='arr'>↑</span>
+</th>
+<th class='n'>Amount</th>
+</tr>
+</thead> <tbody id='rows'>
+<tr class='r' data-i='0' tabindex='-1' aria-selected='false'> <td class='cb'>
+<label>
+<input type='checkbox' aria-label='Select Amazon Marketplace (186.42)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 4</td> <td class='v'>
+<button class='vn' title='Click to select every Amazon Marketplace transaction'>Amazon Marketplace</button>
+<span class='raw'>AMAZON MKTPLACE PMTS AMZN.COM/BILL WA</span>
+</td> <td class='e' title='Crystal Kitchen & Bath'>CKB</td> <td class='a'>
+<span class='ac'>6420 Shop supplies</span>
+<a class='nref' href='#note-1' data-note='1' aria-label='Note 1: why the AI chose this'>1</a>
+</td> <td class='j tnum'>—</td> <td class='m m-none'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<circle cx='6' cy='6' r='3.5' fill='none' stroke='currentColor' stroke-width='1.4'/>
+</svg>
+<span>Unmatched</span>
+</td> <td class='c tnum c-lo'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+<i>
+</i>
+<i>
+</i>
+<i>
+</i>
+</span>
+<span>58</span>
+</td> <td class='n amt'>(186.42)</td>
+</tr>
+<tr class='r' data-i='1' tabindex='-1' aria-selected='false'> <td class='cb'>
+<label>
+<input type='checkbox' aria-label='Select Jerry’s Hardware (73.18)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 3</td> <td class='v'>
+<button class='vn' title='Click to select every Jerry’s Hardware transaction'>Jerry’s Hardware</button>
+<span class='raw'>SQ *JERRYS HARDWARE ANKENY IA</span>
+</td> <td class='e' title='Metro Heating & Cooling'>MHC</td> <td class='a'>
+<span class='ac'>5100 Materials</span>
+<a class='nref' href='#note-2' data-note='2' aria-label='Note 2: why the AI chose this'>2</a>
+</td> <td class='j tnum'>MH-3307</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Receipt</span>
+</td> <td class='c tnum c-lo'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+<i>
+</i>
+<i>
+</i>
+<i>
+</i>
+</span>
+<span>64</span>
+</td> <td class='n amt'>(73.18)</td>
+</tr>
+<tr class='r' data-i='2' tabindex='-1' aria-selected='false'> <td class='cb'>
+<label>
+<input type='checkbox' aria-label='Select Iowa Dept. 
+of Revenue 1,204.00'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 3</td> <td class='v'>
+<button class='vn' title='Click to select every Iowa Dept. 
+of Revenue transaction'>Iowa Dept. 
+of Revenue</button>
+<span class='raw'>ACH CR IA DEPT REVENUE REFUND 110326</span>
+</td> <td class='e' title='Iowa Custom Cabinets'>ICC</td> <td class='a'>
+<span class='ac'>2310 Sales tax payable</span>
+<a class='nref' href='#note-3' data-note='3' aria-label='Note 3: why the AI chose this'>3</a>
+</td> <td class='j tnum'>—</td> <td class='m m-none'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<circle cx='6' cy='6' r='3.5' fill='none' stroke='currentColor' stroke-width='1.4'/>
+</svg>
+<span>Unmatched</span>
+</td> <td class='c tnum c-lo'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+<i>
+</i>
+<i>
+</i>
+</span>
+<span>66</span>
+</td> <td class='n amt'>1,204.00<span class='hp'>)</span>
+</td>
+</tr>
+<tr class='r' data-i='3' tabindex='-1' aria-selected='false'> <td class='cb'>
+<label>
+<input type='checkbox' aria-label='Select Check 10482 (2,450.00)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 2</td> <td class='v'>
+<button class='vn' title='Click to select every Check 10482 transaction'>Check 10482</button>
+<span class='raw'>CHECK 10482</span>
+</td> <td class='e' title='Heritage Interiors'>HER</td> <td class='a'>
+<span class='ac'>2000 Accounts payable</span>
+<a class='nref' href='#note-4' data-note='4' aria-label='Note 4: why the AI chose this'>4</a>
+</td> <td class='j tnum'>—</td> <td class='m m-warn'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M6 2v5M6 9.2v.8' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>2 bills</span>
+</td> <td class='c tnum c-mid'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+<i>
+</i>
+<i>
+</i>
+</span>
+<span>71</span>
+</td> <td class='n amt'>(2,450.00)</td>
+</tr>
+<tr class='r' data-i='4' tabindex='-1' aria-selected='false'> <td class='cb'>
+<label>
+<input type='checkbox' aria-label='Select R. 
+Alvarez (900.00)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 2</td> <td class='v'>
+<button class='vn' title='Click to select every R. 
+Alvarez transaction'>R. 
+Alvarez</button>
+<span class='raw'>VENMO *R ALVAREZ</span>
+</td> <td class='e' title='Revived Interiors'>REV</td> <td class='a'>
+<span class='ac'>5300 Subcontractors</span>
+<a class='nref' href='#note-5' data-note='5' aria-label='Note 5: why the AI chose this'>5</a>
+</td> <td class='j tnum'>RI-0418</td> <td class='m m-none'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<circle cx='6' cy='6' r='3.5' fill='none' stroke='currentColor' stroke-width='1.4'/>
+</svg>
+<span>Unmatched</span>
+</td> <td class='c tnum c-mid'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+<i>
+</i>
+<i>
+</i>
+</span>
+<span>74</span>
+</td> <td class='n amt'>(900.00)</td>
+</tr>
+<tr class='r' data-i='5' tabindex='-1' aria-selected='false'> <td class='cb'>
+<label>
+<input type='checkbox' aria-label='Select Shell (96.57)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 1</td> <td class='v'>
+<button class='vn' title='Click to select every Shell transaction'>Shell</button>
+<span class='raw'>SHELL OIL 57442 URBANDALE IA</span>
+</td> <td class='e' title='Dorrian HVAC'>DOR</td> <td class='a'>
+<span class='ac'>6510 Fuel</span>
+<a class='nref' href='#note-6' data-note='6' aria-label='Note 6: why the AI chose this'>6</a>
+</td> <td class='j tnum'>—</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Receipt</span>
+</td> <td class='c tnum c-mid'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+<i>
+</i>
+</span>
+<span>79</span>
+</td> <td class='n amt'>(96.57)</td>
+</tr>
+<tr class='r' data-i='6' tabindex='-1' aria-selected='false'> <td class='cb'>
+<label>
+<input type='checkbox' aria-label='Select Home Depot (1,318.06)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Oct 31</td> <td class='v'>
+<button class='vn' title='Click to select every Home Depot transaction'>Home Depot</button>
+<span class='raw'>THE HOME DEPOT #2111 WEST DES MOINES</span>
+</td> <td class='e' title='Artistry Homes'>ART</td> <td class='a'>
+<span class='ac'>5100 Materials</span>
+<a class='nref' href='#note-7' data-note='7' aria-label='Note 7: why the AI chose this'>7</a>
+</td> <td class='j tnum'>AH-PT14</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Receipt</span>
+</td> <td class='c tnum c-mid'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+<i>
+</i>
+</span>
+<span>82</span>
+</td> <td class='n amt'>(1,318.06)</td>
+</tr>
+<tr class='r' data-i='7' tabindex='-1' aria-selected='false'> <td class='cb'>
+<label>
+<input type='checkbox' aria-label='Select MidAmerican Energy (2,904.11)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Oct 31</td> <td class='v'>
+<button class='vn' title='Click to select every MidAmerican Energy transaction'>MidAmerican Energy</button>
+<span class='raw'>MIDAMERICAN ENERGY ACH</span>
+</td> <td class='e' title='Clive Power Equipment'>CPE</td> <td class='a'>
+<span class='ac'>6230 Utilities</span>
+<a class='nref' href='#note-8' data-note='8' aria-label='Note 8: why the AI chose this'>8</a>
+</td> <td class='j tnum'>—</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Bill B-7731</span>
+</td> <td class='c tnum c-mid'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+</span>
+<span>86</span>
+</td> <td class='n amt'>(2,904.11)</td>
+</tr>
+<tr class='r' data-i='8' tabindex='-1' aria-selected='false'> <td class='cb'>
+<label>
+<input type='checkbox' aria-label='Select Johnstone Supply (3,377.40)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Oct 30</td> <td class='v'>
+<button class='vn' title='Click to select every Johnstone Supply transaction'>Johnstone Supply</button>
+<span class='raw'>JOHNSTONE SUPPLY DSM 0412</span>
+</td> <td class='e' title='Heartland Heating & Cooling'>HHC</td> <td class='a'>
+<span class='ac'>5100 Materials</span>
+<a class='nref' href='#note-9' data-note='9' aria-label='Note 9: why the AI chose this'>9</a>
+</td> <td class='j tnum'>HH-2611</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Bill B-20391</span>
+</td> <td class='c tnum c-mid'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+</span>
+<span>88</span>
+</td> <td class='n amt'>(3,377.40)</td>
+</tr>
+<tr class='r sel' data-i='9' tabindex='-1' aria-selected='true'> <td class='cb'>
+<label>
+<input type='checkbox' checked aria-label='Select Adobe (89.99)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Oct 30</td> <td class='v'>
+<button class='vn' title='Click to select every Adobe transaction'>Adobe</button>
+<span class='raw'>RAMP *ADOBE CREATIVE CLD</span>
+</td> <td class='e' title='Merit Management Group'>MMG</td> <td class='a'>
+<span class='ac'>6610 Software</span>
+<a class='nref' href='#note-10' data-note='10' aria-label='Note 10: why the AI chose this'>10</a>
+</td> <td class='j tnum'>—</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Receipt</span>
+</td> <td class='c tnum c-hi'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+</span>
+<span>90</span>
+</td> <td class='n amt'>(89.99)</td>
+</tr>
+<tr class='r sel' data-i='10' tabindex='-1' aria-selected='true'> <td class='cb'>
+<label>
+<input type='checkbox' checked aria-label='Select Menards (512.77)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 4</td> <td class='v'>
+<button class='vn' title='Click to select every Menards transaction'>Menards</button>
+<span class='raw'>MENARDS ANKENY IA</span>
+</td> <td class='e' title='Revived Interiors'>REV</td> <td class='a'>
+<span class='ac'>5100 Materials</span>
+<a class='nref' href='#note-11' data-note='11' aria-label='Note 11: why the AI chose this'>11</a>
+</td> <td class='j tnum'>RI-0418</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Receipt</span>
+</td> <td class='c tnum c-hi'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+</span>
+<span>90</span>
+</td> <td class='n amt'>(512.77)</td>
+</tr>
+<tr class='r sel hov' data-i='11' tabindex='-1' aria-selected='true'> <td class='cb'>
+<label>
+<input type='checkbox' checked aria-label='Select Ferguson Enterprises (2,640.00)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Oct 31</td> <td class='v'>
+<button class='vn' title='Click to select every Ferguson Enterprises transaction'>Ferguson Enterprises</button>
+<span class='raw'>FERGUSON ENT #1147 DES MOINES</span>
+<span class='vb' title='Select all 3 Ferguson transactions in the queue'>Batch 3 <kbd>V</kbd>
+</span>
+</td> <td class='e' title='Dorrian HVAC'>DOR</td> <td class='a'>
+<span class='ac'>5100 Materials</span>
+<a class='nref' href='#note-12' data-note='12' aria-label='Note 12: why the AI chose this'>12</a>
+</td> <td class='j tnum'>DH-1174</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Bill B-6650</span>
+</td> <td class='c tnum c-hi'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+</span>
+<span>91</span>
+</td> <td class='n amt'>(2,640.00)</td>
+</tr>
+<tr class='r sel' data-i='12' tabindex='-1' aria-selected='true'> <td class='cb'>
+<label>
+<input type='checkbox' checked aria-label='Select Sherwin-Williams (684.35)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 2</td> <td class='v'>
+<button class='vn' title='Click to select every Sherwin-Williams transaction'>Sherwin-Williams</button>
+<span class='raw'>SHERWIN-WILLIAMS 7012</span>
+</td> <td class='e' title='Heritage Interiors'>HER</td> <td class='a'>
+<span class='ac'>5100 Materials</span>
+<a class='nref' href='#note-13' data-note='13' aria-label='Note 13: why the AI chose this'>13</a>
+</td> <td class='j tnum'>HI-0722</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Receipt</span>
+</td> <td class='c tnum c-hi'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+</span>
+<span>92</span>
+</td> <td class='n amt'>(684.35)</td>
+</tr>
+<tr class='r sel' data-i='13' tabindex='-1' aria-selected='true'> <td class='cb'>
+<label>
+<input type='checkbox' checked aria-label='Select Ferguson Enterprises (1,876.25)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 2</td> <td class='v'>
+<button class='vn' title='Click to select every Ferguson Enterprises transaction'>Ferguson Enterprises</button>
+<span class='raw'>FERGUSON ENT #1147 DES MOINES</span>
+</td> <td class='e' title='Metro Heating & Cooling'>MHC</td> <td class='a'>
+<span class='ac'>5100 Materials</span>
+<a class='nref' href='#note-14' data-note='14' aria-label='Note 14: why the AI chose this'>14</a>
+</td> <td class='j tnum'>MH-3290</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Bill B-8812</span>
+</td> <td class='c tnum c-hi'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+</span>
+<span>93</span>
+</td> <td class='n amt'>(1,876.25)</td>
+</tr>
+<tr class='r sel focus' data-i='14' tabindex='-1' aria-selected='true'> <td class='cb'>
+<label>
+<input type='checkbox' checked aria-label='Select Ferguson Enterprises (4,212.80)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 3</td> <td class='v'>
+<button class='vn' title='Click to select every Ferguson Enterprises transaction'>Ferguson Enterprises</button>
+<span class='raw'>FERGUSON ENT #1147 DES MOINES</span>
+</td> <td class='e' title='Heartland Heating & Cooling'>HHC</td> <td class='a'>
+<span class='ac'>5100 Materials</span>
+<a class='nref' href='#note-15' data-note='15' aria-label='Note 15: why the AI chose this'>15</a>
+</td> <td class='j tnum'>HH-2611</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Bill B-20417</span>
+</td> <td class='c tnum c-hi'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i>
+</i>
+</span>
+<span>94</span>
+</td> <td class='n amt'>(4,212.80)</td>
+</tr>
+<tr class='r sel' data-i='15' tabindex='-1' aria-selected='true'> <td class='cb'>
+<label>
+<input type='checkbox' checked aria-label='Select Carrier Enterprise (18,940.00)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 3</td> <td class='v'>
+<button class='vn' title='Click to select every Carrier Enterprise transaction'>Carrier Enterprise</button>
+<span class='raw'>CARRIER ENTERPRISE ACH 2026</span>
+</td> <td class='e' title='Metro Heating & Cooling'>MHC</td> <td class='a'>
+<span class='ac'>5110 Equipment</span>
+<a class='nref' href='#note-16' data-note='16' aria-label='Note 16: why the AI chose this'>16</a>
+</td> <td class='j tnum'>MH-3307</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Bill B-8820</span>
+</td> <td class='c tnum c-hi'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+</span>
+<span>95</span>
+</td> <td class='n amt'>(18,940.00)</td>
+</tr>
+<tr class='r sel' data-i='16' tabindex='-1' aria-selected='true'> <td class='cb'>
+<label>
+<input type='checkbox' checked aria-label='Select ADP (412.60)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 4</td> <td class='v'>
+<button class='vn' title='Click to select every ADP transaction'>ADP</button>
+<span class='raw'>ADP PAYROLL FEES 110426</span>
+</td> <td class='e' title='Iowa Custom Cabinets'>ICC</td> <td class='a'>
+<span class='ac'>6150 Payroll processing</span>
+<a class='nref' href='#note-17' data-note='17' aria-label='Note 17: why the AI chose this'>17</a>
+</td> <td class='j tnum'>—</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Bill B-3302</span>
+</td> <td class='c tnum c-hi'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+</span>
+<span>96</span>
+</td> <td class='n amt'>(412.60)</td>
+</tr>
+<tr class='r sel' data-i='17' tabindex='-1' aria-selected='true'> <td class='cb'>
+<label>
+<input type='checkbox' checked aria-label='Select Stripe payout 12,486.20'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 2</td> <td class='v'>
+<button class='vn' title='Click to select every Stripe payout transaction'>Stripe payout</button>
+<span class='raw'>STRIPE TRANSFER ST-8W2K</span>
+</td> <td class='e' title='Swan Creek'>SWC</td> <td class='a'>
+<span class='ac'>1200 Accounts receivable</span>
+<a class='nref' href='#note-18' data-note='18' aria-label='Note 18: why the AI chose this'>18</a>
+</td> <td class='j tnum'>—</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>4 invoices</span>
+</td> <td class='c tnum c-hi'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+</span>
+<span>97</span>
+</td> <td class='n amt'>12,486.20<span class='hp'>)</span>
+</td>
+</tr>
+<tr class='r sel' data-i='18' tabindex='-1' aria-selected='true'> <td class='cb'>
+<label>
+<input type='checkbox' checked aria-label='Select Principal Financial (6,318.00)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Oct 31</td> <td class='v'>
+<button class='vn' title='Click to select every Principal Financial transaction'>Principal Financial</button>
+<span class='raw'>PRINCIPAL LIFE INS PREM</span>
+</td> <td class='e' title='Merit Management Group'>MMG</td> <td class='a'>
+<span class='ac'>6170 Employee benefits</span>
+<a class='nref' href='#note-19' data-note='19' aria-label='Note 19: why the AI chose this'>19</a>
+</td> <td class='j tnum'>—</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Bill B-1188</span>
+</td> <td class='c tnum c-hi'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+</span>
+<span>97</span>
+</td> <td class='n amt'>(6,318.00)</td>
+</tr>
+<tr class='r sel' data-i='19' tabindex='-1' aria-selected='true'> <td class='cb'>
+<label>
+<input type='checkbox' checked aria-label='Select Verizon Wireless (1,142.88)'>
+<span>
+</span>
+</label>
+</td> <td class='d tnum'>Nov 1</td> <td class='v'>
+<button class='vn' title='Click to select every Verizon Wireless transaction'>Verizon Wireless</button>
+<span class='raw'>VERIZON WIRELESS PAYMENTS</span>
+</td> <td class='e' title='AIM'>AIM</td> <td class='a'>
+<span class='ac'>6240 Telephone</span>
+<a class='nref' href='#note-20' data-note='20' aria-label='Note 20: why the AI chose this'>20</a>
+</td> <td class='j tnum'>—</td> <td class='m m-ok'>
+<svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'>
+<path d='M2 6.2 4.8 9 10 3' fill='none' stroke='currentColor' stroke-width='1.6'/>
+</svg>
+<span>Bill B-0951</span>
+</td> <td class='c tnum c-hi'>
+<span class='conf' aria-hidden='true'>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+<i class='on'>
+</i>
+</span>
+<span>98</span>
+</td> <td class='n amt'>(1,142.88)</td>
+</tr>
+</tbody> </table> </div> <div class='bulk' role='region' aria-label='Bulk actions'>
+<span>
+<b class='tnum' id='selct'>11 selected</b> <span class='mut2'>· net</span> <b class='tnum' id='seltot'>($24,343.44)</b>
+</span> <span class='mut2'>1 is over the $10,000 auto-approve limit</span>
+<span class='sp'>
+</span> <button class='btn'>Flag <kbd>F</kbd>
+</button>
+<button class='btn'>Clear <kbd>Esc</kbd>
+</button>
+<button class='btn primary'>Approve 11 <kbd>⇧</kbd>
+<kbd>A</kbd>
+</button>
+</div> </section> <aside class='panel' aria-labelledby='pn-title'> <div class='pscroll' id='pscroll'> <div class='ptop'>
+<div class='note-top' style='grid-template-columns:48px 1fr'>
+<span class='note-no' id='pn-no' aria-hidden='true'>15</span> <div>
+<div class='kind' id='pn-title'>Note 15 · AI coding</div>
+<div class='sub' id='pn-bank'>1010 · Heartland Operating ••4471</div>
+</div>
+</div> <button class='pclose' aria-label='Close panel (Esc)'>
+<svg width='14' height='14' viewBox='0 0 14 14' aria-hidden='true'>
+<path d='M3 3l8 8M11 3l-8 8' stroke='currentColor' stroke-width='1.5'/>
+</svg>
+</button>
+</div> <div class='pamt'>
+<span class='big tnum' id='pn-amt'>($4,212.80)</span> <span class='meta'>
+<span id='pn-date'>Nov 3, 
+2026</span>
+<br>Paid out · ACH</span>
+</div> <div class='pv' id='pn-vendor'>Ferguson Enterprises<small>FERGUSON ENT #1147 DES MOINES</small>
+</div> <div class='fields'> <div class='fld w'>
+<label>Entity</label>
+<div class='in ai' tabindex='0'>
+<span id='pn-ent'>Heartland Heating & Cooling</span>
+<span class='tag'>AI</span>
+</div>
+</div> <div class='fld'>
+<label>Account</label>
+<div class='in ai' tabindex='0'>
+<span id='pn-acc'>5100 Materials</span>
+<span class='tag'>AI</span>
+</div>
+</div> <div class='fld'>
+<label>Job</label>
+<div class='in ai' tabindex='0'>
+<span id='pn-job'>HH-2611 · Beaverdale</span>
+<span class='tag'>AI</span>
+</div>
+</div> <div class='fld w'>
+<label>Match</label>
+<div class='in ai' tabindex='0'>
+<span id='pn-match'>Bill B-20417 · $4,212.80 · due Nov 18</span>
+<span class='tag'>AI</span>
+</div>
+</div> <div class='fld w'>
+<label>Memo</label>
+<div class='in' tabindex='0'>
+<span class='mut' style='color:var(--steel)'>PO 7781 · rough-in materials</span>
+</div>
+</div> </div> <div class='psec'>
+<h4>Confidence <b id='pn-conf'>94%</b>
+</h4> <table class='mini' id='pn-score'>
+<thead>
+<tr>
+<th>Signal</th>
+<th class='n'>Weight</th>
+<th class='n'>Score</th>
+<th class='n'>Points</th>
+</tr>
+</thead> <tbody>
+<tr>
+<td>Vendor</td>
+<td class='n'>40%</td>
+<td class='n'>100</td>
+<td class='n'>40.0</td>
+</tr> <tr>
+<td>Amount</td>
+<td class='n'>40%</td>
+<td class='n'>100</td>
+<td class='n'>40.0</td>
+</tr> <tr>
+<td>Date</td>
+<td class='n'>20%</td>
+<td class='n'>70</td>
+<td class='n'>14.0</td>
+</tr> <tr class='t'>
+<td>Composite</td>
+<td>
+</td>
+<td>
+</td>
+<td class='n'>94.0</td>
+</tr>
+</tbody>
+</table>
+</div> <div class='psec'>
+<h4>Why this coding</h4> <ol class='why' id='pn-why'> <li>
+<span>Amount matches open bill <b>B-20417</b> exactly, 
+$4,212.80. 
+Paid 2 days before the bank date.</span>
+</li> <li>
+<span>Heartland coded <b>42 of 44</b> Ferguson charges to 5100 Materials in the last 12 months.</span>
+</li> <li>
+<span>The bill references PO 7781, 
+issued against job <b>HH-2611</b>, 
+Beaverdale retrofit.</span>
+</li> </ol>
+</div> <div class='psec'>
+<h4>Posts as <b>JE draft</b>
+</h4> <table class='mini'>
+<thead>
+<tr>
+<th>Account</th>
+<th class='n'>Debit</th>
+<th class='n'>Credit</th>
+</tr>
+</thead> <tbody>
+<tr>
+<td>2000 Accounts payable · B-20417</td>
+<td class='n'>4,212.80</td>
+<td class='n mut'>—</td>
+</tr> <tr>
+<td>1010 Heartland Operating ••4471</td>
+<td class='n mut'>—</td>
+<td class='n'>4,212.80</td>
+</tr> <tr class='t'>
+<td>Balanced</td>
+<td class='n'>4,212.80</td>
+<td class='n'>4,212.80</td>
+</tr>
+</tbody>
+</table> <p class='sub' style='margin-top:8px'>The expense was booked to 5100 when bill B-20417 was approved. 
+This clears the payable.</p>
+</div> <div class='psec'>
+<h4>Ferguson at Heartland <b>last 5</b>
+</h4> <table class='mini'>
+<thead>
+<tr>
+<th>Date</th>
+<th>Account</th>
+<th>Job</th>
+<th class='n'>Amount</th>
+</tr>
+</thead> <tbody> <tr>
+<td class='tnum'>Oct 20</td>
+<td>5100</td>
+<td class='tnum'>HH-2611</td>
+<td class='n'>(2,904.15)</td>
+</tr> <tr>
+<td class='tnum'>Oct 9</td>
+<td>5100</td>
+<td class='tnum'>HH-2588</td>
+<td class='n'>(1,118.40)</td>
+</tr> <tr>
+<td class='tnum'>Sep 29</td>
+<td>5100</td>
+<td class='tnum'>HH-2588</td>
+<td class='n'>(3,760.00)</td>
+</tr> <tr>
+<td class='tnum'>Sep 17</td>
+<td class='mut'>6420</td>
+<td class='mut'>—</td>
+<td class='n'>(214.62)</td>
+</tr> <tr>
+<td class='tnum'>Sep 8</td>
+<td>5100</td>
+<td class='tnum'>HH-2570</td>
+<td class='n'>(5,402.33)</td>
+</tr> </tbody>
+</table>
+</div> </div> <div class='pact'>
+<button class='btn primary' id='approve'>Approve and next <kbd>A</kbd>
+</button> <button class='btn'>Edit <kbd>E</kbd>
+</button>
+<button class='btn'>Split <kbd>S</kbd>
+</button>
+<button class='btn'>Flag <kbd>F</kbd>
+</button>
+</div> </aside> </div> <div class='toast' role='status' id='toast'>Approved · Shell, 
+Dorrian HVAC · posted JE-2026-10442 <a href='#'>Undo <kbd>Z</kbd>
+</a>
+</div> </main>
+</div> <script> (function(){ function lit(id,on){ document.querySelectorAll('[data-note='+id+']').forEach(function(el){ el.classList.toggle(el.classList.contains('nref')?'lit':(el.classList.contains('note')?'lit':'lit-fig'),on); 
+}); 
+} 
+document.querySelectorAll('.nref,.note').forEach(function(el){ var id=el.getAttribute('data-note'); 
+if(!id) return; 
+['mouseenter',
+'focus'].forEach(function(e){el.addEventListener(e,function(){lit(id,true)})}); 
+['mouseleave',
+'blur'].forEach(function(e){el.addEventListener(e,function(){lit(id,false)})}); 
+}); 
+})(); 
+var TX=[{n:1,date:'Nov 4',
+vendor:'Amazon Marketplace',
+ent:'Crystal Kitchen & Bath',
+acc:'6420 Shop supplies',
+job:'—',
+match:'Unmatched',
+conf:58,amt:-186.42,s:[60,50,70],why:['Order has 3 items; 
+one looks like a vanity faucet, 
+which would be job materials.',
+'Crystal codes Amazon to 6420 about half the time.',
+'Split it, 
+or attach the order to confirm.'],bank:'1015 · Crystal Ramp Card ••0817'},{
+n:2,date:'Nov 3',
+vendor:'Jerry’s Hardware',
+ent:'Metro Heating & Cooling',
+acc:'5100 Materials',
+job:'MH-3307',
+match:'Receipt',
+conf:64,amt:-73.18,s:[40,80,80],why:['First charge from this vendor at Metro.',
+'Receipt texted by a tech on job MH-3307 the same day.',
+'Amount on receipt matches; 
+vendor is new.'],bank:'1010 · Metro Operating ••6612'},{
+n:3,date:'Nov 3',
+vendor:'Iowa Dept. 
+of Revenue',
+ent:'Iowa Custom Cabinets',
+acc:'2310 Sales tax payable',
+job:'—',
+match:'Unmatched',
+conf:66,amt:1204.0,s:[90,30,90],why:['A deposit from the state usually means a sales-tax overpayment refund.',
+'No refund is recorded as receivable, 
+so the amount can’t be matched.',
+'Check the September return before approving.'],bank:'1010 · ICC Operating ••7724'},{
+n:4,date:'Nov 2',
+vendor:'Check 10482',
+ent:'Heritage Interiors',
+acc:'2000 Accounts payable',
+job:'—',
+match:'2 bills',
+conf:71,amt:-2450.0,s:[50,90,75],why:['Two open bills are exactly $2,450.00: Kohler Co. 
+and Des Moines Stone.',
+'Check 10482 was printed Oct 29 in the Kohler payment run.',
+'Confirm the payee before it clears the wrong bill.'],bank:'1010 · Heritage Operating ••3390'},{
+n:5,date:'Nov 2',
+vendor:'R. 
+Alvarez',
+ent:'Revived Interiors',
+acc:'5300 Subcontractors',
+job:'RI-0418',
+match:'Unmatched',
+conf:74,amt:-900.0,s:[70,80,70],why:['Alvarez billed Revived for tile on RI-0418 twice in September.',
+'No W-9 on file — this payment pushes him past $600 for the year.',
+'Approve, 
+then request a W-9.'],bank:'1010 · Revived Operating ••5146'},{
+n:6,date:'Nov 1',
+vendor:'Shell',
+ent:'Dorrian HVAC',
+acc:'6510 Fuel',
+job:'—',
+match:'Receipt',
+conf:79,amt:-96.57,s:[90,60,95],why:['Fuel at Shell is coded 6510 at every entity.',
+'Receipt image matches but the total is hand-written.',
+'Card belongs to a Dorrian service van.'],bank:'1010 · Dorrian Operating ••9035'},{
+n:7,date:'Oct 31',
+vendor:'Home Depot',
+ent:'Artistry Homes',
+acc:'5100 Materials',
+job:'AH-PT14',
+match:'Receipt',
+conf:82,amt:-1318.06,s:[90,80,70],why:['Receipt lists lumber and fasteners for Prairie Trail lot 14.',
+'Superintendent’s card; 
+he buys for PT14 most weeks.',
+'Two days between purchase and posting.'],bank:'1010 · Artistry Operating ••8853'},{
+n:8,date:'Oct 31',
+vendor:'MidAmerican Energy',
+ent:'Clive Power Equipment',
+acc:'6230 Utilities',
+job:'—',
+match:'Bill B-7731',
+conf:86,amt:-2904.11,s:[100,70,90],why:['Open bill B-7731 is $2,912.40; 
+the bank amount is $8.29 less.',
+'The difference matches last month’s autopay credit.',
+'Approve to clear the bill and book the credit.'],bank:'1010 · Clive Operating ••5518'},{
+n:9,date:'Oct 30',
+vendor:'Johnstone Supply',
+ent:'Heartland Heating & Cooling',
+acc:'5100 Materials',
+job:'HH-2611',
+match:'Bill B-20391',
+conf:88,amt:-3377.4,s:[100,80,80],why:['Matches open bill B-20391 within $0.40 — a rounding credit.',
+'Bill is coded to job HH-2611, 
+Beaverdale retrofit.',
+'Johnstone is a trusted vendor at Heartland.'],bank:'1010 · Heartland Operating ••4471'},{
+n:10,date:'Oct 30',
+vendor:'Adobe',
+ent:'Merit Management Group',
+acc:'6610 Software',
+job:'—',
+match:'Receipt',
+conf:90,amt:-89.99,s:[100,100,50],why:['Same charge every month since March 2025.',
+'Receipt forwarded by Ramp.',
+'Posted 3 days after the charge.'],bank:'1010 · MMG Operating ••2208'},{
+n:11,date:'Nov 4',
+vendor:'Menards',
+ent:'Revived Interiors',
+acc:'5100 Materials',
+job:'RI-0418',
+match:'Receipt',
+conf:90,amt:-512.77,s:[90,100,70],why:['Receipt matches to the cent.',
+'Revived codes Menards to 5100 on active jobs.',
+'RI-0418 is the only open job that bought tile this week.'],bank:'1010 · Revived Operating ••5146'},{
+n:12,date:'Oct 31',
+vendor:'Ferguson Enterprises',
+ent:'Dorrian HVAC',
+acc:'5100 Materials',
+job:'DH-1174',
+match:'Bill B-6650',
+conf:91,amt:-2640.0,s:[100,100,55],why:['Matches open bill B-6650 exactly.',
+'Dorrian codes Ferguson to 5100 on 38 of 40 charges.',
+'Paid 4 days after the bill date.'],bank:'1010 · Dorrian Operating ••9035'},{
+n:13,date:'Nov 2',
+vendor:'Sherwin-Williams',
+ent:'Heritage Interiors',
+acc:'5100 Materials',
+job:'HI-0722',
+match:'Receipt',
+conf:92,amt:-684.35,s:[100,90,80],why:['Receipt from the store matches within $0.12.',
+'Heritage codes Sherwin-Williams to 5100.',
+'Job HI-0722 is the only paint job open.'],bank:'1010 · Heritage Operating ••3390'},{
+n:14,date:'Nov 2',
+vendor:'Ferguson Enterprises',
+ent:'Metro Heating & Cooling',
+acc:'5100 Materials',
+job:'MH-3290',
+match:'Bill B-8812',
+conf:93,amt:-1876.25,s:[100,100,65],why:['Matches open bill B-8812 exactly.',
+'Metro codes Ferguson to 5100 on all 51 prior charges.',
+'Bill references job MH-3290.'],bank:'1010 · Metro Operating ••6612'},{
+n:15,date:'Nov 3',
+vendor:'Ferguson Enterprises',
+ent:'Heartland Heating & Cooling',
+acc:'5100 Materials',
+job:'HH-2611',
+match:'Bill B-20417',
+conf:94,amt:-4212.8,s:[100,100,70],why:[],bank:'1010 · Heartland Operating ••4471'},{
+n:16,date:'Nov 3',
+vendor:'Carrier Enterprise',
+ent:'Metro Heating & Cooling',
+acc:'5110 Equipment',
+job:'MH-3307',
+match:'Bill B-8820',
+conf:95,amt:-18940.0,s:[100,100,75],why:['Matches open bill B-8820 exactly — two condensing units.',
+'Equipment over $10,000 is coded 5110 at Metro.',
+'Over the $10,000 auto-approve limit, 
+so it waits for you.'],bank:'1010 · Metro Operating ••6612'},{
+n:17,date:'Nov 4',
+vendor:'ADP',
+ent:'Iowa Custom Cabinets',
+acc:'6150 Payroll processing',
+job:'—',
+match:'Bill B-3302',
+conf:96,amt:-412.6,s:[100,100,80],why:['Matches ADP’s invoice exactly.',
+'Every ADP fee since 2024 is coded 6150.',
+'Weekly cadence, 
+on schedule.'],bank:'1010 · ICC Operating ••7724'},{
+n:18,date:'Nov 2',
+vendor:'Stripe payout',
+ent:'Swan Creek',
+acc:'1200 Accounts receivable',
+job:'—',
+match:'4 invoices',
+conf:97,amt:12486.2,s:[100,100,85],why:['Payout equals four paid invoices less Stripe fees of $381.80.',
+'Invoices INV-2291 to INV-2294 were paid Oct 30.',
+'Fees post to 6720 Merchant fees.'],bank:'1010 · Swan Creek Operating ••1209'},{
+n:19,date:'Oct 31',
+vendor:'Principal Financial',
+ent:'Merit Management Group',
+acc:'6170 Employee benefits',
+job:'—',
+match:'Bill B-1188',
+conf:97,amt:-6318.0,s:[100,100,85],why:['Matches the November premium bill exactly.',
+'Benefits for MMG staff, 
+coded 6170 monthly.',
+'Allocation to entities runs at close.'],bank:'1010 · MMG Operating ••2208'},{
+n:20,date:'Nov 1',
+vendor:'Verizon Wireless',
+ent:'AIM',
+acc:'6240 Telephone',
+job:'—',
+match:'Bill B-0951',
+conf:98,amt:-1142.88,s:[100,100,90],why:['Matches the October statement exactly.',
+'Coded 6240 for 26 straight months.',
+'Autopay date.'],bank:'1010 · AIM Operating ••4480'}]; 
+var FOCUS=14; 
+(function(){ var rows=[].slice.call(document.querySelectorAll('#rows tr.r')),cur=FOCUS,orig=document.getElementById('pscroll').innerHTML,je=10442; 
+function fmt(v){var s=Math.abs(v).toLocaleString('en-US',
+{minimumFractionDigits:2,maximumFractionDigits:2});return v<0?'($'+s+')':'$'+s} 
+function show(i){ rows.forEach(function(r){r.classList.remove('focus')});rows[i].classList.add('focus');rows[i].scrollIntoView({block:'nearest'});cur=i; 
+var t=TX[i];if(i===FOCUS){document.getElementById('pscroll').innerHTML=orig;return} 
+document.getElementById('pn-no').textContent=t.n;document.getElementById('pn-title').textContent='Note '+t.n+' · AI coding'; 
+document.getElementById('pn-bank').textContent=t.bank;document.getElementById('pn-amt').textContent=fmt(t.amt); 
+document.getElementById('pn-date').textContent=t.date+',
+ 
+2026';document.getElementById('pn-vendor').firstChild.textContent=t.vendor; 
+document.getElementById('pn-ent').textContent=t.ent;document.getElementById('pn-acc').textContent=t.acc; 
+document.getElementById('pn-job').textContent=t.job;document.getElementById('pn-match').textContent=t.match; 
+document.getElementById('pn-conf').textContent=t.conf+'%'; 
+var w=[40,40,20],lab=['Vendor',
+'Amount',
+'Date'],h='';t.s.forEach(function(s,k){h+='<tr>
+<td>'+lab[k]+'</td>
+<td class=n>'+w[k]+'%</td>
+<td class=n>'+s+'</td>
+<td class=n>'+(s*w[k]/100).toFixed(1)+'</td>
+</tr>'}); 
+h+='<tr class=t>
+<td>Composite</td>
+<td>
+</td>
+<td>
+</td>
+<td class=n>'+(t.s[0]*.4+t.s[1]*.4+t.s[2]*.2).toFixed(1)+'</td>
+</tr>'; 
+document.querySelector('#pn-score tbody').innerHTML=h; 
+document.getElementById('pn-why').innerHTML=t.why.map(function(x){return '<li>
+<span>'+x+'</span>
+</li>'}).join(''); 
+} 
+function recount(){var n=0,s=0;rows.forEach(function(r,i){if(r.querySelector('input').checked){n++;s+=TX[i].amt}}); 
+document.getElementById('selct').textContent=n+' selected';document.getElementById('seltot').textContent=fmt(Math.round(s*100)/100);} 
+rows.forEach(function(r,i){r.addEventListener('click',
+function(e){if(e.target.closest('label,.nref'))return;show(i)}); 
+r.querySelector('input').addEventListener('change',
+function(){r.classList.toggle('sel',
+this.checked);recount()})}); 
+document.getElementById('sel90').addEventListener('click',
+function(){rows.forEach(function(r,i){var on=TX[i].conf>=90;r.querySelector('input').checked=on;r.classList.toggle('sel',
+on)});recount()}); 
+document.addEventListener('keydown',
+function(e){ if(e.target.matches('input[type=text],textarea'))return; 
+var k=e.key.toLowerCase(); 
+if(k==='j'){show(Math.min(rows.length-1,cur+1))} 
+else if(k==='k'){show(Math.max(0,cur-1))} 
+else if(k==='x'){var c=rows[cur].querySelector('input');c.checked=!c.checked;rows[cur].classList.toggle('sel',
+c.checked);recount()} 
+else if(k==='a'&&!e.shiftKey){rows[cur].classList.add('done');var t=TX[cur];document.getElementById('toast').innerHTML='Approved · '+t.vendor+',
+ 
+'+t.ent+' · posted JE-2026-'+(++je)+' <a href=#>Undo <kbd>Z</kbd>
+</a>';show(Math.min(rows.length-1,cur+1))} 
+else if(k==='f'){rows[cur].classList.toggle('flag')} 
+else if(k==='v'){var v=TX[cur].vendor;rows.forEach(function(r,i){if(TX[i].vendor===v){r.querySelector('input').checked=true;r.classList.add('sel')}});recount()} 
+else if(k==='escape'){rows.forEach(function(r){r.querySelector('input').checked=false;r.classList.remove('sel')});recount()} 
+}); 
+})(); 
+</script>
+</body>
+</html>

@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=1440">
+<title>S8 · Dashboard edit mode · MeritBooks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="system.css">
+<style>
+/* Board layout only — not part of the system */
+body{min-width:1440px}
+.sheet-top{display:flex;align-items:center;gap:24px;height:48px;padding:0 48px;background:var(--midnight);color:var(--grey-300)}
+.sheet-top img{height:24px;width:auto}
+.sheet-top nav{margin-left:auto;display:flex;gap:4px}
+.sheet-top nav a{height:32px;display:inline-flex;align-items:center;padding:0 12px;color:var(--grey-300);font-weight:500}
+.sheet-top nav a:hover,.sheet-top nav a[aria-current=page]{background:var(--night-800);color:var(--warm)}
+.sheet{padding:0 48px 96px}
+.board-h{display:flex;justify-content:space-between;align-items:flex-end;padding:40px 0 16px;border-bottom:1px solid var(--electric)}
+.board-h p{margin-top:8px;color:var(--ink-2);max-width:76ch}
+.board-h .pg{font-variant-numeric:tabular-nums}
+.frame{border:1px solid var(--line-2);border-left:0;border-right:0;overflow:hidden;position:relative;margin:24px -48px 0;background:var(--warm)}
+.frame-cap{padding:0}
+.frame-cap{display:flex;justify-content:space-between;margin-top:8px;font-size:12px;line-height:16px;color:var(--ink-3)}
+.anno{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:24px}
+.anno div{border-top:1px solid var(--line-2);padding-top:12px}
+.anno b{display:block;font-weight:600;margin-bottom:4px}
+.anno p{color:var(--ink-2)}
+.edit-body{display:grid;grid-template-columns:320px minmax(0,1fr);min-height:0}
+.edit-canvas{padding:24px;min-width:0}
+.agenda li{display:grid;grid-template-columns:56px 1fr auto;gap:8px;align-items:center;min-height:40px;border-bottom:1px solid var(--line);padding:0 16px}
+.agenda{list-style:none}
+.agenda .d{font-weight:600}
+.minibands{display:grid;grid-template-columns:repeat(3,1fr);height:100%}
+.minibands div{padding:16px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:4px}
+.minibands div:last-child{border-right:0}
+.minibands .v{font:600 20px/28px var(--f-text);font-variant-numeric:tabular-nums}
+.sel{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 8px 0 10px;background:var(--night-800);border:1px solid var(--night-700);color:var(--warm);font-weight:600}
+.sel span{color:var(--slate);font-weight:400}
+.pub{width:880px}
+.pub-grid{display:grid;grid-template-columns:1fr 280px;gap:0}
+.pub-main{padding:16px 24px 24px}
+.pub-side{padding:16px 20px 24px;background:var(--canvas);border-left:1px solid var(--line)}
+.pub h4{font:600 12px/16px var(--f-text);letter-spacing:.12em;text-transform:uppercase;color:var(--ink);margin:20px 0 8px}
+.pub h4:first-child{margin-top:0}
+.req{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+.apply{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.apply .opt-card p b{color:var(--ink)}
+.affected{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></symbol>
+<symbol id="i-down" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></symbol>
+<symbol id="i-right" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></symbol>
+<symbol id="i-layers" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2 14 5 8 8 2 5Z"/><path d="M2 8.2l6 3 6-3"/><path d="M2 11.2l6 3 6-3"/></symbol>
+<symbol id="i-grid" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/></symbol>
+<symbol id="i-pin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M5.5 2h5l-.7 4.2L12 8.5H4l2.2-2.3Z"/><path d="M8 8.5V14"/></symbol>
+<symbol id="i-lock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="7" width="9" height="6.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></symbol>
+<symbol id="i-drag" viewBox="0 0 16 16" fill="currentColor"><rect x="5" y="3" width="2" height="2"/><rect x="9" y="3" width="2" height="2"/><rect x="5" y="7" width="2" height="2"/><rect x="9" y="7" width="2" height="2"/><rect x="5" y="11" width="2" height="2"/><rect x="9" y="11" width="2" height="2"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h12M2 11h12"/><rect x="9" y="3" width="2.5" height="4" fill="#fff"/><rect x="4.5" y="9" width="2.5" height="4" fill="#fff"/></symbol>
+<symbol id="i-x" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></symbol>
+<symbol id="i-receipt" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h8v12l-2-1.2L8 14l-2-1.2L4 14Z"/><path d="M6 6h4M6 9h4"/></symbol>
+<symbol id="i-bill" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h5.5L12 4.5V14H4Z"/><path d="M6 7.5h4M6 10.5h3"/></symbol>
+<symbol id="i-none" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"><rect x="3" y="3" width="10" height="10"/></symbol>
+<symbol id="i-eye" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></symbol>
+<symbol id="i-undo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 3.5 2.5 6.5l3 3"/><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7"/></symbol>
+<symbol id="i-plug" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2v3.5M10 2v3.5M4 5.5h8v2a4 4 0 0 1-8 0Z"/><path d="M8 11.5V14"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></symbol>
+<symbol id="i-flag" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3.5 14V2.5h8l-1.5 3 1.5 3h-8"/></symbol>
+<symbol id="i-ask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 3h11v8H7l-3 2.5V11H2.5Z"/></symbol>
+<symbol id="i-resize" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 3h4v4M7 13H3V9M13 3 3 13"/></symbol>
+<symbol id="i-history" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9"/><path d="M2.5 2.5v2.5H5"/><path d="M8 5v3.2l2 1.3"/></symbol>
+<symbol id="i-book" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 2.5h7.5L13 5v8.5H3Z"/><path d="M5.5 6.5h5M5.5 9h5M5.5 11.5h3"/></symbol>
+</defs></svg>
+
+<a class="skip" href="#main">Skip to content</a>
+<header class="sheet-top on-dark">
+  <img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24">
+  <span class="eyebrow" style="color:var(--slate)">MeritBooks<span class="sl">//</span>Design System v2</span>
+  <nav aria-label="Design system pages"><a href="index.html">Index</a><a href="components.html">Components</a><a href="S6-owner-home.html">S6 Owner</a><a href="S6b-cfo-home.html">S6b CFO</a><a href="S6c-controller-home.html">S6c Controller</a><a href="S7-switcher-and-contexts.html">S7 Switcher</a><a href="S8-dashboard-edit.html" aria-current="page">S8 Edit</a><a href="S9-platform-console-home.html">S9 Platform</a></nav>
+</header>
+
+<main id="main" class="sheet">
+  <div class="board-h"><div><div class="eyebrow">S8<span class="sl">//</span>IA-SPEC §5</div><h1 class="t-title" style="margin-top:8px">Make the home yours, inside your firm’s rules</h1><p>Dana Lee, bookkeeper, pressed Customize. The page keeps its live data. The rail collapses to make room for the catalog, which lists only widgets her role can use. Merit’s published Bookkeeper layout is Add &amp; move, with My clients required.</p></div><span class="pg">S8.1</span></div>
+
+  <!-- ===== USER EDIT ===== -->
+  <div class="frame" style="height:1100px">
+    <div class="app app--frame app--mini density-cockpit" data-context="workspace" style="height:1100px">
+      <aside class="rail" aria-label="Primary">
+        <div class="rail-logo"><img src="assets/merit-icon.png" alt="Merit" width="22" height="20"></div>
+        <nav class="rail-nav">
+          <a class="rail-icon" href="#" aria-current="page" aria-label="Home"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-grid"/></svg></a>
+          <a class="rail-icon" href="#" aria-label="Review queue"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-book"/></svg></a>
+          <a class="rail-icon" href="#" aria-label="Requests"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-ask"/></svg></a>
+        </nav>
+        <div class="rail-foot" style="padding:16px 0;display:grid;place-items:center"><span class="avatar">DL</span></div>
+      </aside>
+      <header class="bar">
+        <button class="ctx" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-grid"/></svg><span class="ctx-name">Merit Management Group</span><span class="ctx-meta">Workspace</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg><span class="kbd">⌘J</span></button>
+        <span class="crumbs"><b>Home</b></span>
+        <button class="cmdk" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><span>Jump to client, vendor, account…</span><span class="kbd">⌘K</span></button>
+      </header>
+      <div class="main" style="overflow:visible">
+        <div class="editbar" role="toolbar" aria-label="Edit home">
+          <span class="b">Editing your home</span><span class="sl">//</span><span class="ink-2">Bookkeeper layout v4 · Add &amp; move · 1 required</span>
+          <span class="keyhints" style="margin-left:16px"><span class="keys"><span class="kbd">←</span><span class="kbd">→</span> move</span><span class="keys"><span class="kbd">⇧</span>+ arrows resize</span><span class="keys"><span class="kbd">↵</span> drop</span></span>
+          <span class="sp"></span>
+          <button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-undo"/></svg>Undo<span class="kbd">⌘Z</span></button>
+          <span style="position:relative"><button class="btn" type="button" id="reset" aria-expanded="true" aria-controls="reset-pop">Reset to role default</button>
+            <div class="popover" id="reset-pop" role="dialog" aria-labelledby="rp-h" style="top:40px;right:0;width:380px">
+              <div style="padding:16px 16px 4px"><div class="t-head" id="rp-h">Reset to Bookkeeper v4?</div><p class="ink-2" style="margin-top:4px">You’ll lose these three changes:</p>
+                <ul class="ev" style="margin-top:8px"><li>Feeds moved under Due this week<span class="dl"></span><span class="v">now</span></li><li>Due this week resized to 4×2<span class="dl"></span><span class="v">now</span></li><li>Unreconciled accounts removed<span class="dl"></span><span class="v">Oct 3</span></li></ul>
+                <p class="t-cap" style="margin-top:8px">Widget filters, like the confidence band, are kept.</p></div>
+              <div class="dialog-foot" style="margin-top:12px"><span class="sp"></span><button class="btn" type="button">Keep editing</button><button class="btn btn--danger" type="button">Reset my home</button></div>
+            </div></span>
+          <button class="btn" type="button">Cancel</button>
+          <button class="btn btn--primary" type="button">Done</button>
+        </div>
+        <div class="edit-body" style="height:calc(1100px - 96px)">
+          <!-- Catalog -->
+          <aside class="catalog" aria-labelledby="cat-h">
+            <div class="catalog-head">
+              <div class="row row--between"><h2 class="t-head" id="cat-h">Add widgets</h2><span class="t-cap">Drag onto the grid, or press Add</span></div>
+              <label class="search" style="margin-top:12px"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="cat-q" placeholder="Search widgets" aria-label="Search widgets"><span class="kbd">/</span></label>
+            </div>
+            <div class="catalog-body" id="cat">
+              <div class="cat-group"><span>Work</span><span>4</span></div>
+              <article class="cat-card is-placed" data-k="my clients"><div class="cat-thumb" aria-hidden="true"><i class="b"></i><i></i><i class="s"></i><i></i><i class="s"></i></div><div><div class="t-head">My clients</div><p>Which of my clients is furthest from close?</p><div class="cat-card-foot"><span class="wg-lock"><svg class="ico" width="12" height="12" aria-hidden="true"><use href="#i-lock"/></svg>Required</span><span class="t-cap">On your home</span></div></div></article>
+              <article class="cat-card is-placed" data-k="due this week agenda"><div class="cat-thumb" aria-hidden="true"><i class="b"></i><i class="s"></i><i class="s"></i><i class="s"></i></div><div><div class="t-head">Due this week</div><p>What’s due today and this week?</p><div class="cat-card-foot"><span class="t-cap">On your home</span><button class="btn btn--quiet" type="button">Show me</button></div></div></article>
+              <article class="cat-card is-placed" data-k="needs your judgment ai"><div class="cat-thumb" aria-hidden="true"><i class="b"></i><span class="meter"><i class="on"></i><i class="on"></i><i class="part"></i><i></i><i></i></span><i class="s"></i></div><div><div class="t-head">Needs your judgment</div><p>What did the AI not get, across my clients?</p><div class="cat-card-foot"><span class="t-cap">On your home</span><button class="btn btn--quiet" type="button">Show me</button></div></div></article>
+              <article class="cat-card is-placed" data-k="waiting on clients requests"><div class="cat-thumb" aria-hidden="true"><i class="b"></i><i></i><i></i><i class="s"></i></div><div><div class="t-head">Waiting on clients</div><p>What am I waiting on, and does it block close?</p><div class="cat-card-foot"><span class="t-cap">On your home</span><button class="btn btn--quiet" type="button">Show me</button></div></div></article>
+              <div class="cat-group"><span>Close</span><span>2</span></div>
+              <article class="cat-card" data-k="unreconciled accounts reconcile"><div class="cat-thumb" aria-hidden="true"><i class="b"></i><i></i><i class="s"></i><i></i></div><div><div class="t-head">Unreconciled accounts</div><p>Which accounts still need reconciling, and how far off?</p><div class="cat-card-foot"><span class="size-chips"><span class="size-chip">S</span><span class="size-chip">M</span></span><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-plus"/></svg>Add</button></div></div></article>
+              <article class="cat-card is-placed" data-k="done for you automation"><div class="cat-thumb" aria-hidden="true"><i class="b"></i><i class="s"></i><i class="s"></i><i class="s"></i></div><div><div class="t-head">Done for you</div><p>What did the system do, and should I spot-check it?</p><div class="cat-card-foot"><span class="t-cap">On your home</span><button class="btn btn--quiet" type="button">Show me</button></div></div></article>
+              <div class="cat-group"><span>Connections</span><span>1</span></div>
+              <article class="cat-card is-placed" data-k="feeds connections plaid"><div class="cat-thumb" aria-hidden="true"><i class="b"></i><i class="s"></i></div><div><div class="t-head">Feeds &amp; connections</div><p>Is anything broken that will stop work?</p><div class="cat-card-foot"><span class="t-cap">Moving now</span><button class="btn btn--quiet" type="button">Show me</button></div></div></article>
+            </div>
+            <div class="catalog-foot">7 widgets your role can use. Widgets that need other permissions, like Close grid or Consolidated, aren’t listed.</div>
+          </aside>
+          <!-- Grid -->
+          <div class="edit-canvas">
+            <div class="dash-wrap">
+              <div class="dash-guides" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="dash is-editing" style="grid-auto-flow:row">
+                <!-- My clients · required -->
+                <section class="wg wg--primary is-required" style="--x:1;--w:8;--y:1;--h:4" aria-labelledby="w1">
+                  <div class="wg-head"><button class="wg-handle" type="button" aria-label="Move My clients"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-drag"/></svg></button><h3 class="wg-title" id="w1">My clients</h3><span class="wg-count">6</span><span class="wg-lock"><svg class="ico" width="12" height="12" aria-hidden="true"><use href="#i-lock"/></svg>Required</span>
+                    <div class="wg-act"><button class="wg-tool" type="button" aria-label="My clients settings"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-sliders"/></svg></button><span class="wg-tool" role="button" aria-disabled="true" tabindex="0" title="Required by Merit Management Group’s Bookkeeper layout" aria-label="Can’t remove. Required by your firm’s Bookkeeper layout"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-lock"/></svg></span></div></div>
+                  <div class="wg-body">
+                    <table class="tbl tbl-q tbl-q--flush" aria-label="My clients ranked by distance from close">
+                      <colgroup><col><col style="width:112px"><col style="width:60px"><col style="width:52px"><col style="width:76px"><col style="width:60px"><col style="width:96px"></colgroup>
+                      <thead><tr><th>Client</th><th>Step</th><th class="n">Review</th><th class="n">Unrec</th><th class="n">Requests</th><th>Due</th><th>Status</th></tr></thead>
+                      <tbody>
+                        <tr class="q-row is-attn"><td><span class="l1">Dorrian HVAC</span><span class="l2">C-105 · feed down 3 days</span></td><td><span class="meter" role="img" aria-label="Blocked at Review"><i class="bad"></i><i></i><i></i><i></i></span>Review</td><td class="n">58</td><td class="n">3</td><td class="n">1 · 5d</td><td class="tnum">Oct 20</td><td><span class="status status--blocked"><i class="pip pip--blocked"></i>Blocked</span></td></tr>
+                        <tr class="q-row"><td><span class="l1">Crystal Kitchen &amp; Bath</span><span class="l2">C-104</span></td><td><span class="meter" role="img" aria-label="Step 1 of 4"><i class="cur"></i><i></i><i></i><i></i></span>Review</td><td class="n">26</td><td class="n">1</td><td class="n">2 · 2d</td><td class="tnum neg b">Oct 16</td><td><span class="status status--overdue"><i class="pip pip--overdue"></i>Overdue</span></td></tr>
+                        <tr class="q-row"><td><span class="l1">Clive Power Equipment</span><span class="l2">C-102</span></td><td><span class="meter" role="img" aria-label="Step 1 of 4"><i class="cur"></i><i></i><i></i><i></i></span>Review</td><td class="n">41</td><td class="n">2</td><td class="n">3 · 6d</td><td class="tnum">Oct 21</td><td><span class="status status--risk"><i class="pip pip--risk"></i>At risk</span></td></tr>
+                        <tr class="q-row"><td><span class="l1">Swan Creek</span><span class="l2">C-107</span></td><td><span class="meter" role="img" aria-label="Step 2 of 4"><i class="on"></i><i class="cur"></i><i></i><i></i></span>Reconcile</td><td class="n">0</td><td class="n">1</td><td class="n">0</td><td class="tnum">Oct 21</td><td><span class="status status--track"><i class="pip pip--track"></i>On track</span></td></tr>
+                        <tr class="q-row"><td><span class="l1">Heritage Interiors</span><span class="l2">C-101</span></td><td><span class="meter" role="img" aria-label="Step 3 of 4"><i class="on"></i><i class="on"></i><i class="cur"></i><i></i></span>Check</td><td class="n">0</td><td class="n">0</td><td class="n">1 · 1d</td><td class="tnum">Oct 23</td><td><span class="status status--track"><i class="pip pip--track"></i>On track</span></td></tr>
+                        <tr class="q-row is-done"><td><span class="l1">Wild Rose</span><span class="l2">C-112</span></td><td><span class="meter" role="img" aria-label="All 4 steps"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>Ready</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="tnum">Oct 23</td><td><span class="status status--ready"><i class="pip pip--ready"></i>Ready</span></td></tr>
+                        <tr><td class="b" style="border-bottom:0">6 clients</td><td style="border-bottom:0"></td><td class="n b" style="border-top:1px solid var(--midnight);border-bottom:0">125</td><td class="n b" style="border-top:1px solid var(--midnight);border-bottom:0">7</td><td class="n b" style="border-top:1px solid var(--midnight);border-bottom:0">7</td><td style="border-bottom:0"></td><td style="border-bottom:0"></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="wg-foot"><span>Ranked by distance from close · 1 of 6 ready</span><a class="btn btn--primary" href="#" style="margin-left:auto">Start Dorrian HVAC<svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-right"/></svg></a></div>
+                  <span class="wg-resize" aria-hidden="true"></span>
+                </section>
+                <!-- Due this week · resizing -->
+                <section class="wg is-resizing" style="--x:9;--w:4;--y:1;--h:2" aria-labelledby="w2">
+                  <div class="wg-head"><button class="wg-handle" type="button" aria-label="Move Due this week"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-drag"/></svg></button><h3 class="wg-title" id="w2">Due this week</h3>
+                    <div class="wg-act"><span class="size-chips" role="group" aria-label="Size of Due this week"><button class="size-chip" type="button" aria-pressed="true">4×2</button><button class="size-chip" type="button" aria-pressed="false">4×4</button><button class="size-chip" type="button" aria-pressed="false">6×4</button></span></div></div>
+                  <div class="wg-body"><ul class="agenda">
+                    <li><span class="d neg">Today</span><span>Crystal K&amp;B close<span class="l2">3 days overdue</span></span><span class="pip pip--overdue"></span></li>
+                    <li><span class="d">Tue</span><span>Dorrian HVAC close</span><span class="pip pip--blocked"></span></li>
+                    <li><span class="d">Wed</span><span>Clive close · Swan Creek rec</span><span class="pip pip--risk"></span></li>
+                  </ul></div>
+                  <span class="wg-resize" aria-hidden="true"></span>
+                </section>
+                <!-- Feeds · drop target + lifted -->
+                <div class="wg-drop" style="--x:9;--w:4;--y:3;--h:2">Drop Feeds here · 4×2</div>
+                <section class="wg is-lifted" style="--x:9;--w:4;--y:3;--h:2;transform:translate(-56px,-28px) rotate(-.6deg)" aria-labelledby="w3" aria-grabbed="true">
+                  <div class="wg-head"><button class="wg-handle" type="button" aria-label="Moving Feeds and connections"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-drag"/></svg></button><h3 class="wg-title" id="w3">Feeds &amp; connections</h3><span class="wg-count">1 broken</span></div>
+                  <div class="wg-body wg-body--pad"><span class="status status--blocked"><i class="pip pip--blocked"></i>Dorrian HVAC</span><p class="ink-2" style="margin-top:4px">Bank of Iowa ••4471 · disconnected 3 days</p><div class="btn-row" style="margin-top:12px"><button class="btn btn--primary" type="button">Reconnect</button><button class="btn" type="button">Ask client</button></div></div>
+                </section>
+                <!-- Needs your judgment -->
+                <section class="wg" style="--x:1;--w:6;--y:5;--h:2" aria-labelledby="w4">
+                  <div class="wg-head"><button class="wg-handle" type="button" aria-label="Move Needs your judgment"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-drag"/></svg></button><h3 class="wg-title" id="w4">Needs your judgment</h3><span class="wg-count">125</span>
+                    <div class="wg-act"><button class="wg-tool" type="button" aria-label="Settings"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-sliders"/></svg></button><button class="wg-tool" type="button" aria-label="Remove Needs your judgment"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-x"/></svg></button></div></div>
+                  <div class="wg-body"><div class="minibands">
+                    <div><span class="eyebrow">Decide</span><span class="v">19</span><span class="t-cap">Dorrian 9 · Clive 6 · Crystal 4</span></div>
+                    <div><span class="eyebrow">Check</span><span class="v">31</span><span class="t-cap">Dorrian 14 · Clive 12 · Crystal 5</span></div>
+                    <div><span class="eyebrow">Ready</span><span class="v">75</span><span class="t-cap">Preselected for batch</span></div>
+                  </div></div>
+                  <div class="wg-foot"><span>19 + 31 + 75 = 125 to review</span><a class="btn btn--quiet" href="#">Start with Decide</a></div>
+                  <span class="wg-resize" aria-hidden="true"></span>
+                </section>
+                <!-- Waiting on clients -->
+                <section class="wg" style="--x:7;--w:6;--y:5;--h:2" aria-labelledby="w5">
+                  <div class="wg-head"><button class="wg-handle" type="button" aria-label="Move Waiting on clients"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-drag"/></svg></button><h3 class="wg-title" id="w5">Waiting on clients</h3><span class="wg-count">7</span><span class="wg-meta">2 block close</span>
+                    <div class="wg-act"><button class="wg-tool" type="button" aria-label="Settings"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-sliders"/></svg></button><button class="wg-tool" type="button" aria-label="Remove Waiting on clients"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-x"/></svg></button></div></div>
+                  <div class="wg-body"><table class="tbl tbl-q tbl-q--compact tbl-q--flush"><colgroup><col><col style="width:64px"><col style="width:104px"></colgroup><tbody>
+                    <tr class="q-row is-attn"><td><span class="l1">Venmo · J. Ortega (4,812.00)</span><span class="l2">Clive Power Equipment</span></td><td class="tnum neg b">6 days</td><td><span class="tag tag--neg">Blocks close</span></td></tr>
+                    <tr class="q-row"><td><span class="l1">September bank statement</span><span class="l2">Dorrian HVAC</span></td><td class="tnum b">5 days</td><td><span class="tag tag--neg">Blocks close</span></td></tr>
+                    <tr class="q-row"><td><span class="l1">3 card charges at Menards</span><span class="l2">Crystal Kitchen &amp; Bath</span></td><td class="tnum">2 days</td><td></td></tr>
+                  </tbody></table></div>
+                  <span class="wg-resize" aria-hidden="true"></span>
+                </section>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="frame-cap"><span>User edit mode · 1440 × 1100. Feeds is mid-drag; Due this week is mid-resize; My clients can’t be removed.</span><span>Grid 12 × 136px rows · guides in Sky</span></div>
+  <div class="anno">
+    <div><b>Live, in place</b><p>Customize doesn’t open a separate editor. Figures stay real and keep refreshing, so you arrange the home you’ll actually use.</p></div>
+    <div><b>Only what you may see</b><p>The catalog is filtered by permission before it renders. There’s no “locked” card teasing a widget you can’t use; the footer says the rest exists.</p></div>
+    <div><b>Required means locked</b><p>A required widget can move and resize under Add &amp; move, but its remove control becomes a lock with the reason. Removing it from the layout JSON reinserts it.</p></div>
+    <div><b>Snap, don’t stretch</b><p>Resize offers only the sizes the widget declares. The corner handle and the size chips do the same thing; the chips are the keyboard path.</p></div>
+  </div>
+
+  <!-- ===== ADMIN: EDIT ROLE LAYOUT + PUBLISH ===== -->
+  <div class="board-h" style="margin-top:56px"><div><div class="eyebrow">S8<span class="sl">//</span>IA-SPEC §5.1–5.3</div><h2 class="t-title" style="margin-top:8px">Edit role layout, then publish</h2><p>Jordan Smith, accounting manager, holds the layouts permission. She picks a role and a surface, previews as a real bookkeeper, then publishes v5. The dialog states the consequence before the button does: four people lose their personal layouts.</p></div><span class="pg">S8.2</span></div>
+
+  <div class="frame" style="height:960px">
+    <div class="app app--frame app--mini" data-context="workspace" style="height:960px">
+      <aside class="rail" aria-label="Primary"><div class="rail-logo"><img src="assets/merit-icon.png" alt="Merit" width="22" height="20"></div>
+        <nav class="rail-nav"><a class="rail-icon" href="#" aria-label="Home"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-grid"/></svg></a><a class="rail-icon" href="#" aria-current="page" aria-label="Settings · Dashboard layouts"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-sliders"/></svg></a></nav>
+        <div class="rail-foot" style="padding:16px 0;display:grid;place-items:center"><span class="avatar">JS</span></div></aside>
+      <header class="bar">
+        <button class="ctx" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-grid"/></svg><span class="ctx-name">Merit Management Group</span><span class="ctx-meta">Workspace</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg></button>
+        <span class="crumbs">Settings<span class="sl">//</span><b>Dashboard layouts</b></span>
+      </header>
+      <div class="main" style="overflow:hidden">
+        <div class="editbar editbar--admin" role="toolbar" aria-label="Edit role layout">
+          <span class="eyebrow">Edit role layout</span>
+          <button class="sel" type="button" aria-haspopup="listbox"><span>Role</span>Bookkeeper<svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg></button>
+          <button class="sel" type="button" aria-haspopup="listbox"><span>Surface</span>Workspace home<svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg></button>
+          <button class="sel" type="button" aria-haspopup="listbox"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-eye"/></svg><span>Preview as</span>Dana Lee<svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg></button>
+          <span class="sp"></span>
+          <button class="btn btn--dark" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-history"/></svg>Version history</button>
+          <button class="btn btn--primary" type="button" aria-expanded="true" aria-controls="pub">Publish…</button>
+        </div>
+        <div class="page" style="padding-top:16px">
+          <div class="inline-notice inline-notice--info"><div><b>MeritBooks published a new Bookkeeper default on Oct 12.</b> Your firm’s layout hasn’t changed.</div><span class="sp"></span><button class="btn btn--quiet" type="button">Compare</button><button class="btn btn--quiet" type="button">Adopt</button><button class="btn btn--quiet" type="button">Dismiss</button></div>
+          <div class="dash is-editing" style="margin-top:16px;--row:96px">
+            <div class="wg wg--primary is-required" style="--w:8;--h:3"><div class="wg-head"><span class="wg-handle"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-drag"/></svg></span><h3 class="wg-title">My clients</h3><span class="wg-count">6</span><span class="wg-lock"><svg class="ico" width="12" height="12" aria-hidden="true"><use href="#i-lock"/></svg>Required</span></div><div class="wg-body wg-body--pad ink-2">Dana’s six clients, ranked. Dorrian HVAC first.</div></div>
+            <div class="wg is-required" style="--w:4;--h:3"><div class="wg-head"><span class="wg-handle"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-drag"/></svg></span><h3 class="wg-title">Feeds &amp; connections</h3><span class="wg-lock"><svg class="ico" width="12" height="12" aria-hidden="true"><use href="#i-lock"/></svg>Required</span></div><div class="wg-body wg-body--pad ink-2">New in v5: required, top right.</div></div>
+            <div class="wg" style="--w:6;--h:2"><div class="wg-head"><span class="wg-handle"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-drag"/></svg></span><h3 class="wg-title">Needs your judgment</h3><span class="wg-lock"><svg class="ico" width="12" height="12" aria-hidden="true"><use href="#i-lock"/></svg>Required</span></div></div>
+            <div class="wg" style="--w:6;--h:2"><div class="wg-head"><span class="wg-handle"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-drag"/></svg></span><h3 class="wg-title">Waiting on clients</h3></div></div>
+          </div>
+        </div>
+
+        <!-- Publish dialog -->
+        <div class="scrim" style="padding-top:56px">
+          <div class="dialog pub" id="pub" role="dialog" aria-modal="true" aria-labelledby="pub-h">
+            <div class="dialog-head"><div class="eyebrow">Bookkeeper<span class="sl">//</span>Workspace home<span class="sl">//</span>v4 → v5</div><h3 class="t-section" id="pub-h" style="margin-top:4px">Publish the Bookkeeper layout</h3></div>
+            <div class="pub-grid">
+              <div class="pub-main">
+                <h4>Lock level</h4>
+                <div class="opt-cards" role="radiogroup" aria-label="Lock level">
+                  <label class="opt-card"><input type="radio" name="lock"><span class="t-head">Locked</span><p>Collapse and filter only. No add, move or resize.</p></label>
+                  <label class="opt-card"><input type="radio" name="lock" checked><span class="t-head">Add &amp; move</span><p>Add, move, resize, remove anything not required.</p></label>
+                  <label class="opt-card"><input type="radio" name="lock"><span class="t-head">Unlocked</span><p>Everything except removing required widgets.</p></label>
+                </div>
+                <h4>Required widgets</h4>
+                <div class="req">
+                  <label class="check"><input type="checkbox" checked disabled><i></i>My clients <span class="t-cap">· primary</span></label>
+                  <label class="check"><input type="checkbox"><i></i>Due this week</label>
+                  <label class="check"><input type="checkbox" checked><i></i>Feeds &amp; connections <span class="tag tag--ai">New</span></label>
+                  <label class="check"><input type="checkbox"><i></i>Waiting on clients</label>
+                  <label class="check"><input type="checkbox" checked><i></i>Needs your judgment</label>
+                  <label class="check"><input type="checkbox"><i></i>Done for you</label>
+                </div>
+                <h4>Apply to</h4>
+                <div class="apply" role="radiogroup" aria-label="Apply to">
+                  <label class="opt-card"><input type="radio" name="apply"><span class="t-head">New users only</span><p>6 current bookkeepers keep what they have. Required widgets are still added.</p></label>
+                  <label class="opt-card"><input type="radio" name="apply" checked><span class="t-head">Everyone</span><p><b>Resets 4 personalized layouts</b> of 6 bookkeepers. They’re told on their next visit.</p></label>
+                </div>
+                <div class="affected" aria-label="Affected people"><span class="tag">Dana Lee</span><span class="tag">Sam Kovac</span><span class="tag">Priya Natarajan</span><span class="tag">Luis Ortiz</span></div>
+                <label class="field" style="margin-top:16px"><span class="field-label">Release note · shown to everyone affected</span><textarea class="textarea" rows="2">Feeds is now required and sits top right, so a broken bank connection is the first thing you see.</textarea></label>
+              </div>
+              <aside class="pub-side" aria-labelledby="vh-h">
+                <h4 id="vh-h">Version history</h4>
+                <ul class="versions">
+                  <li><span class="vno">5</span><span><span class="b">Draft</span><span class="l2">Today · Jordan Smith</span></span><span class="tag tag--ai">This</span></li>
+                  <li class="is-current"><span class="vno">4</span><span><span class="b">Current</span><span class="l2">Oct 2 · Jordan Smith · new users only</span></span><span></span></li>
+                  <li><span class="vno">3</span><span><span class="b">Sep 14</span><span class="l2">Everyone · reset 5 layouts</span></span><button class="btn btn--quiet" type="button">Roll back</button></li>
+                  <li><span class="vno">2</span><span><span class="b">Aug 30</span><span class="l2">Added Done for you</span></span><button class="btn btn--quiet" type="button">Roll back</button></li>
+                  <li><span class="vno">1</span><span><span class="b">Aug 1</span><span class="l2">MeritBooks system template</span></span><button class="btn btn--quiet" type="button">Roll back</button></li>
+                </ul>
+                <p class="t-cap" style="margin-top:12px">Rolling back publishes the old version as v6. Nothing is deleted.</p>
+              </aside>
+            </div>
+            <div class="dialog-foot"><span class="t-cap" id="pub-sum">Add &amp; move · 3 required · everyone · 4 layouts reset</span><span class="sp"></span><button class="btn" type="button">Cancel</button><button class="btn btn--primary" type="button" id="pub-btn">Publish v5 to everyone</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="frame-cap"><span>Admin mode · Publish dialog open over a preview of the layout as Dana Lee sees it.</span><span>Dialog 880px · version history on Canvas</span></div>
+</main>
+
+<script>
+(function(){
+  /* catalog filter */
+  var q=document.getElementById('cat-q');
+  q.addEventListener('input',function(){var t=q.value.trim().toLowerCase();
+    document.querySelectorAll('#cat .cat-card').forEach(function(c){c.style.display=(!t||c.dataset.k.indexOf(t)>-1||c.textContent.toLowerCase().indexOf(t)>-1)?'':'none'});});
+  /* size chips */
+  document.querySelectorAll('.size-chips').forEach(function(g){g.addEventListener('click',function(e){var b=e.target.closest('button.size-chip');if(!b)return;
+    g.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed','false')});b.setAttribute('aria-pressed','true');});});
+  /* publish summary follows the choices */
+  function upd(){var lock=['Locked','Add & move','Unlocked'][[].indexOf.call(document.getElementsByName('lock'),[].filter.call(document.getElementsByName('lock'),function(r){return r.checked})[0])];
+    var req=document.querySelectorAll('.req input:checked').length;
+    var every=document.getElementsByName('apply')[1].checked;
+    document.getElementById('pub-sum').textContent=lock+' · '+req+' required · '+(every?'everyone · 4 layouts reset':'new users only · no layouts reset');
+    document.getElementById('pub-btn').textContent=every?'Publish v5 to everyone':'Publish v5 for new users';
+    document.querySelector('.affected').style.display=every?'':'none';}
+  document.querySelectorAll('.pub input').forEach(function(i){i.addEventListener('change',upd)});
+})();
+</script>
+</body></html>

@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=1440">
+<title>S7 · Context switcher and shell states · MeritBooks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="system.css">
+<style>
+/* Board layout only — not part of the system */
+body{min-width:1440px}
+.sheet-top{display:flex;align-items:center;gap:24px;height:48px;padding:0 48px;background:var(--midnight);color:var(--grey-300)}
+.sheet-top img{height:24px;width:auto}
+.sheet-top nav{margin-left:auto;display:flex;gap:4px}
+.sheet-top nav a{height:32px;display:inline-flex;align-items:center;padding:0 12px;color:var(--grey-300);font-weight:500}
+.sheet-top nav a:hover,.sheet-top nav a[aria-current=page]{background:var(--night-800);color:var(--warm)}
+.sheet{padding:0 48px 96px}
+.board-h{display:flex;justify-content:space-between;align-items:flex-end;padding:40px 0 16px;border-bottom:1px solid var(--electric)}
+.board-h p{margin-top:8px;color:var(--ink-2);max-width:72ch}
+.board-h .pg{font-variant-numeric:tabular-nums}
+.frame{border:1px solid var(--line-2);overflow:hidden;position:relative;margin-top:24px;background:var(--warm)}
+.frame-cap{display:flex;justify-content:space-between;margin-top:8px;font-size:12px;line-height:16px;color:var(--ink-3)}
+.quad{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:8px}
+.quad .frame{height:420px}
+.quad-h{display:flex;align-items:baseline;gap:12px;margin-top:32px}
+.quad-h .t-section{color:var(--ink)}
+.anno{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:24px}
+.anno div{border-top:1px solid var(--line-2);padding-top:12px}
+.anno b{display:block;font-weight:600;margin-bottom:4px}
+.anno p{color:var(--ink-2)}
+.dec td,.dec th{padding:12px 12px 12px 0;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
+.dec th{font:500 12px/16px var(--f-text);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);border-bottom:1px solid var(--electric)}
+.dec td{color:var(--ink-2)} .dec td:first-child{color:var(--ink);font-weight:600}
+.chipsw{display:inline-block;width:12px;height:12px;vertical-align:-1px;margin-right:6px;border:1px solid var(--line-2)}
+.steps4{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);background:var(--white)}
+.step{padding:12px 16px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:4px}
+.step:last-child{border-right:0}
+.step.is-cur{background:var(--sky);box-shadow:inset 0 -2px var(--electric)}
+.step .v{font:600 20px/28px var(--f-text);font-variant-numeric:tabular-nums}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></symbol>
+<symbol id="i-down" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></symbol>
+<symbol id="i-right" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></symbol>
+<symbol id="i-layers" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2 14 5 8 8 2 5Z"/><path d="M2 8.2l6 3 6-3"/><path d="M2 11.2l6 3 6-3"/></symbol>
+<symbol id="i-grid" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/></symbol>
+<symbol id="i-pin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M5.5 2h5l-.7 4.2L12 8.5H4l2.2-2.3Z"/><path d="M8 8.5V14"/></symbol>
+<symbol id="i-lock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="7" width="9" height="6.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></symbol>
+<symbol id="i-drag" viewBox="0 0 16 16" fill="currentColor"><rect x="5" y="3" width="2" height="2"/><rect x="9" y="3" width="2" height="2"/><rect x="5" y="7" width="2" height="2"/><rect x="9" y="7" width="2" height="2"/><rect x="5" y="11" width="2" height="2"/><rect x="9" y="11" width="2" height="2"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h12M2 11h12"/><rect x="9" y="3" width="2.5" height="4" fill="#fff"/><rect x="4.5" y="9" width="2.5" height="4" fill="#fff"/></symbol>
+<symbol id="i-x" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></symbol>
+<symbol id="i-receipt" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h8v12l-2-1.2L8 14l-2-1.2L4 14Z"/><path d="M6 6h4M6 9h4"/></symbol>
+<symbol id="i-bill" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h5.5L12 4.5V14H4Z"/><path d="M6 7.5h4M6 10.5h3"/></symbol>
+<symbol id="i-none" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"><rect x="3" y="3" width="10" height="10"/></symbol>
+<symbol id="i-eye" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></symbol>
+<symbol id="i-undo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 3.5 2.5 6.5l3 3"/><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7"/></symbol>
+<symbol id="i-plug" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2v3.5M10 2v3.5M4 5.5h8v2a4 4 0 0 1-8 0Z"/><path d="M8 11.5V14"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></symbol>
+<symbol id="i-flag" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3.5 14V2.5h8l-1.5 3 1.5 3h-8"/></symbol>
+<symbol id="i-ask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 3h11v8H7l-3 2.5V11H2.5Z"/></symbol>
+<symbol id="i-resize" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 3h4v4M7 13H3V9M13 3 3 13"/></symbol>
+<symbol id="i-history" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9"/><path d="M2.5 2.5v2.5H5"/><path d="M8 5v3.2l2 1.3"/></symbol>
+<symbol id="i-book" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 2.5h7.5L13 5v8.5H3Z"/><path d="M5.5 6.5h5M5.5 9h5M5.5 11.5h3"/></symbol>
+</defs></svg>
+
+<a class="skip" href="#main">Skip to content</a>
+<header class="sheet-top on-dark">
+  <img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24">
+  <span class="eyebrow" style="color:var(--slate)">MeritBooks<span class="sl">//</span>Design System v2</span>
+  <nav aria-label="Design system pages"><a href="index.html">Index</a><a href="components.html">Components</a><a href="S6-owner-home.html">S6 Owner</a><a href="S6b-cfo-home.html">S6b CFO</a><a href="S6c-controller-home.html">S6c Controller</a><a href="S7-switcher-and-contexts.html" aria-current="page">S7 Switcher</a><a href="S8-dashboard-edit.html">S8 Edit</a><a href="S9-platform-console-home.html">S9 Platform</a></nav>
+</header>
+
+<main id="main" class="sheet">
+  <div class="board-h"><div><div class="eyebrow">S7<span class="sl">//</span>IA-SPEC §3.1, §3.3</div><h1 class="t-title" style="margin-top:8px">Whose books am I in?</h1><p>The context chip answers it on every screen, and <span class="kbd">⌘</span><span class="kbd">J</span> changes it. Erin Vance, controller, all-client scope, holds two consolidation groups. She is on Clive Power Equipment’s home and has opened the switcher.</p></div><span class="pg">S7</span></div>
+
+  <!-- ===== Open switcher ===== -->
+  <div class="frame" style="height:780px">
+    <div class="app app--frame density-cockpit" data-context="client" style="height:780px">
+      <aside class="rail" aria-label="Primary">
+        <div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"><span class="prod">BOOKS</span></div>
+        <nav class="rail-nav">
+          <div class="rail-group">Home</div>
+          <a class="rail-link" href="#" aria-current="page">Client home</a>
+          <a class="rail-link" href="#">To review<span class="count">41</span></a>
+          <a class="rail-link" href="#">Requests<span class="count">3</span></a>
+          <a class="rail-link" href="#">Close<span class="count">7/12</span></a>
+          <div class="rail-group">Payables</div>
+          <a class="rail-link" href="#">Bills<span class="count">18</span></a>
+          <a class="rail-link" href="#">Pay runs</a>
+          <a class="rail-link" href="#">Vendors</a>
+          <div class="rail-group">Banking &amp; cash</div>
+          <a class="rail-link" href="#">Bank feed</a>
+          <a class="rail-link" href="#">Reconciliation<span class="count">2</span></a>
+          <a class="rail-link" href="#">Cash position</a>
+          <div class="rail-group">Accounting</div>
+          <a class="rail-link" href="#">Journal entries</a>
+          <a class="rail-link" href="#">Chart of accounts</a>
+          <div class="rail-group">Reports</div>
+          <a class="rail-link" href="#">Reports</a>
+        </nav>
+        <div class="rail-foot"><div class="rail-user"><span class="avatar">EV</span><span>Erin Vance<small>Controller</small></span></div></div>
+      </aside>
+      <header class="bar">
+        <button class="ctx" type="button" id="ctx" aria-haspopup="dialog" aria-expanded="true" aria-controls="switcher"><i class="pip pip--open" aria-hidden="true"></i><span class="ctx-name">Clive Power Equipment</span><span class="ctx-meta tnum">C-102 · Sep open</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg><span class="kbd">⌘J</span></button>
+        <span class="crumbs"><b>Client home</b></span>
+        <button class="cmdk" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><span>Jump to vendor, account, JE…</span><span class="kbd">⌘K</span></button>
+        <span class="sync"><i aria-hidden="true"></i>Synced 7:42 AM</span>
+      </header>
+      <div class="main">
+        <div class="ctxline"><span>Mon Oct 19</span><span class="sl">//</span><span>September close</span><span class="sl">//</span><span>Day 12 of 15</span><span class="sl">//</span><b class="warn">Due Oct 21 · at risk</b><span class="sp"></span><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-sliders"/></svg>Customize</button></div>
+        <div class="page">
+          <div class="steps4" role="tablist" aria-label="Books review">
+            <div class="step is-cur"><span class="eyebrow">1 Review</span><span class="v">41</span><span class="t-cap">to review · 6 to decide</span></div>
+            <div class="step"><span class="eyebrow">2 Reconcile</span><span class="v">2</span><span class="t-cap">accounts off · 1,240.00</span></div>
+            <div class="step"><span class="eyebrow">3 Check</span><span class="v">4</span><span class="t-cap">exceptions open</span></div>
+            <div class="step"><span class="eyebrow">4 Close</span><span class="v">7 <span class="ink-3" style="font-weight:400">of 12</span></span><span class="t-cap">tasks done · 3 auto-verified</span></div>
+          </div>
+          <div class="bands" style="margin-top:24px">
+            <div class="band-tab" aria-selected="true"><span class="eyebrow">Decide</span><span class="v">6</span><span class="t-cap">Under 70, or the AI has a question</span></div>
+            <div class="band-tab"><span class="eyebrow">Check</span><span class="v">12</span><span class="t-cap">70–89 · one look each</span></div>
+            <div class="band-tab"><span class="eyebrow">Ready</span><span class="v">23</span><span class="t-cap">90 and up · preselected</span></div>
+          </div>
+          <table class="tbl tbl-q" style="margin-top:16px;border-top:1px solid var(--line)">
+            <colgroup><col style="width:72px"><col><col style="width:220px"><col style="width:140px"><col style="width:96px"><col style="width:120px"></colgroup>
+            <tbody>
+              <tr class="q-row is-attn"><td class="tnum ink-2">Oct 14</td><td><span class="l1">Venmo · J. Ortega</span><span class="l2">VENMO PAYMENT 1023884</span></td><td><span class="l1 warn">AI asks: wages or a subcontractor?</span></td><td><span class="match match--none">No match</span></td><td><span class="conf conf--lo"><span class="meter"><i class="on"></i><i class="part"></i><i></i><i></i><i></i></span><b>38</b></span></td><td class="n">(4,812.00)</td></tr>
+              <tr class="q-row"><td class="tnum ink-2">Oct 9</td><td><span class="l1">Amazon Business</span><span class="l2">AMZN Mktp US*2K4T19</span></td><td><span class="l1"><span class="code">6420</span>Shop supplies</span></td><td><span class="match match--none">No match</span></td><td><span class="conf conf--lo"><span class="meter"><i class="on"></i><i class="on"></i><i class="part"></i><i></i><i></i></span><b>58</b></span></td><td class="n">(642.18)</td></tr>
+              <tr class="q-row"><td class="tnum ink-2">Oct 11</td><td><span class="l1">Casey’s #2231</span><span class="l2">CASEYS GEN STORE 2231 CLIVE</span></td><td><span class="l1"><span class="code">6520</span>Fuel</span></td><td><span class="match match--none">No match</span></td><td><span class="conf conf--lo"><span class="meter"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span><b>63</b></span></td><td class="n">(88.41)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- The switcher -->
+    <div class="popover" id="switcher" role="dialog" aria-label="Switch context" style="top:52px;left:248px;width:480px">
+      <div class="popover-head"><svg class="ico ink-3" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><input id="sw-q" type="search" placeholder="Find a client by name, number or code" aria-label="Find a client" autocomplete="off"><span class="kbd">Esc</span></div>
+      <ul class="popover-list" role="listbox" id="sw-list" style="max-height:620px">
+        <li class="popover-item" role="option" aria-selected="false" data-k="merit management group workspace"><svg class="ico ink-2" width="16" height="16" aria-hidden="true"><use href="#i-grid"/></svg><span><span class="b">Merit Management Group</span> <span class="ink-3">· Workspace</span></span><span class="r">13 clients</span></li>
+        <li class="popover-group" role="presentation"><span>Recent</span></li>
+        <li class="popover-item" role="option" aria-selected="false" data-k="clive power equipment c-102 cpe"><i class="pip pip--risk" aria-hidden="true"></i><span>Clive Power Equipment <span class="ink-3 tnum">C-102</span></span><span class="r"><span class="tag">You are here</span></span></li>
+        <li class="popover-item" role="option" aria-selected="false" data-k="dorrian hvac c-105 dor"><i class="pip pip--blocked" aria-hidden="true"></i><span>Dorrian HVAC <span class="ink-3 tnum">C-105</span></span><span class="r"><span class="tnum">58 open</span><span class="neg b">Blocked</span></span></li>
+        <li class="popover-item" role="option" aria-selected="false" data-k="merit management group consolidated"><svg class="ico blue" width="16" height="16" aria-hidden="true"><use href="#i-layers"/></svg><span>Merit Management Group — Consolidated</span><span class="r">9 clients</span></li>
+        <li class="popover-group" role="presentation"><span>Pinned</span></li>
+        <li class="popover-item" role="option" aria-selected="false" data-k="merit management group llc c-100 own books mmg"><i class="pip pip--track" aria-hidden="true"></i><span>Merit Management Group LLC <span class="ink-3 tnum">C-100</span></span><span class="r"><span class="ctx-tag ctx-tag--own">Own books</span><span class="tnum">12 open</span></span></li>
+        <li class="popover-item" role="option" aria-selected="false" data-k="heartland heating cooling c-103 hhc"><i class="pip pip--track" aria-hidden="true"></i><span>Heartland Heating &amp; Cooling <span class="ink-3 tnum">C-103</span></span><span class="r tnum">9 open</span></li>
+        <li class="popover-group" role="presentation"><span>My clients · reviewer</span><span>3</span></li>
+        <li class="popover-item" role="option" aria-selected="true" data-k="crystal kitchen bath c-104 ckb"><i class="pip pip--overdue" aria-hidden="true"></i><span>Crystal Kitchen &amp; Bath <span class="ink-3 tnum">C-104</span></span><span class="r"><span class="tnum">26 open</span><span class="neg b">Overdue</span></span></li>
+        <li class="popover-item" role="option" aria-selected="false" data-k="swan creek c-107 swc"><i class="pip pip--track" aria-hidden="true"></i><span>Swan Creek <span class="ink-3 tnum">C-107</span></span><span class="r tnum">18 open</span></li>
+        <li class="popover-item" role="option" aria-selected="false" data-k="wild rose c-112 wrs"><i class="pip pip--ready" aria-hidden="true"></i><span>Wild Rose <span class="ink-3 tnum">C-112</span></span><span class="r pos b">Ready for review</span></li>
+        <li class="popover-group" role="presentation"><span>All clients</span><span>13 · type to filter</span></li>
+        <li class="popover-item" role="option" aria-selected="false" data-k="aim c-111"><i class="pip pip--ready" aria-hidden="true"></i><span>AIM <span class="ink-3 tnum">C-111</span></span><span class="r pos">Ready</span></li>
+        <li class="popover-item" role="option" aria-selected="false" data-k="artistry homes c-110 art"><i class="pip pip--track" aria-hidden="true"></i><span>Artistry Homes <span class="ink-3 tnum">C-110</span></span><span class="r tnum">31 open</span></li>
+        <li class="popover-group" role="presentation"><span>Consolidated</span><span>2 groups you hold</span></li>
+        <li class="popover-item" role="option" aria-selected="false" data-k="merit management group consolidated"><svg class="ico blue" width="16" height="16" aria-hidden="true"><use href="#i-layers"/></svg><span>Merit Management Group — Consolidated<span class="l2">9 clients · eliminations on · manage</span></span><span class="r"><span class="tag tag--solid">Read-only</span></span></li>
+        <li class="popover-item" role="option" aria-selected="false" data-k="hvac companies combined"><svg class="ico blue" width="16" height="16" aria-hidden="true"><use href="#i-layers"/></svg><span>HVAC companies — Combined<span class="l2">Heartland · Dorrian · Metro · view</span></span><span class="r"><span class="tag tag--solid">Read-only</span></span></li>
+      </ul>
+      <div class="popover-foot"><span class="keys"><span class="kbd">↑</span><span class="kbd">↓</span> move</span><span class="keys"><span class="kbd">↵</span> open</span><span class="keys"><span class="kbd">Esc</span> close</span><span class="sp"></span><span>Keeps you on Client home</span></div>
+    </div>
+  </div>
+  <div class="frame-cap"><span>Open state, 1344 × 780. Type to filter, or use the arrow keys. Crystal Kitchen &amp; Bath is under the keyboard cursor.</span><span>Popover 480px · rows 40px</span></div>
+
+  <div class="anno">
+    <div><b>Order</b><p>Workspace first, then the last five recents, then Pinned, My clients, All clients (only with all-client scope), Consolidated (only groups you hold). The Platform section exists for platform staff only.</p></div>
+    <div><b>Every row says how it’s going</b><p>Close-status pip plus open-item count, so the switcher is also a triage list. Own books carry their tag here too, before you switch.</p></div>
+    <div><b>Keeps your place</b><p>Switch from Bank feed and you land on the new client’s Bank feed. If that page doesn’t exist there (say, in a consolidated view), you land on its home.</p></div>
+    <div><b>Never authority</b><p>The chosen context is a hint. The server checks access on every request. A group row only appears when you can open every member.</p></div>
+  </div>
+
+  <!-- ===== Four states ===== -->
+  <div class="board-h" style="margin-top:48px"><div><div class="eyebrow">S7<span class="sl">//</span>Shell states</div><h2 class="t-title" style="margin-top:8px">Four states, side by side</h2><p>Same shell, same chip, same rail. What changes is the bar, and one mark that belongs to the meaning of the state. Each one stays readable at a glance from across the room.</p></div><span class="pg">S7.2</span></div>
+
+  <div class="quad">
+    <!-- 1 Client -->
+    <div>
+      <div class="quad-h"><span class="outline-num">1</span><h3 class="t-section">Client books</h3><span class="t-cap">Midnight bar · the working default</span></div>
+      <div class="frame">
+        <div class="app app--frame" data-context="client" style="height:420px">
+          <aside class="rail"><div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"></div>
+            <nav class="rail-nav"><div class="rail-group">Home</div><a class="rail-link" href="#">Client home</a><a class="rail-link" href="#" aria-current="page">To review<span class="count">41</span></a><a class="rail-link" href="#">Requests<span class="count">3</span></a><div class="rail-group">Banking &amp; cash</div><a class="rail-link" href="#">Bank feed</a><a class="rail-link" href="#">Reconciliation</a></nav></aside>
+          <header class="bar"><button class="ctx" type="button"><i class="pip pip--open" aria-hidden="true"></i><span class="ctx-name">Clive Power Equipment</span><span class="ctx-meta tnum">C-102 · Sep open</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg></button></header>
+          <div class="main"><div class="ctxline"><span>Mon Oct 19</span><span class="sl">//</span><span>Day 12 of 15</span><span class="sl">//</span><b>41 to review</b></div>
+            <div class="page" style="padding-top:16px"><table class="tbl tbl-q tbl-q--flush"><colgroup><col><col style="width:64px"><col style="width:96px"></colgroup><tbody>
+              <tr class="q-row is-cursor"><td><span class="l1">Sunbelt Rentals</span><span class="l2"><span class="code">5230</span>Equipment rental</span></td><td><span class="conf"><b>74</b></span></td><td class="n">(3,184.62)</td></tr>
+              <tr class="q-row"><td><span class="l1">MidAmerican Energy</span><span class="l2"><span class="code">6230</span>Utilities</span></td><td><span class="conf"><b>81</b></span></td><td class="n">(1,962.33)</td></tr>
+              <tr class="q-row"><td><span class="l1">Ferguson Enterprises</span><span class="l2"><span class="code">5110</span>Parts inventory</span></td><td><span class="conf"><b>97</b></span></td><td class="n">(7,412.90)</td></tr>
+            </tbody></table></div></div>
+        </div>
+      </div>
+    </div>
+    <!-- 2 Own books -->
+    <div>
+      <div class="quad-h"><span class="outline-num">2</span><h3 class="t-section">Tenant’s own books</h3><span class="t-cap">The bar takes the firm’s own colour</span></div>
+      <div class="frame">
+        <div class="app app--frame" data-context="own" style="height:420px">
+          <aside class="rail"><div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"></div>
+            <nav class="rail-nav"><div class="rail-group">Home</div><a class="rail-link" href="#">Client home</a><a class="rail-link" href="#">To review<span class="count">12</span></a><div class="rail-group">Receivables</div><a class="rail-link" href="#" aria-current="page">Invoices<span class="count">9</span></a><a class="rail-link" href="#">Customers</a></nav></aside>
+          <header class="bar"><button class="ctx" type="button"><i class="pip pip--open" aria-hidden="true"></i><span class="ctx-name">Merit Management Group LLC</span><span class="ctx-tag ctx-tag--own">Own books</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg></button></header>
+          <div class="main"><div class="ctxline"><span>Mon Oct 19</span><span class="sl">//</span><b>Entries post to the firm’s own ledger, C-100</b></div>
+            <div class="page" style="padding-top:16px"><table class="tbl tbl-q tbl-q--flush"><colgroup><col><col style="width:88px"><col style="width:96px"></colgroup><tbody>
+              <tr class="q-row"><td><span class="l1">Management fee · Heartland H&amp;C</span><span class="l2">INV-2610-03 · Sep services</span></td><td class="ink-2">Draft</td><td class="n">34,667.00</td></tr>
+              <tr class="q-row"><td><span class="l1">Management fee · Dorrian HVAC</span><span class="l2">INV-2610-05 · Sep services</span></td><td class="ink-2">Draft</td><td class="n">34,667.00</td></tr>
+              <tr class="q-row"><td><span class="l1">Management fee · Metro H&amp;C</span><span class="l2">INV-2610-06 · Sep services</span></td><td class="ink-2">Draft</td><td class="n">34,666.00</td></tr>
+            </tbody></table></div></div>
+        </div>
+      </div>
+    </div>
+    <!-- 3 Consolidated -->
+    <div>
+      <div class="quad-h"><span class="outline-num">3</span><h3 class="t-section">Consolidated view</h3><span class="t-cap">Steel bar, closed by the double rule</span></div>
+      <div class="frame">
+        <div class="app app--frame" data-context="consolidated" style="height:420px">
+          <aside class="rail"><div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"></div>
+            <nav class="rail-nav"><div class="rail-group">Consolidated</div><a class="rail-link" href="#" aria-current="page">Statements</a><a class="rail-link" href="#">Eliminations<span class="count">2</span></a><a class="rail-link" href="#">Close status<span class="count">7/9</span></a><a class="rail-link" href="#">Members &amp; ownership</a></nav></aside>
+          <header class="bar"><button class="ctx" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-layers"/></svg><span class="ctx-name">Merit Management Group — Consolidated</span><span class="ctx-tag ctx-tag--ro">Read-only</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg></button></header>
+          <div class="main"><div class="ctxline"><span>September 2026</span><span class="sl">//</span><span class="tnum">9 clients · eliminations on</span><span class="sl">//</span><b>Draft · 2 clients still open</b></div>
+            <div class="page" style="padding-top:16px">
+              <table class="tbl tbl-fs"><colgroup><col><col style="width:110px"><col style="width:110px"></colgroup>
+                <thead><tr><th>In US dollars</th><th class="n cur">Sep 2026</th><th class="n">Aug 2026</th></tr></thead>
+                <tbody>
+                  <tr class="fs-line"><td>Revenue, before eliminations</td><td class="n cur">9,648,400<span class="hp">)</span></td><td class="n">9,579,400<span class="hp">)</span></td></tr>
+                  <tr class="fs-line fs-elim"><td>Intercompany management fees</td><td class="n cur">(312,000)</td><td class="n">(312,000)</td></tr>
+                  <tr class="fs-grand"><td>Consolidated revenue</td><td class="n cur">9,336,400<span class="hp">)</span></td><td class="n">9,267,400<span class="hp">)</span></td></tr>
+                </tbody></table>
+            </div></div>
+        </div>
+      </div>
+    </div>
+    <!-- 4 Support session -->
+    <div>
+      <div class="quad-h"><span class="outline-num">4</span><h3 class="t-section">Support session</h3><span class="t-cap">An overlay above any state</span></div>
+      <div class="frame">
+        <div class="app app--frame" data-context="client" style="height:420px">
+          <div class="support-band" role="status" aria-live="off"><span><b>Support session</b><span class="sl" style="color:#fff">//</span>Alex Kim, MeritBooks<span class="sl" style="color:#fff">//</span>Read-only<span class="sl" style="color:#fff">//</span>MB-2291</span><span class="sp"></span><span class="clock" id="clock" aria-label="42 minutes left">42:00</span><span>left</span><button class="btn" type="button">End session</button></div>
+          <aside class="rail"><div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"></div>
+            <nav class="rail-nav"><div class="rail-group">Client settings</div><a class="rail-link" href="#" aria-current="page">Bank connections</a><a class="rail-link" href="#">Client profile</a></nav>
+            <div class="rail-foot"><div class="rail-user"><span class="avatar">AK</span><span>Alex Kim<small>Platform support</small></span></div></div></aside>
+          <header class="bar"><button class="ctx" type="button"><i class="pip pip--blocked" aria-hidden="true" style="border-color:#F19A91;background:linear-gradient(135deg,transparent 40%,#F19A91 40% 60%,transparent 60%)"></i><span class="ctx-name">Dorrian HVAC</span><span class="ctx-meta tnum">C-105</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg></button></header>
+          <div class="main"><div class="ctxline"><b>Every page Alex opens is written to Merit’s access log</b></div>
+            <div class="page" style="padding-top:16px">
+              <div class="inline-notice inline-notice--neg"><div><b>Bank of Iowa operating ••4471</b><br>Disconnected Oct 16 · token expired · ticket MB-2291</div></div>
+              <div class="btn-row" style="margin-top:12px"><button class="btn" type="button" aria-disabled="true" disabled>Reconnect (read-only session)</button><button class="btn btn--quiet" type="button">Ask for read-write</button></div>
+            </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Decisions ===== -->
+  <div class="board-h" style="margin-top:56px"><div><div class="eyebrow">S7<span class="sl">//</span>Decision record</div><h2 class="t-title" style="margin-top:8px">Why not amber, steel and red bands</h2><p>IA-SPEC §3.1 asked for a 4px amber, steel or red band under the bar. Amber isn’t in the Merit palette, a 4px line goes unnoticed after a week, and amber reads as “something is wrong” when posting to the firm’s own books is legitimate work. Each state now changes the bar itself and carries one mark that means something.</p></div><span class="pg">S7.3</span></div>
+  <table class="dec" style="margin-top:8px">
+    <thead><tr><th style="width:170px">State</th><th style="width:210px">Bar</th><th style="width:250px">Mark</th><th style="width:250px">Chip</th><th style="width:190px">Navigation</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Client books</td><td><span class="chipsw" style="background:#0A1628"></span>Midnight #0A1628</td><td>none</td><td>Period pip · name · C-number · “Sep open”</td><td>Full client nav</td><td>The default has to be the quietest state. Everything else is measured against it.</td></tr>
+      <tr><td>Own books</td><td><span class="chipsw" style="background:#2563EB"></span>Electric Blue #2563EB · white 5.2:1</td><td>The bar’s colour is the mark</td><td>Midnight chip + Warm White “Own books” tag (17.7:1)</td><td>Full client nav</td><td>The firm’s own books wear the firm’s own colour. White-label: the bar takes the tenant’s brand primary. It’s legitimate work, not a warning, but impossible to mistake for a client.</td></tr>
+      <tr><td>Consolidated</td><td><span class="chipsw" style="background:#3D4F65"></span>Steel #3D4F65 · white 8.2:1</td><td>Blue double rule under the bar: the rule that closes a total in the annual report</td><td>Layered mark · group name · “Read-only” tag (8.2:1)</td><td>Statements, eliminations, close status, members only</td><td>A roll-up is a total. The page is framed like one. Processing nav is removed rather than disabled, so there is nothing to post to.</td></tr>
+      <tr><td>Support session</td><td>Unchanged, so it can sit on any state</td><td>32px brick band <span class="chipsw" style="background:#B42318"></span>#B42318 above the shell, white 6.6:1, hatched with the monogram’s 45° slash across the rail</td><td>Unchanged · agent shown in the rail foot</td><td>Whatever the grant allows</td><td>Consented access is a security condition, so it gets the one danger colour. Above the shell, not under it, because it overlays any context. The countdown and End stay visible at all times.</td></tr>
+      <tr><td>Workspace · Platform</td><td><span class="chipsw" style="background:#0A1628"></span>Midnight</td><td>none</td><td>Grid mark · tenant name · “Workspace” / “MeritBooks Platform”</td><td>Workspace or platform nav</td><td>No posting happens here. The chip is enough.</td></tr>
+    </tbody>
+  </table>
+</main>
+
+<script>
+(function(){
+  /* switcher: filter + arrow keys */
+  var q=document.getElementById('sw-q'),list=document.getElementById('sw-list');
+  var items=[].slice.call(list.querySelectorAll('.popover-item'));
+  function vis(){return items.filter(function(i){return i.style.display!=='none'})}
+  function sel(el,scroll){items.forEach(function(i){i.setAttribute('aria-selected','false')});if(el){el.setAttribute('aria-selected','true');if(scroll){var l=list,t=el.offsetTop,b=t+el.offsetHeight;if(t<l.scrollTop)l.scrollTop=t;else if(b>l.scrollTop+l.clientHeight)l.scrollTop=b-l.clientHeight;}}}
+  q.addEventListener('input',function(){var t=q.value.trim().toLowerCase();
+    items.forEach(function(i){i.style.display=(!t||i.dataset.k.indexOf(t)>-1)?'':'none'});
+    list.querySelectorAll('.popover-group').forEach(function(g){g.style.display=t?'none':''});sel(vis()[0]);});
+  q.addEventListener('keydown',function(e){var v=vis(),i=v.findIndex(function(x){return x.getAttribute('aria-selected')==='true'});
+    if(e.key==='ArrowDown'){e.preventDefault();sel(v[Math.min(v.length-1,i+1)],true);}
+    if(e.key==='ArrowUp'){e.preventDefault();sel(v[Math.max(0,i-1)],true);}
+    if(e.key==='Escape'){q.value='';q.dispatchEvent(new Event('input'));}});
+  items.forEach(function(i){i.addEventListener('mouseenter',function(){sel(i)})});
+  /* support countdown */
+  var c=document.getElementById('clock'),s=42*60;
+  setInterval(function(){if(s<=0)return;s--;var m=Math.floor(s/60),r=('0'+(s%60)).slice(-2);c.textContent=m+':'+r;c.setAttribute('aria-label',m+' minutes left');},1000);
+})();
+</script>
+</body></html>

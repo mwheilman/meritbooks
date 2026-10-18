@@ -1,0 +1,196 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Income statement · MeritBooks</title><meta name="theme-color" content="#0A1628"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet"><style>
+:root{
+--blue:#2563EB; --signal:#3B82F6; --midnight:#0A1628; --warm:#FDFCFA;
+--steel:#3D4F65; --slate:#8494A7; --canvas:#F5F3EF; --sky:#EBF2FE;
+--m1:#1A2A3F; --m2:#2A3E57; --m3:#3F566F; --m4:#5A738D;
+--b3:#6AA8FF; --b4:#A9CCFF; --b5:#DCEBFF;
+--g1:#F2F3F5; --g2:#E1E5EA; --g3:#CCD3DB; --g4:#B5BEC8;
+--neg:#B42318; --pos:#1F6E50; --warn:#8A5A00;
+--ink:#0A1628; --ink2:#3D4F65; --ink3:#536A82; 
+--line:#E1E5EA; --line2:#CCD3DB;
+--rail:216px; --bar:72px;
+--ease:cubic-bezier(.2,.7,.2,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{color-scheme:light;-webkit-text-size-adjust:100%}
+body{font:400 13px/20px "DM Sans",system-ui,sans-serif;color:var(--ink);background:var(--warm);
+font-feature-settings:"ss01" 0;-webkit-font-smoothing:antialiased;min-width:1280px}
+a{color:inherit;text-decoration:none}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+.num{font-variant-numeric:tabular-nums lining-nums;text-align:right;white-space:nowrap}
+.syne{font-family:Syne,"DM Sans",sans-serif;font-weight:700;letter-spacing:-.01em}
+.eyebrow{font:500 12px/16px "DM Sans";letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+.sep{color:var(--ink3);margin:0 .5em;letter-spacing:0}
+.dark .sep,.bar .sep,.rail .sep{color:var(--slate)}
+.skip{position:absolute;left:-9999px;top:8px;background:var(--blue);color:#fff;padding:8px 16px;z-index:99}
+.skip:focus{left:8px}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.dark :focus-visible,.rail :focus-visible,.bar :focus-visible{outline-color:var(--signal)}
+.app{display:grid;grid-template-columns:var(--rail) 1fr;grid-template-rows:var(--bar) 1fr;height:100vh;min-height:760px}
+.rail{grid-row:1/3;background:var(--midnight);color:var(--warm);display:flex;flex-direction:column;border-right:1px solid var(--m1)}
+.rail-logo{height:var(--bar);display:flex;align-items:center;gap:24px;padding:0 24px}
+.rail-logo img{height:24px;width:auto;display:block}
+.rail-logo .prod{font:500 12px/16px "DM Sans";letter-spacing:.12em;color:var(--slate)}
+.rail nav{padding:8px 0;flex:1;overflow:auto}
+.rail h2{font:500 12px/16px "DM Sans";letter-spacing:.12em;color:var(--slate);text-transform:uppercase;padding:16px 24px 8px}
+.nav-a{position:relative;display:flex;align-items:center;height:36px;padding:0 16px 0 24px;color:#CCD3DB;font-weight:500;
+transition:background-color .12s var(--ease),color .12s var(--ease)}
+.nav-a:hover{background:var(--m1);color:var(--warm)}
+.nav-a .ct{margin-left:auto;color:var(--slate)}
+.nav-a .go{margin-left:auto;display:none;gap:2px}
+.nav-a:hover .go,.nav-a.hint .go{display:inline-flex}
+.nav-a:hover .ct,.nav-a.hint .ct{display:none}
+.nav-a[aria-current=page]{background:var(--m1);color:var(--warm)}
+.nav-a[aria-current=page]::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;background:var(--signal)}
+.nav-a .alert{margin-left:auto;font-weight:600;color:var(--warm);background:var(--neg);padding:0 6px;line-height:20px}
+.scope{border-top:1px solid var(--m1);padding:16px 24px 24px}
+.scope-btn{display:flex;align-items:center;justify-content:space-between;width:100%;height:40px;padding:0 12px;
+background:var(--m1);color:var(--warm);font-weight:500;border:1px solid var(--m2);transition:border-color .12s}
+.scope-btn:hover{border-color:var(--m4)}
+.scope .who{display:flex;align-items:center;gap:12px;margin-top:16px;color:#CCD3DB}
+.av{width:32px;height:32px;display:grid;place-items:center;background:var(--m2);color:var(--warm);font-weight:600;font-size:12px;letter-spacing:.04em}
+.bar{background:var(--midnight);color:var(--warm);display:flex;align-items:center;gap:24px;padding:0 32px;border-bottom:1px solid var(--m1)}
+.crumbs{font-weight:500;color:#CCD3DB;white-space:nowrap}
+.crumbs b{color:var(--warm);font-weight:600}
+.cmd{margin-left:auto;display:flex;align-items:center;gap:12px;width:400px;height:40px;padding:0 8px 0 12px;background:var(--m1);
+border:1px solid var(--m2);color:var(--slate);transition:border-color .12s}
+.cmd:hover{border-color:var(--m4)}
+.cmd svg{flex:none}
+.cmd span{flex:1;text-align:left}
+.sync{display:flex;align-items:center;gap:8px;color:var(--slate);white-space:nowrap}
+.sync i{width:8px;height:8px;background:var(--signal);display:block}
+main{overflow:auto;background:var(--warm);position:relative}
+.kbd{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;font:500 12px/1 "DM Sans";color:var(--ink2);
+background:#fff;border:1px solid var(--line2);border-bottom-width:2px;border-radius:2px;font-variant-numeric:tabular-nums}
+.dark .kbd,.rail .kbd,.bar .kbd,.kbd.d{background:var(--m1);border-color:var(--m3);color:#CCD3DB}
+.btn .kbd{margin-left:8px}
+.btn-p .kbd{background:transparent;border-color:rgba(253,252,250,.55);color:var(--warm)}
+.btn{display:inline-flex;align-items:center;height:32px;padding:0 12px;font-weight:500;white-space:nowrap;
+border:1px solid var(--line2);background:#fff;color:var(--ink);transition:border-color .12s,color .12s,background-color .12s}
+.btn:hover{border-color:var(--blue);color:var(--blue)}
+.btn-p{background:var(--blue);border-color:var(--blue);color:var(--warm)}
+.btn-p:hover{background:var(--midnight);border-color:var(--midnight);color:var(--warm)}
+.btn-g{border-color:transparent;background:transparent}
+.btn-g:hover{background:var(--g1);border-color:transparent;color:var(--ink)}
+.slash{display:block;flex:none}
+.slash .s-on{fill:var(--blue)}
+.slash .s-part{fill:var(--b4)}
+.slash .s-off{fill:var(--g3)}
+.slash .s-cur{fill:none;stroke:var(--blue);stroke-width:1}
+.slash .s-bad{fill:var(--neg)}
+.dark .slash .s-on{fill:var(--signal)}
+.dark .slash .s-off{fill:var(--m2)}
+.dark .slash .s-part{fill:var(--m4)}
+.dark .slash .s-cur{stroke:var(--signal)}
+.conf{display:inline-flex;align-items:center;gap:8px}
+.conf-n{min-width:20px;font-weight:600}
+.conf-lo .conf-n{color:var(--warn)}
+.conf-lo .slash .s-on{fill:var(--warn)}
+.conf-lo .slash .s-part{fill:#E4C690}
+table{border-collapse:collapse;width:100%}
+th{font:500 12px/16px "DM Sans";letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);text-align:left;white-space:nowrap}
+.tag{display:inline-flex;align-items:center;height:20px;padding:0 6px;font:600 12px/20px "DM Sans";letter-spacing:.02em;background:var(--g1);color:var(--ink2)}
+.tag.ai{background:var(--sky);color:var(--blue)}
+.tag.neg{background:#FBEAE8;color:var(--neg)}
+.tag.warn{background:#F7EFDF;color:var(--warn)}
+.neg{color:var(--neg)}
+.pos{color:var(--pos)}
+.muted{color:var(--ink2)}
+.faint{color:var(--ink3)}
+.pal-wrap{position:fixed;inset:0;background:rgba(10,22,40,.48);display:none;align-items:flex-start;justify-content:center;padding-top:120px;z-index:50}
+.pal-wrap.open{display:flex}
+.pal{width:640px;background:#fff;border:1px solid var(--midnight);box-shadow:0 1px 0 var(--midnight),0 24px 48px -16px rgba(10,22,40,.45)}
+.pal input{width:100%;height:56px;border:0;border-bottom:1px solid var(--line);padding:0 24px;font-size:15px;outline:none;background:#fff}
+.pal ul{list-style:none;padding:8px 0}
+.pal li{display:flex;align-items:center;gap:12px;height:40px;padding:0 24px;color:var(--ink)}
+.pal li .k{margin-left:auto;display:flex;gap:4px}
+.pal li[aria-selected=true]{background:var(--sky);box-shadow:inset 3px 0 var(--blue)}
+.pal .grp{font:500 12px/16px "DM Sans";letter-spacing:.12em;color:var(--ink3);text-transform:uppercase;padding:12px 24px 4px;height:auto}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+.st{padding:0 32px 48px}
+.st-head{padding-top:32px}
+.st-h1{display:flex;justify-content:space-between;align-items:flex-end}
+.st-h1 h1{font-size:40px;line-height:48px;color:var(--blue);margin-top:8px;letter-spacing:-.02em}
+.ni-hero{display:flex;gap:40px;align-items:flex-end}
+.ni-c{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.big{font-size:40px;line-height:48px;color:var(--ink);font-variant-numeric:tabular-nums}
+.outline{color:transparent;-webkit-text-stroke:1px var(--ink3)}
+.st-tools{display:flex;align-items:center;gap:12px;margin-top:24px;padding:16px 0;border-top:2px solid var(--blue);border-bottom:1px solid var(--line)}
+.seg{display:flex;border:1px solid var(--line2);height:32px;margin-left:12px}
+.seg button{padding:0 12px;font-weight:500;color:var(--ink2);border-right:1px solid var(--line2);transition:background-color .12s,color .12s}
+.seg button:last-child{border-right:0}
+.seg button:hover{background:var(--g1);color:var(--ink)}
+.seg button[aria-selected=true]{background:var(--midnight);color:var(--warm)}
+.prelim{margin-left:auto;display:flex;align-items:center;gap:12px;color:var(--ink2)}
+.prelim b{color:var(--ink);font-weight:600}
+.st-body{display:grid;grid-template-columns:repeat(12,1fr);column-gap:24px;margin-top:24px}
+.st-table{grid-column:1/9}
+.cmt{grid-column:9/13}
+.is{table-layout:fixed}
+.is th{height:32px;padding:0 8px;border-bottom:1px solid var(--line2)}
+.is th:first-child{padding-left:0}
+.is .grp-h th{border-bottom:0;height:24px}
+.is .gh{text-align:center;color:var(--ink);box-shadow:inset 0 -1px var(--ink)}
+.is td{height:32px;padding:0 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.is td.lbl{padding-left:0;white-space:nowrap}
+.is .code{display:inline-block;width:48px;color:var(--ink3);font-size:12px}
+tr.hd td{height:40px;padding:16px 0 0;font:600 12px/16px "DM Sans";letter-spacing:.12em;text-transform:uppercase;border-bottom:1px solid var(--line2);vertical-align:bottom;padding-bottom:8px}
+tr.ln{transition:background-color .1s var(--ease)}
+tr.ln:hover{background:var(--g1)}
+tr.ln:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+tr.elim td{color:var(--ink2)}
+tr.elim td.lbl{font-style:normal}
+tr.sub td{font-weight:600;border-top:1px solid var(--ink);border-bottom:0;height:40px}
+tr.key td{font-weight:700;height:40px;background:var(--canvas);border-bottom:1px solid var(--line2)}
+tr.key td.lbl{padding-left:8px}
+tr.ratio td{color:var(--ink2);height:32px}
+tr.ni td{background:var(--midnight);color:var(--warm);font-weight:700;height:48px;border:0}
+tr.ni td.lbl{padding-left:16px;font-size:15px}
+tr.ni td.muted{color:var(--g4)}
+tr.ni td.neg{color:#F4A79D}
+tr.ni td:last-child{padding-right:16px}
+.chev{display:inline-grid;place-items:center;width:32px;height:32px;margin:-4px 0 -4px -32px;color:var(--blue);vertical-align:middle}
+tr.open td{font-weight:600}
+tr.linked td{background:var(--sky)}
+tr.linked td:first-child{box-shadow:inset 3px 0 var(--blue)}
+tr.drill td{background:#fff;height:32px;font-size:13px;color:var(--ink2)}
+tr.drill td.lbl{padding-left:48px;color:var(--ink)}
+tr.drill.hot td.lbl{box-shadow:inset 3px 0 var(--b4)}
+.cmark{display:inline-grid;place-items:center;min-width:20px;height:20px;margin-left:8px;padding:0 4px;font:700 12px/1 "DM Sans";color:var(--blue);border:1px solid var(--blue);vertical-align:middle;font-variant-numeric:tabular-nums}
+.foot{margin-top:16px;font-size:12px;line-height:20px}
+.cmt-h{display:flex;align-items:center;justify-content:space-between;height:40px;border-bottom:2px solid var(--blue)}
+.cmt-h h2{font-size:15px;line-height:24px;font-weight:600}
+.cmt-sub{margin-top:12px}
+.cms{list-style:none;margin-top:8px}
+.cm{padding:16px;border:1px solid transparent;border-bottom-color:var(--line);transition:background-color .12s,border-color .12s}
+.cm:hover{background:var(--g1)}
+.cm.focus{background:#fff;border-color:var(--blue);box-shadow:inset 3px 0 var(--blue)}
+.cm:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+.cm-top{display:flex;align-items:center;gap:8px}
+.cm-top .cmark{margin-left:0}
+.cm-line{font-weight:600;flex:1}
+.cm-line .num{color:var(--ink3);margin-right:4px}
+.cm-top>.num{font-weight:600}
+.cm p{margin-top:8px;color:var(--ink2)}
+.cm-ev{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.ev-l{display:inline-flex;align-items:center;height:32px;padding:0 8px;background:var(--sky);color:var(--blue);font-weight:500;font-size:12px;transition:background-color .12s}
+.ev-l:hover{box-shadow:inset 0 -2px var(--blue)}
+.cm-act{display:flex;align-items:center;gap:8px;margin-top:12px}
+.cm-s{margin-left:auto;font-size:12px}
+.cmt-foot{margin-top:24px}
+</style></head><body><a class="skip" href="#main">Skip to content</a><div class="app"><aside class="rail" aria-label="Primary"><div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"><span class="prod">BOOKS</span></div><nav><h2>OPERATE</h2><a class="nav-a" href="portfolio.html">Portfolio<span class="go" aria-hidden="true"><kbd class="kbd ">G</kbd><kbd class="kbd ">P</kbd></span></a><a class="nav-a" href="bank-feed.html">Review queue<span class="ct num">47</span><span class="go" aria-hidden="true"><kbd class="kbd ">G</kbd><kbd class="kbd ">R</kbd></span></a><a class="nav-a" href="#">Close<span class="ct num">Day 3</span><span class="go" aria-hidden="true"><kbd class="kbd ">G</kbd><kbd class="kbd ">C</kbd></span></a><a class="nav-a" href="#">Journal<span class="go" aria-hidden="true"><kbd class="kbd ">G</kbd><kbd class="kbd ">J</kbd></span></a><a class="nav-a" href="#">Payables<span class="ct num">18</span><span class="go" aria-hidden="true"><kbd class="kbd ">G</kbd><kbd class="kbd ">B</kbd></span></a><a class="nav-a" href="#">Receivables<span class="go" aria-hidden="true"><kbd class="kbd ">G</kbd><kbd class="kbd ">I</kbd></span></a><a class="nav-a" href="#">Jobs & WIP<span class="go" aria-hidden="true"><kbd class="kbd ">G</kbd><kbd class="kbd ">W</kbd></span></a><h2>REPORT</h2><a class="nav-a" href="statement.html" aria-current="page">Statements<span class="go" aria-hidden="true"><kbd class="kbd ">G</kbd><kbd class="kbd ">S</kbd></span></a><a class="nav-a" href="#">Covenants<span class="alert num" aria-label="1 breach">1</span><span class="go" aria-hidden="true"><kbd class="kbd ">G</kbd><kbd class="kbd ">V</kbd></span></a><a class="nav-a" href="#">Lender packs<span class="go" aria-hidden="true"><kbd class="kbd ">G</kbd><kbd class="kbd ">L</kbd></span></a></nav><div class="scope"><div class="eyebrow" style="color:var(--slate);margin-bottom:8px">Scope</div><button class="scope-btn" type="button" aria-haspopup="listbox"><span>All entities <span class="num" style="color:var(--slate)">· 24</span></span><kbd class="kbd ">⌘</kbd><kbd class="kbd ">E</kbd></button><div class="who"><span class="av" aria-hidden="true">RK</span><span>Rachel K. · Controller</span></div></div></aside><header class="bar"><div class="crumbs">Merit Management Group<span class="sep" aria-hidden="true">//</span>Consolidated<span class="sep" aria-hidden="true">//</span><b>Income statement</b></div><button class="cmd" type="button" id="cmdk" aria-haspopup="dialog"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.75"/><path d="M10.5 10.5 14 14" stroke-linecap="square"/></svg><span>Jump to entity, vendor, account, JE…</span><kbd class="kbd ">⌘</kbd><kbd class="kbd ">K</kbd></button><div class="sync"><i aria-hidden="true"></i>Plaid + Ramp synced 7:42&nbsp;AM</div></header><main id="main" tabindex="-1"><div class="st"><header class="st-head"><div class="st-h1"><div><div class="eyebrow">Reporting<span class="sep" aria-hidden="true">//</span>Consolidated · 16 books<span class="sep" aria-hidden="true">//</span>October 2026</div><h1 class="syne">Income statement</h1></div><div class="ni-hero" aria-label="Net income October 1,577,230, September 1,708,305"><div class="ni-c"><span class="eyebrow">October net income</span><span class="syne big num">1,577,230</span></div><div class="ni-c ghost"><span class="eyebrow">September</span><span class="syne big num outline">1,708,305</span></div></div></div><div class="st-tools"><button class="btn" type="button">October 2026 <svg width="10" height="10" aria-hidden="true" style="margin-left:8px"><path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button><span class="faint">vs</span><button class="btn" type="button">September 2026 · Budget v2</button><div class="seg" role="tablist" aria-label="Columns"><button role="tab" aria-selected="true">Consolidated</button><button role="tab" aria-selected="false">By entity</button><button role="tab" aria-selected="false">Show eliminations</button></div><div class="prelim"><svg class="slash " width="121" height="12" viewBox="0 0 121 12" role="img" aria-label="9 of 16 books locked"><polygon class="s-on" points="12,0 16,0 4,12 0,12"/><polygon class="s-on" points="19,0 23,0 11,12 7,12"/><polygon class="s-on" points="26,0 30,0 18,12 14,12"/><polygon class="s-on" points="33,0 37,0 25,12 21,12"/><polygon class="s-on" points="40,0 44,0 32,12 28,12"/><polygon class="s-on" points="47,0 51,0 39,12 35,12"/><polygon class="s-on" points="54,0 58,0 46,12 42,12"/><polygon class="s-on" points="61,0 65,0 53,12 49,12"/><polygon class="s-on" points="68,0 72,0 60,12 56,12"/><polygon class="s-off" points="75,0 79,0 67,12 63,12"/><polygon class="s-off" points="82,0 86,0 74,12 70,12"/><polygon class="s-off" points="89,0 93,0 81,12 77,12"/><polygon class="s-off" points="96,0 100,0 88,12 84,12"/><polygon class="s-off" points="103,0 107,0 95,12 91,12"/><polygon class="s-off" points="110,0 114,0 102,12 98,12"/><polygon class="s-off" points="117,0 121,0 109,12 105,12"/></svg><span><b>Preliminary</b> · 9 of 16 books locked</span></div></div></header>
+<div class="st-body"><section class="st-table" aria-label="Consolidated income statement"><table class="is"><colgroup><col><col style="width:96px"><col style="width:96px"><col style="width:88px"><col style="width:96px"><col style="width:96px"><col style="width:72px"></colgroup><thead><tr class="grp-h"><th></th><th colspan="3" class="gh">Actual</th><th colspan="3" class="gh">vs budget</th></tr><tr><th>USD · whole dollars</th><th class="num">Oct 2026</th><th class="num">Sep 2026</th><th class="num">Change</th><th class="num">Budget</th><th class="num">Var</th><th class="num">Var %</th></tr></thead><tbody><tr class="hd"><td colspan="7">Revenue</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">4100</span>Contract revenue<span class="cmark" title="Commentary">2</span></td><td class="num">9,842,310</td><td class="num muted">9,214,880</td><td class="num muted">627,430</td><td class="num muted">9,600,000</td><td class="num ">242,310</td><td class="num ">2.5%</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">4200</span>Service &amp; maintenance revenue</td><td class="num">2,318,640</td><td class="num muted">2,402,115</td><td class="num muted">(83,475)</td><td class="num muted">2,350,000</td><td class="num neg">(31,360)</td><td class="num neg">(1.3%)</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">4300</span>Equipment &amp; parts sales</td><td class="num">1,286,420</td><td class="num muted">1,198,760</td><td class="num muted">87,660</td><td class="num muted">1,250,000</td><td class="num ">36,420</td><td class="num ">2.9%</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">4500</span>Rental income</td><td class="num">212,800</td><td class="num muted">212,800</td><td class="num muted">0</td><td class="num muted">212,800</td><td class="num ">0</td><td class="num ">0.0%</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">4900</span>Management fees · intercompany</td><td class="num">418,000</td><td class="num muted">418,000</td><td class="num muted">0</td><td class="num muted">418,000</td><td class="num ">0</td><td class="num ">0.0%</td></tr><tr class="ln elim" tabindex="0"><td class="lbl"><span class="code"></span>Eliminations</td><td class="num">(418,000)</td><td class="num muted">(418,000)</td><td class="num muted">0</td><td class="num muted">(418,000)</td><td class="num ">0</td><td class="num ">0.0%</td></tr><tr class="sub"><td class="lbl">Total revenue</td><td class="num">13,660,170</td><td class="num muted">13,028,555</td><td class="num muted">631,615</td><td class="num muted">13,412,800</td><td class="num ">247,370</td><td class="num ">1.8%</td></tr><tr class="hd"><td colspan="7">Cost of revenue</td></tr><tr class="ln open linked" tabindex="0"><td class="lbl"><button class="chev" type="button" aria-expanded="true" aria-label="Collapse Materials by entity"><svg width="10" height="10" aria-hidden="true"><path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button><span class="code num">5110</span>Materials<span class="cmark">1</span></td><td class="num">4,612,880</td><td class="num muted">4,188,240</td><td class="num muted">424,640</td><td class="num muted">4,320,000</td><td class="num neg">(292,880)</td><td class="num neg">(6.8%)</td></tr><tr class="drill hot"><td class="lbl">Dorrian HVAC</td><td class="num">1,092,400</td><td class="num muted">948,200</td><td class="num muted">144,200</td><td class="num muted">944,000</td><td class="num neg">(148,400)</td><td class="num neg">(15.7%)</td></tr><tr class="drill hot"><td class="lbl">Artistry Homes</td><td class="num">1,186,300</td><td class="num muted">1,061,800</td><td class="num muted">124,500</td><td class="num muted">1,090,000</td><td class="num neg">(96,300)</td><td class="num neg">(8.8%)</td></tr><tr class="drill"><td class="lbl">Heartland Heating &amp; Cooling</td><td class="num">612,480</td><td class="num muted">598,300</td><td class="num muted">14,180</td><td class="num muted">604,000</td><td class="num neg">(8,480)</td><td class="num neg">(1.4%)</td></tr><tr class="drill"><td class="lbl">Metro Heating &amp; Cooling</td><td class="num">498,760</td><td class="num muted">471,900</td><td class="num muted">26,860</td><td class="num muted">482,000</td><td class="num neg">(16,760)</td><td class="num neg">(3.5%)</td></tr><tr class="drill"><td class="lbl">Heritage Interiors</td><td class="num">402,110</td><td class="num muted">391,700</td><td class="num muted">10,410</td><td class="num muted">396,000</td><td class="num neg">(6,110)</td><td class="num neg">(1.5%)</td></tr><tr class="drill"><td class="lbl">Iowa Custom Cabinets</td><td class="num">344,820</td><td class="num muted">322,940</td><td class="num muted">21,880</td><td class="num muted">330,000</td><td class="num neg">(14,820)</td><td class="num neg">(4.5%)</td></tr><tr class="drill"><td class="lbl">Crystal Kitchen &amp; Bath</td><td class="num">168,240</td><td class="num muted">151,600</td><td class="num muted">16,640</td><td class="num muted">160,000</td><td class="num neg">(8,240)</td><td class="num neg">(5.1%)</td></tr><tr class="drill"><td class="lbl">Revived Interiors</td><td class="num">112,680</td><td class="num muted">98,400</td><td class="num muted">14,280</td><td class="num muted">106,000</td><td class="num neg">(6,680)</td><td class="num neg">(6.3%)</td></tr><tr class="drill"><td class="lbl">Swan Creek, AIM, Wild Rose</td><td class="num">195,090</td><td class="num muted">143,400</td><td class="num muted">51,690</td><td class="num muted">208,000</td><td class="num ">12,910</td><td class="num ">6.2%</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">5200</span>Direct labor</td><td class="num">2,694,310</td><td class="num muted">2,610,480</td><td class="num muted">83,830</td><td class="num muted">2,640,000</td><td class="num neg">(54,310)</td><td class="num neg">(2.1%)</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">5300</span>Subcontractors</td><td class="num">1,348,220</td><td class="num muted">1,262,900</td><td class="num muted">85,320</td><td class="num muted">1,300,000</td><td class="num neg">(48,220)</td><td class="num neg">(3.7%)</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">5120</span>Equipment &amp; parts cost</td><td class="num">842,160</td><td class="num muted">781,300</td><td class="num muted">60,860</td><td class="num muted">812,000</td><td class="num neg">(30,160)</td><td class="num neg">(3.7%)</td></tr><tr class="sub"><td class="lbl">Total cost of revenue</td><td class="num">9,497,570</td><td class="num muted">8,842,920</td><td class="num muted">654,650</td><td class="num muted">9,072,000</td><td class="num neg">(425,570)</td><td class="num neg">(4.7%)</td></tr><tr class="key"><td class="lbl">Gross profit</td><td class="num">4,162,600</td><td class="num muted">4,185,635</td><td class="num muted">(23,035)</td><td class="num muted">4,340,800</td><td class="num neg">(178,200)</td><td class="num neg">(4.1%)</td></tr><tr class="ratio"><td class="lbl">Gross margin</td><td class="num">30.5%</td><td class="num muted">32.1%</td><td class="num muted">(1.7 pts)</td><td class="num muted">32.4%</td><td class="num neg">(1.9 pts)</td><td></td></tr><tr class="hd"><td colspan="7">Operating expenses</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">6100</span>Salaries &amp; wages · indirect</td><td class="num">1,184,600</td><td class="num muted">1,176,300</td><td class="num muted">8,300</td><td class="num muted">1,190,000</td><td class="num ">5,400</td><td class="num ">0.5%</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">6200</span>Rent &amp; occupancy</td><td class="num">196,400</td><td class="num muted">196,400</td><td class="num muted">0</td><td class="num muted">198,000</td><td class="num ">1,600</td><td class="num ">0.8%</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">6310</span>Vehicles &amp; fuel</td><td class="num">214,880</td><td class="num muted">198,420</td><td class="num muted">16,460</td><td class="num muted">205,000</td><td class="num neg">(9,880)</td><td class="num neg">(4.8%)</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">6400</span>Insurance</td><td class="num">168,300</td><td class="num muted">168,300</td><td class="num muted">0</td><td class="num muted">170,000</td><td class="num ">1,700</td><td class="num ">1.0%</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">6600</span>Marketing</td><td class="num">94,120</td><td class="num muted">112,640</td><td class="num muted">(18,520)</td><td class="num muted">110,000</td><td class="num ">15,880</td><td class="num ">14.4%</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">6700</span>Professional fees</td><td class="num">72,450</td><td class="num muted">58,900</td><td class="num muted">13,550</td><td class="num muted">60,000</td><td class="num neg">(12,450)</td><td class="num neg">(20.8%)</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">6750</span>Warranty expense<span class="cmark" title="Commentary">3</span></td><td class="num">128,600</td><td class="num muted">61,200</td><td class="num muted">67,400</td><td class="num muted">70,000</td><td class="num neg">(58,600)</td><td class="num neg">(83.7%)</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">6900</span>Management fees · intercompany</td><td class="num">418,000</td><td class="num muted">418,000</td><td class="num muted">0</td><td class="num muted">418,000</td><td class="num ">0</td><td class="num ">0.0%</td></tr><tr class="ln elim" tabindex="0"><td class="lbl"><span class="code"></span>Eliminations</td><td class="num">(418,000)</td><td class="num muted">(418,000)</td><td class="num muted">0</td><td class="num muted">(418,000)</td><td class="num ">0</td><td class="num ">0.0%</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">6990</span>Other operating</td><td class="num">142,380</td><td class="num muted">138,960</td><td class="num muted">3,420</td><td class="num muted">140,000</td><td class="num neg">(2,380)</td><td class="num neg">(1.7%)</td></tr><tr class="sub"><td class="lbl">Total operating expenses</td><td class="num">2,201,730</td><td class="num muted">2,111,120</td><td class="num muted">90,610</td><td class="num muted">2,143,000</td><td class="num neg">(58,730)</td><td class="num neg">(2.7%)</td></tr><tr class="key"><td class="lbl">Operating income</td><td class="num">1,960,870</td><td class="num muted">2,074,515</td><td class="num muted">(113,645)</td><td class="num muted">2,197,800</td><td class="num neg">(236,930)</td><td class="num neg">(10.8%)</td></tr><tr class="hd"><td colspan="7">Other expense</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">7100</span>Interest expense<span class="cmark" title="Commentary">4</span></td><td class="num">168,940</td><td class="num muted">152,310</td><td class="num muted">16,630</td><td class="num muted">150,000</td><td class="num neg">(18,940)</td><td class="num neg">(12.6%)</td></tr><tr class="ln " tabindex="0"><td class="lbl"><span class="code num">7200</span>Depreciation &amp; amortization</td><td class="num">214,700</td><td class="num muted">213,900</td><td class="num muted">800</td><td class="num muted">215,000</td><td class="num ">300</td><td class="num ">0.1%</td></tr><tr class="sub"><td class="lbl">Total other expense</td><td class="num">383,640</td><td class="num muted">366,210</td><td class="num muted">17,430</td><td class="num muted">365,000</td><td class="num neg">(18,640)</td><td class="num neg">(5.1%)</td></tr><tr class="ni"><td class="lbl">Net income</td><td class="num">1,577,230</td><td class="num muted">1,708,305</td><td class="num muted">(131,075)</td><td class="num muted">1,832,800</td><td class="num neg">(255,570)</td><td class="num neg">(13.9%)</td></tr></tbody></table><p class="foot faint">Intercompany management fees (418,000) eliminate in consolidation. Variance is shown as its effect on profit: unfavorable in parentheses. Drill any line with <kbd class="kbd ">→</kbd> · collapse with <kbd class="kbd ">←</kbd>.</p></section>
+<aside class="cmt" aria-labelledby="cmt-h"><div class="cmt-h"><h2 id="cmt-h">Variance commentary</h2><span class="tag ai">AI draft</span></div><p class="faint cmt-sub">Ranked by effect on profit. Drafted 6:12&nbsp;AM from 1,284 October entries. Nothing goes in the lender pack until the controller accepts it.</p><ol class="cms"><li class="cm focus" tabindex="0"><div class="cm-top"><span class="cmark">1</span><span class="cm-line"><span class="num">5110</span> Materials</span><span class="num neg">(292,880)</span></div><p>Dorrian HVAC (148,400) and Artistry Homes (96,300) explain 84% of the miss. Dorrian pulled the Hy-Vee Ankeny rooftop units forward from November; Artistry bought lumber for Waukee Lots 12–14 ahead of a December price increase.</p><div class="cm-ev"><a class="ev-l" href="#">PO 2614-11</a><a class="ev-l" href="#">PO 2614-12</a><a class="ev-l" href="#">ABC Supply B-7740</a><a class="ev-l" href="#">+4</a></div><div class="cm-act"><button class="btn" type="button">Accept</button><button class="btn btn-g" type="button">Edit</button><span class="faint cm-s">Draft</span></div></li><li class="cm" tabindex="0"><div class="cm-top"><span class="cmark">2</span><span class="cm-line"><span class="num">4100</span> Contract revenue</span><span class="num ">242,310</span></div><p>Two Artistry Homes closings landed in October instead of November, and Hy-Vee Ankeny percent-complete moved from 58% to 71%.</p><div class="cm-ev"><a class="ev-l" href="#">Closing stmt Lot 9</a><a class="ev-l" href="#">Closing stmt Lot 10</a><a class="ev-l" href="#">WIP schedule</a></div><div class="cm-act"><button class="btn" type="button">Accept</button><button class="btn btn-g" type="button">Edit</button><span class="faint cm-s">Draft</span></div></li><li class="cm" tabindex="0"><div class="cm-top"><span class="cmark">3</span><span class="cm-line"><span class="num">6750</span> Warranty expense</span><span class="num neg">(58,600)</span></div><p>Dorrian HVAC trued up its reserve for 2023 compressor failures after 11 October claims. One-time; the run-rate returns to about $70,000 in November.</p><div class="cm-ev"><a class="ev-l" href="#">JE-10-0412</a><a class="ev-l" href="#">Claims log Q4</a></div><div class="cm-act"><button class="btn" type="button">Accept</button><button class="btn btn-g" type="button">Edit</button><span class="faint cm-s">Draft</span></div></li><li class="cm" tabindex="0"><div class="cm-top"><span class="cmark">4</span><span class="cm-line"><span class="num">7100</span> Interest expense</span><span class="num neg">(18,940)</span></div><p>Dorrian HVAC’s line of credit averaged $1.1M in October versus $600,000 budgeted, funding the materials pull-forward in note 1.</p><div class="cm-ev"><a class="ev-l" href="#">LOC statement Oct</a></div><div class="cm-act"><button class="btn" type="button">Accept</button><button class="btn btn-g" type="button">Edit</button><span class="faint cm-s">Draft</span></div></li></ol><div class="cmt-foot"><button class="btn btn-p" type="button">Accept all 4 into lender pack</button></div></aside></div></div></main></div><div class="pal-wrap" id="pal" role="dialog" aria-modal="true" aria-label="Command menu"><div class="pal"><input type="text" placeholder="Type a command or search…" aria-label="Command"><ul role="listbox"><li class="grp" role="presentation">Go to</li><li role="option" aria-selected="true">Review queue<span class="k"><kbd class="kbd ">G</kbd><kbd class="kbd ">R</kbd></span></li><li role="option">Portfolio<span class="k"><kbd class="kbd ">G</kbd><kbd class="kbd ">P</kbd></span></li><li role="option">Income statement · Consolidated<span class="k"><kbd class="kbd ">G</kbd><kbd class="kbd ">S</kbd></span></li><li class="grp" role="presentation">Entity</li><li role="option">Switch to Dorrian HVAC<span class="k"><kbd class="kbd ">⌘</kbd><kbd class="kbd ">E</kbd></span></li><li role="option">Start close · Revived Interiors<span class="k"></span></li><li class="grp" role="presentation">Actions</li><li role="option">New journal entry<span class="k"><kbd class="kbd ">N</kbd><kbd class="kbd ">J</kbd></span></li><li role="option">Build lender pack · October 2026<span class="k"></span></li></ul></div></div><script>
+(function(){
+var pal=document.getElementById('pal'), inp=pal.querySelector('input'), last=null;
+function open(){last=document.activeElement;pal.classList.add('open');inp.focus();}
+function close(){pal.classList.remove('open');if(last)last.focus();}
+document.getElementById('cmdk').addEventListener('click',open);
+pal.addEventListener('click',function(e){if(e.target===pal)close();});
+document.addEventListener('keydown',function(e){
+if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();pal.classList.contains('open')?close():open();}
+else if(e.key==='Escape'&&pal.classList.contains('open')){e.preventDefault();close();}
+});
+})();
+</script></body></html>

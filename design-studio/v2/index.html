@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=1440">
+<title>MeritBooks Design System v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="system.css">
+<style>
+body{min-width:1440px}
+.sheet-top{display:flex;align-items:center;gap:24px;height:48px;padding:0 48px;background:var(--midnight);color:var(--grey-300)}
+.sheet-top img{height:24px;width:auto}
+.sheet{padding:40px 48px 96px;display:grid;grid-template-columns:repeat(12,1fr);column-gap:24px}
+.intro{grid-column:1/8}
+.intro p{margin-top:16px;font-size:15px;line-height:24px;color:var(--ink-2)}
+.intro p b{color:var(--ink);font-weight:600}
+.facts{grid-column:9/13;align-self:end;border-top:2px solid var(--electric);padding-top:12px}
+.facts dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px}
+.facts dt{color:var(--ink-2)} .facts dd{font-weight:500}
+.toc{grid-column:1/13;margin-top:48px;border-top:1px solid var(--electric);list-style:none}
+.toc a{display:grid;grid-template-columns:96px 360px 1fr 32px;align-items:center;gap:24px;min-height:88px;padding:16px 0;border-bottom:1px solid var(--line);transition:background-color var(--fast)}
+.toc a:hover{background:var(--grey-100)}
+.toc a:hover .ar{color:var(--electric)}
+.toc .no{font:700 28px/32px var(--f-display);color:transparent;-webkit-text-stroke:1px var(--electric)}
+.toc .nm{font:700 20px/28px var(--f-display);color:var(--ink)}
+.toc .ds{color:var(--ink-2)}
+.toc .ar{color:var(--ink-3);font-size:20px;text-align:right}
+.rules{grid-column:1/13;margin-top:56px;display:grid;grid-template-columns:repeat(4,1fr);gap:24px}
+.rules div{border-top:1px solid var(--line-2);padding-top:12px}
+.rules b{display:block;font-weight:600;margin-bottom:4px}
+.rules p{color:var(--ink-2)}
+</style></head>
+<body>
+<header class="sheet-top on-dark"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"><span class="eyebrow" style="color:var(--slate)">MeritBooks<span class="sl">//</span>Design System v2<span class="sl">//</span>Oct 2026</span><span class="tag" style="margin-left:auto;background:var(--night-800);color:var(--grey-300)">Sample data</span></header>
+<main class="sheet" id="main">
+  <section class="intro">
+    <div class="eyebrow">Index<span class="sl">//</span>Merge of A and B</div>
+    <h1 class="t-title" style="margin-top:8px">MeritBooks Design System v2</h1>
+    <p><b>One system, two densities.</b> Annual Report sets the owner’s screens: editorial Syne titles, statement rules, notes to the figures. Operator Cockpit sets the work screens: the Midnight frame, 48px rows, keys printed beside the verbs, the slash meter.</p>
+    <p><b>Two marks run through it.</b> The slash measures: the monogram’s 45° stroke counts confidence, close steps and clients ready. The note explains: anything the AI touched carries a note reference, and the note shows its evidence as a ledger that sums. Every home opens on work, with a 32px context line and no banner.</p>
+  </section>
+  <section class="facts" aria-label="System facts"><dl><dt>Stylesheet</dt><dd><a class="link" href="system.css">system.css</a></dd><dt>Guide</dt><dd>design-studio/v2/README.md</dd><dt>Type</dt><dd>Syne 700 · DM Sans 400–700</dd><dt>Width</dt><dd>1440 desktop</dd><dt>Data</dt><dd>Merit Management Group · Sep 2026 close · sample data</dd></dl></section>
+  <ol class="toc" aria-label="Pages">
+    <li><a href="components.html"><span class="no">01</span><span class="nm">Component sheet</span><span class="ds">Tokens, type, grid, shell, buttons, inputs, tabs, status, slash meter, statement and queue tables, notes, overlays, figures, widget frame, edit-mode affordances.</span><span class="ar" aria-hidden="true">→</span></a></li>
+    <li><a href="S6-owner-home.html"><span class="no">S6</span><span class="nm">Owner home</span><span class="ds">Mike as owner of Merit Management Group: decisions with an approve-payment-run slip, figures at a glance, the consolidated group with its eliminations line, every client side by side. Privacy on, and the same home without a group grant.</span><span class="ar" aria-hidden="true">→</span></a></li>
+    <li><a href="S6b-cfo-home.html"><span class="no">S6b</span><span class="nm">CFO home</span><span class="ds">A six-figure strip, then money awaiting release, P&amp;L vs budget by client with reasons, receivables and payables, the group and covenant headroom.</span><span class="ar" aria-hidden="true">→</span></a></li>
+    <li><a href="S6c-controller-home.html"><span class="no">S6c</span><span class="nm">Controller home</span><span class="ds">The close-through matrix, 13 clients by 8 modules, then exceptions, recs to sign off, entries to post, intercompany and the hard close.</span><span class="ar" aria-hidden="true">→</span></a></li>
+    <li><a href="S5-accounting-manager-home.html"><span class="no">S5</span><span class="nm">Accounting manager home</span><span class="ds">The supervision cockpit: close grid across 13 clients with preparer, reviewer and the step each is on; review queue; capacity in hours with drag-to-reassign; blocked work and stale requests.</span><span class="ar" aria-hidden="true">→</span></a></li>
+    <li><a href="S1-bookkeeper-home.html"><span class="no">S1</span><span class="nm">Bookkeeper home</span><span class="ds">Dana Lee’s Monday: six clients ranked by time to spare, the week laid out against her open hours, what the system did for her, and the all-ready Friday.</span><span class="ar" aria-hidden="true">→</span></a></li>
+    <li><a href="S2-client-books-loop.html"><span class="no">S2</span><span class="nm">Client books loop</span><span class="ds">Inside Clive Power Equipment: Review, Reconcile, Check, Close. Step 1 open with a reviewer’s return, then the hand-off to the next client.</span><span class="ar" aria-hidden="true">→</span></a></li>
+    <li><a href="S3-review-queue.html"><span class="no">S3</span><span class="nm">Review queue</span><span class="ds">Clive’s bank and Ramp card feed by band. Live keyboard, the AI’s arithmetic in the edit panel, batch approve 212, and Ask client from 3 rows.</span><span class="ar" aria-hidden="true">→</span></a></li>
+    <li><a href="S4-client-request-mobile.html"><span class="no">S4</span><span class="nm">Client request, on a phone</span><span class="ds">Rob Hartley answers Dana’s three questions from a text: one-tap answers, a split, a receipt photo, confirmation, all caught up.</span><span class="ar" aria-hidden="true">→</span></a></li>
+    <li><a href="S7-switcher-and-contexts.html"><span class="no">S7</span><span class="nm">Switcher &amp; shell states</span><span class="ds">The open ⌘J switcher, then client books, own books, consolidated and support session side by side, with the decision record.</span><span class="ar" aria-hidden="true">→</span></a></li>
+    <li><a href="S8-dashboard-edit.html"><span class="no">S8</span><span class="nm">Dashboard edit mode</span><span class="ds">A bookkeeper customizing in place: catalog filtered by permission, drag, resize, required lock, reset. Then a manager editing the role layout and publishing v5.</span><span class="ar" aria-hidden="true">→</span></a></li>
+      <li><a href="S9-platform-console-home.html"><span class="no">S9</span><span class="nm">Platform console</span><span class="ds">Onboarding funnel as tabs over tenant health ranked by risk, the AI gateway down, support access by consent, billing labelled list-price computed, integration health.</span><span class="ar" aria-hidden="true">→</span></a></li>
+      <li><a href="S10-support-access.html"><span class="no">S10</span><span class="nm">Support access</span><span class="ds">Platform support asks with a reason, ticket, scope and duration; the tenant admin approves from a card on their home; every page opened lands in a log the tenant can read.</span><span class="ar" aria-hidden="true">→</span></a></li>
+      <li><a href="S11-team-and-access.html"><span class="no">S11</span><span class="nm">Team &amp; access</span><span class="ds">Assigning a bookkeeper to clients with capacity and function, hours moving as you check; roles above the manager listed and locked; a group grant blocked until access is complete.</span><span class="ar" aria-hidden="true">→</span></a></li>
+      <li><a href="S12-consolidation-group.html"><span class="no">S12</span><span class="nm">Consolidation group</span><span class="ds">Creating “Merit Management Group — Consolidated” from ownership with %, method, minority interest and eliminations that tie; adding a sister client to a combined group; a suspended grant.</span><span class="ar" aria-hidden="true">→</span></a></li>
+</ol>
+  <section class="rules" aria-label="Rules">
+    <div><b>No banner heroes</b><p>Above the fold: the bar, a 32px context line, then the primary module in the top-left 8 of 12 columns.</p></div>
+    <div><b>Every number has a comparison and a destination</b><p>If a figure has no “vs” and nowhere to go, cut it.</p></div>
+    <div><b>Every module has one primary action</b><p>An empty state and a done state too. A widget the user can’t use isn’t rendered.</p></div>
+    <div><b>Use the IA’s words</b><p>Client, company, workspace, consolidation group, own books. See IA-SPEC §1.1 for the banned list.</p></div>
+  </section>
+</main>
+</body></html>
