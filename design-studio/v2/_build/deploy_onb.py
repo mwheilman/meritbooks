@@ -9,12 +9,12 @@ OUT = sys.argv[1]
 os.makedirs(os.path.join(OUT, "assets"), exist_ok=True)
 V2 = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-TOC = [("O10", "Migration Control Tower", "O-control-tower.html", "Fourteen Merit clients in three waves, sorted worst first: stage as the brand’s slash, sources with health, blockers in dollars, one verb per row, bulk actions, the QuickBooks connect-the-next-company loop with an EIN mismatch caught."),
-       ("O11", "Client migration", "O-client-migration.html", "Heartland’s move: the eight stages with the current one opened, what needs a person, every source by role and what happens to it at go-live, what the system did as a ledger that sums, the plan in plain English, and where-this-came-from."),
+TOC = [("O10", "Migration Control Tower", "O-control-tower.html", "Fourteen Merit clients by cutover date: Wave 1 Aug 31, Wave 2 Sep 30, Wave 3 Oct 31, then Unscheduled. Eight plainly named stages, from Gather info to Live, each saying what happens, who does it and when it’s done. Blockers in dollars, one verb per row, bulk actions, and the QuickBooks connect-the-next-company loop with an EIN mismatch caught."),
+       ("O11", "Client migration", "O-client-migration.html", "Heartland’s move: the eight stages with the current one, Prove balances, opened, what needs a person, every source by role and what happens to it at go-live, what the system did as a ledger that sums, the plan in plain English, and where-this-came-from."),
        ("O12", "Connect a source", "O-connect-source.html", "simPRO over its live API with a read-only promise, preview and import contract. Innergy with no API: a recipe and a drop zone that ties the WIP file to the GL, and a QuickBooks bridge labelled temporary."),
-       ("O14", "Preflight", "O-preflight.html", "Dorrian’s 24 checks on one strip, findings ranked by dollars with fix-in-QuickBooks or handle-it-for-me, and the branded report to send the client."),
-       ("O15", "Chart mapping", "O-mapping.html", "Heritage’s 223 accounts onto the Merit standard chart: Ready, Check, Decide by dollars, the rule behind every proposal, a type-guard stop, a shared-rule conflict across clients, and departments found in the data."),
-       ("O19", "Tie-out, shadow close, certificate", "O-tieout-certificate.html", "Heartland’s month-by-account grid with its drill, schedule and independent ties; AIM’s September closed twice; and AIM’s Conversion Certificate awaiting the reviewer."),
+       ("O14", "Check data quality", "O-preflight.html", "Dorrian’s 24 checks on one strip, findings ranked by dollars with fix-in-QuickBooks or handle-it-for-me, and the branded report to send the client."),
+       ("O15", "Match accounts", "O-mapping.html", "Heritage’s 223 accounts matched to the Merit standard chart: Ready, Check, Decide by dollars, the rule behind every proposal, a type-guard stop, a shared-rule conflict across clients, and departments found in the data."),
+       ("O19", "Prove balances, practice close, sign-off", "O-tieout-certificate.html", "Prove balances: Heartland’s month-by-account grid with its drill, schedule ties and ties to outside evidence. Practice close: AIM’s September closed in both systems. Signed off: AIM’s Conversion Certificate awaiting the reviewer."),
        ("O20", "Buy-in", "O-buy-in.html", "QuickBooks beside MeritBooks for the parallel month with every difference in a note, then “What changes on Monday” for a bookkeeper coming from QuickBooks."),
        ("S18", "Integrations hub", "S18-integrations-hub.html", "Connections by client and role with health, the error queue with replay, a catalog with honest statuses for ServiceTitan, Buildertrend, Innergy, simPRO, RFMS and c-Systems, and the Ramp accounting connection.")]
 INDEX = (common.head("Onboarding & integrations") + common.sheet_top("index.html")
@@ -41,7 +41,8 @@ def mini_css(s):
 
 def mini_html(s):
     s = re.sub(r">\s+<", "><", s)
-    s = re.sub(r' title="[^"]*"', "", s)          # grid tooltips: sr text already carries the meaning
+    s = re.sub(r'(<td\b[^>]*?) title="[^"]*"', r"\1", s)   # tie-out grid cell tooltips only: sr text carries the meaning.
+    # Other title= stay (the Tower's stage tabs explain what happens · who · done when on hover).
     return s
 
 

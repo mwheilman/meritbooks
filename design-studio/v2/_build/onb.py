@@ -3,21 +3,72 @@ Builds on common.py. Page-local CSS here is layout plus four onboarding marks th
   .src   source chip  — a connected system with its health pip (never colour alone: pip shape + word in title/legend)
   .prov  provenance   — "from QuickBooks · Oct 17" beside any prefilled or imported figure (spec P1, P13)
   .tier  how a system connects — Live API / Partner pending / Bridge (temporary) / File drop
-  .stg   the migration's eight stages drawn with the slash meter (Plan … Live)
+  .stg   the migration's eight stages drawn with the slash meter (Gather info … Live)
 No new colours or fonts: everything resolves to system.css tokens."""
 import common
 from common import *
 
 common.NAV = [("index.html", "Index"), ("O-control-tower.html", "Tower"), ("O-client-migration.html", "Client"),
-              ("O-connect-source.html", "Connect"), ("O-preflight.html", "Preflight"), ("O-mapping.html", "Mapping"),
-              ("O-tieout-certificate.html", "Tie-out & certificate"), ("O-buy-in.html", "Buy-in"),
+              ("O-connect-source.html", "Connect"), ("O-preflight.html", "Data quality"), ("O-mapping.html", "Match accounts"),
+              ("O-tieout-certificate.html", "Prove & sign off"), ("O-buy-in.html", "Buy-in"),
               ("S18-integrations-hub.html", "S18 Hub")]
 
-STAGES = ["Plan", "Connect", "Preflight", "Map", "Tie-out", "Shadow close", "Certified", "Live"]
+# UI labels for the eight migration stages. DB enum (08 §3 OM-1) stays plan · connect · preflight · map · tie_out ·
+# shadow_close · certified · live; only the words a person reads changed (owner feedback: say what the work is).
+STAGES = ["Gather info", "Connect systems", "Check data quality", "Match accounts", "Prove balances", "Practice close",
+          "Signed off", "Live"]
+STAGE_KEYS = ["plan", "connect", "preflight", "map", "tie_out", "shadow_close", "certified", "live"]
+
+# What happens · who does it · done when, per stage (08 §5.3 C1–C8, §5.4 delegation map). One source for the Tower's
+# tab descriptions, tooltips, accessible descriptions and the "What happens in each stage" guide.
+STAGE_INFO = [
+    dict(short="Cutover date and systems",
+         what="Set the cutover date and how much history to bring, and name every system the client uses.",
+         who="Accounting manager · Jordan Smith. The client owner answers 3 questions.",
+         done="Every system is named and the cutover date is set."),
+    dict(short="Read-only sign-in or files",
+         what="Sign in to each system read-only, or drop its export files. Loans, bank recs and leases go in the same place.",
+         who="Preparer, or the client owner when they hold the login.",
+         done="Every source has pulled once."),
+    dict(short="24 automatic checks",
+         what="24 checks run on the old books: bank not reconciled, AR that doesn’t match its aging, suspense and more.",
+         who="MeritBooks runs them. The preparer fixes or accepts each.",
+         done="No blockers remain and every warning has a decision."),
+    dict(short="Old chart to Merit chart",
+         what="Each old account is matched to the Merit chart. Shared rules and AI propose, largest balance first.",
+         who="Preparer decides. Jordan Smith settles shared rules.",
+         done="Every account with a balance is matched."),
+    dict(short="Old minus new is zero",
+         what="History posts, then every account, every month: old books minus new books. Schedules, bank and loans tie too.",
+         who="Preparer signs. The reviewer checks.",
+         done="The grid is all zeros and the preparer has signed."),
+    dict(short="One month in both systems",
+         what="Close one month in MeritBooks and in the old system, then compare them account by account.",
+         who="Preparer. The reviewer reads the differences.",
+         done="Every difference is explained."),
+    dict(short="Reviewer signs certificate",
+         what="The reviewer signs the Conversion Certificate. Months before cutover lock for good.",
+         who="Reviewer · Jordan Smith or Priya Natarajan, never the preparer.",
+         done="The certificate is signed."),
+    dict(short="MeritBooks is the book",
+         what="MeritBooks is the book of record. The old system is archived; field, bank and card systems keep feeding.",
+         who="MeritBooks, automatically. The bookkeeper takes over.",
+         done="The client moves to the close grid."),
+]
+assert len(STAGES) == len(STAGE_INFO) == len(STAGE_KEYS) == 8
+
+
+def stage_desc(i):
+    """Plain sentence for title= and aria descriptions: what happens · who does it · done when."""
+    d = STAGE_INFO[i]
+    return f'{STAGES[i]}. What happens: {d["what"]} Who does it: {d["who"]} Done when: {d["done"]}'
 
 ONB_CSS = """
 /* ---- onboarding marks (shared by O-screens + S18) ---- */
 .sheet-top nav a{padding:0 8px}
+/* 32px targets: system .seg is 32px outside its 1px border, so buttons render 30px. Onboarding boards grow it. */
+.seg{height:auto;min-height:34px}
+.seg button{min-height:32px;white-space:nowrap}
 .src{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border:1px solid var(--line-2);background:var(--white);
   font:500 12px/16px var(--f-text);color:var(--ink);white-space:nowrap}
 .src .pip{width:8px;height:8px}

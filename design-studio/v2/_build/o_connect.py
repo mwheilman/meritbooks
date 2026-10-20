@@ -81,17 +81,17 @@ def simpro():
                    ("J-24790", "Nguyen, T.", "Residential install", "Complete", "11,240.00", "11,240.00", "7,905.20"),
                    ("J-24785", "Waukee Schools", "Service &amp; maintenance", "In progress", "6,300.00", "3,150.00", "1,980.75")]
     st = "".join(f'<tr><td class="code">{a}</td><td>{b}</td><td>{c}</td><td>{d}</td><td class="n">{e}</td><td class="n">{f}</td><td class="n">{g}</td></tr>' for a, b, c, d, e, f, g in sample_rows)
-    smp = (f'<table class="tbl tbl-q tbl-q--flush tbl-q--compact smp" aria-label="Five sample jobs"><colgroup><col style="width:80px"><col><col style="width:152px"><col style="width:96px"><col style="width:96px"><col style="width:96px"><col style="width:96px"></colgroup>'
+    smp = (f'<table class="tbl tbl-q tbl-q--flush tbl-q--compact smp" aria-label="Five sample jobs"><colgroup><col style="width:80px"><col><col style="width:184px"><col style="width:96px"><col style="width:96px"><col style="width:96px"><col style="width:96px"></colgroup>'
            f'<thead><tr><th>Job</th><th>Customer</th><th>Business unit</th><th>Status</th><th class="n">Contract</th><th class="n">Billed</th><th class="n">Cost</th></tr></thead><tbody>{st}</tbody></table>')
     teaser = ('<ul class="teaser" style="padding:0">'
-              f'<li><div><span class="l1">{status("ready", "Open invoices tie to QuickBooks")}</span><p>86 invoices, 214,880.40 in both. Check PF-23 passes before mapping.</p></div><span class="n b">0.00</span></li>'
+              f'<li><div><span class="l1">{status("ready", "Open invoices tie to QuickBooks")}</span><p>86 invoices, 214,880.40 in both. The field-invoice check passes before accounts are matched.</p></div><span class="n b">0.00</span></li>'
               f'<li><div><span class="l1">{status("risk", "14 jobs on hold with unbilled cost")}</span><p>Cost to date with no billing. They’ll show on the WIP card for Sam to confirm.</p></div><span class="n b">31,240.00</span></li>'
               f'<li><div><span class="l1">{status("track", "2 technicians not in payroll")}</span><p>Likely subcontractors. Asked on the employee match, not a blocker.</p></div><span class="n b">—</span></li></ul>')
     left = (f'{promise("simPRO")}'
             f'<section class="card" style="margin-top:16px" aria-labelledby="h-disc"><div class="card-h"><h3 id="h-disc">What’s in Heartland’s simPRO</h3><span class="t-cap">Preview only. Nothing is stored except this summary.</span></div>'
             f'<div class="facts-row"><span>Build <b>heartland.simprosuite.com</b></span><span>Connected by <b>Heartland’s simPRO admin</b> via link, Oct 13</span><span>Access <b>read-only</b></span><span>Webhooks <b>jobs, invoices, payments</b></span></div>'
             f'{dtab}<div class="card-h" style="border-top:1px solid var(--line)"><h3 style="font-size:13px">Jobs · 5 of 1,284</h3><span class="t-cap">a sample, so you can check the shape</span></div>{smp}</section>'
-            f'<section class="card" style="margin-top:16px" aria-labelledby="h-teaser"><div class="card-h"><h3 id="h-teaser">First look at quality</h3><span class="t-cap">3 checks that can run before a pull · the full preflight runs after</span></div>{teaser}</section>')
+            f'<section class="card" style="margin-top:16px" aria-labelledby="h-teaser"><div class="card-h"><h3 id="h-teaser">First look at quality</h3><span class="t-cap">3 checks that can run before a pull · all 24 data-quality checks run after</span></div>{teaser}</section>')
     bring = [("Business units → departments", "3", True), ("Jobs open at Sep 30, and jobs since Jan 2025", "418", True), ("Customers (link to QuickBooks)", "1,206", True),
              ("Open invoices (enrich QuickBooks AR)", "86", True), ("Price book items", "1,912", True), ("Technicians → employees", "38", True),
              ("Payments, orders, receipts dated after Sep 30", "feed", True), ("Timesheets", "61,220", False)]
@@ -107,8 +107,8 @@ def simpro():
             f'<div class="panel-sec"><div class="panel-sec-h"><h3>The import contract</h3></div><dl class="contract">{ct}</dl></div>'
             f'<div class="panel-foot"><span class="tag">Staged, not in your books</span><span class="sp"></span><button class="btn btn--primary" type="button">Pull into staging</button></div></aside>')
     steps = ('<ol class="steps" aria-label="Connect simPRO"><li class="is-done"><span class="no">1</span>Connect</li><li aria-current="step"><span class="no">2</span>Preview</li>'
-             '<li><span class="no">3</span>Pull &amp; map</li><li><span class="no">4</span>Tie out</li></ol>')
-    main = (ctxline(["Mon Oct 19", "Heartland Heating &amp; Cooling", "Connect · simPRO", "<b>Preview ready · 8 kinds of record</b>"], '<span class="tag" style="margin-right:12px">Sample data</span>')
+             '<li><span class="no">3</span>Pull &amp; match</li><li><span class="no">4</span>Prove balances</li></ol>')
+    main = (ctxline(["Mon Oct 19", "Heartland Heating &amp; Cooling", "Connect systems · simPRO", "<b>Preview ready · 8 kinds of record</b>"], '<span class="tag" style="margin-right:12px">Sample data</span>')
             + '<div class="page"><div class="page-head"><div><div class="eyebrow">Sources<span class="sl">//</span>Field system</div>'
               '<h1 class="t-title" style="margin-top:8px">simPRO</h1></div>'
               f'<div class="btn-row"><span class="srcs">{src("simPRO", "ok")}</span><button class="btn btn--quiet" type="button">Disconnect</button></div></div>'
@@ -137,12 +137,12 @@ def innergy():
               f'<span class="l2">Innergy WIP export · recognized by its headers, rules only · 47 open jobs</span></span><span class="sp" style="flex:1"></span>{status("risk", "Doesn’t tie to GL")}</div>'
               f'<ul class="ev"><li><span>Cost to date, 47 open jobs, from the file</span><span class="dl"></span><span class="v">1,884,215.60</span></li>'
               f'<li><span>Work in progress asset in QuickBooks at Sep 30</span><span class="dl"></span><span class="v">1,872,735.60</span></li>'
-              f'<li class="ev-total"><span>Difference · preflight PF-20</span><span class="dl"></span><span class="v neg">11,480.00</span></li></ul>'
+              f'<li class="ev-total"><span>Difference · WIP vs GL check</span><span class="dl"></span><span class="v neg">11,480.00</span></li></ul>'
               f'<div class="card-f"><span>Usually a vendor bill in Innergy that hasn’t synced. The WIP card shows the jobs that carry it.</span><span class="sp"></span><button class="btn" type="button">Open the WIP card</button></div></div>')
     drop = (f'<div class="drop">{ico("upload", 16)}<span class="who"><span class="l1">2 of 3 files dropped</span><span class="l2">Waiting for open AP as of Sep 30</span></span><span class="sp"></span>'
             f'<button class="btn" type="button">Choose files</button><button class="btn" type="button">{ico("send")}Ask ICC’s office to send it</button></div>')
     req = (f'<div class="req">{tier("partner")}<span class="who"><span class="l1">Innergy has no public API. MeritBooks asked for partner access on Oct 6.</span>'
-           f'<span class="l2">When it’s granted this card’s button becomes Connect. Staged data, mappings and the tie-out don’t change.</span></span><span class="sp"></span>'
+           f'<span class="l2">When it’s granted this card’s button becomes Connect. Staged data, matched accounts and proved balances don’t change.</span></span><span class="sp"></span>'
            f'<button class="btn btn--quiet" type="button">Tell me when it lands</button></div>')
     left = (f'<section class="card" aria-labelledby="h-path"><div class="card-h"><h3 id="h-path">How should Innergy come in?</h3><span class="t-cap">Iowa Custom Cabinets · millwork jobs and WIP</span></div>'
             f'<div class="card-b">{paths}{req}</div></section>'
@@ -159,8 +159,8 @@ def innergy():
             f'<dl class="contract" style="margin-top:12px"><dt>Ends</dt><dd>When Innergy access lands. You’re asked to keep or end it every 30 days.</dd><dt>Watch for</dt><dd>Anything also dropped as a file is matched, not posted twice.</dd></dl></div>'
             f'<div class="panel-foot"><span class="tag">Staged, not in your books</span><span class="sp"></span><button class="btn btn--primary" type="button" aria-disabled="true">Stage 3 files</button></div></aside>')
     steps_ = ('<ol class="steps" aria-label="Connect Innergy"><li aria-current="step"><span class="no">1</span>Choose a path</li><li><span class="no">2</span>Export &amp; drop</li>'
-              '<li><span class="no">3</span>Pull &amp; map</li><li><span class="no">4</span>Tie out</li></ol>')
-    main = (ctxline(["Mon Oct 19", "Iowa Custom Cabinets", "Connect · Innergy", '<b class="warn">No API · 2 of 3 files in</b>'], '<span class="tag" style="margin-right:12px">Sample data</span>')
+              '<li><span class="no">3</span>Pull &amp; match</li><li><span class="no">4</span>Prove balances</li></ol>')
+    main = (ctxline(["Mon Oct 19", "Iowa Custom Cabinets", "Connect systems · Innergy", '<b class="warn">No API · 2 of 3 files in</b>'], '<span class="tag" style="margin-right:12px">Sample data</span>')
             + '<div class="page"><div class="page-head"><div><div class="eyebrow">Sources<span class="sl">//</span>Field system</div>'
               '<h1 class="t-title" style="margin-top:8px">Innergy</h1></div>'
               f'<div class="btn-row"><span class="srcs">{src("Innergy", "file", "file")}</span></div></div>'
@@ -170,7 +170,7 @@ def innergy():
 
 def build():
     body = (board_h("O12<span class=\"sl\">//</span>08-ONBOARDING §4", "Connect what they have, honestly",
-                    "Every system gets the same four steps: connect, preview, pull and map, tie out. A system with a live API connects in a click and previews before anything is stored. "
+                    "Every system gets the same four steps: connect, preview, pull and match, prove balances. A system with a live API connects in a click and previews before anything is stored. "
                     "A system without one gets a recipe and a drop zone, or a bridge through QuickBooks that says, in the interface, that it’s temporary.",
                     '<span class="tag">Sample data</span> O12')
             + frame(simpro(), "O12.1 · simPRO, live API · Heartland’s admin created the app from a one-step link; Sam previews before pulling.")
@@ -182,8 +182,8 @@ def build():
             + frame(innergy(), "O12.2 · Iowa Custom Cabinets. The partner request is visible; when it lands the same card says Connect.")
             + anno([("Two honest paths", "Export &amp; drop for the opening (it carries its own totals, so it certifies). A QuickBooks bridge for daily activity, tagged Temporary with an end condition."),
                     ("Recipes are steps", "Numbered because order matters. Each step names the screen and the columns. Version and draft status are printed on the recipe."),
-                    ("Files prove themselves", "The dropped WIP file is recognized by its headers and tied to the GL before mapping: the 11,480.00 gap is the one on the Tower."),
-                    ("The upgrade path", "When Innergy grants access, the button changes from Export to Connect. Staging, mappings and tie-out stay as they are.")]))
+                    ("Files prove themselves", "The dropped WIP file is recognized by its headers and tied to the GL before accounts are matched: the 11,480.00 gap is the one on the Tower."),
+                    ("The upgrade path", "When Innergy grants access, the button changes from Export to Connect. Staging, matched accounts and proved balances stay as they are.")]))
     return page("O12 · Connect a source", CSS, body, "O-connect-source.html")
 
 

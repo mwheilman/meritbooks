@@ -40,6 +40,10 @@ body{min-width:1440px}
 .app--frame .main{overflow:hidden}
 .bar .ctx{flex:none}
 .page-head .t-title{white-space:nowrap}
+.seg{height:auto}
+.seg button{min-height:32px}
+/* in-table links get a 32px target without changing row rhythm */
+.tbl a.l1.link{display:flex;align-items:center;width:max-content;min-height:32px;margin:-6px 0}
 """
 
 ICONS = {
@@ -225,10 +229,10 @@ def legend(full=True):
              ('<span class="cap cap--sm is-set"><i></i></span>', "From a permission set"),
              ('<span class="cap cap--sm is-muted"><i></i></span>', "Muted on this assignment")]
     if full:
-        items += [('<span class="cap cap--sm is-on" data-delta="add"><i></i></span>', "Added vs template"),
-                  ('<span class="cap cap--sm" data-delta="rem"><i></i></span>', "Removed vs template"),
-                  ('<span class="cap cap--sm is-on is-hard"><i></i></span>', "Hard conflict"),
-                  ('<span class="cap cap--sm is-on is-soft"><i></i></span>', "Soft conflict")]
+        items += [('<span class="cap cap--sm is-on" data-delta="add"><i></i></span>', "Proposed: add"),
+                  ('<span class="cap cap--sm" data-delta="rem"><i></i></span>', "Proposed: remove"),
+                  ('<span class="cap cap--sm is-on is-hard"><i></i></span>', "Conflict that blocks publishing"),
+                  ('<span class="cap cap--sm is-on is-soft"><i></i></span>', "Conflict that needs a reason")]
     items += [(ico("money", 14), "Moves money"), (ico("eye-off", 14), "Sensitive fields"), (ico("lock", 14), "Re-verify to use")]
     return '<div class="legend" aria-label="Legend">' + "".join(f'<span>{a}{b}</span>' for a, b in items) + '</div>'
 

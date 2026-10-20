@@ -69,7 +69,9 @@ the **wizard side of the contract** (§4): what every connector must hand the wi
     and a superseding certificate.
 11. **Many clients are one motion.** The **Migration Control Tower** (`/clients/onboarding`, the IA's
     "Onboarding tracker") runs waves of clients with bulk actions, shared cutover dates and shared mapping
-    sets. Its stages run Plan · Connect · Preflight · Map · Tie-out · Shadow close · Certified · Live.
+    sets. Its stages, in the words the UI uses, run Gather info · Connect systems · Check data quality ·
+    Match accounts · Prove balances · Practice close · Signed off · Live (definitions in §5.3.1; DB enum
+    values unchanged).
 12. **Buy-in is designed, not hoped for.** Accounting teams get side-by-side old-vs-new reports,
     "where did this number come from" on every figure, a no-write-back promise, rollback, learning by
     doing on their own client's real data, and a **"What changed for my workflow"** page for each role.
@@ -224,7 +226,7 @@ Numbered **OM-1…OM-12**. The lead assigns real migration numbers **after** IA 
 
 **OM-1 · Migration project** (`public.migration_projects`, one per client being onboarded)
 - `id`, `org_id`, `location_id` (unique while not archived), `wave_id` → OM-2 (nullable)
-- `stage` check (`plan`,`connect`,`preflight`,`map`,`tie_out`,`shadow_close`,`certified`,`live`,`paused`,`abandoned`)
+- `stage` check (`plan`,`connect`,`preflight`,`map`,`tie_out`,`shadow_close`,`certified`,`live`,`paused`,`abandoned`). These are storage values only; the UI never shows them. UI labels: `plan` = **Gather info**, `connect` = **Connect systems**, `preflight` = **Check data quality**, `map` = **Match accounts**, `tie_out` = **Prove balances**, `shadow_close` = **Practice close**, `certified` = **Signed off**, `live` = **Live** (§5.3.1)
 - `cutover_date date` (last day before MeritBooks takes over), `history_depth` check (`opening_only`,`monthly`,`monthly_plus_detail`), `history_start date`
 - `target_go_live date`, `shadow_mode` check (`parallel`,`clean_switch`,`none`), `shadow_period_id` → fiscal_periods
 - `chart_strategy` check (`keep_source_chart`,`tenant_standard`), `mapping_set_id` → OM-5
@@ -232,7 +234,7 @@ Numbered **OM-1…OM-12**. The lead assigns real migration numbers **after** IA 
 - `blocker_summary jsonb` (computed: counts and $ by blocker class), `next_action jsonb`, `stage_changed_at`, `certified_at`, `certificate_id` → OM-10
 - replaces `locations.onboarding_status` as the source of truth (keep the column as a derived mirror for one release, the same "live count wins" rule as `deriveStatus`)
 
-**OM-2 · Migration waves** (`public.migration_waves`): `id`, `org_id`, `name` ("Wave 1 — QBO HVAC"), `default_cutover_date`, `default_history_depth`, `default_mapping_set_id`, `target_go_live`, `status`, `created_by`. Waves are optional (a single company tenant never sees them).
+**OM-2 · Migration waves** (`public.migration_waves`): `id`, `org_id`, `name` ("Wave 1 · Aug 31 cutover"), `cutover_date date not null` (a wave **is** a cutover date, §6.5; unique per org while open), `purpose text` (one line, e.g. "proves the Merit standard mapping set"), `default_history_depth`, `default_mapping_set_id`, `target_go_live`, `status`, `created_by`. A project's `cutover_date` must equal its wave's; changing a client's cutover moves it to the wave with that date (or creates one). `wave_id` null = **Unscheduled** (no cutover, no target go-live). Waves are optional (a single company tenant never sees them).
 
 **OM-3 · Sources and connections**
 - **`core.erp_connections` (fix G-ON-1):** + `location_id uuid` (nullable for tenant-level connections such as Ramp or a directory), + `external_ref text` (QBO realmId, Xero tenantId, ServiceTitan tenant id, …), + `role` check (`ledger_source`,`field_system`,`bank`,`card_spend`,`payroll`,`crm`,`directory`,`mailbox`,`docs`), + `scopes text[]`, + `read_only boolean`. Drop unique `(org_id, erp_id)`. New unique `(org_id, erp_id, external_ref)`. Index `(org_id, location_id)`. Secrets stay in Vault (`meta.secretRef`). 07 owns the lifecycle; this doc only requires per-client binding
@@ -410,24 +412,50 @@ team", T10 disappears, and the user lands straight in the client migration (5.3)
 
 ### 5.3 (c) The accounting team: migrate one client (O11–O24)
 
-The **client migration workspace** (`/clients/[id]/migration`) is a left rail of eight stages with live
-status and an assignee on each. The main panel is the current stage. A right drawer holds "Where this came
+The **client migration workspace** (`/clients/[id]/migration`) is a left rail of eight stages (named as in
+§5.3.1) with live status and an assignee on each. The main panel is the current stage. A right drawer holds "Where this came
 from", comments and "Ask someone". Every stage can be done out of order where data allows. The rail shows
 skipped as skipped.
 
+#### 5.3.1 The eight stages, in plain words (UI labels; binding for every screen)
+
+Owner direction (Oct 2026): every stage must say what the work is, who does it and what "done" means. These
+labels and sentences are the UI copy for the Tower tabs (with a one-line description, a tooltip and an
+accessible description), the "What happens in each stage" guide, the client rail, crumbs and buttons. The
+**Done when** column is also the stage derivation rule: a project moves to the next stage when its done test
+is true (or the stage is explicitly skipped, shown as skipped).
+
+| # | UI label (DB value) | One line on the tab | What happens | Who does it | Done when |
+|---|---|---|---|---|---|
+| 1 | **Gather info** (`plan`) | Cutover date and systems | Set the cutover date and how much history to bring, and name every system the client uses | Accounting manager (migration lead). The client owner answers the 3 discovery questions | Every system is named and the cutover date is set |
+| 2 | **Connect systems** (`connect`) | Read-only sign-in or files | Sign in to each system read-only, or drop its export files; loans, bank recs and leases go in the same place | Preparer, or the client owner when they hold the login (magic link) | Every source has pulled once |
+| 3 | **Check data quality** (`preflight`) | 24 automatic checks | The §8 checks run on the old books (bank not reconciled, AR that doesn't match its aging, suspense, …); each finding gets fix in source / handle it / accept | MeritBooks runs them; the preparer decides | No blockers remain and every warning has a decision |
+| 4 | **Match accounts** (`map`) | Old chart to Merit chart | Each old account is matched to the tenant chart; shared rules and AI propose, largest balance first; dimensions and master data resolve here too | Preparer decides; the accounting manager settles shared rules | Every account with a balance is matched |
+| 5 | **Prove balances** (`tie_out`) | Old minus new is zero | History and opening runs post; every account, every month: old books minus new books = 0; schedules (C5) tie to controls; bank, lender, tax, payroll and 1099 tie to outside evidence | Preparer signs the balance proof; reviewer checks | The grid is all zeros and the preparer has signed |
+| 6 | **Practice close** (`shadow_close`) | One month in both systems | Close one month in MeritBooks and in the old system, then compare account by account (clean-switch variant: compare to trend and outside evidence) | Preparer; reviewer reads the differences | Every difference is explained (residual 0.00 or explained) |
+| 7 | **Signed off** (`certified`) | Reviewer signs certificate | The reviewer signs the Conversion Certificate; pre-cutover months hard-close | Reviewer, never the preparer (DB check) | The certificate is signed |
+| 8 | **Live** (`live`) | MeritBooks is the book | MeritBooks is the book of record; the ledger source is archived and disconnected; field, bank and card systems keep feeding | MeritBooks, automatically; the bookkeeper takes over | The client is handed to the close grid |
+
+Verb buttons follow the labels: "Check data quality" (bulk), "Fix data issues", "Match 38 accounts", "Fix 2
+differences", "Sign balance proof", "Sign off and issue". Internal check codes (PF-xx) never appear as the
+only label; they may follow the plain name as a support reference.
+
+#### 5.3.2 What each stage contains (C1–C8)
+
 | # | Stage | H | S | t (QBO + 1 field system) |
 |---|---|---|---|---|
-| C1 | **Plan** (O11) | Confirms prefilled cutover ("MeritBooks takes over Oct 1; September and earlier stay as they were"), history depth (default monthly: current FY YTD + prior FY), shadow mode, lead and reviewer, and **which systems this client uses** (multi-select pre-checked from tenant knowledge; "Not sure" sends a 3-question discovery request to the client contact) | Defaults from the wave. Validates cutover against period status (B1). Creates `migration_sources` for each system picked | 2 min |
-| C2 | **Connect** (O12, O13) | Clicks Connect per source (OAuth, read-only promise shown) or follows the recipe and drops files. Drops corporate docs, loans, leases, WIP, budgets, last bank rec, policy docs into the same zone | Discovery preview per source (§4.2). Smart Intake classifies each file and routes it to its parser **and this client**. Requests the missing pieces from the client contact via a magic-link document request (IA M-7) with a checklist ("Last bank reconciliation for each account", "Loan statements as of Sep 30") | 5 min |
-| C3 | **Preflight** (O14) | Reads the findings. Picks a disposition per finding: fix in source / carry as reconciling item / accept with note. Can send the report to the client | Runs the preflight library (§8) on discovery + first pull. Ranks by $ impact. Recomputes when the source is re-pulled | 5 min |
-| C4 | **Pull & map** (O15–O17) | Bulk-accepts the Ready band, decides the Check/Decide bands (ordered by $), accepts dimension proposals, resolves duplicate/match proposals for customers, vendors and jobs | Pulls the selected entities and window into staging (one run per source × entity). Runs the mapping cascade (§7.1) against the tenant mapping set, dimension inference (§7.3) and master-data matching (§9). Shows ledger-vs-field reconciliation of customers/jobs/open invoices | 10 min |
-| C5 | **Opening & schedules** (O18) | Reviews each schedule card's proposal (loans, leases, assets, prepaids, equity holders, WIP jobs, budgets, outstanding bank items, 1099 YTD, payroll YTD) and confirms | Section framework `propose → validate → commit`. Each schedule ties to its GL control at cutover (debt register = loan liability accounts, …). Existing-loan mode (B9) by default | 8 min |
-| C6 | **Tie-out** (O19, O20) | Opens the grid. Resolves any non-zero cell (drill to source records). Reviews the independent ties. Opens side-by-side reports. Preparer **signs** the tie-out | Posts history runs and opening runs as **staged-approved → posted** (each undoable). Computes the month × account grid, cutover TB, subledger ties, schedule ties and independent ties. Stale-source detection | 5 min |
-| C7 | **Shadow close** (O21) | Works the first month in MeritBooks (normal bookkeeper loop, IA §6). At month end reviews the diff vs the old system | In `parallel` mode: shadow-pulls the source TB/GL for the month and diffs by account with transaction-level explanations. In `clean_switch` mode: compares MeritBooks close to the trend and to independent ties only | normal month + 10 min review |
-| C8 | **Certify & go live** (O22, O23) | Reviewer (≠ preparer) reviews the packet and **approves the certificate** | Issues the certificate (PDF + hash). HARD_CLOSEs pre-cutover periods. Disconnects and archives ledger sources (legacy archive OM-12). Flips field/bank/Ramp sources to ongoing feeds. Client status → `active`. Hands the client to the bookkeeper home | 5 min |
+| C1 | **Gather info** (`plan`, O11) | Confirms prefilled cutover ("MeritBooks takes over Oct 1; September and earlier stay as they were"), history depth (default monthly: current FY YTD + prior FY), shadow mode, lead and reviewer, and **which systems this client uses** (multi-select pre-checked from tenant knowledge; "Not sure" sends a 3-question discovery request to the client contact) | Defaults from the wave. Validates cutover against period status (B1). Creates `migration_sources` for each system picked | 2 min |
+| C2 | **Connect systems** (`connect`, O12, O13) | Clicks Connect per source (OAuth, read-only promise shown) or follows the recipe and drops files. Drops corporate docs, loans, leases, WIP, budgets, last bank rec, policy docs into the same zone | Discovery preview per source (§4.2). Smart Intake classifies each file and routes it to its parser **and this client**. Requests the missing pieces from the client contact via a magic-link document request (IA M-7) with a checklist ("Last bank reconciliation for each account", "Loan statements as of Sep 30") | 5 min |
+| C3 | **Check data quality** (`preflight`, O14) | Reads the findings. Picks a disposition per finding: fix in source / carry as reconciling item / accept with note. Can send the report to the client | Runs the preflight library (§8) on discovery + first pull. Ranks by $ impact. Recomputes when the source is re-pulled | 5 min |
+| C4 | **Match accounts** (`map`, O15–O17; includes the pull) | Bulk-accepts the Ready band, decides the Check/Decide bands (ordered by $), accepts dimension proposals, resolves duplicate/match proposals for customers, vendors and jobs | Pulls the selected entities and window into staging (one run per source × entity). Runs the mapping cascade (§7.1) against the tenant mapping set, dimension inference (§7.3) and master-data matching (§9). Shows ledger-vs-field reconciliation of customers/jobs/open invoices | 10 min |
+| C5 | **Opening & schedules** (part of Prove balances, `tie_out`, O18) | Reviews each schedule card's proposal (loans, leases, assets, prepaids, equity holders, WIP jobs, budgets, outstanding bank items, 1099 YTD, payroll YTD) and confirms | Section framework `propose → validate → commit`. Each schedule ties to its GL control at cutover (debt register = loan liability accounts, …). Existing-loan mode (B9) by default | 8 min |
+| C6 | **Prove balances** (`tie_out`, O19, O20) | Opens the grid. Resolves any non-zero cell (drill to source records). Reviews the ties to outside evidence. Opens side-by-side reports. Preparer **signs** the balance proof (the tie-out) | Posts history runs and opening runs as **staged-approved → posted** (each undoable). Computes the month × account grid, cutover TB, subledger ties, schedule ties and independent ties. Stale-source detection | 5 min |
+| C7 | **Practice close** (`shadow_close`, O21) | Works the first month in MeritBooks (normal bookkeeper loop, IA §6). At month end reviews the diff vs the old system | In `parallel` mode: shadow-pulls the source TB/GL for the month and diffs by account with transaction-level explanations. In `clean_switch` mode: compares MeritBooks close to the trend and to independent ties only | normal month + 10 min review |
+| C8 | **Signed off → Live** (`certified` → `live`, O22, O23) | Reviewer (≠ preparer) reviews the packet and **signs off the certificate** | Issues the certificate (PDF + hash). HARD_CLOSEs pre-cutover periods. Disconnects and archives ledger sources (legacy archive OM-12). Flips field/bank/Ramp sources to ongoing feeds. Client status → `active`. Hands the client to the bookkeeper home | 5 min |
 
 **Go-live before shadow close is allowed** (the client starts transacting in MeritBooks after C6). The
-certificate then issues after C7. The stage chip shows "Live, certification pending shadow close". This keeps
+certificate then issues after C7. The stage chip shows "Practice close · live" (the client is live while its
+practice close finishes; sign-off follows). This keeps
 the "live the same day" FPB target without weakening the proof.
 
 ### 5.4 Delegation map (who typically does each step; anyone can be handed any step)
@@ -443,7 +471,7 @@ the "live the same day" FPB target without weakening the proof.
 | C5 | bookkeeper | controller for equity, loans, rev-rec inputs |
 | C6 | bookkeeper signs | reviewer reviews |
 | C7 | bookkeeper | reviewer |
-| C8 | reviewer approves | controller voids/reopens if needed |
+| C8 | reviewer signs off | controller voids/reopens if needed |
 
 **Client-side OAuth consent:** the person who owns the QBO/ServiceTitan login is often the client, not the
 firm. "Ask the client to connect" sends a magic link that runs **only** the connect step for that one
@@ -462,28 +490,38 @@ the client-access filter (a bookkeeper sees only their clients' rows).
 ### 6.1 Layout (opens on work, no banner)
 
 ```
-Oct 19 · Wave 1 cutover Sep 30 · 9 of 17 clients live · 3 certified · $41,220 in open blockers
-[ All 17 ] [ Plan 2 ] [ Connect 3 ] [ Preflight 1 ] [ Map 2 ] [ Tie-out 2 ] [ Shadow 4 ] [ Certified 3 ]   Wave ▾  Lead ▾  System ▾
+Oct 19 · Wave 2 · Sep 30 cutover · Wave 3 next · Oct 31 · 2 of 14 live · $113,717 in open blockers
+┌ All ─┬ Gather info ┬ Connect systems ┬ Check data quality ┬ Match accounts ┬ Prove balances ┬ Practice close ┬ Signed off ┬ Live ┐
+│  14  │ Cutover date│ Read-only sign- │ 24 automatic checks│ Old chart to   │ Old minus new  │ One month in   │ Reviewer   │ MeritBooks │
+│      │ and systems │ in or files     │                    │ Merit chart    │ is zero        │ both systems   │ signs cert.│ is the book│
+│      │  2          │  5              │  1                 │  2             │  1             │  1             │  0         │  2         │
+└──────┴─────────────┴─────────────────┴────────────────────┴────────────────┴────────────────┴────────────────┴────────────┴────────────┘
+ ▸ What happens in each stage   (disclosure: 8 columns under the tabs · what happens · who does it · done when)
+[ All waves | Wave 1 3 | Wave 2 6 | Wave 3 3 | Unscheduled 2 ]  System ▾  Preparer ▾
+ A wave is a group of clients moving on the same cutover date.
 ┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ ☐ Client               Stage        Sources            Blockers         Next action               Lead / Rev   Due │
-│ ☐ Clive Power Equip.   Connect      Sage(file) C-Sys   TB missing       Ask client: Intacct TB    Dana / Kim  Oct 21│
-│ ☐ Heartland H&C        Tie-out      QBO simPRO         $3,140 · 2 cells Resolve Oct 1099 cell     Dana / Kim  Oct 22│
-│ ☐ Heritage Interiors   Map          QBO RFMS           38 to decide     Decide 38 mappings ($92k) Lee  / Kim  Oct 23│
-│ ☐ AIM K&B              Shadow       QBO Buildertrend   —                Shadow diff due Nov 3     Lee  / Kim  Nov 3 │
-└──────────────────────────────────────────────────────────────── [Bulk: Set cutover · Apply mapping set · Assign · Request docs · Run preflight] ┘
+│ ☐ Client               Stage               Sources            Blockers          Next step            Preparer / Rev  Go-live │
+│ WAVE 1 · AUG 31 CUTOVER  proved the mapping set · 3 clients · $1,862                                                      │
+│ ☐ AIM K&B              Practice close      QBO Buildertrend   $1,862 · 2 to explain  Explain 2 items  Luis / Jordan   Oct 21 │
+│ WAVE 2 · SEP 30 CUTOVER  the rest of QuickBooks + field systems, Clive by file · 6 clients · $111,855                     │
+│ ☐ Clive Power Equip.   Connect systems     Sage(file) C-Sys   3 files missing   Ask Rob for files    Dana / Jordan   Nov 4  │
+│ ☐ Heritage Interiors   Match accounts      QBO RFMS           $92,410 · 38      Match 38 accounts    Dana / Jordan   Oct 27 │
+│ ☐ Heartland H&C        Prove balances      QBO simPRO         $3,140 · 2 diffs  Fix 2 differences    Sam / Priya     Oct 22 │
+│ WAVE 3 · OCT 31 CUTOVER … · UNSCHEDULED (no cutover, go-live "Not set") last                                              │
+└──────────────────────────────────────────────────────────────── [Bulk: Set cutover · Apply mapping set · Assign · Request docs · Check data quality] ┘
 ```
 
 ### 6.2 Columns (every one sorts and filters)
-Client · stage (with days in stage and SLA dot) · sources (system chips, each with a health dot: connected /
+Client · stage (UI label per §5.3.1, the 8-stroke slash, days in stage and SLA word) · sources (system chips, each with a health dot: connected /
 stale / error / recipe-awaiting-file) · history depth · cutover · **blockers** (count and $, by class:
-documents, preflight, mapping, dedupe, tie-out cells, independent ties, shadow diff) · next action (one verb
+documents, data quality, matching, dedupe, balance-grid differences, outside-evidence ties, practice-close differences) · next action (one verb
 button, the exact step) · lead / reviewer (inline reassign → effective-dated `client_assignments`) · target
 go-live · certificate status.
 
 ### 6.3 Bulk actions (P9)
 Set cutover / history depth / shadow mode for the selection · move to wave · **apply mapping set** (re-runs
 the cascade, shows a per-client delta before committing) · assign lead/reviewer · **request documents** (one
-checklist, sent per client contact, tracked per client) · run preflight · re-pull stale sources · **issue
+checklist, sent per client contact, tracked per client) · check data quality (re-run preflight) · re-pull stale sources · **issue
 certificates** (only rows with all gates green; each still needs its reviewer's approval, batched into one
 review queue item per reviewer) · export the tracker (XLSX, for the owner).
 
@@ -495,15 +533,28 @@ the client (dice similarity today in `company-match.ts`, plus EIN from QBO Compa
 same loop works for ServiceTitan tenants and Xero orgs.
 
 ### 6.5 Wave mechanics
-A wave is a cohort sharing cutover, history depth, mapping set and target go-live. Recommended wave plan
-(auto-suggested, editable): **Wave 1** = 2–3 clean QBO clients (proves the mapping set) → **Wave 2** = the rest of
-the QBO clients using the now-hardened mapping set → **Wave 3** = file-only and unusual ledgers (Sage, cancelled
-systems, spreadsheets). Wave burndown chart: blockers $ and stage counts by day, with a drill.
+**A wave is a group of clients moving on the same cutover date.** That is the definition, enforced (OM-2):
+every client in a wave has the wave's cutover date; changing a client's cutover moves it to the matching wave.
+Waves also share history depth, mapping set and a target go-live as defaults. **Waves list chronologically by
+cutover date; Unscheduled (clients with no cutover yet, usually because their systems aren't named) lists
+last** and shows go-live as "Not set". Inside a wave, rows sort worst first: a cancelled source, then dollars
+blocked, then earliest stage; live clients last. Each group row states the wave's purpose, client count and
+blocker subtotal; subtotals sum to the footer.
+
+Recommended wave plan (auto-suggested, editable), stated as cutover dates: **Wave 1** = 2–3 clean QBO clients
+on the earliest cutover (proves the mapping set) → **Wave 2** = the next month-end: the rest of the QBO and
+field-system clients on the now-hardened mapping set, plus any client whose source is cancelled (it moves by
+file and sorts first in its wave) → **Wave 3** = the following month-end for the clients still connecting. A
+file-only or unusual-ledger client joins whichever wave matches its cutover; it is not a wave of its own.
+First tenant (sample boards): Wave 1 · Aug 31 (MMG LLC, Merit Fund III, AIM) · Wave 2 · Sep 30 (Heartland,
+Heritage, Iowa Custom Cabinets, Dorrian, Revived, Clive, file-only since Sage Intacct was cancelled 10/1) ·
+Wave 3 · Oct 31 (Swan Creek, Artistry Homes, Wild Rose, the QuickBooks connect loop) · Unscheduled (Metro,
+Crystal: systems not named). Wave burndown chart: blockers $ and stage counts by day, with a drill.
 
 ### 6.6 Supervisor module and done state
 IA `am.onboarding` widget = the Tower's top 5 "stuck longest" rows plus the stage tabs. Done state: "All 17
-clients certified. Average 4.2 days plan-to-live, 31 human minutes per client." The Tower then hides from
-nav until a client enters `plan` again.
+clients signed off and live. Average 4.2 days from Gather info to Live, 31 human minutes per client." The Tower
+then hides from nav until a client enters Gather info (`plan`) again.
 
 ---
 
@@ -864,6 +915,8 @@ Linked from the invite email and the tour, and reachable from Help forever.
 - **AC-22** With the AI gateway off, the golden packet reaches a certificate using rules, recipes, crosswalk, column maps and manual decisions. Each AI-dependent panel shows "AI paused: rules and memory only".
 - **AC-23** A bookkeeper assigned to 2 of 17 clients sees 2 rows in the Control Tower and can't open another client's migration via URL (RLS + API, IA R1/R2).
 - **AC-24** The platform admin's funnel never displays a tenant's financial figure (IA R13).
+- **AC-25** (Tower stages explain themselves) Every Tower stage tab shows its §5.3.1 label and one-line description, exposes what happens · who does it · done when as a tooltip and as an accessible description, and the "What happens in each stage" disclosure lists all eight in columns under their tabs (collapsed by default, remembered per person). No screen in O10–O24 shows a DB stage value or a bare check code as a label.
+- **AC-26** (Waves are cutover dates) Every client in a wave has that wave's cutover date (DB check); waves list in cutover order with Unscheduled last; an Unscheduled client shows cutover and go-live "Not set"; wave subtotals of blocker $ sum to the Tower footer exactly as printed (half-up rounding to whole dollars).
 
 ### 14.2 Buy-in acceptance
 - **AC-B1** Side-by-side reports exist for P&L, BS, TB, AR/AP aging for any window month, with XLSX export of both columns.
@@ -919,19 +972,19 @@ synthetic data.
 | **O7** | **Policies** | dropped doc beside compiled rules with source sentences; follow-ups |
 | **O8** | **Inboxes** | per-client forwarding addresses (copy, test); mailbox connect with read-only promise; backfill results: bills found, deduped vs ledger, new vendors to review |
 | **O9** | **Integrations hub** | clients × systems matrix; tiers honest (Connect vs Export & drop); per-cell health; "connect next" loop; "my system isn't listed" |
-| **O10** | **Migration Control Tower** | §6 in full: stage tabs with counts, wave filter, rows with sources/blockers $/next action/lead-reviewer, bulk bar, burndown, done state |
-| **O11** | **Client plan** | cutover with plain-English explanation + period check; history depth options with "what you get"; shadow mode; chart strategy; systems this client uses + "Not sure? Ask the client"; lead/reviewer |
+| **O10** | **Migration Control Tower** | §6 in full: stage tabs named per §5.3.1, each with its one-line description, tooltip and accessible description (what happens · who · done when), the "What happens in each stage" disclosure (8 columns under the tabs), counts; wave filter with the one-line wave definition; rows grouped by wave in cutover order, Unscheduled last, with sources/blockers $/next step/preparer-reviewer; bulk bar, burndown, done state |
+| **O11** | **Client plan** (Gather info) | cutover with plain-English explanation + period check; history depth options with "what you get"; shadow mode; chart strategy; systems this client uses + "Not sure? Ask the client"; lead/reviewer |
 | **O12** | **Connect a source** | connector card: read-only promise, OAuth or recipe steps (with screenshots), discovery preview (counts, date ranges, samples, preflight teaser), choose entities + window; "Ask the client to connect" magic link |
 | **O13** | **Drop everything** (client or tenant level) | multi-file drop; per-file type + client + parser with confidence and source (rules/AI/user); correct-type dropdown; missing-documents checklist with "Request from client" |
-| **O14** | **Preflight report** | findings ranked by $; severity chips; plain English; disposition picker; send-to-client PDF preview; re-run on re-pull; done state "No blockers" |
-| **O15** | **COA mapping review** | Ready / Check / Decide bands with counts and $; $-ordered list; source account → target with confidence bar and the rule that produced it; type-guard warnings; bulk accept; conflict badges from other clients; "request account" bulk for controller; by-source / by-target toggle |
+| **O14** | **Check data quality** (preflight report) | findings ranked by $; severity chips; plain English; disposition picker; send-to-client PDF preview; re-run on re-pull; done state "No blockers" |
+| **O15** | **Match accounts** (COA mapping review) | Ready / Check / Decide bands with counts and $; $-ordered list; source account → target with confidence bar and the rule that produced it; type-guard warnings; bulk accept; conflict badges from other clients; "request account" bulk for controller; by-source / by-target toggle |
 | **O16** | **Dimension proposals** | proposed departments/jobs/classes with evidence (txn count, $, accounts); merge into existing; effect preview on mappings |
 | **O17** | **Master data & ERP reconciliation** | customers/vendors/jobs: auto-linked, proposed (side-by-side cards), conflicts; ledger open AR vs field open invoices matched by invoice #; authority matrix editor |
 | **O18** | **Opening & schedules** | one ParseReview card each: loans (existing mode + covenants), leases, assets, prepaids, equity holders, WIP jobs, budgets, outstanding bank items, 1099 YTD, payroll YTD, sales-tax PTD; each with its GL tie at cutover |
-| **O19** | **Tie-out grid** | month × account heat-grid (0 / $ / stale / pre-dimension); roll-forward row; toggle source vs target accounts; cell drill to records; cutover TB checks; subledger & schedule ties; independent ties with Evidenced / Internal only; preparer sign |
+| **O19** | **Prove balances** (tie-out grid) | month × account heat-grid (0 / $ / stale / pre-dimension); roll-forward row; toggle source vs target accounts; cell drill to records; cutover TB checks; subledger & schedule ties; independent ties with Evidenced / Internal only; preparer sign |
 | **O20** | **Side-by-side reports** | P&L/BS/TB/aging/job P&L: source · MeritBooks · difference; month picker; export |
-| **O21** | **Shadow close** | per-account diff with explanation categories and transaction links; resolve actions; residual = $0; clean-switch variant |
-| **O22** | **Conversion Certificate** | the packet (§10.7) as a review screen; prepared-by / approve; PDF preview with hash and number; refused state when approver = preparer |
+| **O21** | **Practice close** (shadow close) | per-account diff with explanation categories and transaction links; resolve actions; residual = $0; clean-switch variant |
+| **O22** | **Signed off** (Conversion Certificate) | the packet (§10.7) as a review screen; prepared-by / approve; PDF preview with hash and number; refused state when approver = preparer |
 | **O23** | **Go-live & rollback panel** | what flips at go-live (periods, sources, archive); undo run list; reset client; post-certificate reopen with second approver; certificate versions |
 | **O24** | **What changed for my workflow** + first-week path | per role; stays / automated / moved / new; QBO-term bridge; checklist of real first tasks with progress |
 | **O25** | **Client document & connect request** (client contact, 390px) | checklist of requested docs with camera/file attach; "Connect QuickBooks" single-purpose consent; plain-English read-only promise; all-done state |
@@ -956,7 +1009,7 @@ Intuit production keys (QBO, Mike).
 |---|---|---|---|
 | **OB-0 Spine** | OM-1…OM-12 migrations; `onb.mappings/waves/certificate` capability keys; nav entries (Tower, Add clients, Mapping sets) | IA M-1/M-2, R-1 | migrations, permissions, navigation (lead) |
 | **OB-1 Connector contract** | `MigrationConnector` + descriptor + conformance test; QBO conformed (discover, control totals, fingerprint, monthly TB, GL detail); `erp_connections` per-client (G-ON-1); mock moved to sandbox-only | OB-0, 07 framework | `lib/integrations/connectors/*` (07-owned package), `quickbooks/*` |
-| **OB-2 Migration project + Tower v2** | projects/waves services, 8-stage derivation, Tower UI + bulk actions + "connect next" loop; rename portfolio → clients; owner via `client_assignments` | OB-0, IA M-5 | `lib/clients/onboarding/*`, `app/(app)/clients/onboarding/*`, `api/onboarding/clients/*` |
+| **OB-2 Migration project + Tower v2** | projects/waves services, 8-stage derivation (each stage's "Done when" test in §5.3.1; waves keyed by cutover date, §6.5), Tower UI + bulk actions + "connect next" loop; rename portfolio → clients; owner via `client_assignments` | OB-0, IA M-5 | `lib/clients/onboarding/*`, `app/(app)/clients/onboarding/*`, `api/onboarding/clients/*` |
 | **OB-3 Preflight library** | PF-01…PF-24 pure checks over staged data; findings + dispositions; client PDF | OB-1 (staged shape) | `lib/onboarding/preflight/*` |
 | **OB-4 Mapping intelligence** | cascade, bands, $-ordering, type guard, mapping sets/rules/conflicts/publish, crosswalk library seed (QBO detail types, Xero, Intacct), O15 + O26 | OB-0, OB-1 | `lib/onboarding/mapping/*`, `app/(app)/clients/[id]/migration/map/*` |
 | **OB-5 Dimension inference** | signals → proposals → accept/merge; dimension-aware mapping rules; deferred `validate_dimensions` | OB-4 | `lib/onboarding/dimensions/*` |

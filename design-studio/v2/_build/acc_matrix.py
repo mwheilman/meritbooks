@@ -7,7 +7,7 @@ window.MBM=(function(){
   var AN={};A.forEach(function(a){AN[a[0]]=a[1]});
   function has(g,cap){var p=cap.split(':');return (g[p[0]]||'').indexOf(p[1])>-1}
   function relMoney(g){return Object.keys(g).some(function(k){return CAT[k]&&CAT[k].flags.indexOf('M')>-1&&(g[k]||'').indexOf('R')>-1})}
-  function sodHits(g){return MB.sod.filter(function(r){return r.need.every(function(n){return n==='@release_money'?relMoney(g):has(g,n)})})}
+  function sodHits(g,mit){return MB.sod.filter(function(r){return !(mit&&mit[r.id])&&r.need.every(function(n){return n==='@release_money'?relMoney(g):has(g,n)})})}
   function capName(cap){var p=cap.split(':');if(p[0]==='@release_money')return 'Any money release';var c=CAT[p[0]];return c.label+': '+AN[p[1]]}
   function norm(s,acts){return acts.split('').filter(function(c){return s.indexOf(c)>-1}).join('')}
   var PRESETS={None:'',View:'VX',Prepare:'VCED',Approve:'VA',Full:'VCEDAPRXK'};

@@ -49,7 +49,12 @@ pages = {"S13-role-library.html": s13.build(), "S14-role-builder.html": s14.buil
          "S16-client-roles.html": s16.build(), "S17-access-review.html": s17.build()}
 for k, v in pages.items():
     open(os.path.join(OUT, k), "w").write(page(v))
-open(os.path.join(OUT, "access.css"), "w").write(mini_css2(C.BOARD_CSS))
+# v2.3 access rules also live in system.css; repeated here so the bundle works on the system.css already deployed.
+V23 = """.capm th{padding:0 2px}.capm th:first-child{padding-left:16px}
+.sod-mark{display:grid;place-items:center;width:32px;height:32px}
+.sod-row--hard .sod-mark{color:var(--neg)} .sod-row--soft .sod-mark{color:var(--warn)} .sod-row--held .sod-mark{color:var(--ink-2)}
+.sod-fix{display:block;margin-top:2px;color:var(--ink-2)}"""
+open(os.path.join(OUT, "access.css"), "w").write(mini_css2(C.BOARD_CSS + V23))
 open(os.path.join(OUT, "matrix.js"), "w").write(js_base() + "\n" + MATRIX_JS.strip().replace("#i-", "sprite.svg#i-") + "\n")
 js = (C.TOAST_JS + C.AUDIT_JS).replace('<div class="toast-region" aria-live="polite" id="toasts"></div>', "")
 RJS = r"""(function(){
@@ -79,7 +84,7 @@ open(os.path.join(OUT, "system.css"), "w").write(mini_css2(open(os.path.join(V2,
 idx = open(os.path.join(V2, "index.html")).read()
 keep = set(pages)
 idx = re.sub(r'\s*<li><a href="([^"]+)">.*?</li>', lambda m: m.group(0) if m.group(1) in keep else "", idx, flags=re.S)
-idx = idx.replace("<dt>Stylesheet</dt>", "<dt>Review set</dt><dd>S13–S17 · access &amp; roles · Oct 19, 2026</dd><dt>Stylesheet</dt>")
+idx = idx.replace("<dt>Stylesheet</dt>", "<dt>Review set</dt><dd>S13–S17 · access &amp; roles · Oct 20, 2026</dd><dt>Stylesheet</dt>")
 idx = re.sub(r"<style>(.*?)</style>", lambda m: "<style>" + mini_css(m.group(1)) + "</style>", idx, flags=re.S)
 open(os.path.join(OUT, "index.html"), "w").write(re.sub(r">\s*\n\s*<", ">\n<", idx))
 im = Image.open(os.path.join(V2, "assets", "merit-logo-on-dark.png")).convert("RGBA")

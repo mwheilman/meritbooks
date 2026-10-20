@@ -1,4 +1,4 @@
-"""O14 — Data-quality preflight. Dorrian HVAC (C-105), QuickBooks + FieldEdge (via the QuickBooks bridge).
+"""O14 — Check data quality (DB stage `preflight`). Dorrian HVAC (C-105), QuickBooks + FieldEdge (via the QuickBooks bridge).
 24 deterministic checks, findings ranked by dollars, fix-in-source vs handle-for-me, and the send-to-client report."""
 from onb import *
 from onb_data import money, DORRIAN_BLOCKERS
@@ -9,14 +9,17 @@ CSS = """
 .pf{display:flex;flex-direction:column;gap:2px;min-height:72px;padding:8px 10px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
 .pf:nth-child(8n){border-right:0}
 .pf:nth-last-child(-n+8){border-bottom:0}
-.pf .id{font:600 12px/16px var(--f-text);color:var(--ink-2);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:6px}
-.pf .nm{font-size:12px;line-height:16px;color:var(--ink)}
-.pf .rs{font-size:12px;line-height:16px;font-weight:600;margin-top:auto;font-variant-numeric:tabular-nums}
+.pf .id{display:flex;align-items:flex-start;gap:6px}
+.pf .id .pip{margin-top:4px;flex:none}
+.pf .nm{font-size:12px;line-height:16px;color:var(--ink);font-weight:500}
+.pf .rs{display:flex;align-items:baseline;gap:8px;font-size:12px;line-height:16px;font-weight:600;margin-top:auto;padding-top:4px;font-variant-numeric:tabular-nums}
+.pf .rs .ref{margin-left:auto;font-weight:400;color:var(--ink-3)}
 .pf.is-blocker{background:var(--neg-wash)} .pf.is-blocker .rs{color:var(--neg)}
 .pf.is-warning .rs{color:var(--warn)}
 .pf.is-info .rs{color:var(--electric)}
 .pf.is-passed .rs{color:var(--pos)}
 .pf.is-na .nm,.pf.is-na .rs{color:var(--ink-3)}
+.pf.is-blocker .rs .ref,.pf.is-warning .rs .ref{color:var(--ink-3)}
 .pf-legend{display:flex;gap:24px;align-items:center;margin:8px 0 0;color:var(--ink-2);font-size:12px}
 .pf-legend b{color:var(--ink);font-variant-numeric:tabular-nums}
 .pfl{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:24px;align-items:start;margin-top:24px}
@@ -28,6 +31,7 @@ CSS = """
 .fd-row p{color:var(--ink-2);font-size:12px;line-height:16px;margin-top:2px}
 .fd-row .amt{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
 .fd-row .seg{width:100%}
+.fd-row .l2{white-space:normal}
 .fd-row .seg button{flex:1;padding:0 8px;white-space:nowrap}
 .fd-grp{display:flex;align-items:center;gap:12px;height:40px;padding:0 16px;background:var(--canvas);border-bottom:1px solid var(--line)}
 .fd-detail{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;padding:16px 16px 20px 164px;border-bottom:1px solid var(--line);background:var(--white)}
@@ -77,13 +81,13 @@ WORD = {"blocker": "Blocker", "warning": "Warning", "info": "Info", "passed": "P
 def grid():
     t = ""
     for i, n, k, r in CHECKS:
-        t += (f'<div class="pf is-{k}"><span class="id"><i class="pip pip--{PIP[k]}" aria-hidden="true"></i>{i}<span class="sr">{WORD[k]}</span></span>'
-              f'<span class="nm">{n}</span><span class="rs">{r}</span></div>')
-    leg = (f'<div class="pf-legend"><span>{status("blocked", "Blockers")} <b>{CNT["blocker"]}</b> stop the tie-out</span>'
+        t += (f'<div class="pf is-{k}" role="listitem"><span class="id"><i class="pip pip--{PIP[k]}" aria-hidden="true"></i><span class="nm">{n}</span><span class="sr">, {WORD[k]}</span></span>'
+              f'<span class="rs"><span>{r}</span><span class="ref" title="Check reference for support">{i}</span></span></div>')
+    leg = (f'<div class="pf-legend"><span>{status("blocked", "Blockers")} <b>{CNT["blocker"]}</b> stop Prove balances</span>'
            f'<span>{status("risk", "Warnings")} <b>{CNT["warning"]}</b> need a decision</span><span><i class="pip pip--open" aria-hidden="true"></i> Info <b>{CNT["info"]}</b></span>'
            f'<span>{status("ready", "Passed")} <b>{CNT["passed"]}</b></span><span><i class="pip pip--closed" aria-hidden="true"></i> Not applicable <b>{CNT["na"]}</b></span>'
            f'<span class="sp" style="flex:1"></span><span class="prov">QuickBooks pull Oct 18, 6:04 AM · FieldEdge via the QuickBooks bridge</span></div>')
-    return f'<div class="pf-grid" role="list" aria-label="All 24 preflight checks">{t}</div>{leg}'
+    return f'<div class="pf-grid" role="list" aria-label="All 24 data-quality checks">{t}</div>{leg}'
 
 
 def seg(opts, sel):
@@ -91,22 +95,23 @@ def seg(opts, sel):
             "".join(f'<button type="button" aria-pressed="{"true" if i == sel else "false"}">{o}</button>' for i, o in enumerate(opts)) + "</div>")
 
 
-FIND_B = [("PF-01", "Receivables don’t match the A/R account", "3 journal entries hit A/R with no customer", 421250, 0, True),
-          ("PF-02", "Payables don’t match the A/P account", "One bill payment recorded twice in June", 61200, 1, False)]
-FIND_W = [("PF-14", "4 vendors paid over $600 have no TIN", "38,600.00 paid this year · W-9s needed for 1099s", 3860000, 0),
-          ("PF-10", "Bank accounts last reconciled Jun 30", "Operating ••8812 · 23 uncleared items", 2231540, 1),
-          ("PF-03", "Undeposited Funds holds 18,940.00", "41 payments never grouped into a deposit", 1894000, 1),
-          ("PF-18", "Equipment deposits booked as revenue", "12 customer deposits for install jobs not yet done", 1240000, 1),
-          ("PF-17", "Depreciation not run since May", "Catch-up for Jun–Sep on 9 vehicles and tools", 648000, 1),
-          ("PF-04", "Uncategorized expense", "17 transactions", 314520, 1),
-          ("PF-23", "2 FieldEdge invoices never reached QuickBooks", "Found in FieldEdge’s AR export; the bridge can’t see them", 287000, 2),
-          ("PF-09", "Debit balance on a vendor", "Johnstone Supply, overpaid in August", 231875, 2),
-          ("PF-05", "Ask My Accountant holds 1,980.00", "6 transactions", 198000, None)]
+# the first field is the check's plain name (shown under the status); PF codes stay internal (spec §8)
+FIND_B = [("AR aging check", "Receivables don’t match the A/R account", "3 journal entries hit A/R with no customer", 421250, 0, True),
+          ("AP aging check", "Payables don’t match the A/P account", "One bill payment recorded twice in June", 61200, 1, False)]
+FIND_W = [("1099 vendors", "4 vendors paid over $600 have no TIN", "38,600.00 paid this year · W-9s needed for 1099s", 3860000, 0),
+          ("Bank recs", "Bank accounts last reconciled Jun 30", "Operating ••8812 · 23 uncleared items", 2231540, 1),
+          ("Undeposited funds", "Undeposited Funds holds 18,940.00", "41 payments never grouped into a deposit", 1894000, 1),
+          ("Deposits in revenue", "Equipment deposits booked as revenue", "12 customer deposits for install jobs not yet done", 1240000, 1),
+          ("Depreciation", "Depreciation not run since May", "Catch-up for Jun–Sep on 9 vehicles and tools", 648000, 1),
+          ("Uncategorized", "Uncategorized expense", "17 transactions", 314520, 1),
+          ("Field AR = ledger AR", "2 FieldEdge invoices never reached QuickBooks", "Found in FieldEdge’s AR export; the bridge can’t see them", 287000, 2),
+          ("Abnormal signs", "Debit balance on a vendor", "Johnstone Supply, overpaid in August", 231875, 2),
+          ("Ask My Accountant", "Ask My Accountant holds 1,980.00", "6 transactions", 198000, None)]
 assert sum(f[3] for f in FIND_B) == sum(v for _, v in DORRIAN_BLOCKERS)
 
 
 def findings():
-    out = f'<div class="fd-grp"><span class="q-group-t">Blockers</span><span class="t-cap">2 · {money(sum(f[3] for f in FIND_B))} · stop the tie-out</span></div>'
+    out = f'<div class="fd-grp"><span class="q-group-t">Blockers</span><span class="t-cap">2 · {money(sum(f[3] for f in FIND_B))} · stop Prove balances</span></div>'
     for i, t, p, v, sel, open_ in FIND_B:
         out += (f'<div class="fd-row is-attn{" is-open" if open_ else ""}" tabindex="0"><span>{status("blocked", "Blocker")}<span class="l2" style="margin-top:2px">{i}</span></span>'
                 f'<div><span class="t">{t}</span><p>{p}</p></div><span class="amt">{money(v)}</span>{seg(["Fix in QuickBooks", "Handle it for me"], sel)}</div>')
@@ -118,7 +123,7 @@ def findings():
 <li><span>JE 131 · Jul 31 · “reclass deposit”</span><span class="dl"></span><span class="v">1,250.00</span></li>
 <li><span>JE 140 · Aug 30 · no memo</span><span class="dl"></span><span class="v">562.50</span></li>
 <li class="ev-total"><span>In A/R with no customer</span><span class="dl"></span><span class="v">4,212.50</span></li></ul>
-<div class="basis"><span>Check <b>PF-01</b></span><span>Rules only, no AI</span><span>Accounts <b>1200 Accounts receivable</b></span></div></div>
+<div class="basis"><span>Check <b>AR aging = AR account</b></span><span>Rules only, no AI</span><span>Accounts <b>1200 Accounts receivable</b></span></div></div>
 <div><div class="opt is-sel"><span class="t-head" style="font-size:13px;line-height:20px">Fix in QuickBooks</span><p>Dorrian’s office reverses or applies the three entries. We re-pull and this check re-runs. Goes in the report to the client.</p></div>
 <div class="opt"><span class="t-head" style="font-size:13px;line-height:20px">Handle it for me</span><p>Carry 4,212.50 as one reconciling item, “Unapplied A/R from conversion”, owned by Dana Lee, cleared in October. Prints on the certificate.</p></div>
 <div class="btn-row" style="margin-top:12px"><button class="btn btn--quiet" type="button">{ico("eye")}Open the 3 entries</button><button class="btn btn--quiet" type="button">{ico("ask")}Ask someone</button></div></div></div>"""
@@ -128,10 +133,10 @@ def findings():
         out += (f'<div class="fd-row" tabindex="0"><span>{status("risk", "Warning")}<span class="l2" style="margin-top:2px">{i}</span></span>'
                 f'<div><span class="t">{t}</span><p>{p}</p></div><span class="amt">{money(v)}</span>{s}</div>')
     out += (f'<div class="fd-grp"><span class="q-group-t">Info</span><span class="t-cap">1 · feeds customer and vendor matching</span></div>'
-            f'<div class="fd-row" tabindex="0"><span><span class="status" style="color:var(--electric)"><i class="pip pip--open" aria-hidden="true"></i>Info</span><span class="l2" style="margin-top:2px">PF-13</span></span>'
+            f'<div class="fd-row" tabindex="0"><span><span class="status" style="color:var(--electric)"><i class="pip pip--open" aria-hidden="true"></i>Info</span><span class="l2" style="margin-top:2px">Duplicate names</span></span>'
             f'<div><span class="t">14 likely duplicate customers and vendors</span><p>“Johnstone Supply” and “Johnstone Supply Co.”, and 13 more. They become merge proposals when you map.</p></div><span class="amt">—</span><span></span></div>')
-    foot = (f'<div class="fd-foot"><span><b>10 of 11</b> decided</span><span>1 waiting · PF-05</span><span class="sp"></span>'
-            f'<button class="btn" type="button">{ico("retry")}Re-run after a re-pull</button><button class="btn btn--primary" type="button" aria-disabled="true">Go to mapping</button></div>')
+    foot = (f'<div class="fd-foot"><span><b>10 of 11</b> decided</span><span>1 waiting · Ask My Accountant</span><span class="sp"></span>'
+            f'<button class="btn" type="button">{ico("retry")}Re-run after a re-pull</button><button class="btn btn--primary" type="button" aria-disabled="true">Match accounts</button></div>')
     return f'<section class="fd" aria-label="Findings, largest first">{out}{foot}</section>'
 
 
@@ -150,12 +155,12 @@ def report():
 
 def states():
     run = ('<div class="state"><div class="state-h"><span class="eyebrow">Loading · checks running</span></div><div class="card-b">'
-           '<p class="t-head" style="margin:0">Running 24 checks on the QuickBooks pull</p><p class="ink-2" style="margin-top:4px">14 of 24 done. Mapping opens when they finish; nothing here needs you yet.</p>'
+           '<p class="t-head" style="margin:0">Running 24 checks on the QuickBooks pull</p><p class="ink-2" style="margin-top:4px">14 of 24 done. Match accounts opens when they finish; nothing here needs you yet.</p>'
            '<div style="margin-top:12px"><span class="meter meter--lg" role="img" aria-label="14 of 24 checks done">' + '<i class="on"></i>' * 14 + '<i></i>' * 10 + '</span></div>'
            '<span class="bar-l" style="width:80%"></span><span class="bar-l" style="width:60%"></span><span class="bar-l" style="width:70%"></span></div></div>')
     done = state("Done · no blockers", "done", "No blockers. Every warning has a decision.",
-                 "PF-01 cleared on the Oct 21 re-pull after Dorrian’s office reversed the three entries. 6 items are being handled for you and print on the certificate. Mapping is next.",
-                 '<button class="btn btn--primary" type="button">Go to mapping</button><button class="btn" type="button">See the decision log</button>')
+                 "The receivables check cleared on the Oct 21 re-pull after Dorrian’s office reversed the three entries. 6 items are being handled for you and print on the certificate. Match accounts is next.",
+                 '<button class="btn btn--primary" type="button">Match accounts</button><button class="btn" type="button">See the decision log</button>')
     err = state("Error · couldn’t run", "err", "The QuickBooks connection for Dorrian expired",
                 "Intuit asked for sign-in again on Oct 18 at 11:40 PM, so the nightly pull didn’t run and the checks are a day old. Dorrian’s owner holds the QuickBooks login.",
                 '<button class="btn btn--primary" type="button">' + ico("send") + 'Ask the owner to reconnect</button><button class="btn" type="button">Use yesterday’s results</button>')
@@ -164,26 +169,26 @@ def states():
 
 def build():
     tot = money(sum(f[3] for f in FIND_B))
-    main = (ctxline(["Mon Oct 19", "Dorrian HVAC", "Preflight · day 4", f'<b class="neg">2 blockers · {tot}</b>', "9 warnings · 8 decided"],
+    main = (ctxline(["Mon Oct 19", "Dorrian HVAC", "Check data quality · day 4", f'<b class="neg">2 blockers · {tot}</b>', "9 warnings · 8 decided"],
                     '<span class="tag" style="margin-right:12px">Sample data</span>')
-            + '<div class="page"><div class="page-head"><div><div class="eyebrow">Migration<span class="sl">//</span>Preflight<span class="sl">//</span>Dorrian HVAC</div>'
+            + '<div class="page"><div class="page-head"><div><div class="eyebrow">Migration<span class="sl">//</span>Check data quality<span class="sl">//</span>Dorrian HVAC</div>'
               '<h1 class="t-title" style="margin-top:8px">Before we move anything</h1></div>'
               f'<div class="btn-row"><span class="srcs">{src("QuickBooks", "ok")}{src("FieldEdge", "bridge", "via QB", True)}</span></div></div>'
             + grid() + f'<div class="pfl">{findings()}{report()}</div></div>')
-    a = app("client", "density-cockpit", rail_mini(CLIENT_MINI, "DL", 1), bar(ctx_client("Dorrian HVAC", "C-105"), "Migration · Preflight", "Jump to account, vendor, customer…", "QuickBooks pulled 6:04 AM"), main, extra_cls="app--mini")
+    a = app("client", "density-cockpit", rail_mini(CLIENT_MINI, "DL", 1), bar(ctx_client("Dorrian HVAC", "C-105"), "Migration · Check data quality", "Jump to account, vendor, customer…", "QuickBooks pulled 6:04 AM"), main, extra_cls="app--mini")
     a = a.replace('class="app ', 'data-live class="app ', 1)
     body = (board_h("O14<span class=\"sl\">//</span>08-ONBOARDING §8", "What’s wrong, in dollars, before it moves",
                     "The moment Dorrian’s QuickBooks connected, 24 deterministic checks ran. Every result is on one strip; the findings below are ranked by dollars, in plain English, "
                     "and each one gets a decision: fix it in QuickBooks, or have it handled here. The fix-in-source items become a report Dana can send Dorrian’s office.",
                     '<span class="tag">Sample data</span> O14')
             + frame(a, "O14.1 · 2 blockers, the first opened with its evidence. Report preview updates as decisions are made.")
-            + anno([("All 24 on one strip", "Blocker, warning, info, passed, not applicable: pip shape and word on every tile, so the strip reads in greyscale."),
+            + anno([("All 24 on one strip", "Blocker, warning, info, passed, not applicable: pip shape and word on every tile, so the strip reads in greyscale. Each tile leads with what it checks in plain words; the small code at the corner is only support’s reference."),
                     ("Evidence that sums", "The opened blocker lists the three entries behind 4,212.50. The two blockers add to the 4,824.50 the Tower shows."),
                     ("Two kinds of fix", "Fix in source goes into the client report and re-checks on the next pull. Handle it for me names the reconciling item, its owner and when it clears."),
                     ("A gift, not a gate", "The report is Merit-branded and in the client’s words: what we found before we moved your books. It proves value before go-live.")])
             + section_h("O14.2 · Running, done and couldn’t run", "")
             + f'<div class="frame" style="background:var(--canvas)">{states()}</div>')
-    return page("O14 · Preflight", CSS, body, "O-preflight.html")
+    return page("O14 · Check data quality", CSS, body, "O-preflight.html")
 
 
 if __name__ == "__main__":

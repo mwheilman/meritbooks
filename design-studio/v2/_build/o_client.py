@@ -19,6 +19,8 @@ CSS = """
 .srail .is-cur .sk{background:transparent;box-shadow:inset 0 0 0 1.5px var(--electric)}
 .srail .is-done .r{color:var(--pos)}
 .srail .r{font-size:12px;color:var(--ink-3);white-space:nowrap}
+.srail a .l1{white-space:normal}
+.srail .what{display:block;font-size:12px;line-height:16px;color:var(--ink-3);font-weight:400;white-space:normal}
 .srail .subs{list-style:none;padding:0 12px 8px 46px;background:var(--sky)}
 .srail .subs li{display:flex;justify-content:space-between;gap:8px;border:0;min-height:28px;align-items:center;font-size:12px;color:var(--ink-2)}
 .srail .subs li b{font-weight:600;color:var(--ink)}
@@ -58,10 +60,11 @@ CSS = """
 
 
 def stage_rail():
-    items = [("Plan", "done", "Oct 12", None), ("Connect", "done", "Oct 13", None), ("Preflight", "done", "Oct 15", None),
-             ("Map", "done", "Oct 16", None), ("Tie-out", "cur", "2 open", [("Opening &amp; schedules", "11 tied", ""), ("Monthly grid", "2 cells · 1 stale", "neg"),
-                                                                            ("Subledger ties", "9 tied", ""), ("Independent ties", "4 of 5", "warn"), ("Preparer signs", "locked", "")]),
-             ("Shadow close", "", "Oct, parallel", None), ("Certified", "", "Priya", None), ("Live", "", "target Oct 22", None)]
+    rs = [("done", "Oct 12", None), ("done", "Oct 13", None), ("done", "Oct 15", None), ("done", "Oct 16", None),
+          ("cur", "2 open", [("Opening &amp; schedules", "11 tied", ""), ("Monthly grid", "2 open · 1 stale", "neg"),
+                             ("Subledger ties", "9 tied", ""), ("Bank, loan, tax ties", "4 of 5", "warn"), ("Preparer signs", "locked", "")]),
+          ("", "October", None), ("", "Priya", None), ("", "target Oct 22", None)]
+    items = [(STAGES[i], st, r, subs) for i, (st, r, subs) in enumerate(rs)]
     li = ""
     for name, st, r, subs in items:
         cls = {"done": "is-done", "cur": "is-cur", "": ""}[st]
@@ -71,20 +74,22 @@ def stage_rail():
         sub = ""
         if subs:
             sub = '<ul class="subs">' + "".join(f'<li><span>{a}</span><b class="{c}">{b}</b></li>' for a, b, c in subs) + "</ul>"
-        li += f'<li class="{cls}"><a href="#"{aria}>{mark}<span class="l1">{name}</span><span class="r">{rr}</span></a>{sub}</li>'
-    return (f'<nav class="srail" aria-label="Migration stages"><div class="srail-h"><span class="eyebrow">Stage 5 of 8</span>'
+        i = STAGES.index(name)
+        what = f'<span class="what">{STAGE_INFO[i]["short"]}</span>' if st == "cur" else ""
+        li += f'<li class="{cls}"><a href="#"{aria} title="{E(stage_desc(i))}">{mark}<span class="l1">{name}{what}</span><span class="r">{rr}</span></a>{sub}</li>'
+    return (f'<nav class="srail" aria-label="Migration stages"><div class="srail-h"><span class="eyebrow">Stage 5 of 8 · {STAGES[4]}</span>'
             f'<div style="margin-top:6px">{stage_meter(4)}</div></div><ol>{li}</ol>'
-            f'<div class="srail-f">Stages can be worked out of order where the data allows. Skipped shows as skipped, never as done.</div></nav>')
+            f'<div class="srail-f"><b>Done when</b> {STAGE_INFO[4]["done"][0].lower() + STAGE_INFO[4]["done"][1:]} Stages can be worked out of order where the data allows. Skipped shows as skipped, never as done.</div></nav>')
 
 
 def needs_you():
     items = [
-        ("is-attn", "Resolve 2 tie-out cells · $3,140.00", "One August invoice is Install in QuickBooks and Service in simPRO, so it shows in both rows. A June 2025 fuel entry changed in QuickBooks after the pull.",
+        ("is-attn", "Fix 2 differences in the balance grid · $3,140.00", "One August invoice is Install in QuickBooks and Service in simPRO, so it shows in both rows. A June 2025 fuel entry changed in QuickBooks after the pull.",
          '<button class="btn btn--primary" type="button">Open the grid</button>', ""),
         ("", "Attach the Bank of Iowa loan statement at Sep 30", "The loan ties to QuickBooks but not yet to the lender. Without the statement it prints as Internal only on the certificate.",
          '<button class="btn" type="button">' + ico("ask") + 'Ask Heartland</button>', ""),
-        ("", "Sign the tie-out", "You sign; Priya Natarajan reviews and approves the certificate after October’s shadow close.",
-         '<button class="btn" type="button" aria-disabled="true">' + ico("sign") + 'Sign tie-out</button>', f'<span class="lock">{ico("lock", 12)}Locked until the grid is all zero</span>'),
+        ("", "Sign the balance proof", "You sign; Priya Natarajan reviews and signs off the certificate after October’s practice close.",
+         '<button class="btn" type="button" aria-disabled="true">' + ico("sign") + 'Sign balance proof</button>', f'<span class="lock">{ico("lock", 12)}Locked until the grid is all zero</span>'),
     ]
     li = "".join(f'<li class="{c}"><div><p class="t-head" style="margin:0">{t}</p><p>{p}</p>{lk}</div>{b}</li>' for c, t, p, b, lk in items)
     return (f'<section class="wg wg--primary" style="grid-column:auto;grid-row:auto" aria-labelledby="h-need"><div class="wg-head"><h2 class="wg-title" id="h-need">Needs you</h2>'
@@ -94,13 +99,13 @@ def needs_you():
 def sources():
     rows = [
         ("QuickBooks Online", "Ledger · one-time", tier("live"), "Pulled Oct 17, 6:02 AM",
-         "21 monthly trial balances, 251 accounts, 18,412 transactions kept for drill-down, 388 vendors", "Disconnects and archives when certified", "ok", False),
+         "21 monthly trial balances, 251 accounts, 18,412 transactions kept for drill-down, 388 vendors", "Disconnects and archives at sign-off", "ok", False),
         ("simPRO", "Field system", tier("live"), "Webhooks on · 4 min ago",
          '1,284 jobs (312 open), <a href="#" class="fig-link is-lit" data-note="ar">86 open invoices · 214,880.40</a>, 1,206 customers (1,171 linked to QuickBooks)', "Stays connected. Jobs, invoices and payments after Sep 30 flow in", "ok", True),
         ("Plaid · Farmers State", "Bank · ••4471, ••4489", tier("live"), "Balance 6:00 AM",
          "Balances at Sep 30, 17 outstanding items from the September recs", "Stays connected as the bank feed", "ok", False),
         ("Ramp", "Card spend · tenant", tier("live"), "Synced 7:40 AM",
-         "Heartland entity, 14 cards, departments pushed from MeritBooks", "Stays connected. Never export from Ramp by hand", "ok", False),
+         "Heartland’s 14 cards, departments pushed from MeritBooks", "Stays connected. Never export from Ramp by hand", "ok", False),
         ("Documents", "Dropped Oct 13", tier("file", "Drop"), "14 files, 14 classified",
          "Loan agreement, 2 bank recs, WIP schedule, 2026 budget, operating agreement, insurance", "Kept with the client; linked to each schedule", "ok", False),
     ]
@@ -122,7 +127,7 @@ def did():
     more = [("History months posted, one entry each", "21"), ("Open invoices linked by invoice #", "86 of 86"),
             ("Departments from simPRO business units", "3"), ("Vendor habits learned from history", "214"), ("Outstanding bank items loaded", "17")]
     left2 = "".join(f'<li><span>{a}</span><span class="dl"></span><span class="v">{b}</span></li>' for a, b in more)
-    right = [("Mapping decisions", "6", "Oct 16"), ("Preflight dispositions", "9", "Oct 15"), ("Customer merges decided", "23", "Oct 16"),
+    right = [("Accounts matched by hand", "6", "Oct 16"), ("Data-quality decisions", "9", "Oct 15"), ("Customer merges decided", "23", "Oct 16"),
              ("Schedules confirmed", "11", "Oct 18")]
     r = "".join(f'<li><span>{a}</span><span class="dl"></span><span class="v">{b}</span></li>' for a, b, _ in right)
     return (f'<section class="card" aria-labelledby="h-did" style="margin-top:24px"><div class="card-h"><h3 id="h-did">What the system did, and what you decided</h3></div>'
@@ -135,9 +140,9 @@ def did():
 def plan():
     kv = [("Cutover", "<b>Sep 30, 2026.</b> MeritBooks takes over Oct 1. September and earlier stay as they were in QuickBooks.", "Period check passed"),
           ("History", "<b>Monthly, Jan 2025 – Sep 2026.</b> 21 months, one summary entry per month, plus transaction detail kept read-only for drill-down.", "Wave default"),
-          ("Shadow close", "<b>Parallel for October.</b> QuickBooks keeps running one more month and we diff the close. Bank of Iowa gets a lender package.", "Required by tenant rule"),
+          ("Practice close", "<b>October, in both systems.</b> QuickBooks keeps running one more month and we compare the close. Bank of Iowa gets a lender package.", "Required by tenant rule"),
           ("Chart", "<b>Merit standard chart v3</b> with departments, not Heartland’s own chart.", "Firm default"),
-          ("People", "<b>Jordan Smith</b> leads · <b>Sam Kovac</b> prepares · <b>Priya Natarajan</b> reviews and approves", "Reviewer ≠ preparer")]
+          ("People", "<b>Jordan Smith</b> leads · <b>Sam Kovac</b> prepares · <b>Priya Natarajan</b> reviews and signs off", "Reviewer ≠ preparer")]
     rows = "".join(f'<dt>{a}</dt><dd>{b}<div style="margin-top:2px">{prov(c)}</div></dd><dd><button class="btn btn--quiet" type="button">Change</button></dd>' for a, b, c in kv)
     return (f'<section class="card plan" aria-labelledby="h-plan" style="margin-top:24px"><div class="card-h"><h3 id="h-plan">The plan</h3><span class="t-cap">Confirmed by Jordan Smith, Oct 12 · 2 minutes</span></div>'
             f'<div class="card-b"><dl class="kv">{rows}</dl></div></section>')
@@ -167,28 +172,28 @@ def drawer():
 
 
 def states():
-    metro = ('<div class="state"><div class="state-h"><span class="eyebrow">Plan · Metro Heating &amp; Cooling</span></div><div class="card-b">'
+    metro = ('<div class="state"><div class="state-h"><span class="eyebrow">Gather info · Metro Heating &amp; Cooling</span></div><div class="card-b">'
              '<p class="t-head" style="margin:0">Which systems does Metro use?</p><p class="ink-2" style="margin-top:4px">Pre-checked from what Merit already knows. Nothing is assumed.</p>'
              '<div style="display:grid;gap:0;margin-top:8px">'
              '<label class="check"><input type="checkbox"><i></i>QuickBooks Online <span class="t-cap">· ledger</span></label>'
              '<label class="check"><input type="checkbox"><i></i>ServiceTitan <span class="t-cap">· field system</span></label>'
              '<label class="check"><input type="checkbox" checked><i></i>Ramp <span class="t-cap">· card spend, tenant-wide</span></label>'
              '<label class="check"><input type="checkbox" checked><i></i>Plaid <span class="t-cap">· bank</span></label></div>'
-             '<div class="inline-notice inline-notice--info" style="margin-top:8px"><span><b>Sent Oct 17 to Metro’s owner:</b> “Which software runs your jobs? Which keeps your books? Who has the login?” 3 questions, answers by text.</span></div>'
+             '<div class="inline-notice inline-notice--info" style="margin-top:8px"><span><b>Sent Oct 17 to Metro’s owner, so Metro sits in Unscheduled:</b> “Which software runs your jobs? Which keeps your books? Who has the login?” 3 questions, answers by text.</span></div>'
              f'<div class="btn-row" style="margin-top:12px"><button class="btn" type="button">Nudge the owner</button><button class="btn btn--quiet" type="button">I know, set it myself</button></div></div></div>')
-    done = state("Done · live and certified · Merit Fund III", "done", "Live since Oct 9. Certificate CC-0002.",
+    done = state("Done · live and signed off · Merit Fund III", "done", "Live since Oct 9. Certificate CC-0002.",
                  "QuickBooks was disconnected and archived after 20 monthly reports, GL detail and the 1099 report were pulled. Plaid stays on as the bank feed. Luis Ortiz has Merit Fund III on his home.",
                  '<button class="btn" type="button">' + ico("download") + 'Certificate PDF</button><button class="btn btn--quiet" type="button">Open client home</button>')
     err = state("Error · source changed since the pull · Heartland", "err", "QuickBooks changed after Oct 17’s pull",
-                "A fuel transaction dated Jun 2025, a month QuickBooks shows as closed, was edited yesterday at 4:12 PM. That cell is stale, and the tie-out can’t be signed until you re-pull or accept the change.",
+                "A fuel transaction dated Jun 2025, a month QuickBooks shows as closed, was edited yesterday at 4:12 PM. That cell is stale, and the balance proof can’t be signed until you re-pull or accept the change.",
                 '<button class="btn btn--primary" type="button">' + ico("retry") + 'Re-pull Jun 2025</button><button class="btn" type="button">See the edit</button>')
     return f'<div class="states">{metro}{done}{err}</div>'
 
 
 def build():
-    main = (ctxline(["Mon Oct 19", "Cutover Sep 30", "<b>Tie-out · day 2</b>", '<b class="neg">2 cells open · $3,140.00</b>', "Target go-live Thu Oct 22"],
+    main = (ctxline(["Mon Oct 19", "Cutover Sep 30", "<b>Prove balances · day 2</b>", '<b class="neg">2 differences · $3,140.00</b>', "Target go-live Thu Oct 22"],
                     '<span class="tag" style="margin-right:12px">Sample data</span>')
-            + '<div class="page"><div class="page-head"><div><div class="eyebrow">Migration<span class="sl">//</span>Heartland Heating &amp; Cooling<span class="sl">//</span>Wave 2</div>'
+            + '<div class="page"><div class="page-head"><div><div class="eyebrow">Migration<span class="sl">//</span>Heartland Heating &amp; Cooling<span class="sl">//</span>Wave 2 · Sep 30 cutover</div>'
               '<h1 class="t-title" style="margin-top:8px">Moving Heartland onto MeritBooks</h1></div>'
               f'<div class="btn-row"><button class="btn" type="button">{ico("file")}Drop files</button><button class="btn" type="button">{ico("eye")}Side-by-side reports</button></div></div>'
             + f'<div class="mig">{stage_rail()}<div>{needs_you()}{sources()}{did()}{plan()}</div>{drawer()}</div></div>')
@@ -196,15 +201,15 @@ def build():
                bar(ctx_client("Heartland Heating & Cooling", "C-103"), "Migration", "Jump to account, job, customer…", "simPRO synced 4 min ago"), main, extra_cls="app--mini")
     app_ = app_.replace('class="app ', 'data-live class="app ', 1)
     body = (board_h("O11<span class=\"sl\">//</span>08-ONBOARDING §5.3", "One client’s move, start to proof",
-                    "Sam Kovac is preparing Heartland’s migration. The left rail is the eight stages with the current one opened into its sub-steps. The page leads with the three things that need a person; "
+                    "Sam Kovac is preparing Heartland’s migration. The left rail is the eight stages, in plain words, with the current one, Prove balances, opened into its sub-steps. The page leads with the three things that need a person; "
                     "everything the system did is a ledger that sums. The drawer answers “where did this number come from” for the open-invoice figure he clicked.",
                     '<span class="tag">Sample data</span> O11')
-            + frame(app_, "O11.1 · Tie-out stage, “where this came from” open on simPRO’s open invoices. Mini rail so the drawer never covers the work.")
+            + frame(app_, "O11.1 · Prove balances stage, “where this came from” open on simPRO’s open invoices. Mini rail so the drawer never covers the work.")
             + anno([("What the system did vs what’s needed", "Done-for-you lines sum (231 + 14 + 6 = 251 accounts). The three things that need a person are the primary module, with the lock reason on the one that can’t be done yet."),
                     ("Sources by role", "Ledger, field system, bank, card spend and documents, each with how it connects and what happens to it at go-live. QuickBooks leaves; simPRO, Plaid and Ramp stay as feeds."),
-                    ("Plain-English plan", "Cutover, history, shadow and chart are sentences, each with a provenance chip saying where the default came from. Every one has a Change button."),
+                    ("Plain-English plan", "Cutover, history, practice close and chart are sentences, each with a provenance chip saying where the default came from. Every one has a Change button."),
                     ("Delegate anything", "Ask a teammate, the client contact (a link that opens only that step) or MeritBooks concierge. Comments live on the migration, not in email.")])
-            + section_h("O11.2 · Plan without answers, done, and source changed", "")
+            + section_h("O11.2 · Gather info without answers, done, and source changed", "")
             + f'<div class="frame" style="background:var(--canvas)">{states()}</div>')
     return page("O11 · Client migration", CSS, body, "O-client-migration.html")
 

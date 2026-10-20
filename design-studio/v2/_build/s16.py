@@ -21,7 +21,7 @@ CSS = """
 .rr[aria-current=true]{background:var(--sky);box-shadow:inset 3px 0 var(--electric)}
 .rr .row{gap:8px}
 .cr-main{min-width:0;overflow:auto;padding:24px 32px 40px}
-.cr-main .capm col.c-act{width:52px}
+.cr-main .capm col.c-act{width:60px}
 .env-q{position:relative;margin-top:16px}
 .env-q .search{width:420px}
 .env-foot{display:flex;align-items:center;gap:16px;margin-top:0;padding:12px 16px;background:var(--canvas);border:1px solid var(--line);border-top:0}
@@ -57,8 +57,8 @@ def rail_firm_client():
 
 def client_admin_frame():
     roles = (f'<span class="eyebrow">Heritage roles</span>'
-             f'<div class="rr" aria-current="true" tabindex="0"><span class="row"><span class="l1">Office manager</span><span class="tag tag--warn">v3 waiting</span></span><span class="l2">1 person · v2 live</span></div>'
-             f'<div class="rr" tabindex="0"><span class="l1">Field supervisor</span><span class="l2">2 people · v1</span></div>'
+             f'<div class="rr" aria-current="true" tabindex="0"><span class="l1">Office manager</span><span class="l2">1 person · <span class="warn">changes wait for Merit</span></span></div>'
+             f'<div class="rr" tabindex="0"><span class="l1">Field supervisor</span><span class="l2">2 people</span></div>'
              f'<div style="padding:12px 20px"><button class="btn" type="button">{ico("plus")}New Heritage role</button></div>'
              f'<span class="eyebrow">From Merit Management Group</span>'
              f'<div class="rr" tabindex="0"><span class="row"><span class="l1">Client admin</span>{ico("lock",12)}</span><span class="l2">1 person · you</span></div>'
@@ -66,20 +66,21 @@ def client_admin_frame():
              f'<div class="rr" tabindex="0"><span class="row"><span class="l1">Employee / cardholder</span>{ico("lock",12)}</span><span class="l2">4 people</span></div>'
              f'<p class="t-cap" style="padding:12px 20px">Merit’s roles can be assigned, not edited.</p>')
     people = "".join(f'<tr class="q-row"><td><span class="l1">{a}</span><span class="l2">{b}</span></td><td><span class="l1">{c}</span><span class="l2">{d}</span></td><td><span class="l1">{e}</span></td></tr>' for a, b, c, d, e in [
-        ("Marcus Reyes", "marcus@heritageinteriors.com", "Office manager", "Heritage role · v2", "Today 7:58 AM")])
+        ("Marcus Reyes", "marcus@heritageinteriors.com", "Office manager", "Heritage’s own role", "Today 7:58 AM")])
     return f"""<div class="app app--frame density-report" data-context="client">
 {rail_client_admin("Team & roles")}
 {bar_client("Heritage Interiors", "C-101 · Sep open", 'Client settings<span class="sl">//</span>People &amp; access<span class="sl">//</span><b>Team &amp; roles</b>')}
 <main class="main"><div class="ctxline"><span>Heritage Interiors</span><span class="sl">//</span><span>9 people</span><span class="sl">//</span><span>Merit Management Group sets the ceiling</span><span class="sl">//</span><b id="ca-wait">1 change waiting for Merit</b></div>
 <div class="cr"><nav class="cr-roles" aria-label="Roles">{roles}</nav>
-<div class="cr-main"><div class="page-head" style="margin-bottom:12px"><div><div class="eyebrow">Heritage role<span class="sl">//</span>client staff only</div><h1 class="t-title" style="margin-top:4px">Office manager</h1>
+<div class="cr-main"><div class="page-head" style="margin-bottom:12px"><div><div class="eyebrow">Heritage’s own role<span class="sl">//</span>Heritage staff only</div><h1 class="t-title" style="margin-top:4px">Office manager</h1>
 <p class="ink-2" style="margin-top:6px">Approves bills up to a limit, chases receipts, answers Merit’s questions.</p></div>
-<div class="btn-row" style="flex-wrap:nowrap"><span class="lvl lvl--client">Client · Heritage Interiors</span><button class="btn" type="button" id="withdraw">Withdraw v3</button></div></div>
-<div class="inline-notice inline-notice--warn" id="pend"><span class="warn">{ico("clock")}</span><div><b>v3 is waiting for Merit Management Group.</b> Sent Oct 16 to Jordan Smith because it raises an approval limit. Marcus keeps v2 until Merit approves.</div></div>
+<div class="btn-row" style="flex-wrap:nowrap"><button class="btn" type="button" id="withdraw">Withdraw proposed changes</button></div></div>
+<div class="inline-notice inline-notice--warn" id="pend"><span class="warn">{ico("clock")}</span><div><b>Your proposed changes are waiting for Merit Management Group.</b> Sent Oct 16 to Jordan Smith because they raise an approval limit. Marcus keeps what he has now until Merit approves.</div></div>
+<div class="tabs" role="tablist" aria-label="Office manager" id="om-mode" style="margin-top:16px"><button class="tab" role="tab" type="button" aria-selected="false" data-mode="cur">Current</button><button class="tab" role="tab" type="button" aria-selected="true" data-mode="prop">Proposed changes<span class="n tnum">2</span></button></div>
 <div class="env-q"><label class="search">{ico("search")}<input id="env-q" placeholder="What should an office manager be able to do?" aria-label="Find a capability" value=""></label></div>
 <div id="env-msg" style="margin-top:8px"></div>
-<p class="t-cap" style="margin-top:8px">Small square top right: changed in v3, compared with v2 that’s live. Cut corner: has a limit.</p>
-<table class="tbl capm" id="om" style="margin-top:12px"><colgroup><col><col style="width:104px">{'<col class="c-act" style="width:52px">'*9}</colgroup></table>
+<p class="t-cap" style="margin-top:8px" id="om-cap">Small square top right: a proposed change, compared with what Marcus has now. Cut corner: has a limit.</p>
+<table class="tbl capm" id="om" style="margin-top:12px"><colgroup><col><col style="width:104px">{'<col class="c-act" style="width:60px">'*9}</colgroup></table>
 <div class="env-foot">{ico("shield")}<span>Your accounting firm controls access beyond this list.</span><span class="sp"></span><button class="btn" type="button">Ask Merit for more</button></div>
 <p class="t-cap" style="margin-top:8px">Changes to approve, post, release or settings go to Merit before they apply. Everything else applies when you save.</p>
 <h2 class="t-section" style="margin-top:32px">People with this role</h2>
@@ -98,8 +99,8 @@ def firm_frame():
             + p("Dana Lee", "Bookkeeper", "Bookkeeper", "Direct on Heritage", '<span class="warn">Preparer + reviewer</span>', "—")
             + p("Alex Kim", "MeritBooks support", "Support session", "Approved by Mike · read-only", "—", '<span class="warn">Ends 11:40 AM</span>')
             + g("Heritage staff", 7) + p("Lauren Pierce", "Client admin", "Client admin", "Merit role on Heritage", "—", "—")
-            + p("Marcus Reyes", "Office manager", "Office manager", "Heritage role · v2", "—", "—")
-            + p("Hannah Cole, Tyler Brandt", "Field supervisors", "Field supervisor", "Heritage role · v1", "—", "—")
+            + p("Marcus Reyes", "Office manager", "Office manager", "Heritage’s own role", "—", "—")
+            + p("Hannah Cole, Tyler Brandt", "Field supervisors", "Field supervisor", "Heritage’s own role", "—", "—")
             + p("4 cardholders", "Own cards only", "Employee / cardholder", "Merit role", "—", "—")
             + g("Outside", 2) + p("Gina Alvarez", "Heritage bookkeeping contact", "Client contact", "Merit role · magic link", "—", "—")
             + p("Kyle Brandt", "Northwest Bank", "Lender viewer", "Delivered packs only", "—", "Sep 30, 2027"))
@@ -111,11 +112,11 @@ def firm_frame():
 <div class="inline-notice inline-notice--warn"><span class="warn">{ico("alert")}</span><div><b>Dana Lee is preparer and reviewer on the September close.</b> Move review to someone else before she signs off.<br><b>Only Nora Lindqvist can release pay runs here.</b> She’s out Nov 3–7. Add a backup.</div></div>
 <table class="tbl tbl-q who-t" style="margin-top:16px"><colgroup><col style="width:216px"><col><col style="width:176px"><col style="width:136px"></colgroup><thead><tr><th>Person</th><th>Role · how they get in</th><th>Capacity</th><th>Ends</th></tr></thead><tbody>{rows}</tbody></table></div>
 <aside class="fa-side" aria-label="Heritage access policy">
-<div class="sec pend" id="appr"><h3>Waiting for you</h3><span class="l1">Lauren wants Office manager v3</span><span class="l2">Sent Oct 16 · Marcus Reyes holds it</span>
-<ul class="why" style="margin-top:8px"><li><b>Approve bills</b> up to $5,000 (was $2,500)</li><li><b>Create invoices</b>, not send</li><li class="against">Inside Heritage’s envelope · no duty conflicts</li></ul>
-<div class="btn-row" style="margin-top:12px"><button class="btn btn--primary" type="button" id="appr-go">Approve v3</button><button class="btn" type="button">Return with a note</button></div></div>
+<div class="sec pend" id="appr"><h3>Waiting for you</h3><span class="l1">Lauren proposed changes to Office manager</span><span class="l2">Sent Oct 16 · Marcus Reyes holds it</span>
+<ul class="why" style="margin-top:8px"><li><b>Approve bills</b> up to $5,000 (was $2,500)</li><li><b>Create invoices</b>, not send</li><li class="against">Inside the limits you set for Heritage · no conflicts</li></ul>
+<div class="btn-row" style="margin-top:12px"><button class="btn btn--primary" type="button" id="appr-go">Approve changes</button><button class="btn" type="button">Return with a note</button></div></div>
 <div class="sec"><h3>Heritage’s own roles</h3><label class="switch"><input type="checkbox" checked><i></i>Heritage can make roles for its staff</label>
-<label class="field" style="margin-top:12px"><span class="field-label">Most a Heritage role can contain</span><select class="select"><option selected>Client staff envelope · MeritBooks standard</option><option>Heritage envelope · custom</option></select><span class="field-help">Bills, expenses, receipts, requests, documents, reports, cash view, vendors and customers without bank details, invoices. No posting, periods, recs or settings.</span></label></div>
+<label class="field" style="margin-top:12px"><span class="field-label">Most a Heritage role can contain</span><select class="select"><option selected>Standard limits for client staff</option><option>Custom limits for Heritage</option></select><span class="field-help">Bills, expenses, receipts, requests, documents, reports, cash view, vendors and customers without bank details, invoices. No posting, periods, recs or settings.</span></label></div>
 <div class="sec"><h3>Merit approves changes that</h3><div class="acts4"><label class="check"><input type="checkbox" checked><i></i>Approve</label><label class="check"><input type="checkbox" checked><i></i>Release or send</label><label class="check"><input type="checkbox" checked><i></i>Post</label><label class="check"><input type="checkbox" checked><i></i>Change settings</label></div></div>
 <div class="sec"><h3>Seats and sign-in</h3><dl class="kv" style="grid-template-columns:1fr auto;align-items:center"><dt>Heritage staff seats</dt><dd><input class="input tnum" value="15" style="width:72px;text-align:right" aria-label="Seat cap"></dd><dt>Used</dt><dd>7 of 15</dd></dl>
 <label class="switch" style="margin-top:8px"><input type="checkbox" checked><i></i>Two-step sign-in for every Heritage user</label>
@@ -127,18 +128,20 @@ def smalls_frame():
     return f"""<div class="smalls"><div><h3 class="t-section" style="color:var(--ink);margin-bottom:12px">Client roles turned off</h3>
 <div class="empty"><span class="wg-empty-mark">{ico("lock")}</span><span class="t-head">Swan Creek uses Merit’s roles</span><p class="ink-2">Merit Management Group hasn’t turned on Swan Creek roles. You can still give your staff Client contact or Employee / cardholder.</p><div class="btn-row"><button class="btn btn--primary" type="button">Assign a role</button><button class="btn" type="button">Ask Merit to turn on Swan Creek roles</button></div></div></div>
 <div><h3 class="t-section" style="color:var(--ink);margin-bottom:12px">Nothing waiting</h3>
-<div class="empty"><span class="wg-done-mark">{ico("check")}</span><span class="t-head">Office manager v3 is live</span><p class="ink-2">Jordan Smith approved it Oct 17, 9:20 AM. Marcus can now approve bills up to $5,000. It’s in Heritage’s access log.</p><button class="btn" type="button">See the log</button></div></div></div>"""
+<div class="empty"><span class="wg-done-mark">{ico("check")}</span><span class="t-head">Office manager’s changes are live</span><p class="ink-2">Jordan Smith approved it Oct 17, 9:20 AM. Marcus can now approve bills up to $5,000. It’s in Heritage’s access log.</p><button class="btn" type="button">See the log</button></div></div></div>"""
 
 
-JS = "<script>\n" + js_data(env=ENV, om2=OM2, om3=OM3, lim3=LIM3) + MATRIX_JS + r"""
+JS = "<script>\n" + js_data(env=ENV, om2=OM2, om3=OM3, lim2=LIM2, lim3=LIM3) + MATRIX_JS + r"""
 (function(){
-  var t=document.getElementById('om');t.insertAdjacentHTML('beforeend',MBM.head(true,'What they can do'));
-  var g=JSON.parse(JSON.stringify(MB.om3)),q=document.getElementById('env-q');
+  var t=document.getElementById('om');
+  var g=JSON.parse(JSON.stringify(MB.om3)),q=document.getElementById('env-q'),mode='prop';
   function draw(){var s=q.value.trim().toLowerCase();
     var env=MB.env,keys=Object.keys(env);
     /* only envelope capabilities exist here; cells outside the envelope are absent */
     var saved=MBM.CAT;var cat={};
-    MBM.render(t,{grants:g,base:MB.om2,limits:MB.lim3,edit:true,acts:function(k){return env[k]},only:function(k){return keys.indexOf(k)>-1&&(!s||(MBM.CAT[k].label+' '+MBM.CAT[k].domL).toLowerCase().indexOf(s)>-1)}});
+    var ed=mode==='prop';t.querySelector('thead')&&t.querySelector('thead').remove();t.querySelector('tbody')&&t.querySelector('tbody').remove();t.querySelector('colgroup').innerHTML='<col>'+(ed?'<col style="width:104px">':'')+new Array(10).join('<col class="c-act" style="width:60px">');t.insertAdjacentHTML('beforeend',MBM.head(ed,'What they can do'));
+    document.getElementById('om-cap').textContent=ed?'Small square top right: a proposed change, compared with what Marcus has now. Cut corner: has a limit.':'What Marcus has today. Edit in Proposed changes; he keeps this until Merit approves.';
+    MBM.render(t,{grants:ed?g:MB.om2,base:ed?MB.om2:null,limits:ed?MB.lim3:MB.lim2,edit:ed,acts:function(k){return env[k]},only:function(k){return keys.indexOf(k)>-1&&(!s||(MBM.CAT[k].label+' '+MBM.CAT[k].domL).toLowerCase().indexOf(s)>-1)}});
     var m=document.getElementById('env-msg');m.innerHTML='';
     if(s.length>2&&!t.querySelector('tr.capm-res')){var hit=MBM.ORDER.filter(function(k){return (MBM.CAT[k].label+' '+MBM.CAT[k].domL).toLowerCase().indexOf(s.replace(/^(post|approve|release|see|view)\s+/,''))>-1})[0];
       m.innerHTML='<div class="inline-notice inline-notice--neg"><span class="neg"><span class="slash" aria-hidden="true"></span></span><div><b>'+(hit?MBM.esc(MBM.CAT[hit].label):'That')+' is outside what Heritage Interiors can hand out.</b> Merit Management Group controls it. <a class="link" href="#">Ask Merit</a></div></div>';}
@@ -149,8 +152,9 @@ JS = "<script>\n" + js_data(env=ENV, om2=OM2, om3=OM3, lim3=LIM3) + MATRIX_JS + 
     var firm='APRK'.indexOf(p[1])>-1;mbToast(firm?'Changed '+MBM.capName(b.dataset.c).toLowerCase()+' · goes to Merit for approval':'Saved '+MBM.capName(b.dataset.c).toLowerCase()+' · applies now')});
   t.addEventListener('change',function(e){var s=e.target.closest('select[data-preset]');if(!s)return;var k=s.dataset.preset;g[k]=MBM.applyPreset(MB.env[k],s.value);draw()});
   draw();
-  document.getElementById('withdraw').onclick=function(){document.getElementById('pend').hidden=true;document.getElementById('ca-wait').textContent='Nothing waiting for Merit';g=JSON.parse(JSON.stringify(MB.om2));draw();this.hidden=true;mbToast('Withdrew v3 · v2 stays live')};
-  document.getElementById('appr-go').onclick=function(){var a=document.getElementById('appr');a.classList.remove('pend');a.innerHTML='<h3>Waiting for you</h3><span class="l1 pos">Approved Office manager v3</span><span class="l2">Live for Marcus Reyes now · logged in Heritage’s access log</span>';mbToast('Approved Office manager v3 for Heritage Interiors')};
+  document.getElementById('om-mode').addEventListener('click',function(e){var b=e.target.closest('[data-mode]');if(!b)return;mode=b.dataset.mode;this.querySelectorAll('[data-mode]').forEach(function(x){x.setAttribute('aria-selected',String(x===b))});draw()});
+  document.getElementById('withdraw').onclick=function(){document.getElementById('pend').hidden=true;document.getElementById('ca-wait').textContent='Nothing waiting for Merit';g=JSON.parse(JSON.stringify(MB.om2));draw();this.hidden=true;mbToast('Withdrew the proposed changes · Marcus keeps what he has')};
+  document.getElementById('appr-go').onclick=function(){var a=document.getElementById('appr');a.classList.remove('pend');a.innerHTML='<h3>Waiting for you</h3><span class="l1 pos">Approved the changes to Office manager</span><span class="l2">Live for Marcus Reyes now · logged in Heritage’s access log</span>';mbToast('Approved the changes to Office manager for Heritage Interiors')};
 })();
 </script>"""
 
@@ -160,10 +164,10 @@ def build():
     b = sheet_top("S16-client-roles.html") + '<main id="main" class="sheet">'
     b += board_h("S16", "05-RBAC §6.5 A5 · §6.4 A4 · §1.6", "Heritage makes roles for its own staff, inside Merit’s ceiling",
                  "Lauren Pierce runs Heritage Interiors’ office. Merit turned on Heritage roles, so she builds Office manager herself, but only from what Merit allows a client to hand out. Raising Marcus’s bill limit goes to Merit first. Then Jordan, on Merit’s side, sees who can open Heritage’s books, the gaps, the policy, and the request.", "S16.1")
-    b += frame(client_admin_frame(), 1000, "Same matrix as the firm’s builder with everything outside the envelope removed, not greyed. Try searching “post journal entries”.", "Live: cells, presets, search, Withdraw")
-    b += '<div class="anno"><div><b>The envelope is the edge of the page</b><p>Lauren never sees GL, periods, recs or settings. When she looks for one, the answer says who controls it and how to ask.</p></div><div><b>Which changes wait</b><p>Approve, post, release and settings go to Merit; everything else applies at once. Toasts say which happened.</p></div><div><b>Merit’s roles are locked here</b><p>She can assign Client contact or Employee / cardholder but not edit them.</p></div><div><b>Report density</b><p>Lauren isn’t an accountant, so the screen uses the Annual Report titles: fewer, larger words.</p></div></div>'
+    b += frame(client_admin_frame(), 1000, "Same matrix and the same Current / Proposed changes tabs as the firm’s builder, with everything outside Heritage’s limits removed, not greyed. Try searching “post journal entries”.", "Live: cells, presets, search, Withdraw")
+    b += '<div class="anno"><div><b>Merit’s limits are the edge of the page</b><p>Lauren never sees GL, periods, recs or settings. When she looks for one, the answer says who controls it and how to ask.</p></div><div><b>Which changes wait</b><p>Approve, post, release and settings go to Merit; everything else applies at once. Toasts say which happened.</p></div><div><b>Merit’s roles are locked here</b><p>She can assign Client contact or Employee / cardholder but not edit them.</p></div><div><b>Report density</b><p>Lauren isn’t an accountant, so the screen uses the Annual Report titles: fewer, larger words.</p></div></div>'
     b += '<div class="pair-h"><h2 class="t-section">Merit’s side of Heritage</h2><span class="t-cap">Who can open these books, how, the gaps, and the client policy</span></div>'
-    b += frame(firm_frame(), 940, "Every way in is listed: Merit staff, Heritage staff, outsiders, and the live support session. Gaps are written as things to do.", "S16.2 · approve v3 from the panel")
+    b += frame(firm_frame(), 1010, "Every way in is listed: Merit staff, Heritage staff, outsiders, and the live support session. Gaps are written as things to do.", "S16.2 · approve the changes from the panel")
     b += '<div class="pair-h"><h2 class="t-section">Off, and done</h2></div>'
     b += frame(smalls_frame(), 300, "", "S16.3")
     b += '</main>'

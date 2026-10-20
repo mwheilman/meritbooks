@@ -148,7 +148,7 @@ CATALOG = [
    ("core.access.assignments", "Grant access", "VCED", "L"),
    ("core.access.reviews", "Access reviews", "VCAX", ""),
    ("core.access.simulate", "View as", "V", ""),
-   ("core.access.sod_policy", "Duties policy", "VK", "L")]),
+   ("core.access.sod_policy", "Conflict rules", "VK", "L")]),
  ("Tenant", "Tenant settings", [
    ("core.tenant.settings", "Security and branding", "VK", "L"),
    ("core.tenant.accounting_settings", "Accounting settings", "VK", ""),
@@ -157,7 +157,7 @@ CATALOG = [
    ("core.tenant.export", "Full export", "X", "L")]),
 ]
 
-# Accounting manager, as Merit Management Group publishes it today (v5)
+# Accounting manager: what its 3 holders have today ("Current", published Oct 2)
 AM_V5 = {
  "gl.accounts": "VCEDAX", "gl.journal_entries": "VCEDAPX", "gl.recurring_entries": "VCEDAP", "gl.periods": "VE",
  "gl.reporting_basis": "VCEP", "gl.dimensions": "VCED", "gl.year_end": "V", "gl.intercompany": "VCEAP",
@@ -197,7 +197,7 @@ AM_V5 = {
 AM_TPL4 = dict(AM_V5); AM_TPL4["core.tenant.dashboard_layouts"] = "V"; AM_TPL4["ar.write_offs"] = "VCAP"
 # Latest template (v5, Oct 14): connections no longer create; adds read of AI autonomy? no: adds 1099 export already; adds sales tax post.
 AM_TPL5 = dict(AM_TPL4); AM_TPL5["int.connections"] = "V"; AM_TPL5["tax.sales_tax"] = "VEP"
-# The draft (v6) Mike is editing
+# Mike's proposed changes (the one editable draft)
 AM_DRAFT = dict(AM_V5); AM_DRAFT["pay.batches"] = "VCEARX"; AM_DRAFT["payroll.runs"] = "VCEAR"; AM_DRAFT["int.connections"] = "V"
 
 LIMITS_V5 = {"ap.bills:A": "≤ $25,000", "gl.journal_entries:P": "≤ $25,000", "pay.batches:A": "≤ $25,000",
@@ -205,21 +205,30 @@ LIMITS_V5 = {"ap.bills:A": "≤ $25,000", "gl.journal_entries:P": "≤ $25,000",
 LIMITS_DRAFT = dict(LIMITS_V5); LIMITS_DRAFT["ap.bills:A"] = "≤ $35,000"; LIMITS_DRAFT["pay.batches:R"] = "≤ $25,000 · $60,000 a day"
 
 # SoD rules (05 4.3). "any money release" is read as [M] releases (see spec issue).
+# The id is internal only and is never rendered. "p" is the one plain sentence the UI shows;
+# "fix" is the suggested fix: ("rm", capability) removes a grant, ("ctl", text) adds a control.
 SOD = [
  {"id": "S1", "need": ["pay.batches:C", "pay.batches:A", "pay.batches:R"], "hard": False,
-  "t": "Whole payment chain in one person", "w": "Builds, approves and releases the same pay run."},
+  "p": "Could create, approve and release the same pay run.",
+  "fix": ("ctl", "Require a second person on releases over $10,000")},
  {"id": "S2", "need": ["pay.vendor_bank_details:E", "pay.batches:R"], "hard": True,
-  "t": "Change bank details, then pay", "w": "Hard for firms. Can edit where money goes and send it."},
+  "p": "Could change where a vendor gets paid and then send the payment.",
+  "fix": ("rm", "pay.vendor_bank_details:E")},
  {"id": "S4", "need": ["payroll.employees:E", "payroll.runs:R"], "hard": True,
-  "t": "Change pay, then release payroll", "w": "Hard for firms. Can edit a rate or bank account and release the run."},
+  "p": "Could change an employee’s pay and then release payroll.",
+  "fix": ("rm", "payroll.runs:R")},
  {"id": "S5", "need": ["gl.journal_entries:P", "gl.periods:E"], "hard": False,
-  "t": "Reopen a period and post into it", "w": "Posting into a reopened period without oversight."},
+  "p": "Could reopen a closed month and post entries into it.",
+  "fix": ("ctl", "Have the controller approve every reopened month")},
  {"id": "S6", "need": ["core.access.assignments:C", "@release_money"], "hard": False,
-  "t": "Grants access and releases money", "w": "Two admins could grant each other release."},
+  "p": "Could give people access and also release money, so two managers could give each other release.",
+  "fix": ("ctl", "Only let managers grant roles that can’t release money")},
  {"id": "S7", "need": ["mdm.vendors:C", "ap.bills:A", "pay.batches:R"], "hard": False,
-  "t": "Create a vendor, approve its bill, pay it", "w": "The fictitious-vendor chain."},
+  "p": "Could add a vendor, approve its bill and pay it.",
+  "fix": ("ctl", "Require a second approver on a new vendor’s first payment")},
  {"id": "S8", "need": ["ai.autonomy:K", "pay.batches:R"], "hard": False,
-  "t": "Turns on auto-actions and releases", "w": "Enabling automation on what one releases."},
+  "p": "Could switch on automatic actions for payments it also releases.",
+  "fix": ("rm", "ai.autonomy:K")},
 ]
 
 

@@ -6,11 +6,16 @@ from onb_data import money
 
 CSS = """
 .page{padding-top:24px}
-.mp{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:0;border:1px solid var(--line);background:var(--white);margin-top:16px}
+.mp{display:grid;grid-template-columns:minmax(0,1fr) 368px;gap:0;border:1px solid var(--line);background:var(--white);margin-top:16px}
 .mp-main{min-width:0;display:flex;flex-direction:column}
 .mp .bands{border:0;border-bottom:1px solid var(--line)}
-.mp .tbl-q th{background:var(--white)}
-.mp .tbl-q td{height:56px}
+.mp .tbl-q th{background:var(--white);vertical-align:middle;height:48px}
+.mp .tbl-q td{height:56px;padding-top:8px;padding-bottom:8px;white-space:normal;overflow:visible}
+.mp .tbl-q td .l1,.mp .tbl-q td .l2{white-space:normal;overflow-wrap:anywhere}
+.mp .tbl-q th .th-sort{white-space:nowrap}
+.mp td .tg{display:flex;white-space:normal;align-items:flex-start}
+.mp td .tg .ico{margin-top:2px;flex:none}
+.setbar{flex-wrap:wrap}
 .mp .arrow{color:var(--ink-3);margin:0 2px}
 .mp .tg{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;white-space:nowrap}
 .mp .tg--neg{color:var(--neg)} .mp .tg--warn{color:var(--warn)} .mp .tg--info{color:var(--electric)}
@@ -50,9 +55,9 @@ ROWS = [
      ("neg", "Liability → expense")),
     ("6125", "Truck fuel – installers", "Expense", "6120 Vehicle fuel", "", 66, "Merit standard v3", 988000, 2140630,
      ("warn", "Conflict · 2 clients differ")),
-    ("3900", "Opening Balance Equity", "Equity", "3200 Retained earnings", "reclass, controller approves", 70, "Preflight PF-06", 725000, 0,
+    ("3900", "Opening Balance Equity", "Equity", "3200 Retained earnings", "reclass, controller approves", 70, "Data-quality check", 725000, 0,
      ("info", "Controller")),
-    ("6990", "Ask My Accountant", "Expense", "9999 Suspense", "items go to review", 52, "Preflight PF-05", 321218, 418300,
+    ("6990", "Ask My Accountant", "Expense", "9999 Suspense", "items go to review", 52, "Data-quality check", 321218, 418300,
      ("", "")),
     ("4900", "Builder rebates", "Revenue", "4950 Discounts &amp; rebates", "", 57, "Name heuristic · contained", 264000, 1906220,
      ("", "")),
@@ -89,7 +94,7 @@ def table():
     tr += (f'<tr class="q-sum"><td colspan="4">{MORE_N} more in Decide, each under 2,640.00 · same order</td><td class="n">{money(MORE_BAL)}</td></tr>'
            f'<tr class="q-tot"><td colspan="4">38 accounts to decide</td><td class="n"><span>{money(DECIDE_BAL)}</span></td></tr>')
     return (f'<table class="tbl tbl-q tbl-q--flush" aria-label="Accounts to decide, largest balance first">'
-            f'<colgroup><col style="width:248px"><col><col style="width:128px"><col style="width:196px"><col style="width:132px"></colgroup>'
+            f'<colgroup><col style="width:224px"><col><col style="width:120px"><col style="width:176px"><col style="width:152px"></colgroup>'
             f'<thead><tr><th>QuickBooks account</th><th>MeritBooks account</th><th>Confidence</th><th>Why</th><th class="n"><button class="th-sort" type="button" style="min-height:32px">Balance Sep 30 {ico("down",12)}</button></th></tr></thead><tbody>{tr}</tbody></table>')
 
 
@@ -154,26 +159,26 @@ def build():
               '<span class="keys"><span class="kbd">E</span></span> change<span class="keys"><span class="kbd">R</span></span> request account<span class="keys"><span class="kbd">?</span></span> why'
               '<span class="sp"></span><span>AI alone never lands in Ready</span></div>')
     mp = f'<div class="mp"><div class="mp-main">{bands}{setbar}{bulk}<div style="flex:1">{table()}</div>{keybar}</div>{panel()}</div>'
-    main = (ctxline(["Mon Oct 19", "Heritage Interiors", "Map · day 3", f'<b>38 to decide · {money(DECIDE_BAL)}</b>', "223 QuickBooks accounts"],
+    main = (ctxline(["Mon Oct 19", "Heritage Interiors", "Match accounts · day 3", f'<b>38 to decide · {money(DECIDE_BAL)}</b>', "223 QuickBooks accounts"],
                     '<span class="tag" style="margin-right:12px">Sample data</span>')
-            + '<div class="page"><div class="page-head"><div><div class="eyebrow">Migration<span class="sl">//</span>Map<span class="sl">//</span>Heritage Interiors</div>'
-              '<h1 class="t-title" style="margin-top:8px">Chart mapping</h1></div>'
+            + '<div class="page"><div class="page-head"><div><div class="eyebrow">Migration<span class="sl">//</span>Match accounts<span class="sl">//</span>Heritage Interiors</div>'
+              '<h1 class="t-title" style="margin-top:8px">Match accounts to the Merit chart</h1></div>'
               f'<div class="btn-row"><span class="prov">QuickBooks pull Oct 16 · 223 accounts · 21 monthly TBs</span><button class="btn" type="button">{ico("download")}Export mapping</button></div></div>'
             + mp
             + '<div class="sec-h"><h2>Departments and jobs found in the data</h2><span class="t-cap">from QuickBooks classes, RFMS stores and orders, and account-name families · nothing to configure</span></div>'
             + dims() + '</div>')
-    a = app("client", "density-cockpit", rail_mini(CLIENT_MINI, "DL", 1), bar(ctx_client("Heritage Interiors", "C-101"), "Migration · Map", "Jump to account, job, customer…", "RFMS synced 7:02 AM"), main, extra_cls="app--mini")
+    a = app("client", "density-cockpit", rail_mini(CLIENT_MINI, "DL", 1), bar(ctx_client("Heritage Interiors", "C-101"), "Migration · Match accounts", "Jump to account, job, customer…", "RFMS synced 7:02 AM"), main, extra_cls="app--mini")
     a = a.replace('class="app ', 'data-live class="app ', 1)
-    body = (board_h("O15 + O16<span class=\"sl\">//</span>08-ONBOARDING §7", "Map by the dollar, once for every client",
-                    "Heritage’s 223 QuickBooks accounts map onto the Merit standard chart. Ready, Check and Decide are the same bands the bank feed uses. The Decide band is ordered by balance, "
+    body = (board_h("O15 + O16<span class=\"sl\">//</span>08-ONBOARDING §7", "Match by the dollar, once for every client",
+                    "Match accounts: Heritage’s 223 QuickBooks accounts map onto the Merit standard chart. Ready, Check and Decide are the same bands the bank feed uses. The Decide band is ordered by balance, "
                     "and every proposal names the rule that made it. Rules approved on AIM and Heartland arrive pre-filled here; where those clients disagree, Heritage sees the conflict.",
                     '<span class="tag">Sample data</span> O15')
             + frame(a, "O15.1 · Decide band, cursor on a shared-rule conflict. The row amounts plus the 31 more equal the band total.")
             + anno([("Ordered by dollars", "Largest cutover balance first, with 21-month activity under it. The band header, the rows and the 31-more line all sum to 92,410.00."),
-                    ("The rule is the reason", "Merit standard rule, QuickBooks crosswalk, name heuristic, preflight, or AI proposal capped at 89. No balances are ever sent to the model."),
+                    ("The rule is the reason", "Merit standard rule, QuickBooks crosswalk, name heuristic, a data-quality check, or AI proposal capped at 89. No balances are ever sent to the model."),
                     ("Type guard", "A liability proposed onto an expense is red and can’t be accepted without a typed reason, which prints on the certificate."),
                     ("Dimensions are found, not typed", "Classes, RFMS stores and account families become department proposals with evidence; one merges into the tenant’s existing Commercial department.")]))
-    return page("O15 · Chart mapping", CSS, body, "O-mapping.html")
+    return page("O15 · Match accounts", CSS, body, "O-mapping.html")
 
 
 if __name__ == "__main__":

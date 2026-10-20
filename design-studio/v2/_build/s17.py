@@ -8,8 +8,8 @@ ITEMS = [
  ("unused", "Unused capabilities", "Dana Lee · Bookkeeper · sales tax prep on 4 clients", "reduce",
   [("Sales tax: edit · Heritage Interiors", "0 uses"), ("Sales tax: edit · Clive Power Equipment", "0 uses"), ("Sales tax: edit · Swan Creek", "0 uses"), ("Sales tax: edit · Wild Rose", "0 uses")],
   "Erin files sales tax for these four. Mute it on them; keep it on Crystal, where Dana does file."),
- ("sod", "Duty exception · S5 soft", "Owen Pratt · reopens periods and posts into them", "keep",
-  [("Justification", "Audit adjustments for Metro and AIM"), ("Compensating control", "Erin reviews every reopened period"), ("This quarter", "2 reopened · both reviewed"), ("Expires", "Aug 1, 2027")],
+ ("sod", "Allowed conflict", "Owen Pratt · can reopen a closed month and post into it", "keep",
+  [("Reason", "Audit adjustments for Metro and AIM"), ("Safeguard", "Erin approves every reopened month"), ("This quarter", "2 reopened · both reviewed"), ("Expires", "Aug 1, 2027")],
   "Used as described and the control ran both times."),
  ("usage", "Assignment", "Sam Kovac · Bookkeeper on Clive Power Equipment", "keep",
   [("Last used", "4 days ago"), ("Actions in the last 90 days", "212"), ("Capacity", "Preparer"), ("Granted", "Jordan Smith · Mar 3, 2025")],
@@ -115,7 +115,7 @@ def overview_frame():
 <div class="ov"><div class="page-head" style="margin-bottom:0"><div><div class="eyebrow">Team<span class="sl">//</span>Access reviews</div><h1 class="t-title" style="margin-top:4px">Access reviews</h1></div><div class="btn-row"><button class="btn" type="button">Edit schedule</button><button class="btn btn--primary" type="button" aria-disabled="true" title="33 items still open">Close Q3 review</button></div></div>
 <div class="ov-grid"><div>
 <h2 class="t-head">Q3 2026 · by reviewer</h2>
-<table class="tbl tbl-q rvw" style="margin-top:8px"><colgroup><col><col style="width:232px"><col style="width:80px"><col style="width:96px"></colgroup><thead><tr><th>Reviewer</th><th>Decided</th><th class="n">Left</th><th></th></tr></thead><tbody>{rows}</tbody></table>
+<table class="tbl tbl-q rvw" style="margin-top:8px"><colgroup><col><col style="width:232px"><col style="width:72px"><col style="width:128px"></colgroup><thead><tr><th>Reviewer</th><th>Decided</th><th class="n">Left</th><th></th></tr></thead><tbody>{rows}</tbody></table>
 <div class="inline-notice" style="margin-top:12px">{ico("info")}<div>Mike is the only tenant admin, so Nora Lindqvist reviews Mike’s own access. Nobody reviews themselves.</div></div>
 <h2 class="t-head" style="margin-top:32px">Past reviews</h2>
 <table class="tbl tbl-q past" style="margin-top:8px"><colgroup><col><col style="width:320px"><col style="width:208px"></colgroup><thead><tr><th>Review</th><th>Outcome</th><th></th></tr></thead><tbody>
@@ -123,7 +123,7 @@ def overview_frame():
 <tr class="q-row"><td><span class="l1">Q1 2026</span><span class="l2">Closed Apr 9 · first review</span></td><td><span class="l1 tnum">63 items · 48 kept · 9 reduced · 6 revoked</span><span class="l2">Legacy full books dropped from Mike</span></td><td><div class="btn-row"><button class="btn" type="button">{ico("download")}PDF</button><button class="btn" type="button">CSV</button></div></td></tr></tbody></table></div>
 <aside><div class="surface" style="padding:20px"><div class="eyebrow">How Q3 was set up</div>
 <dl class="kv" style="margin-top:12px"><dt>Scope</dt><dd>13 clients · 25 roles</dd><dt>Reviewers</dt><dd>Each person’s grantor</dd><dt>Admins reviewed by</dt><dd>Another admin or CFO</dd><dt>Opened</dt><dd>Oct 17</dd><dt>Due</dt><dd>Oct 31 · 14 days</dd><dt>Reminders</dt><dd>7 and 2 days before</dd><dt>Unreviewed at due date</dt><dd>Stay, flagged</dd></dl></div>
-<div class="surface" style="padding:20px;margin-top:16px"><div class="eyebrow">What’s in it</div><dl class="kv" style="margin-top:12px"><dt>Assignments with usage</dt><dd>61</dd><dt>Duty exceptions</dt><dd>9</dd><dt>Dormant 90 days</dt><dd>4</dd><dt>Unused capabilities</dt><dd>12</dd><dt>Ending within 30 days</dt><dd>8</dd><dt class="b" style="border-top:1px solid var(--midnight);padding-top:6px">Total</dt><dd class="b" style="border-top:1px solid var(--midnight);padding-top:6px">94</dd></dl></div></aside></div></div></main></div>"""
+<div class="surface" style="padding:20px;margin-top:16px"><div class="eyebrow">What’s in it</div><dl class="kv" style="margin-top:12px"><dt>Assignments with usage</dt><dd>61</dd><dt>Allowed conflicts</dt><dd>9</dd><dt>Dormant 90 days</dt><dd>4</dd><dt>Unused capabilities</dt><dd>12</dd><dt>Ending within 30 days</dt><dd>8</dd><dt class="b" style="border-top:1px solid var(--midnight);padding-top:6px">Total</dt><dd class="b" style="border-top:1px solid var(--midnight);padding-top:6px">94</dd></dl></div></aside></div></div></main></div>"""
 
 
 def phone_frame():
@@ -147,7 +147,7 @@ def close_frame():
 <table class="tbl tbl-fs" style="margin-top:16px"><colgroup><col><col style="width:80px"><col style="width:80px"><col style="width:80px"><col style="width:80px"></colgroup>
 <thead><tr><th>Item kind</th><th class="n">Items</th><th class="n">Kept</th><th class="n">Reduced</th><th class="n">Revoked</th></tr></thead><tbody>
 <tr class="fs-line"><td>Assignments with usage</td><td class="n">58</td><td class="n">54</td><td class="n">3</td><td class="n">1</td></tr>
-<tr class="fs-line"><td>Duty exceptions</td><td class="n">7</td><td class="n">6</td><td class="n">1</td><td class="n">0</td></tr>
+<tr class="fs-line"><td>Allowed conflicts</td><td class="n">7</td><td class="n">6</td><td class="n">1</td><td class="n">0</td></tr>
 <tr class="fs-line"><td>Dormant 90 days</td><td class="n">5</td><td class="n">0</td><td class="n">1</td><td class="n">4</td></tr>
 <tr class="fs-line"><td>Unused capabilities</td><td class="n">11</td><td class="n">5</td><td class="n">6</td><td class="n">0</td></tr>
 <tr class="fs-line"><td>Ending within 30 days</td><td class="n">7</td><td class="n">6</td><td class="n">0</td><td class="n">1</td></tr>
@@ -162,7 +162,7 @@ JS = r"""<script>
   var SIDE=[
    ['Dormant access','Luis Ortiz on Artistry Homes','<p class="ink-2">Revoking removes Bookkeeper on Artistry Homes only. Luis keeps his other 3 clients.</p><label class="check" style="margin-top:8px"><input type="checkbox" checked><i></i>Apply now, not at close</label>'],
    ['Unused capabilities','Dana Lee · sales tax prep','<p class="ink-2">Reduce mutes the capability on the clients you tick. Her role stays the same.</p><ul class="mute-l" style="margin-top:8px"><li><label class="check"><input type="checkbox" checked><i></i>Heritage Interiors</label></li><li><label class="check"><input type="checkbox" checked><i></i>Clive Power Equipment</label></li><li><label class="check"><input type="checkbox" checked><i></i>Swan Creek</label></li><li><label class="check"><input type="checkbox" checked><i></i>Wild Rose</label></li><li><label class="check"><input type="checkbox"><i></i>Crystal Kitchen &amp; Bath · used 3 times</label></li></ul>'],
-   ['Duty exception · S5','Owen Pratt · reopen and post','<p class="ink-2">Keeping renews nothing: the exception still expires Aug 1, 2027. Reducing would remove reopen from his role assignment on Metro and AIM.</p>'],
+   ['Allowed conflict','Owen Pratt · reopen and post','<p class="ink-2">Keeping renews nothing: it is still allowed only until Aug 1, 2027. Reducing would take reopening months out of his access on Metro and AIM.</p>'],
    ['Assignment','Sam Kovac on Clive Power Equipment','<p class="ink-2">Nothing unusual. Used daily, matches capacity.</p>'],
    ['Ends soon','Rachel Ames on Swan Creek','<p class="ink-2">Letting it end closes her access Nov 3. A new grant for 30 days needs Erin Vance, who granted the first.</p>'],
    ['Permission set','Priya · Year-end close','<p class="ink-2">Ends by itself Jan 31.</p>'],

@@ -65,7 +65,7 @@ body{min-width:1440px}
 <symbol id="i-drag" viewBox="0 0 16 16" fill="currentColor"><rect x="5" y="3" width="2" height="2"/><rect x="9" y="3" width="2" height="2"/><rect x="5" y="7" width="2" height="2"/><rect x="9" y="7" width="2" height="2"/><rect x="5" y="11" width="2" height="2"/><rect x="9" y="11" width="2" height="2"/></symbol>
 <symbol id="i-sliders" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h12M2 11h12"/><rect x="9" y="3" width="2.5" height="4" fill="#fff"/><rect x="4.5" y="9" width="2.5" height="4" fill="#fff"/></symbol>
 <symbol id="i-x" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
-<symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></symbol><symbol id="i-alert" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.2 14.2 13.5H1.8Z" stroke-linejoin="round"/><path d="M8 6.5v3.2M8 11.2v1"/></symbol>
 <symbol id="i-receipt" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h8v12l-2-1.2L8 14l-2-1.2L4 14Z"/><path d="M6 6h4M6 9h4"/></symbol>
 <symbol id="i-bill" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h5.5L12 4.5V14H4Z"/><path d="M6 7.5h4M6 10.5h3"/></symbol>
 <symbol id="i-none" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"><rect x="3" y="3" width="10" height="10"/></symbol>
@@ -636,16 +636,16 @@ body{min-width:1440px}
       <span class="row"><button class="cap is-on is-lim" type="button" aria-pressed="true" aria-label="Granted with a limit"><i></i></button>With a limit</span>
       <span class="row"><span class="cap cap--ro is-set" role="img" aria-label="From a permission set"><i></i></span>Permission set</span>
       <span class="row"><span class="cap cap--ro is-muted" role="img" aria-label="Muted"><i></i></span>Muted</span>
-      <span class="row"><button class="cap is-on" data-delta="add" type="button" aria-pressed="true" aria-label="Added vs template"><i></i></button>Added vs template</span>
-      <span class="row"><button class="cap" data-delta="rem" type="button" aria-pressed="false" aria-label="Removed vs template"><i></i></button>Removed vs template</span>
+      <span class="row"><button class="cap is-on" data-delta="add" type="button" aria-pressed="true" aria-label="Proposed: add"><i></i></button>Proposed: add</span>
+      <span class="row"><button class="cap" data-delta="rem" type="button" aria-pressed="false" aria-label="Proposed: remove"><i></i></button>Proposed: remove</span>
       <span class="row"><button class="cap is-on is-hard" type="button" aria-pressed="true" aria-label="Hard conflict"><i></i></button>Hard conflict</span>
       <span class="row"><button class="cap is-on is-soft" type="button" aria-pressed="true" aria-label="Soft conflict"><i></i></button>Soft conflict</span>
     </div>
-    <div class="row" style="gap:8px;margin-top:24px"><span class="lvl lvl--platform">Platform template v5</span><span class="lvl lvl--tenant">Tenant · Merit Management Group</span><span class="lvl lvl--client">Client · Heritage Interiors</span></div>
+    <div class="row" style="gap:8px;margin-top:24px"><span class="lvl lvl--platform">MeritBooks</span><span class="lvl lvl--tenant">Tenant · Merit Management Group</span><span class="lvl lvl--client">Client · Heritage Interiors</span></div>
     <div class="sod" style="margin-top:24px">
-      <div class="sod-row sod-row--hard"><span class="sod-code">S4</span><p><b>Blocks publishing. Change pay, then release payroll:</b> Employee records: Edit + Payroll runs: Release. Hard for firms.</p><button class="btn" type="button">Remove payroll run release</button></div>
-      <div class="sod-row sod-row--soft"><span class="sod-code">S1 S7</span><p><b>2 soft conflicts.</b> Holders will need a written justification when you publish.</p><button class="btn btn--quiet" type="button">Show rules</button></div>
-      <div class="sod-row sod-row--held"><span class="sod-code">S5</span><p><b>Already in v5.</b> Exceptions on file for 3 people.</p><a class="link" href="#">See exceptions</a></div>
+      <div class="sod-row sod-row--hard"><span class="sod-mark"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-alert"/></svg></span><p><b>Blocks publishing.</b> Could change an employee’s pay and then release payroll.<span class="sod-fix">Suggested fix: remove payroll release.</span></p><button class="btn" type="button">Remove payroll release</button></div>
+      <div class="sod-row sod-row--soft"><span class="sod-mark"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-alert"/></svg></span><p><b>Needs a reason to publish.</b> Could add a vendor, approve its bill and pay it.<span class="sod-fix">Suggested fix: require a second approver on a new vendor’s first payment.</span></p><button class="btn" type="button">Use this fix</button></div>
+      <div class="sod-row sod-row--held"><span class="sod-mark"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></span><p><b>Already allowed today.</b> Could reopen a closed month and post into it. Reasons are on file for 3 people.</p><a class="link" href="#">See reasons</a></div>
     </div>
     <div class="grid-12" style="margin-top:24px;row-gap:24px">
       <div style="grid-column:span 5"><div class="verdict verdict--deny"><span class="slash" aria-hidden="true"></span><div>Can’t approve: over her $10,000 limit<p>Her button reads “Approve up to your limit → route”.</p></div></div>

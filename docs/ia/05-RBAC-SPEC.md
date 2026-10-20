@@ -47,9 +47,10 @@ reads them (IA M-3/M-4). `approval_workflow_steps.approver_role` is replaced by 
    coarse layer: client access in RLS, plus capability checks on post/approve/release state transitions and
    masked views for sensitive fields.
 8. **Template changes never apply silently.** A tenant role cloned from a template keeps its grants. When the
-   platform publishes a new template version, the tenant admin sees **"Update available"** with a diff and adopts
-   it, or cherry-picks from it. Only *restrictions* (platform locks or SoD rules) apply globally, and always with
-   notice.
+   platform publishes a new template version, the tenant admin sees an optional **"MeritBooks suggests n updates"**
+   note and adds or skips each suggested change into the role's Proposed changes (§1.7, §6.10). Only *restrictions*
+   (platform locks or SoD rules) apply globally, and always with notice. In the UI a role is only ever **Current** or
+   **Proposed changes**; template and version language stays out of the screen.
 9. **The UI is permission-filtered.** Anything the user can't do is **hidden, not disabled**. There is one
    exception: an action blocked only by a limit shows its alternative ("Route for approval"). A 403 page offers
    **Request access**.
@@ -125,7 +126,7 @@ never contain them (hard rule H5).
 | Attribute | Values | Purpose |
 |---|---|---|
 | `audience` | `internal_staff` · `client_staff` · `external` (auditor, client contact) · `platform` | Sets the **ceiling**, as Sage Intacct's user type does: an `external` role can never hold ledger writes, money actions or configuration, however it is edited (H3). |
-| `kind` | `standard` · `custom` | Library grouping. Also controls whether "Update available" applies. |
+| `kind` | `standard` · `custom` | Library grouping. Also controls whether MeritBooks suggestions apply. |
 | `upstream_template_id`, `upstream_version` | link | Lineage for diff and upgrade. **Not live inheritance** (§1.7). |
 | `default_scope` | `all_clients` · `assigned` | Pre-fills the assignment dialog. |
 | `field_policy` | per sensitivity class (§3.6) | Default masking. |
@@ -201,10 +202,11 @@ integrations or AI-autonomy configuration.
   version's grants as a new version. Every publish is logged with a reason and its impact (§6.2).
 - **When a template changes,** the platform publishes template v(n+1) with a changelog. Each change is classified
   as `add`, `remove`, `constraint`, `split` or `rename`.
-  - `add` / `remove` / `constraint` → every derived tenant role shows **"Update available"** (role library and
-    tenant-admin home). The admin opens the diff (their current grants vs vN vs vN+1) and can **Adopt all**,
-    **Adopt safe changes** (read-only additions only), **Cherry-pick**, or **Dismiss**. Nothing applies until
-    they act.
+  - `add` / `remove` / `constraint` → each change becomes a **suggestion** on every derived tenant role (one
+    optional note on the role library and tenant-admin home). The admin adds or skips each one; added changes go
+    into that role's Proposed changes and publish normally. Nothing applies until they act. (Data: the
+    `template_updates` row still records `adopted` / `partially_adopted` / `dismissed`; the API `mode` stays, but the
+    UI only uses per-change add/skip.)
   - `split` (one capability becomes two finer ones) and `rename` are **equivalence-preserving**. They are applied
     automatically, so a role holding the parent gets both children and nobody's effective access changes. They
     are announced in the update inbox and logged as `catalog.equivalence_migration`.
@@ -215,6 +217,21 @@ integrations or AI-autonomy configuration.
   update inbox with suggested roles. (Open question Q3.)
 - **Client roles** can be cloned from tenant roles. The same lineage and update-available flow applies one level
   down.
+- **How the UI presents this (owner review, Oct 20 2026 — binding for §6).** The data model above (versions,
+  `upstream_template_id`, change classes) is unchanged, but none of it is the vocabulary of the screen:
+  - A role shows exactly two states: **Current** (the published version its holders resolve to) and **Proposed
+    changes** (the single open draft, editable). There is at most one draft per role. Version numbers and template
+    lineage ("template v4", "v5 published", "draft v6", "Standard · modified") never appear in the library, the
+    builder header or the publish dialog.
+  - **Template updates are optional suggestions.** When a platform template a role came from changes, the library
+    shows one quiet, dismissible note ("MeritBooks suggests 2 updates"). Opening it lists each suggested change as one
+    sentence with who it reaches and why, and **Add** / **Skip**. Add puts the change into that role's Proposed
+    changes (it is still reviewed and published normally); Skip drops it for that role. No three-way diff is shown.
+    `split`/`rename` equivalence migrations and platform restrictions are not suggestions; they are announced in one
+    line ("already in effect").
+  - **Version history is one click away**: a quiet "History" control in the role's status line opens a drawer
+    (date, who, what changed, reason, **Restore**). Restore copies that version into Proposed changes; it never goes
+    live by itself.
 
 ### 1.8 Resolution (the order every decision follows)
 
@@ -654,6 +671,11 @@ promote soft → hard. Only the platform can demote.
   that appears in every access review until removed.
 - SoD is evaluated on the **effective set** (roles + permission sets − mutes), not per role. Two harmless roles
   that together conflict are caught.
+- **Rule codes (S1–S9) are internal.** They are stored and logged, but the UI never shows a code. Every rule carries
+  a one-sentence plain description of what a person could do ("Could release payments it also approves") and a
+  **suggested fix** that is either removing one grant or adding a control ("Require a second person on releases over
+  $10,000"). Screens show the sentence, the fix and a button to apply it. UI label for an SoD exception: **allowed
+  conflict**.
 
 ### 4.4 Least-privilege defaults
 
@@ -1008,51 +1030,75 @@ also works at 390).
 
 ### 6.1 A1 · Role library (`/settings/access/roles`)
 
-- **Tabs:** Roles · Permission sets · Envelopes · Templates (platform library, read-only) · Updates (badge count).
-- **Table columns:** name, **level chip** (Platform / Tenant / Client: <name>), kind (Standard · Standard modified ·
-  Custom), audience, **holders** (people · clients; click opens list), last published (who/when), SoD exceptions
-  count, update-available dot, status.
-- **Filters:** level, kind, audience, "has holders", "has SoD exceptions", "unused in 90d".
-- **Row actions:** Open · Clone · Compare · Archive (blocked with reason if it has holders).
-- **New role** offers three starts: "Start from a standard role" (template picker with one-line job descriptions),
-  "Copy an existing role", "Start empty".
+- **Tabs:** Roles · Permission sets · Client limits (the envelope, §1.6). No Templates or Updates tab: the platform
+  library is reached from "New role → From a standard role", and template changes arrive as suggestions (§1.7).
+- **Suggestions note:** when MeritBooks has suggested updates for roles derived from its standard roles, one quiet,
+  dismissible line sits above the filters: "MeritBooks suggests 2 updates for Accounting manager and Bookkeeper.
+  Optional; nothing changes unless you add them." **See suggestions** opens a dialog listing each change in one
+  sentence, who it reaches and why, with **Add** / **Skip** (and Undo). Nothing else in the library mentions templates.
+- **Table columns:** role (name + one-line job), **for** (Internal staff / Client staff / External, with "Standard
+  role", "Custom · from Bookkeeper" or "Made by Heritage Interiors" underneath), **people** (people · clients; click
+  opens the list), **last published** (date · who), **changes** ("Proposed changes · 4 · Draft by Mike Heilman",
+  "New role · not in use", "Proposed changes · 2 · Waiting for you to approve" for client-made roles, or a dash).
+  No level chips, no kind "Standard · modified", no version numbers, no SoD-exception count.
+- **Groups:** Standard roles ("Ready-made by MeritBooks. Change them as you like; MeritBooks never changes them for
+  you"), Your custom roles, Made by clients. Standard roles nobody holds collapse behind one "Show 6" row.
+- **Filters:** made by (All / Merit's / By clients), kind (standard / custom), for, "In use", "Has changes",
+  "Unused 90 days".
+- **Row actions:** Open · Copy as a new role · Compare · History · Archive (blocked with reason if people hold it).
+- **New role** offers three starts: "From a standard role" (picker with one-line job descriptions), "Copy one of
+  yours", "Start empty". It opens the builder with everything as Proposed changes; nobody holds it until published.
 
 ### 6.2 A2 · Role builder (`/settings/access/roles/:id`)
 
-- **Header:** name, description, level/audience/kind chips, "Based on **Controller · template v3**", version chip
-  (v5 published · draft v6), and **Save draft** / **Review & publish**.
-- **Left rail:** domains (GL, Close, Bank, Cards, AP, Payments, Expenses, AR, Rev rec, Jobs, Inventory, Assets, Debt,
+- **Header:** eyebrow, name, one-line description, and **Discard changes** / **Save** / **Review & publish**. No chip
+  row. Everything else is one quiet status line (the context line): "3 people on 13 clients · Internal staff ·
+  Current since Oct 2 · Proposed changes saved 9:04 AM", with a quiet **History** control and the access log at the
+  right.
+- **Tabs:** **Current** (read-only: exactly what holders have today; editing controls disabled, with one line saying
+  so) · **Proposed changes** *n* (the editable draft; *n* = number of changes vs Current) · **People** *n*. If
+  MeritBooks has a suggestion for this role, a quiet "MeritBooks suggests 1 update" control sits at the right of the
+  tabs; it never appears in the header.
+- **Left rail:** areas (GL, Close, Bank, Cards, AP, Payments, Expenses, AR, Rev rec, Jobs, Inventory, Assets, Debt,
   Cash, Payroll, Tax, FP&A, Reports, Consolidation, Controls, Masters, Requests & portals, Onboarding,
-  Integrations, AI, Workspace, Access, Tenant). Each shows "n granted". Only entitled modules appear; un-entitled
-  ones are listed under "Not in your plan".
+  Integrations, AI, Workspace, Access, Settings). Each shows "n granted"; areas with proposed changes show the
+  count in blue. Only entitled modules appear; un-entitled ones are listed under "Not in your plan".
 - **Matrix:**
   - One row per resource, with the 9 action columns. **Cells that don't apply to a resource are absent**, not
-    greyed.
-  - The preset selector (None / View / Prepare / Approve / Full) is at the start of each row, and a domain-level
-    preset sits in the domain header.
-  - Each cell shows a **delta marker vs upstream**: added (filled dot), removed (hollow dot). A constrained cell
-    shows a small "≤ $25k" or "dept" tag.
-  - Tags show inline: money, sensitive, locked (step-up).
-  - Hover shows plain-English meaning (from `permission-catalog.ts` descriptions, carried over).
-- **Constraints panel** (right, opens on clicking a constrained-capable cell): dollar limit (per item, per day for
-  release), document types, dimension restriction (mode + values or "their departments"), ownership, period rule.
-  It validates against `supports_constraints`.
-- **Policies tab:** default scope, field classes (comp / TIN / bank / personal with level selectors), auth (MFA,
-  step-up minutes, IP list, session), max assignment days, assignable band, audience (locked after first publish).
-- **Inline SoD:**
-  - As cells change, a strip above the matrix lists triggered rules. **Hard** rules are red, block publishing,
-    name the two cells and offer "Remove X" or "Remove Y". **Soft** rules are amber: "Holders will need a written
-    justification."
-  - Envelope violations (client roles) are red, with "Exceeds what Heritage Interiors' envelope allows".
-- **Diff tab:** three-way current published ↔ draft ↔ upstream template (latest), differences only, grouped by
-  domain.
+    greyed. Column headers fit without truncation (60px action columns).
+  - The preset selector (None / View / Prepare / Approve / Full) is at the start of each row in Proposed changes.
+  - Each cell in Proposed changes shows a **delta marker vs Current**: proposed add (filled square), proposed remove
+    (hollow square). A constrained cell shows a cut corner and the limit under the resource name (wraps; never
+    truncated). "Only proposed changes" filters to changed rows.
+  - Tags show inline: money, sensitive, locked (step-up). Hover shows plain-English meaning.
+- **Selected-permission panel** (right, opens on the clicked cell): dollar limit (per item, per day for release),
+  which clients (radio list, not a segmented control, so labels never wrap), departments & jobs, sensitive fields,
+  time box, sign-in, who can assign. It validates against `supports_constraints` and is disabled on the Current tab.
+- **Conflicts strip** (above the matrix, Proposed changes only; §4.3):
+  - A conflict that blocks publishing is a red row: "**Blocks publishing.** Could change an employee's pay and then
+    release payroll. Suggested fix: remove one of the two." with one button per grant ("Remove payroll release",
+    "Remove employee pay edits"). Publishing stays disabled until it's fixed.
+  - The others collapse into one amber row: "3 more conflicts need a fix or a reason before publishing." followed by
+    the plain sentences; **Show fixes** lists each with its suggested fix and **Use this fix**.
+  - Conflicts holders already have today (allowed, with reasons on file) are not repeated here.
+  - No rule codes anywhere. Envelope violations (client roles) read "Outside what Merit lets Heritage Interiors hand
+    out", with who controls it and how to ask.
+- **Only what changes** (the Proposed changes tab with the filter on, summary layout): Area · Permission ·
+  **Current** · **Proposed** · Undo, differences only. A MeritBooks suggestion for this role, if any, appears as one
+  optional row under "Suggested by MeritBooks" with **Add** / **Skip**. No three-way comparison.
 - **Review & publish dialog:**
-  - **People affected:** "14 people across 9 clients". Expandable per person: gains (green), losses (red), new
-    SoD exceptions needed, people who will lose access to a page they used in the last 30 days (warning).
-  - Effective now or at a scheduled date. Reason (required). Second-approval notice if the publish is high-risk
-    or widens the publisher's own access.
-  - Publishing runs the rebuild job with a progress bar.
-- **Version history drawer:** each version shows who, when, why and the changelog. **Restore as new version.**
+  - **What changes:** one line per change in words ("Limit goes from $25,000 to $35,000").
+  - **People affected:** "3 people across 13 clients". Per person: clients, gains, losses, and a warning when someone
+    loses something they used in the last 30 days.
+  - **Conflicts to settle** (shown only if the proposal adds any): each conflict is one plain sentence with its
+    suggested fix and **Use this fix**. Below them, "Or keep the ones you haven't fixed" asks for one reason and one
+    safeguard, filed as an allowed conflict that comes up in every access review until it expires (default 1 year).
+    When every conflict is fixed the whole section disappears.
+  - Effective after approval or on a date. Reason (required). **Who approves** (names, and "you can't approve your
+    own change") when the publish is high-risk or widens the publisher's own access. Checks in plain words.
+  - Publishing runs the rebuild job with a progress line; holders keep Current until it completes.
+- **History drawer** (from the status line): date, who, what changed, reason; **Restore** copies an earlier version
+  into Proposed changes. The current version is marked "Current". Nothing is deleted.
 
 ### 6.3 A3 · User access page (`/team/:membershipId/access`)
 
@@ -1061,7 +1107,7 @@ also works at 390).
   consolidation groups · tenant). Columns: role/permission set, read-only/mutes, limits, effective dates (expiry
   countdown), granted by, approved by, SoD exceptions, **last used on this client**.
 - **Effective access by client:** pick a client and see the resolved matrix (read-only, same layout as the builder)
-  with a source tooltip on every cell ("from Bookkeeper v4 via Clive Power Equipment assignment").
+  with a source tooltip on every cell ("From Bookkeeper via the Clive Power Equipment assignment"; no version numbers).
 - **Actions:** Add access (dialog: role or permission set → scope picker with search, multi-select clients, or
   client set → dates → constraints tighten-only → live ceiling/SoD check → submit), Extend, Mute…, Make
   read-only, Revoke, **View as** (if permitted), **Why can't they…?** (opens the explainer prefilled with this
@@ -1073,19 +1119,24 @@ also works at 390).
 
 - Who can access this client: people × role, and how (direct / all-clients / client set / group), capacity
   (preparer/reviewer), limits and expiry.
-- Shows coverage gaps: "No one holds **pay.batches:release** on this client", "Preparer and reviewer are the same
-  person".
+- Shows coverage gaps in words: "Only Nora Lindqvist can release pay runs here. She's out Nov 3–7. Add a backup.",
+  "Dana Lee is preparer and reviewer on the September close."
 - **Client policy panel** (tenant admins): enable client roles, choose the envelope, firm-approval actions, seat
   cap, MFA floor.
 
 ### 6.5 A5 · Client-level role screen (client admin)
 
 - The client admin of Heritage Interiors sees **Heritage Interiors · Team & roles** only. It is a simplified A1/A2:
-  - The library shows client roles plus the tenant roles the firm made assignable to client staff.
-  - The builder shows **only envelope capabilities**. Everything else is absent, with a footer: "Your accounting
-    firm controls access beyond this. Request more."
+  - The library shows Heritage's own roles plus the Merit roles the firm made assignable to client staff (locked:
+    assign, not edit).
+  - The builder has the same **Current / Proposed changes** tabs and shows **only capabilities inside Heritage's
+    limits**. Everything else is absent, with a footer: "Your accounting firm controls access beyond this. Ask Merit
+    for more."
   - People lists only client staff and contacts.
-- Changes that touch firm-approval actions show "Pending approval by Merit Management Group" until approved.
+- Proposed changes that touch firm-approval actions (approve, post, release, settings) show "Your proposed changes are
+  waiting for Merit Management Group… Marcus keeps what he has now until Merit approves", with **Withdraw proposed
+  changes**. On the firm's side (A4) they appear as "Lauren proposed changes to Office manager" with **Approve
+  changes** / **Return with a note**. Other changes apply on save.
 - All activity is visible to the firm in the access log.
 
 ### 6.6 A6 · Compare roles
@@ -1109,9 +1160,9 @@ Options: "Differences only", and "Show constraints" (limits, dimensions, field l
 - **Campaign setup:** quarterly by default (tenant setting), scope (all or selected clients/roles), reviewers
   (default: each person's grantor or manager; tenant admins review admins; nobody reviews themselves), due date
   (14 days), auto-revoke unreviewed (off by default), reminders.
-- **Reviewer inbox:** one card per item, with keyboard (k keep / r reduce / x revoke / j/k move):
+- **Reviewer inbox:** one card per item, with keyboard (a keep / r reduce / x revoke / j/k move / z undo):
   - assignment with usage evidence ("Last used 4 days ago · 212 actions")
-  - SoD exceptions with justification
+  - allowed conflicts (SoD exceptions) with their reason and safeguard, in plain words
   - dormant access (no activity 90d)
   - unused capabilities (granted, unused 90d → suggest reduction)
   - expiring time-boxed grants
@@ -1124,14 +1175,16 @@ Options: "Differences only", and "Show constraints" (limits, dimensions, field l
 - **Export matrix** (XLSX): members × clients × capabilities with limits and sources, one sheet per client plus a
   summary. This is the "who can do what" artifact auditors ask for.
 
-### 6.10 A10 · SoD policy & template updates
+### 6.10 A10 · Conflict rules & MeritBooks suggestions
 
-- **SoD policy:** platform rules with their default enforcement. The tenant can promote a rule to hard, set the JE
-  self-post threshold, and turn sole-approver mode on or off (Q1). Open exceptions list with expiries.
-- **Template updates inbox:** per derived role, show what's new (with a plain-English changelog) and the
-  three-way diff, plus "Adopt all" / "Adopt safe changes" / "Pick" / "Dismiss". New-feature capabilities are
-  grouped as "New in MeritBooks: Debt covenants". Each shows which standard roles get it by default and "Add to
-  roles…".
+- **Conflict rules** (UI name for the SoD policy; opened from "Conflict rules" on the library): each platform rule as
+  its plain sentence and suggested fix, with its default (blocks publishing / needs a reason). The tenant can make a
+  rule block publishing, set the JE self-post threshold, and turn sole-approver mode on or off (Q1). Open allowed
+  conflicts are listed with their reason, safeguard and expiry. Rule codes stay internal (logs, exports).
+- **MeritBooks suggestions** replace the template-updates inbox. Per derived role, each `add` / `remove` /
+  `constraint` change is one suggestion: a sentence, who it reaches, why, **Add** / **Skip** (§1.7). New-feature
+  capabilities arrive the same way ("Let bookkeepers see loans and covenants, view only"). Dismissing the library note
+  hides it until the next batch; skipped suggestions don't come back. No three-way diff, no template version numbers.
 
 ### 6.11 Request access (every user)
 

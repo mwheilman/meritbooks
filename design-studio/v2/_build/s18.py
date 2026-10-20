@@ -11,14 +11,15 @@ CSS = """
 .hstrip .fig-v--dense{font-size:20px}
 .mx{margin-top:16px;border:1px solid var(--line);background:var(--white)}
 .mx table th{background:var(--white)}
-.mx td{height:56px;padding:0 6px}
+.mx td{height:56px;padding:6px;white-space:normal;overflow:visible}
+.mx td .l1,.mx td .l2{white-space:normal}
 .mx tr>*:first-child{padding-left:16px}
 .mx tr>*:last-child{padding-right:16px}
 .mx tr.ten td{background:var(--canvas)}
-.cellx{display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;height:44px;padding:0 8px;border:1px solid var(--line);background:var(--white)}
-.cellx .t{display:flex;align-items:center;gap:6px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cellx{display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;min-height:44px;padding:4px 8px;border:1px solid var(--line);background:var(--white)}
+.cellx .t{display:flex;align-items:center;gap:6px;font-weight:500;color:var(--ink);overflow-wrap:anywhere}
 .cellx .t .pip{width:8px;height:8px}
-.cellx .s{font-size:12px;line-height:16px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cellx .s{font-size:12px;line-height:16px;color:var(--ink-3)}
 .cellx.is-err{border-color:var(--neg);box-shadow:inset 3px 0 var(--neg)}
 .cellx.is-err .s{color:var(--neg);font-weight:500}
 .cellx.is-bridge{border-style:dashed}
@@ -53,19 +54,19 @@ CSS = """
 COLS = ["Ledger source", "Field system", "Bank", "Card spend", "Payroll &amp; time", "AP inbox"]
 # cell: (name, sub, kind) kind: ok | err | bridge | file | arch | none | warn
 M = [
-    ("Heartland Heating &amp; Cooling", "C-103 · tie-out", [("QuickBooks", "migrating · 6:02 AM", "ok"), ("simPRO", "4 min ago · webhooks", "ok"), ("Plaid", "2 accounts · 6:00 AM", "ok"),
+    ("Heartland Heating &amp; Cooling", "C-103 · Prove balances", [("QuickBooks", "migrating · 6:02 AM", "ok"), ("simPRO", "4 min ago · webhooks", "ok"), ("Plaid", "2 accounts · 6:00 AM", "ok"),
                                                     ("Ramp", "entity · 7:40 AM", "ok"), ("Register file", "monthly", "file"), ("ap+heartland@", "3 bills today", "ok")]),
-    ("Dorrian HVAC", "C-105 · preflight", [("QuickBooks", "migrating · 6:04 AM", "ok"), ("FieldEdge", "via QuickBooks", "bridge"), ("Plaid", "login needed · 3 days", "err"),
+    ("Dorrian HVAC", "C-105 · Check data quality", [("QuickBooks", "migrating · 6:04 AM", "ok"), ("FieldEdge", "via QuickBooks", "bridge"), ("Plaid", "login needed · 3 days", "err"),
                                           ("Ramp", "entity · 7:40 AM", "ok"), ("Not set", "", "none"), ("ap+dorrian@", "forwarding", "ok")]),
-    ("Heritage Interiors", "C-101 · map", [("QuickBooks", "migrating · 6:01 AM", "ok"), ("RFMS", "key rejected 7:02 AM", "err"), ("Plaid", "3 accounts · 6:00 AM", "ok"),
+    ("Heritage Interiors", "C-101 · Match accounts", [("QuickBooks", "migrating · 6:01 AM", "ok"), ("RFMS", "key rejected 7:02 AM", "err"), ("Plaid", "3 accounts · 6:00 AM", "ok"),
                                           ("Ramp", "entity · 7:40 AM", "ok"), ("QuickBooks Time", "installers · 6:10 AM", "ok"), ("Gmail", "AP label · backfilled", "ok")]),
-    ("AIM Kitchen &amp; Bath", "C-111 · live, shadow", [("QuickBooks", "bridge transport only", "bridge"), ("Buildertrend", "via QuickBooks", "bridge"), ("Plaid", "1 account · 6:00 AM", "ok"),
+    ("AIM Kitchen &amp; Bath", "C-111 · Live, practice close", [("QuickBooks", "bridge transport only", "bridge"), ("Buildertrend", "via QuickBooks", "bridge"), ("Plaid", "1 account · 6:00 AM", "ok"),
                                                  ("Ramp", "entity · 7:40 AM", "ok"), ("Not set", "", "none"), ("ap+aim@", "38 bills in Sep", "ok")]),
-    ("Iowa Custom Cabinets", "C-108 · map", [("QuickBooks", "migrating · 6:00 AM", "ok"), ("Innergy", "file · 2 of 3 in", "file"), ("Plaid", "2 accounts · 6:00 AM", "ok"),
+    ("Iowa Custom Cabinets", "C-108 · Match accounts", [("QuickBooks", "migrating · 6:00 AM", "ok"), ("Innergy", "file · 2 of 3 in", "file"), ("Plaid", "2 accounts · 6:00 AM", "ok"),
                                             ("Ramp", "entity · 7:40 AM", "ok"), ("Not set", "", "none"), ("ap+icc@", "forwarding", "ok")]),
-    ("Clive Power Equipment", "C-102 · connect", [("Sage Intacct", "cancelled · files only", "warn"), ("c-Systems", "GL export · weekly", "file"), ("Plaid", "1 account · 6:00 AM", "ok"),
+    ("Clive Power Equipment", "C-102 · Connect systems", [("Sage Intacct", "cancelled · files only", "warn"), ("c-Systems", "GL export · weekly", "file"), ("Plaid", "1 account · 6:00 AM", "ok"),
                                                  ("Ramp", "entity · 7:40 AM", "ok"), ("Not set", "", "none"), ("ap+clive@", "forwarding", "ok")]),
-    ("Merit Fund III", "C-113 · live", [("QuickBooks", "archived Oct 9", "arch"), ("None", "fund, no field system", "none"), ("Plaid", "1 account · 6:00 AM", "ok"),
+    ("Merit Fund III", "C-113 · Live", [("QuickBooks", "archived Oct 9", "arch"), ("None", "fund, no field system", "none"), ("Plaid", "1 account · 6:00 AM", "ok"),
                                        ("None", "", "none"), ("None", "", "none"), ("ap+fund3@", "forwarding", "ok")]),
 ]
 KIND = {"ok": ("ready", ""), "err": ("overdue", " is-err"), "bridge": ("soft", " is-bridge"), "file": ("track", ""), "arch": ("closed", " is-arch"), "none": ("", " is-none"), "warn": ("risk", ""), "pend": ("risk", "")}
@@ -82,12 +83,12 @@ def matrix():
     head = "<tr><th>Client</th>" + "".join(f"<th>{c}</th>" for c in COLS) + "</tr>"
     ten = ('<tr class="ten"><td><span class="l1">Merit Management Group</span><span class="l2">tenant-wide</span></td>'
            + "".join(f"<td>{cellx(*c)}</td>" for c in [("Not applicable", "per client", "none"), ("Not applicable", "per client", "none"), ("Plaid", "1 production app", "ok"),
-                                                         ("Ramp", "1 business · 14 entities", "ok"), ("Not chosen", "provider pending", "none"), ("Microsoft 365", "credentials pending", "pend")]) + "</tr>")
+                                                         ("Ramp", "one business, all clients", "ok"), ("Not chosen", "provider pending", "none"), ("Microsoft 365", "credentials pending", "pend")]) + "</tr>")
     body = ten
     for name, sub, cells in M:
         attn = " is-attn" if any(k == "err" for *_, k in cells) else ""
         body += f'<tr class="q-row{attn}" tabindex="0"><td><span class="l1">{name}</span><span class="l2">{sub}</span></td>' + "".join(f"<td>{cellx(*c)}</td>" for c in cells) + "</tr>"
-    body += '<tr class="q-group"><td colspan="7"><span class="t-cap">7 more clients in Plan or Connect · 9 connections planned · <button class="btn btn--quiet" type="button" style="height:32px">Show all 14</button></span></td></tr>'
+    body += '<tr class="q-group"><td colspan="7"><span class="t-cap">7 more clients · 6 in Gather info or Connect systems, 1 live · 9 connections planned · <button class="btn btn--quiet" type="button" style="height:32px">Show all 14</button></span></td></tr>'
     return (f'<div class="mx"><table class="tbl tbl-q tbl-q--flush" aria-label="Connections by client and role"><colgroup><col style="width:200px">{"<col>" * 6}</colgroup>'
             f'<thead>{head}</thead><tbody>{body}</tbody></table></div>')
 
@@ -170,7 +171,7 @@ CAT = [
     ]),
     ("Bank, cards &amp; payments", "Ongoing", [
         ("Plaid", "Bank feeds", "live", "Every client bank, one production app.", "", "12 clients", "Connect"),
-        ("Ramp", "Cards, bills, reimbursements", "live", "One accounting connection for the Ramp business.", "", "Tenant · 14 entities", "Manage"),
+        ("Ramp", "Cards, bills, reimbursements", "live", "One accounting connection for the Ramp business.", "", "Tenant · every client", "Manage"),
         ("Stripe", "Card and ACH payments", "live", "Invoice payments and payouts.", "", "Tenant", "Manage"),
         ("Bank statement files", "OFX, QFX, CSV, BAI2", "file", "For accounts Plaid can’t reach.", "", "", "Drop a file"),
     ]),

@@ -10,6 +10,7 @@ CSS = """
 .sbs-bar .sp{flex:1}
 .sbs .tbl-fs td.d{color:var(--ink-2)}
 .sbs .tbl-fs td.d.neg{color:var(--neg);font-weight:600}
+.sbs .tbl-fs th.nt,.sbs .tbl-fs td.nt{width:56px}
 .sbs .tbl-fs td.ex{font-size:12px;color:var(--ink-3);padding-left:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sbs .tbl-fs .src-h{font-size:12px;color:var(--ink-3);text-transform:none;letter-spacing:0;font-weight:400;display:block}
 .sbs .notes{align-self:start}
@@ -81,8 +82,8 @@ def pl_table():
     b += '<tr class="fs-gap"><td colspan="6"></td></tr>'
     b += sub("Operating income", AIM_MB["oi"], AIM_QB["oi"], "fs-grand")
     return (f'<table class="tbl tbl-fs" aria-label="AIM income statement, September 2026, QuickBooks beside MeritBooks">'
-            f'<colgroup><col><col style="width:40px"><col style="width:132px"><col style="width:132px"><col style="width:120px"><col style="width:176px"></colgroup>'
-            f'<thead><tr><th>In US dollars · September 2026</th><th class="nt">Note</th><th class="n">QuickBooks<span class="src-h">shadow pull Oct 12</span></th>'
+            f'<colgroup><col><col style="width:56px"><col style="width:132px"><col style="width:132px"><col style="width:120px"><col style="width:176px"></colgroup>'
+            f'<thead><tr><th>In US dollars · September 2026</th><th class="nt">Note</th><th class="n">QuickBooks<span class="src-h">parallel pull Oct 12</span></th>'
             f'<th class="n cur">MeritBooks<span class="src-h">book of record</span></th><th class="n">Difference<span class="src-h">QB − MB</span></th><th style="padding-left:16px">Why</th></tr></thead>'
             f'<tbody>{b}</tbody></table>')
 
@@ -101,7 +102,7 @@ def notes():
 <li><span>Kline Tile · subcontract install</span><span class="dl"></span><span class="v">{money(AIM_SHADOW_OPEN[1][2])}</span></li>
 <li class="ev-total"><span>Unexplained</span><span class="dl"></span><span class="v">{money(resid)}</span></li></ul>
 <div class="basis"><span>Source <b>bridge · Buildertrend via QuickBooks</b></span><span>Read <b>Sep 30, 6:00 PM</b></span></div>
-<div class="note-acts"><button class="btn btn--quiet" type="button">Open the shadow close</button><button class="btn btn--quiet" type="button">{ico("flag")}Report a mismatch</button></div></article>"""
+<div class="note-acts"><button class="btn btn--quiet" type="button">Open the practice close</button><button class="btn btn--quiet" type="button">{ico("flag")}Report a mismatch</button></div></article>"""
     return f'<aside class="notes" aria-label="Notes to the comparison"><div class="notes-head"><span class="eyebrow">Notes</span><span class="t-cap">2 · hover a figure to light its note</span></div>{n1}{n2}</aside>'
 
 
@@ -116,7 +117,7 @@ def frame_a():
             + '<div class="page"><div class="page-head"><div><div class="eyebrow">Reports<span class="sl">//</span>Side by side<span class="sl">//</span>AIM Kitchen &amp; Bath</div>'
               '<h1 class="t-title" style="margin-top:8px">QuickBooks beside MeritBooks</h1></div></div>'
             + bar_ + f'<div class="sbs"><div>{pl_table()}</div>{notes()}</div></div>')
-    a = app("client", "density-report", rail_mini(CLIENT_MINI, "LO", 5), bar(ctx_client("AIM Kitchen & Bath", "C-111", "Live · shadow", "open"), "Reports · Side by side", "Jump to account, job, report…", "Bridge read 6:00 AM"), main, extra_cls="app--mini")
+    a = app("client", "density-report", rail_mini(CLIENT_MINI, "LO", 5), bar(ctx_client("AIM Kitchen & Bath", "C-111", "Live · practice close", "open"), "Reports · Side by side", "Jump to account, job, report…", "Bridge read 6:00 AM"), main, extra_cls="app--mini")
     return a.replace('class="app ', 'data-live class="app ', 1)
 
 

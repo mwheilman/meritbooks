@@ -599,7 +599,7 @@ table{border-collapse:collapse;width:100%}
    Shape carries meaning, never colour alone:
      corner notch   = constrained (limit, departments, doc types)
      ring           = granted by a permission set, not the role
-     6px square TR  = added vs template (filled) / removed vs template (hollow)
+     6px square TR  = proposed change: add (filled) / remove (hollow), vs Current
      45° slash      = taken away: muted, denied, revoked (the monogram's stroke)
      outline        = separation-of-duties conflict (solid hard, dashed soft)   */
 .cap{position:relative;display:inline-grid;place-items:center;width:32px;height:32px;flex:none;cursor:pointer;vertical-align:middle}
@@ -628,8 +628,8 @@ table{border-collapse:collapse;width:100%}
 
 /* Capability matrix — one row per resource, 9 action columns, inapplicable cells absent */
 .capm{table-layout:fixed}
-.capm th{height:40px;padding:0 4px;font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:0;text-transform:none;color:var(--ink-2);text-align:center;border-bottom:1px solid var(--line-2);background:var(--warm);position:sticky;top:0;z-index:2}
-.capm th:first-child{text-align:left}
+.capm th{height:40px;padding:0 2px;font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:0;text-transform:none;color:var(--ink-2);text-align:center;border-bottom:1px solid var(--line-2);background:var(--warm);position:sticky;top:0;z-index:2}
+.capm th:first-child{text-align:left;padding-left:16px}
 .capm td{height:40px;padding:0 4px;border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
 .capm td:first-child{text-align:left;padding-left:16px;overflow:hidden}
 .capm tr>*:last-child{padding-right:16px}
@@ -655,6 +655,10 @@ table{border-collapse:collapse;width:100%}
 .sod-row--held{background:var(--canvas);box-shadow:inset 3px 0 var(--steel)}
 .sod-code{font:700 var(--t-15)/var(--lh-15) var(--f-text);font-variant-numeric:tabular-nums}
 .sod-row--hard .sod-code{color:var(--neg)} .sod-row--soft .sod-code{color:var(--warn)} .sod-row--held .sod-code{color:var(--ink-2)}
+/* v2.3: rule codes are internal. The row leads with a mark and one plain sentence + the suggested fix. */
+.sod-mark{display:grid;place-items:center;width:32px;height:32px}
+.sod-row--hard .sod-mark{color:var(--neg)} .sod-row--soft .sod-mark{color:var(--warn)} .sod-row--held .sod-mark{color:var(--ink-2)}
+.sod-fix{display:block;margin-top:2px;color:var(--ink-2)}
 .sod-row p{color:var(--ink-2)}
 .sod-row b{color:var(--ink);font-weight:600}
 
