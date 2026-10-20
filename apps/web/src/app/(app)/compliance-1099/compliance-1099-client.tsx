@@ -18,6 +18,7 @@ import {
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
+import { formatThresholdUsd, get1099Thresholds } from '@/lib/tax/1099-thresholds';
 import { api } from '@/lib/api-client';
 import { PageHeader } from '@/components/ui';
 import { Generate1099Modal } from './generate-1099-modal';
@@ -55,6 +56,8 @@ interface Ten99Row {
 interface Ten99Summary {
   taxYear: number;
   thresholdCents: number;
+  thresholdProvisional: boolean;
+  thresholdNotice: string | null;
   candidates: number;
   ready: number;
   missingDocs: number;
@@ -158,12 +161,23 @@ export function Compliance1099Client() {
     );
   }
 
+  // Thresholds follow the law for the selected tax year (lib/tax/1099-thresholds).
+  const law = get1099Thresholds(year);
+  const floorLabel = formatThresholdUsd(law.generalCents);
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="1099 Readiness"
-        description={`Vendors paid $600 or more by check / ACH / wire in ${year} — card payments excluded (those are 1099-K). Services file on 1099-NEC; rents / royalties / medical / attorney proceeds file on 1099-MISC. Flag gaps to queue a W-9 chase, then generate each form.`}
+        description={`Vendors paid ${floorLabel} or more by check / ACH / wire in ${year} (royalties from ${formatThresholdUsd(law.miscBoxCents.MISC_2)}, attorney gross proceeds from ${formatThresholdUsd(law.miscBoxCents.MISC_10)}) — card payments excluded (those are the processor's 1099-K). Services file on 1099-NEC; rents / royalties / medical / attorney proceeds file on 1099-MISC. Flag gaps to queue a W-9 chase, then generate each form.`}
       />
+
+      {law.notice && (
+        <div role="status" className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{law.notice}</span>
+        </div>
+      )}
 
       <div className="mb-6">
         <VendorComplianceTabs />
@@ -242,7 +256,7 @@ export function Compliance1099Client() {
       {/* Summary tiles */}
       {!isLoading && !error && summary && summary.candidates > 0 && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Tile icon={Users} label="Candidates (>= $600)" value={String(summary.candidates)} accent="bg-slate-500/10 text-slate-300" />
+          <Tile icon={Users} label={`Candidates (>= ${floorLabel})`} value={String(summary.candidates)} accent="bg-slate-500/10 text-slate-300" />
           <Tile icon={CheckCircle2} label="Ready to file" value={String(summary.ready)} accent="bg-emerald-500/10 text-emerald-400" />
           <Tile icon={FileWarning} label="Missing docs" value={String(summary.missingDocs)} accent="bg-red-500/10 text-red-400" />
           <Tile icon={DollarSign} label="$ at risk" value={formatMoney(summary.dollarsAtRiskCents)} accent="bg-amber-500/10 text-amber-400" />
@@ -272,7 +286,7 @@ export function Compliance1099Client() {
             <>
               <p className="text-sm font-medium text-white">No 1099 candidates for {year}</p>
               <p className="mt-1 text-xs text-slate-500">
-                No vendor was paid $600 or more by a reportable rail in this tax year.
+                No vendor was paid {floorLabel} or more by a reportable rail in this tax year.
               </p>
             </>
           ) : (

@@ -7,13 +7,15 @@ import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { formatMoney } from '@meritbooks/shared';
 import { buildReadinessReport } from './readiness';
+import { formatThresholdUsd, get1099Thresholds } from '@/lib/tax/1099-thresholds';
 
 /**
  * 1099-NEC readiness surface (CPA panel) — docs/discovery/books/cpa-tax-assurance.md §B4.
  *
  * GET  /api/compliance/1099?year=YYYY
- *   Returns every vendor paid >= $600 by a REPORTABLE (non-card) rail in the tax
- *   year, with its W-9 / TIN / 1099-eligibility status and a readiness flag, plus
+ *   Returns every vendor whose REPORTABLE (non-card) payments in the tax year reach
+ *   that year's 1099 floor (lib/tax/1099-thresholds — $600 ≤2025, $2,000 for 2026,
+ *   IRS-indexed after), with its W-9 / TIN / 1099-eligibility status and a readiness flag, plus
  *   summary tiles. Read-only. RLS-scoped — the DB enforces org isolation.
  *
  * POST /api/compliance/1099   { vendorId, year? }
@@ -68,10 +70,11 @@ export const POST = apiHandler(flagSchema, async (body, ctx) => {
   // Recompute against the same source of truth so the flag can't be forged from a
   // stale client — the vendor must be a real candidate WITH a gap this year.
   const report = await buildReadinessReport(supabase, year);
+  const floorLabel = formatThresholdUsd(get1099Thresholds(year).generalCents);
   const row = report.rows.find((r) => r.vendorId === body.vendorId);
   if (!row) {
     return NextResponse.json(
-      { error: `Vendor is not a ${year} 1099 candidate (no reportable payments >= $600).`, code: 'NOT_A_CANDIDATE' },
+      { error: `Vendor is not a ${year} 1099 candidate (no reportable payments >= ${floorLabel}).`, code: 'NOT_A_CANDIDATE' },
       { status: 400 },
     );
   }
@@ -99,7 +102,7 @@ export const POST = apiHandler(flagSchema, async (body, ctx) => {
   const title = `1099 gap: ${row.vendorName} · ${formatMoney(row.totalPaidCents)} paid in ${year} · ${gapLabel}`;
   const reason =
     `${row.vendorName} was paid ${formatMoney(row.totalPaidCents)} by reportable (non-card) rails in ${year} ` +
-    `(${row.paymentCount} payment${row.paymentCount === 1 ? '' : 's'}), crossing the $600 1099-NEC floor, but ` +
+    `(${row.paymentCount} payment${row.paymentCount === 1 ? '' : 's'}), crossing the ${year} ${floorLabel} 1099 floor, but ` +
     (row.readiness === 'NOT_MARKED_1099'
       ? 'the vendor is not flagged 1099-eligible. Confirm entity type (a corporation is exempt) or mark it eligible and collect a W-9.'
       : `the W-9 is ${row.w9Status.replace('_', ' ')}${row.tinPresent ? '' : ' and no TIN is on file'}. Collect the W-9 before filing to avoid backup withholding / penalties.`);
@@ -119,6 +122,8 @@ export const POST = apiHandler(flagSchema, async (body, ctx) => {
         w9_status: row.w9Status,
         tin_present: row.tinPresent,
         amount_at_risk_cents: row.totalPaidCents,
+        threshold_cents: report.summary.thresholdCents,
+        threshold_provisional: report.summary.thresholdProvisional,
         subjects: { vendor_id: row.vendorId },
       },
       confidence: 0.95,

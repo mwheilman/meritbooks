@@ -10,11 +10,12 @@
  * CPA framing (docs/discovery/books/cpa-tax-assurance.md §A3/§B4): the OWNED general
  * ledger already tells us which GL expense account each reportable dollar was coded
  * to, and box-classify.ts routes that to the correct MISC box:
- *   - Box 1  Rents            (MISC_1)   — $600 floor
- *   - Box 2  Royalties        (MISC_2)   — $10 floor (the ONE sub-$600 box)
- *   - Box 3  Other income     (MISC_3)   — $600 floor (prizes / awards / other)
- *   - Box 6  Medical/health   (MISC_6)   — $600 floor
- *   - Box 10 Attorney proceeds(MISC_10)  — $600 floor (gross proceeds / settlements)
+ *   - Box 1  Rents            (MISC_1)   — general floor ($600 ≤2025, $2,000 2026, indexed 2027+)
+ *   - Box 2  Royalties        (MISC_2)   — $10 floor (IRC 6050N; unchanged by OBBBA)
+ *   - Box 3  Other income     (MISC_3)   — general floor (prizes / awards / other)
+ *   - Box 6  Medical/health   (MISC_6)   — general floor
+ *   - Box 10 Attorney proceeds(MISC_10)  — $600 floor (IRC 6045(f); unchanged by OBBBA)
+ * Every floor is resolved per TAX YEAR from lib/tax/1099-thresholds — never hardcoded.
  * Card / third-party-network payments are EXCLUDED (those land on the processor's
  * 1099-K; the readiness aggregation already strips card rails before apportioning to
  * boxes, and this module double-guards against it). A vendor produces a 1099-MISC
@@ -31,6 +32,7 @@
 
 import type { W9State } from '@/app/api/compliance/1099/readiness';
 import { BOX_META } from '@/lib/tax/box-classify';
+import { formatThresholdUsd, get1099Thresholds } from '@/lib/tax/1099-thresholds';
 import {
   box1FromPayments,
   isValidTin,
@@ -56,19 +58,21 @@ export type MiscBoxCode = 'MISC_1' | 'MISC_2' | 'MISC_3' | 'MISC_6' | 'MISC_10';
 
 export const MISC_BOX_CODES: MiscBoxCode[] = ['MISC_1', 'MISC_2', 'MISC_3', 'MISC_6', 'MISC_10'];
 
-/** General MISC reporting floor: paid $600 OR MORE in the tax year. */
-export const MISC_GENERAL_THRESHOLD_CENTS = 60_000;
-/** Royalties (Box 2) have a lower $10 floor — the only sub-$600 MISC box. */
-export const MISC_ROYALTY_THRESHOLD_CENTS = 1_000;
-
-/** Per-box filing threshold (cents). Box 2 (royalties) is $10; everything else $600. */
-export const MISC_BOX_THRESHOLD_CENTS: Record<MiscBoxCode, number> = {
-  MISC_1: MISC_GENERAL_THRESHOLD_CENTS,
-  MISC_2: MISC_ROYALTY_THRESHOLD_CENTS,
-  MISC_3: MISC_GENERAL_THRESHOLD_CENTS,
-  MISC_6: MISC_GENERAL_THRESHOLD_CENTS,
-  MISC_10: MISC_GENERAL_THRESHOLD_CENTS,
-};
+/**
+ * Per-box filing threshold (cents, "at least") for a tax year. Royalties stay $10 and
+ * attorney gross proceeds stay $600; rents / other / medical follow the general
+ * floor ($600 through 2025, $2,000 for 2026, IRS-indexed after). See 1099-thresholds.
+ */
+export function miscBoxThresholdsFor(taxYear: number): Record<MiscBoxCode, number> {
+  const t = get1099Thresholds(taxYear).miscBoxCents;
+  return {
+    MISC_1: t.MISC_1,
+    MISC_2: t.MISC_2,
+    MISC_3: t.MISC_3,
+    MISC_6: t.MISC_6,
+    MISC_10: t.MISC_10,
+  };
+}
 
 /** A box→cents map of the MISC-classified reportable spend for one vendor. */
 export type MiscBoxCents = Partial<Record<MiscBoxCode, number>>;
@@ -123,8 +127,14 @@ export interface Form1099MiscRecord {
 
 export interface Form1099MiscSummary {
   taxYear: number;
+  /** The year's general MISC floor (rents / other / medical), cents. */
   generalThresholdCents: number;
+  /** Royalties (box 2) floor — $10 every year. */
   royaltyThresholdCents: number;
+  /** Attorney gross proceeds (box 10) floor — $600 (IRC 6045(f), unchanged by OBBBA). */
+  attorneyProceedsThresholdCents: number;
+  /** Set when the year's IRS-indexed amount is not yet published (provisional floor). */
+  thresholdNotice: string | null;
   /** Records that will be filed. */
   readyCount: number;
   /** Sum of every MISC box across ready records (cents). */
@@ -161,9 +171,10 @@ export function sumMiscBoxes(boxes: MiscBoxCents): number {
   return MISC_BOX_CODES.reduce((s, code) => s + miscBoxAmount(boxes, code), 0);
 }
 
-/** True when at least one box clears its own filing threshold (Box 2 = $10, else $600). */
-export function meetsAnyMiscThreshold(boxes: MiscBoxCents): boolean {
-  return MISC_BOX_CODES.some((code) => miscBoxAmount(boxes, code) >= MISC_BOX_THRESHOLD_CENTS[code]);
+/** True when at least one box clears its own filing threshold for the tax year. */
+export function meetsAnyMiscThreshold(boxes: MiscBoxCents, taxYear: number): boolean {
+  const floors = miscBoxThresholdsFor(taxYear);
+  return MISC_BOX_CODES.some((code) => miscBoxAmount(boxes, code) >= floors[code]);
 }
 
 // ── Classification & assembly ──────────────────────────────────────────────────
@@ -177,12 +188,13 @@ export function meetsAnyMiscThreshold(boxes: MiscBoxCents): boolean {
  */
 export function classifyMiscRecipient(
   input: RecipientMiscInput,
+  taxYear: number,
 ): { status: RecordStatus; code?: Form1099Exclusion['code'] } {
   // Defensive card carve-out: if raw payments are supplied and NONE are reportable
   // (all card / third-party network → 1099-K), there is no 1099-MISC to file.
   if (input.payments && box1FromPayments(input.payments) === 0)
     return { status: 'EXCLUDED', code: 'BELOW_THRESHOLD' };
-  if (!meetsAnyMiscThreshold(input.miscBoxCents))
+  if (!meetsAnyMiscThreshold(input.miscBoxCents, taxYear))
     return { status: 'EXCLUDED', code: 'BELOW_THRESHOLD' };
   if (!input.is1099Eligible) return { status: 'EXCLUDED', code: 'NOT_1099_ELIGIBLE' };
   if (!isValidTin(input.tin)) return { status: 'BLOCKED', code: 'MISSING_TIN' };
@@ -190,10 +202,16 @@ export function classifyMiscRecipient(
   return { status: 'READY' };
 }
 
-function exclusionReason(code: Form1099Exclusion['code'], name: string): string {
+function exclusionReason(code: Form1099Exclusion['code'], name: string, taxYear: number): string {
   switch (code) {
-    case 'BELOW_THRESHOLD':
-      return `${name}'s reportable MISC payments are under every box floor ($600 — $10 for royalties), or were paid by card (1099-K) — no 1099-MISC required.`;
+    case 'BELOW_THRESHOLD': {
+      const f = miscBoxThresholdsFor(taxYear);
+      return (
+        `${name}'s reportable MISC payments are under every ${taxYear} box floor ` +
+        `(${formatThresholdUsd(f.MISC_1)} rents / other / medical, ${formatThresholdUsd(f.MISC_10)} attorney proceeds, ` +
+        `${formatThresholdUsd(f.MISC_2)} royalties), or were paid by card (1099-K) — no 1099-MISC required.`
+      );
+    }
     case 'NOT_1099_ELIGIBLE':
       return `${name} has reportable MISC payments but is not flagged 1099-eligible. Confirm entity type (a corporation is generally exempt, though attorney gross proceeds are reportable even to a corp) or mark it eligible before filing.`;
     case 'MISSING_TIN':
@@ -229,7 +247,7 @@ export function assembleForm1099MiscBatch(
   const exclusions: Form1099Exclusion[] = [];
 
   for (const input of recipients) {
-    const { status, code } = classifyMiscRecipient(input);
+    const { status, code } = classifyMiscRecipient(input, taxYear);
     const boxAmounts = presentBoxes(input.miscBoxCents);
     const totalReportableMiscCents = sumMiscBoxes(boxAmounts);
 
@@ -263,7 +281,7 @@ export function assembleForm1099MiscBatch(
         totalPaidCents: input.totalPaidCents || totalReportableMiscCents,
         status,
         code: code!,
-        reason: exclusionReason(code!, input.vendorName),
+        reason: exclusionReason(code!, input.vendorName, taxYear),
         fixFirst: status === 'BLOCKED',
       });
     }
@@ -287,8 +305,10 @@ export function assembleForm1099MiscBatch(
 
   const summary: Form1099MiscSummary = {
     taxYear,
-    generalThresholdCents: MISC_GENERAL_THRESHOLD_CENTS,
-    royaltyThresholdCents: MISC_ROYALTY_THRESHOLD_CENTS,
+    generalThresholdCents: get1099Thresholds(taxYear).generalCents,
+    royaltyThresholdCents: get1099Thresholds(taxYear).miscBoxCents.MISC_2,
+    attorneyProceedsThresholdCents: get1099Thresholds(taxYear).miscBoxCents.MISC_10,
+    thresholdNotice: get1099Thresholds(taxYear).notice,
     readyCount: records.length,
     totalReportableMiscCents: records.reduce((s, r) => s + r.totalReportableMiscCents, 0),
     boxTotals,

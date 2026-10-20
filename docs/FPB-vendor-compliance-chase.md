@@ -33,7 +33,7 @@ list, never a spreadsheet.
 | W-9 AI read: `W9_EXTRACT` via the Core gateway; TIN masked inside the module; infers 1099 eligibility from entity type | `lib/vendors/w9-parse.ts`, `/api/vendors/w9-parse` | LIVE (AI dark until Anthropic is funded) |
 | COI AI read: `COI_EXTRACT`; carrier, policy #, named insured, holder, additional-insured flag, coverage lines (GL, WC, auto, umbrella, professional, pollution) with each-occurrence and aggregate limits | `lib/vendors/coi-parse.ts`, `/api/vendors/coi-parse` | LIVE. **Confirm persists only GL and WC** (the doc table has no columns for the rest; the parser's own header reports this gap) |
 | Vendor portal: magic link, per-vendor, `requested_docs` W9/COI/BANKING, uploads land PENDING in the private `documents` bucket, never flip compliance; rate-limited | mig 142, `app/portal/vendor/[token]`, `/api/portal/vendor/[token]/upload` | LIVE. Desktop-styled; no AI read-back to the vendor; **tokens stored in clear** (`vendor_portal_tokens.token`), unlike IA M-7's "hashed" rule |
-| 1099 readiness: candidates at **$600** (`REPORTABLE_THRESHOLD_CENTS = 60_000`), W-9 gaps, NEC vs MISC box, Copy B PDFs, FIRE file | `/api/compliance/1099/readiness.ts`, `lib/tax/form-1099*.ts`, `/compliance-1099` | PARTIAL (transmission needs a TCC). **Threshold is a constant, not dated** (see §11.4) |
+| 1099 readiness: candidates at the **tax year's floor** (`lib/tax/1099-thresholds.ts`: $600 ≤2025, $2,000 for 2026, IRS-indexed 2027+; royalties $10, attorney gross proceeds $600), W-9 gaps, NEC vs MISC box, Copy B PDFs, FIRE file | `/api/compliance/1099/readiness.ts`, `lib/tax/form-1099*.ts`, `lib/tax/1099-thresholds.ts`, `/compliance-1099` | PARTIAL (transmission needs a TCC). Threshold is **dated by tax year** since 2026-10-20 (see §9) |
 | Projects-side docs: `proj.compliance_docs` (LIEN_WAIVER_*, COI, W9, CERTIFIED_PAYROLL; job/commitment-scoped) | mig 1005 | Projects-owned. **Overlaps Books on W9 and COI** (see §2.2) |
 
 Gaps the owner is seeing: no requirement rules, no sender, no SMS, no scheduler (INT-01), no TIN match, no endorsements,
@@ -258,10 +258,31 @@ Holds never block **approval** or **posting** of the bill (the liability is real
 - Readiness per vendor = 1099-eligible × paid ≥ threshold × W-9 VERIFIED (TIN match pass) × box classified.
 - `tax.1099` widget and `/compliance-1099` read the same `v_vendor_compliance_status`; a W-9 gap on a 1099 candidate is
   a chase request, not a list to export.
-- **Threshold must be dated, not a constant.** Code uses `REPORTABLE_THRESHOLD_CENTS = 60_000` ($600). Federal law
-  changed the NEC/MISC floor for payments after 2025 (reported as $2,000, indexed). Make it a table keyed by tax year
-  and confirm the TY2026 figure with tax counsel before 1099 season. Pre-season (October–November) the scan TIN-matches
-  every candidate so January is a filing, not a chase.
+- **Threshold is dated by tax year (DONE 2026-10-20; owner decision d: "follow whatever the law is").** Every 1099 floor
+  comes from `lib/tax/1099-thresholds.ts` (`get1099Thresholds(taxYear)`); nothing else hardcodes a dollar figure.
+  | Tax year (payment year) | 1099-NEC box 1 · MISC rents / other / medical / crop | MISC royalties · substitute pmts | MISC box 10 attorney gross proceeds | Direct-sales checkbox | 1099-K (processor) |
+  |---|---|---|---|---|---|
+  | ≤ 2025 | $600 | $10 | $600 | $5,000 | > $20,000 AND > 200 transactions |
+  | 2026 | **$2,000** (P.L. 119-21 "OBBBA" sec. 70433) | $10 (unchanged) | $600 (IRC 6045(f), unchanged) | $5,000 | > $20,000 AND > 200 (OBBBA restored the pre-ARPA test) |
+  | 2027+ | $2,000 indexed for inflation (2025 base, rounded to $100); **IRS publishes each year** | $10 | $600 | $5,000 | same |
+  Confirmed against the IRS 2026 Instructions for Forms 1099-MISC and 1099-NEC ("increased to $2,000 and may be adjusted
+  for inflation beginning in calendar year 2027"; box 10 "$600 or more"; box 2 "$10 or more").
+  **2027+ procedure:** when the IRS publishes the indexed amount, add one entry to `IRS_INDEXED_GENERAL_THRESHOLD_CENTS`
+  (TODO(irs-indexing) in that file). Until then the year is **provisional**: the module uses the most recent known amount
+  ($2,000), the 1099 screen shows a notice, and because indexing can only raise the floor this can only list *extra*
+  candidates for review — it never silently drops one and **never falls back to $600 for 2026+**.
+  Candidacy: a vendor is a candidate when its reportable (non-card) total reaches the general floor **or** any single MISC
+  box reaches its own floor (a $15 royalty or a $700 attorney settlement in 2026 is still reportable).
+  **State filing caveat:** some states kept a $600 state-reporting floor for 2026; state thresholds are a separate table
+  to add with combined federal/state filing (TAX-05), not this federal one.
+  Pre-season (October–November) the scan TIN-matches every candidate so January is a filing, not a chase.
+- **Backup withholding follows the same dated floor.** IRC 3406(b)(6): payments of the 6041/6041A kind are "reportable
+  payments" subject to 24% backup withholding (missing / IRS-flagged TIN) only once the payee's aggregate for the year
+  reaches the information-reporting floor — `get1099Thresholds(year).backupWithholdingCents` ($600 ≤2025, $2,000 for
+  2026, indexed after). Practical rule for the §6.3 phase-2 build: once a payee without a valid TIN is expected to cross
+  the year's floor (or already has), withhold 24% on each payment from that point; below the floor, no withholding.
+  Royalty and attorney-proceeds payees keep their own lower reporting floors. Confirm the per-payment mechanics
+  (withhold from the first payment vs from the crossing payment) with tax counsel before turning withholding on.
 
 ## 10. States, lifecycle, audit
 

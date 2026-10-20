@@ -2,10 +2,13 @@
  * 1099-NEC readiness — the aggregation + readiness logic behind the CPA panel.
  *
  * CPA framing (docs/discovery/books/cpa-tax-assurance.md §A3 / §B4): a vendor is a
- * 1099-NEC candidate when it was paid **$600 or more** for services in the calendar
- * year by a REPORTABLE rail (cash / check / ACH / wire). Card / third-party-network
- * payments are EXCLUDED — those land on the processor's 1099-K, and issuing a
- * 1099-NEC on top would double-report. Getting that rail split right is the whole
+ * 1099 candidate when its reportable payments in the calendar year reach the TAX
+ * YEAR's floor (lib/tax/1099-thresholds — $600 through 2025, $2,000 for 2026, IRS-
+ * indexed from 2027) or any single MISC box reaches its own floor (royalties $10,
+ * attorney gross proceeds $600), paid by a REPORTABLE rail (cash / check / ACH /
+ * wire). Card / third-party-network payments are EXCLUDED — those land on the
+ * processor's 1099-K ($20,000 AND 200 transactions), and issuing a 1099-NEC on top
+ * would double-report. Getting that rail split right is the whole
  * point of doing this off the owned ledger instead of a spreadsheet.
  *
  * The "reportable payments" number is built from POSTED `bill_payments` in the year
@@ -20,6 +23,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { get1099Thresholds, type MiscThresholdBox } from '@/lib/tax/1099-thresholds';
 import {
   BOX_META,
   classify1099Box,
@@ -30,8 +34,21 @@ import {
   type BoxCents,
 } from '@/lib/tax/box-classify';
 
-/** IRS reporting floor: $600 OR MORE (not strictly "over") in reportable payments. */
-export const REPORTABLE_THRESHOLD_CENTS = 60_000;
+/**
+ * Candidate test for a vendor's aggregated reportable spend in a tax year: the total
+ * reaches the year's general floor, OR any one MISC box reaches its own (possibly
+ * lower) floor — e.g. a $15 royalty or a $700 attorney settlement in 2026. Pure.
+ */
+export function isTen99Candidate(totalCents: number, boxes: BoxCents, taxYear: number): boolean {
+  const t = get1099Thresholds(taxYear);
+  if (totalCents >= t.generalCents) return true;
+  for (const [code, cents] of Object.entries(boxes) as [Box1099Code, number | undefined][]) {
+    if (code === 'NEC_1') continue;
+    const floor = t.miscBoxCents[code as MiscThresholdBox];
+    if (typeof floor === 'number' && (cents ?? 0) >= floor) return true;
+  }
+  return false;
+}
 
 export type W9State = 'on_file' | 'missing' | 'expired';
 export type Readiness = 'READY' | 'MISSING_W9' | 'NOT_MARKED_1099';
@@ -70,7 +87,12 @@ export interface Ten99Row {
 
 export interface Ten99Summary {
   taxYear: number;
+  /** The tax year's general 1099-NEC / MISC floor (cents). */
   thresholdCents: number;
+  /** True when the year's IRS-indexed amount isn't published yet (provisional floor). */
+  thresholdProvisional: boolean;
+  /** UI caveat for a provisional year; null otherwise. */
+  thresholdNotice: string | null;
   candidates: number;
   ready: number;
   /** Candidates NOT ready — a W-9/TIN gap or not marked 1099-eligible. */
@@ -97,7 +119,7 @@ export interface ReadinessFacts {
 
 /**
  * Pure readiness decision — unit-testable, no I/O.
- *   NOT_MARKED_1099: crossed the $600 floor but the vendor isn't flagged
+ *   NOT_MARKED_1099: crossed the year's floor but the vendor isn't flagged
  *                    1099-eligible (could be a corporation/exempt — a CPA must
  *                    confirm; it is a documentation GAP until they do).
  *   MISSING_W9:      flagged 1099-eligible but the W-9 isn't on file (or expired)
@@ -148,13 +170,16 @@ export async function buildReadinessReport(
   taxYear: number,
 ): Promise<Ten99Report> {
   const now = new Date();
+  const thresholds = get1099Thresholds(taxYear);
   const start = `${taxYear}-01-01`;
   const end = `${taxYear}-12-31`;
 
   const emptyReport = (): Ten99Report => ({
     summary: {
       taxYear,
-      thresholdCents: REPORTABLE_THRESHOLD_CENTS,
+      thresholdCents: thresholds.generalCents,
+      thresholdProvisional: thresholds.provisional,
+      thresholdNotice: thresholds.notice,
       candidates: 0,
       ready: 0,
       missingDocs: 0,
@@ -247,9 +272,10 @@ export async function buildReadinessReport(
     agg.set(vendorId, cur);
   }
 
-  // 4. Keep only vendors at/above the $600 floor — the 1099 candidates.
+  // 4. Keep only vendors at/above the tax year's floor (or a box-specific floor) —
+  //    the 1099 candidates.
   const candidateIds = [...agg.entries()]
-    .filter(([, v]) => v.cents >= REPORTABLE_THRESHOLD_CENTS)
+    .filter(([, v]) => isTen99Candidate(v.cents, v.boxes, taxYear))
     .map(([id]) => id);
   if (candidateIds.length === 0) return emptyReport();
 
@@ -376,7 +402,9 @@ export async function buildReadinessReport(
   return {
     summary: {
       taxYear,
-      thresholdCents: REPORTABLE_THRESHOLD_CENTS,
+      thresholdCents: thresholds.generalCents,
+      thresholdProvisional: thresholds.provisional,
+      thresholdNotice: thresholds.notice,
       candidates: rows.length,
       ready,
       missingDocs,

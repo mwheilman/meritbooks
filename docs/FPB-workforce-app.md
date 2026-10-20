@@ -1,6 +1,11 @@
-# Feature Product Brief: The workforce app (employee surface), expense-policy upload, budget upload
+# Feature Product Brief: Merit Workforce (the employee app), expense-policy upload, budget upload
 
-**Status:** DRAFT for owner approval (Rule 13). Written 2026-10-20 against HEAD `5d62752`.
+**Status:** DRAFT for owner approval (Rule 13). Written 2026-10-20 against HEAD `5d62752`; revised 2026-10-20 for the
+owner decisions below.
+**Owner decisions (binding, 2026-10-20):** (a) the employee app is named **Merit Workforce**; receipt chase can be
+**enabled or disabled per tenant and per client** and lives in Merit Workforce. (b) Payroll is **provider-agnostic**:
+any payroll system works; **Gusto** is the likely first API provider. (c) Payroll includes a **commissions** mechanism
+(docs/FPB-commissions.md); employees see their **commission statements** in Merit Workforce.
 **Owner ask (verbatim):** "We need a workforce app where employees can clock in, see their paycheck, and where the
 receipt chase will happen. We need the ability to upload budgets and expense policies."
 **Capability IDs:** EXP-01..11, PRT-04, PRL-08, FPA-01, G2/G27 (04-CAPABILITY-MAP); IA-SPEC v2 §3.6.6, §4.13, M-7, M-11,
@@ -15,10 +20,11 @@ engine), `docs/FPB-reports-fpna.md` (budget upload and budget cycle, being writt
 ## 0. The one-paragraph version
 
 One app on the employee's phone, signed in with a magic link, that answers the four things a field or office employee
-needs from the company's back office: **am I on the clock, what did I get paid, what receipts do I owe, and what am I
-owed back.** It is a **suite-level surface**, not a Books page: the shell, identity and notifications are Suite Core;
+needs from the company's back office: **am I on the clock, what did I get paid (and what commission have I earned),
+what receipts do I owe, and what am I owed back.** The app is **Merit Workforce**. It is a **suite-level surface**, not a Books page: the shell, identity and notifications are Suite Core;
 each card in it is owned by the module that owns the data: time by **MeritProjects**, pay by the **payroll provider**
-(via Books' payroll engine), receipts, card charges, expenses and the expense policy by **Books**. Canon retired in-app
+(via Books' provider-agnostic payroll seam), commission statements, receipts, card charges, expenses and the expense
+policy by **Books**. Canon retired in-app
 time tracking from Books (CANON-ANCHOR §2); this brief does **not** rebuild it in Books. It puts Projects' time module
 on the employee's phone and lets Books consume approved hours. Alongside it: an expense-policy upload (document → AI
 rules → human confirms → engine → employees acknowledge) and the budget upload hand-off to FP&A.
@@ -32,11 +38,12 @@ rules → human confirms → engine → employees acknowledge) and the budget up
 | **Notifications**: email, SMS (opt-in), web push, quiet hours, consent, STOP handling | **Suite Core** (new channel service) | Books' M-7 chase engine calls it | Email exists (Resend); SMS/push not built (INT-13) |
 | **Clock in/out punches, breaks, geofence check, job + cost code on the shift** | **MeritProjects** (time module) | none directly | `proj.time_entries` exists (job, cost code, hours, approval_state). **Punches, breaks, geo, non-job time do not exist** — Projects build (§4.3) |
 | **Timesheet (week) and its supervisor approval** | **MeritProjects** | consumes APPROVED hours for payroll (gate `TIMESHEET_PAYROLL`) and job cost | approval_state on `proj.time_entries` exists; no week-level submit, no supervisor routing |
-| **Paycheck / paystub detail, W-2, direct-deposit info, tax withholding** | **Payroll provider** (Check or Gusto Embedded, undecided) | Books holds run + run-line amounts and the provider document reference; **never PII** | Provider unpicked; mock engine labelled "estimate"; register import is the honest primary |
-| **PTO balance and requests** | **Payroll provider** if it supports it; else **informational** Books accrual (FPB-payroll §7) | displays | Not built |
+| **Paycheck / paystub detail, W-2, direct-deposit info, tax withholding** | **The tenant's payroll system**, reached through Books' provider-agnostic `PayrollProvider` seam (`lib/payroll/providers`): **Gusto** via API (first provider), any other system (ADP, Paychex, Paylocity, QBO Payroll, …) via the **file adapter** | Books holds run + run-line amounts and the provider document reference; **never PII** | Seam + Gusto adapter skeleton + file adapter built; Gusto sandbox not connected; register import is the path for every non-API system |
+| **PTO balance and requests** | **Payroll provider** if it supports it (Gusto: yes); else **informational** Books accrual (FPB-payroll §7) | displays | Seam method `getPtoBalances` built; screen not built |
+| **Commission statements** (earned, clawbacks, payable, per-job detail) | **Books** commissions engine (`lib/commissions`, docs/FPB-commissions.md) | owns; paid through the payroll seam as COMMISSION earnings | Engine (pure) built; schema proposed; screen not built |
 | **Card charges needing receipts** (card → cardholder map) | **Books** (M-11 `card_holders`, `receipt_policies`) | owns | PLANNED |
 | **Receipts** (capture, AI read, match) | **Books** (`receipts`, documents bucket) | owns | LIVE on desk (`/receipts`); mobile capture PLANNED (EXP-03) |
-| **Receipt chase** (requests, reminders, escalation) | **Books M-7** (`client_requests.kind = 'receipt'`) | owns | PARTIAL: settings only, no sender (EXP-05) |
+| **Receipt chase** (requests, reminders, escalation) | **Books M-7** (`client_requests.kind = 'receipt'`), delivered in Merit Workforce; **on/off per tenant and per client** (§4.9) | owns | PARTIAL: settings only, no sender (EXP-05); enable flags proposed |
 | **Expense reports, mileage, per diem, reimbursement** | **Books** (`lib/expenses/expense-reports.ts`, approver queue, reimbursement batch) | owns | LIVE on desk |
 | **Expense policy** (document, compiled rules, versions) | **Books** (`expense_policies`, `policy-schema.ts`) | owns | LIVE: compiler + engine + EC-14 detector |
 | **Policy acknowledgment** | **Books** (new `policy_acknowledgments`, generic `policy_kind` so a future MeritHR can adopt handbook acks) | owns | Not built |
@@ -49,7 +56,7 @@ rules → human confirms → engine → employees acknowledge) and the budget up
    Books action (suite architecture decision 5: the agent and every UI call the same typed actions).
 3. Payroll PII (SSN, bank, withholding) stays at the provider and the Core secret path (matrix `core.employees`).
    The app shows the last 4 of the deposit account only if the provider returns it at render time; it is never stored.
-4. Each card carries a small source label ("Time · Projects", "Pay · Check", "Receipts · Books") on the design boards;
+4. Each card carries a small source label ("Time · Projects", "Pay · Gusto", "Receipts · Books") on the design boards;
    in product it lives in the card's overflow ("Where this comes from"), useful for support and for white-label resale.
 
 ## 2. Job and users
@@ -75,14 +82,17 @@ complete receipts and fast reimbursements without anyone chasing by hand.
 - **Install**: PWA ("Add to Home Screen"), offline shell; punches made offline queue with device time + a server
   reconciliation flag (§4.3). Native wrapper later only if push on iOS PWA proves unreliable.
 - **Multi-company**: an employee of two clients sees a company switcher at the top of Home (one membership each).
-  White-label: the tenant's logo and primary color; the app name is the tenant's ("Heartland Workforce", powered by Merit).
+- **Name and branding (owner decision a):** the app is **Merit Workforce** (home-screen name, sign-in page, emails,
+  push sender). Inside the app, Home shows the employer's logo and primary color ("Heartland Heating & Cooling" on
+  Merit Workforce). A reseller-level app-name override for white-label resale is a later option, not a tenant setting.
 
 ## 4. Screens (W1 board shows each at 390 × 844)
 
 ### 4.1 Home
 One screen, ordered by what needs doing now: **clock status card** (on the clock 2 h 41 m at J-2614, cost code 23 05,
-"Start break" / "Clock out"), **receipts owed** (count + amount, "Snap the oldest"), **next paycheck** (date, "View last
-stub"), **expense report** in progress, **policy to acknowledge** (when one is pending). Bottom tabs: Home · Time ·
+"Start break" / "Clock out"), **receipts owed** (count + amount, "Snap the oldest"; hidden when receipt chase is off for this
+client, §4.9), **next paycheck** (date, "View last stub"), **commissions this period** (for employees on a plan:
+earned to date, "View statement"), **expense report** in progress, **policy to acknowledge** (when one is pending). Bottom tabs: Home · Time ·
 Receipts · Pay · More (expenses, PTO, documents, settings). Done state: "Nothing owed. Next paycheck Fri Oct 30."
 
 ### 4.2 Receipts (Books)
@@ -116,15 +126,29 @@ supervisor (crew lead or department head per the approval chain, mig 092 N-step 
 note. Approved hours become `APPROVED` time entries; payroll pulls them (FPB-payroll §5, `TIMESHEET_PAYROLL` gate) and
 labor cost lands on the job with the run (JOB_COST rides FROZEN v3 unchanged).
 
-### 4.5 Pay (provider via Books)
+### 4.5 Pay (any payroll provider, via Books' provider-agnostic seam)
 - **Next paycheck** date (from `payroll.pay_schedules`), **last paycheck** net and gross, hours paid vs hours approved
   (they should tie; if not, "Ask payroll" opens a request to the payroll runner).
 - **Paystub detail** (earnings, taxes, deductions, YTD) rendered from the provider's API or embedded component at view
   time, not stored; PDF download from the provider. Books' `run_lines` supplies gross/net and the dimension split
   ("Billed to: J-2614 41.5 h · J-2633 38.0 h") — the ledger-native part no provider can show.
-- **W-2** (January) and **PTO balance** when the provider exposes them. Without a live provider (register-import
-  tenants): the Pay tab says where stubs are ("Your stubs are in ADP. Open ADP") and shows nothing invented.
+- **W-2** (January) and **PTO balance** when the provider exposes them (`getDocumentLinks`, `getPtoBalances`; Gusto
+  supports both). Pay stubs and W-2 PDFs are streamed through a server proxy at view time and never stored.
+- **Provider-agnostic (owner decision b):** what the Pay tab can show depends only on the adapter's advertised
+  `capabilities`, never on a hardcoded provider. **Gusto** (API): stubs, W-2, PTO in-app. **Any other system** (file
+  adapter, register import): the Pay tab shows Books' own run figures from the imported register and says where stubs
+  are ("Your stubs are in ADP. Open ADP" — the portal URL the tenant set on the connection), and shows nothing invented.
 - Re-prompt passkey on open; amounts hidden behind "Show" by default on shared devices (setting).
+
+### 4.5.1 Commissions (Books; owner decision c)
+- For employees assigned a commission plan: **this period so far** (earned, clawbacks, net), **last statement**
+  (approved / paid, with the payroll date it was paid on), and **per-job detail**: job, basis (sold / installed /
+  invoiced / paid), basis amount, rate, commission, and a plain-English line from the engine ("5.00% of revenue × 50%
+  split"; "Clawback: cancelled on Nov 15"). A negative balance carried forward is shown honestly with the plan's rule.
+- **Dispute**: "Question this line" opens a request to the employee's manager with the line attached; the manager can
+  add an ADJUSTMENT line (reason required, audited) before approving the statement.
+- Statements are read-only for the employee; approval is a manager action on the desk (FPB-commissions §6). Paid
+  commissions also appear on the pay stub as a "Commission" earning (Gusto) or in the outside system's stub (file).
 
 ### 4.6 Expenses (Books)
 Mileage (map distance, IRS rate from the active policy's `mileageRateCentsPerMile`), per diem (GSA by city, policy
@@ -143,13 +167,32 @@ document hash. Expense submission is **allowed but flagged** until acknowledged 
 ### 4.8 Notifications
 | Event | Channel default | Owner of the event |
 |---|---|---|
-| Card charge needs receipt | push, then SMS if opted in; quiet hours | Books M-7 |
+| Card charge needs receipt (only when receipt chase is on for the client, §4.9) | push, then SMS if opted in; quiet hours | Books M-7 |
 | Forgot to clock out (geofence exit or 12 h open) | push | Projects |
 | Timesheet due / returned | push + email | Projects |
 | Expense approved / returned / paid | push | Books |
-| Payday / stub ready | push | Books (from provider webhook) |
+| Payday / stub ready | push | Books (from provider webhook, or register import for file-based payroll) |
+| Commission statement ready / approved | push + email | Books (commissions) |
 | Policy to acknowledge | push + email | Books |
 One daily digest instead of many when more than 3 are due; STOP and quiet hours honored by the Core channel service.
+
+### 4.9 Receipt chase on/off, per tenant and per client (owner decision a)
+**Settings.** Two switches, both on the desk (Settings · Receipts & expenses), audited:
+- **Tenant switch** (`organizations.receipt_chase_enabled`, default **on**): the master switch for the whole tenant.
+- **Client switch** (`company_policies.receipt_chase_enabled`, nullable; null = follow the tenant): lets a firm turn
+  chase on for some clients and off for others (e.g. a client whose own office collects receipts).
+- **Effective** = tenant on AND (client switch is null or on). A client cannot turn chase on when the tenant has it off.
+**Effect on reminders.**
+- Off → no new receipt requests are created for that client's card charges, the chase scheduler skips the client, and
+  **open reminders stop** (pending sends cancelled, not just paused; escalation counters frozen). Nothing is deleted:
+  open receipt requests stay visible on the desk as "chase off" so the bookkeeper can still match receipts.
+- Merit Workforce hides the "Receipts owed" card and the chase deep links for that client; employees can still snap and
+  upload receipts voluntarily, and those still match.
+- Turning chase back on does **not** back-fill a burst of reminders: only charges after the switch-on time, plus open
+  requests younger than the tenant's chase window, resume on the normal cadence (respecting quiet hours).
+- Interval, quiet hours, channel and escalation stay where they are today (`organizations.chase_*`,
+  `company_policies.receipt_chase_interval_minutes`, `receipt_quiet_hours_*`); the switches only gate them.
+- The vendor-compliance chase (shared M-7 engine) should adopt the same per-tenant / per-client switch pattern.
 
 ## 5. Expense-policy upload (W2 board)
 
@@ -182,7 +225,7 @@ Budget ownership and the budget cycle (department-head submissions, versions, re
   account match by number then name, 12 monthly cells, `dryRun` preview, idempotent upsert). Needed there (FP&A FPB):
   department/class columns per row, version tag, and an AI mapping fallback for messy files.
 - **Onboarding:** O18 budgets card (08 §10.5) uses the same loader.
-- **Workforce app:** none. Employees don't upload budgets; department heads submitting a budget is a desk flow in the
+- **Merit Workforce:** none. Employees don't upload budgets; department heads submitting a budget is a desk flow in the
   budget cycle (FPA-06), not the employee app.
 
 ## 7. States
@@ -192,13 +235,14 @@ Budget ownership and the budget cycle (department-head submissions, versions, re
 | Home | skeleton cards in final order | first sign-in: "Your company set this up for receipts and pay" + what each tab does | "Nothing owed" | card-level, never page | cached last state + "Offline · 2 punches will send when you're back" |
 | Clock | — | no jobs assigned: search all jobs | — | punch failed → queued, never lost | offline punch with device time, flagged for review |
 | Receipts | — | "No card on file" / "All caught up" | yes | upload retry | AI down: receipt stored, "Dana will match it" |
-| Pay | — | no provider: link out | — | provider down: "Pay details are temporarily unavailable from Check" | — |
+| Pay | — | file-based payroll: Books run figures + portal link | — | provider down: "Pay details are temporarily unavailable from Gusto" | — |
+| Commissions | — | not on a plan: tab hidden; on a plan, nothing yet: "No commissionable jobs this period" | statement paid | card-level | cached last statement |
 | Policy review (W2) | parse progress per page | no policy: start from Merit's template | published + ack progress | schema validation errors listed by rule | manual builder |
 
 ## 8. Permissions (role `employee`, IA §2.2)
 
 Own records only: `exp.receipts V C E D (own)`, `exp.reports V C E (own)`, `cards.transactions V (own)`,
-`req.client_requests V E (assigned to me)`, `time.punches C (own)` and `time.entries V E (own, before approval)` (Projects
+`req.client_requests V E (assigned to me)`, `comp.my_statements V (own)` (commission statements, new), `time.punches C (own)` and `time.entries V E (own, before approval)` (Projects
 resources, to add to the capability registry), `payroll.my_pay V (own)` (new, renders provider data, no PII stored).
 No ledger, money, configure or cross-client capability (audience ceiling). Supervisor approval of time is a Projects
 capability (`time.entries:A`, dimension-restricted to their crew/department). Policy publish: `exp.policy:K`.
@@ -234,7 +278,9 @@ decision (§4.3); geofence radius on job site.
 **Books (next Books migration per the lead):** `card_holders`, `receipt_policies` (M-11); M-7 tables if not landed;
 `policy_acknowledgments` (org, location, policy_kind, policy_id, version, membership_id, acknowledged_at, method,
 document_hash); `expense_policies.location_id`; `payroll.runs/run_lines` read view for the employee (own lines only,
-security_invoker).
+security_invoker); **receipt chase switches**: `organizations.receipt_chase_enabled boolean not null default true`,
+`company_policies.receipt_chase_enabled boolean null`; commission tables per docs/FPB-commissions.md §16 with an
+employee read view (own statements and lines only, security_invoker).
 
 ## 12. Acceptance criteria
 
@@ -248,6 +294,11 @@ security_invoker).
    is stored or logged anywhere in Books or Core tables (schema guard test).
 5. A card charge over the policy threshold sends a push within one scheduler cycle; quiet hours delay it; snapping the
    receipt matches it and stops the chase.
+5a. With receipt chase **off** for the tenant, or for a client, no receipt request or reminder is sent for that
+   client's charges, open reminders are cancelled, the Home card is hidden, and voluntary uploads still match.
+   Turning it back on resumes only in-window requests (no burst). Every switch change is audited.
+5b. An employee on a commission plan sees the current period's earned / clawback / net and per-job lines that match the
+   approved statement to the cent; paid statements show the payroll date.
 6. An expense line over a BLOCK limit can't be submitted without a reason; the reason routes it to the supervisor as an
    exception; WARN lines submit with a badge.
 7. Publishing a new policy version creates acknowledgment tasks for every employee in scope; the controller sees
@@ -264,17 +315,21 @@ security_invoker).
 2. Books: M-11 cards/cardholders + M-7 receipt chase (S21/S22), Receipts and Expenses tabs on mobile (APIs exist).
 3. Books: policy upload upgrade (source spans, simulate, per-client publish) + acknowledgments.
 4. Projects (parallel, its own FPB): punches, breaks, geofence, week submit/approve; then the Time tab.
-5. Books + provider: Pay tab after the provider pick (Check vs Gusto, task #32); link-out until then.
+5. Books + provider: Pay tab on the provider-agnostic seam — Gusto (API) first, file-based systems via register
+   import + portal link; Commissions tab once the commission tables land (FPB-commissions §16).
+5a. Books: receipt chase tenant/client switches (§4.9) with the M-7 sender.
 6. Notifications digest, offline queue hardening, white-label theming.
 
 ## 14. Open decisions for the owner
 
 | # | Decision | Default here |
 |---|---|---|
-| W1 | App identity: "Merit" app vs tenant-branded ("Heartland Workforce") | Tenant-branded, "powered by Merit" footer |
-| W2 | Payroll provider (Check vs Gusto) — decides how much of Pay is native | Link-out until picked |
+| W1 | App identity | **DECIDED (owner):** "Merit Workforce"; employer logo/color inside; reseller rename later |
+| W2 | Payroll provider | **DECIDED (owner):** provider-agnostic; Gusto first (API); any system via file import/export |
 | W3 | Geofence on by default? | Off; per tenant; flag, never block |
 | W4 | Reimburse via AP batch or payroll | AP batch default; payroll per tenant |
 | W5 | Policy acknowledgment blocking expense submission | Flag only |
 | W6 | Native app wrapper vs PWA | PWA first; wrap only if iOS push falls short |
 | W7 | Non-job time in Projects (nullable job vs internal jobs) | Projects workstream decides |
+| W8 | Receipt chase default for a NEW client when the tenant switch is on | Follow the tenant (null) |
+| W9 | Show commission $ on the Home card or only inside the Pay tab (shared devices) | Home shows "View statement" only; amounts behind "Show" like pay |

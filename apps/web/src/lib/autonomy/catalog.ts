@@ -84,6 +84,35 @@ export const AUTONOMY_FEATURES: readonly AutonomyFeatureDef[] = [
     defaultMode: 'PROPOSE',
   },
 
+  // ── Scheduled engines (lib/scheduler/posting-gate.ts) ──────────────────────
+  // Deterministic engines the scheduler (M-12) runs on a cadence. At PROPOSE they
+  // only compute a preview (a human runs the posting from the module screen); at
+  // AUTO_UNDER_LIMIT the scheduled run posts when the run total is ≤ the cap.
+  {
+    feature: 'SCHEDULED_REV_REC',
+    label: 'Scheduled revenue recognition (1st of month)',
+    description:
+      'On the 1st, previews the monthly rev-rec run for every eligible job. At Propose a human posts it from Revenue recognition; at Auto-under-limit the scheduled run posts when the total recognized is within the cap.',
+    category: 'processing',
+    defaultMode: 'PROPOSE',
+  },
+  {
+    feature: 'SCHEDULED_PREPAID_AMORTIZATION',
+    label: 'Scheduled prepaid amortization',
+    description:
+      'Monthly, finds every due prepaid amortization period. At Propose it reports what is due for a human to post; at Auto-under-limit the scheduled run posts when the total is within the cap.',
+    category: 'processing',
+    defaultMode: 'PROPOSE',
+  },
+  {
+    feature: 'SCHEDULED_EVENT_DRAIN',
+    label: 'Scheduled Projects event drain',
+    description:
+      'Hourly, checks for pending Projects events (job billing, internal invoices, progress). At Propose they wait for a human to process them; at Auto-under-limit billing and internal-invoice events post when the pending total is within the cap. Progress (rev-rec) events always wait for a human because their amount is unknown until recognized.',
+    category: 'processing',
+    defaultMode: 'PROPOSE',
+  },
+
   // ── Financial control exceptions (detect-only) ─────────────────────────────
   {
     feature: 'DUPLICATE_PAYMENT',

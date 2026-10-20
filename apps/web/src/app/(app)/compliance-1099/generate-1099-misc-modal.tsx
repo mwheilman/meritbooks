@@ -19,6 +19,7 @@ import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks';
+import { formatThresholdUsd, get1099Thresholds } from '@/lib/tax/1099-thresholds';
 
 /**
  * Generate 1099-MISC flow — the MISC sibling of Generate1099Modal (which does NEC).
@@ -426,8 +427,10 @@ export function Generate1099MiscModal({ year, onClose }: { year: number; onClose
 
               {excluded.length > 0 && (
                 <p className="text-[11px] text-slate-600">
-                  {excluded.length} candidate{excluded.length === 1 ? '' : 's'} excluded (no MISC box clears its floor —
-                  $600, or $10 for royalties — or not marked 1099-eligible). Vendors whose spend is nonemployee
+                  {excluded.length} candidate{excluded.length === 1 ? '' : 's'} excluded (no MISC box clears its {year} floor —
+                  {formatThresholdUsd(get1099Thresholds(year).generalCents)} rents / other / medical,{' '}
+                  {formatThresholdUsd(get1099Thresholds(year).miscBoxCents.MISC_10)} attorney proceeds,{' '}
+                  {formatThresholdUsd(get1099Thresholds(year).miscBoxCents.MISC_2)} royalties — or not marked 1099-eligible). Vendors whose spend is nonemployee
                   compensation belong on the 1099-NEC batch.
                 </p>
               )}

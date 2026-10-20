@@ -3,7 +3,8 @@
 **Status:** Draft for Mike's sign-off (Rule 13)
 **Module:** Embedded payroll — run, post, remit, file, and reconcile payroll against a licensed provider
 **Author:** Auditor (Session 40 wave)
-**Governing principle (canon, non-negotiable):** *MeritBooks is NEVER the regulated party.* A licensed provider (Check or Gusto Embedded) calculates taxes, moves money, remits to agencies, and files returns behind a Books-owned `PayrollEngine` capability interface. MeritBooks owns the GL posting, reconciliation, approval + audit, the data model, and the UI — **not** the tax engine, the bank movement, or the filing.
+**Owner decisions (binding, 2026-10-20):** (b) payroll is **provider-agnostic** — ANY payroll system works; **Gusto** is the likely first API provider. (c) payroll includes a **commissions** mechanism that works with any payroll system (docs/FPB-commissions.md). The employee surface is **Merit Workforce** (docs/FPB-workforce-app.md).
+**Governing principle (canon, non-negotiable):** *MeritBooks is NEVER the regulated party.* A licensed provider (Gusto first; Check or any other system) calculates taxes, moves money, remits to agencies, and files returns behind a Books-owned `PayrollProvider` capability interface (`lib/payroll/providers/types.ts`, a superset of the run-only `PayrollEngine`). MeritBooks owns the GL posting, reconciliation, approval + audit, the data model, and the UI — **not** the tax engine, the bank movement, or the filing.
 **Grounds against what is already built:** migrations `041_provider_connections` (Core secret vault), `042_money_movement_approvals` (preparer≠approver CHECK), `043_money_movement_posting` (1095/1096 clearing accounts, `ach_authorizations`), `044_payroll_posting` (2270 Garnishments Payable + 9 payroll role keys), `045_employer_benefit_roles` (6020/6030/6040 employer-benefit expense roles), `055_money_movement_entry_types` (`PAYROLL_RUN` entry_type enum value), `061/062` identity + action_log; and `apps/web/src/lib/posting/payroll.ts` (`recordPayrollRun` / `recordPayrollRemittance`).
 
 ---
@@ -37,9 +38,9 @@ The organizing rule from the ownership matrix (FILE 2) and CANON §2: **payroll 
 - `payroll.pay_schedules` — per (org, location): frequency (`WEEKLY` | `BIWEEKLY` | `SEMIMONTHLY` | `MONTHLY`), period anchor, pay-date offset, next period boundaries. Pay dates are a *product of setup*, mirroring how fiscal periods are generated at onboarding (identity FILE 4), never invented at run time.
 - `payroll.runs` — one row per pay run: `pay_schedule_id`, `period_start`, `period_end`, `pay_date`, `status` (see §5), `provider_run_id`, `approval_id` (FK → `public.approvals`), `gl_entry_id` (FK, set on post), totals (gross/net/employer-tax/employee-withholding), `bank_txn_id` (FK → bank feed, set on reconcile).
 - `payroll.run_lines` — one row per employee per run: `employee_id`, `gross_cents`, `net_cents`, and the **dimension stamp** (`department_id`, `job_id`, `class_id`, `location_id`) that makes the GL job-costed; plus a jsonb `earnings` / `deductions` / `employer_contributions` breakdown returned by the provider (amounts only — never account/routing numbers).
-- Provider secrets: registered in `core.provider_connections` (capability `PAYROLL`, provider `check` | `gusto`), secret in Vault via `core.store_provider_secret` (migration 041). The row holds `account_handle` + `secret_ref` only.
+- Provider connection: registered in `core.provider_connections` (capability `PAYROLL`, provider `gusto` | `check` | `file` | `mock`), secret in Vault via `core.store_provider_secret` (migration 041). The row holds `account_handle` + `secret_ref` + non-secret `metadata` only (Gusto: company_uuid in `account_handle`, the OAuth token pair JSON in Vault; file: `metadata.systemName`, `employeePortalUrl`, `earningsCsv` template).
 
-**Earnings types (captured on `run_lines.earnings`, all bigint cents):** hourly, salary, overtime (1.5×), double-time, bonus, commission, reimbursement (non-taxable, does not hit wage expense — posts to the expense/clearing account it reimburses), tips (reported + paid). Provider computes tax on the taxable subset; Books posts the amounts.
+**Earnings types (captured on `run_lines.earnings`, all bigint cents):** hourly, salary, overtime (1.5×), double-time, bonus, commission (calculated by the Books commissions engine, docs/FPB-commissions.md, and handed to the provider as COMMISSION earnings), reimbursement (non-taxable, does not hit wage expense — posts to the expense/clearing account it reimburses), tips (reported + paid). Provider computes tax on the taxable subset; Books posts the amounts.
 
 **Deductions & contributions (`run_lines.deductions` / `employer_contributions`):** pre-tax (traditional 401(k), HSA, FSA, pre-tax health premium — reduce taxable wages, provider handles), post-tax (Roth 401(k), post-tax deductions), and **garnishments** (child support, tax levy, creditor) which post to **2270 Garnishments Payable** (seeded by migration 044) and are remitted by the provider. Employer contributions (employer 401(k) match, employer health, workers comp) post to expense (6020/6030/6040 per migration 045) and to their matching payables.
 
@@ -111,7 +112,7 @@ Balance identity enforced before post: `net = gross − Σ withholdings` and `Σ
 
 **Known wiring gap to close (Rule 11 honesty):** `recordPayrollRun` currently posts `entry_type: 'STANDARD'`, but migration 055 added a dedicated `PAYROLL_RUN` enum value — the builder should be switched to `PAYROLL_RUN` so the schema-drift guard (`schema.test.ts`) and reporting can distinguish payroll entries. Small, in-scope.
 
-**Contractor (1099-NEC):** a contractor payment is an **AP disbursement, not payroll** — no tax withholding, no employer tax. It runs through the bills/AP path (DR contractor expense / CR Payments in Transit), tagged `is_1099`, and the provider (or a year-end job) files 1099-NEC. Kept in this brief because it shares the run UI and the "pay people" mental model, but it must post as AP, not wages.
+**Contractor (1099-NEC):** a contractor payment is an **AP disbursement, not payroll** — no tax withholding, no employer tax. It runs through the bills/AP path (DR contractor expense / CR Payments in Transit), tagged `is_1099`, and the provider (or a year-end job) files 1099-NEC once the contractor reaches the tax year's floor (`lib/tax/1099-thresholds.ts`: $600 for payments through 2025, $2,000 for 2026, IRS-indexed from 2027 — never hardcoded). Contractor commissions are 1099-NEC compensation, not W-2 earnings. Kept in this brief because it shares the run UI and the "pay people" mental model, but it must post as AP, not wages.
 
 **Remittance & filing:** the provider remits withheld taxes and garnishments to agencies/recipients and files (941/940, state, W-2/1099). Books posts the liability at run time and clears it when the provider's remittance debit hits the bank feed. Books never touches an agency.
 
@@ -149,25 +150,36 @@ All four route through the Core-owned AI gateway (`@meritbooks/core-ai`), metere
 
 **The two canon wins to call out explicitly:** (1) **automated child-support / garnishment remittance** (tracked through 2270 Garnishments Payable and remitted by the provider — most SMB payroll leaves this as a manual employer chore), and (2) **automated new-hire report filing** (state new-hire reporting handled by the provider automatically). These are the differentiators to lead with beyond the ledger-native job-costing.
 
-## 15. Provider make-vs-buy (Check vs Gusto Embedded) — HUMAN/COMMERCIAL DECISION
+## 15. Provider strategy — PROVIDER-AGNOSTIC, Gusto first (owner decision, 2026-10-20)
 
-MeritBooks builds the **provider-agnostic `PayrollEngine` interface** and one adapter. Two realistic providers:
+**Decision:** any payroll system must work. Books owns one seam, `PayrollProvider` (`lib/payroll/providers/types.ts`), and a registry of adapters (`lib/payroll/providers/registry.ts`) selected per tenant by `core.provider_connections.provider`. Provider choice is a per-tenant connection, not a product fork. **Gusto** is the likely first API provider; the earlier Check-vs-Gusto question (task #32) is resolved as "Gusto first, others as adapters".
 
-| | **Check** (payroll infrastructure API) | **Gusto Embedded** |
-|---|---|---|
-| Model | Pure API/infrastructure — you own the whole UX, they are the engine of record + tax/filing | Embedded product — more of the UX/onboarding comes prebuilt |
-| Fit for "we own the book of record" | **Strong** — Check expects the platform to own product surface and GL; cleanest for our ledger-native posture | Good, but more opinionated UX to fit around |
-| Tax calc / remit / file / garnishments / new-hire | Yes (regulated party) | Yes (regulated party) |
-| Employee onboarding / PII custody | Provider-hosted flows + API; PII stays with provider | Provider-hosted; PII stays with provider |
-| Commercial | Per-employee/per-run pricing; contract + underwriting | Rev-share / per-employee; partner program |
+**The seam (one interface, every adapter):** connect/status; employee roster sync; pay schedules; run preview → submit → status (the original `PayrollEngine` methods, unchanged so `run.ts` is untouched); pay stub / W-2 retrieval handles (streamed by a server proxy, never stored); journal / GL-report export; **earnings import** (commissions, bonuses, spiffs — API push or a rendered earnings file); PTO balances. Each adapter advertises `capabilities`; an unsupported call throws `PayrollCapabilityUnsupportedError` (never a silent no-op, never mock numbers). No PII crosses the seam (allow-listed mappers).
 
-**This choice is explicitly a HUMAN / COMMERCIAL decision (blocker):** pricing, contract terms, underwriting, go-live sandbox access, and the white-label resale story (Module 1 of 12, resellable) all sit outside engineering judgment. The engineering recommendation is to **build to the interface first and defer provider selection** — nothing about the run workflow, GL wiring, dimensions, approvals, or reconciliation depends on which provider is chosen. **Mike selects the provider; engineering does not.** The tentative engineering lean, for the ledger-native/white-label posture, is **Check** (infrastructure-first) — to be confirmed commercially.
+| Adapter | Status (2026-10-20) | Run payroll in Books | Roster / schedules | Stubs, W-2 | Journal | Earnings (commissions) | PTO | Register import |
+|---|---|---|---|---|---|---|---|---|
+| **Gusto** (`gusto`) | Skeleton built + mocked-fetch tests; endpoints from Gusto's docs (API version 2026-06-15); response field names marked TODO(gusto-sandbox) | Yes: prepare → update → calculate (async) → submit | Yes | Yes (pay_stub PDF; employee forms → W-2 PDF) | Yes (GL report) | Yes: fixed compensations ("Commission", "Bonus") on the unprocessed payroll | Yes (time-off policies) | — |
+| **Any system via files** (`file`) | Built + tested; reuses the existing deterministic register importer | No (runs in the tenant's system) | — | Portal link | Register import → balanced JE (existing confirm route) | Yes: provider-neutral earnings CSV with per-tenant column / code template | — | Yes (CSV/XLSX) |
+| **Check** (`check`) | Run path scaffolded (unchanged), roster/schedules TODO(check-sandbox) | Yes | Scaffolded | Not mapped | Not mapped | Not mapped (add as run earning lines) | Not mapped | — |
+| **Mock** (`mock`) | Built | Estimates only | Empty | — | Balanced summary | Accepts | Empty | — |
+
+**Gusto connection (OAuth app):** env `GUSTO_CLIENT_ID`, `GUSTO_CLIENT_SECRET` (server-only), optional `GUSTO_API_BASE_URL` (defaults: `https://api.gusto-demo.com` for test, `https://api.gusto.com` for live). Company tokens expire after 2 hours and a refresh **revokes** the previous refresh token, so the adapter refuses to refresh without a persistence callback; the registry wires it to `rotateProviderSecret`. Unconfigured → `status()` = NOT_CONFIGURED and every call throws `PayrollProviderNotConfiguredError` (degrade-safe).
+
+**Safety change in resolution:** a tenant with an ACTIVE connection to a real provider now gets that adapter even when its credentials are missing/expired (it reports NOT_CONFIGURED and the run routes return 409 `PROVIDER_NOT_CONFIGURED`). Previously it silently fell back to Mock estimates, which could have been approved, released and posted as if real. No connection at all still resolves to Mock (canon: no core capability depends on a provider being installed).
+
+**Still human / commercial (not engineering):** Gusto Embedded partner agreement, pricing / rev-share, sandbox credentials, white-label resale terms, and per-tenant ACH authorization. Everything above is buildable and testable before that is signed.
+
+## 15A. Commissions in payroll (owner decision c)
+
+Books **calculates** commissions (plans: % of revenue, % of gross profit, flat per job, tiered accelerators, spiffs; basis: sold / installed / invoiced / paid; clawbacks), a manager **approves** each employee's period statement (preparer ≠ approver), the period-end close **accrues** them (DR commission expense — COGS for direct/tech, OPEX for selling — / CR Accrued Commissions Payable), and the approved payable is **handed to the payroll provider as COMMISSION earnings** through `importEarnings` (Gusto: pushed onto the unprocessed payroll; any other system: the earnings CSV). When the payroll run that paid them posts, a reclass clears the accrual against the earnings expense account the run debited (DR Accrued Commissions Payable / CR payroll earnings expense), so the expense is recognized once, in the period earned. Full spec, engine and schema proposal: **docs/FPB-commissions.md**. This is an employee **earning**, not the retired chargeback / burden / labor-class engine (CANON §2).
 
 ## 16. Data-model changes needed
 
 New Books-owned schema `payroll.*` (or `public.payroll_*` if a schema carve is deferred): `pay_schedules`, `employee_comp`, `runs`, `run_lines` (all per §2, all `org_id` + RLS `org_id = get_org_id()`, all money bigint cents, no PII). Extend `core.provider_connections` usage for capability `PAYROLL` (table already exists). Switch `recordPayrollRun` to `entry_type='PAYROLL_RUN'` (enum value already exists, migration 055). Add a `PAYROLL_RUN`-kind path already present in `public.approvals` (migration 042). **No new PII columns anywhere** — that is a hard review gate. `schema.test.ts` and `tenant-isolation.test.ts` must stay green; add a guard asserting no `ssn`/`bank_account`/`routing` column exists in any `payroll.*` or `core.*` table.
 
 ## Acceptance criteria (these define "done," not "it renders")
+
+0. **Provider-agnostic:** the same run workflow, posting and reconciliation work with the Gusto adapter (sandbox), the file adapter (register import + earnings CSV) and the Mock engine, selected only by the tenant's `core.provider_connections` row; an unconfigured real provider returns 409 `PROVIDER_NOT_CONFIGURED`, never mock numbers.
 
 1. A tenant can define a pay schedule and per-employee comp with department/job/class defaults, storing **zero PII** (verified by a schema guard test).
 2. A run can be drafted, hours pulled/keyed, off-cycle earnings added, and a **provider-computed** gross-to-net preview shown (mocked provider acceptable pre-sandbox).
@@ -196,14 +208,16 @@ New Books-owned schema `payroll.*` (or `public.payroll_*` if a schema carve is d
 7. Pay-schedule engine + PTO accrual model (accrual is a Books calc; balances are informational until the provider owns them).
 8. AI: run anomaly review + labor→job attribution + close accrual proposal (all advisory, logged).
 
-**Phase B — needs the provider sandbox (gated on the commercial decision):**
-9. Provider selection (**Mike — commercial/human blocker**): Check vs Gusto Embedded — pricing, contract, underwriting, sandbox access, white-label terms.
-10. Concrete `PayrollEngine` adapter for the chosen provider (real gross-to-net, tax remittance, filing, garnishment + new-hire reporting), secrets in Vault.
+**Phase A2 — built 2026-10-20 (provider-agnostic seam):** `PayrollProvider` interface + registry; Mock / Check refactored onto it; Gusto adapter skeleton (OAuth, payroll prepare/calculate/submit, roster, schedules, stubs/W-2, GL report, earnings push, PTO) with mocked-fetch tests; File adapter (register import reuse + earnings CSV); commissions engine (pure) — see FPB-commissions.
+
+**Phase B — needs the Gusto sandbox (gated on the partner agreement):**
+9. Gusto Embedded partner agreement + sandbox credentials (**Mike — commercial/human blocker**). Provider choice itself is decided: Gusto first, provider-agnostic.
+10. Confirm the TODO(gusto-sandbox) response fields; connect flow (OAuth authorize → `exchangeCode` → Vault) and a Settings · Payroll provider screen; webhooks.
 11. Real employee onboarding flow (PII captured **by the provider**, never in Books).
 12. Provider webhooks (run processed, debit settled, return/NSF) via the Core verify-and-route path; drive `PROCESSING→POSTED→RECONCILED` and the returned/NSF path.
 13. Employee self-service (provider portal link) → later native pay-stub PDF + W-2/1099 surfacing.
 
 **Explicit human / commercial blockers (cannot be resolved by engineering):**
-- **Provider selection (Check vs Gusto Embedded)** — pricing, contract, underwriting, sandbox credentials, white-label resale terms. All of Phase B is gated on this.
+- **Gusto Embedded partner agreement** — pricing / rev-share, contract, underwriting, sandbox credentials, white-label resale terms. Provider *strategy* is decided (provider-agnostic, Gusto first); Phase B's live Gusto path is gated on the agreement. File-based tenants (any payroll system) are not gated.
 - **Identity gate** — payroll approval should resolve on `core.memberships/roles`; until that lands (open NO-GO gate, task #9) approval runs on the interim `core.employees.role` fallback. Not a hard blocker for Phase A, but the interim must be reconciled before go-live.
 - Money-movement legal consent (ACH/NACHA authorization for the provider debit) — captured in `public.ach_authorizations` (migration 043); the tenant's bank authorization is a human sign-off, not code.

@@ -55,7 +55,7 @@ function recipient(over: Partial<RecipientMiscInput>): RecipientMiscInput {
   };
 }
 
-function build(recipients: RecipientMiscInput[], t: FireTransmitter = TRANSMITTER, taxYear = 2026) {
+function build(recipients: RecipientMiscInput[], t: FireTransmitter = TRANSMITTER, taxYear = 2025) {
   const batch = assembleForm1099MiscBatch(PAYER, recipients, taxYear);
   return { batch, ...buildMiscFireFile(batch, { taxYear, transmitter: t }) };
 }

@@ -6,8 +6,9 @@
  * reviews and transmits (canon §3: AI/automation proposes; a human acts).
  *
  * CPA framing (docs/discovery/books/cpa-tax-assurance.md §A3/§B4): a vendor gets a
- * 1099-NEC when it was paid **$600 or more** for services in the calendar year by a
- * REPORTABLE rail (cash / check / ACH / wire). Card / third-party-network payments
+ * 1099-NEC when it was paid AT LEAST the tax year's NEC floor for services in the
+ * calendar year (lib/tax/1099-thresholds: $600 through 2025, $2,000 for 2026, then
+ * IRS-indexed) by a REPORTABLE rail (cash / check / ACH / wire). Card / third-party-network payments
  * are EXCLUDED (those land on the processor's 1099-K; issuing a NEC on top would
  * double-report). Box 1 (nonemployee compensation) is exactly that reportable,
  * non-card total. Corporations / exempt payees are excluded.
@@ -19,9 +20,7 @@
  */
 
 import type { W9State } from '@/app/api/compliance/1099/readiness';
-
-/** IRS reporting floor: paid $600 OR MORE (not strictly "over") in the tax year. */
-export const REPORTABLE_THRESHOLD_CENTS = 60_000;
+import { formatThresholdUsd, get1099Thresholds } from '@/lib/tax/1099-thresholds';
 
 // ── Inputs ────────────────────────────────────────────────────────────────────
 
@@ -86,7 +85,7 @@ export interface RecipientInput {
    * Optional NEC-classified portion of the reportable total (cents), derived from GL
    * expense coding (see lib/tax/box-classify). When present, THIS is Box 1 — so a
    * vendor's rent / royalty / medical / attorney dollars never leak onto a 1099-NEC.
-   * When the reportable total clears $600 but the NEC portion does not, the candidate
+   * When the reportable total clears the year's floor but the NEC portion does not, the candidate
    * is EXCLUDED with code MISC_ONLY (it belongs on a 1099-MISC, filed separately).
    */
   necReportableCents?: number;
@@ -142,7 +141,10 @@ export interface Form1099Exclusion {
 
 export interface Form1099Summary {
   taxYear: number;
+  /** The year's 1099-NEC floor (lib/tax/1099-thresholds), cents. */
   thresholdCents: number;
+  /** Set when the year's IRS-indexed amount is not yet published (provisional floor). */
+  thresholdNotice: string | null;
   /** Records that will be filed. */
   readyCount: number;
   /** Sum of Box 1 across ready records (cents). */
@@ -228,13 +230,15 @@ export function centsToAmountString(cents: number): string {
  */
 export function classifyRecipient(
   input: RecipientInput,
+  taxYear: number,
 ): { status: RecordStatus; code?: Form1099Exclusion['code'] } {
+  const floor = get1099Thresholds(taxYear).necCents;
   const reportable = input.payments ? box1FromPayments(input.payments) : input.totalPaidCents;
   // Box 1 (NEC) = the NEC-classified portion when supplied, else the whole reportable total.
   const box1 = input.necReportableCents ?? reportable;
-  if (reportable < REPORTABLE_THRESHOLD_CENTS) return { status: 'EXCLUDED', code: 'BELOW_THRESHOLD' };
-  // Reportable clears $600 but its nonemployee-comp portion doesn't → 1099-MISC, not NEC.
-  if (input.necReportableCents !== undefined && box1 < REPORTABLE_THRESHOLD_CENTS)
+  if (reportable < floor) return { status: 'EXCLUDED', code: 'BELOW_THRESHOLD' };
+  // Reportable clears the floor but its nonemployee-comp portion doesn't → 1099-MISC, not NEC.
+  if (input.necReportableCents !== undefined && box1 < floor)
     return { status: 'EXCLUDED', code: 'MISC_ONLY' };
   if (!input.is1099Eligible) return { status: 'EXCLUDED', code: 'NOT_1099_ELIGIBLE' };
   if (!isValidTin(input.tin)) return { status: 'BLOCKED', code: 'MISSING_TIN' };
@@ -242,14 +246,15 @@ export function classifyRecipient(
   return { status: 'READY' };
 }
 
-function exclusionReason(code: Form1099Exclusion['code'], name: string): string {
+function exclusionReason(code: Form1099Exclusion['code'], name: string, taxYear: number): string {
+  const floor = formatThresholdUsd(get1099Thresholds(taxYear).necCents);
   switch (code) {
     case 'BELOW_THRESHOLD':
-      return `${name} was paid under the $600 1099-NEC floor by reportable rails — no form required.`;
+      return `${name} was paid under the ${taxYear} ${floor} 1099-NEC floor by reportable rails — no form required.`;
     case 'MISC_ONLY':
       return `${name}'s reportable payments are classified 1099-MISC (rents / royalties / medical / attorney proceeds), not nonemployee compensation. File a 1099-MISC separately — this NEC batch covers Box 1 services only.`;
     case 'NOT_1099_ELIGIBLE':
-      return `${name} crossed $600 but is not flagged 1099-eligible. Confirm entity type (a corporation is exempt) or mark it eligible before filing.`;
+      return `${name} crossed the ${taxYear} ${floor} floor but is not flagged 1099-eligible. Confirm entity type (a corporation is exempt) or mark it eligible before filing.`;
     case 'MISSING_TIN':
       return `${name} is 1099-eligible but has no valid TIN on file. Collect a W-9 (name + TIN) before filing to avoid backup withholding / penalties.`;
     case 'MISSING_W9':
@@ -273,7 +278,7 @@ export function assembleForm1099Batch(
     const reportable = input.payments ? box1FromPayments(input.payments) : input.totalPaidCents;
     // Box 1 (NEC) uses the nonemployee-comp portion when the caller has classified it.
     const box1 = input.necReportableCents ?? reportable;
-    const { status, code } = classifyRecipient(input);
+    const { status, code } = classifyRecipient(input, taxYear);
 
     if (status === 'READY') {
       const stateLines: Form1099StateLine[] = input.state
@@ -303,7 +308,7 @@ export function assembleForm1099Batch(
         totalPaidCents: reportable,
         status,
         code: code!,
-        reason: exclusionReason(code!, input.vendorName),
+        reason: exclusionReason(code!, input.vendorName, taxYear),
         fixFirst: status === 'BLOCKED',
       });
     }
@@ -319,7 +324,8 @@ export function assembleForm1099Batch(
   const blocked = exclusions.filter((e) => e.status === 'BLOCKED');
   const summary: Form1099Summary = {
     taxYear,
-    thresholdCents: REPORTABLE_THRESHOLD_CENTS,
+    thresholdCents: get1099Thresholds(taxYear).necCents,
+    thresholdNotice: get1099Thresholds(taxYear).notice,
     readyCount: records.length,
     totalNonemployeeCompCents: records.reduce((s, r) => s + r.box1NonemployeeCompCents, 0),
     blockedCount: blocked.length,

@@ -22,8 +22,9 @@ const PUBLIC_PATTERNS = [
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/api/webhooks(.*)',
-  '/pay(.*)',
-  '/api/pay(.*)',
+  '/pay/(.*)',
+  '/api/pay/(.*)',
+  '/api/cron/(.*)',
 ];
 
 /** Clerk's createRouteMatcher compiles path patterns to regexes; this mirrors it. */
@@ -52,6 +53,33 @@ describe('public routes — customer-facing payment surface', () => {
   it('sign-in and sign-up are public', () => {
     expect(isPublic('/sign-in')).toBe(true);
     expect(isPublic('/sign-up/verify')).toBe(true);
+  });
+});
+
+describe('public routes — scheduler dispatcher', () => {
+  // Vercel Cron has no Clerk session; the route's own Bearer CRON_SECRET check
+  // (fail-closed, lib/scheduler/cron-auth.ts) is the credential.
+  it('the cron tick is public at the middleware layer', () => {
+    expect(isPublic('/api/cron/tick')).toBe(true);
+  });
+
+  it('the run-log read API is NOT public (Clerk + settings_system:view)', () => {
+    expect(isPublic('/api/scheduler/runs')).toBe(false);
+  });
+});
+
+describe('public routes — prefix collisions stay protected', () => {
+  // '/pay(.*)' once matched '/payroll' and '/payments' — those are staff surfaces.
+  it.each([
+    '/payroll',
+    '/payroll/runs',
+    '/payments',
+    '/api/payroll/runs',
+    '/api/payments/release',
+    '/api/payables',
+    '/api/cronjobs',
+  ])('%s is NOT public', (path) => {
+    expect(isPublic(path)).toBe(false);
   });
 });
 

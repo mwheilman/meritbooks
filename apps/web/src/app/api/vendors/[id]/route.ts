@@ -5,7 +5,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { pairsForVendor, type VendorDupInput } from '@/lib/vendors/dedupe';
 import { loadVendorPaymentProfiles } from '@/lib/ap/vendor-payment-details';
-import { computeReadiness, REPORTABLE_THRESHOLD_CENTS, type W9State } from '@/app/api/compliance/1099/readiness';
+import { computeReadiness, type W9State } from '@/app/api/compliance/1099/readiness';
+import { get1099Thresholds } from '@/lib/tax/1099-thresholds';
 
 /**
  * GET /api/vendors/[id] — vendor detail + ledger rollup for the detail drawer/peek.
@@ -167,7 +168,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const ven = v as Record<string, any>;
 
   // ---- 1099 status (read-only). A vendor is "reportable" when marked
-  // 1099-eligible AND paid >= the $600 IRS floor this year over a REPORTABLE
+  // 1099-eligible AND paid >= this tax year's IRS floor (lib/tax/1099-thresholds:
+  // $600 ≤2025, $2,000 for 2026, indexed after) over a REPORTABLE
   // (non-card) rail — card/TPN spend lands on the processor's 1099-K, so it is
   // excluded here (mirrors the 1099 readiness engine). Missing-TIN is flagged
   // when eligible but no encrypted TIN is on file. Nothing is filed from here.
@@ -187,12 +189,15 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     if (s === 'expired') return 'expired';
     return 'missing';
   })();
+  const ten99Thresholds = get1099Thresholds(yearStart.getFullYear());
   const ten99 = {
     eligible: is1099Eligible,
-    reportable: is1099Eligible && reportableYtdCents >= REPORTABLE_THRESHOLD_CENTS,
-    crossedThreshold: reportableYtdCents >= REPORTABLE_THRESHOLD_CENTS,
+    reportable: is1099Eligible && reportableYtdCents >= ten99Thresholds.generalCents,
+    crossedThreshold: reportableYtdCents >= ten99Thresholds.generalCents,
     reportableYtdCents,
-    thresholdCents: REPORTABLE_THRESHOLD_CENTS,
+    thresholdCents: ten99Thresholds.generalCents,
+    thresholdTaxYear: ten99Thresholds.taxYear,
+    thresholdProvisional: ten99Thresholds.provisional,
     tinPresent,
     missingTin: is1099Eligible && !tinPresent,
     w9State,

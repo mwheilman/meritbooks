@@ -5,6 +5,8 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { previewRun, InvalidRunTransitionError, RunStateError } from '@/lib/payroll/run';
+import { PayrollProviderNotConfiguredError } from '@/lib/payroll/engine/types';
+import { PayrollCapabilityUnsupportedError } from '@/lib/payroll/providers/types';
 
 /**
  * POST /api/payroll/runs/[id]/preview — ask the provider engine for gross-to-net
@@ -35,6 +37,10 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   } catch (e) {
     if (e instanceof InvalidRunTransitionError) return NextResponse.json({ error: e.message, code: 'INVALID_TRANSITION' }, { status: 409 });
     if (e instanceof RunStateError) return NextResponse.json({ error: e.message }, { status: 400 });
+    // Provider seam: an unconfigured provider or a file-based payroll system (runs
+    // outside Books) is a setup state, not a server fault — no money moved.
+    if (e instanceof PayrollProviderNotConfiguredError) return NextResponse.json({ error: e.message, code: 'PROVIDER_NOT_CONFIGURED' }, { status: 409 });
+    if (e instanceof PayrollCapabilityUnsupportedError) return NextResponse.json({ error: e.message, code: 'PROVIDER_CAPABILITY_UNSUPPORTED' }, { status: 409 });
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Preview failed' }, { status: 500 });
   }
 }

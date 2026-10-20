@@ -5,6 +5,9 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requireMoneyMovement, PAYMENTS_EXECUTE, PAYROLL_RELEASE_FEATURE } from '@/lib/rbac/payments-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { releaseRun, InvalidRunTransitionError, RunStateError, RunReleaserCannotApproveError } from '@/lib/payroll/run';
+import { PayrollProviderNotConfiguredError } from '@/lib/payroll/engine/types';
+import { PayrollCapabilityUnsupportedError } from '@/lib/payroll/providers/types';
+import { MockPayrollInProductionError } from '@/lib/payroll/providers/mock';
 
 /**
  * POST /api/payroll/runs/[id]/release — THE money-movement step.
@@ -48,6 +51,11 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     if (e instanceof RunReleaserCannotApproveError) return NextResponse.json({ error: e.message, code: 'SOD_VIOLATION' }, { status: 403 });
     if (e instanceof InvalidRunTransitionError) return NextResponse.json({ error: e.message, code: 'INVALID_TRANSITION' }, { status: 409 });
     if (e instanceof RunStateError) return NextResponse.json({ error: e.message }, { status: 400 });
+    // Provider seam: an unconfigured provider or a file-based payroll system (runs
+    // outside Books) is a setup state, not a server fault — no money moved.
+    if (e instanceof MockPayrollInProductionError) return NextResponse.json({ error: e.message, code: 'PROVIDER_NOT_CONNECTED' }, { status: 409 });
+    if (e instanceof PayrollProviderNotConfiguredError) return NextResponse.json({ error: e.message, code: 'PROVIDER_NOT_CONFIGURED' }, { status: 409 });
+    if (e instanceof PayrollCapabilityUnsupportedError) return NextResponse.json({ error: e.message, code: 'PROVIDER_CAPABILITY_UNSUPPORTED' }, { status: 409 });
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Release failed' }, { status: 500 });
   }
 }

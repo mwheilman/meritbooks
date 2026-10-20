@@ -19,6 +19,7 @@ import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks';
+import { formatThresholdUsd, get1099Thresholds } from '@/lib/tax/1099-thresholds';
 
 /**
  * Generate 1099s flow (read-only assembly; NO IRS transmit — canon §3). The user
@@ -396,7 +397,7 @@ export function Generate1099Modal({ year, onClose }: { year: number; onClose: ()
 
               {excluded.length > 0 && (
                 <p className="text-[11px] text-slate-600">
-                  {excluded.length} candidate{excluded.length === 1 ? '' : 's'} excluded (below $600 or not marked
+                  {excluded.length} candidate{excluded.length === 1 ? '' : 's'} excluded (below the {year} {formatThresholdUsd(get1099Thresholds(year).necCents)} floor or not marked
                   1099-eligible — likely a corporation / exempt payee).
                 </p>
               )}

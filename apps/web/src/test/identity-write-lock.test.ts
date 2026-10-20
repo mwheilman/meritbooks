@@ -57,6 +57,30 @@ const GRANT_LOCKED_TABLES: ReadonlyArray<readonly [string, string]> = [
   ['core', 'membership_invitations'],
 ];
 
+/**
+ * Wave-1 access authority tables (migrations 157–161, 05-RBAC-SPEC R-1…R-5). They are
+ * created service-write-only from birth (same pattern as 154), so they are held to the
+ * same runtime + catalog + static guarantees as the 154 list.
+ */
+const ACCESS_AUTHORITY_TABLES: ReadonlyArray<readonly [string, string]> = [
+  ['core', 'capabilities'],
+  ['core', 'capability_migrations'],
+  ['core', 'role_definitions'],
+  ['core', 'role_versions'],
+  ['core', 'role_grants'],
+  ['core', 'permission_sets'],
+  ['core', 'permission_set_versions'],
+  ['core', 'permission_set_grants'],
+  ['core', 'client_sets'],
+  ['core', 'client_set_members'],
+  ['core', 'access_assignments'],
+  ['core', 'client_access_policies'],
+  ['core', 'legacy_roles'],
+  ['core', 'legacy_feature_catalog'],
+  ['core', 'legacy_role_cells'],
+  ['core', 'legacy_cell_rules'],
+];
+
 const LOCK_MIGRATION = '154';
 
 const ORG_A = '11111111-1111-1111-1111-111111111111';
@@ -195,7 +219,7 @@ describe('migration 154 — after (members are SELECT-only on identity/control t
     expect(r.rows[0].is_platform_staff).toBe(false);
   });
 
-  for (const [schema, table] of [...LOCKED_TABLES, ...GRANT_LOCKED_TABLES]) {
+  for (const [schema, table] of [...LOCKED_TABLES, ...GRANT_LOCKED_TABLES, ...ACCESS_AUTHORITY_TABLES]) {
     const qualified = `${schema}.${table}`;
     for (const role of ['authenticated', 'anon'] as const) {
       it(`${role} cannot INSERT / UPDATE / DELETE / TRUNCATE ${qualified}`, async () => {
@@ -247,7 +271,7 @@ describe('migration 154 — after (members are SELECT-only on identity/control t
   });
 
   it('catalog: RLS enabled, only SELECT (or service_role-only) policies, no member write GRANT', async () => {
-    for (const [schema, table] of LOCKED_TABLES) {
+    for (const [schema, table] of [...LOCKED_TABLES, ...ACCESS_AUTHORITY_TABLES]) {
       const qualified = `${schema}.${table}`;
       const exists = await db.query<{ r: string | null }>(`select to_regclass($1)::text r`, [qualified]);
       if (!exists.rows[0].r) continue;
@@ -299,7 +323,7 @@ describe('static guard — no later migration may re-open member writes on a loc
     const offenders: string[] = [];
     for (const f of later) {
       const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8').replace(/--[^\n]*/g, '');
-      for (const [, table] of [...LOCKED_TABLES, ...GRANT_LOCKED_TABLES]) {
+      for (const [, table] of [...LOCKED_TABLES, ...GRANT_LOCKED_TABLES, ...ACCESS_AUTHORITY_TABLES]) {
         const t = `(?:"?\\w+"?\\.)?"?${table}"?`;
         const grant = new RegExp(
           `grant\\s+[^;]*\\b(insert|update|delete|truncate|all)\\b[^;]*\\bon\\s+(?:table\\s+)?${t}\\b[^;]*\\bto\\s+[^;]*\\b(authenticated|anon|public)\\b`,

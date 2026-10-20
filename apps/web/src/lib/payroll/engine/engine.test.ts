@@ -136,8 +136,10 @@ describe('resolvePayrollEngine', () => {
     expect(engine.name).toBe('mock');
   });
 
-  it('falls back to Mock when provider=check but no usable secret is configured', async () => {
-    // secret_ref null → apiKey stays null → CheckEngine.isConfigured() is false → Mock.
+  it('returns the (unconfigured) Check adapter — NOT Mock — when provider=check has no usable secret', async () => {
+    // A tenant that connected a real provider must never silently get Mock estimates
+    // (they could be approved, released and posted as real). The unconfigured adapter
+    // throws PayrollProviderNotConfiguredError on use instead.
     const db = fakeDb({
       data: {
         provider: 'check',
@@ -149,7 +151,30 @@ describe('resolvePayrollEngine', () => {
       error: null,
     });
     const engine = await resolvePayrollEngine(db, 'org_1');
-    expect(engine.name).toBe('mock');
+    expect(engine.name).toBe('check');
+    expect(engine.isConfigured()).toBe(false);
+    await expect(
+      engine.previewRun({ periodStart: '2026-01-01', periodEnd: '2026-01-15', payDate: '2026-01-20', employees: [] }),
+    ).rejects.toThrow('payroll provider not configured');
+  });
+
+  it('returns the File adapter for provider=file (payroll runs in the tenant\'s own system)', async () => {
+    const db = fakeDb({
+      data: { provider: 'file', environment: 'live', account_handle: null, secret_ref: null, status: 'active', metadata: { systemName: 'ADP' } },
+      error: null,
+    });
+    const engine = await resolvePayrollEngine(db, 'org_1');
+    expect(engine.name).toBe('file');
+    expect(engine.capabilities.runPayroll).toBe(false);
+    expect(engine.capabilities.registerImport).toBe(true);
+  });
+
+  it('falls back to Mock for an unknown provider string', async () => {
+    const db = fakeDb({
+      data: { provider: 'acme_payroll', environment: 'test', account_handle: null, secret_ref: null, status: 'active' },
+      error: null,
+    });
+    expect((await resolvePayrollEngine(db, 'org_1')).name).toBe('mock');
   });
 });
 

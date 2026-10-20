@@ -53,7 +53,7 @@ function recipient(over: Partial<RecipientInput>): RecipientInput {
   };
 }
 
-function build(recipients: RecipientInput[], t: FireTransmitter = TRANSMITTER, taxYear = 2026) {
+function build(recipients: RecipientInput[], t: FireTransmitter = TRANSMITTER, taxYear = 2025) {
   const batch = assembleForm1099Batch(PAYER, recipients, taxYear);
   return { batch, ...buildFireFile(batch, { taxYear, transmitter: t }) };
 }
@@ -105,7 +105,7 @@ describe('buildFireFile — T (transmitter) record', () => {
   const t = lines(content)[0];
 
   it('carries year, TIN, TCC, contact, and payee count', () => {
-    expect(t.slice(1, 5)).toBe('2026'); // payment year
+    expect(t.slice(1, 5)).toBe('2025'); // payment year
     expect(t.slice(6, 15)).toBe('123456789'); // transmitter TIN
     expect(t.slice(15, 20)).toBe('AB123'); // TCC
     expect(t.slice(27, 28)).toBe(' '); // not a test file
@@ -192,8 +192,8 @@ describe('buildFireFile — degrade-safe warnings, never a silently-invalid requ
     const noTin = build([recipient({ totalPaidCents: 90_000 })], { ...TRANSMITTER, tin: null });
     expect(noTin.warnings.some((w) => w.toLowerCase().includes('transmitter tin'))).toBe(true);
 
-    const batch = assembleForm1099Batch({ ...PAYER, tin: null }, [recipient({ totalPaidCents: 90_000 })], 2026);
-    const noPayer = buildFireFile(batch, { taxYear: 2026, transmitter: TRANSMITTER });
+    const batch = assembleForm1099Batch({ ...PAYER, tin: null }, [recipient({ totalPaidCents: 90_000 })], 2025);
+    const noPayer = buildFireFile(batch, { taxYear: 2025, transmitter: TRANSMITTER });
     expect(noPayer.warnings.some((w) => w.toLowerCase().includes('payer ein'))).toBe(true);
   });
 

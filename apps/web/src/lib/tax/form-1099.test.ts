@@ -9,10 +9,15 @@ import {
   maskTin,
   normalizeTin,
   toNecImportCsv,
-  REPORTABLE_THRESHOLD_CENTS,
   type PayerInfo,
   type RecipientInput,
 } from './form-1099';
+import { necThresholdCents } from './1099-thresholds';
+
+// These fixtures model the pre-OBBBA $600 regime (tax year 2025). The 2026 $2,000
+// floor is covered in its own block at the bottom of this file.
+const Y = 2025;
+const REPORTABLE_THRESHOLD_CENTS = necThresholdCents(Y);
 
 const PAYER: PayerInfo = {
   name: 'Acme Holdings LLC',
@@ -80,36 +85,37 @@ describe('box1FromPayments — card rails excluded (1099-K, not NEC)', () => {
 });
 
 describe('classifyRecipient — threshold, eligibility, TIN/W-9 gate', () => {
-  it('excludes vendors under the $600 floor', () => {
-    const c = classifyRecipient(recipient({ totalPaidCents: REPORTABLE_THRESHOLD_CENTS - 1 }));
+  it('excludes vendors under the 2025 $600 floor', () => {
+    const c = classifyRecipient(recipient({ totalPaidCents: REPORTABLE_THRESHOLD_CENTS - 1 }), Y);
     expect(c.status).toBe('EXCLUDED');
     expect(c.code).toBe('BELOW_THRESHOLD');
   });
 
   it('excludes vendors not marked 1099-eligible (corp / exempt)', () => {
-    const c = classifyRecipient(recipient({ is1099Eligible: false }));
+    const c = classifyRecipient(recipient({ is1099Eligible: false }), Y);
     expect(c.status).toBe('EXCLUDED');
     expect(c.code).toBe('NOT_1099_ELIGIBLE');
   });
 
   it('BLOCKS an eligible vendor with a missing / invalid TIN', () => {
-    expect(classifyRecipient(recipient({ tin: null })).code).toBe('MISSING_TIN');
-    expect(classifyRecipient(recipient({ tin: '123' })).code).toBe('MISSING_TIN');
+    expect(classifyRecipient(recipient({ tin: null }), Y).code).toBe('MISSING_TIN');
+    expect(classifyRecipient(recipient({ tin: '123' }), Y).code).toBe('MISSING_TIN');
   });
 
   it('BLOCKS an eligible, TIN-present vendor whose W-9 is not on file', () => {
-    expect(classifyRecipient(recipient({ w9Status: 'missing' })).code).toBe('MISSING_W9');
-    expect(classifyRecipient(recipient({ w9Status: 'expired' })).code).toBe('MISSING_W9');
+    expect(classifyRecipient(recipient({ w9Status: 'missing' }), Y).code).toBe('MISSING_W9');
+    expect(classifyRecipient(recipient({ w9Status: 'expired' }), Y).code).toBe('MISSING_W9');
   });
 
   it('marks a fully-documented eligible vendor READY', () => {
-    expect(classifyRecipient(recipient({})).status).toBe('READY');
+    expect(classifyRecipient(recipient({}), Y).status).toBe('READY');
   });
 
   it('EXCLUDES (MISC_ONLY) when reportable clears $600 but the NEC portion does not', () => {
     // $10k reportable, but only $200 classified as nonemployee comp → belongs on MISC.
     const c = classifyRecipient(
       recipient({ totalPaidCents: 1_000_000, necReportableCents: 20_000 }),
+      Y,
     );
     expect(c.status).toBe('EXCLUDED');
     expect(c.code).toBe('MISC_ONLY');
@@ -118,6 +124,7 @@ describe('classifyRecipient — threshold, eligibility, TIN/W-9 gate', () => {
   it('uses the NEC portion as Box 1 when supplied, and stays READY above the floor', () => {
     const c = classifyRecipient(
       recipient({ totalPaidCents: 1_000_000, necReportableCents: 700_00 }),
+      Y,
     );
     expect(c.status).toBe('READY');
   });
@@ -132,6 +139,7 @@ describe('classifyRecipient — threshold, eligibility, TIN/W-9 gate', () => {
           { amountCents: 15_000, method: 'CARD', rail: 'CARD' },
         ],
       }),
+      Y,
     );
     expect(c.status).toBe('EXCLUDED');
     expect(c.code).toBe('BELOW_THRESHOLD');
@@ -147,7 +155,7 @@ describe('assembleForm1099Batch', () => {
     recipient({ vendorId: 'excl-corp', vendorName: 'Corp Inc', is1099Eligible: false, totalPaidCents: 300_000 }),
     recipient({ vendorId: 'excl-small', vendorName: 'Tiny Sub', totalPaidCents: 40_000 }),
   ];
-  const batch = assembleForm1099Batch(PAYER, recipients, 2026);
+  const batch = assembleForm1099Batch(PAYER, recipients, 2025);
 
   it('files only fully-documented eligible vendors, largest comp first', () => {
     expect(batch.records.map((r) => r.vendorId)).toEqual(['ready-big', 'ready-small']);
@@ -183,7 +191,7 @@ describe('assembleForm1099Batch', () => {
         // $90k reportable, all rent → MISC_ONLY, excluded from the NEC file.
         recipient({ vendorId: 'rent', vendorName: 'Landlord LLC', totalPaidCents: 900_000, necReportableCents: 0 }),
       ],
-      2026,
+      2025,
     );
     const filed = mixed.records.find((r) => r.vendorId === 'mixed');
     expect(filed?.box1NonemployeeCompCents).toBe(500_000);
@@ -194,7 +202,7 @@ describe('assembleForm1099Batch', () => {
   });
 
   it('flags a missing payer EIN as a filing blocker', () => {
-    const noEin = assembleForm1099Batch({ ...PAYER, tin: null }, recipients, 2026);
+    const noEin = assembleForm1099Batch({ ...PAYER, tin: null }, recipients, 2025);
     expect(noEin.summary.payerTinMissing).toBe(true);
     expect(batch.summary.payerTinMissing).toBe(false);
   });
@@ -207,7 +215,7 @@ describe('toNecImportCsv — the filing-service e-file', () => {
       recipient({ vendorId: 'r1', vendorName: 'Jane, Contractor', totalPaidCents: 123_456 }),
       recipient({ vendorId: 'blocked', tin: null, totalPaidCents: 200_000 }),
     ],
-    2026,
+    2025,
   );
   const csv = toNecImportCsv(batch);
   const lines = csv.trim().split('\r\n');
@@ -221,5 +229,34 @@ describe('toNecImportCsv — the filing-service e-file', () => {
     expect(lines[1]).toContain('1234.56');
     expect(lines[1]).toContain('"Jane, Contractor"');
     expect(lines[1]).toContain('12-3456789'); // payer EIN formatted
+  });
+});
+
+describe('tax-year thresholds — OBBBA $2,000 floor for 2026 (never $600)', () => {
+  it('excludes a $900 contractor in 2026 that WAS reportable in 2025', () => {
+    const r = recipient({ totalPaidCents: 90_000 });
+    expect(classifyRecipient(r, 2025).status).toBe('READY');
+    const c2026 = classifyRecipient(r, 2026);
+    expect(c2026.status).toBe('EXCLUDED');
+    expect(c2026.code).toBe('BELOW_THRESHOLD');
+  });
+
+  it('files at exactly $2,000 in 2026 and not at $1,999.99', () => {
+    expect(classifyRecipient(recipient({ totalPaidCents: 200_000 }), 2026).status).toBe('READY');
+    expect(classifyRecipient(recipient({ totalPaidCents: 199_999 }), 2026).code).toBe('BELOW_THRESHOLD');
+  });
+
+  it('carries the year floor + reason copy on the batch summary', () => {
+    const b = assembleForm1099Batch(PAYER, [recipient({ vendorId: 'x', totalPaidCents: 150_000 })], 2026);
+    expect(b.summary.thresholdCents).toBe(200_000);
+    expect(b.summary.thresholdNotice).toBeNull();
+    expect(b.exclusions[0].reason).toContain('$2,000');
+    expect(b.exclusions[0].reason).not.toContain('$600');
+  });
+
+  it('flags 2027 as provisional until the IRS-indexed amount is entered (still >= $2,000)', () => {
+    const b = assembleForm1099Batch(PAYER, [recipient({ totalPaidCents: 250_000 })], 2027);
+    expect(b.summary.thresholdCents).toBeGreaterThanOrEqual(200_000);
+    expect(b.summary.thresholdNotice).toMatch(/not yet published/);
   });
 });

@@ -4,11 +4,16 @@ import {
   classifyMiscRecipient,
   meetsAnyMiscThreshold,
   toMiscImportCsv,
-  MISC_GENERAL_THRESHOLD_CENTS,
-  MISC_ROYALTY_THRESHOLD_CENTS,
+  miscBoxThresholdsFor,
   type RecipientMiscInput,
 } from './form-1099-misc';
 import type { PayerInfo } from './form-1099';
+
+// These fixtures model the pre-OBBBA $600 regime (tax year 2025). The 2026 rules
+// ($2,000 general, $600 attorney, $10 royalties) have their own block below.
+const Y = 2025;
+const MISC_GENERAL_THRESHOLD_CENTS = miscBoxThresholdsFor(Y).MISC_1;
+const MISC_ROYALTY_THRESHOLD_CENTS = miscBoxThresholdsFor(Y).MISC_2;
 
 const PAYER: PayerInfo = {
   name: 'Acme Holdings LLC',
@@ -43,28 +48,28 @@ function recipient(over: Partial<RecipientMiscInput>): RecipientMiscInput {
 describe('meetsAnyMiscThreshold — royalties clear at $10, everything else at $600', () => {
   it('royalties qualify at $10 (the one sub-$600 MISC box)', () => {
     expect(MISC_ROYALTY_THRESHOLD_CENTS).toBe(1_000);
-    expect(meetsAnyMiscThreshold({ MISC_2: 1_000 })).toBe(true); // exactly $10
-    expect(meetsAnyMiscThreshold({ MISC_2: 999 })).toBe(false); // $9.99 → no
+    expect(meetsAnyMiscThreshold({ MISC_2: 1_000 }, Y)).toBe(true); // exactly $10
+    expect(meetsAnyMiscThreshold({ MISC_2: 999 }, Y)).toBe(false); // $9.99 → no
   });
 
   it('rents / other / medical / attorney need the full $600 floor', () => {
     expect(MISC_GENERAL_THRESHOLD_CENTS).toBe(60_000);
-    expect(meetsAnyMiscThreshold({ MISC_1: 60_000 })).toBe(true); // exactly $600
-    expect(meetsAnyMiscThreshold({ MISC_1: 59_999 })).toBe(false); // $599.99 → no
+    expect(meetsAnyMiscThreshold({ MISC_1: 60_000 }, Y)).toBe(true); // exactly $600
+    expect(meetsAnyMiscThreshold({ MISC_1: 59_999 }, Y)).toBe(false); // $599.99 → no
     // A $15 royalty alongside a sub-$600 rent still triggers the form (royalty floor).
-    expect(meetsAnyMiscThreshold({ MISC_1: 40_000, MISC_2: 1_500 })).toBe(true);
+    expect(meetsAnyMiscThreshold({ MISC_1: 40_000, MISC_2: 1_500 }, Y)).toBe(true);
   });
 });
 
 describe('classifyMiscRecipient — threshold, eligibility, TIN/W-9 gate, card carve-out', () => {
   it('excludes when no box clears its floor', () => {
-    const c = classifyMiscRecipient(recipient({ miscBoxCents: { MISC_1: 40_000 } })); // $400 rent
+    const c = classifyMiscRecipient(recipient({ miscBoxCents: { MISC_1: 40_000 } }), Y); // $400 rent
     expect(c.status).toBe('EXCLUDED');
     expect(c.code).toBe('BELOW_THRESHOLD');
   });
 
   it('files a $15 royalty (below $600 but above the $10 royalty floor)', () => {
-    const c = classifyMiscRecipient(recipient({ miscBoxCents: { MISC_2: 1_500 } }));
+    const c = classifyMiscRecipient(recipient({ miscBoxCents: { MISC_2: 1_500 } }), Y);
     expect(c.status).toBe('READY');
   });
 
@@ -77,23 +82,24 @@ describe('classifyMiscRecipient — threshold, eligibility, TIN/W-9 gate, card c
           { amountCents: 30_000, method: null, rail: 'card' },
         ],
       }),
+      Y,
     );
     expect(c.status).toBe('EXCLUDED');
     expect(c.code).toBe('BELOW_THRESHOLD');
   });
 
   it('blocks eligible vendors missing a TIN or W-9', () => {
-    expect(classifyMiscRecipient(recipient({ tin: null })).code).toBe('MISSING_TIN');
-    expect(classifyMiscRecipient(recipient({ w9Status: 'missing' })).code).toBe('MISSING_W9');
-    expect(classifyMiscRecipient(recipient({ w9Status: 'expired' })).code).toBe('MISSING_W9');
+    expect(classifyMiscRecipient(recipient({ tin: null }), Y).code).toBe('MISSING_TIN');
+    expect(classifyMiscRecipient(recipient({ w9Status: 'missing' }), Y).code).toBe('MISSING_W9');
+    expect(classifyMiscRecipient(recipient({ w9Status: 'expired' }), Y).code).toBe('MISSING_W9');
   });
 
   it('excludes vendors not marked 1099-eligible (corp / exempt)', () => {
-    expect(classifyMiscRecipient(recipient({ is1099Eligible: false })).code).toBe('NOT_1099_ELIGIBLE');
+    expect(classifyMiscRecipient(recipient({ is1099Eligible: false }), Y).code).toBe('NOT_1099_ELIGIBLE');
   });
 
   it('marks a fully-documented eligible vendor READY', () => {
-    expect(classifyMiscRecipient(recipient({})).status).toBe('READY');
+    expect(classifyMiscRecipient(recipient({}), Y).status).toBe('READY');
   });
 });
 
@@ -110,7 +116,7 @@ describe('assembleForm1099MiscBatch — per-box amounts, sorting, summary', () =
     recipient({ vendorId: 'excl-small', vendorName: 'Tiny Rent', miscBoxCents: { MISC_1: 40_000 }, totalPaidCents: 40_000 }),
     recipient({ vendorId: 'excl-nec', vendorName: 'Pure Services', miscBoxCents: {}, totalPaidCents: 300_000 }), // all NEC → no MISC box
   ];
-  const batch = assembleForm1099MiscBatch(PAYER, recipients, 2026);
+  const batch = assembleForm1099MiscBatch(PAYER, recipients, 2025);
 
   it('files only fully-documented eligible vendors, largest total first', () => {
     expect(batch.records.map((r) => r.vendorId)).toEqual(['rent-big', 'mixed']);
@@ -141,7 +147,7 @@ describe('assembleForm1099MiscBatch — per-box amounts, sorting, summary', () =
   });
 
   it('flags a missing payer EIN as a filing blocker', () => {
-    const noEin = assembleForm1099MiscBatch({ ...PAYER, tin: null }, recipients, 2026);
+    const noEin = assembleForm1099MiscBatch({ ...PAYER, tin: null }, recipients, 2025);
     expect(noEin.summary.payerTinMissing).toBe(true);
     expect(batch.summary.payerTinMissing).toBe(false);
   });
@@ -154,7 +160,7 @@ describe('toMiscImportCsv — the filing-service e-file', () => {
       recipient({ vendorId: 'r1', vendorName: 'Rent, Co', miscBoxCents: { MISC_1: 123_456 }, totalPaidCents: 123_456 }),
       recipient({ vendorId: 'blocked', tin: null, miscBoxCents: { MISC_1: 200_000 }, totalPaidCents: 200_000 }),
     ],
-    2026,
+    2025,
   );
   const csv = toMiscImportCsv(batch);
   const lines = csv.trim().split('\r\n');
@@ -171,5 +177,33 @@ describe('toMiscImportCsv — the filing-service e-file', () => {
     expect(lines[1]).toContain('"Rent, Co"');
     expect(lines[1]).toContain('1099-MISC');
     expect(lines[1]).toContain('12-3456789'); // payer EIN formatted
+  });
+});
+
+describe('tax-year thresholds — 2026 MISC floors (OBBBA)', () => {
+  it('rents / other / medical need $2,000 in 2026', () => {
+    expect(meetsAnyMiscThreshold({ MISC_1: 199_999 }, 2026)).toBe(false);
+    expect(meetsAnyMiscThreshold({ MISC_1: 200_000 }, 2026)).toBe(true);
+    expect(meetsAnyMiscThreshold({ MISC_6: 150_000 }, 2026)).toBe(false);
+  });
+
+  it('attorney gross proceeds stay at $600 and royalties at $10 in 2026', () => {
+    expect(meetsAnyMiscThreshold({ MISC_10: 60_000 }, 2026)).toBe(true);
+    expect(meetsAnyMiscThreshold({ MISC_10: 59_999 }, 2026)).toBe(false);
+    expect(meetsAnyMiscThreshold({ MISC_2: 1_000 }, 2026)).toBe(true);
+  });
+
+  it('a $900 rent is filed for 2025 but excluded for 2026', () => {
+    const r = recipient({ miscBoxCents: { MISC_1: 90_000 } });
+    expect(classifyMiscRecipient(r, 2025).status).toBe('READY');
+    expect(classifyMiscRecipient(r, 2026).code).toBe('BELOW_THRESHOLD');
+  });
+
+  it('the 2026 batch summary reports the year floors and reason copy', () => {
+    const b = assembleForm1099MiscBatch(PAYER, [recipient({ miscBoxCents: { MISC_1: 90_000 } })], 2026);
+    expect(b.summary.generalThresholdCents).toBe(200_000);
+    expect(b.summary.attorneyProceedsThresholdCents).toBe(60_000);
+    expect(b.summary.royaltyThresholdCents).toBe(1_000);
+    expect(b.exclusions[0].reason).toContain('$2,000');
   });
 });

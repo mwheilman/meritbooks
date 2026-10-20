@@ -718,9 +718,9 @@ export const HELP_CONTENT: Record<string, HelpContent> = {
   '/compliance-1099': {
     title: '1099-NEC Readiness',
     whatItDoes:
-      'Vendors paid $600 or more by check / ACH / wire in the year — card payments excluded (those are 1099-K). Flag gaps to queue a W-9 chase, then generate the 1099s.',
+      'Vendors paid at least the tax year\'s 1099 floor by check / ACH / wire — $600 through 2025, $2,000 for 2026, inflation-indexed from 2027 (royalties $10, attorney gross proceeds $600). Card payments are excluded (those are the processor\'s 1099-K). Flag gaps to queue a W-9 chase, then generate the 1099s.',
     keyFeatures: [
-      'Automatic $600 threshold detection by payment method',
+      'Threshold follows the law for the selected tax year, by payment method',
       'Gap flags queue a W-9 chase',
       'Generates 1099-NEC and IRS e-file (FIRE/IRIS) format',
     ],
