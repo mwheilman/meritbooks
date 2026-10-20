@@ -424,3 +424,80 @@ These pages have no CompanyScopeGuard: intake queue, 1099, vendors, customers, d
 peek, Recurring) · `/bills` (+ intake queue) · `/checks` · `/expenses` · `/invoices` · `/collections` · `/cash` · `/debt` ·
 `/reports` (P&L with drill + saved view) · `/fpna` · `/consolidation` · `/portfolio` · `/team` · `/settings` ·
 `/settings/approvals` (Simulate) · `/settings/autonomy` · `/onboarding` · `/platform` · `/vendor-compliance` · `/payroll`.
+
+---
+
+## §L Live walkthrough (2026-10-19)
+
+**Result: blocked again. The Chrome session is not signed in, so no authenticated page could be visited.** Nothing in
+§1–§7 has changed. No credentials were entered and no SSO was attempted. Signing in is the owner's job.
+
+### L.1 What was observed
+
+- **Browser:** one connected Chrome ("Browser 1", macOS). Navigating to `https://meritbooks-web.vercel.app/dashboard`
+  redirects to `concise-dolphin-51.accounts.dev/sign-in` ("Sign in to Merit Enterprise Suite", Google or email,
+  "Last used" badge, **"Development mode"**, Clerk dev instance). This was seen in two tabs.
+- **Tab instability:** the first tab (the S6 design page) froze when it navigated. `Page.captureScreenshot` timed
+  out after 30 s and the tab then dropped out of the MCP group. A fresh tab worked normally. This is worth knowing
+  for the next chrome-auditor run.
+- **Screenshots:** one only, of the sign-in page. None of the app.
+- **What production is running:** the Vercel `meritbooks-web` production deployment is `e8b9aa1` (READY). The
+  `apps/web` code there is **identical to repo HEAD `8d4ea41`**: `git diff e8b9aa1 HEAD -- apps/web` is empty, because
+  `daee098` (brand re-skin) and its revert `5b3cc41` cancel out. **So every code-audit finding in §1–§5 describes the
+  code that is live.** The deploy before it, `c4569ff`, failed (ERROR) and was superseded.
+
+### L.2 Per-page live status
+
+| Route(s) | Renders? | Data? | Issues seen live | Console/network | Screenshot |
+|---|---|---|---|---|---|
+| `/dashboard` (also `/`) | Redirects to Clerk sign-in | n/a | Signed out | not captured | sign-in page only |
+| All other §7 routes (`/inbox`, `/bank-feed`, `/reconciliation`, `/close`, `/journal-entries`, `/bills`, `/checks`, `/expenses`, `/invoices`, `/collections`, `/cash`, `/debt`, `/reports`, `/fpna`, `/consolidation`, `/portfolio`, `/team`, `/settings`, `/settings/approvals`, `/settings/autonomy`, `/onboarding`, `/platform`, `/vendor-compliance`, `/payroll`) and all 64 sidebar destinations | **Not visited** (signed out) | n/a | n/a | n/a | n | 
+
+### L.3 Code-audit bug verification
+
+None of these could be reproduced live while signed out. "Code ✔ at prod" means the ✔ in §5 was made against code
+that is identical to what production runs (L.1).
+
+| # | Claimed bug | Live result | Code status at prod `e8b9aa1` |
+|---|---|---|---|
+| 1 | Bank-feed edit panel drops vendor-name edits | Not testable (signed out). Even signed in, it can only be fully proven by saving, which is a write. | Code ✔ at prod |
+| 2 | Credit Cards Flag is dead | Not testable (signed out) | Code ✔ at prod |
+| 3 | ⌘K opens two overlays | Not testable (signed out) | Code ✔ at prod |
+| 4 | "CPA Desk ⌘K" button is dead | Not testable (signed out) | Code ✔ at prod |
+| 5 | "View GL" links (`?highlight=`, `?entry=`) are ignored | Not testable (signed out) | Code ✔ at prod |
+| 6 | CoA Approve/Reject failures are silent | Not testable read-only (clicking would write) | From code (unchanged) |
+| 7 | Bills/Receipts capped at 50 rows | Not testable (signed out) | From code (unchanged) |
+| 9 | Board Package "Operating Income" shows `ebitdaCents` | Not testable (signed out) | From code (unchanged) |
+| 10 | Platform "Companies" column sorts by MRR | Not testable (signed out) | From code (unchanged) |
+
+### L.4 New bug found (from Vercel production runtime logs, the only live signal available)
+
+- **N1. The obligations "subscriptions" source fails on every load in production.**
+  - **Log:** `[obligations] source 'subscriptions' degraded: column subscriptions.name does not exist`. Count 281
+    over 7 days, 6 users, route `/api/inbox`, first seen 2026-08-09, last seen 2026-10-20 00:54Z. It is the **only**
+    runtime error group in the 7-day window.
+  - **Cause:** `apps/web/src/lib/obligations/collect.ts:467` runs
+    `.select('id, name, vendor_name, next_renewal_date, amount_cents, status')`, but migration `085_subscriptions.sql`
+    has no `name` column. The table has `vendor_name` and `product`.
+  - **Effect:** subscription renewals never appear on `/obligations` or in the Inbox alerts that are built from it.
+    The loader degrades the source on purpose, so the page doesn't crash. The gap is silent, apart from a
+    "sources skipped" note where the UI shows one.
+  - **Fix (not applied):** select `product` instead of `name`, or drop it, and use `vendor_name` for the label.
+  - **Test gap:** `schema-contract.test.ts` doesn't catch it, because it checks the literals written to CHECK/enum
+    columns, not the columns that are selected.
+- The rest of the runtime-error picture is clean: no other error groups in 7 days. That is mild evidence that the
+  main pages are not throwing server-side, but it says nothing about client-side console errors or dead buttons.
+
+### L.5 Refined recommendations
+
+- **Add N1 to §6 item 2 (fix now).** It is a one-line change, and the error has been live and silent for about
+  10 weeks.
+- **Add a guard test:** a schema test that checks every column named in a `.select('…')` string literal exists in
+  the migrations. It would have caught N1 and would catch the same mistake elsewhere.
+- **Keep/merge recommendations stand unchanged** until a signed-in pass confirms them. The patterns marked KEEP in §2
+  are still code-only judgements: Inbox keynav, bank-feed confidence explainer and vendor recents, reconciliation
+  difference decomposer and never-auto-plug, hover peek with mini Dr/Cr, audit TimelineDrawer, approvals Simulate,
+  autonomy kill switch with reason.
+- **To unblock (owner, about 1 minute):** sign in to `meritbooks-web.vercel.app` in the Chrome profile that the
+  Claude extension controls. "Browser 1" is the only one connected. Then re-run this pass. Note that the sign-in page
+  is the Clerk **development** instance; standing up the Clerk production instance is still an open owner item.

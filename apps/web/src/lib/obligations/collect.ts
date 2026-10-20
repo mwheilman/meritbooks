@@ -453,7 +453,7 @@ async function collectInsurance(supabase: SupabaseClient, asOf: string, loc: Str
 
 interface SubscriptionRow {
   id: string;
-  name: string | null;
+  product: string | null;
   vendor_name: string | null;
   next_renewal_date: string | null;
   amount_cents: number | null;
@@ -464,16 +464,18 @@ async function collectSubscriptions(supabase: SupabaseClient, asOf: string): Pro
   // `subscriptions` may not exist yet — the query throws, the loader degrades it.
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('id, name, vendor_name, next_renewal_date, amount_cents, status');
+    .select('id, vendor_name, product, next_renewal_date, amount_cents, status');
   if (error) throw new Error(error.message);
   const out: Obligation[] = [];
   for (const r of (data ?? []) as SubscriptionRow[]) {
-    if (r.status && !['ACTIVE', 'TRIAL', 'PENDING'].includes(r.status)) continue;
+    // Statuses per migration 085: DETECTED / ACTIVE / UNDER_REVIEW / CANCELLING / CANCELLED / KEPT.
+    // Everything still live renews (CANCELLING is kept so the renewal date reads as a cancel-by deadline).
+    if (r.status === 'CANCELLED') continue;
     const o = makeObligation(asOf, {
       type: 'SUBSCRIPTION',
       category: 'RENEWAL',
-      title: `${r.name ?? r.vendor_name ?? 'Subscription'} — renews`,
-      subtitle: r.vendor_name && r.name ? r.vendor_name : null,
+      title: `${r.vendor_name ?? 'Subscription'}${r.product ? ` ${r.product}` : ''} — ${r.status === 'CANCELLING' ? 'cancel before renewal' : 'renews'}`,
+      subtitle: null,
       dueDate: r.next_renewal_date ?? '',
       amountCents: typeof r.amount_cents === 'number' ? r.amount_cents : null,
       entityId: r.id,
