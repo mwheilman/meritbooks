@@ -11,7 +11,7 @@
  * the reviewer sees exactly what didn't import.
  */
 
-import { normalizeState } from '@/lib/controls/sales-tax-nexus';
+import { normalizeState } from '@/lib/tax/state-codes';
 
 export interface ParsedRateRow {
   state: string;

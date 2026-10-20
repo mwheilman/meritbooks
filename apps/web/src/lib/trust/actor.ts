@@ -22,7 +22,7 @@ export async function resolveActor(
 ): Promise<{ coreUserId: string | null; isPlatformStaff: boolean }> {
   try {
     // Ensure the row exists (insert-if-absent; conflict => no-op, no UPDATE needed).
-    const { createAdminSupabase } = await import('@/lib/supabase/server');
+    const { createAdminSupabase } = await import('@/lib/supabase/admin');
     await createAdminSupabase()
       .schema('core').from('users')
       .upsert({ clerk_user_id: clerkUserId }, { onConflict: 'clerk_user_id', ignoreDuplicates: true });

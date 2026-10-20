@@ -27,19 +27,4 @@ export async function createServerSupabase() {
   );
 }
 
-/**
- * Admin client with service role key — bypasses RLS.
- * Use ONLY in server-side operations where RLS bypass is intentional.
- */
-export function createAdminSupabase() {
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        getAll: () => [],
-        setAll: () => {},
-      },
-    }
-  );
-}
+export { createAdminSupabase } from './admin';
