@@ -1,17 +1,27 @@
 import type { Metadata } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
-import '../styles/globals.css';
+import { fontVariables } from '@meritbooks/merit-ui/fonts';
+import { IconSprite, titleTemplate } from '@meritbooks/merit-ui';
+import { clerkAppearance } from '@/lib/clerk-appearance';
+import { Providers } from './providers';
+import './globals.css';
+import './projects.css';
 
 export const metadata: Metadata = {
-  title: 'MeritProjects',
-  description: 'Operations & project management — Merit Enterprise Suite',
+  title: { template: titleTemplate('projects'), default: 'Merit Projects' },
+  description: 'Merit Projects: jobs, budgets, schedules and change orders, tied to Merit Books.',
+  icons: { icon: '/brand/lockups/merit-icon-full-color.svg' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
-      <html lang="en" className="dark">
-        <body>{children}</body>
+    <ClerkProvider appearance={clerkAppearance}>
+      {/* fonts on <html>: the kit tokens live on :root */}
+      <html lang="en" className={fontVariables}>
+        <body>
+          <IconSprite />
+          <Providers>{children}</Providers>
+        </body>
       </html>
     </ClerkProvider>
   );

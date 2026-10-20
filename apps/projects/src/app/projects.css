@@ -1,0 +1,102 @@
+/* ==========================================================================
+   Merit Projects — page-local layout marks.
+   Lifted from the kit boards (S1 agenda/nlink, S3 queue+panel split, S6 glance,
+   S27 scopes/areas). Tokens only: no hex, no radius, no shadow beyond the kit.
+   Everything a component needs beyond these comes from system.css.
+   ========================================================================== */
+
+/* Calm gate screens (sign-in, pick a workspace, enable Merit Projects) */
+.mp-gate{min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:var(--s6) var(--s4);background:var(--warm)}
+.mp-gate-card{display:flex;flex-direction:column;align-items:flex-start;gap:var(--s3);width:min(560px,100%)}
+.mp-gate-card .t-title{margin-top:4px}
+.mp-gate-card p{color:var(--ink-2);max-width:56ch}
+.mp-gate-card .surface{width:100%;padding:var(--s3)}
+
+/* S1 — number links inside tables */
+.nlink{color:inherit;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px;transition:text-decoration-color var(--fast)}
+.nlink:hover,.nlink:focus-visible{text-decoration-color:var(--electric);color:var(--electric)}
+
+/* S1 — agenda (This week) */
+.agenda{list-style:none}
+.agenda li{display:grid;grid-template-columns:56px minmax(0,1fr) 18px;column-gap:8px;align-items:center;height:40px;padding:0 16px;border-bottom:1px solid var(--line)}
+.agenda li:last-child{border-bottom:0}
+.agenda a{display:contents}
+.agenda li:hover{background:var(--grey-100)}
+.agenda .d{font-weight:600}
+.agenda .d.neg{color:var(--neg)}
+.agenda .txt{min-width:0}
+.agenda .pip{justify-self:end}
+
+/* Activity feed (dotted time column, plain sentence) */
+.feed{list-style:none}
+.feed li{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:16px;align-items:center;min-height:40px;padding:4px 16px;border-bottom:1px solid var(--line)}
+.feed li:last-child{border-bottom:0}
+.feed .t{color:var(--ink-3);font-size:var(--t-12);white-space:nowrap;font-variant-numeric:tabular-nums}
+.feed--flush li{padding-left:0;padding-right:0}
+
+/* S6 — at a glance (figure list) */
+.glance{list-style:none}
+.gl{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;row-gap:4px;padding:14px 0;border-bottom:1px solid var(--line);transition:background-color var(--fast) var(--ease),box-shadow var(--fast) var(--ease)}
+.gl:hover{background:var(--sky);box-shadow:-8px 0 0 var(--sky),8px 0 0 var(--sky)}
+.gl .fig-l{grid-column:1;grid-row:1;align-self:center}
+.gl .fig-v--dense{grid-column:2;grid-row:1;text-align:right;white-space:nowrap}
+.gl .fig-vs{grid-column:1/3;grid-row:2;flex-direction:column;gap:2px}
+.density-cockpit .glance{padding:0 16px}
+
+/* S3 — queue beside its side panel (the panel never covers the row) */
+.mp-split{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s3);align-items:start}
+.mp-split.has-panel{grid-template-columns:minmax(0,1fr) 400px}
+.mp-split > .panel{position:sticky;top:0;max-height:calc(100dvh - 128px);min-height:480px}
+.mp-tools{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:var(--s2)}
+.mp-tools .search{width:280px}
+.mp-tools .field{min-width:160px}
+.mp-table{border:1px solid var(--line);background:var(--white)}
+
+/* S27 — settings scopes and numbered areas */
+.cols{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:var(--s4);margin-top:var(--s3);align-items:start}
+.scope{border-top:2px solid var(--electric)}
+.scope + .scope{margin-top:var(--s4)}
+.scope-h{display:flex;align-items:center;gap:12px;padding:12px 0}
+.scope-h .t-section{color:var(--ink)}
+.scope-h .sp{flex:1}
+.ar{list-style:none}
+.ar li{position:relative;display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:12px;align-items:center;min-height:56px;padding:8px 8px 8px 0;border-bottom:1px solid var(--line);transition:background-color var(--fast)}
+.ar .nm a::after{content:"";position:absolute;inset:0}
+.ar .nm a:focus-visible{outline:0}
+.ar li:focus-within{outline:2px solid var(--electric);outline-offset:-2px}
+.ar li:hover{background:var(--grey-100)}
+.ar li[aria-current=true]{background:var(--sky);box-shadow:inset 3px 0 var(--electric)}
+.ar .no{font:700 15px/24px var(--f-display);color:transparent;-webkit-text-stroke:1px var(--electric);text-align:right;font-variant-numeric:tabular-nums}
+.ar .nm{font-weight:600;display:flex;align-items:center;gap:8px;min-width:0}
+.ar .nm a{color:var(--ink);white-space:nowrap}
+.ar .ds{display:block;font-size:var(--t-12);line-height:var(--lh-12);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ar .st{display:flex;align-items:center;gap:8px;justify-content:flex-end;white-space:nowrap}
+.ar li.is-attn{box-shadow:inset 3px 0 var(--warn)}
+.sec{border-top:2px solid var(--electric);padding-top:12px}
+.sec + .sec{margin-top:var(--s4)}
+.sec-h{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+.sec-h .t-section{color:var(--ink)}
+.sec-h .sp{flex:1}
+
+/* Job header (page object, not a context) */
+.job-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:var(--s2)}
+.job-head .meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;color:var(--ink-2)}
+.job-tabs{margin-bottom:var(--s3)}
+
+/* Lightweight timeline bar per task (CSS grid, one column per day in view) */
+.tl{position:relative;height:16px;background:var(--grey-100)}
+.tl i{position:absolute;top:4px;bottom:4px;background:var(--electric)}
+.tl i.done{background:var(--blue-200)}
+.tl i.late{background:var(--neg)}
+.tl i.blocked{background:var(--white);box-shadow:inset 0 0 0 1.5px var(--neg)}
+.tl b{position:absolute;top:-2px;bottom:-2px;width:1px;background:var(--midnight)}
+.tl-scale{display:flex;justify-content:space-between;color:var(--ink-3);font-size:var(--t-12);line-height:var(--lh-12);font-variant-numeric:tabular-nums}
+
+/* Inline forms under a table (add a line / task / change order) */
+.mp-add{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;padding:12px 16px;background:var(--canvas);border-top:1px solid var(--line)}
+.mp-add .field{margin:0}
+.mp-form{display:grid;gap:16px}
+.mp-form-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+
+/* Command palette rows */
+.cmdp-kind{color:var(--ink-3);font-size:var(--t-12)}

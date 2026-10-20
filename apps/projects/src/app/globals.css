@@ -1,0 +1,6 @@
+@import "tailwindcss/base";                               /* 1. preflight                         */
+@import "@meritbooks/merit-ui/styles/system.css";         /* 2. kit v2.3, verbatim                 */
+@import "@meritbooks/merit-ui/styles/marks.css";          /* 3. promoted board marks               */
+@import "@meritbooks/merit-ui/styles/next-adapter.css";   /* 4. Next/Tailwind fixes                */
+@import "tailwindcss/components";                         /* 5.                                    */
+@import "tailwindcss/utilities";                          /* 6. page-local layout utilities only   */

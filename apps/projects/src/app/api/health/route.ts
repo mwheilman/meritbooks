@@ -1,20 +1,10 @@
-import { NextResponse } from 'next/server';
-import { apiQueryHandler } from '@/lib/api-handler';
+export const dynamic = 'force-dynamic';
 
-// Health probe: confirms end-to-end auth -> Clerk token -> RLS-scoped DB read of
-// the caller's own org (core.organizations is REST-exposed + org-readable).
-export const GET = apiQueryHandler(null, async (_params, { orgId, supabase }) => {
-  const { data, error } = await supabase
-    .schema('core')
-    .from('organizations')
-    .select('id, entitlements')
-    .eq('id', orgId)
-    .maybeSingle();
-  return NextResponse.json({
-    ok: !error,
-    module: 'PROJECTS',
-    orgId,
-    entitlements: data?.entitlements ?? null,
-    error: error?.message ?? null,
-  });
+import { route, must } from '@/lib/api';
+
+// Health probe: auth → Clerk token → RLS-scoped read of the caller's org, plus pm reachability.
+export const GET = route({}, async ({ db, tenant }) => {
+  const org = must(await db.schema('core').from('organizations').select('id, entitlements').eq('id', tenant.orgId).maybeSingle(), 'health org');
+  const pmRes = await db.schema('pm').from('pack_installs').select('id', { count: 'exact', head: true });
+  return { ok: true, module: 'PROJECTS', orgId: tenant.orgId, entitlements: (org as { entitlements: unknown } | null)?.entitlements ?? null, pm: !pmRes.error };
 });

@@ -1,37 +1,95 @@
-import Link from 'next/link';
-import { currentOrgId, getEntitlements, hasModule } from '@/lib/entitlements';
-import { Nav } from '@/components/nav';
-import { CommandBar } from '@/components/command-bar';
+import { redirect } from 'next/navigation';
+import { currentUser } from '@clerk/nextjs/server';
+import { booksUrl, getScope, type Scope } from '@/lib/scope';
+import { requireDb, pm } from '@/lib/pm/db';
+import { getModulesFor, getVocabulary } from '@/lib/pm/config';
+import { getMe, homeDensityFor, roleLabel } from '@/lib/pm/people';
+import { railNav, type NavCounts } from '@/lib/nav';
+import { addDays, todayIso, weekLabel } from '@/lib/time';
+import { shortDate } from '@meritbooks/merit-ui';
+import { AppFrame } from '@/components/shell/AppFrame';
+import { EnableProjectsScreen, NoWorkspaceScreen } from '@/components/shell/GateScreens';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
-// Entitlements gate: MeritProjects renders ONLY if the tenant owns the module.
-// Standalone-sellable and bundle-safe, decided by core.organizations.entitlements
-// (Suite Core owns it; Projects only reads it). A Books-only tenant never sees this.
+export const dynamic = 'force-dynamic';
+
+/** Cheap rail counts: open jobs, open change orders, overdue tasks — in this scope. */
+async function counts(db: SupabaseClient, scope: Scope): Promise<NavCounts> {
+  try {
+    const today = todayIso();
+    const [jobsRes, cosRes, tasksRes] = await Promise.all([
+      pm(db).from('projects').select('job_id, location_id, stage_key').in('location_id', scope.companyIds),
+      pm(db).from('change_orders').select('job_id').in('stage', ['PCO', 'COR']).limit(1000),
+      pm(db).from('tasks').select('job_id').not('status', 'in', '(DONE,CANCELLED)').lt('due_on', today).limit(1000),
+    ]);
+    const jobs = (jobsRes.data ?? []) as Array<{ job_id: string }>;
+    const inScope = new Set(jobs.map((j) => j.job_id));
+    const openJobsRes = await pm(db)
+      .from('v_project_list')
+      .select('job_id', { count: 'exact', head: true })
+      .in('location_id', scope.companyIds)
+      .not('stage_is_terminal', 'is', true);
+    return {
+      openJobs: openJobsRes.count ?? undefined,
+      toReview: ((cosRes.data ?? []) as Array<{ job_id: string }>).filter((c) => inScope.has(c.job_id)).length,
+      overdueTasks: ((tasksRes.data ?? []) as Array<{ job_id: string }>).filter((t) => inScope.has(t.job_id)).length,
+    };
+  } catch {
+    return {};
+  }
+}
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const orgId = await currentOrgId();
-  const ents = await getEntitlements(orgId);
+  const r = await getScope();
+  if (r.kind === 'onboard') redirect(r.href);
+  if (r.kind === 'gate') {
+    if (r.state === 'no_session') redirect('/sign-in');
+    if (r.state === 'no_org') return <NoWorkspaceScreen />;
+    return <EnableProjectsScreen orgName={r.tenant.orgName} booksUrl={booksUrl()} />;
+  }
+  const scope = r.scope;
+  const db = await requireDb();
+  const [me, modules, vocab, navCounts] = await Promise.all([
+    getMe(db, scope.userId),
+    getModulesFor(db, scope.companyIds, scope.installs),
+    getVocabulary(db, scope.company?.id ?? null, scope.companyIds),
+    counts(db, scope),
+  ]);
 
-  if (!hasModule(ents, 'projects')) {
-    return (
-      <div className="min-h-screen grid place-items-center bg-surface-950 px-6">
-        <div className="max-w-md text-center space-y-3">
-          <div className="text-heading font-semibold text-white">MeritProjects isn&apos;t enabled</div>
-          <p className="text-sm text-slate-400">
-            This organization doesn&apos;t own the Projects module yet. An administrator can enable it in
-            Suite settings (<span className="num">entitlements.projects</span>).
-          </p>
-          <Link href="/sign-in" className="inline-block text-sm text-brand-400 hover:text-brand-300">
-            Switch account
-          </Link>
-        </div>
-      </div>
-    );
+  let name = [me.firstName, me.lastName].filter(Boolean).join(' ');
+  if (!name) {
+    const u = await currentUser().catch(() => null);
+    name = u?.fullName || u?.primaryEmailAddress?.emailAddress || 'You';
   }
 
+  const today = todayIso();
+  const dow = new Date(`${today}T12:00:00Z`).getUTCDay();
+  const monday = addDays(today, dow === 0 ? -6 : 1 - dow);
+  const installedIds = new Set(scope.installs.map((i) => i.location_id));
+
   return (
-    <div className="min-h-screen flex bg-surface-950">
-      <Nav />
-      <main className="flex-1 min-w-0 p-8">{children}</main>
-      <CommandBar />
-    </div>
+    <AppFrame
+      context={scope.context}
+      density={homeDensityFor(me.role)}
+      nav={railNav({
+        context: scope.context,
+        vocab,
+        modules,
+        counts: navCounts,
+        booksPresent: scope.tenant.booksPresent,
+        companyCount: scope.installedCompanies.length,
+      })}
+      orgName={scope.tenant.orgName ?? 'Workspace'}
+      companies={scope.tenant.companies.map((c) => ({ id: c.id, name: c.name, shortCode: c.shortCode, installed: installedIds.has(c.id) }))}
+      activeCompanyId={scope.company?.id ?? null}
+      view={scope.view}
+      user={{ name, role: roleLabel(me.role) }}
+      week={{ label: weekLabel(today), range: `${shortDate(monday)}–${shortDate(addDays(monday, 6))}` }}
+      booksUrl={booksUrl()}
+      vocab={vocab}
+      readOnly={scope.readOnly}
+    >
+      {children}
+    </AppFrame>
   );
 }

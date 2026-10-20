@@ -1,499 +1,284 @@
-import Link from 'next/link';
-import {
-  ArrowLeft,
-  AlertCircle,
-  LockKeyhole,
-  FileWarning,
-  ClipboardList,
-  ShieldCheck,
-  ListChecks,
-  PiggyBank,
-  Wallet,
-} from 'lucide-react';
-import clsx from 'clsx';
-import { createAuthedServerSupabase } from '@/lib/supabase/authed';
-import { AddCostCode, AddGate, GateAdvance } from './job-actions';
+import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+import { Page, count } from '@meritbooks/merit-ui';
+import { pageScope } from '@/lib/scope';
+import { requireDb } from '@/lib/pm/db';
+import { getJobOverview, getProject, getStageOptions } from '@/lib/pm/projects';
+import { getVocabulary } from '@/lib/pm/config';
+import { getBudget, listCostCodes, pickBudgets } from '@/lib/pm/budget';
+import { listActivity } from '@/lib/pm/activity';
+import { listChangeOrders, listContracts, listSnapshots, listTasks } from '@/lib/pm/work';
+import { employeeNames } from '@/lib/pm/people';
+import { jobTypeModules } from '@/lib/pm/modules';
+import { jobTabs, pickTab } from '@/lib/pm/job-tabs';
+import { cents, marginPctText } from '@/lib/pm/money';
+import { lower } from '@/lib/pm/vocab';
+import { AREAS } from '@/lib/areas';
+import { todayIso } from '@/lib/time';
+import { PageLine } from '@/components/common/PageLine';
+import { ActivityFeed } from '@/components/common/ActivityFeed';
+import { PageCrumbs } from '@/components/shell/ShellContext';
+import { JobHeader } from '@/components/job/JobHeader';
+import { JobTabsNav } from '@/components/job/JobTabsNav';
+import { OverviewTab } from '@/components/job/OverviewTab';
+import { BudgetTab } from '@/components/job/BudgetTab';
+import { ScheduleTab } from '@/components/job/ScheduleTab';
+import { ContractTab } from '@/components/job/ContractTab';
+import { LaterTab } from '@/components/job/LaterTab';
+import { ChangeOrderQueue } from '@/components/co/ChangeOrderQueue';
+import { EstimateTab } from '@/components/money/EstimateTab';
+import { CommitmentsTab } from '@/components/money/CommitmentsTab';
+import { BillingTab } from '@/components/money/BillingTab';
+import { JobCostTab } from '@/components/money/JobCostTab';
+import { WorkOrdersTab } from '@/components/ops/job-tabs/WorkOrdersTab';
+import { ProductionTab } from '@/components/ops/job-tabs/ProductionTab';
+import { SelectionsTab } from '@/components/ops/job-tabs/SelectionsTab';
+import { DrawsTab } from '@/components/ops/job-tabs/DrawsTab';
+import { UnitsTab } from '@/components/ops/job-tabs/UnitsTab';
+import { LogsTab } from '@/components/ops/job-tabs/LogsTab';
+import { PunchTab } from '@/components/ops/job-tabs/PunchTab';
+import { TimeTab } from '@/components/ops/job-tabs/TimeTab';
+import { getJobBilling, getJobCommitments, getJobEstimates, getJobFinancials, getPrimaryContract, listCostCodeStatus } from '@/lib/pm/money/queries';
+import { billingModesFor } from '@/lib/pm/money/billing-modes';
+import { pm } from '@/lib/pm/db';
 
-export const dynamic = 'force-dynamic';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// G4 Job detail. Single job, three-number operational picture + slippage,
-// commitments and external gates. Every panel RLS-scoped, all figures live
-// from proj.* views. Money is integer cents; render as whole USD.
-
-interface JobIdentityRow {
-  id: string;
-  job_number: string | null;
-  name: string | null;
-  archetype: string | null;
-  status: string | null;
-  customer_name: string | null;
+export async function generateMetadata({ params }: { params: { jobId: string } }): Promise<Metadata> {
+  if (!UUID.test(params.jobId)) return { title: 'Job' };
+  const scope = await pageScope();
+  if (!scope) return { title: 'Job' };
+  const job = await getProject(await requireDb(), params.jobId).catch(() => null);
+  return { title: job ? [job.list.job_number, job.list.name].filter(Boolean).join(' ') : 'Job' };
 }
 
-interface JobMarginRow {
-  job_id: string;
-  revenue_contract_cents: number | null;
-  operational_actual_cents: number | null;
-  operational_pending_cents: number | null;
-  committed_open_cents: number | null;
-  projected_final_cents: number | null;
-  operational_margin_cents: number | null;
-  operational_margin_pct: number | string | null;
-  budget_remaining_cents: number | null;
-}
-
-interface ContractRow {
-  job_id: string;
-  pct_complete: number | string | null;
-  progress_basis: string | null;
-  status: string | null;
-}
-
-interface SlippageRow {
-  cost_code: string | null;
-  cost_code_name: string | null;
-  budgeted_cents: number | null;
-  actual_cents: number | null;
-  committed_open_cents: number | null;
-  projected_final_cents: number | null;
-  variance_cents: number | null;
-}
-
-interface CommitmentRow {
-  id: string;
-  number: string | null;
-  commitment_type: string | null;
-  status: string | null;
-  original_amount_cents: number | null;
-  revised_amount_cents: number | null;
-}
-
-interface CommitmentStatusRow {
-  commitment_id: string;
-  amount_cents: number | null;
-  invoiced_cents: number | null;
-  open_cents: number | null;
-}
-
-interface GateRow {
-  id: string;
-  gate_type: string | null;
-  name: string | null;
-  status: string | null;
-}
-
-const usd = (cents: number | null | undefined): string =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format((cents ?? 0) / 100);
-
-const num = (v: number | string | null | undefined): number | null => {
-  if (v === null || v === undefined) return null;
-  const n = typeof v === 'string' ? Number.parseFloat(v) : v;
-  return Number.isFinite(n) ? n : null;
+const LATER_WHAT: Record<string, string> = {
+  selections: AREAS.find((a) => a.slug === 'selections')?.what ?? '',
+  logs: AREAS.find((a) => a.slug === 'daily-logs')?.what ?? '',
+  time: AREAS.find((a) => a.slug === 'time')?.what ?? '',
+  documents: 'Drawings, contracts, photos and signed change orders, linked to the job and its records.',
 };
 
-const STATUS_TONE: Record<string, string> = {
-  ACTIVE: 'bg-brand-500/10 text-brand-300 ring-brand-500/20',
-  BID: 'bg-info/10 text-info-fg ring-info/20',
-  COMPLETE: 'bg-ai/10 text-ai-fg ring-ai/20',
-  CLOSED: 'bg-surface-800 text-slate-400 ring-surface-800',
-  ON_HOLD: 'bg-warning/10 text-warning-fg ring-warning/20',
-  CANCELLED: 'bg-danger/10 text-danger-fg ring-danger/20',
-};
+export default async function JobPage({ params, searchParams }: { params: { jobId: string }; searchParams: { tab?: string; request?: string } }) {
+  if (!UUID.test(params.jobId)) notFound();
+  const scope = await pageScope();
+  if (!scope) return null;
+  const db = await requireDb();
+  const job = await getProject(db, params.jobId);
+  if (!job) notFound();
+  const { list, project, jobType } = job;
+  const modules = jobTypeModules(jobType.modules);
+  const [overview, vocab, stageOpts, names, openBilling, draftCommitments] = await Promise.all([
+    getJobOverview(db, list.job_id),
+    getVocabulary(db, list.location_id),
+    getStageOptions(db, list.location_id, jobType.stage_machine_key, project.stage_key),
+    employeeNames(db, [project.pm_user_id]),
+    modules.has('billing') || modules.has('retainage')
+      ? pm(db).from('billing_requests').select('id', { count: 'exact', head: true }).eq('job_id', list.job_id).in('status', ['DRAFT', 'REJECTED']).then((r) => r.count ?? 0, () => 0)
+      : Promise.resolve(0),
+    modules.has('commitments')
+      ? pm(db).from('commitments').select('id', { count: 'exact', head: true }).eq('job_id', list.job_id).eq('status', 'DRAFT').then((r) => r.count ?? 0, () => 0)
+      : Promise.resolve(0),
+  ]);
+  const tabs = jobTabs(modules, vocab);
+  const opsProps = { jobId: list.job_id, companyId: list.location_id, modules, vocabulary: vocab };
+  const tab = pickTab(tabs, searchParams.tab);
+  const today = todayIso();
+  const multi = scope.companyIds.length > 1;
+  const companyName = scope.tenant.companies.find((c) => c.id === list.location_id)?.name ?? null;
+  const label = [list.job_number, list.name].filter(Boolean).join(' · ');
 
-const GATE_TONE: Record<string, string> = {
-  APPROVED: 'bg-brand-500/10 text-brand-300 ring-brand-500/20',
-  CLEARED: 'bg-brand-500/10 text-brand-300 ring-brand-500/20',
-  WAIVED: 'bg-surface-800 text-slate-400 ring-surface-800',
-  SUBMITTED: 'bg-info/10 text-info-fg ring-info/20',
-  PENDING: 'bg-warning/10 text-warning-fg ring-warning/20',
-  REJECTED: 'bg-danger/10 text-danger-fg ring-danger/20',
-  EXPIRED: 'bg-danger/10 text-danger-fg ring-danger/20',
-};
-
-function Chip({ label, tone }: { label: string; tone: string }) {
-  return (
-    <span
-      className={clsx(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium uppercase tracking-wide ring-1 ring-inset',
-        tone,
-      )}
-    >
-      {label.replace(/_/g, ' ').toLowerCase()}
-    </span>
-  );
-}
-
-function Shell({
-  title,
-  body,
-  icon: Icon,
-}: {
-  title: string;
-  body: string;
-  icon: typeof AlertCircle;
-}) {
-  return (
-    <div className="space-y-6">
-      <Link href="/jobs" className="inline-flex items-center gap-1.5 text-sm text-brand-400 hover:text-brand-300">
-        <ArrowLeft className="h-4 w-4" /> All jobs
-      </Link>
-      <div className="rounded-xl border border-surface-800 bg-surface-900 p-12 text-center">
-        <Icon className="mx-auto h-8 w-8 text-slate-500" />
-        <div className="mt-3 text-heading text-white">{title}</div>
-        <p className="mx-auto mt-1 max-w-sm text-sm text-slate-400">{body}</p>
-      </div>
-    </div>
-  );
-}
-
-function Kpi({
-  label,
-  value,
-  sub,
-  tone,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: 'pos' | 'neg';
-}) {
-  return (
-    <div className="rounded-xl border border-surface-800 bg-surface-900 p-4">
-      <div className="text-2xs uppercase tracking-wider text-slate-500">{label}</div>
-      <div
-        className={clsx(
-          'num mt-1.5 text-heading font-semibold',
-          tone === 'pos' ? 'text-brand-400' : tone === 'neg' ? 'text-danger-fg' : 'text-white',
-        )}
-      >
-        {value}
-      </div>
-      {sub && <div className="num mt-0.5 text-2xs text-slate-500">{sub}</div>}
-    </div>
-  );
-}
-
-function SectionCard({
-  title,
-  count,
-  action,
-  children,
-}: {
-  title: string;
-  count?: number;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-xl border border-surface-800 bg-surface-900">
-      <div className="flex items-center justify-between gap-3 border-b border-surface-800 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-heading text-white">{title}</h2>
-          {count !== undefined && <span className="num text-2xs text-slate-500">{count}</span>}
-        </div>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-export default async function JobDetailPage({ params }: { params: { jobId: string } }) {
-  const { jobId } = params;
-  const sb = await createAuthedServerSupabase();
-
-  if (!sb) {
-    return (
-      <Shell
-        icon={LockKeyhole}
-        title="Sign in to view this job"
-        body="Your session couldn't be authenticated. Sign in again to load org-scoped job data."
+  let body: React.ReactNode = null;
+  if (tab.later) {
+    body = <LaterTab label={tab.label} what={LATER_WHAT[tab.value] ?? ''} />;
+  } else if (tab.value === 'overview') {
+    const [tasks, activity] = await Promise.all([modules.has('schedule') ? listTasks(db, list.job_id) : Promise.resolve([]), listActivity(db, { jobId: list.job_id }, 8)]);
+    body = (
+      <OverviewTab
+        job={list}
+        overview={overview}
+        tasks={tasks}
+        activity={activity}
+        today={today}
+        hasSchedule={modules.has('schedule')}
+        details={{
+          jobId: list.job_id, companyId: list.location_id, customerId: list.customer_id, customerName: list.customer_name,
+          plannedStart: project.planned_start, plannedFinish: project.planned_finish, actualStart: project.actual_start,
+          facts: [
+            { term: 'Job type', value: list.job_type_label },
+            { term: 'Created', value: list.created_at.slice(0, 10) },
+            ...(overview?.last_snapshot_version ? [{ term: 'Last sent to Books', value: `v${overview.last_snapshot_version} · ${overview.last_snapshot_as_of}` }] : []),
+          ],
+        }}
       />
     );
-  }
-
-  const [jobRes, marginRes, contractRes, slippageRes, commitmentsRes, commitStatusRes, gatesRes] =
-    await Promise.all([
-      sb.schema('core').from('jobs').select('id, job_number, name, archetype, status, customer_name').eq('id', jobId).maybeSingle(),
-      sb.schema('proj').from('v_job_margin').select('*').eq('job_id', jobId).maybeSingle(),
-      sb.schema('proj').from('v_contract_current').select('job_id, pct_complete, progress_basis, status').eq('job_id', jobId).limit(1),
-      sb.schema('proj').from('v_cost_code_slippage').select('cost_code, cost_code_name, budgeted_cents, actual_cents, committed_open_cents, projected_final_cents, variance_cents').eq('job_id', jobId),
-      sb.schema('proj').from('commitments').select('id, number, commitment_type, status, original_amount_cents, revised_amount_cents').eq('job_id', jobId),
-      sb.schema('proj').from('v_commitment_status').select('commitment_id, amount_cents, invoiced_cents, open_cents').eq('job_id', jobId),
-      sb.schema('proj').from('external_gates').select('id, gate_type, name, status').eq('job_id', jobId),
+  } else if (tab.value === 'budget') {
+    const [bundle, codes] = await Promise.all([getBudget(db, list.job_id), listCostCodes(db, list.location_id, { jobId: list.job_id, includeInactive: true })]);
+    const picked = pickBudgets(bundle.budgets);
+    body = (
+      <BudgetTab
+        jobId={list.job_id}
+        budgets={bundle.budgets}
+        lines={bundle.lines}
+        currentId={picked.current?.id ?? null}
+        effectiveId={picked.effective?.id ?? null}
+        draftId={picked.draft?.id ?? null}
+        costCodes={codes}
+        contractCents={list.contract_revised_cents}
+        booksPresent={scope.tenant.booksPresent}
+      />
+    );
+  } else if (tab.value === 'schedule') {
+    body = <ScheduleTab jobId={list.job_id} tasks={await listTasks(db, list.job_id)} today={today} />;
+  } else if (tab.value === 'change-orders') {
+    const cos = await listChangeOrders(db, list.job_id);
+    body = (
+      <ChangeOrderQueue
+        aria-label={`${vocab.change_orders} on ${label}`}
+        rows={cos.map((c) => ({ ...c, jobLabel: label, company: null }))}
+        showJob={false}
+        createForJobId={list.job_id}
+        currentUserId={scope.userId}
+        mode="all"
+      />
+    );
+  } else if (tab.value === 'contract') {
+    const [contracts, snapshots] = await Promise.all([listContracts(db, list.job_id), listSnapshots(db, list.job_id)]);
+    body = (
+      <ContractTab
+        jobId={list.job_id}
+        contracts={contracts}
+        snapshots={snapshots}
+        originalCents={overview?.original_contract_cents ?? list.original_contract_cents}
+        approvedCoCents={overview?.approved_co_cents ?? list.approved_co_cents}
+        pendingCoCents={overview?.pending_co_cents ?? list.pending_co_cents}
+        defaultBasis={jobType.progress_basis}
+        booksPresent={scope.tenant.booksPresent}
+        isSample={list.is_sample}
+      />
+    );
+  } else if (tab.value === 'estimates') {
+    const [bundle, codes] = await Promise.all([getJobEstimates(db, list.job_id), listCostCodes(db, list.location_id, { jobId: list.job_id, includeInactive: true })]);
+    body = (
+      <EstimateTab
+        jobId={list.job_id}
+        estimates={bundle.estimates}
+        lines={bundle.lines}
+        costCodes={codes}
+        contractCents={list.contract_revised_cents}
+        budgetCents={list.budget_total_cents}
+        booksPresent={scope.tenant.booksPresent && !list.is_sample}
+      />
+    );
+  } else if (tab.value === 'commitments') {
+    const [bundle, codes, cos, ccs] = await Promise.all([
+      getJobCommitments(db, list.job_id),
+      listCostCodes(db, list.location_id, { jobId: list.job_id, includeInactive: true }),
+      listChangeOrders(db, list.job_id),
+      listCostCodeStatus(db, list.job_id),
     ]);
-
-  if (jobRes.error) {
-    return <Shell icon={AlertCircle} title="Couldn't load this job" body={jobRes.error.message} />;
-  }
-
-  const job = jobRes.data as JobIdentityRow | null;
-  if (!job) {
-    return (
-      <Shell
-        icon={FileWarning}
-        title="Job not found"
-        body="This job doesn't exist or isn't visible to your organization."
+    body = (
+      <CommitmentsTab
+        jobId={list.job_id}
+        {...bundle}
+        costCodes={codes}
+        ownerCos={cos.filter((c) => c.stage !== 'VOID' && c.stage !== 'REJECTED').map((c) => ({ id: c.id, number: c.number, title: c.title, stage: c.stage }))}
+        currentUserId={scope.userId}
+        booksPresent={scope.tenant.booksPresent && !list.is_sample}
+        today={today}
+        budgetByCode={Object.fromEntries(ccs.filter((r) => r.cost_code_id).map((r) => [r.cost_code_id as string, r.budget_cents]))}
       />
+    );
+  } else if (tab.value === 'billing') {
+    const [bundle, contract, codes, accepted, cos] = await Promise.all([
+      getJobBilling(db, list.job_id),
+      getPrimaryContract(db, list.job_id),
+      listCostCodes(db, list.location_id, { jobId: list.job_id }),
+      pm(db).from('estimates').select('id', { count: 'exact', head: true }).eq('job_id', list.job_id).eq('status', 'ACCEPTED').then((r) => (r.count ?? 0) > 0, () => false),
+      listChangeOrders(db, list.job_id),
+    ]);
+    body = (
+      <BillingTab
+        jobId={list.job_id}
+        bundle={bundle}
+        modes={billingModesFor({ billingModes: jobType.billing_modes, defaultBillingMode: jobType.default_billing_mode, modules })}
+        contract={contract}
+        revisedContractCents={bundle.financials?.revised_contract_cents ?? list.contract_revised_cents}
+        costCodes={codes}
+        currentUserId={scope.userId}
+        booksPresent={scope.tenant.booksPresent}
+        isSample={list.is_sample}
+        today={today}
+        hasAcceptedEstimate={accepted}
+        coStage={Object.fromEntries(cos.map((c) => [c.id, c.stage]))}
+        initialRequestId={searchParams.request && UUID.test(searchParams.request) ? searchParams.request : null}
+      />
+    );
+  } else if (tab.value === 'job-cost') {
+    const [rowsCc, fin] = await Promise.all([listCostCodeStatus(db, list.job_id), getJobFinancials(db, list.job_id)]);
+    body = <JobCostTab jobId={list.job_id} rows={rowsCc} financials={fin} booksPresent={scope.tenant.booksPresent && !list.is_sample} />;
+  } else if (tab.value === 'work-orders') {
+    body = <WorkOrdersTab {...opsProps} />;
+  } else if (tab.value === 'production') {
+    body = <ProductionTab {...opsProps} />;
+  } else if (tab.value === 'selections') {
+    body = <SelectionsTab {...opsProps} />;
+  } else if (tab.value === 'draws') {
+    body = <DrawsTab {...opsProps} />;
+  } else if (tab.value === 'units') {
+    body = <UnitsTab {...opsProps} />;
+  } else if (tab.value === 'logs') {
+    body = <LogsTab {...opsProps} />;
+  } else if (tab.value === 'punch') {
+    body = <PunchTab {...opsProps} />;
+  } else if (tab.value === 'time') {
+    body = <TimeTab {...opsProps} />;
+  } else if (tab.value === 'activity') {
+    const activity = await listActivity(db, { jobId: list.job_id }, 100);
+    body = (
+      <div className="mp-table">
+        {activity.length ? <ActivityFeed rows={activity} /> : <p className="t-cap" style={{ padding: 16 }}>Nothing has happened on this job yet.</p>}
+      </div>
     );
   }
 
-  const margin = (marginRes.data as JobMarginRow | null) ?? null;
-  const contract = ((contractRes.data ?? []) as ContractRow[])[0] ?? null;
-  const slippage = (slippageRes.data ?? []) as SlippageRow[];
-  const commitments = (commitmentsRes.data ?? []) as CommitmentRow[];
-  const commitStatus = (commitStatusRes.data ?? []) as CommitmentStatusRow[];
-  const gates = (gatesRes.data ?? []) as GateRow[];
-
-  // Aggregate commitment-line status up to each commitment.
-  const statusByCommitment = new Map<string, { amount: number; invoiced: number; open: number }>();
-  for (const s of commitStatus) {
-    const cur = statusByCommitment.get(s.commitment_id) ?? { amount: 0, invoiced: 0, open: 0 };
-    cur.amount += s.amount_cents ?? 0;
-    cur.invoiced += s.invoiced_cents ?? 0;
-    cur.open += s.open_cents ?? 0;
-    statusByCommitment.set(s.commitment_id, cur);
-  }
-
-  const pctComplete = (() => {
-    const p = num(contract?.pct_complete ?? null);
-    if (p === null) return null;
-    return Math.max(0, Math.min(100, p * 100));
-  })();
-
-  const marginPctVal = num(margin?.operational_margin_pct ?? null);
-  const marginCents = margin?.operational_margin_cents ?? null;
-
   return (
-    <div className="space-y-6">
-      <Link href="/jobs" className="inline-flex items-center gap-1.5 text-sm text-brand-400 hover:text-brand-300">
-        <ArrowLeft className="h-4 w-4" /> All jobs
-      </Link>
-
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-1.5">
-          <h1 className="text-title text-white">{job.name ?? 'Untitled job'}</h1>
-          <div className="num flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-slate-500">
-            <span>{job.job_number ?? '—'}</span>
-            {job.customer_name && <span>· {job.customer_name}</span>}
-          </div>
+    <>
+      <PageCrumbs items={[{ label: vocab.jobs, href: '/jobs' }, { label }, ...(tab.value !== 'overview' ? [{ label: tab.label }] : [])]} />
+      <PageLine
+        facts={[
+          { label: `${cents(list.contract_revised_cents, 0)} revised contract`, tnum: true },
+          { label: `${cents(list.budget_total_cents, 0)} budget`, tnum: true },
+          { label: `${cents(overview?.projected_margin_cents ?? list.contract_revised_cents - list.cost_estimate_cents, 0)} projected margin · ${marginPctText(list)}`, strong: true, tnum: true },
+          `${count(overview?.pending_co_count ?? 0)} pending ${lower(vocab.change_orders)} · ${cents(list.pending_co_cents, 0)}`,
+        ]}
+      />
+      <Page>
+        <JobHeader
+          jobId={list.job_id}
+          companyId={list.location_id}
+          number={list.job_number}
+          name={list.name}
+          customer={list.customer_name}
+          stageLabel={list.stage_label ?? list.stage_key}
+          coreStatus={list.core_status}
+          pmName={project.pm_user_id ? names[project.pm_user_id] ?? null : null}
+          jobTypeLabel={list.job_type_label}
+          companyName={multi ? companyName : null}
+          isSample={list.is_sample}
+          stages={stageOpts.stages.map((s) => ({ key: s.stage_key, label: s.label, terminal: s.is_terminal }))}
+          currentStage={project.stage_key}
+          next={stageOpts.next.map((n) => ({ to_stage: n.to_stage, label: n.label, core_status: n.core_status, guards: n.guards }))}
+        />
+        <JobTabsNav
+          tabs={tabs}
+          value={tab.value}
+          counts={{ 'change-orders': overview?.pending_co_count, schedule: overview?.tasks_overdue, billing: openBilling, commitments: draftCommitments }}
+        />
+        <div id="job-panel" role="tabpanel" aria-label={tab.label}>
+          {body}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {job.archetype && (
-            <span className="inline-flex items-center rounded-md bg-surface-800 px-2 py-0.5 text-2xs font-medium uppercase tracking-wide text-slate-300">
-              {job.archetype.replace(/_/g, ' ').toLowerCase()}
-            </span>
-          )}
-          <Chip
-            label={job.status ?? 'unknown'}
-            tone={STATUS_TONE[job.status ?? ''] ?? 'bg-surface-800 text-slate-400 ring-surface-800'}
-          />
-        </div>
-      </header>
-
-      {/* Billing tools — G7 progress-billing surfaces for this job */}
-      <nav className="flex flex-wrap items-center gap-2">
-        <Link
-          href={`/billing/sov/${job.id}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-surface-800 bg-surface-900 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-brand-500/40 hover:text-brand-300"
-        >
-          <ListChecks className="h-3.5 w-3.5" />
-          Schedule of values
-        </Link>
-        <Link
-          href={`/billing/retainage/${job.id}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-surface-800 bg-surface-900 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-brand-500/40 hover:text-brand-300"
-        >
-          <PiggyBank className="h-3.5 w-3.5" />
-          Retainage
-        </Link>
-        <Link
-          href={`/allowances?jobId=${job.id}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-surface-800 bg-surface-900 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-brand-500/40 hover:text-brand-300"
-        >
-          <Wallet className="h-3.5 w-3.5" />
-          Allowances
-        </Link>
-      </nav>
-
-      {/* KPI row — the three-number operational picture */}
-      {margin ? (
-        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          <Kpi label="Contract value" value={usd(margin.revenue_contract_cents)} />
-          <Kpi label="Operational actual" value={usd(margin.operational_actual_cents)} />
-          <Kpi label="Pending" value={usd(margin.operational_pending_cents)} />
-          <Kpi label="Committed open" value={usd(margin.committed_open_cents)} />
-          <Kpi label="Projected final" value={usd(margin.projected_final_cents)} />
-          <Kpi
-            label="Operational margin"
-            value={usd(marginCents)}
-            sub={marginPctVal === null ? undefined : `${marginPctVal >= 0 ? '' : '−'}${Math.abs(marginPctVal).toFixed(1)}%`}
-            tone={marginCents === null ? undefined : marginCents >= 0 ? 'pos' : 'neg'}
-          />
-          <Kpi
-            label="Budget remaining"
-            value={usd(margin.budget_remaining_cents)}
-            tone={(margin.budget_remaining_cents ?? 0) < 0 ? 'neg' : undefined}
-          />
-        </section>
-      ) : (
-        <div className="rounded-xl border border-surface-800 bg-surface-900 p-6 text-sm text-slate-400">
-          No margin figures yet — this job has no contract, cost or commitment activity.
-        </div>
-      )}
-
-      {/* Percent complete */}
-      {pctComplete !== null && (
-        <section className="rounded-xl border border-surface-800 bg-surface-900 p-4">
-          <div className="flex items-center justify-between text-2xs uppercase tracking-wider text-slate-500">
-            <span>Percent complete{contract?.progress_basis ? ` · ${contract.progress_basis.replace(/_/g, ' ').toLowerCase()}` : ''}</span>
-            <span className="num text-slate-300">{pctComplete.toFixed(1)}%</span>
-          </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-800">
-            <div className="h-full rounded-full bg-brand-500" style={{ width: `${pctComplete}%` }} />
-          </div>
-        </section>
-      )}
-
-      {/* Cost-code slippage */}
-      <SectionCard title="Cost-code slippage" count={slippage.length} action={<AddCostCode jobId={jobId} />}>
-        {slippage.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-slate-500">No cost-code budget or activity yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-surface-800 text-left text-2xs uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-2.5 font-medium">Code</th>
-                  <th className="px-4 py-2.5 font-medium">Name</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Budget</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Actual</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Committed open</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Projected final</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Variance</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-800">
-                {slippage.map((r, i) => {
-                  const v = r.variance_cents ?? 0;
-                  return (
-                    <tr key={`${r.cost_code ?? 'n'}-${i}`} className="hover:bg-surface-850/60">
-                      <td className="num px-4 py-2.5 text-slate-300">{r.cost_code ?? '—'}</td>
-                      <td className="px-4 py-2.5 text-slate-300">{r.cost_code_name ?? '—'}</td>
-                      <td className="num px-4 py-2.5 text-right text-slate-400">{usd(r.budgeted_cents)}</td>
-                      <td className="num px-4 py-2.5 text-right text-slate-200">{usd(r.actual_cents)}</td>
-                      <td className="num px-4 py-2.5 text-right text-slate-400">{usd(r.committed_open_cents)}</td>
-                      <td className="num px-4 py-2.5 text-right text-slate-200">{usd(r.projected_final_cents)}</td>
-                      <td className={clsx('num px-4 py-2.5 text-right', v < 0 ? 'text-danger-fg' : 'text-brand-400')}>
-                        {usd(v)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </SectionCard>
-
-      {/* Commitments */}
-      <SectionCard title="Commitments" count={commitments.length}>
-        {commitments.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
-            <ClipboardList className="h-6 w-6 text-slate-600" />
-            <p className="text-sm text-slate-500">No purchase orders or subcontracts on this job yet.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-surface-800 text-left text-2xs uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-2.5 font-medium">Number</th>
-                  <th className="px-4 py-2.5 font-medium">Type</th>
-                  <th className="px-4 py-2.5 font-medium">Status</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Amount</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Invoiced</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Open</th>
-                  <th className="px-4 py-2.5 font-medium">Billed</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-800">
-                {commitments.map((c) => {
-                  const agg = statusByCommitment.get(c.id);
-                  const amount = agg?.amount ?? c.revised_amount_cents ?? c.original_amount_cents ?? 0;
-                  const invoiced = agg?.invoiced ?? 0;
-                  const open = agg?.open ?? Math.max(amount - invoiced, 0);
-                  const pct = amount > 0 ? Math.max(0, Math.min(100, (invoiced / amount) * 100)) : 0;
-                  return (
-                    <tr key={c.id} className="hover:bg-surface-850/60">
-                      <td className="num px-4 py-2.5 text-slate-200">{c.number ?? '—'}</td>
-                      <td className="px-4 py-2.5">
-                        <span className="text-2xs uppercase tracking-wide text-slate-400">
-                          {(c.commitment_type ?? '—').replace(/_/g, ' ').toLowerCase()}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Chip
-                          label={c.status ?? 'draft'}
-                          tone={STATUS_TONE[c.status ?? ''] ?? 'bg-surface-800 text-slate-400 ring-surface-800'}
-                        />
-                      </td>
-                      <td className="num px-4 py-2.5 text-right text-slate-200">{usd(amount)}</td>
-                      <td className="num px-4 py-2.5 text-right text-slate-400">{usd(invoiced)}</td>
-                      <td className="num px-4 py-2.5 text-right text-slate-300">{usd(open)}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-surface-800">
-                            <div className="h-full rounded-full bg-brand-500" style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className="num text-2xs text-slate-500">{pct.toFixed(0)}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </SectionCard>
-
-      {/* External gates */}
-      <SectionCard title="External gates" count={gates.length} action={<AddGate jobId={jobId} />}>
-        {gates.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
-            <ShieldCheck className="h-6 w-6 text-slate-600" />
-            <p className="text-sm text-slate-500">No permits, inspections or acceptance gates tracked.</p>
-            <p className="text-2xs text-slate-600">Use “Add gate” above to start tracking one.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-2 p-4 sm:grid-cols-2">
-            {gates.map((g) => (
-              <div
-                key={g.id}
-                className="flex flex-col gap-2.5 rounded-lg border border-surface-800 bg-surface-950 px-3 py-2.5"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex flex-col">
-                    <span className="text-2xs uppercase tracking-wide text-slate-500">
-                      {(g.gate_type ?? 'gate').replace(/_/g, ' ').toLowerCase()}
-                    </span>
-                    <span className="text-sm text-slate-200">{g.name ?? '—'}</span>
-                  </div>
-                  <Chip
-                    label={g.status ?? 'pending'}
-                    tone={GATE_TONE[g.status ?? ''] ?? 'bg-surface-800 text-slate-400 ring-surface-800'}
-                  />
-                </div>
-                <GateAdvance gateId={g.id} status={g.status ?? 'PENDING'} />
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-    </div>
+      </Page>
+    </>
   );
 }

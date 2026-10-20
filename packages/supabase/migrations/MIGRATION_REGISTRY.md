@@ -40,8 +40,15 @@ Projects migrations sort after all Books migrations, which is safe: `proj` depen
 | # | File | Status |
 |---|---|---|
 | 1100 | `1100_pm_foundation.sql` | applying 2026-10-20 (parts 1–3 live via MCP; 4–6 via SQL editor) — schema `pm`, packs, materialized config, job spine, guards, definer fns (apply_pack_plan, create_project, transition_stage, emit_job_progress, set_contract, set_progress, approve/advance_change_order, load_sample_job, remove_sample_data), views. Shared-spine additive: `core_jobs_org_id_id_uidx`. PGlite harness 113/113. |
-| 1101 | _(next)_ | commitments + billing (SOV, retainage, deposits) + JOB_COMMITMENT/JOB_BILLING emitters |
-| 1102 | _(next)_ | JOB_COST drain (replayable) + job financial views |
+| 1101 | `1101_pm_onboarding_followups.sql` | authored — onboarding_runs advance after APPLIED; `pm.adopt_job`; `pm.set_job_customer` |
+| 1102 | `1102_pm_commitments_billing.sql` | authored — estimates, commitments (+CCO, receipts, compliance/holds), SOV (AIA G702/703), billing generators (progress/SOV/milestone/T&M/retainage release/allowance), `approve_and_emit_billing` (frozen-v3 type + `billing_subtype`, `schema_version` 2), deposits (`JOB_DEPOSIT_REQUEST`), `JOB_COMMITMENT`, reconcile, `pm.approver_roles` role map |
+| 1103 | `1103_pm_cost_drain.sql` | authored — `pm.job_costs` projection, replayable `drain_job_costs`/`rebuild_job_costs`, `refresh_job_costs`, `run_seam_cycle`, `v_job_financials`, `v_cost_code_status`, `v_seam_health` |
+| 1104 | `1104_pm_field_service.sql` | authored — work orders/ROs, dispatch (gist no-overlap; needs `btree_gist`), crews/skills, agreements, assets, truck stock, material moves, warranty claims, KPIs |
+| 1105 | `1105_pm_production.sql` | authored — ETO work centers, routings, operations, BOM, release-to-shop gates, KPIs |
+| 1106 | `1106_pm_selections.sql` | authored — selections + client approvals, procurement items (designer markup), flooring measures, KPIs |
+| 1107 | `1107_pm_development.sql` | authored — units/lots, entitlements, lender draw schedules/draws (G703), in-balance test, KPIs, `pm.v_kpis` |
+
+> **Apply rule for the `pm` chain:** always apply 1100 → 1107 **in order, as a set** (1100 re-baselines grants and guard placeholders; later files re-grant and replace them). PGlite harness: full chain ×2 idempotent (165 fns, 111 relations); suites 121 + 196 + 250 checks green.
 
 > `1004` (G7) built after `1005`/`1006` — independent, idempotent. Legacy `proj` is frozen; new work goes to `pm` (1100+).
 >

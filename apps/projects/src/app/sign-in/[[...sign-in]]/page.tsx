@@ -1,9 +1,16 @@
+import type { Metadata } from 'next';
 import { SignIn } from '@clerk/nextjs';
+import { Lockup } from '@meritbooks/merit-ui';
 
-export default function Page() {
+export const metadata: Metadata = { title: 'Sign in' };
+
+export default function SignInPage() {
   return (
-    <div className="min-h-screen grid place-items-center bg-surface-950">
-      <SignIn />
-    </div>
+    <main className="mp-gate">
+      <div className="mp-gate-card">
+        <Lockup module="projects" variant="full-color" height={32} />
+        <SignIn />
+      </div>
+    </main>
   );
 }
