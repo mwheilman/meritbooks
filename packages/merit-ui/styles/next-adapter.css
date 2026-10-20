@@ -1,0 +1,47 @@
+/* ==========================================================================
+   Merit Suite — Next.js / Tailwind adapter (kit v2.3)
+   The ONLY additions on top of the verbatim kit system.css. Each rule fixes a
+   documented conflict between system.css and Tailwind preflight / Next / a
+   real app (review 01 §1.4). Load AFTER system.css and marks.css, BEFORE
+   tailwind components/utilities.
+   ========================================================================== */
+
+/* 1. Fonts. next/font hashes family names; the kit tokens name the families
+      literally. Point the tokens at the next/font variables (set by
+      fontVariables on <html>), keeping the literal names as fallback for
+      prototypes that load the Google Fonts <link> instead.                  */
+:root{
+  --f-display:var(--font-syne,'Syne'),var(--font-dm-sans,'DM Sans'),system-ui,sans-serif;
+  --f-text:var(--font-dm-sans,'DM Sans'),system-ui,sans-serif;
+}
+
+/* 2. No monospace, anywhere. Preflight gives code/kbd/samp/pre the mono stack. */
+code,kbd,samp,pre{font-family:var(--f-text);font-size:inherit}
+
+/* 3. Placeholders. Preflight colours a bare ::placeholder Tailwind gray-400 (off-palette). */
+input::placeholder,textarea::placeholder{color:var(--ink-3);opacity:1}
+
+/* 4. Viewport-height shell. .app{min-height:100vh} lets the page grow past the
+      viewport so the rail scrolls away; a real app pins the shell and scrolls
+      .main (and .rail-nav) instead. The boards fake this with inline height. */
+.app--viewport{height:100vh;height:100dvh;min-height:0;overflow:hidden}
+.app--viewport .rail{min-height:0;overflow:hidden}
+
+/* 5. Overlays. The kit .scrim is absolute inside a positioned frame; React
+      overlays render through a portal on <body>, so they need fixed.        */
+.scrim--fixed{position:fixed}
+.popover--fixed{position:fixed}
+
+/* 6. WebKit table rows. Safari does not reliably paint background or
+      box-shadow on <tr>; the kit paints the queue cursor/selection there.
+      Repaint the same treatment on the cells (identical values) and drop the
+      row-level shadow so Chromium doesn't draw it twice.                     */
+.tbl-q tr.q-row:hover>td{background:var(--grey-100)}
+.tbl-q tr.q-row.is-selected>td{background:var(--sky)}
+.tbl-q tr.q-row.is-selected:hover>td{background:var(--blue-100)}
+.tbl-q tr.q-row.is-cursor{box-shadow:none}
+.tbl-q tr.q-row.is-cursor>td{background:var(--white);box-shadow:inset 0 1px var(--electric),inset 0 -1px var(--electric)}
+.tbl-q tr.q-row.is-cursor>td:first-child{box-shadow:inset 3px 0 var(--electric),inset 0 1px var(--electric),inset 0 -1px var(--electric)}
+.tbl-q tr.q-row.is-cursor>td:last-child{box-shadow:inset -1px 0 var(--electric),inset 0 1px var(--electric),inset 0 -1px var(--electric)}
+.tbl-q tr.q-row.is-cursor.is-attn>td:first-child{box-shadow:inset 3px 0 var(--neg),inset 0 1px var(--electric),inset 0 -1px var(--electric)}
+.tbl-q tr.q-row.is-cursor.is-selected:hover>td{background:var(--blue-100)}

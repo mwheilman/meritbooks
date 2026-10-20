@@ -1,0 +1,162 @@
+/* ==========================================================================
+   Merit Suite — promoted page-local marks (kit v2.3, README §6a / §6b)
+   Copied verbatim from the boards' inline <style> blocks. Values are the
+   boards' values; do not hand-tune. Load AFTER system.css.
+
+   Source of each block:
+     .src .srcs .prov .tier .stgw    O-control-tower.html (onboarding marks, shared by O-* + S18)
+     8-stroke migration meter        O-control-tower.html (.stgw + .meter with 8 <i>)
+     .pipe                           S20-pay-runs.html
+     .seq .seq-ax .seq-lg            S20-pay-runs.html
+     .trk .trk-ax                    S22-receipt-chase.html
+     .pb .lgd                        S23-fpna.html
+     .ru                             S24-debt-lender.html
+     .ih  .cell                      S27-settings.html (.cell un-scoped from ".lin .cell")
+
+   Collisions resolved:
+     - S23 defines a different page-local ".src" (a caption). The onboarding
+       ".src" chip wins; use .t-cap for S23's caption.
+     - The control tower's global ".who" (flex column) is scoped to
+       ".stgw .who" so it can't fight S20's ".pipe .who".
+     - S22/S23/S24 each define a slightly different legend (.lg / .lgd). The
+       S23 plan-bar legend is promoted as .lgd; the S22 cadence legend as
+       .trk-lg (renamed from .lg so it can't collide); the S20 sequence legend
+       stays .seq-lg.
+   ========================================================================== */
+
+/* -------------------------------------------------------------- Source chip
+   A connected system + health pip; the word is in .sr text.
+   Dashed = bridge through QuickBooks, always labelled temporary.           */
+.src{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border:1px solid var(--line-2);background:var(--white);
+  font:500 12px/16px var(--f-text);color:var(--ink);white-space:nowrap}
+.src .pip{width:8px;height:8px}
+.src small{font:inherit;color:var(--ink-3)}
+.src--bridge{border-style:dashed}
+.srcs{display:flex;gap:4px;flex-wrap:nowrap;min-width:0}
+
+/* -------------------------------------------------------------- Provenance
+   "Where this default came from" beside any prefilled value.               */
+.prov{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:16px;color:var(--ink-3);white-space:nowrap}
+.prov::before{content:"";width:6px;height:6px;background:var(--electric);transform:skewX(-45deg);flex:none}
+
+/* -------------------------------------------------------------- How it connects
+   Live API · Partner pending · Bridge · temporary · File drop.
+   Never shows a status the product can't honor.                            */
+.tier{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;font-weight:500}
+.tier--live{color:var(--pos)} .tier--partner{color:var(--warn)} .tier--bridge,.tier--file{color:var(--ink-2)}
+
+/* -------------------------------------------------------------- Migration stage (8-stroke meter)
+   <div class="stgw"><span class="meter" role="img" aria-label="Stage 4 of 8, Map">
+     <i class="on"></i>×3 <i class="cur"></i> <i></i>×4</span>
+     <span class="who"><span class="l1">Map</span><span class="l2">day 3</span></span></div>
+   on = done · cur = current · bad = current and blocked.                    */
+.stgw{display:flex;align-items:center;gap:8px;min-width:0}
+.stgw .meter{padding:0 4px 0 6px}
+.stgw .who{display:flex;flex-direction:column;min-width:0}
+
+/* -------------------------------------------------------------- Run pipeline (S20)
+   One owner per step: Queue · Approve · Print or export · Release · Clear.  */
+.pipe{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid var(--line);background:var(--white)}
+.pipe li{list-style:none;position:relative;padding:12px 16px 14px;border-right:1px solid var(--line);min-width:0}
+.pipe li:last-child{border-right:0}
+.pipe .no{font:700 20px/28px var(--f-display);color:transparent;-webkit-text-stroke:1px var(--electric)}
+.pipe .lb{display:block;font-weight:600;margin-top:2px}
+.pipe .who{display:block;font-size:12px;line-height:16px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pipe li.is-cur{background:var(--sky);box-shadow:inset 0 2px var(--electric)}
+.pipe li.is-cur .no{color:var(--electric);-webkit-text-stroke:0}
+.pipe li.is-done .no{color:var(--ink-2);-webkit-text-stroke:0}
+
+/* -------------------------------------------------------------- Sequence strip (S20)
+   One cell per number: cleared (Steel), outstanding (o), void (v, brick
+   slash), this run (r), next (n, hatched). Every number accounted for.     */
+.seq{display:flex;flex-wrap:nowrap;gap:2px;margin-top:12px}
+.seq i{position:relative;display:block;flex:1;min-width:0;height:32px;background:var(--steel)}
+.seq i.o{background:var(--white);box-shadow:inset 0 0 0 1.5px var(--steel)}
+.seq i.v{background:var(--white);box-shadow:inset 0 0 0 1.5px var(--neg)}
+.seq i.v::before{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--neg);transform:rotate(45deg)}
+.seq i.r{background:var(--electric)}
+.seq i.r.j{background:var(--white);box-shadow:inset 0 0 0 1.5px var(--neg)}
+.seq i.r.j::before{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--neg);transform:rotate(45deg)}
+.seq i.n{background:repeating-linear-gradient(135deg,var(--white) 0 3px,var(--blue-200) 3px 5px);box-shadow:inset 0 0 0 1px var(--blue-200)}
+.seq-ax{position:relative;height:16px;margin-top:6px;font-size:12px;line-height:16px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.seq-ax span{position:absolute;top:0}
+.seq-lg{display:flex;flex-wrap:wrap;gap:4px 20px;margin-top:10px;font-size:12px;line-height:16px;color:var(--ink-2)}
+.seq-lg span{display:inline-flex;align-items:center;gap:6px}
+.seq-lg i{position:relative;display:inline-block;width:10px;height:14px;background:var(--steel)}
+.seq-lg i.o{background:var(--white);box-shadow:inset 0 0 0 1.5px var(--steel)}
+.seq-lg i.v{background:var(--white);box-shadow:inset 0 0 0 1.5px var(--neg)}
+.seq-lg i.v::before{content:"";position:absolute;left:4px;top:-2px;bottom:-2px;width:2px;background:var(--neg);transform:rotate(45deg)}
+.seq-lg i.r{background:var(--electric)}
+.seq-lg i.n{background:repeating-linear-gradient(135deg,var(--white) 0 3px,var(--blue-200) 3px 5px);box-shadow:inset 0 0 0 1px var(--blue-200)}
+
+/* -------------------------------------------------------------- Cadence track (S22)
+   Reminders as the 45° slash on a day axis: filled sent, hollow (up) next,
+   brick (esc) at escalation, grey (ps) paused, a Midnight bar for today.   */
+.trk{position:relative;display:block;height:24px;width:100%;min-width:0}
+.trk::before{content:"";position:absolute;left:0;right:0;top:11px;height:1px;background:var(--line-2)}
+.trk i{position:absolute;top:4px;width:4px;height:16px;margin-left:-2px;transform:skewX(-30deg);background:var(--electric)}
+.trk i.up{background:var(--white);box-shadow:inset 0 0 0 1px var(--electric)}
+.trk i.esc{background:var(--neg)}
+.trk i.esc.up{background:var(--white);box-shadow:inset 0 0 0 1px var(--neg)}
+.trk i.ps{background:var(--grey-300)}
+.trk b{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--midnight)}
+.trk b::after{content:attr(data-d);position:absolute;top:-1px;left:5px;font:600 12px/12px var(--f-text);color:var(--ink);white-space:nowrap;background:var(--white);padding:0 2px}
+.trk b.fl::after{left:auto;right:5px}
+.trk-ax{display:flex;justify-content:space-between;font-size:12px;line-height:16px;color:var(--ink-3)}
+.trk-lg{display:flex;flex-wrap:wrap;gap:4px 20px;font-size:12px;line-height:16px;color:var(--ink-2)}
+.trk-lg span{display:inline-flex;align-items:center;gap:6px}
+.trk-lg i{display:inline-block;width:4px;height:14px;transform:skewX(-30deg);background:var(--electric)}
+.trk-lg i.up{background:var(--white);box-shadow:inset 0 0 0 1px var(--electric)}
+.trk-lg i.esc{background:var(--neg)}
+.trk-lg i.ps{background:var(--grey-300)}
+
+/* -------------------------------------------------------------- Plan bar (S23)
+   Actual (a, Midnight) · committed (c, blue slash hatch) · estimated (e,
+   outline) against a budget tick (b brick short, b.ok spruce met).
+   Bars on one screen share one scale.                                       */
+.pb{position:relative;display:block;height:16px;background:transparent}
+.pb span{position:absolute;top:0;bottom:0}
+.pb .a{background:var(--midnight)}
+.pb .c{background:repeating-linear-gradient(135deg,var(--electric) 0 3px,var(--blue-200) 3px 6px)}
+.pb .e{background:var(--white);box-shadow:inset 0 0 0 1.5px var(--blue-300)}
+.pb .b{top:-5px;bottom:-5px;width:2px;margin-left:-1px;background:var(--neg)}
+.pb .b.ok{background:var(--pos)}
+.lgd{display:flex;flex-wrap:wrap;gap:4px 20px;font-size:12px;line-height:16px;color:var(--ink-2)}
+.lgd span{display:inline-flex;align-items:center;gap:6px}
+.lgd i{display:inline-block;width:20px;height:10px}
+.lgd i.a{background:var(--midnight)} .lgd i.c{background:repeating-linear-gradient(135deg,var(--electric) 0 3px,var(--blue-200) 3px 6px)}
+.lgd i.e{background:var(--white);box-shadow:inset 0 0 0 1.5px var(--blue-300)} .lgd i.b{width:2px;height:16px;background:var(--neg)}
+
+/* -------------------------------------------------------------- Headroom ruler (S24)
+   Limit line, breach zone hatched, today block, forecast outlines; the
+   tightest forecast is labelled.                                            */
+.ru{position:relative;height:56px}
+.ru .track{position:absolute;left:0;right:0;top:24px;height:8px;background:var(--grey-100);box-shadow:inset 0 0 0 1px var(--line-2)}
+.ru .zone{position:absolute;top:24px;height:8px;background:repeating-linear-gradient(135deg,var(--neg-wash) 0 4px,var(--neg) 4px 5px)}
+.ru .lim{position:absolute;top:14px;height:28px;width:2px;margin-left:-1px;background:var(--neg)}
+.ru .lim span{position:absolute;top:-14px;left:-40px;width:80px;text-align:center;font-size:12px;line-height:12px;color:var(--neg);font-weight:600;white-space:nowrap}
+.ru .now{position:absolute;top:18px;width:12px;height:20px;margin-left:-6px;background:var(--midnight)}
+.ru .fc{position:absolute;top:21px;width:10px;height:14px;margin-left:-5px;background:var(--white);box-shadow:inset 0 0 0 2px var(--electric)}
+.ru .fc.bad{box-shadow:inset 0 0 0 2px var(--neg)}
+.ru .lb{position:absolute;top:42px;font-size:12px;line-height:14px;color:var(--ink-3);white-space:nowrap;transform:translateX(-50%)}
+.ru .lb.now-l{color:var(--ink);font-weight:600}
+
+/* -------------------------------------------------------------- Inheritance marks (S27)
+   Follows the firm's default (outline + ↳) · overrides (ov, filled Electric)
+   · this company only (own, hatched). Never colour alone.                   */
+.ih{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:16px;white-space:nowrap;color:var(--ink-3)}
+.ih i{position:relative;display:inline-block;width:14px;height:14px;box-shadow:inset 0 0 0 1.5px var(--night-500);flex:none}
+.ih i::after{content:"";position:absolute;left:3px;top:3px;width:5px;height:5px;border-left:1.5px solid var(--night-500);border-bottom:1.5px solid var(--night-500)}
+.ih.ov{color:var(--electric);font-weight:600}
+.ih.ov i{background:var(--electric);box-shadow:none}
+.ih.ov i::after{border-color:var(--white)}
+.ih.own{color:var(--ink-2)}
+.ih.own i{box-shadow:inset 0 0 0 1.5px var(--ink-2);background:repeating-linear-gradient(135deg,transparent 0 3px,var(--grey-300) 3px 4px)}
+.ih.own i::after{display:none}
+/* Inheritance cell — a 16px mark in a 32px target, for matrices            */
+.cell{display:inline-grid;place-items:center;width:32px;height:32px}
+.cell i{position:relative;display:block;width:16px;height:16px;box-shadow:inset 0 0 0 1.5px var(--night-500)}
+.cell i::after{content:"";position:absolute;left:4px;top:3px;width:6px;height:6px;border-left:1.5px solid var(--night-500);border-bottom:1.5px solid var(--night-500)}
+.cell.ov i{background:var(--electric);box-shadow:none}
+.cell.ov i::after{border-color:var(--white)}
+.cell.na{color:var(--ink-3)}

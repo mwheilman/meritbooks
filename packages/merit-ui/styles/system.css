@@ -1,0 +1,697 @@
+/* ==========================================================================
+   MeritBooks Design System v2
+   One system, two densities:
+     .density-report  (A "Annual Report")  owner / CFO / FD / dept head / auditor
+     .density-cockpit (B "Operator Cockpit") bookkeeper / manager / controller /
+                                              payroll / clerk / platform
+   Rules: brand palette only (+ three tuned functional colours), Syne + DM Sans
+   only, tabular figures, 8-pt spacing, square geometry (2px only on keycaps).
+   No banner heroes. Every number has a comparison and a destination.
+   ========================================================================== */
+
+/* -------------------------------------------------------------- 1. TOKENS */
+:root{
+  /* Brand — Merit Brand Guidelines 2026, p.12–14 (exact) */
+  --electric:#2563EB;   /* main: titles, buttons, rules, focus, links        */
+  --signal:#3B82F6;     /* accent on Midnight only                           */
+  --midnight:#0A1628;   /* shell, body copy, totals                          */
+  --steel:#3D4F65;      /* secondary text; consolidated shell                */
+  --slate:#8494A7;      /* labels on Midnight only (3.1:1 on white — never text on light) */
+  --warm:#FDFCFA;       /* page                                              */
+  --canvas:#F5F3EF;     /* insets, notes column, group rows                  */
+  --sky:#EBF2FE;        /* selection, AI, info wash                          */
+  --white:#FFFFFF;      /* surfaces that sit on the page                     */
+
+  /* Ramps — sampled from the guide's Usage page (p.14) */
+  --blue-300:#6AA8FF; --blue-200:#A9CCFF; --blue-100:#DCEBFF;
+  --grey-100:#F2F3F5; --grey-200:#E1E5EA; --grey-300:#CCD3DB; --grey-400:#B5BEC8;
+  --night-800:#1A2A3F; --night-700:#2A3E57; --night-600:#3F566F; --night-500:#5A738D;
+
+  /* Text tiers (contrast on Warm White) */
+  --ink:#0A1628;        /* 17.7:1 */
+  --ink-2:#3D4F65;      /*  8.2:1 */
+  --ink-3:#536A82;      /*  5.5:1  — the AA floor for captions on light       */
+  --line:#E1E5EA;       /* hairline                                          */
+  --line-2:#CCD3DB;     /* control border                                    */
+
+  /* Functional — tuned dark so they sit beside Midnight and Steel */
+  --pos:#1F6E50;  --pos-wash:#E6F1EC;   /* spruce 6.2:1  · on wash 5.3:1     */
+  --neg:#B42318;  --neg-wash:#FBEAE8;   /* brick  6.6:1  · on wash 5.7:1     */
+  --warn:#8A5A00; --warn-wash:#F7EFDF;  /* ochre  5.9:1  · on wash 5.2:1     */
+
+  /* Type — only Syne (700) and DM Sans (400/500/600/700) */
+  --f-display:'Syne','DM Sans',system-ui,sans-serif;
+  --f-text:'DM Sans',system-ui,sans-serif;
+  --t-12:12px; --t-13:13px; --t-15:15px; --t-20:20px; --t-28:28px; --t-40:40px;
+  --lh-12:16px; --lh-13:20px; --lh-15:24px; --lh-20:28px; --lh-28:32px; --lh-40:48px;
+
+  /* Space — 8-pt (4 only for optical nudges) */
+  --s-half:4px; --s1:8px; --s2:16px; --s3:24px; --s4:32px; --s5:40px; --s6:48px; --s8:64px;
+
+  /* Shell */
+  --rail:232px; --rail-mini:64px; --bar:48px; --ctxline:32px; --gutter:24px; --margin:32px;
+
+  /* Dashboard grid */
+  --row:136px;          /* one grid row; h2 = 296px, h4 = 616px              */
+
+  /* Elevation — hairlines first; shadow only for things that float */
+  --float:0 1px 0 var(--midnight),0 24px 48px -16px rgba(10,22,40,.40);
+  --lift:0 2px 0 var(--electric),0 16px 32px -12px rgba(10,22,40,.35);
+
+  --ease:cubic-bezier(.2,.7,.2,1);
+  --fast:.12s; --med:.2s;
+}
+
+/* -------------------------------------------------------------- 2. BASE */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%;color-scheme:light}
+body{font:400 var(--t-13)/var(--lh-13) var(--f-text);color:var(--ink);background:var(--warm);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;font-optical-sizing:auto}
+a{color:inherit;text-decoration:none}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+img{display:block}
+table{border-collapse:collapse;width:100%}
+.tnum,.n,td.n,th.n{font-variant-numeric:tabular-nums lining-nums}
+.n{text-align:right;white-space:nowrap}
+.sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skip{position:absolute;left:-9999px;top:8px;z-index:200;background:var(--electric);color:var(--white);padding:8px 16px}
+.skip:focus{left:8px}
+:focus-visible{outline:2px solid var(--electric);outline-offset:2px}
+.on-dark :focus-visible,.rail :focus-visible,.bar :focus-visible,.toast :focus-visible,.support-band :focus-visible{outline-color:var(--signal)}
+[data-context="own"] .bar :focus-visible{outline-color:var(--white)}
+
+/* -------------------------------------------------------------- 3. TYPE
+   Max five sizes per screen. Syne: page title, section title, statement
+   bottom line, note numerals. DM Sans does the work.                        */
+.t-display{font:700 var(--t-40)/var(--lh-40) var(--f-display);letter-spacing:-.02em;color:var(--electric)}
+.t-title{font:700 var(--t-28)/var(--lh-28) var(--f-display);letter-spacing:-.01em;color:var(--electric)}
+.t-section{font:700 var(--t-20)/var(--lh-20) var(--f-display);letter-spacing:-.005em;color:var(--electric)}
+.t-head{font:600 var(--t-15)/var(--lh-15) var(--f-text);color:var(--ink)}
+.t-body{font:400 var(--t-15)/var(--lh-15) var(--f-text)}
+.t-ui{font:400 var(--t-13)/var(--lh-13) var(--f-text)}
+.t-cap{font:400 var(--t-12)/var(--lh-12) var(--f-text);color:var(--ink-3)}
+.eyebrow{font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.sl{color:var(--electric);margin:0 .5em;letter-spacing:0}           /* the brand's "//" */
+.on-dark .sl,.rail .sl,.bar .sl{color:var(--signal)}
+.outline-num{font:700 var(--t-28)/var(--lh-28) var(--f-display);color:transparent;-webkit-text-stroke:1px var(--electric)}
+.ink{color:var(--ink)} .ink-2{color:var(--ink-2)} .ink-3{color:var(--ink-3)}
+.pos{color:var(--pos)} .neg{color:var(--neg)} .warn{color:var(--warn)} .blue{color:var(--electric)}
+.b{font-weight:600}
+.link{color:var(--electric);font-weight:500;text-decoration:underline;text-decoration-color:var(--blue-200);text-underline-offset:3px;transition:text-decoration-color var(--fast)}
+.link:hover{text-decoration-color:var(--electric)}
+.rule{height:1px;background:var(--electric);border:0}
+.rule--2{height:2px}
+
+/* -------------------------------------------------------------- 4. SHELL
+   <div class="app" data-context="client|own|consolidated|workspace|platform">
+     [.support-band]  .rail  .bar  .main(.ctxline + .page)                   */
+.app{display:grid;grid-template-columns:var(--rail) minmax(0,1fr);grid-template-rows:auto var(--bar) minmax(0,1fr);
+  grid-template-areas:"band band" "rail bar" "rail main";min-height:100vh;background:var(--warm)}
+.app--mini{grid-template-columns:var(--rail-mini) minmax(0,1fr)}
+.app--frame{min-height:0}
+
+/* Rail */
+.rail{grid-area:rail;background:var(--midnight);color:var(--warm);display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--night-800)}
+.rail-logo{height:var(--bar);display:flex;align-items:center;gap:16px;padding:0 24px;flex:none}
+.rail-logo img{height:24px;width:auto;max-width:100%}   /* v2.3: the product lockup (assets/lockups/merit-<module>-horizontal-on-dark.svg). The product name is part of the logo — never a separate label. */
+.rail-nav{flex:1;overflow:auto;padding:8px 0 16px}
+.rail-group{font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:.14em;text-transform:uppercase;color:var(--slate);padding:16px 24px 8px}
+.rail-link{position:relative;display:flex;align-items:center;gap:8px;height:32px;padding:0 16px 0 24px;color:var(--grey-300);font-weight:500;
+  transition:background-color var(--fast) var(--ease),color var(--fast) var(--ease)}
+.rail-link:hover{background:var(--night-800);color:var(--warm)}
+.rail-link[aria-current=page]{background:var(--night-800);color:var(--warm)}
+.rail-link[aria-current=page]::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;background:var(--signal)}
+.rail-link .count{margin-left:auto;color:var(--slate);font-variant-numeric:tabular-nums}
+.rail-link .count--alert{color:var(--warm);background:var(--neg);padding:0 6px;line-height:20px;font-weight:600}
+.rail-link .keys{margin-left:auto;display:none;gap:2px}
+.rail-link:hover .keys{display:inline-flex}
+.rail-link:hover .count{display:none}
+.rail-foot{border-top:1px solid var(--night-800);padding:16px 24px 20px;flex:none}
+.rail-foot .eyebrow{color:var(--slate)}
+.rail-period{display:flex;justify-content:space-between;align-items:baseline;margin-top:4px;color:var(--warm);font-weight:500}
+.rail-period span{color:var(--slate);font-weight:400}
+.rail-user{display:flex;align-items:center;gap:12px;margin-top:16px;color:var(--grey-300)}
+.rail-user small{display:block;font-size:var(--t-12);line-height:var(--lh-12);color:var(--slate)}
+.avatar{width:32px;height:32px;flex:none;display:grid;place-items:center;background:var(--night-700);color:var(--warm);font:600 var(--t-12)/1 var(--f-text);letter-spacing:.04em}
+.app--mini .rail-logo{padding:0;justify-content:center}
+.app--mini .rail-logo img{height:20px}
+.rail-icon{display:grid;place-items:center;width:40px;height:40px;margin:2px auto;color:var(--grey-300);transition:background-color var(--fast)}
+.rail-icon:hover,.rail-icon[aria-current=page]{background:var(--night-800);color:var(--warm)}
+
+/* Top bar — carries the context chip; changes with context */
+.bar{grid-area:bar;position:relative;z-index:5;display:flex;align-items:center;gap:16px;padding:0 24px 0 16px;background:var(--midnight);color:var(--warm);border-bottom:1px solid var(--night-800)}
+.crumbs{color:var(--grey-300);white-space:nowrap;font-weight:500}
+.crumbs b{color:var(--warm);font-weight:600}
+.cmdk{margin-left:auto;display:flex;align-items:center;gap:8px;width:320px;height:32px;padding:0 6px 0 10px;background:var(--night-800);border:1px solid var(--night-700);color:var(--slate);transition:border-color var(--fast)}
+.cmdk:hover{border-color:var(--night-500)}
+.cmdk span:not(.kbd){flex:1;text-align:left;white-space:nowrap}   /* v2.1: the keycap must not flex, or the label wraps */
+.cmdk .kbd{flex:none}
+.sync{display:flex;align-items:center;gap:8px;color:var(--slate);white-space:nowrap;font-size:var(--t-12)}
+.sync i{width:6px;height:6px;background:var(--signal)}
+
+/* Context chip — the switcher trigger (⌘J) */
+.ctx{display:flex;align-items:center;gap:10px;height:32px;max-width:440px;padding:0 6px 0 10px;background:var(--night-800);border:1px solid var(--night-700);color:var(--warm);font-weight:600;white-space:nowrap;transition:border-color var(--fast)}
+.ctx:hover,.ctx[aria-expanded=true]{border-color:var(--signal)}
+.ctx-name{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.ctx-meta{color:var(--grey-300);font-weight:400}
+.ctx-tag{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 6px;font:600 var(--t-12)/20px var(--f-text);letter-spacing:.02em}
+.ctx svg{flex:none}
+
+/* Context line — 32px, the only thing above the primary module */
+.main{grid-area:main;min-width:0;min-height:0;position:relative;overflow:auto}
+.ctxline{display:flex;align-items:center;gap:0;height:var(--ctxline);padding:0 var(--margin);border-bottom:1px solid var(--line);color:var(--ink-2);white-space:nowrap;background:var(--warm)}
+.ctxline b{color:var(--ink);font-weight:600}
+.ctxline .sp{flex:1}
+.ctxline .btn{height:32px;margin-right:-12px}
+.page{padding:var(--s3) var(--margin) var(--s6)}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:var(--s3)}
+
+/* ----- The four context states (+ two quiet ones) ------------------------
+   client       Midnight bar. Baseline working state.
+   own          The bar takes the tenant's brand colour (Electric Blue for
+                Merit). The firm's own books wear the firm's own colour.
+   consolidated Steel bar closed by a double rule — the annual-report rule
+                that closes a total. Read-only; processing nav removed.
+   support      Overlay: a brick band ABOVE the shell, hatched with the
+                monogram's 45° slash, countdown + End always visible.
+   workspace / platform  Midnight bar, chip only.                          */
+[data-context="own"] .bar{background:var(--electric);border-bottom-color:var(--electric)}
+[data-context="own"] .bar .crumbs,[data-context="own"] .bar .crumbs b,[data-context="own"] .bar .sync{color:var(--white)}
+[data-context="own"] .bar .sync i{background:var(--white)}
+[data-context="own"] .ctx{background:var(--midnight);border-color:var(--midnight)}
+[data-context="own"] .ctx:hover,[data-context="own"] .ctx[aria-expanded=true]{border-color:var(--white)}
+[data-context="own"] .cmdk{background:var(--midnight);border-color:var(--midnight);color:var(--grey-300)}
+.ctx-tag--own{background:var(--electric);color:var(--white)}
+[data-context="own"] .ctx-tag--own{background:var(--warm);color:var(--midnight)}
+
+[data-context="consolidated"] .bar{background:var(--steel);border-bottom:0}
+[data-context="consolidated"] .bar::after{content:"";position:absolute;left:0;right:0;top:100%;height:6px;
+  background:linear-gradient(var(--electric) 0 2px,var(--warm) 2px 4px,var(--electric) 4px 6px)}
+[data-context="consolidated"] .main{padding-top:6px}
+[data-context="consolidated"] .bar .crumbs{color:var(--blue-100)}
+[data-context="consolidated"] .bar .crumbs b{color:var(--white)}
+[data-context="consolidated"] .bar .sync{color:var(--blue-100)}
+[data-context="consolidated"] .ctx{background:var(--night-700);border-color:var(--night-600)}
+[data-context="consolidated"] .ctx-meta{color:var(--blue-100)}
+[data-context="consolidated"] .cmdk{background:var(--night-700);border-color:var(--night-600);color:var(--blue-100)}
+.ctx-tag--ro{background:var(--warm);color:var(--steel)}
+
+.support-band{grid-area:band;display:flex;align-items:center;gap:16px;height:32px;padding:0 16px 0 0;background:var(--neg);color:var(--white);font-weight:500;white-space:nowrap}
+.support-band::before{content:"";align-self:stretch;width:var(--rail);flex:none;
+  background:repeating-linear-gradient(135deg,transparent 0 6px,rgba(255,255,255,.28) 6px 9px),#8A2016}
+.support-band b{font-weight:700}
+.support-band .sp{flex:1}
+.support-band .clock{font-variant-numeric:tabular-nums;font-weight:700;min-width:44px}
+.support-band .btn{height:24px;padding:0 10px;background:transparent;border-color:rgba(255,255,255,.7);color:var(--white)}
+.support-band .btn:hover{background:var(--white);color:var(--neg);border-color:var(--white)}
+.support-band .btn::after{content:"";position:absolute;inset:-4px -2px}   /* 32px hit area */
+
+/* -------------------------------------------------------------- 5. BUTTONS */
+.btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:32px;padding:0 12px;
+  font-weight:600;white-space:nowrap;border:1px solid var(--line-2);background:var(--white);color:var(--ink);
+  transition:border-color var(--fast) var(--ease),color var(--fast) var(--ease),background-color var(--fast) var(--ease)}
+.btn:hover{border-color:var(--electric);color:var(--electric)}
+.btn:active{transform:translateY(1px)}
+.btn--primary{background:var(--electric);border-color:var(--electric);color:var(--white)}
+.btn--primary:hover{background:var(--midnight);border-color:var(--midnight);color:var(--white)}
+.btn--quiet{background:transparent;border-color:transparent;color:var(--electric)}
+.btn--quiet:hover{background:var(--sky);border-color:transparent}
+.btn--danger{background:var(--white);border-color:var(--neg);color:var(--neg)}
+.btn--danger:hover{background:var(--neg);color:var(--white);border-color:var(--neg)}
+.btn--dark{background:var(--night-800);border-color:var(--night-700);color:var(--warm)}
+.btn--dark:hover{border-color:var(--signal);color:var(--warm)}
+.btn--lg{height:40px;padding:0 16px;font-size:var(--t-15)}
+.btn--icon{width:32px;padding:0}
+.btn[disabled],.btn[aria-disabled=true]{background:var(--grey-100);border-color:var(--line);color:var(--ink-3);cursor:not-allowed;transform:none}
+.btn .n{font-weight:500;opacity:.8}
+.btn-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+/* Keycaps — the one 2px radius in the system, so they read as keys */
+.kbd{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;font:500 var(--t-12)/1 var(--f-text);color:var(--ink-2);
+  background:var(--white);border:1px solid var(--line-2);border-bottom-width:2px;border-radius:2px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kbd+.kbd{margin-left:2px}
+.kbd--dark,.rail .kbd,.bar .kbd,.toast .kbd,.keybar .kbd{background:var(--night-800);border-color:var(--night-600);color:var(--grey-300)}
+.btn--primary .kbd{background:transparent;border-color:rgba(255,255,255,.55);color:var(--white)}
+.keys{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.keyhints{display:flex;align-items:center;gap:16px;color:var(--ink-3);font-size:var(--t-12)}
+.keybar{display:flex;align-items:center;gap:24px;height:40px;padding:0 var(--margin);background:var(--midnight);color:var(--grey-300);font-size:var(--t-12)}
+.keybar .sp{flex:1}
+
+/* -------------------------------------------------------------- 6. INPUTS */
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field-label{font:500 var(--t-12)/var(--lh-12) var(--f-text);color:var(--ink-2)}
+.field-help{font-size:var(--t-12);line-height:var(--lh-12);color:var(--ink-3)}
+.field-error{font-size:var(--t-12);line-height:var(--lh-12);color:var(--neg);font-weight:500}
+.input,.select,.textarea{height:32px;width:100%;padding:0 10px;border:1px solid var(--line-2);background:var(--white);color:var(--ink);outline:none;
+  transition:border-color var(--fast),box-shadow var(--fast)}
+.textarea{height:auto;min-height:72px;padding:8px 10px;resize:vertical;line-height:var(--lh-13)}
+.input::placeholder,.textarea::placeholder{color:var(--ink-3)}
+.input:hover,.select:hover,.textarea:hover{border-color:var(--grey-400)}
+.input:focus,.select:focus,.textarea:focus,.input.is-focus{border-color:var(--electric);box-shadow:0 0 0 1px var(--electric)}
+.input.is-error{border-color:var(--neg);box-shadow:0 0 0 1px var(--neg)}
+.input[disabled]{background:var(--grey-100);color:var(--ink-3)}
+.input--money{text-align:right;font-variant-numeric:tabular-nums}
+.select{appearance:none;padding-right:28px;background:var(--white) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%233D4F65' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 10px center}
+.search{display:flex;align-items:center;gap:8px;height:32px;padding:0 6px 0 10px;border:1px solid var(--line-2);background:var(--white);color:var(--ink-3);min-width:0}
+.search:focus-within{border-color:var(--electric);box-shadow:0 0 0 1px var(--electric)}
+.search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--ink)}
+.search input::placeholder{color:var(--ink-3)}
+.check,.radio{position:relative;display:inline-flex;align-items:center;gap:8px;min-height:32px;cursor:pointer}
+.check input,.radio input{position:absolute;opacity:0;width:32px;height:32px;left:-8px;margin:0;cursor:pointer}
+.check i,.radio i{flex:none;width:16px;height:16px;border:1.5px solid var(--grey-400);background:var(--white);transition:background-color var(--fast),border-color var(--fast)}
+.radio i{border-radius:50%}
+.check:hover i,.radio:hover i{border-color:var(--electric)}
+.check input:checked+i{background:var(--electric) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath d='M3.5 8.2 6.6 11 12.5 4.8' fill='none' stroke='%23FFFFFF' stroke-width='1.8'/%3E%3C/svg%3E") center no-repeat;border-color:var(--electric)}
+.check input:indeterminate+i{background:var(--electric) linear-gradient(var(--white),var(--white)) center/8px 2px no-repeat;border-color:var(--electric)}
+.radio input:checked+i{border:5px solid var(--electric)}
+.check input:focus-visible+i,.radio input:focus-visible+i{outline:2px solid var(--electric);outline-offset:2px}
+.check input:disabled+i{background:var(--grey-100);border-color:var(--line-2)}
+.switch{position:relative;display:inline-flex;align-items:center;gap:8px;min-height:32px;cursor:pointer}
+.switch input{position:absolute;opacity:0;width:36px;height:20px;margin:0}
+.switch i{width:32px;height:16px;background:var(--grey-300);position:relative;transition:background-color var(--fast)}
+.switch i::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;background:var(--white);transition:transform var(--fast) var(--ease)}
+.switch input:checked+i{background:var(--electric)}
+.switch input:checked+i::after{transform:translateX(16px)}
+.switch input:focus-visible+i{outline:2px solid var(--electric);outline-offset:2px}
+
+/* -------------------------------------------------------------- 7. TABS */
+.tabs{display:flex;gap:24px;border-bottom:1px solid var(--line)}
+.tab{position:relative;display:inline-flex;align-items:center;gap:8px;height:40px;color:var(--ink-2);font-weight:500;transition:color var(--fast)}
+.tab:hover{color:var(--ink)}
+.tab .n{color:var(--ink-3)}
+.tab[aria-selected=true]{color:var(--ink);font-weight:600}
+.tab[aria-selected=true]::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--electric)}
+.tab[aria-selected=true] .n{color:var(--electric)}
+.seg{display:inline-flex;border:1px solid var(--line-2);background:var(--white);height:32px}
+.seg button{padding:0 12px;font-weight:500;color:var(--ink-2);border-right:1px solid var(--line-2);transition:background-color var(--fast),color var(--fast)}
+.seg button:last-child{border-right:0}
+.seg button:hover{background:var(--grey-100);color:var(--ink)}
+.seg button[aria-pressed=true],.seg button[aria-selected=true]{background:var(--midnight);color:var(--warm)}
+.seg .n{margin-left:6px;color:var(--ink-3)}
+.seg button[aria-pressed=true] .n,.seg button[aria-selected=true] .n{color:var(--grey-400)}
+/* Band tabs — Decide / Check / Ready. The band name, its count, and a meter. */
+.bands{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);background:var(--white)}
+.band-tab{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 16px;border-right:1px solid var(--line);text-align:left;transition:background-color var(--fast)}
+.band-tab:last-child{border-right:0}
+.band-tab:hover{background:var(--grey-100)}
+.band-tab[aria-selected=true]{background:var(--sky);box-shadow:inset 0 -2px var(--electric)}
+.band-tab .eyebrow{color:var(--ink-2)}
+.band-tab .v{font:600 var(--t-20)/var(--lh-20) var(--f-text);font-variant-numeric:tabular-nums}
+.band-tab .t-cap{color:var(--ink-3)}
+
+/* -------------------------------------------------------------- 8. TABLES */
+.tbl th{font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);text-align:left;white-space:nowrap;vertical-align:bottom}
+.tbl th.n,.tbl td.n{text-align:right}
+.tbl td{vertical-align:middle}
+.tbl .hp{visibility:hidden}               /* hanging paren keeps digits aligned */
+.l1{display:block;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.l2{display:block;font-size:var(--t-12);line-height:var(--lh-12);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.code{font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums;margin-right:4px}
+
+/* A — the financial statement. Blue header rule, single rule = subtotal,
+   blue double rule = total. 32px rows. Notes column. F / U markers.          */
+.tbl-fs{table-layout:fixed}
+.tbl-fs th{padding:8px;border-bottom:1px solid var(--electric)}
+.tbl-fs td{height:32px;padding:4px 8px;font-variant-numeric:tabular-nums lining-nums}
+.tbl-fs tr>*:first-child{padding-left:0}
+.tbl-fs tr>*:last-child{padding-right:0}
+.tbl-fs .cur{background:var(--white)}
+.tbl-fs tr.fs-head td{padding-top:20px;height:auto;font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);background:none}
+.tbl-fs tr.fs-line:hover td{background:var(--sky)}
+.tbl-fs tr.fs-elim td{color:var(--ink-2)}
+.tbl-fs tr.fs-sub td{font-weight:600}
+.tbl-fs tr.fs-sub td.n{border-top:1px solid var(--midnight)}
+.tbl-fs tr.fs-grand td{font-weight:700;height:40px}
+.tbl-fs tr.fs-grand td.n{border-top:1px solid var(--midnight);border-bottom:3px double var(--electric)}
+.tbl-fs tr.fs-gap td{height:8px;padding:0}
+.tbl-fs td.nt{width:40px;text-align:center}
+.fu{display:inline-block;width:16px;text-align:center;font-size:var(--t-12);font-weight:700}
+.fu--f{color:var(--pos)} .fu--u{color:var(--neg)}
+
+/* B — the dense queue. 48px rows, sticky header, group rows on Canvas,
+   cursor row = white + blue inset, selection = Sky.                         */
+.tbl-q{table-layout:fixed}
+.tbl-q th{position:sticky;top:0;z-index:1;height:40px;padding:0 8px;background:var(--warm);border-bottom:1px solid var(--line-2)}
+.tbl-q td{height:48px;padding:0 8px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbl-q tr>*:first-child{padding-left:24px}
+.tbl-q tr>*:last-child{padding-right:24px}
+.tbl-q td.n{font-weight:500}
+.tbl-q tr.q-group td{height:40px;background:var(--canvas)}
+.q-group-t{font:600 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:.12em;text-transform:uppercase;color:var(--ink);margin-right:8px}
+.tbl-q tr.q-row{transition:background-color .1s var(--ease)}
+.tbl-q tr.q-row:hover{background:var(--grey-100)}
+.tbl-q tr.q-row.is-selected{background:var(--sky)}
+.tbl-q tr.q-row.is-selected:hover{background:var(--blue-100)}
+.tbl-q tr.q-row.is-cursor{background:var(--white);box-shadow:inset 3px 0 var(--electric),inset 0 0 0 1px var(--electric)}
+.tbl-q tr.q-row.is-done{opacity:.45}
+.tbl-q tr.q-row.is-attn td:first-child{box-shadow:inset 3px 0 var(--neg)}
+.tbl-q--compact td{height:40px}
+.tbl-q--flush tr>*:first-child{padding-left:16px}
+.tbl-q--flush tr>*:last-child{padding-right:16px}
+.th-sort{display:inline-flex;align-items:center;gap:4px;color:var(--electric);font:inherit;letter-spacing:inherit;text-transform:inherit}
+
+/* Bulk bar — appears on selection */
+.bulk{display:flex;align-items:center;gap:12px;height:48px;padding:0 16px 0 24px;background:var(--sky);border-bottom:1px solid var(--blue-100);box-shadow:inset 3px 0 var(--electric)}
+.bulk .sp{flex:1}
+
+/* -------------------------------------------------------------- 9. STATUS
+   Never colour alone: every pip has a distinct shape and a word beside it.  */
+.pip{display:inline-block;flex:none;width:10px;height:10px;vertical-align:-1px}
+.pip--ready{background:var(--pos)}
+.pip--track{border:1.5px solid var(--ink-2)}
+.pip--risk{background:linear-gradient(135deg,var(--warn) 50%,transparent 50%);border:1.5px solid var(--warn)}
+.pip--overdue{background:var(--neg)}
+.pip--blocked{border:1.5px solid var(--neg);background:linear-gradient(135deg,transparent 40%,var(--neg) 40% 60%,transparent 60%)}
+.pip--open{background:var(--signal)}
+.pip--soft{border:1.5px solid var(--warn)}
+.pip--closed{background:var(--ink-2)}
+.status{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;font-weight:500}
+.status--ready{color:var(--pos)} .status--risk{color:var(--warn)} .status--overdue,.status--blocked{color:var(--neg)} .status--track{color:var(--ink-2)}
+.tag{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 6px;font:600 var(--t-12)/20px var(--f-text);letter-spacing:.02em;background:var(--grey-100);color:var(--ink-2);white-space:nowrap}
+.tag--ai{background:var(--sky);color:var(--electric)}
+.tag--pos{background:var(--pos-wash);color:var(--pos)}
+.tag--neg{background:var(--neg-wash);color:var(--neg)}
+.tag--warn{background:var(--warn-wash);color:var(--warn)}
+.tag--solid{background:var(--midnight);color:var(--warm)}
+.match{display:inline-flex;align-items:center;gap:6px;color:var(--ink-2);white-space:nowrap}
+.match svg{flex:none}
+.match--none{color:var(--ink-3)}
+.match--partial{color:var(--warn);font-weight:500}
+.inline-notice{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;background:var(--canvas);box-shadow:inset 3px 0 var(--steel);color:var(--ink-2)}
+.inline-notice b{color:var(--ink)}
+.inline-notice--warn{background:var(--warn-wash);box-shadow:inset 3px 0 var(--warn)}
+.inline-notice--neg{background:var(--neg-wash);box-shadow:inset 3px 0 var(--neg)}
+.inline-notice--info{background:var(--sky);box-shadow:inset 3px 0 var(--electric)}
+
+/* -------------------------------------------------------------- 10. SLASH METER
+   The monogram's 45° stroke, spaced like the "//" separator. Read by count;
+   the number always sits beside it. Pure CSS:
+   <span class="meter" role="img" aria-label="…"><i class="on"></i>…</span>  */
+.meter{display:inline-flex;align-items:center;gap:3px;height:12px;padding:0 6px;vertical-align:middle;flex:none}
+.meter i{display:block;width:4px;height:12px;background:var(--grey-300);transform:skewX(-45deg)}
+.meter i.on{background:var(--electric)}
+.meter i.part{background:var(--blue-200)}
+.meter i.cur{background:transparent;box-shadow:inset 0 0 0 1px var(--electric)}
+.meter i.bad{background:var(--neg)}
+.meter--lg{height:16px;gap:4px;padding:0 8px}
+.meter--lg i{width:5px;height:16px}
+.on-dark .meter i,.rail .meter i{background:var(--night-700)}
+.on-dark .meter i.on,.rail .meter i.on{background:var(--signal)}
+.on-dark .meter i.part,.rail .meter i.part{background:var(--night-500)}
+.conf{display:inline-flex;align-items:center;gap:6px}
+.conf b{min-width:20px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+.conf--lo b{color:var(--warn)}
+.conf--lo .meter i.on{background:var(--warn)}
+.conf--lo .meter i.part{background:#E4C690}
+
+/* -------------------------------------------------------------- 11. NOTES & EVIDENCE
+   The AI speaks as an auditor's footnote, never as a chat bubble.
+   Figure carries .nref; note carries the claim, a dotted-leader evidence
+   ledger, its basis/confidence, and one or two actions. Linked by data-note. */
+.nref{position:relative;display:inline-block;margin-left:2px;padding:0 3px;font:700 var(--t-12)/16px var(--f-text);color:var(--electric);vertical-align:top;top:-3px;
+  font-variant-numeric:tabular-nums;transition:color var(--fast),background-color var(--fast)}
+.nref::after{content:"";position:absolute;inset:-8px -6px}
+.nref:hover,.nref.is-lit{color:var(--white);background:var(--electric)}
+.is-lit-fig{background:var(--sky)!important;box-shadow:inset 0 -1px 0 var(--electric)}
+.notes{background:var(--canvas);padding:var(--s3)}
+.notes-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:var(--s2)}
+.note{position:relative;border-top:1px solid var(--electric);padding:16px 0 20px;transition:background-color var(--med) var(--ease),box-shadow var(--med) var(--ease)}
+.note.is-lit{background:var(--white);box-shadow:-16px 0 0 var(--white),16px 0 0 var(--white),inset 2px 0 0 var(--electric)}
+.note-top{display:grid;grid-template-columns:48px 1fr;column-gap:8px;align-items:start}
+.note-no{font:700 var(--t-28)/var(--lh-28) var(--f-display);color:transparent;-webkit-text-stroke:1px var(--electric);font-variant-numeric:tabular-nums}
+.note-kind{font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+.note-title{font:600 var(--t-15)/var(--lh-15) var(--f-text);color:var(--ink);margin-top:4px}
+.note p{color:var(--ink-2);margin-top:8px}
+.note p b{color:var(--ink);font-weight:600}
+.ev{list-style:none;margin-top:12px}
+.ev li{display:flex;align-items:baseline;gap:8px;line-height:24px;color:var(--ink)}
+.ev li .dl{flex:1;border-bottom:1px dotted var(--grey-400);transform:translateY(-4px)}
+.ev li .v{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:500}
+.ev li.ev-total{border-top:1px solid var(--midnight);margin-top:4px;font-weight:600}
+.basis{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:12px;font-size:var(--t-12);line-height:var(--lh-12);color:var(--ink-2)}
+.basis b{font-weight:600;color:var(--ink)}
+.note-acts{display:flex;gap:8px;margin-top:12px;margin-left:-12px}
+.why{list-style:none;margin-top:8px}
+.why li{position:relative;padding-left:16px;margin-top:6px;color:var(--ink-2)}
+.why li::before{content:"";position:absolute;left:0;top:7px;width:6px;height:6px;background:var(--electric)}
+.why li.against::before{background:none;border:1px solid var(--electric)}
+.why b{color:var(--ink);font-weight:600}
+.note--panel{padding:16px;background:var(--sky);border-top:0;box-shadow:inset 3px 0 var(--electric)}
+
+/* -------------------------------------------------------------- 12. OVERLAYS */
+.toast{display:inline-flex;align-items:center;gap:16px;height:48px;padding:0 8px 0 16px;background:var(--midnight);color:var(--warm);box-shadow:0 12px 24px -12px rgba(10,22,40,.5)}
+.toast .btn--quiet{color:var(--blue-300)}
+.toast .btn--quiet:hover{background:var(--night-800);color:var(--warm)}
+.toast-mark{width:3px;align-self:stretch;margin:12px 0;background:var(--signal)}
+.toast--neg .toast-mark{background:#F19A91}
+.toast-region{position:fixed;left:50%;bottom:56px;transform:translateX(-50%);z-index:90}
+.popover{position:absolute;z-index:60;background:var(--white);border:1px solid var(--midnight);box-shadow:var(--float)}
+.popover-head{display:flex;align-items:center;gap:8px;height:48px;padding:0 12px 0 16px;border-bottom:1px solid var(--line)}
+.popover-head input{flex:1;min-width:0;height:46px;border:0;outline:0;background:transparent;font-size:var(--t-15);color:var(--ink)}
+.popover-head input::placeholder{color:var(--ink-3)}
+.popover-list{position:relative;list-style:none;padding:4px 0 8px;overflow:auto}
+.popover-group{display:flex;justify-content:space-between;padding:12px 16px 4px;font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.popover-item{display:flex;align-items:center;gap:12px;min-height:40px;padding:4px 16px;color:var(--ink);cursor:pointer;transition:background-color .08s}
+.popover-item:hover{background:var(--grey-100)}
+.popover-item[aria-selected=true]{background:var(--sky);box-shadow:inset 3px 0 var(--electric)}
+.popover-item .r{margin-left:auto;display:flex;align-items:center;gap:12px;color:var(--ink-3);white-space:nowrap}
+.popover-foot{display:flex;align-items:center;gap:16px;height:40px;padding:0 16px;border-top:1px solid var(--line);background:var(--canvas);color:var(--ink-3);font-size:var(--t-12)}
+.tooltip{position:absolute;z-index:70;padding:6px 8px;background:var(--midnight);color:var(--warm);font-size:var(--t-12);line-height:var(--lh-12);white-space:nowrap}
+.panel{display:flex;flex-direction:column;min-height:0;background:var(--white);border-left:1px solid var(--line-2)}
+.panel-head{padding:20px 24px 16px;border-bottom:1px solid var(--line)}
+.panel-body{flex:1;overflow:auto;padding:0 24px 24px}
+.panel-sec{padding-top:20px}
+.panel-sec-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.panel-sec-h h3{font:600 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:.12em;text-transform:uppercase;color:var(--ink)}
+.panel-foot{display:flex;align-items:center;gap:8px;padding:16px 24px;border-top:1px solid var(--line);background:var(--white)}
+.panel-foot .sp{flex:1}
+.scrim{position:absolute;inset:0;z-index:80;background:rgba(10,22,40,.48);display:flex;align-items:flex-start;justify-content:center;padding-top:96px}
+.dialog{background:var(--white);border:1px solid var(--midnight);box-shadow:var(--float);width:560px;max-width:calc(100% - 48px)}
+.dialog-head{padding:24px 24px 0}
+.dialog-head .t-section{color:var(--ink)}
+.dialog-body{padding:16px 24px 24px}
+.dialog-foot{display:flex;align-items:center;gap:8px;padding:16px 24px;border-top:1px solid var(--line);background:var(--canvas)}
+.dialog-foot .sp{flex:1}
+
+/* -------------------------------------------------------------- 13. FIGURES
+   A number is never alone: value + comparison + destination.                */
+.fig{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fig-l{font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+.fig-v{font:700 var(--t-28)/var(--lh-28) var(--f-display);letter-spacing:-.01em;color:var(--ink)}
+.fig-v--dense{font:600 var(--t-20)/var(--lh-20) var(--f-text);font-variant-numeric:tabular-nums}
+.fig-vs{display:flex;gap:8px;flex-wrap:wrap;font-size:var(--t-12);line-height:var(--lh-12);color:var(--ink-2)}
+.fig a{align-self:flex-start}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px}
+.kv dt{color:var(--ink-2)} .kv dd{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink);font-weight:500}
+
+/* -------------------------------------------------------------- 14. DASHBOARD
+   12 columns × 136px rows, 24px gutters. Place with --w / --h (and optional
+   --x / --y). Sizes: S 3×2 · M 6×2 · L 6×4 · W 12×2 · XL 12×4 (+ 4 and 8 wide
+   for primary modules).  The primary module sits top-left, 8 of 12 columns. */
+.dash{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));grid-auto-rows:var(--row);gap:var(--gutter);grid-auto-flow:row dense}
+.wg{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;grid-column:var(--x,auto)/span var(--w,6);grid-row:var(--y,auto)/span var(--h,2);
+  background:var(--white);border:1px solid var(--line);transition:box-shadow var(--med) var(--ease),transform var(--med) var(--ease)}
+.wg-head{display:flex;align-items:center;gap:12px;height:48px;flex:none;padding:0 8px 0 16px;border-bottom:1px solid var(--line)}
+.wg-title{font:600 var(--t-15)/var(--lh-15) var(--f-text);color:var(--ink);white-space:nowrap}
+.wg-count{color:var(--ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.wg-meta{color:var(--ink-3);font-size:var(--t-12);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wg-act{margin-left:auto;display:flex;align-items:center;gap:4px;flex:none}
+.wg-body{flex:1;min-height:0;overflow:auto}
+.wg-body--pad{padding:16px}
+.wg-foot{display:flex;align-items:center;gap:12px;height:40px;flex:none;padding:0 8px 0 16px;border-top:1px solid var(--line);color:var(--ink-3);font-size:var(--t-12)}
+.wg-foot .btn{margin-left:auto}
+.wg--primary{border-color:var(--line-2)}
+.wg--primary .wg-head{border-bottom:2px solid var(--electric)}
+/* Report density: editorial header — Syne section title over a blue rule */
+.density-report .wg{border:0;background:transparent}
+.density-report .wg-head{height:auto;padding:0 0 8px;border-bottom:2px solid var(--electric);align-items:baseline}
+.density-report .wg-title{font:700 var(--t-20)/var(--lh-20) var(--f-display);color:var(--electric)}
+.density-report .wg-foot{padding:0;border-top:0}
+/* States */
+.wg-state{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:8px;height:100%;padding:24px}
+.wg-state .t-head{max-width:44ch}
+.wg-state p{color:var(--ink-2);max-width:52ch}
+.wg-done-mark{display:grid;place-items:center;width:32px;height:32px;border:1.5px solid var(--pos);color:var(--pos)}
+.wg-empty-mark{display:grid;place-items:center;width:32px;height:32px;border:1.5px dashed var(--grey-400);color:var(--ink-3)}
+.wg-loading .bar-l{display:block;height:12px;background:linear-gradient(90deg,var(--grey-100),var(--grey-200),var(--grey-100));background-size:200% 100%;animation:mb-shimmer 1.4s linear infinite}
+@keyframes mb-shimmer{to{background-position:-200% 0}}
+
+/* -------------------------------------------------------------- 15. EDIT MODE
+   Customize → the page keeps live data; widgets gain handles.               */
+.editbar{display:flex;align-items:center;gap:12px;height:48px;padding:0 var(--margin);background:var(--sky);box-shadow:inset 0 -1px var(--blue-100),inset 3px 0 var(--electric);white-space:nowrap}
+.editbar .sp{flex:1}
+.editbar--admin{background:var(--midnight);color:var(--warm);box-shadow:inset 3px 0 var(--signal)}
+.editbar--admin .eyebrow{color:var(--slate)}
+.dash-wrap{position:relative}
+.dash-guides{position:absolute;inset:0;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gutter);pointer-events:none}
+.dash-guides i{background:repeating-linear-gradient(var(--sky) 0 var(--row),transparent var(--row) calc(var(--row) + var(--gutter)))}
+.dash.is-editing{position:relative}
+.dash.is-editing .wg{border:1px dashed var(--grey-400)}
+.dash.is-editing .wg:hover{border:1px solid var(--electric)}
+.wg-handle{display:grid;place-items:center;width:32px;height:32px;margin-left:-8px;color:var(--ink-3);cursor:grab;flex:none}
+.wg-handle:hover{background:var(--grey-100);color:var(--ink)}
+.wg-tool{display:grid;place-items:center;width:32px;height:32px;color:var(--ink-2);flex:none}
+.wg-tool:hover{background:var(--grey-100);color:var(--ink)}
+.wg-tool[aria-disabled=true]{color:var(--grey-400);cursor:not-allowed}
+.wg-lock{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 6px;background:var(--midnight);color:var(--warm);font:600 var(--t-12)/20px var(--f-text)}
+.wg-resize{position:absolute;right:0;bottom:0;width:24px;height:24px;cursor:nwse-resize;z-index:2;
+  background:linear-gradient(135deg,transparent 0 55%,var(--electric) 55% 62%,transparent 62% 72%,var(--electric) 72% 79%,transparent 79%)}
+.wg.is-required{border-style:solid!important;border-color:var(--line-2)!important}
+.wg.is-lifted{z-index:10;box-shadow:var(--lift);transform:translate(-6px,-6px) rotate(-.4deg);border:1px solid var(--electric)!important;cursor:grabbing}
+.wg.is-resizing{border:1px solid var(--electric)!important;box-shadow:0 0 0 3px var(--blue-100)}
+.wg-drop{grid-column:var(--x,auto)/span var(--w,4);grid-row:var(--y,auto)/span var(--h,2);border:2px dashed var(--electric);
+  background:repeating-linear-gradient(135deg,var(--sky) 0 8px,var(--white) 8px 14px);display:grid;place-items:center;color:var(--electric);font-weight:600}
+.wg-veil{position:absolute;inset:48px 0 0;background:rgba(253,252,250,.6);pointer-events:none}
+.size-chips{display:inline-flex;gap:4px}
+.size-chip{display:inline-grid;place-items:center;min-width:32px;height:24px;padding:0 6px;border:1px solid var(--line-2);font:600 var(--t-12)/1 var(--f-text);color:var(--ink-2);background:var(--white)}
+.size-chip[aria-pressed=true]{background:var(--midnight);border-color:var(--midnight);color:var(--warm)}
+.size-chip[aria-disabled=true]{color:var(--grey-400);border-style:dashed}
+/* Catalog drawer */
+.catalog{display:flex;flex-direction:column;min-height:0;background:var(--white);border-right:1px solid var(--line-2)}
+.catalog-head{padding:16px 16px 12px;border-bottom:1px solid var(--line)}
+.catalog-body{flex:1;overflow:auto;padding:0 16px 16px}
+.catalog-foot{padding:12px 16px;border-top:1px solid var(--line);background:var(--canvas);color:var(--ink-2);font-size:var(--t-12);line-height:var(--lh-12)}
+.cat-group{padding:16px 0 8px;font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);display:flex;justify-content:space-between}
+.cat-card{display:grid;grid-template-columns:72px 1fr;gap:12px;padding:12px;border:1px solid var(--line);margin-bottom:8px;background:var(--white);transition:border-color var(--fast)}
+.cat-card:hover{border-color:var(--electric)}
+.cat-card.is-placed{background:var(--canvas)}
+.cat-card .t-head{font-size:var(--t-13);line-height:var(--lh-13)}
+.cat-card p{color:var(--ink-2);font-size:var(--t-12);line-height:var(--lh-12);margin-top:2px}
+.cat-card-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
+.cat-thumb{height:56px;border:1px solid var(--line);background:var(--warm);padding:6px;display:flex;flex-direction:column;gap:4px;overflow:hidden}
+.cat-thumb i{display:block;height:4px;background:var(--grey-200)}
+.cat-thumb i.b{background:var(--electric);height:2px}
+.cat-thumb i.s{width:60%}
+.cat-thumb .meter{padding:0 3px;height:8px;gap:2px}
+.cat-thumb .meter i{width:3px;height:8px}
+/* Lock-level options + version history (admin) */
+.opt-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.opt-card{position:relative;display:flex;flex-direction:column;gap:4px;padding:12px;border:1px solid var(--line-2);cursor:pointer;transition:border-color var(--fast)}
+.opt-card:hover{border-color:var(--electric)}
+.opt-card input{position:absolute;opacity:0}
+.opt-card:has(input:checked){border-color:var(--electric);box-shadow:inset 0 0 0 1px var(--electric);background:var(--sky)}
+.opt-card:has(input:focus-visible){outline:2px solid var(--electric);outline-offset:2px}
+.opt-card .t-head{font-size:var(--t-13);line-height:var(--lh-13)}
+.opt-card p{font-size:var(--t-12);line-height:var(--lh-12);color:var(--ink-2)}
+.versions{list-style:none}
+.versions li{display:grid;grid-template-columns:40px 1fr auto;gap:8px;align-items:start;padding:10px 0;border-bottom:1px solid var(--line)}
+.versions .vno{font:700 var(--t-15)/var(--lh-15) var(--f-display);color:transparent;-webkit-text-stroke:1px var(--electric)}
+.versions li.is-current .vno{color:var(--electric);-webkit-text-stroke:0}
+
+/* -------------------------------------------------------------- 16. UTIL */
+.row{display:flex;align-items:center;gap:8px}
+.row--between{justify-content:space-between}
+.sp{flex:1}
+.stack>*+*{margin-top:var(--s2)}
+.grid-12{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--gutter)}
+.hairline{border-top:1px solid var(--line)}
+.surface{background:var(--white);border:1px solid var(--line)}
+.inset{background:var(--canvas)}
+.ico{display:inline-block;flex:none;vertical-align:middle}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+/* -------------------------------------------------------------- 17. ACCESS (v2.2)
+   Grants are drawn, not ticked. A cap cell is a 16px square inside a 32px
+   target: filled = granted · hollow = not granted · absent = doesn't apply.
+   Shape carries meaning, never colour alone:
+     corner notch   = constrained (limit, departments, doc types)
+     ring           = granted by a permission set, not the role
+     6px square TR  = added vs template (filled) / removed vs template (hollow)
+     45° slash      = taken away: muted, denied, revoked (the monogram's stroke)
+     outline        = separation-of-duties conflict (solid hard, dashed soft)   */
+.cap{position:relative;display:inline-grid;place-items:center;width:32px;height:32px;flex:none;cursor:pointer;vertical-align:middle}
+.cap i{position:relative;display:block;width:16px;height:16px;border:1.5px solid var(--night-500);   /* 4.9:1, meets 1.4.11 for the only cue */
+ background:var(--white);
+  transition:background-color var(--fast) var(--ease),border-color var(--fast) var(--ease),box-shadow var(--fast) var(--ease)}
+.cap:hover i{border-color:var(--electric)}
+.cap[aria-pressed=true] i,.cap.is-on i{background:var(--electric);border-color:var(--electric)}
+.cap.is-lim i::after{content:"";position:absolute;right:-1.5px;bottom:-1.5px;width:0;height:0;border-style:solid;border-width:0 0 7px 7px;border-color:transparent transparent var(--white) transparent}
+.cap.is-set i{background:var(--white);border-color:var(--electric);box-shadow:inset 0 0 0 2.5px var(--white),inset 0 0 0 8px var(--electric)}
+.cap.is-muted i{background:var(--white);border-color:var(--ink-2)}
+.cap.is-muted i::before,.slash::before{content:"";position:absolute;left:50%;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--ink);transform:rotate(45deg)}
+.cap[data-delta]::after{content:"";position:absolute;top:3px;right:3px;width:6px;height:6px;background:var(--electric)}
+.cap[data-delta=rem]::after{background:var(--white);box-shadow:inset 0 0 0 1.5px var(--electric)}
+.cap.is-hard i{outline:2px solid var(--neg);outline-offset:3px}
+.cap.is-soft i{outline:2px dashed var(--warn);outline-offset:3px}
+.cap.is-lit i{box-shadow:0 0 0 4px var(--blue-100)}
+.cap.is-set.is-lit i{box-shadow:inset 0 0 0 2.5px var(--white),inset 0 0 0 8px var(--electric),0 0 0 4px var(--blue-100)}
+.cap.is-sel{background:var(--sky);box-shadow:inset 0 0 0 1px var(--electric)}
+.cap--ro{cursor:default}
+.cap--ro:hover i{border-color:var(--night-500)}
+.cap--ro[aria-pressed=true]:hover i,.cap--ro.is-on:hover i{border-color:var(--electric)}
+.cap--sm{width:20px;height:20px;cursor:default}
+.cap--sm i{width:12px;height:12px}
+.slash{position:relative;display:inline-block;width:12px;height:12px;flex:none}
+
+/* Capability matrix — one row per resource, 9 action columns, inapplicable cells absent */
+.capm{table-layout:fixed}
+.capm th{height:40px;padding:0 4px;font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:0;text-transform:none;color:var(--ink-2);text-align:center;border-bottom:1px solid var(--line-2);background:var(--warm);position:sticky;top:0;z-index:2}
+.capm th:first-child{text-align:left}
+.capm td{height:40px;padding:0 4px;border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
+.capm td:first-child{text-align:left;padding-left:16px;overflow:hidden}
+.capm tr>*:last-child{padding-right:16px}
+.capm tr.capm-dom td{height:40px;background:var(--canvas);text-align:left}
+.capm tr.capm-dom .q-group-t{margin-right:8px}
+.capm tr.capm-res:hover td{background:var(--grey-100)}
+.capm .res{display:flex;align-items:center;gap:6px;min-width:0}
+.capm .res .l1{min-width:0}
+.capm .flags{display:inline-flex;gap:2px;color:var(--ink-3);flex:none}
+.capm .select{height:32px;padding:0 24px 0 8px;background-position:right 8px center}
+
+/* Ownership level chips — platform · tenant · client */
+.lvl{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 6px;font:600 var(--t-12)/18px var(--f-text);letter-spacing:.02em;white-space:nowrap;border:1px solid transparent}
+.lvl--platform{background:var(--midnight);color:var(--warm)}
+.lvl--tenant{background:var(--white);border-color:var(--electric);color:var(--electric)}
+.lvl--client{background:var(--sky);border-color:var(--blue-200);color:var(--ink)}
+
+/* Separation-of-duties strip — sits above the matrix, lists triggered rules */
+.sod{display:flex;flex-direction:column;gap:1px;background:var(--line)}
+.sod-row{display:grid;grid-template-columns:48px minmax(0,1fr) auto;align-items:center;gap:12px;min-height:56px;padding:8px 16px;background:var(--white)}
+.sod-row--hard{background:var(--neg-wash);box-shadow:inset 3px 0 var(--neg)}
+.sod-row--soft{background:var(--warn-wash);box-shadow:inset 3px 0 var(--warn)}
+.sod-row--held{background:var(--canvas);box-shadow:inset 3px 0 var(--steel)}
+.sod-code{font:700 var(--t-15)/var(--lh-15) var(--f-text);font-variant-numeric:tabular-nums}
+.sod-row--hard .sod-code{color:var(--neg)} .sod-row--soft .sod-code{color:var(--warn)} .sod-row--held .sod-code{color:var(--ink-2)}
+.sod-row p{color:var(--ink-2)}
+.sod-row b{color:var(--ink);font-weight:600}
+
+/* Decision trace — the resolution order as a numbered ledger. The step that
+   decided carries the slash (deny) or the check (allow).                    */
+.trace{list-style:none;counter-reset:tr}
+.trace li{display:grid;grid-template-columns:32px minmax(0,1fr) auto;column-gap:8px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line)}
+.trace .tno{font:700 var(--t-15)/var(--lh-15) var(--f-display);color:transparent;-webkit-text-stroke:1px var(--electric);font-variant-numeric:tabular-nums}
+.trace .tl{color:var(--ink);font-weight:500}
+.trace .td{display:block;color:var(--ink-2);font-size:var(--t-12);line-height:var(--lh-12);margin-top:2px}
+.trace .tv{display:inline-flex;align-items:center;gap:6px;font-weight:600;white-space:nowrap}
+.trace .tv--pass{color:var(--pos)} .trace .tv--fail{color:var(--neg)} .trace .tv--skip{color:var(--ink-3);font-weight:500}
+.trace li.is-decider{background:var(--white);box-shadow:-12px 0 0 var(--white),12px 0 0 var(--white),inset 3px 0 0 var(--neg)}
+.trace li.is-decider.is-allow{box-shadow:-12px 0 0 var(--white),12px 0 0 var(--white),inset 3px 0 0 var(--pos)}
+.trace li.is-decider .tno{color:var(--electric);-webkit-text-stroke:0}
+.verdict{display:flex;align-items:center;gap:12px;padding:12px 16px;font-weight:600}
+.verdict--deny{background:var(--neg-wash);color:var(--neg);box-shadow:inset 3px 0 var(--neg)}
+.verdict--allow{background:var(--pos-wash);color:var(--pos);box-shadow:inset 3px 0 var(--pos)}
+.verdict p{color:var(--ink);font-weight:400}
+
+/* View-as — read-only simulation. A Sky band above the shell (info, not alarm:
+   it's you, looking through someone else's access). Same slot as support.   */
+.viewas-band{grid-area:band;display:flex;align-items:center;gap:16px;height:32px;padding:0 16px 0 0;background:var(--sky);color:var(--ink);font-weight:500;white-space:nowrap;box-shadow:inset 0 -1px var(--blue-200)}
+.viewas-band::before{content:"";align-self:stretch;width:var(--rail);flex:none;background:repeating-linear-gradient(135deg,transparent 0 6px,var(--blue-200) 6px 9px),var(--blue-100)}
+.app--mini .viewas-band::before,.app--mini .support-band::before{width:var(--rail-mini)}
+.viewas-band b{font-weight:700}
+.viewas-band .sp{flex:1}
+.viewas-band .clock{font-variant-numeric:tabular-nums;font-weight:700;min-width:44px}
+.viewas-band .btn{height:24px;padding:0 10px}
+.viewas-band .btn::after{content:"";position:absolute;inset:-4px -2px}
+
+/* Attestation card — one access-review item: claim, evidence, decision keys */
+.attest{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 24px;padding:16px 24px;background:var(--white);border:1px solid var(--line);transition:border-color var(--fast),box-shadow var(--fast)}
+.attest+.attest{border-top:0}
+.attest.is-cursor{border-color:var(--electric);box-shadow:inset 3px 0 var(--electric)}
+.attest.is-kept{background:var(--canvas)}
+.attest.is-revoked .attest-claim{text-decoration:line-through;text-decoration-color:var(--ink-2)}
+.attest-kind{font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+.attest-claim{font:600 var(--t-15)/var(--lh-15) var(--f-text);color:var(--ink);margin-top:4px}
+.attest-acts{display:flex;align-items:flex-start;gap:8px}
+.attest .ev{grid-column:1/2;margin-top:4px}

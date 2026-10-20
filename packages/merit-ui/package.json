@@ -1,0 +1,44 @@
+{
+  "name": "@meritbooks/merit-ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Merit Suite design system (Style Guide v2.3) for Next.js 14 + React 18 + Tailwind 3.4. Consumed as TypeScript source.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./preset": "./tailwind/preset.ts",
+    "./fonts": "./src/fonts.ts",
+    "./styles/system.css": "./styles/system.css",
+    "./styles/marks.css": "./styles/marks.css",
+    "./styles/next-adapter.css": "./styles/next-adapter.css",
+    "./assets/*": "./assets/*",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "echo 'No build needed - consumed as TypeScript source (add to transpilePackages)'",
+    "type-check": "tsc --noEmit -p .",
+    "test": "vitest run",
+    "sync-brand": "node scripts/sync-brand.mjs"
+  },
+  "peerDependencies": {
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "tailwindcss": ">=3.4.0 <4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "next": "^14.2.25",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.8"
+  }
+}
