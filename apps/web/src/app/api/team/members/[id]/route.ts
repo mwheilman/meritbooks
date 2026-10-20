@@ -8,6 +8,7 @@ import { requireManageUsers } from '@/lib/team/guard';
 import { updateMemberSchema } from '@/lib/validations/team';
 import { ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { legacyRoleChangeSod, type LegacyRoleSodResult } from '@/lib/rbac/sod-store';
 import { syncMembershipRole } from '@/lib/identity/sync-membership';
 import {
   setEmployeeOnboardingCompanies,
@@ -78,6 +79,31 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // members (migration 154): every write below runs as the service role, authorized by
   // requireManageUsers above and pinned to the session org + the org-verified target.
   const admin = createAdminSupabase();
+
+  // Assignment-time separation of duties (05 §4.3, migration 165). A role change that
+  // CREATES a hard conflict (e.g. firm tenants: edit vendor bank details + release
+  // payments) is refused; new soft conflicts are returned as warnings and logged.
+  let sodWarnings: LegacyRoleSodResult['warnings'] = [];
+  if (role !== undefined && role !== target.role) {
+    const sod = await legacyRoleChangeSod(admin, orgId!, (target.role as string | null) ?? null, role);
+    if (sod.unavailable) {
+      return NextResponse.json(
+        { error: 'The separation-of-duties rules could not be checked right now, so the role was not changed. Try again in a moment.', code: 'SOD_UNAVAILABLE' },
+        { status: 503 }
+      );
+    }
+    if (sod.blocked.length > 0) {
+      return NextResponse.json(
+        {
+          error: `This role would let one person ${sod.blocked[0].description.replace(/^Could /, '').replace(/\.$/, '')}. ${sod.blocked[0].suggestedFix ?? ''}`.trim(),
+          code: 'SOD_CONFLICT',
+          conflicts: sod.blocked.map((c) => ({ description: c.description, suggestedFix: c.suggestedFix })),
+        },
+        { status: 409 }
+      );
+    }
+    sodWarnings = sod.warnings;
+  }
 
   if (role !== undefined) {
     const { error: roleErr } = await admin
@@ -159,8 +185,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     subjectTable: 'employees',
     subjectId: memberId,
     summary: changes.length > 0 ? `Updated ${changes.join(' and ')}` : 'Updated member',
-    metadata: { role: role ?? null, companyIds: companyIds ?? null },
+    metadata: {
+      role: role ?? null,
+      companyIds: companyIds ?? null,
+      sodWarnings: sodWarnings.map((w) => w.ruleKey),
+    },
   });
 
-  return NextResponse.json({ data: { id: memberId } });
+  return NextResponse.json({
+    data: {
+      id: memberId,
+      sodWarnings: sodWarnings.map((w) => ({ description: w.description, suggestedFix: w.suggestedFix })),
+    },
+  });
 }

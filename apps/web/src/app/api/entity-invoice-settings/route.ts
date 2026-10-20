@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { z } from 'zod';
 
 /**
@@ -12,6 +14,17 @@ import { z } from 'zod';
  * endpoint serves them. Self-saving — independent of the create forms.
  */
 const TABLE: Record<string, string> = { CUSTOMER: 'customers', JOB: 'jobs', LOCATION: 'locations' };
+
+/**
+ * Who may change each scope's settings. CUSTOMER and LOCATION rows live in tables
+ * that are service-role-write only (migration 167, M4), so those writes run with the
+ * service role AFTER this check and are pinned to the session org.
+ */
+const WRITE_GRANT: Record<'CUSTOMER' | 'JOB' | 'LOCATION', { feature: string; action: 'edit' }> = {
+  CUSTOMER: { feature: 'customers', action: 'edit' },
+  JOB: { feature: 'jobs', action: 'edit' },
+  LOCATION: { feature: 'settings_acct', action: 'edit' },
+};
 
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
@@ -51,7 +64,7 @@ const putSchema = z.object({
 export async function PUT(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const parsed = putSchema.safeParse(await request.json().catch(() => ({})));
@@ -59,7 +72,12 @@ export async function PUT(request: Request) {
   const b = parsed.data;
   const table = TABLE[b.scope];
 
-  const { error } = await supabase
+  const grant = WRITE_GRANT[b.scope];
+  const guard = await requirePermission(userId, grant.feature, grant.action);
+  if (!guard.ok) return guard.response;
+  const writer = b.scope === 'JOB' ? supabase : createAdminSupabase();
+
+  const { data: updated, error } = await writer
     .schema('core').from(table)
     .update({
       payment_methods_allowed: b.payment_methods_allowed && b.payment_methods_allowed.length ? b.payment_methods_allowed : null,
@@ -67,7 +85,9 @@ export async function PUT(request: Request) {
       retainage_enabled: b.retainage_enabled,
       default_retainage_pct: b.default_retainage_pct,
     })
-    .eq('id', b.id).eq('org_id', orgId);
+    .eq('id', b.id).eq('org_id', orgId)
+    .select('id');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!updated || updated.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

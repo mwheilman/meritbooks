@@ -107,6 +107,10 @@ export async function POST(request: Request) {
     mediaType,
     fileName,
     userId,
+    mayCreateVendor: async () => {
+      const g = await requirePermission(userId, 'vendors', 'create');
+      return g.ok && g.orgId === orgId;
+    },
   });
 
   if (!result.ok) {

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { getImportType } from '@/lib/import/definitions';
 import { coerceValue } from '@/lib/import/csv';
 import { isMigrationProviderId } from '@/lib/integrations/erp/providers';
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest) {
 
   const guard = await requirePermission(userId, 'vendors', 'create');
   if (!guard.ok) return guard.response;
+  if (guard.orgId !== orgId) return NextResponse.json({ error: 'Forbidden', code: 'FORBIDDEN' }, { status: 403 });
 
   let body: Body;
   try {
@@ -154,6 +156,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, connected: true, company: publicCompany(company), proposal });
   }
 
+  // Opening bills land in public.bills (service-role write, migration 171): bills:create.
+  if (proposal.bills.some((b) => !b.duplicate)) {
+    const billGuard = await requirePermission(userId, 'bills', 'create');
+    if (!billGuard.ok) return billGuard.response;
+  }
   return commitAp(supabase, orgId, company, proposal);
 }
 
@@ -183,7 +190,9 @@ async function commitAp(
       payment_terms_days: v.paymentTermsDays,
       is_1099_eligible: v.is1099Eligible,
     }));
-    const { error } = await supabase.schema('core').from('vendors').insert(rows);
+    // Migration 168: core.vendors is SELECT-only for members — the service role writes
+    // after the vendors:create check above; every row is pinned to the session org.
+    const { error } = await createAdminSupabase().schema('core').from('vendors').insert(rows);
     if (error) return NextResponse.json({ error: `Could not save vendors: ${error.message}` }, { status: 500 });
     insertedVendors = rows.length;
   }
@@ -213,7 +222,11 @@ async function commitAp(
   }
   let insertedBills = 0;
   if (billRows.length > 0) {
-    const { error } = await supabase.from('bills').insert(billRows);
+    // public.bills is SELECT-only for members (migration 171): opening bills are written
+    // with the service role after bills:create (checked in POST before commit; the company
+    // was read through the caller's RLS client — org + client scope — and every row
+    // carries org_id).
+    const { error } = await createAdminSupabase().from('bills').insert(billRows);
     if (error) return NextResponse.json({ error: `Could not save opening bills: ${error.message}` }, { status: 500 });
     insertedBills = billRows.length;
   }

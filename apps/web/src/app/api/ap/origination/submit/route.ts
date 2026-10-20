@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { assertSessionMeetsPolicy } from '@/lib/auth/assert-session-policy';
 import { requireMoneyMovement, PAYMENTS_EXECUTE, AP_DISBURSEMENT_RELEASE_FEATURE } from '@/lib/rbac/payments-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { resolveOriginationProvider, submitOriginationBatch } from '@/lib/money/origination';
@@ -33,6 +34,13 @@ export async function POST(request: Request) {
     AP_DISBURSEMENT_RELEASE_FEATURE,
   );
   if (!guard.ok) return guard.response;
+
+  // R-7 (05 §3.8): the tenant's authentication policy — MFA / step-up re-verification
+  // / session age / IP allowlist — is checked before any money is released. With every
+  // policy off this passes (Settings → Security shows the warning); with a policy on
+  // and the Clerk factor data missing it FAILS CLOSED with a structured step-up error.
+  const sessionPolicy = await assertSessionMeetsPolicy({ orgId, userId }, { action: 'money_release' });
+  if (!sessionPolicy.ok) return sessionPolicy.response;
 
   let body: SubmitBody = {};
   try {

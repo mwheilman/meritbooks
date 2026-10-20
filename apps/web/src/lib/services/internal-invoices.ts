@@ -25,6 +25,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { scopedWriter, writerFor } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -151,7 +152,9 @@ async function ensureAccount(db: DB, orgId: string, spec: AccountSpec): Promise<
 
   const number = await freeAccountNumber(db, orgId, spec.number);
 
-  const { data: account, error } = await db
+  // public.accounts is SELECT-only for members (migration 171): org-level system account,
+  // org pinned on the row, written through writerFor(db) (the service role for a member caller).
+  const { data: account, error } = await writerFor(db)
     .from('accounts')
     .insert({
       org_id: orgId,
@@ -273,8 +276,13 @@ export async function bookInternalInvoice(db: DB, input: BookInput): Promise<Boo
     throw new Error('Cannot book into a hard-closed period');
   }
 
+  // gl_entries / gl_entry_lines are SELECT-only for members (migration 171): for a member
+  // caller, org / client-scope check on the company, then service-role writes pinned to
+  // the org (a service-role caller — the dept-invoice drain — writes as itself).
+  const writer = await scopedWriter(db, input.orgId, [input.locationId]);
+
   // Insert the GL entry header (entry_number auto-generates)
-  const { data: entry, error: entryError } = await db
+  const { data: entry, error: entryError } = await writer
     .from('gl_entries')
     .insert({
       org_id: input.orgId,
@@ -348,9 +356,9 @@ export async function bookInternalInvoice(db: DB, input: BookInput): Promise<Boo
     memo: l.memo,
   }));
 
-  const { error: linesError } = await db.from('gl_entry_lines').insert(lineInserts);
+  const { error: linesError } = await writer.from('gl_entry_lines').insert(lineInserts);
   if (linesError) {
-    await db.from('gl_entries').delete().eq('id', entry.id); // roll back header
+    await writer.from('gl_entries').delete().eq('id', entry.id).eq('org_id', input.orgId); // roll back header
     throw new Error(`Failed to post GL lines: ${linesError.message}`);
   }
 

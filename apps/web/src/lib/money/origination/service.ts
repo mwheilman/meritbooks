@@ -32,6 +32,7 @@ import type {
   OriginationRail,
   StatusQuery,
 } from './provider';
+import { scopedWriter, writerFor } from '@/lib/db/scoped-writer';
 
 // ── Pure helpers (DB-free, unit-tested) ──────────────────────────────────────
 
@@ -288,6 +289,8 @@ export async function createOriginationBatch(
     approvalIds?: string[];
     effectiveDate?: string | null;
     includeChecks?: boolean;
+    /** Writer override (tests). Default: the service role for a member caller, else `db`. */
+    writer?: SupabaseClient;
   },
 ): Promise<OriginationBatch> {
   const assembled = await assembleReleasedDisbursements(db, {
@@ -299,7 +302,13 @@ export async function createOriginationBatch(
   const summary = summarizeLines(assembled.lines);
   const locationId = assembled.lines.find((l) => l.locationId)?.locationId ?? null;
 
-  const { data: batchData, error: batchErr } = await db
+  // payment_origination_batches / _items are SELECT-only for members (migration 171):
+  // the lines were read through the caller's client `db`; the batch is written with the
+  // service role, pinned to the org, after every line's company passes the org /
+  // client-scope check. The route has authorized origination first.
+  const writer = await scopedWriter(db, orgId, assembled.lines.map((l) => l.locationId), { writer: opts.writer });
+
+  const { data: batchData, error: batchErr } = await writer
     .from('payment_origination_batches')
     .insert({
       org_id: orgId,
@@ -325,7 +334,7 @@ export async function createOriginationBatch(
     amount_cents: l.amountCents,
     status: 'PENDING' as OriginationItemStatus,
   }));
-  const { data: insertedItems, error: itemErr } = await db
+  const { data: insertedItems, error: itemErr } = await writer
     .from('payment_origination_items')
     .insert(itemRows)
     .select('*');
@@ -370,6 +379,7 @@ export async function submitOriginationBatch(
   batchId: string,
   provider: OriginationProvider,
   actor: string,
+  opts: { writer?: SupabaseClient } = {},
 ): Promise<SubmitOutcome> {
   const batch = await loadBatch(db, orgId, batchId);
   if (!batch) throw new Error('Origination batch not found');
@@ -389,8 +399,11 @@ export async function submitOriginationBatch(
     lines,
   });
 
+  // Batch read through the caller's client above (org + client scope); written with the
+  // service role (migration 171), pinned to the org.
+  const writer = writerFor(db, opts.writer);
   const submittedAt = new Date().toISOString();
-  const { error: bErr } = await db
+  const { error: bErr } = await writer
     .from('payment_origination_batches')
     .update({
       status: result.status,
@@ -408,7 +421,7 @@ export async function submitOriginationBatch(
   const byItem = new Map(result.items.map((r) => [r.itemId, r]));
   for (const item of batch.items) {
     const verdict = byItem.get(item.id);
-    await db
+    await writer
       .from('payment_origination_items')
       .update({ status: verdict?.status ?? 'SUBMITTED', updated_at: submittedAt })
       .eq('org_id', orgId)
@@ -430,6 +443,7 @@ export async function refreshOriginationBatch(
   batchId: string,
   provider: OriginationProvider,
   simulate?: StatusQuery['simulate'],
+  opts: { writer?: SupabaseClient } = {},
 ): Promise<OriginationBatch> {
   const batch = await loadBatch(db, orgId, batchId);
   if (!batch) throw new Error('Origination batch not found');
@@ -446,13 +460,15 @@ export async function refreshOriginationBatch(
   const status = await provider.getStatus({ providerBatchRef: batch.providerBatchRef, lines, simulate });
 
   const byItem = new Map(status.items.map((r) => [r.itemId, r]));
+  // Service-role writes (migration 171), pinned to the org; batch read via the caller.
+  const writer = writerFor(db, opts.writer);
   const now = new Date().toISOString();
   const itemStatuses: OriginationItemStatus[] = [];
   for (const item of batch.items) {
     const verdict = byItem.get(item.id);
     const nextStatus = verdict?.status ?? item.status;
     itemStatuses.push(nextStatus);
-    await db
+    await writer
       .from('payment_origination_items')
       .update({
         status: nextStatus,
@@ -464,7 +480,7 @@ export async function refreshOriginationBatch(
   }
 
   const batchStatus = foldBatchStatus(itemStatuses);
-  const { error: bErr } = await db
+  const { error: bErr } = await writer
     .from('payment_origination_batches')
     .update({
       status: batchStatus,

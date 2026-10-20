@@ -24,8 +24,15 @@ import { debitCreditFor, type Effect } from './account-direction';
 import { resolveRole, resolveCashSide, getAccountRef, PostingError, type AccountRef } from './account-roles';
 import { enforcePaymentAllowed } from '../services/vendor-compliance';
 import type { PaymentRail } from './transaction-types';
+import { assertOrgRefs, isMemberClient, writerFor } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
+
+// bills / bill_payments / customer_payments / payment_applications (and the GL) are
+// SELECT-only for members (migration 171). Reads go through the caller's client `db`;
+// sub-ledger writes go through `writerFor(db)` (the service role for a member caller),
+// pinned to the org — after the GL post (which checks org + client scope on the company)
+// and, for a member caller, with every referenced id pinned to the org.
 
 /** Canonical v4-shaped uuid matcher (mirrors get_org_id()'s cast guard). */
 const ORG_UUID_RE =
@@ -177,7 +184,8 @@ export async function recordBillPayment(db: DB, input: RecordBillPaymentInput): 
   });
   if (!je.success || !je.entry_id) throw new PostingError(je.error ?? 'Failed to post bill payment');
 
-  const { data: payment, error: payErr } = await db
+  const writer = writerFor(db);
+  const { data: payment, error: payErr } = await writer
     .from('bill_payments')
     .insert({
       org_id: input.orgId,
@@ -198,7 +206,7 @@ export async function recordBillPayment(db: DB, input: RecordBillPaymentInput): 
 
   const newPaid = billData.amount_paid_cents + input.amountCents;
   const status: 'PAID' | 'PARTIALLY_PAID' = newPaid >= billData.total_cents ? 'PAID' : 'PARTIALLY_PAID';
-  await db
+  await writer
     .from('bills')
     .update({
       amount_paid_cents: newPaid,
@@ -207,7 +215,8 @@ export async function recordBillPayment(db: DB, input: RecordBillPaymentInput): 
       payment_method: input.method ?? null,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', input.billId);
+    .eq('id', input.billId)
+    .eq('org_id', input.orgId);
 
   return { payment_id: payment.id as string, gl_entry_id: je.entry_id, status, amount_paid_cents: newPaid };
 }
@@ -266,6 +275,15 @@ export async function recordCustomerPayment(db: DB, input: RecordCustomerPayment
     }
   }
 
+  // The customer / bank account are written by id into service-role rows: pin them to
+  // the org before anything posts (FKs never check the tenant).
+  if (isMemberClient(db)) {
+    await assertOrgRefs(input.orgId, [
+      { schema: 'core', table: 'customers', ids: [input.customerId], label: 'customer' },
+      { table: 'bank_accounts', ids: [input.bankAccountId], label: 'bank account' },
+    ], { caller: db });
+  }
+
   const rail = input.rail ?? methodToRail(input.method);
   const cash = input.cashAccountId
     ? await getAccountRef(db, input.orgId, input.cashAccountId)
@@ -296,7 +314,8 @@ export async function recordCustomerPayment(db: DB, input: RecordCustomerPayment
   });
   if (!je.success || !je.entry_id) throw new PostingError(je.error ?? 'Failed to post customer payment');
 
-  const { data: payment, error: payErr } = await db
+  const writer = writerFor(db);
+  const { data: payment, error: payErr } = await writer
     .from('customer_payments')
     .insert({
       org_id: input.orgId,
@@ -313,7 +332,7 @@ export async function recordCustomerPayment(db: DB, input: RecordCustomerPayment
   if (payErr || !payment) throw new PostingError(payErr?.message ?? 'Failed to record payment');
 
   for (const app of input.applications) {
-    await db.from('payment_applications').insert({
+    await writer.from('payment_applications').insert({
       org_id: input.orgId,
       payment_id: payment.id,
       invoice_id: app.invoice_id,

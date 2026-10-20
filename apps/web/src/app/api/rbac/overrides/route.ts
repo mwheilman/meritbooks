@@ -8,6 +8,7 @@ import { setOverrideSchema, resetOverrideSchema } from '@/lib/validations/rbac';
 import { isValidCell } from '@/lib/rbac/permission-catalog';
 import { resolveRoleKind } from '@/lib/rbac/resolve-permissions';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { legacyOverrideSod } from '@/lib/rbac/sod-store';
 
 /**
  * PUT /api/rbac/overrides  — set (grant/deny) one (role, feature, action) cell.
@@ -48,6 +49,26 @@ export async function PUT(req: NextRequest) {
   const invalid = await validateCell(supabase, orgId!, roleKey, feature, action);
   if (invalid) return invalid;
 
+  // Separation of duties (05 §4.3, migration 165): a grant that would give every holder
+  // of this role a blocked combination is refused; soft conflicts come back as warnings.
+  const sod = await legacyOverrideSod(createAdminSupabase(), orgId!, roleKey, `${feature}::${action}`, allowed);
+  if (sod.unavailable) {
+    return NextResponse.json(
+      { error: 'The separation-of-duties rules could not be checked right now, so this change was not saved. Try again in a moment.', code: 'SOD_UNAVAILABLE' },
+      { status: 503 },
+    );
+  }
+  if (sod.blocked.length > 0) {
+    return NextResponse.json(
+      {
+        error: `This change would let one person ${sod.blocked[0].description.replace(/^Could /, '').replace(/\.$/, '')}. ${sod.blocked[0].suggestedFix ?? ''}`.trim(),
+        code: 'SOD_CONFLICT',
+        conflicts: sod.blocked.map((c) => ({ description: c.description, suggestedFix: c.suggestedFix })),
+      },
+      { status: 409 },
+    );
+  }
+
   // Write via the service role: core.role_permission_overrides is SELECT-only for
   // members (migration 154) — authorization is the requireManageUsers gate above.
   const { error } = await createAdminSupabase()
@@ -75,10 +96,18 @@ export async function PUT(req: NextRequest) {
     subjectTable: 'role_permission_overrides',
     subjectId: `${roleKey}:${feature}:${action}`,
     summary: `${allowed ? 'Granted' : 'Revoked'} ${feature}.${action} for role ${roleKey}`,
-    metadata: { roleKey, feature, action, allowed },
+    metadata: { roleKey, feature, action, allowed, sodWarnings: sod.warnings.map((w) => w.ruleKey) },
   });
 
-  return NextResponse.json({ data: { roleKey, feature, action, allowed } });
+  return NextResponse.json({
+    data: {
+      roleKey,
+      feature,
+      action,
+      allowed,
+      sodWarnings: sod.warnings.map((w) => ({ description: w.description, suggestedFix: w.suggestedFix })),
+    },
+  });
 }
 
 export async function DELETE(req: NextRequest) {

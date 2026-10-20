@@ -22,6 +22,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 // Route that service writer to the same fake so the write path stays exercised.
 const serviceWriter = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('@/lib/supabase/server', () => ({ createAdminSupabase: () => serviceWriter.db }));
+// authorize() (wave 2A) reads the org's enforcement mode through lib/supabase/admin.
+// Same fake: an unconfigured organizations row → 'legacy', so these tests keep
+// asserting the legacy decision exactly as before.
+vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => serviceWriter.db }));
 
 import { canApprove, approve, SeparationOfDutiesError, NotAuthorizedToApproveError } from './approvals';
 import { normalizeMembershipRole } from '@/lib/rbac/role-normalize';

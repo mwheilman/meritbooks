@@ -37,6 +37,8 @@ export interface DisbursementItemInput {
   locationId: string | null;
   /** clerk id of the preparer — used downstream to enforce releaser != preparer. */
   preparedBy: string;
+  /** clerk id of the approver — release SoD: approver != releaser unless sole-approver mode. */
+  approvedBy?: string | null;
 }
 
 export interface DisbursementItem extends DisbursementItemInput {

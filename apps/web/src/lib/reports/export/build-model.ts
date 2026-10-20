@@ -13,6 +13,8 @@ import {
   type ArBucketKey,
   type BilledInvoiceLine,
 } from '../ar-aging-merge';
+import { DEALER_REPORT_KEYS, isDealerReportKey } from '@/lib/dealer/reports/catalog';
+import { dealerModelFromPayload, dealerReportParams, singleClient } from '@/lib/dealer/reports/export-spec';
 
 /**
  * Client-side transformers: the exact JSON the report API returns (the SAME
@@ -464,6 +466,12 @@ const STATEMENT_BUILDERS: Record<string, { url: string; build: ExportSpec['build
   // AR Aging gets a bespoke builder so the export carries the DISTINCT unbilled
   // contract-asset section beneath billed AR. Billed projection is unchanged.
   ar_aging: { url: '/api/reports/ar-aging',         build: buildArAging,         query: (c) => clean({ location_ids: c.locIds, end_date: c.ed }) },
+  // Dealer Pack reports (R1–R8): the server returns the StatementModel itself.
+  ...Object.fromEntries(DEALER_REPORT_KEYS.map((key) => [key, {
+    url: '/api/dealer/reports',
+    build: (data: unknown, meta: ExportMeta) => dealerModelFromPayload(data, meta),
+    query: (c: ResolveCtx) => dealerReportParams(key, { locationId: singleClient(c.locIds) ?? '', sd: c.sd, ed: c.ed }),
+  }])),
 };
 
 /** Every other report → its endpoint (mirrors report-viewer's urlMap) + generic builder. */
@@ -526,6 +534,8 @@ function resolveComparison(reportKey: string, c: ResolveCtx): ExportSpec['compar
 }
 
 export function resolveExportSpec(reportKey: string, c: ResolveCtx): ExportSpec | null {
+  // A dealer report runs for exactly one client — no export for a consolidated view.
+  if (isDealerReportKey(reportKey) && !singleClient(c.locIds)) return null;
   const s = STATEMENT_BUILDERS[reportKey];
   if (s) return { url: s.url, query: s.query(c), build: s.build, compare: resolveComparison(reportKey, c) };
   const url = GENERIC_URLS[reportKey];

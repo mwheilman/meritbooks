@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { GitBranch, X } from 'lucide-react';
 import { formatMoney } from '@meritbooks/shared';
-import { ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
+import { stepApproverLabel } from '@/lib/approvals/step-label';
 import { WORKFLOW_DOC_TYPES, type WorkflowStepDef, type WorkflowDocType } from '@/lib/approvals/workflow';
 import {
   activeWorkflowFor,
@@ -29,20 +29,16 @@ function bandLabel(s: WorkflowStepDef): string {
     : `${formatMoney(s.minAmountCents)} – ${formatMoney(s.maxAmountCents)}`;
 }
 
-function roleLabel(role: string): string {
-  return ROLE_DEFINITIONS[role as UserRole]?.label ?? role;
-}
-
 function StepRow({ s }: { s: WorkflowStepDef }) {
-  const unknown = !isKnownRole(s.approverRole);
+  const unknown = s.approverRole ? !isKnownRole(s.approverRole) : !s.approverCapability;
   return (
     <li className="flex items-center gap-3 rounded-lg border border-white/5 bg-surface-950 px-3 py-2">
       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/5 font-mono text-2xs text-slate-400">
         {s.stepOrder}
       </span>
       <span className={`text-xs font-medium ${unknown ? 'text-red-300' : 'text-white'}`}>
-        {roleLabel(s.approverRole)}
-        {unknown && <span className="ml-1 text-2xs text-red-400">(unknown role)</span>}
+        {stepApproverLabel(s)}
+        {unknown && <span className="ml-1 text-2xs text-red-400">(no valid approver)</span>}
       </span>
       <span className="ml-auto font-mono text-2xs tabular-nums text-slate-400">{bandLabel(s)}</span>
       {s.requireDistinct && (

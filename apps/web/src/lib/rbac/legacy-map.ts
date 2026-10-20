@@ -34,6 +34,12 @@ export interface LegacyRule {
   requiresAll?: readonly LegacyCell[];
   /** At least one of these cells must ALSO be allowed (empty / absent = no condition). */
   requiresAny?: readonly LegacyCell[];
+  /**
+   * The migration that mirrors this rule into core.legacy_cell_rules. Absent = the
+   * original 158 block. Later corrections are APPENDED (rule numbers never shift) and
+   * rendered into their own migration's generated block, because 158 is already live.
+   */
+  introducedIn?: '168';
 }
 
 /** The money-approval cells today's canApprove() accepts (lib/money/approvals.ts). */
@@ -231,6 +237,18 @@ export const LEGACY_RULES: readonly LegacyRule[] = [
   },
   { cell: 'flag::canEditAccountingSettings', grants: [['core.tenant.accounting_settings', ['view', 'configure']]] },
   { cell: 'flag::canEditSystemSettings', grants: [['core.tenant.settings', ['view', 'configure']]] },
+
+  // ── Migration 168 corrections (APPEND ONLY — rule numbers must never shift) ──────
+  // AR refunds. No legacy key maps to pay.refunds, so the 158 backfill left EVERY
+  // imported role without refund authority, while today's canApprove() lets any
+  // money approver approve an AR refund. Same precedent as the reconciliation row
+  // (05 §2.3: "A granted to roles that pass today's canApprove"): refund approve goes
+  // to every role holding any money-approve key; refund release goes to the roles that
+  // release other payments (ap_disbursement_release:run).
+  { cell: 'bills::approve', grants: [['pay.refunds', ['view', 'approve']]], introducedIn: '168' },
+  { cell: 'checks::approve', grants: [['pay.refunds', ['view', 'approve']]], introducedIn: '168' },
+  { cell: 'payroll::approve', grants: [['pay.refunds', ['view', 'approve']]], introducedIn: '168' },
+  { cell: 'ap_disbursement_release::run', grants: [['pay.refunds', ['view', 'release']]], introducedIn: '168' },
 ];
 
 /**
@@ -412,9 +430,15 @@ export function applyCellOverrides(base: ReadonlySet<LegacyCell>, overrides: Rea
 export type GrantMap = Map<string, Set<Action>>;
 
 /** Expand a set of allowed legacy cells into capability grants (05 §2.3). */
-export function expandLegacyCells(cells: ReadonlySet<LegacyCell>): GrantMap {
+export function expandLegacyCells(
+  cells: ReadonlySet<LegacyCell>,
+  opts: { onlyOriginal?: boolean } = {},
+): GrantMap {
   const out: GrantMap = new Map();
   for (const rule of LEGACY_RULES) {
+    // onlyOriginal: the rule set as migration 158 shipped it (generator use only — the
+    // live 158/159 blocks must not change; corrections land in their own migration).
+    if (opts.onlyOriginal && rule.introducedIn) continue;
     if (!cells.has(rule.cell)) continue;
     if (rule.requiresAll && !rule.requiresAll.every((c) => cells.has(c))) continue;
     if (rule.requiresAny && rule.requiresAny.length > 0 && !rule.requiresAny.some((c) => cells.has(c))) continue;
@@ -464,6 +488,8 @@ export interface LegacyRuleRow {
   actions: Action[];
   requiresAll: LegacyCell[];
   requiresAny: LegacyCell[];
+  /** '158' for the original block, else the correcting migration. */
+  introducedIn: string;
 }
 export function legacyRuleRows(): LegacyRuleRow[] {
   const rows: LegacyRuleRow[] = [];
@@ -476,6 +502,7 @@ export function legacyRuleRows(): LegacyRuleRow[] {
         actions: ACTIONS.filter((a) => actions.includes(a)),
         requiresAll: [...(r.requiresAll ?? [])],
         requiresAny: [...(r.requiresAny ?? [])],
+        introducedIn: r.introducedIn ?? '158',
       });
     }
   });

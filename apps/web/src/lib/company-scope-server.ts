@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { ACTIVE_COMPANY_COOKIE, ALL_COMPANIES, isSpecificCompany } from '@/lib/company-scope';
 import { createAuthedServerSupabase } from '@/lib/supabase/authed';
+import { assertClientInScope } from '@/lib/rbac/client-scope';
 
 /**
  * Server-side seed for the active company (audit 06 §L.3 L1).
@@ -33,6 +34,11 @@ export async function readInitialCompany(): Promise<InitialCompany> {
   try {
     const supabase = await createAuthedServerSupabase();
     if (!supabase) return { id, name: null, shortCode: null };
+    // Client scope (IA M-4, mig 163): a cookie naming a client outside the caller's
+    // assignments falls back to consolidated under `enforce` (shadow logs would_deny and
+    // keeps today's behaviour; off is unchanged).
+    const scope = await assertClientInScope({ supabase }, id, 'active_company');
+    if (!scope.allowed) return { id: ALL_COMPANIES, name: null, shortCode: null };
     const { data } = await supabase
       .schema('core')
       .from('locations')

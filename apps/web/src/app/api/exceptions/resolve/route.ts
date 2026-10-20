@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { isWriteScopeError, loadWritableRow, serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/exceptions/resolve
@@ -109,10 +110,20 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (error) updateError = error.message;
     else if (!data) return badRequest('Receipt is not flagged', 'NOT_RESOLVABLE');
   } else if (source === 'bill') {
-    const { data, error } = await supabase
+    // bills is SELECT-only for members (migration 171): pin to the org, assert the bill's
+    // company is in the caller's client scope, then write with the service role.
+    try {
+      const target = await loadWritableRow(supabase, guard.orgId, { table: 'bills', id });
+      if (!target) return badRequest('Bill is not on hold', 'NOT_RESOLVABLE');
+    } catch (e) {
+      if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+      throw e;
+    }
+    const { data, error } = await serviceWriter()
       .from('bills')
       .update({ status: 'PENDING', payment_hold_reason: null })
       .eq('id', id)
+      .eq('org_id', guard.orgId)
       .eq('status', 'ON_HOLD')
       .select('id')
       .maybeSingle();

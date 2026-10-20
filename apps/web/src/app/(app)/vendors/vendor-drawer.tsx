@@ -7,6 +7,7 @@ import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/compone
 import { CheckCircle, AlertTriangle, FileWarning, Clock, ShieldAlert, FileText, Paperclip, UploadCloud, ShieldCheck, Copy, Landmark, CreditCard, BadgeCheck, BadgeAlert } from 'lucide-react';
 import { VendorDocIntake } from './vendor-doc-intake';
 import { VendorPortalAccess } from '@/components/vendor-portal-access';
+import { MaskedField, type MaskLevel } from '@/components/masked-field';
 
 type ComplianceStatus = 'valid' | 'expired' | 'pending' | 'missing';
 
@@ -20,6 +21,8 @@ interface VenDetail {
   id: string; name: string; legalName: string; email: string | null; phone: string | null;
   website: string | null; addressLine: string | null; paymentTermsDays: number | null;
   is1099: boolean; autoApprove: boolean; taxId: string | null; isActive: boolean; w9Status: string | null;
+  taxIdRevealed?: boolean;
+  fieldMasks?: { masked: string[]; levels: { tin: MaskLevel; bank: MaskLevel; comp: MaskLevel; personal: MaskLevel }; revealed: string[] };
   compliance: {
     w9: ComplianceStatus; glCoi: ComplianceStatus; wcCoi: ComplianceStatus;
     hasPaymentHold: boolean;
@@ -409,6 +412,22 @@ export function VendorDrawer({ vendorId, onClose }: { vendorId: string | null; o
             {data.addressLine && <DetailField label="Address" value={data.addressLine} />}
             <DetailField label="Payment terms" value={data.paymentTermsDays != null ? `Net ${data.paymentTermsDays}` : '--'} />
             <DetailField label="1099 eligible" value={data.is1099 ? 'Yes' : 'No'} />
+            <MaskedField
+              label="Taxpayer ID"
+              value={data.taxId}
+              level={data.fieldMasks?.levels.tin ?? 'masked'}
+              onReveal={vendorId ? async (reason) => {
+                const res = await fetch(`/api/vendors/${vendorId}`, {
+                  method: 'POST',
+                  cache: 'no-store',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ reveal: ['tin'], reason }),
+                });
+                if (!res.ok) return null;
+                const body = (await res.json()) as Pick<VenDetail, 'taxId' | 'taxIdRevealed'>;
+                return body.taxIdRevealed ? body.taxId : null;
+              } : undefined}
+            />
             <DetailField label="Auto-approve" value={data.autoApprove ? 'Yes' : 'No'} />
             <DetailField label="Lifetime billed" value={formatMoney(data.spend.lifetimeBilledCents)} mono />
           </DetailSection>

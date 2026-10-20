@@ -2,12 +2,16 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { assertSessionMeetsPolicy } from '@/lib/auth/assert-session-policy';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { createAdminSupabase } from '@/lib/supabase/admin';
+import { applyFieldMasksAll, maskMeta, resolveFieldAccess } from '@/lib/rbac/field-masks';
 import {
   loadVendorPaymentProfiles,
   upsertVendorPaymentProfile,
 } from '@/lib/ap/vendor-payment-details';
+import { isWriteScopeError } from '@/lib/db/scoped-writer';
 
 /**
  * Vendor payment profiles — the MASKED bank details + preferred method captured
@@ -22,11 +26,19 @@ import {
 export async function GET() {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const profiles = await loadVendorPaymentProfiles(supabase);
-  return NextResponse.json({ profiles: Array.from(profiles.values()) });
+  // Bank details are the `bank` field class (05 R-6). Only last-4 masks are ever
+  // stored; a role whose bank level is `hidden` gets no mask at all.
+  const fieldAccess = await resolveFieldAccess(createAdminSupabase(), orgId, userId);
+  const masked = applyFieldMasksAll(
+    Array.from(profiles.values()) as unknown as Array<Record<string, unknown>>,
+    { accountMask: 'bank', routingMask: 'bank' },
+    fieldAccess,
+  );
+  return NextResponse.json({ profiles: masked.rows, fieldMasks: maskMeta(fieldAccess, masked.masked) });
 }
 
 interface ProfileBody {
@@ -50,6 +62,11 @@ export async function POST(request: Request) {
   const guard = await requirePermission(userId, 'checks', 'create');
   if (!guard.ok) return guard.response;
 
+  // R-7: changing vendor bank details is the classic payment-fraud vector — it needs a
+  // fresh re-verification when the tenant turned step-up on (05 §3.8).
+  const sessionPolicy = await assertSessionMeetsPolicy({ orgId, userId }, { action: 'bank_details_edit' });
+  if (!sessionPolicy.ok) return sessionPolicy.response;
+
   let body: ProfileBody = {};
   try {
     body = (await request.json()) as ProfileBody;
@@ -62,7 +79,7 @@ export async function POST(request: Request) {
 
   let profile;
   try {
-    profile = await upsertVendorPaymentProfile(supabase, orgId, {
+    profile = await upsertVendorPaymentProfile(orgId, {
       vendorId: body.vendorId,
       paymentMethod: body.paymentMethod ?? 'ACH',
       accountType: body.accountType ?? null,
@@ -73,7 +90,8 @@ export async function POST(request: Request) {
       capturedBy: userId,
     });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to save profile' }, { status: 500 });
+    const status = isWriteScopeError(e) ? 403 : 500;
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to save profile' }, { status });
   }
 
   // Audit — record only the MASKED detail (never the raw numbers the client sent).

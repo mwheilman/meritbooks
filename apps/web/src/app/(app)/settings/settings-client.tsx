@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Settings, Building2, Bell, Brain, Globe, Save, Loader2, AlertCircle, Check, Route, Percent, Receipt, Sparkles, ShieldAlert } from 'lucide-react';
+  Settings, Building2, Bell, Brain, Globe, Save, Loader2, AlertCircle, Check, Route, Percent, Receipt, Sparkles, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
@@ -14,6 +14,7 @@ import { LearnedPreferences } from './learned-preferences';
 import { SalesTaxRates } from './sales-tax-rates';
 import { CompaniesPanel } from './companies-panel';
 import { DangerZone } from './danger-zone';
+import { SecurityPolicyPanel } from './security-policy';
 
 interface OrgSettings {
   id: string;
@@ -52,7 +53,7 @@ interface SettingsResponse {
   locations: LocationRow[];
 }
 
-type TabKey = 'organization' | 'chase' | 'ai' | 'routing' | 'revrec' | 'salestax' | 'branding' | 'learned' | 'companies' | 'danger';
+type TabKey = 'organization' | 'chase' | 'ai' | 'routing' | 'revrec' | 'salestax' | 'branding' | 'learned' | 'companies' | 'security' | 'danger';
 
 const TABS: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'organization', label: 'Organization', icon: Globe },
@@ -64,6 +65,7 @@ const TABS: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'branding', label: 'Invoice Display', icon: Receipt },
   { key: 'learned', label: 'Learned Preferences', icon: Sparkles },
   { key: 'companies', label: 'Companies', icon: Building2 },
+  { key: 'security', label: 'Security', icon: ShieldCheck },
   { key: 'danger', label: 'Danger Zone', icon: ShieldAlert },
 ];
 
@@ -156,7 +158,7 @@ export function SettingsClient() {
   const labelCls = "block text-xs text-slate-500 mb-1.5 font-medium";
 
   // The Cost Routing tab manages its own persistence; the org Save bar doesn't apply there.
-  const showSaveBar = activeTab !== 'routing' && activeTab !== 'companies' && activeTab !== 'branding' && activeTab !== 'learned' && activeTab !== 'danger';
+  const showSaveBar = activeTab !== 'routing' && activeTab !== 'companies' && activeTab !== 'branding' && activeTab !== 'learned' && activeTab !== 'security' && activeTab !== 'danger';
 
   return (
     <div className="space-y-6">
@@ -251,6 +253,7 @@ export function SettingsClient() {
           {activeTab === 'branding' && <InvoiceBranding />}
           {activeTab === 'learned' && <LearnedPreferences />}
           {activeTab === 'companies' && <CompaniesPanel />}
+          {activeTab === 'security' && <SecurityPolicyPanel />}
           {activeTab === 'danger' && <DangerZone />}
 
           {showSaveBar && (

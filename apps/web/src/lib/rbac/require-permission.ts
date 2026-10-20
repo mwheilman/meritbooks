@@ -47,10 +47,22 @@ export function permissionDenied(
  * normalized through the same `normalizeMembershipRole` the money-approval path
  * uses, so page/route/approval authz can't disagree.
  */
+export interface RequirePermissionOptions {
+  /** Client the request acts on (v2 checks the capability on that client). */
+  locationId?: string | null;
+  /** Wave 2C passthrough (dollar limits) — not evaluated by this guard. */
+  amountCents?: number;
+  /** Wave 2C passthrough (transaction SoD) — not evaluated by this guard. */
+  preparedBy?: string | null;
+  /** Route label for the dual-run log (defaults to the request path). */
+  route?: string;
+}
+
 export async function requirePermission(
   userId: string,
   featureId: string,
-  action: FeatureAction
+  action: FeatureAction,
+  opts: RequirePermissionOptions = {}
 ): Promise<PermissionResult> {
   // Lazy imports keep this module's top-level graph free of next/headers +
   // Supabase env access, so the pure permissionDenied() decision above stays
@@ -94,9 +106,22 @@ export async function requirePermission(
   // a transient DB issue can never LOCK OUT a user who is allowed by default. Only an
   // unknown/absent role denies.
   const { effectivePermission } = await import('@/lib/rbac/resolve-permissions');
-  const allowed = rawRole
+  const legacyAllowed = rawRole
     ? await effectivePermission(supabase, orgId, rawRole, featureId, action)
     : false;
+
+  // R-11 (05-RBAC §5.1): the single policy decision point. In the tenant's 'legacy' and
+  // 'dual' modes this returns legacyAllowed unchanged ('dual' also logs any v2
+  // disagreement); in 'v2' the capability model decides. opts are passthroughs.
+  const { authorizeLegacyCell } = await import('@/lib/rbac/authorize');
+  const decision = await authorizeLegacyCell({ userId, orgId }, featureId, action, {
+    legacy: async () => legacyAllowed,
+    locationId: opts.locationId ?? null,
+    amountCents: opts.amountCents,
+    preparedBy: opts.preparedBy,
+    route: opts.route,
+  });
+  const allowed = decision.allow;
   if (!allowed) {
     return {
       ok: false,

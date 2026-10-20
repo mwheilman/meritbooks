@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { seedChartOfAccounts } from '@/lib/services/coa-seed';
 import { createCompany, REV_REC_METHODS } from '@/lib/companies/create-company';
@@ -101,7 +102,7 @@ export async function POST(request: Request) {
     industry: body.industry ?? null,
     fiscalYearStartMonth: body.fiscal_year_start_month,
     revRecMethod: body.rev_rec_method,
-  });
+  }, { writer: createAdminSupabase() }); // core.locations write: service role after settings_acct:edit (mig 167)
   if (!created.ok) return NextResponse.json({ error: created.error }, { status: created.status });
 
   // 3. Ensure the tenant's chart of accounts exists (idempotent, self-healing,

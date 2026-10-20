@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { auth } from '@clerk/nextjs/server';
+import { markMemberClient } from './member-client';
 
 /**
  * Request-scoped Supabase client that runs as the AUTHENTICATED USER rather than
@@ -18,14 +19,16 @@ import { auth } from '@clerk/nextjs/server';
  * public customer pay page.
  */
 export function createAuthedSupabase(accessToken: string): SupabaseClient {
-  return createClient(
+  // Registered as a member client: writes to member-locked tables (migration 171) made
+  // with it are escalated to the service role only after lib/db/scoped-writer's checks.
+  return markMemberClient(createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       global: { headers: { Authorization: `Bearer ${accessToken}` } },
       auth: { persistSession: false, autoRefreshToken: false },
     },
-  );
+  ));
 }
 
 /**

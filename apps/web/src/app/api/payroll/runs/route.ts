@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { logHumanAction } from '@/lib/trust/action-log';
-import { createRun, RunStateError } from '@/lib/payroll/run';
+import { companyVisibleToCaller, createRun, RunStateError } from '@/lib/payroll/run';
 import { createRunSchema } from '@/lib/validations/payroll';
 
 /**
@@ -34,8 +35,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: parsed.error.flatten() }, { status: 422 });
   }
 
+  // The admin client bypasses client-scope RLS: confirm the caller can see the company.
+  if (!(await companyVisibleToCaller(supabase, orgId, parsed.data.locationId))) {
+    return NextResponse.json({ error: 'Company not found' }, { status: 404 });
+  }
+
   try {
-    const run = await createRun(supabase, orgId, { ...parsed.data, preparedBy: userId });
+    // payroll_runs / payroll_run_employees are member read-only (mig 170): write with the
+    // service role after the payroll:create check above, pinned to the session org.
+    const run = await createRun(createAdminSupabase(), orgId, { ...parsed.data, preparedBy: userId });
     await logHumanAction(supabase, userId, orgId, {
       action: 'payroll.run.create',
       subjectTable: 'payroll_runs',

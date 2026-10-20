@@ -9,6 +9,7 @@ import { markInvitationsAcceptedByEmail } from '@/lib/team/invitations';
 import { bindClerkOrgOnLogin } from '@/lib/rbac/resolve-tenant';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { parseAdminScope, hasPreparerCapability, hasManagementCapability, type AdminCapability } from '@/lib/team/admin-scope';
+import { filterLocationsToScope } from '@/lib/rbac/client-scope';
 
 export async function GET(_req: NextRequest) {
   try {
@@ -233,6 +234,12 @@ export async function GET(_req: NextRequest) {
         locations = locs ?? [];
       }
     }
+
+    // 4b. Client scope (IA M-4, mig 163): the switcher offers only clients the caller's
+    //     access assignments cover. off → unchanged; shadow → unchanged but every client
+    //     the legacy list shows outside assignment scope is logged as would_deny;
+    //     enforce → those clients are dropped (RLS already hides their rows).
+    locations = await filterLocationsToScope(ctx, locations, 'company_list');
 
     // 5. Build response
     const visibleFeatures = getVisibleFeatures(role);

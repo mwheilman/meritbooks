@@ -47,6 +47,9 @@ export function DetailDrawer({
     <>
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         className={clsx(
           'fixed top-0 right-0 h-full bg-surface-900 border-l border-slate-800 z-50 flex flex-col animate-in slide-in-from-right duration-200 max-w-full',
           width === 'lg' ? 'w-[640px]' : 'w-[520px]'

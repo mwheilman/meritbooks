@@ -42,6 +42,7 @@ export const PLANES: Record<Plane, PlaneDef> = {
       'Banking & Cash',
       'Accounting',
       'Jobs & Costing',
+      'Dealer', // industry pack — shown only when enabled for the active client
       'Reporting & Analytics',
     ],
   },

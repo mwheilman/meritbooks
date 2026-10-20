@@ -4,6 +4,8 @@ export const runtime = 'nodejs'; // @react-pdf/renderer needs Node, not edge
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
+import { loadVendorTinsForFiling } from '@/lib/vendors/tin-store';
 import { buildReadinessReport } from '../readiness';
 import { slugify, type PayerInfo } from '@/lib/tax/form-1099';
 import {
@@ -107,17 +109,25 @@ export async function GET(req: NextRequest) {
     string,
     { tin: string | null; line1: string | null; line2: string | null; city: string | null; state: string | null; zip: string | null }
   >();
+  // The TIN column is not member-readable (migration 167, R-6). A statutory filing
+  // needs the full TIN: read it server-side, pinned to the org, and log the access.
+  let filingTins: Map<string, string | null>;
+  try {
+    filingTins = await loadVendorTinsForFiling(createAdminSupabase(), orgId, userId, vendorIds, `1099-MISC forms TY${year} (PDF generation)`);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'TIN lookup failed' }, { status: 500 });
+  }
   for (let i = 0; i < vendorIds.length; i += 500) {
     const slice = vendorIds.slice(i, i + 500);
     if (slice.length === 0) break;
     const { data: vRows } = await supabase
       .schema('core')
       .from('vendors')
-      .select('id, tin_encrypted, address_line1, address_line2, city, state, zip')
+      .select('id, address_line1, address_line2, city, state, zip')
       .in('id', slice);
     for (const v of (vRows ?? []) as Array<Record<string, unknown>>) {
       vendorDetail.set(String(v.id), {
-        tin: (v.tin_encrypted as string) ?? null,
+        tin: filingTins.get(String(v.id)) ?? null,
         line1: (v.address_line1 as string) ?? null,
         line2: (v.address_line2 as string) ?? null,
         city: (v.city as string) ?? null,

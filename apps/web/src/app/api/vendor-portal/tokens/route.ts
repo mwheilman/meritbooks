@@ -11,6 +11,7 @@ import {
   evaluateTokenState,
   type PortalDocKind,
 } from '@/lib/portal/vendor/tokens';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * Admin surface for the vendor upload portal (AUTHENTICATED — NOT under /api/portal,
@@ -125,7 +126,9 @@ export async function POST(req: Request) {
     expiresAt = d.toISOString();
   }
 
-  const { data, error } = await supabase
+  // vendor_portal_tokens is SELECT-only for members (migration 171): written with the
+  // service role after compliance:manage; the vendor was verified in-org above.
+  const { data, error } = await serviceWriter()
     .from('vendor_portal_tokens')
     .insert({
       org_id: orgId,
@@ -160,7 +163,7 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId, userId } = ctx;
+  const { orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
   const guard = await requirePermission(userId, 'compliance', 'manage');
@@ -169,7 +172,8 @@ export async function PATCH(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { token_id?: string };
   if (!body.token_id) return NextResponse.json({ error: 'token_id is required' }, { status: 400 });
 
-  const { data, error } = await supabase
+  // Service-role write (migration 171), pinned to the caller's org.
+  const { data, error } = await serviceWriter()
     .from('vendor_portal_tokens')
     .update({ status: 'REVOKED', updated_at: new Date().toISOString() })
     .eq('id', body.token_id)

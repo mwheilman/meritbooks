@@ -286,7 +286,9 @@ describe('migration 154 — after (members are SELECT-only on identity/control t
       const writePolicies = await db.query<{ policyname: string; cmd: string; roles: string }>(
         `select policyname, cmd, roles::text as roles from pg_policies
           where schemaname = $1 and tablename = $2
-            and cmd <> 'SELECT' and roles::text <> '{service_role}'`,
+            and cmd <> 'SELECT' and roles::text <> '{service_role}'
+            -- a RESTRICTIVE policy (mig 163 client scope) can only narrow, never open a write
+            and permissive = 'PERMISSIVE'`,
         [schema, table],
       );
       expect(writePolicies.rows, `${qualified} member write policies`).toEqual([]);

@@ -8,6 +8,7 @@ import { approveBill, scheduleBill, payBill, voidBill } from '@/lib/services/bil
 import { logHumanAction, logAction } from '@/lib/trust/action-log';
 import { evaluateBillById } from '@/lib/policy/ap-enforce';
 import { getHomeCurrency } from '@/lib/currency';
+import { isWriteScopeError, loadWritableRow, serviceWriter } from '@/lib/db/scoped-writer';
 
 // GET /api/bills/[id] — full bill detail for the AP panel.
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
@@ -221,7 +222,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ ok: true, ...res });
     }
     if (body.action === 'override_approver') {
-      const { error } = await supabase
+      // bills is SELECT-only for members (migration 171): load the bill pinned to the org
+      // (and assert its company is in the caller's client scope), then write it with the
+      // service role.
+      const target = await loadWritableRow(supabase, orgId, { table: 'bills', id: params.id });
+      if (!target) throw new Error('Bill not found');
+      const { error } = await serviceWriter()
         .from('bills')
         .update({ approver_type: body.approver_type, approver_ref: body.approver_ref ?? null, updated_at: new Date().toISOString() })
         .eq('org_id', orgId)
@@ -246,7 +252,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
       if ((bill as { status: string }).status !== 'ON_HOLD') {
         throw new Error('This bill is not on hold');
       }
-      const { error } = await supabase
+      // Read above through the caller's RLS client (org + client scope); bills is
+      // SELECT-only for members (migration 171), so the release is a service-role write.
+      const { error } = await serviceWriter()
         .from('bills')
         .update({ status: 'PENDING', payment_hold_reason: null, updated_at: new Date().toISOString() })
         .eq('org_id', orgId)
@@ -273,6 +281,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
   } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message }, { status: 403 });
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Action failed' }, { status: 500 });
   }
 }

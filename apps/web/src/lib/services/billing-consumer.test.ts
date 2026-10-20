@@ -19,7 +19,8 @@
 import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
-import { processBillingEvents } from './billing-consumer';
+import { processBillingEvents, type BillingPayload } from './billing-consumer';
+import type { ClaimedEvent } from '@/lib/events/claim';
 
 // ── Minimal fake of the supabase-js query builder ─────────────────────────────
 // Supports the chain processBillingEvents + its resolvers use:
@@ -93,9 +94,27 @@ class Builder {
 }
 
 function fakeDb(store: Store): SupabaseClient {
+  // core.claim_pending_events / release_event_claims (migration 167, finding M5).
+  const rpc = async (fn: string, args: Record<string, unknown>) => {
+    const events = store['core.events'] ?? [];
+    if (fn === 'claim_pending_events') {
+      const rows = events.filter((r) =>
+        r.status === 'pending' && r.event_type === args.p_event_type && !r.claimed_by
+        && (args.p_org == null || r.org_id === args.p_org));
+      for (const r of rows) r.claimed_by = args.p_token;
+      return { data: rows.map((r) => ({ ...r })), error: null };
+    }
+    if (fn === 'release_event_claims') {
+      const rows = events.filter((r) => r.claimed_by === args.p_token && r.status === 'pending');
+      for (const r of rows) r.claimed_by = null;
+      return { data: rows.length, error: null };
+    }
+    return { data: null, error: { message: `unknown rpc ${fn}` } };
+  };
   const db = {
-    schema: (s: string) => ({ from: (t: string) => new Builder(store, s, t) }),
+    schema: (s: string) => ({ from: (t: string) => new Builder(store, s, t), rpc }),
     from: (t: string) => new Builder(store, 'public', t),
+    rpc,
   };
   return db as unknown as SupabaseClient;
 }
@@ -271,5 +290,68 @@ describe('billing-consumer — per-event org resolution (no cross-tenant posting
     // Both events flipped to processed, scoped to their own row (idempotency intact).
     expect(s['core.events'].find((e) => e.id === A.eventRowId)?.status).toBe('processed');
     expect(s['core.events'].find((e) => e.id === B.eventRowId)?.status).toBe('processed');
+  });
+});
+
+// ── M5: atomic claim (migration 167) ───────────────────────────────────────────
+// Two drains racing over the same queue (the hourly scheduler + a person pressing
+// "Process") must never both process one event — that was a double invoice and a
+// double GL post. Each drain processes only the rows it claimed.
+describe('billing-consumer — concurrent drains claim disjoint batches (M5)', () => {
+  it('two concurrent drains issue exactly one invoice for one pending event', async () => {
+    const s = store('AS_BILLED', null);
+    const db = fakeDb(s);
+    const [a, b] = await Promise.all([processBillingEvents(db, ORG), processBillingEvents(db, ORG)]);
+    expect(a.processed + b.processed).toBe(1);
+    expect(s['public.invoices']).toHaveLength(1);
+    expect(s['public.gl_entry_lines']).toHaveLength(2);
+    expect(s['core.events'][0].status).toBe('processed');
+  });
+
+  it('a pre-claimed batch is processed as given (the scheduler gates on exactly this set)', async () => {
+    const s = store('AS_BILLED', null);
+    const db = fakeDb(s);
+    // Claimed by someone else → a fresh drain finds nothing to do.
+    s['core.events'][0].claimed_by = 'scheduler:other';
+    const res = await processBillingEvents(db, ORG);
+    expect(res.processed).toBe(0);
+    expect(s['public.invoices']).toHaveLength(0);
+  });
+});
+
+// ── Wave 2G: a lapsed lease can't double-finalize ──────────────────────────────
+// A batch is claimed once; if a drain outlives the 15-minute lease a second drain may
+// reclaim the tail. The first drain must then neither book nor finalize those events,
+// and a booked-but-unfinalized event self-heals from its invoice (source_event_id).
+describe('billing-consumer — claim renewal + claim-conditional finalize (wave 2G)', () => {
+  it('a drain whose claim was taken over books nothing and finalizes nothing', async () => {
+    const s = store('AS_BILLED', null);
+    const db = fakeDb(s);
+    const ev = { ...s['core.events'][0] } as unknown as ClaimedEvent<BillingPayload>;
+    // The lease lapsed: drain B reclaimed the row; drain A still holds its stale batch.
+    s['core.events'][0].claimed_by = 'drain:B';
+    const res = await processBillingEvents(db, ORG, { claimed: { token: 'drain:A', rows: [ev] } });
+    expect(res).toMatchObject({ processed: 0, rejected: 0, skipped: 1 });
+    expect(s['public.invoices']).toHaveLength(0);
+    expect(s['public.gl_entry_lines']).toHaveLength(0);
+    expect(s['core.events'][0].status).toBe('pending');
+    expect(s['core.events'][0].claimed_by).toBe('drain:B');
+  });
+
+  it('the new owner finalizes from the invoice a previous drain already booked — no second invoice', async () => {
+    const s = store('AS_BILLED', null);
+    s['public.invoices'].push({ id: 'inv-prev', org_id: ORG, invoice_number: 'INV-ABC-202606-0001', gl_entry_id: 'je-prev', source_event_id: 'ev-row-1' });
+    const res = await processBillingEvents(fakeDb(s), ORG);
+    expect(res).toMatchObject({ processed: 1, rejected: 0 });
+    expect(s['public.invoices']).toHaveLength(1);
+    expect(s['public.gl_entry_lines']).toHaveLength(0);
+    expect(s['core.events'][0]).toMatchObject({ status: 'processed', invoice_id: 'inv-prev', gl_entry_id: 'je-prev' });
+  });
+
+  it('stamps the source event on the invoice and the GL entry (the DB unique guarantors)', async () => {
+    const s = store('AS_BILLED', null);
+    await processBillingEvents(fakeDb(s), ORG);
+    expect(s['public.invoices'][0].source_event_id).toBe('ev-row-1');
+    expect(s['public.gl_entries'][0].source_ref).toBe('core.events:ev-row-1');
   });
 });

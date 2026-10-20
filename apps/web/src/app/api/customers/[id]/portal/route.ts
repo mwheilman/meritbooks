@@ -8,6 +8,7 @@ import {
   portalTokenStatus,
   type PortalTokenRow,
 } from '@/lib/portal/customer/tokens';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * Admin control plane for a customer's self-service portal link (migration 141).
@@ -110,9 +111,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
   const label = typeof body.label === 'string' && body.label.trim() ? body.label.trim().slice(0, 120) : null;
 
+  // customer_portal_tokens is SELECT-only for members (migration 171): a member could
+  // otherwise mint a bearer link for any customer. The customer was read through the
+  // caller's RLS client above (org + client scope); write with the service role.
+  const writer = serviceWriter();
+
   // Supersede any existing ACTIVE link so there's a single live magic link per
   // customer — regenerating a link should invalidate the old one immediately.
-  await supabase
+  await writer
     .from('customer_portal_tokens')
     .update({ status: 'REVOKED', updated_at: new Date().toISOString() })
     .eq('org_id', orgId)
@@ -120,7 +126,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .eq('status', 'ACTIVE');
 
   const token = generatePortalToken();
-  const { data, error } = await supabase
+  const { data, error } = await writer
     .from('customer_portal_tokens')
     .insert({
       org_id: orgId,
@@ -149,7 +155,12 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   const perm = await requirePermission(userId, 'customers', 'edit');
   if (!perm.ok) return perm.response;
 
-  await supabase
+  // Service-role write (migration 171) — the customer must be visible to the caller
+  // (org + client scope) first.
+  if (!(await customerInOrg(supabase, orgId, params.id))) {
+    return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+  }
+  await serviceWriter()
     .from('customer_portal_tokens')
     .update({ status: 'REVOKED', updated_at: new Date().toISOString() })
     .eq('org_id', orgId)

@@ -32,6 +32,8 @@ import { SavedPacks } from './saved-packs';
 import { SavedViews, type SavedView, type ViewConfig } from './saved-views';
 import { useBasisOverlay, type PresentationBasis, type BasisOverlay } from './use-basis-overlay';
 import { BasisBanner } from './basis-banner';
+import { DealerReportPanel } from '../dealer/reports/report-panel';
+import { DEALER_REPORTS } from '@/lib/dealer/reports/catalog';
 import {
   type CompareMode,
   parseISO,
@@ -170,6 +172,10 @@ const CATALOG: ReportCategory[] = [
   { key: 'tax', label: 'Tax & Compliance', icon: Shield, reports: [
     { key: 'sales_tax', label: 'Sales Tax Summary', desc: 'Tax collected by jurisdiction', needsDates: true, hasBasis: false, hasDetail: true, hasCompare: false },
   ]},
+  // Dealer Pack (FPB-dealer-pack §7). One client at a time; see dealer/reports/report-panel.tsx.
+  { key: 'dealer', label: 'Dealer', icon: Landmark, reports: DEALER_REPORTS.map((r) => (
+    { key: r.key, label: r.label, desc: r.desc, needsDates: r.mode === 'period', hasBasis: false, hasDetail: false, hasCompare: false }
+  ))},
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -704,6 +710,8 @@ function ReportContent({ reportKey, sd, ed, locIds, basis, presentationBasis, ov
   // non-overlay basis reports (e.g. P&L by Month), and never while an overlay basis is active.
   const overlayReport = ['pnl', 'pnl_dept', 'pnl_class', 'bs', 'tb'].includes(reportKey);
   if (!overlayReport && basis !== 'accrual' && presentationBasis === 'GAAP') p.basis = basis;
+
+  if (reportKey.startsWith('dealer_')) return <DealerReportPanel reportKey={reportKey} sd={sd} ed={ed} locIds={locIds} />;
 
   switch (reportKey) {
     case 'pnl':

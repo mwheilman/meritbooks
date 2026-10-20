@@ -71,6 +71,18 @@ export async function POST(request: Request) {
       unit_cost_cents: l.unit_cost_cents ?? undefined,
     }));
 
+    // H6_JE_SELF_POST (wave 2G): the caller creates AND posts this entry, so at/above the
+    // tenant's self-post amount someone else must post it — enforced in v2, logged in dual.
+    const { checkManualJePostSod } = await import('@/lib/rbac/je-post-sod');
+    const sod = await checkManualJePostSod(supabase, {
+      orgId: resolvedOrgId,
+      actor: userId,
+      amountCents: lines.reduce((sum, l) => sum + l.debit_cents, 0),
+      route: '/api/gl/post',
+      locationId: body.location_id,
+    });
+    if (!sod.ok) return NextResponse.json({ error: sod.error, code: sod.code }, { status: sod.status });
+
     const postResult = await postJournalEntry(supabase, {
       org_id: resolvedOrgId,
       location_id: body.location_id,

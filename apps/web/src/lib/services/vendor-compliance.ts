@@ -16,6 +16,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { assertOrgRefs, isMemberClient, isWriteScopeError, writerFor } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -185,10 +186,13 @@ export async function enforcePaymentAllowed(
 
   if (state.activeOverride) {
     if (state.activeOverride.hold_type === 'ONE_TIME') {
-      await db
+      // vendor_payment_holds is SELECT-only for members (migration 171): the override was
+      // read through the caller's client; consume it with the service role, org pinned.
+      await writerFor(db)
         .from('vendor_payment_holds')
         .update({ consumed_at: new Date().toISOString(), consumed_bill_id: billId })
-        .eq('id', state.activeOverride.id);
+        .eq('id', state.activeOverride.id)
+        .eq('org_id', orgId);
       await logEvent(db, orgId, vendorId, 'OVERRIDE_CONSUMED',
         `One-time override consumed for bill payment`, { billId, overrideId: state.activeOverride.id, actor });
     }
@@ -213,7 +217,18 @@ export async function grantOverride(
   if (!reason || reason.trim().length < 3) return { success: false, error: 'A reason is required for an override.' };
   if (holdType === 'TEMPORARY' && !endDate) return { success: false, error: 'A temporary override needs an end date.' };
 
-  const { data, error } = await db
+  // vendor_payment_holds is SELECT-only for members (migration 171) — a member could
+  // otherwise grant themselves an override and pay a non-compliant vendor. The route has
+  // authorized the override; the vendor is pinned to the org; service-role write.
+  try {
+    if (isMemberClient(db)) {
+      await assertOrgRefs(orgId, [{ schema: 'core', table: 'vendors', ids: [vendorId], label: 'vendor' }], { caller: db });
+    }
+  } catch (e) {
+    if (isWriteScopeError(e)) return { success: false, error: e.message };
+    throw e;
+  }
+  const { data, error } = await writerFor(db)
     .from('vendor_payment_holds')
     .insert({
       org_id: orgId,
@@ -251,10 +266,12 @@ export async function releaseOverride(
   if (error || !ov) return { success: false, error: 'Override not found.' };
   if (ov.released_at) return { success: false, error: 'Already released.' };
 
-  const { error: upErr } = await db
+  // Read through the caller's client above; service-role write (migration 171), org pinned.
+  const { error: upErr } = await writerFor(db)
     .from('vendor_payment_holds')
     .update({ released_at: new Date().toISOString(), released_by_user: actor, released_reason: reason })
-    .eq('id', overrideId);
+    .eq('id', overrideId)
+    .eq('org_id', orgId);
   if (upErr) return { success: false, error: upErr.message };
 
   await logEvent(db, orgId, ov.vendor_id as string, 'OVERRIDE_RELEASED',

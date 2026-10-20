@@ -4,6 +4,7 @@
  *   158_role_definitions.sql      ← lib/rbac/legacy-map.ts (legacy block)
  *                                   lib/rbac/access-templates.ts (role_templates block)
  *   159_permission_sets.sql       ← lib/rbac/access-templates.ts (permission_sets block)
+ *   168_events_vendors_locks_and_money_kinds.sql ← lib/rbac/legacy-map.ts (rules introducedIn '168')
  *
  * Usage (from apps/web):  npx tsx scripts/rbac/generate-access-seed.ts [--check]
  *   --check  exit 1 if any block is out of date (no write).
@@ -26,8 +27,15 @@ import {
   legacyAssignableBand,
   legacyRoleCells,
   legacyRuleRows,
+  expandLegacyCells,
 } from '../../src/lib/rbac/legacy-map';
-import { ROLE_TEMPLATES, PERMISSION_SET_TEMPLATES } from '../../src/lib/rbac/access-templates';
+import {
+  ROLE_TEMPLATES,
+  PERMISSION_SET_TEMPLATES,
+  legacyFullBooksGrants,
+  legacyControllerReleaseGrants,
+  type PermissionSetTemplate,
+} from '../../src/lib/rbac/access-templates';
 
 const MIGRATIONS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../packages/supabase/migrations');
 
@@ -89,10 +97,29 @@ function legacyBlock(): string {
   out.push('insert into core.legacy_cell_rules (rule_no, cell, capability, actions, requires_all, requires_any) values');
   out.push(
     legacyRuleRows()
+      .filter((r) => r.introducedIn === '158')
       .map((r) => `  (${r.ruleNo}, ${sqlText(r.cell)}, ${sqlText(r.capability)}, ${sqlArr(r.actions)}, ${sqlArr(r.requiresAll)}, ${sqlArr(r.requiresAny)})`)
       .join(',\n') + ';',
   );
   return out.join('\n');
+}
+
+/**
+ * Legacy-rule corrections appended after 158 went live (rule numbers continue; 158's
+ * block deletes + re-inserts only its own rules, so a fresh replay stays exact).
+ */
+function legacyCorrectionsBlock(migration: string): () => string {
+  return () => {
+    const rows = legacyRuleRows().filter((r) => r.introducedIn === migration);
+    if (rows.length === 0) throw new Error(`no legacy rules introduced in ${migration}`);
+    return [
+      'insert into core.legacy_cell_rules (rule_no, cell, capability, actions, requires_all, requires_any, introduced_in) values',
+      rows
+        .map((r) => `  (${r.ruleNo}, ${sqlText(r.cell)}, ${sqlText(r.capability)}, ${sqlArr(r.actions)}, ${sqlArr(r.requiresAll)}, ${sqlArr(r.requiresAny)}, ${sqlText(r.introducedIn)})`)
+        .join(',\n'),
+      'on conflict (rule_no, capability) do update set cell = excluded.cell, actions = excluded.actions, requires_all = excluded.requires_all, requires_any = excluded.requires_any, introduced_in = excluded.introduced_in;',
+    ].join('\n');
+  };
 }
 
 function roleTemplatesBlock(): string {
@@ -111,6 +138,21 @@ function roleTemplatesBlock(): string {
   return `select core.rbac_seed_platform_roles(${dollar(jsonLines(rows))});`;
 }
 
+/**
+ * Grants of the two legacy permission-set templates AS 159 SHIPPED THEM (original 158
+ * rules). 159 is live; later rule corrections publish a new template version from the
+ * correcting migration (see permissionSetsCorrectionBlock).
+ */
+function originalLegacySetGrants(key: string): PermissionSetTemplate['grants'] | null {
+  if (key === 'legacy_full_books') {
+    return legacyFullBooksGrants(expandLegacyCells(legacyRoleCells('company_admin'), { onlyOriginal: true }));
+  }
+  if (key === 'legacy_controller_release') {
+    return legacyControllerReleaseGrants(expandLegacyCells(legacyRoleCells('merit_controller'), { onlyOriginal: true }));
+  }
+  return null;
+}
+
 function permissionSetsBlock(): string {
   const rows = PERMISSION_SET_TEMPLATES.map((t) => ({
     key: t.key,
@@ -121,9 +163,17 @@ function permissionSetsBlock(): string {
     max_assignment_days: t.maxAssignmentDays,
     is_envelope: t.isEnvelope,
     is_sealed: t.isSealed,
-    grants: t.grants,
+    grants: originalLegacySetGrants(t.key) ?? t.grants,
   }));
   return `select core.rbac_seed_platform_permission_sets(${dollar(jsonLines(rows))});`;
+}
+
+/** Platform legacy sets whose grants changed with the 168 rule corrections → new version. */
+function permissionSetsCorrectionBlock(): string {
+  const rows = PERMISSION_SET_TEMPLATES
+    .filter((t) => t.key === 'legacy_full_books' || t.key === 'legacy_controller_release')
+    .map((t) => ({ key: t.key, grants: t.grants }));
+  return `select core.rbac_republish_platform_permission_sets(${dollar(jsonLines(rows))}, 'MeritBooks correction (migration 168): AR refund approval / release');`;
 }
 
 const BLOCKS: Array<{ file: string; name: string; body: () => string }> = [
@@ -131,6 +181,8 @@ const BLOCKS: Array<{ file: string; name: string; body: () => string }> = [
   { file: '158_role_definitions.sql', name: 'legacy', body: legacyBlock },
   { file: '158_role_definitions.sql', name: 'role_templates', body: roleTemplatesBlock },
   { file: '159_permission_sets.sql', name: 'permission_sets', body: permissionSetsBlock },
+  { file: '168_events_vendors_locks_and_money_kinds.sql', name: 'legacy_168', body: legacyCorrectionsBlock('168') },
+  { file: '168_events_vendors_locks_and_money_kinds.sql', name: 'permission_sets_168', body: permissionSetsCorrectionBlock },
 ];
 
 export function renderBlock(sql: string, name: string, body: string): string {

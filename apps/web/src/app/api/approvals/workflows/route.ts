@@ -14,7 +14,8 @@ import { ALL_ROLES } from '@/lib/rbac/permissions';
 
 /**
  * GET  /api/approvals/workflows  — list this org's configured approval chains.
- * POST /api/approvals/workflows  — create a chain (steps + tiers + approver roles).
+ * POST /api/approvals/workflows  — create a chain (steps + tiers + approvers: a legacy
+ *                                  role, or an approval capability + dollar floor).
  *
  * Defining an approval workflow is a financial-CONTROL action (it governs how money
  * documents route for approval), so both verbs sit behind settings_system:edit. Reads
@@ -32,13 +33,24 @@ export const GET = apiQueryHandler(null, async (_params, ctx) => {
   return NextResponse.json({ workflows });
 });
 
-const stepSchema = z.object({
-  stepOrder: z.number().int().min(1),
-  minAmountCents: z.number().int().min(0).default(0),
-  maxAmountCents: z.number().int().min(0).nullable().default(null),
-  approverRole: z.enum(ALL_ROLES as [string, ...string[]]),
-  requireDistinct: z.boolean().default(true),
-});
+// 05 R-12: a step names a legacy role (compat) OR an approval capability + dollar floor.
+const stepSchema = z
+  .object({
+    stepOrder: z.number().int().min(1),
+    minAmountCents: z.number().int().min(0).default(0),
+    maxAmountCents: z.number().int().min(0).nullable().default(null),
+    approverRole: z.enum(ALL_ROLES as [string, ...string[]]).nullable().optional(),
+    approverCapability: z
+      .string()
+      .regex(/^[a-z0-9_]+(\.[a-z0-9_]+)+:(approve|post|release)$/, 'Not an approval permission')
+      .nullable()
+      .optional(),
+    minApproverLimitCents: z.number().int().min(0).nullable().optional(),
+    requireDistinct: z.boolean().default(true),
+  })
+  .refine((s) => !!s.approverRole || !!s.approverCapability, {
+    message: 'Each step needs an approver role or an approval permission',
+  });
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
@@ -65,7 +77,9 @@ export const POST = apiHandler(createSchema, async (body, ctx) => {
         // types (apiHandler infers the schema's optional-in shape) and never fires.
         minAmountCents: s.minAmountCents ?? 0,
         maxAmountCents: s.maxAmountCents ?? null,
-        approverRole: s.approverRole as (typeof ALL_ROLES)[number],
+        approverRole: (s.approverRole ?? null) as (typeof ALL_ROLES)[number] | null,
+        approverCapability: s.approverRole ? null : s.approverCapability ?? null,
+        minApproverLimitCents: s.approverRole ? null : s.minApproverLimitCents ?? null,
         requireDistinct: s.requireDistinct ?? true,
       })),
       createdByUser: ctx.userId,

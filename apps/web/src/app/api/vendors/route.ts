@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
+import { VENDOR_READ_SELECT } from '@/lib/vendors/columns';
+import { loadVendorTins, tinPresent } from '@/lib/vendors/tin-store';
+import { maskMeta, maskValue, resolveFieldAccess, type FieldAccess } from '@/lib/rbac/field-masks';
 
 // VendorInput is the shape the UI form sends. Several of these are API-level
 // fields that do NOT map 1:1 onto columns of `core.vendors` (the live table) —
@@ -58,27 +63,40 @@ function daysToTerms(days: number | null | undefined): string {
 
 // Surface the API-shaped fields the UI expects on top of the raw DB row so the
 // response contract stays stable even though the underlying columns differ.
-function withApiFields(v: Record<string, unknown>): Record<string, unknown> {
-  // Never surface the raw encrypted TIN to the client. Strip it from the spread
-  // and expose only a boolean gap flag for the 1099 chip.
-  const { tin_encrypted, ...rest } = v;
-  const tinPresent = typeof tin_encrypted === 'string' && tin_encrypted.trim().length > 0;
+// The TIN is never read with the member's client (column revoked, migration 167);
+// the server passes it in and it leaves only as a presence flag + a mask at the
+// caller's field level (05 R-6: hidden → null, masked → "•••• 1234").
+function withApiFields(v: Record<string, unknown>, tin: string | null, access: FieldAccess): Record<string, unknown> {
+  const { tin_encrypted: _never, ...rest } = v;
+  void _never;
+  const present = tinPresent(tin);
   return {
     ...rest,
     is_1099: !!v.is_1099_eligible,
     payment_terms: daysToTerms(v.payment_terms_days as number | null),
     tax_id: null, // no plaintext TIN column on core.vendors (tin_encrypted is not surfaced)
+    tin_masked: present ? maskValue('tin', tin, access) : null,
     notes: null, // no notes column on core.vendors
     // 1099 chip signal: eligible vendor with no TIN on file — a January-chase gap.
-    missing_tin: !!v.is_1099_eligible && !tinPresent,
+    missing_tin: !!v.is_1099_eligible && !present,
   };
+}
+
+/** TINs (server-side, org-pinned) + the caller's field access, for serializing vendors. */
+async function tinContext(orgId: string, userId: string, vendorIds: string[]) {
+  const admin = createAdminSupabase();
+  const [tins, access] = await Promise.all([
+    vendorIds.length ? loadVendorTins(admin, orgId, vendorIds) : Promise.resolve(new Map<string, string | null>()),
+    resolveFieldAccess(admin, orgId, userId),
+  ]);
+  return { tins, access };
 }
 
 export async function GET(req: NextRequest) {
   try {
     const ctx = await requireAuthedContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { supabase, orgId } = ctx;
+    const { supabase, orgId, userId } = ctx;
     if (!orgId) return NextResponse.json({ vendors: [], total: 0 });
 
     const { searchParams } = new URL(req.url);
@@ -96,7 +114,7 @@ export async function GET(req: NextRequest) {
     // the child rows separately (below) and stitch them in JS.
     let query = supabase
       .schema('core').from('vendors')
-      .select('*', { count: 'exact' })
+      .select(VENDOR_READ_SELECT, { count: 'exact' })
       .eq('org_id', orgId)
       .is('deleted_at', null);
 
@@ -130,7 +148,10 @@ export async function GET(req: NextRequest) {
 
     // Fetch compliance docs + payment holds for the vendors on this page
     // (public schema) and group them by vendor_id. Empty page → skip the calls.
-    const vendorIds = (vendors ?? []).map((v: Record<string, unknown>) => v.id as string);
+    // Explicit column list (no TIN) → supabase-js can't infer the row type from a
+    // non-literal select string; the rows are plain vendor records.
+    const vendorRows = (vendors ?? []) as unknown as Array<Record<string, unknown>>;
+    const vendorIds = vendorRows.map((v) => v.id as string);
 
     const docsByVendor = new Map<string, Array<{ doc_type: string; status: string; expiration_date: string | null }>>();
     const holdsByVendor = new Map<string, Array<{ hold_type: string; start_date: string | null; end_date: string | null }>>();
@@ -176,8 +197,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const { tins, access } = await tinContext(orgId, userId, vendorIds);
+
     // Compute compliance status per vendor
-    const enriched = (vendors ?? []).map((v: Record<string, unknown>) => {
+    const enriched = vendorRows.map((v) => {
       const docs = docsByVendor.get(v.id as string) ?? [];
       const holds = holdsByVendor.get(v.id as string) ?? [];
 
@@ -210,7 +233,7 @@ export async function GET(req: NextRequest) {
       };
 
       return {
-        ...withApiFields(v),
+        ...withApiFields(v, tins.get(v.id as string) ?? null, access),
         compliance: complianceStatus,
         ytd_spend_cents: ytdSpendByVendor.get(v.id as string) ?? 0,
       };
@@ -228,6 +251,7 @@ export async function GET(req: NextRequest) {
       page,
       perPage,
       totalPages: Math.ceil((count ?? 0) / perPage),
+      fieldMasks: maskMeta(access, access.policy.tin === 'visible' ? [] : ['tin_masked']),
     });
   } catch (error) {
     console.error('GET /api/vendors error:', error);
@@ -241,6 +265,12 @@ export async function POST(req: NextRequest) {
     if (ctx instanceof NextResponse) return ctx;
     const { supabase, orgId, userId } = ctx;
     if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
+
+    // Authorize (migration 168: core.vendors is SELECT-only for members; the write below
+    // goes through the service role, so this check is the gate).
+    const guard = await requirePermission(userId, 'vendors', 'create');
+    if (!guard.ok) return guard.response;
+    if (guard.orgId !== orgId) return NextResponse.json({ error: 'Forbidden', code: 'FORBIDDEN' }, { status: 403 });
 
     const body = (await req.json()) as VendorInput;
 
@@ -297,10 +327,11 @@ export async function POST(req: NextRequest) {
       created_by: userId,
     };
 
-    const { data: vendor, error } = await supabase
+    // Service-role write, org pinned to the session org (insertData.org_id = orgId).
+    const { data: vendor, error } = await createAdminSupabase()
       .schema('core').from('vendors')
       .insert(insertData)
-      .select('*')
+      .select(VENDOR_READ_SELECT)
       .single();
 
     if (error) {
@@ -308,7 +339,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to create vendor', detail: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ vendor: withApiFields(vendor as Record<string, unknown>) }, { status: 201 });
+    // A new vendor has no TIN on file yet (the create form never persists one).
+    const { access } = await tinContext(orgId, userId, []);
+    return NextResponse.json({ vendor: withApiFields(vendor as unknown as Record<string, unknown>, null, access) }, { status: 201 });
   } catch (error) {
     console.error('POST /api/vendors error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -319,7 +352,13 @@ export async function PATCH(req: NextRequest) {
   try {
     const ctx = await requireAuthedContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { supabase } = ctx;
+    const { orgId, userId } = ctx;
+    if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
+
+    // Authorize (migration 168 — the update below runs as the service role).
+    const guard = await requirePermission(userId, 'vendors', 'edit');
+    if (!guard.ok) return guard.response;
+    if (guard.orgId !== orgId) return NextResponse.json({ error: 'Forbidden', code: 'FORBIDDEN' }, { status: 403 });
 
     const body = await req.json();
     const { id, ...updates } = body as { id: string } & Partial<VendorInput>;
@@ -349,19 +388,24 @@ export async function PATCH(req: NextRequest) {
 
     updateData.updated_at = new Date().toISOString();
 
-    const { data: vendor, error } = await supabase
+    // Service-role write pinned to the session org: a vendor id from another tenant
+    // matches no row (404), never another tenant's vendor.
+    const { data: vendor, error } = await createAdminSupabase()
       .schema('core').from('vendors')
       .update(updateData)
+      .eq('org_id', orgId)
       .eq('id', id)
-      .select('*')
-      .single();
+      .select(VENDOR_READ_SELECT)
+      .maybeSingle();
 
     if (error) {
       console.error('Vendor update error:', error);
       return NextResponse.json({ error: 'Failed to update vendor' }, { status: 500 });
     }
+    if (!vendor) return NextResponse.json({ error: 'Vendor not found' }, { status: 404 });
 
-    return NextResponse.json({ vendor: withApiFields(vendor as Record<string, unknown>) });
+    const { tins, access } = await tinContext(orgId, userId, [id]);
+    return NextResponse.json({ vendor: withApiFields(vendor as unknown as Record<string, unknown>, tins.get(id) ?? null, access) });
   } catch (error) {
     console.error('PATCH /api/vendors error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

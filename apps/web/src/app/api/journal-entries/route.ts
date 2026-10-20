@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { createAdminSupabase } from '@/lib/supabase/server';
-import { requireAuth, requireAuthedContext } from '@/lib/api-handler';
+import { requireAuthedContext } from '@/lib/api-handler';
+import { assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
@@ -126,9 +126,9 @@ export async function GET(request: Request) {
 
 // POST — create a new journal entry
 export async function POST(request: Request) {
-  const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
-  const { userId } = authResult;
+  const authed = await requireAuthedContext();
+  if (authed instanceof NextResponse) return authed;
+  const { userId } = authed;
 
   // Authorize — this endpoint posts a journal entry to the GL immediately
   // (post_immediately defaults true), so gate on journal_entries:post — the same
@@ -136,7 +136,11 @@ export async function POST(request: Request) {
   const guard = await requirePermission(userId, 'journal_entries', 'post');
   if (!guard.ok) return guard.response;
 
-  const supabase = createAdminSupabase();
+  // gl_entries / gl_entry_lines are SELECT-only for members (migration 171): reads use
+  // the caller's RLS client, writes the service role — pinned to the SESSION org (never
+  // the org of whatever location the body names) after the org / client-scope check.
+  const supabase = authed.supabase;
+  const writer = serviceWriter();
 
   let body: z.infer<typeof jeCreateSchema>;
   try {
@@ -186,18 +190,24 @@ export async function POST(request: Request) {
     }
   }
 
-  // Get org_id from location
+  const orgId = guard.orgId;
   const { data: loc } = await supabase
     .schema('core').from('locations')
     .select('org_id')
     .eq('id', body.location_id)
-    .single();
+    .eq('org_id', orgId)
+    .maybeSingle();
 
   if (!loc) {
     return NextResponse.json({ error: 'Location not found', code: 'NOT_FOUND' }, { status: 404 });
   }
 
-  const orgId = loc.org_id as string;
+  try {
+    await assertWriteScope(supabase, orgId, [body.location_id, ...body.lines.map((l) => l.location_id)]);
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    throw e;
+  }
 
   // Find fiscal period
   const { data: period } = await supabase
@@ -223,10 +233,20 @@ export async function POST(request: Request) {
     }, { status: 422 });
   }
 
+  // H6_JE_SELF_POST (wave 2G): the creator of a manual entry at/above the tenant's
+  // self-post amount may not post it themselves — enforced in v2, logged in dual.
+  if (body.post_immediately) {
+    const { checkManualJePostSod } = await import('@/lib/rbac/je-post-sod');
+    const sod = await checkManualJePostSod(writer, {
+      orgId, actor: userId, amountCents: totalDebits, route: '/api/journal-entries', locationId: body.location_id,
+    });
+    if (!sod.ok) return NextResponse.json({ error: sod.error, code: sod.code }, { status: sod.status });
+  }
+
   const status = body.post_immediately ? 'POSTED' : 'DRAFT';
 
   // Insert header
-  const { data: entry, error: entryError } = await supabase
+  const { data: entry, error: entryError } = await writer
     .from('gl_entries')
     .insert({
       org_id: orgId,
@@ -271,13 +291,13 @@ export async function POST(request: Request) {
     memo: line.memo ?? null,
   }));
 
-  const { error: linesError } = await supabase
+  const { error: linesError } = await writer
     .from('gl_entry_lines')
     .insert(lineInserts);
 
   if (linesError) {
     // Rollback the header
-    await supabase.from('gl_entries').delete().eq('id', entry.id);
+    await writer.from('gl_entries').delete().eq('id', entry.id).eq('org_id', orgId);
     console.error('[journal-entries POST] Lines error:', linesError);
     return NextResponse.json({
       error: `Failed to post lines: ${linesError.message}`,

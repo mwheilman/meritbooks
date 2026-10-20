@@ -15,14 +15,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { formatMoney } from '@meritbooks/shared';
 import { addToast } from '@/hooks/use-toast';
-import { ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
+import type { UserRole } from '@/lib/rbac/permissions';
+import { stepApproverLabel } from '@/lib/approvals/step-label';
 import type { WorkflowDocType } from '@/lib/approvals/workflow';
 
 interface StepView {
   stepOrder: number;
   minAmountCents: number;
   maxAmountCents: number | null;
-  approverRole: UserRole;
+  approverRole: UserRole | null;
+  approverCapability?: string | null;
+  minApproverLimitCents?: number | null;
   requireDistinct: boolean;
 }
 
@@ -172,7 +175,7 @@ export function ApprovalChainStatus({ docType, docId, onDecided }: ApprovalChain
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-white">{ROLE_DEFINITIONS[s.approverRole]?.label ?? s.approverRole}</span>
+                  <span className="text-xs font-medium text-white">{stepApproverLabel(s)}</span>
                   <span className="text-2xs text-slate-500">
                     {formatMoney(s.minAmountCents)}
                     {s.maxAmountCents === null ? '+' : `–${formatMoney(s.maxAmountCents)}`}

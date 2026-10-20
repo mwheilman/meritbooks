@@ -2,11 +2,15 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { assertSessionMeetsPolicy } from '@/lib/auth/assert-session-policy';
 import { requireMoneyMovement, PAYMENTS_EXECUTE, AP_DISBURSEMENT_RELEASE_FEATURE } from '@/lib/rbac/payments-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { recordBillPayment } from '@/lib/posting/lifecycle';
 import { PostingError } from '@/lib/posting/account-roles';
 import { claimApprovalForRelease, finalizeReleaseClaim, revertReleaseClaim } from '@/lib/money/approvals';
+import { checkActionSod, ACTION_SOD_MESSAGE, SodViolationError } from '@/lib/rbac/sod';
+import { loadTenantSodSettings } from '@/lib/rbac/sod-store';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { assembleApprovedBatch } from '@/lib/ap/assemble-batch';
 import { buildDisbursementBatch } from '@/lib/ap/disbursement-batch';
 import { loadCheckNumbers } from '@/lib/ap/vendor-payment-details';
@@ -70,6 +74,13 @@ export async function POST(request: Request) {
   );
   if (!guard.ok) return guard.response;
 
+  // R-7 (05 §3.8): the tenant's authentication policy — MFA / step-up re-verification
+  // / session age / IP allowlist — is checked before any money is released. With every
+  // policy off this passes (Settings → Security shows the warning); with a policy on
+  // and the Clerk factor data missing it FAILS CLOSED with a structured step-up error.
+  const sessionPolicy = await assertSessionMeetsPolicy({ orgId, userId }, { action: 'money_release' });
+  if (!sessionPolicy.ok) return sessionPolicy.response;
+
   let body: ReleaseBody = {};
   try {
     body = (await request.json()) as ReleaseBody;
@@ -123,6 +134,14 @@ export async function POST(request: Request) {
     cashAccountId = (ba as { account_id: string } | null)?.account_id ?? undefined;
   }
 
+  // Release SoD settings (05 §4.1 H6 / Q1 sole-approver mode) — loaded once per batch.
+  let soleApproverMode = false;
+  try {
+    soleApproverMode = (await loadTenantSodSettings(createAdminSupabase(), orgId)).soleApproverMode;
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not load the release rules' }, { status: 500 });
+  }
+
   const paymentDate = today();
   const released: Array<{ approvalId: string; billId: string; paymentId: string; amountCents: number; checkNumber: string | null }> = [];
   const failed: Array<{ approvalId: string; billId: string; error: string }> = [];
@@ -132,13 +151,18 @@ export async function POST(request: Request) {
 
   for (const group of batch.groups) {
     for (const item of group.items) {
-      // Separation of duties: the releaser cannot release a line they prepared.
-      if (item.preparedBy === userId) {
-        blocked.push({
-          approvalId: item.approvalId,
-          billId: item.billId,
-          reason: 'Separation of duties: you prepared this line and cannot release it.',
-        });
+      // Separation of duties (05 §4.1 H6), BEFORE claiming: the preparer never
+      // releases; the approver releases only in sole-approver mode. A violation is a
+      // clean per-line "blocked" result, never a generic failure.
+      const sodCode = checkActionSod({
+        actor: userId,
+        action: 'release',
+        preparedBy: item.preparedBy,
+        approvedBy: item.approvedBy ?? null,
+        soleApproverMode,
+      });
+      if (sodCode) {
+        blocked.push({ approvalId: item.approvalId, billId: item.billId, reason: ACTION_SOD_MESSAGE[sodCode] });
         continue;
       }
 
@@ -147,8 +171,15 @@ export async function POST(request: Request) {
       // concurrent release that loses the claim skips instead of double-posting.
       let claim;
       try {
-        claim = await claimApprovalForRelease(supabase, orgId, item.approvalId, userId);
+        claim = await claimApprovalForRelease(supabase, orgId, item.approvalId, userId, {
+          preparedBy: item.preparedBy,
+          approvedBy: item.approvedBy ?? null,
+        });
       } catch (e) {
+        if (e instanceof SodViolationError) {
+          blocked.push({ approvalId: item.approvalId, billId: item.billId, reason: e.message });
+          continue;
+        }
         const msg = e instanceof Error ? e.message : 'Claim failed';
         failed.push({ approvalId: item.approvalId, billId: item.billId, error: msg });
         continue;

@@ -18,9 +18,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { recognizeRun } from '@/lib/services/rev-rec';
 import { runPrepaidAmortizations } from '@/lib/prepaid/amortize';
 import { buildAmortizationSchedule } from '@/lib/prepaid/schedule';
-import { processBillingEvents } from '@/lib/services/billing-consumer';
-import { processDeptInvoiceEvents } from '@/lib/services/dept-invoice-consumer';
-import { processProgressEvents } from '@/lib/services/job-progress';
+import { processBillingEvents, type BillingPayload } from '@/lib/services/billing-consumer';
+import { processDeptInvoiceEvents, type DeptInvoicePayload } from '@/lib/services/dept-invoice-consumer';
+import { processProgressEvents, type ProgressPayload } from '@/lib/services/job-progress';
+import { claimPendingEvents, claimedAmountCents, newClaimToken, releaseEventClaims, type Claim } from '@/lib/events/claim';
 import {
   postingGate,
   SCHEDULED_EVENT_DRAIN_FEATURE,
@@ -141,94 +142,99 @@ export async function runPrepaidAmortizeJob(ctx: JobContext): Promise<JobResult>
 }
 
 // ── events.drain ─────────────────────────────────────────────────────────────
+//
+// M5 (migration 167): each drain CLAIMS its batch atomically first, the autonomy gate
+// is asked about exactly the claimed set's amount, and only the claimed rows are
+// processed — so (a) a concurrent manual drain or a second tick can never process
+// the same event, and (b) the run can never post more than the amount it was gated
+// on (events that arrive after the claim wait for the next run). A "no" from the gate
+// releases the claim so a human can process the events from the module screen.
 
-interface PendingEventRow {
-  payload: { lines?: Array<{ amount_cents?: number | string | null }> } | null;
-}
-
-interface PendingSummary {
-  count: number;
-  /** Sum of line amounts, or null when the event type carries no amount. */
-  amountCents: number | null;
-}
-
-async function pendingFor(
-  admin: SupabaseClient,
-  orgId: string,
-  eventType: string,
-  opts: { sourceModule?: string; withAmount: boolean },
-): Promise<PendingSummary> {
-  let q = admin
-    .schema('core')
-    .from('events')
-    .select('payload')
-    .eq('org_id', orgId)
-    .eq('event_type', eventType)
-    .eq('status', 'pending');
-  if (opts.sourceModule) q = q.eq('source_module', opts.sourceModule);
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-  const rows = (data ?? []) as PendingEventRow[];
-  if (!opts.withAmount) return { count: rows.length, amountCents: null };
-  const amountCents = rows.reduce(
-    (sum, r) => sum + (r.payload?.lines ?? []).reduce((s, l) => s + Math.abs(Math.round(Number(l.amount_cents ?? 0))), 0),
-    0,
-  );
-  return { count: rows.length, amountCents };
+interface DrainSpec {
+  label: string;
+  key: string;
+  /** Amount the gate sees; null = the event type carries no amount (never auto-posts). */
+  amountOf: (claim: Claim<unknown>) => number | null;
+  claim: () => Promise<Claim<unknown>>;
+  run: (claim: Claim<unknown>) => Promise<{ processed: number; rejected: number }>;
 }
 
 export async function runEventsDrainJob(ctx: JobContext): Promise<JobResult> {
   if (!ctx.orgId) return { status: 'skipped', summary: 'Event drains run per tenant.' };
   const orgId = ctx.orgId;
   // The drains are given the service-role client exactly as their routes do: every
-  // read/insert/post inside them is pinned to the event's own org_id, and we pass
-  // orgFilter so this run only ever touches THIS tenant's queue.
+  // read/insert/post inside them is pinned to the event's own org_id, and every claim
+  // is pinned to THIS tenant, so this run only ever touches this tenant's queue.
   const admin = ctx.admin;
 
-  const billing = await pendingFor(admin, orgId, 'JOB_BILLING', { withAmount: true });
-  const dept = await pendingFor(admin, orgId, 'DEPT_INVOICE_ISSUE', { sourceModule: 'projects', withAmount: true });
-  const progress = await pendingFor(admin, orgId, 'JOB_PROGRESS', { withAmount: false });
-  const totalPending = billing.count + dept.count + progress.count;
-  if (totalPending === 0) return { status: 'ok', itemsProcessed: 0, summary: 'No Projects events pending.' };
+  const drains: DrainSpec[] = [
+    {
+      label: 'job billing',
+      key: 'billing',
+      amountOf: (c) => claimedAmountCents(c.rows as Claim<BillingPayload>['rows']),
+      claim: () => claimPendingEvents<BillingPayload>(admin, { eventType: 'JOB_BILLING', orgId, token: newClaimToken('scheduler') }),
+      run: (c) => processBillingEvents(admin, orgId, { claimed: c as Claim<BillingPayload> }),
+    },
+    {
+      label: 'internal invoice',
+      key: 'dept_invoice',
+      amountOf: (c) => claimedAmountCents(c.rows as Claim<DeptInvoicePayload>['rows']),
+      claim: () => claimPendingEvents<DeptInvoicePayload>(admin, {
+        eventType: 'DEPT_INVOICE_ISSUE', sourceModule: 'projects', orgId, token: newClaimToken('scheduler'),
+      }),
+      run: (c) => processDeptInvoiceEvents(admin, orgId, { claimed: c as Claim<DeptInvoicePayload> }),
+    },
+    // Progress events recognize revenue for an amount only known after recognition,
+    // so the gate sees amount=null and never auto-posts them (a human drains them).
+    {
+      label: 'job progress',
+      key: 'progress',
+      amountOf: () => null,
+      claim: () => claimPendingEvents<ProgressPayload>(admin, { eventType: 'JOB_PROGRESS', orgId, token: newClaimToken('scheduler') }),
+      run: (c) => processProgressEvents(admin, orgId, null, { claimed: c as Claim<ProgressPayload> }),
+    },
+  ];
 
-  const counts: Record<string, CountValue> = {
-    billing_pending: billing.count,
-    dept_invoice_pending: dept.count,
-    progress_pending: progress.count,
-  };
+  const counts: Record<string, CountValue> = {};
   const failures: string[] = [];
   const waiting: string[] = [];
   let processed = 0;
-
-  const drains: Array<{
-    label: string;
-    key: string;
-    pending: PendingSummary;
-    run: () => Promise<{ processed: number; rejected: number }>;
-  }> = [
-    { label: 'job billing', key: 'billing', pending: billing, run: () => processBillingEvents(admin, orgId) },
-    { label: 'internal invoice', key: 'dept_invoice', pending: dept, run: () => processDeptInvoiceEvents(admin, orgId) },
-    // Progress events recognize revenue for an amount only known after recognition,
-    // so the gate sees amount=null and never auto-posts them (a human drains them).
-    { label: 'job progress', key: 'progress', pending: progress, run: () => processProgressEvents(admin, orgId, null) },
-  ];
+  let claimedTotal = 0;
 
   for (const d of drains) {
-    if (d.pending.count === 0 || ctx.signal.aborted) continue;
-    const gate = await postingGate(admin, orgId, SCHEDULED_EVENT_DRAIN_FEATURE, d.pending.amountCents);
-    counts[`${d.key}_gate`] = gate.disposition;
-    if (!gate.allowed) {
-      waiting.push(`${d.pending.count} ${d.label}`);
+    if (ctx.signal.aborted) break;
+    let claim: Claim<unknown>;
+    try {
+      claim = await d.claim();
+    } catch (e) {
+      failures.push(`${d.label}: ${e instanceof Error ? e.message : String(e)}`);
       continue;
     }
+    counts[`${d.key}_pending`] = claim.rows.length;
+    if (claim.rows.length === 0) continue;
+    claimedTotal += claim.rows.length;
+
     try {
-      const r = await d.run();
+      const amount = d.amountOf(claim);
+      const gate = await postingGate(admin, orgId, SCHEDULED_EVENT_DRAIN_FEATURE, amount);
+      counts[`${d.key}_gate`] = gate.disposition;
+      if (!gate.allowed) {
+        waiting.push(`${claim.rows.length} ${d.label}`);
+        await releaseEventClaims(admin, claim.token);
+        continue;
+      }
+      const r = await d.run(claim);
       processed += r.processed;
       counts[`${d.key}_processed`] = r.processed;
       counts[`${d.key}_rejected`] = r.rejected;
     } catch (e) {
       failures.push(`${d.label}: ${e instanceof Error ? e.message : String(e)}`);
+      await releaseEventClaims(admin, claim.token).catch(() => 0);
     }
+  }
+
+  if (claimedTotal === 0 && failures.length === 0) {
+    return { status: 'ok', itemsProcessed: 0, counts, summary: 'No Projects events pending.' };
   }
 
   const parts: string[] = [];

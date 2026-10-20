@@ -43,11 +43,26 @@ import { auth } from '@clerk/nextjs/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { type FeatureAction } from '@/lib/rbac/permissions';
 import { resolveTenantOrgId } from '@/lib/rbac/resolve-tenant';
+import { LEGACY_PRIMARY } from '@/lib/rbac/legacy-map';
 
-/** Where an unauthorized (but authenticated) user is bounced. Their own book of
- *  record dashboard is always visible to every internal role, so this is a safe,
- *  friendly landing spot (a 403-equivalent redirect). */
+/** Legacy landing spot for an unauthorized (but authenticated) user, used only when
+ *  the refused (feature, action) has no capability mapping (the retired `payments`
+ *  key) — the 403 page needs a capability to explain and to pre-fill Request access. */
 const NO_ACCESS_REDIRECT = '/dashboard';
+
+/**
+ * The 403 landing page (05 §6.11, app/(app)/no-access): says what is missing and offers
+ * Request access pre-filled with the capability, action and client. Built from the
+ * cell's primary capability (lib/rbac/legacy-map.ts LEGACY_PRIMARY).
+ */
+export function noAccessHref(featureId: string, action: string, locationId?: string | null): string {
+  const primary = LEGACY_PRIMARY[`${featureId}::${action}`];
+  if (!primary) return NO_ACCESS_REDIRECT;
+  const i = primary.lastIndexOf(':');
+  const params = new URLSearchParams({ cap: primary.slice(0, i), action: primary.slice(i + 1) });
+  if (locationId) params.set('client', locationId);
+  return `/no-access?${params.toString()}`;
+}
 /** Where an unauthenticated caller is bounced (defense in depth; Clerk middleware
  *  normally intercepts first). */
 const SIGN_IN_REDIRECT = '/sign-in';
@@ -167,9 +182,15 @@ async function resolvePageRole(
  * computed inside a try/catch (fail closed) and the redirect is issued OUTSIDE it,
  * so a genuine redirect is never swallowed by the fail-closed handler.
  */
+export interface PageGuardOptions {
+  /** The client the page is about, when known (v2 checks it; shown on the 403 page). */
+  locationId?: string | null;
+}
+
 export async function requirePagePermission(
   featureId: string,
   action: FeatureAction,
+  opts: PageGuardOptions = {},
 ): Promise<void> {
   let authenticated = false;
   let allowed = false;
@@ -187,14 +208,23 @@ export async function requirePagePermission(
 
       const orgId = await resolveOrgId(admin, claimOrgId, clerkUserId);
       if (orgId) {
+        let legacyAllowed = false;
         const rawRole = await resolvePageRole(admin, orgId, clerkUserId);
         if (rawRole) {
           // Custom-role-aware, degrade-safe: system default merged with org overrides.
           const { effectivePermission } = await import('@/lib/rbac/resolve-permissions');
-          if (await effectivePermission(admin, orgId, rawRole, featureId, action)) {
-            allowed = true;
-          }
+          legacyAllowed = await effectivePermission(admin, orgId, rawRole, featureId, action);
         }
+        // R-11 (05-RBAC §5.1): single policy decision point. 'legacy' / 'dual' return
+        // legacyAllowed unchanged ('dual' logs v2 disagreements); 'v2' lets the
+        // capability model decide.
+        const { authorizeLegacyCell } = await import('@/lib/rbac/authorize');
+        const decision = await authorizeLegacyCell({ userId: clerkUserId, orgId }, featureId, action, {
+          legacy: async () => legacyAllowed,
+          locationId: opts.locationId ?? null,
+          route: `page:${featureId}:${action}`,
+        });
+        allowed = decision.allow;
       }
     }
   } catch {
@@ -203,5 +233,5 @@ export async function requirePagePermission(
 
   // Redirects live OUTSIDE the try so their control-flow throw is never caught.
   if (!authenticated) redirect(SIGN_IN_REDIRECT);
-  if (!allowed) redirect(NO_ACCESS_REDIRECT);
+  if (!allowed) redirect(noAccessHref(featureId, action, opts.locationId));
 }

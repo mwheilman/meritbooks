@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { logHumanAction } from '@/lib/trust/action-log';
-import { approveRun, InvalidRunTransitionError, RunStateError, RunPreparerCannotApproveError } from '@/lib/payroll/run';
+import { runVisibleToCaller, approveRun, InvalidRunTransitionError, RunStateError, RunPreparerCannotApproveError } from '@/lib/payroll/run';
 import { SeparationOfDutiesError, NotAuthorizedToApproveError } from '@/lib/money/approvals';
 
 /**
@@ -25,8 +26,12 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const guard = await requirePermission(userId, 'payroll', 'approve');
   if (!guard.ok) return guard.response;
 
+  // The admin client bypasses client-scope RLS: the caller must be able to see this run.
+  if (!(await runVisibleToCaller(supabase, orgId, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
   try {
-    const run = await approveRun(supabase, orgId, params.id, userId);
+    // Service-role write after the payroll:approve check (mig 170 write lock), org-pinned.
+    const run = await approveRun(createAdminSupabase(), orgId, params.id, userId);
     await logHumanAction(supabase, userId, orgId, {
       action: 'payroll.run.approve',
       subjectTable: 'payroll_runs',

@@ -116,6 +116,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 // with the actor and reason.
 import { z } from 'zod';
 import { postJournalEntry, voidJournalEntry } from '@/lib/services/gl-posting';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 const jeLineInput = z.object({
   account_id: z.string().uuid(),
@@ -177,19 +178,22 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   let resultEntryId = je.id;
 
   if (isDraft) {
-    // Edit the draft in place.
+    // Edit the draft in place. gl_entries / gl_entry_lines are SELECT-only for members
+    // (migration 171): the entry was read through the caller's RLS client above (org +
+    // client scope), so the service-role writes below are pinned to that org and row.
+    const writer = serviceWriter();
     const headerUpd: Record<string, unknown> = {};
     if (body.memo !== undefined && body.memo !== je.memo) { headerUpd.memo = body.memo; logField('memo', je.memo, body.memo); }
     if (body.entry_date && body.entry_date !== je.entry_date) { headerUpd.entry_date = body.entry_date; logField('entry_date', je.entry_date, body.entry_date); }
-    if (Object.keys(headerUpd).length) await supabase.from('gl_entries').update(headerUpd).eq('id', je.id);
+    if (Object.keys(headerUpd).length) await writer.from('gl_entries').update(headerUpd).eq('id', je.id).eq('org_id', orgId);
 
     if (body.lines) {
-      await supabase.from('gl_entry_lines').delete().eq('gl_entry_id', je.id);
+      await writer.from('gl_entry_lines').delete().eq('gl_entry_id', je.id).eq('org_id', orgId);
       const rows = body.lines.map((l, i) => ({
         org_id: orgId, gl_entry_id: je.id, line_number: i + 1, account_id: l.account_id,
         debit_cents: l.debit_cents, credit_cents: l.credit_cents, location_id: je.location_id, memo: l.memo ?? null,
       }));
-      const { error } = await supabase.from('gl_entry_lines').insert(rows);
+      const { error } = await writer.from('gl_entry_lines').insert(rows);
       if (error) return NextResponse.json({ error: `Lines: ${error.message}` }, { status: 500 });
       logField('lines', 'edited', `${rows.length} lines`);
     }

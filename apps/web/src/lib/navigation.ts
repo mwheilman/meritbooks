@@ -39,6 +39,8 @@ import {
   LayoutGrid,
   Package,
   PiggyBank,
+  Tractor,
+  KeyRound,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -52,7 +54,16 @@ export interface NavItem {
 export interface NavGroup {
   label: string;
   items: NavItem[];
+  /**
+   * Industry pack gate: the group shows only when this pack is switched on for the
+   * active client (e.g. 'dealer' → dealer_pack_settings.enabled). The pages still
+   * guard themselves server-side; this only keeps the nav honest.
+   */
+  requiresPack?: 'dealer';
 }
+
+/** The nav group label for the Dealer Pack (industry module). */
+export const DEALER_NAV_GROUP = 'Dealer';
 
 /**
  * Consolidated information architecture (session 47 redesign).
@@ -143,6 +154,23 @@ export const navigation: NavGroup[] = [
     ],
   },
   {
+    label: DEALER_NAV_GROUP,
+    requiresPack: 'dealer',
+    items: [
+      { label: 'Dealer Home', href: '/dealer', icon: Tractor },
+      { label: 'Floor Plan', href: '/dealer/floor-plan', icon: Landmark },
+      { label: 'Units', href: '/dealer/units', icon: Package },
+      { label: 'Deals & Trade-ins', href: '/dealer/deals', icon: ArrowLeftRight },
+      { label: 'Lender Statements', href: '/dealer/lender-statements', icon: FileCheck },
+      { label: 'Warranty Claims', href: '/dealer/warranty', icon: ShieldCheck },
+      { label: 'Manufacturer Incentives', href: '/dealer/incentives', icon: Percent },
+      { label: 'Manufacturer Statements', href: '/dealer/oem-statements', icon: FileText },
+      { label: 'Dealer Imports', href: '/dealer/imports', icon: Upload },
+      { label: 'Dealer Reports', href: '/dealer/reports', icon: BarChart3 },
+      { label: 'Dealer Settings', href: '/dealer/settings', icon: Settings },
+    ],
+  },
+  {
     label: 'Reporting & Analytics',
     items: [
       { label: 'Reports', href: '/reports', icon: BarChart3 },
@@ -180,6 +208,9 @@ export const navigation: NavGroup[] = [
       { label: 'Payments', href: '/settings/payments', icon: CreditCard },
       { label: 'Approval Workflows', href: '/settings/approvals', icon: ClipboardCheck },
       { label: 'Roles & Permissions', href: '/settings/roles', icon: ShieldCheck },
+      { label: 'Access Requests', href: '/settings/access/requests', icon: KeyRound },
+      { label: 'Access Reviews', href: '/settings/access/reviews', icon: ClipboardCheck },
+      { label: 'Access Log', href: '/settings/access/log', icon: History },
       { label: 'AI Autonomy', href: '/settings/autonomy', icon: SlidersHorizontal },
       { label: 'Integrations', href: '/integrations/erp', icon: Network },
       { label: 'Import Data', href: '/import', icon: Upload },

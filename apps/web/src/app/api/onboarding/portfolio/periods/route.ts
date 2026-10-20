@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { ensureFiscalPeriods } from '@/lib/companies/create-company';
 import { requirePortfolioContext } from '@/lib/companies/portfolio/guard';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/onboarding/portfolio/periods — add missing fiscal periods to a company.
@@ -35,7 +36,9 @@ export async function POST(req: Request) {
     .maybeSingle();
   if (!loc) return NextResponse.json({ error: 'Company not found', code: 'NOT_FOUND' }, { status: 404 });
 
-  const res = await ensureFiscalPeriods(supabase, orgId, parsed.data.locationId);
+  // fiscal_periods is SELECT-only for members (migration 171): the company was read
+  // through the caller's RLS client above (org + client scope); write with the service role.
+  const res = await ensureFiscalPeriods(serviceWriter(), orgId, parsed.data.locationId);
   if (!res.ok) return NextResponse.json({ error: `Could not add fiscal periods: ${res.error}` }, { status: 500 });
   return NextResponse.json({ created: res.created });
 }

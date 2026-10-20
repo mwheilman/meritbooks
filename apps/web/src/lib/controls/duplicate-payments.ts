@@ -41,6 +41,8 @@ import {
 } from '@/lib/autonomy/disposition';
 import { vendorSimilarity, normalizeText } from '@/lib/services/reconciliation-match';
 import { formatMoney } from '@meritbooks/shared';
+import { createAdminSupabase } from '@/lib/supabase/admin';
+import { loadVendorTins } from '@/lib/vendors/tin-store';
 
 export const DUP_FEATURE = 'DUPLICATE_PAYMENT';
 
@@ -356,6 +358,14 @@ const REMEDIATION_QUESTION: Record<DupKind, string> = {
 export async function scanDuplicatePayments(
   supabase: SupabaseClient,
   orgId: string,
+  deps: {
+    /**
+     * TINs for equality matching. core.vendors.tin_encrypted is not member-readable
+     * (migration 167, R-6), so it is read server-side pinned to `orgId`; the raw value
+     * never leaves this function (only "same TIN" is used as a signal).
+     */
+    loadTins?: (vendorIds: string[]) => Promise<Map<string, string | null>>;
+  } = {},
 ): Promise<DuplicateScanSummary> {
   const summary: DuplicateScanSummary = {
     scanned: { bills: 0, vendors: 0, payments: 0 },
@@ -424,19 +434,27 @@ export async function scanDuplicatePayments(
   const { data: vendorsRaw } = await supabase
     .schema('core')
     .from('vendors')
-    .select('id, name, display_name, email, tin_encrypted, address_line1, zip, ytd_spend_cents, is_active')
+    .select('id, name, display_name, email, address_line1, zip, ytd_spend_cents, is_active')
     .limit(2000);
-  const vendors = (vendorsRaw ?? []) as Array<{
+  const vendorRows = (vendorsRaw ?? []) as Array<{
     id: string;
     name: string;
     display_name: string | null;
     email: string | null;
-    tin_encrypted: string | null;
     address_line1: string | null;
     zip: string | null;
     ytd_spend_cents: number | string | null;
     is_active: boolean;
   }>;
+  let tinById = new Map<string, string | null>();
+  try {
+    const loadTins = deps.loadTins ?? ((ids: string[]) => loadVendorTins(createAdminSupabase(), orgId, ids));
+    tinById = await loadTins(vendorRows.map((v) => v.id));
+  } catch (e) {
+    // Degrade: the TIN-equality signal is skipped; name / email / address still match.
+    console.warn('[duplicate-payments] TIN lookup unavailable:', e instanceof Error ? e.message : e);
+  }
+  const vendors = vendorRows.map((v) => ({ ...v, tin_encrypted: tinById.get(v.id) ?? null }));
   summary.scanned.vendors = vendors.length;
 
   const vendorNameById = new Map<string, string>();

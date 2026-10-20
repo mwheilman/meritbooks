@@ -692,7 +692,7 @@ describe('RLS: members cannot write any new access table', () => {
       );
       expect(rls.rows[0].on, `${table} RLS`).toBe(true);
       const writes = await db.query(
-        `select policyname from pg_policies where schemaname = $1 and tablename = $2 and cmd <> 'SELECT' and roles::text <> '{service_role}'`, [schema, table],
+        `select policyname from pg_policies where schemaname = $1 and tablename = $2 and cmd <> 'SELECT' and roles::text <> '{service_role}' and permissive = 'PERMISSIVE'`, [schema, table], // restrictive (mig 163) only narrows
       );
       expect(writes.rows, `${table} write policies`).toEqual([]);
     }

@@ -26,6 +26,7 @@
 
 import { formatMoney } from '@meritbooks/shared';
 import { ALL_ROLES, ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
+import { parseCapabilityRef } from '@/lib/rbac/capabilities';
 import {
   applicableSteps,
   roleMeetsStep,
@@ -178,7 +179,8 @@ export type CoverageCode =
   | 'NO_ACTIVE_WORKFLOW'
   | 'AMOUNT_BAND_GAP'
   | 'UNKNOWN_ROLE'
-  | 'UNSATISFIABLE_ROLE';
+  | 'UNSATISFIABLE_ROLE'
+  | 'UNKNOWN_CAPABILITY';
 
 export interface CoverageFinding {
   docType: WorkflowDocType;
@@ -248,6 +250,21 @@ export function detectCoverageGaps(
     }
 
     for (const s of wf.steps) {
+      // Capability-routed step (05 R-12): satisfiability depends on per-person grants and
+      // limits, not role counts — only the capability reference itself is audited here.
+      if (!s.approverRole) {
+        if (!s.approverCapability || !parseCapabilityRef(s.approverCapability)) {
+          findings.push({
+            docType: dt,
+            docTypeLabel: label,
+            code: 'UNKNOWN_CAPABILITY',
+            severity: 'critical',
+            stepOrder: s.stepOrder,
+            message: `${label} step ${s.stepOrder} has no valid approval permission — no one can satisfy it.`,
+          });
+        }
+        continue;
+      }
       if (!isKnownRole(s.approverRole)) {
         findings.push({
           docType: dt,

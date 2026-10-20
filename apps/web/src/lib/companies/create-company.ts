@@ -53,6 +53,11 @@ const INDUSTRY_MAX = 100;
  * are left untouched, whatever their status). Used by createCompany and by the
  * Control Tower's "add missing periods" repair for companies created before this
  * path existed (e.g. by the old bulk import). Returns how many rows were added.
+ *
+ * `db` is the WRITE client: public.fiscal_periods is SELECT-only for members (migration
+ * 171), so callers pass the service-role client AFTER their own permission check and
+ * after verifying the company is in the caller's org (+ client scope). Rows are pinned
+ * to `orgId` / `locationId`.
  */
 export async function ensureFiscalPeriods(
   db: SupabaseClient,
@@ -69,7 +74,18 @@ export async function ensureFiscalPeriods(
   return { ok: true, created: (data ?? []).length };
 }
 
-export async function createCompany(db: SupabaseClient, input: CreateCompanyInput): Promise<CreateCompanyResult> {
+export async function createCompany(
+  db: SupabaseClient,
+  input: CreateCompanyInput,
+  /**
+   * WRITE CLIENT for core.locations (migration 167, M4): the table is service-role-
+   * write only, so callers pass the service-role client here AFTER their own
+   * permission check. Every write below is pinned to `input.orgId`. Defaults to `db`
+   * (which fails closed for a member client).
+   */
+  opts: { writer?: SupabaseClient } = {},
+): Promise<CreateCompanyResult> {
+  const writer = opts.writer ?? db;
   // ── 1. Validate ────────────────────────────────────────────────────────────
   const orgId = (input.orgId ?? '').trim();
   if (!orgId) return { ok: false, error: 'No resolvable organization', status: 400 };
@@ -120,7 +136,7 @@ export async function createCompany(db: SupabaseClient, input: CreateCompanyInpu
   const shortCode = requestedCode ?? deriveShortCode(name, taken);
 
   // ── 3. Create the company ──────────────────────────────────────────────────
-  const { data: loc, error: locErr } = await db
+  const { data: loc, error: locErr } = await writer
     .schema('core').from('locations')
     .insert({
       org_id: orgId,
@@ -142,12 +158,14 @@ export async function createCompany(db: SupabaseClient, input: CreateCompanyInpu
   const locationId = (loc as { id: string }).id;
 
   // ── 4. Fiscal periods ──────────────────────────────────────────────────────
-  const periods = await ensureFiscalPeriods(db, orgId, locationId);
+  // fiscal_periods is member read-only (migration 171): written with the same write
+  // client as the company itself (the service role from every production caller).
+  const periods = await ensureFiscalPeriods(writer, orgId, locationId);
   if (!periods.ok) {
     // A company with no periods can't post anything. Roll the company back so the
     // caller can simply retry; if the rollback itself is refused, keep the company
     // (the Control Tower flags it and offers "Add missing periods").
-    const { error: delErr } = await db
+    const { error: delErr } = await writer
       .schema('core').from('locations')
       .delete()
       .eq('org_id', orgId)

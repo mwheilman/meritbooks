@@ -11,10 +11,12 @@
  * goes through the RLS-scoped client and is org-scoped.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { parseInvoiceWithAI, type ParsedBill } from '@/lib/services/bill-parser';
 import { scoreToTier, getTierPolicy, type Tier } from '@/lib/trust/score-tier';
 import { logAction } from '@/lib/trust/action-log';
 import { formatMoney } from '@meritbooks/shared';
+import { assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
 
 // GL account the intake lines fall back to when neither the vendor's learned
 // default nor an AI suggestion resolves an account. 6660 "Miscellaneous" (OPEX)
@@ -32,6 +34,17 @@ export interface IntakeInvoiceArgs {
   fileName: string;
   /** Clerk user id for gateway attribution; null for system/service runs. */
   userId?: string | null;
+  /**
+   * Authorization for creating a NEW vendor (vendors:create). Absent = the caller's own
+   * gate covers it. The create itself runs as the service role (migration 168).
+   */
+  mayCreateVendor?: () => Promise<boolean>;
+  /**
+   * Service-role writer override (tests). Defaults to createAdminSupabase(). Used for the
+   * vendor create (core.vendors, mig 168) and the bill + lines (public.bills /
+   * bill_lines are SELECT-only for members, mig 171).
+   */
+  vendorWriter?: SupabaseClient;
 }
 
 export type IntakeResult =
@@ -114,6 +127,16 @@ export async function intakeInvoice(
 ): Promise<IntakeResult> {
   const { orgId, locationId, apiKey, base64, mediaType, fileName, userId } = args;
 
+  // ── 0. The company must be in the caller's org + client scope (the bill is written
+  //       with the service role, which bypasses 163's client-scope policy). Checked
+  //       before the metered parse and before any vendor is created.
+  try {
+    await assertWriteScope(supabase, orgId, [locationId], { writer: args.vendorWriter });
+  } catch (e) {
+    if (isWriteScopeError(e)) return { ok: false, error: e.message };
+    throw e;
+  }
+
   // ── 1. Parse (metered Core AI gateway, org-scoped) ────────
   const parseResult = await parseInvoiceWithAI(supabase, apiKey, {
     orgId,
@@ -145,7 +168,11 @@ export async function intakeInvoice(
     // email/phone/address, so we create the vendor with the extracted name only.
     // ai_confidence records how sure the model was of the name; auto_approve stays
     // false — a freshly machine-created vendor is never auto-trusted.
-    const { data: created, error: vendorErr } = await supabase
+    if (args.mayCreateVendor && !(await args.mayCreateVendor())) {
+      return { ok: false, error: `"${vendorName}" is not a vendor yet, and you can't add vendors. Ask someone who can add it, then upload again.` };
+    }
+    // core.vendors is member read-only (migration 168): service-role write, org pinned.
+    const { data: created, error: vendorErr } = await (args.vendorWriter ?? createAdminSupabase())
       .schema('core')
       .from('vendors')
       .insert({
@@ -184,7 +211,10 @@ export async function intakeInvoice(
   const billDate = parsed.billDate ?? todayISO();
   const dueDate = parsed.dueDate ?? addDaysISO(billDate, 30);
 
-  const { data: bill, error: billErr } = await supabase
+  // bills / bill_lines are member read-only (migration 171): service-role write, org
+  // pinned; the company was checked against the org + client scope at the top.
+  const billWriter = serviceWriter(args.vendorWriter);
+  const { data: bill, error: billErr } = await billWriter
     .from('bills')
     .insert({
       org_id: orgId,
@@ -250,7 +280,7 @@ export async function intakeInvoice(
       amount_cents: line.amountCents,
     }));
 
-    const { data: inserted, error: linesErr } = await supabase
+    const { data: inserted, error: linesErr } = await billWriter
       .from('bill_lines')
       .insert(lineInserts)
       .select('id');

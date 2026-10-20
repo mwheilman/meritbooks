@@ -16,6 +16,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { assertOrgRefs, serviceWriter } from '@/lib/db/scoped-writer';
 
 export type VendorPaymentMethod = 'ACH' | 'CHECK';
 export type BankAccountType = 'checking' | 'savings';
@@ -144,9 +145,9 @@ export interface UpsertProfileInput {
  * on (org_id, vendor_id). Returns the stored (masked) profile.
  */
 export async function upsertVendorPaymentProfile(
-  supabase: SupabaseClient,
   orgId: string,
   input: UpsertProfileInput,
+  opts: { writer?: SupabaseClient } = {},
 ): Promise<VendorPaymentProfile> {
   const paymentMethod = normalizeMethod(input.paymentMethod);
   const accountMask = maskLast4(input.accountNumber);
@@ -163,7 +164,12 @@ export async function upsertVendorPaymentProfile(
     captured_by: input.capturedBy,
     updated_at: new Date().toISOString(),
   };
-  const { data, error } = await supabase
+  // vendor_payment_profiles is SELECT-only for members (migration 171) — a member could
+  // otherwise rewrite `captured_by` and defeat the bank-change rule. The route has
+  // authorized the capture (checks:create + step-up); the vendor is pinned to the org and
+  // the row written with the service role.
+  await assertOrgRefs(orgId, [{ schema: 'core', table: 'vendors', ids: [input.vendorId], label: 'vendor' }], opts);
+  const { data, error } = await serviceWriter(opts.writer)
     .from('vendor_payment_profiles')
     .upsert(row, { onConflict: 'org_id,vendor_id' })
     .select('vendor_id, payment_method, account_type, account_mask, routing_mask, bank_name, notes, captured_at')
@@ -204,16 +210,21 @@ export interface CheckNumberInput {
  * blank check number clears the assignment. Returns the count written/cleared.
  */
 export async function upsertCheckNumbers(
-  supabase: SupabaseClient,
   orgId: string,
   entries: CheckNumberInput[],
   assignedBy: string,
+  opts: { writer?: SupabaseClient } = {},
 ): Promise<number> {
+  // disbursement_check_numbers is SELECT-only for members (migration 171): the route has
+  // authorized the capture (checks:create); every approval is pinned to the org and the
+  // rows are written with the service role.
+  await assertOrgRefs(orgId, [{ table: 'approvals', ids: entries.map((e) => e.approvalId), label: 'disbursement' }], opts);
+  const writer = serviceWriter(opts.writer);
   let n = 0;
   for (const e of entries) {
     const num = (e.checkNumber ?? '').trim();
     if (!num) {
-      const { error } = await supabase
+      const { error } = await writer
         .from('disbursement_check_numbers')
         .delete()
         .eq('org_id', orgId)
@@ -221,7 +232,7 @@ export async function upsertCheckNumbers(
       if (!error) n += 1;
       continue;
     }
-    const { error } = await supabase
+    const { error } = await writer
       .from('disbursement_check_numbers')
       .upsert(
         { org_id: orgId, approval_id: e.approvalId, check_number: num, assigned_by: assignedBy, assigned_at: new Date().toISOString() },

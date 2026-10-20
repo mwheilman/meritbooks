@@ -5,6 +5,7 @@ import { requirePortfolioContext } from '@/lib/companies/portfolio/guard';
 import { loadControlTower } from '@/lib/companies/portfolio/tower';
 import { statusToSync } from '@/lib/companies/portfolio/tower-stage';
 import type { OnboardingStatus } from '@/lib/companies/portfolio/types';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 
 /**
  * Onboarding Control Tower.
@@ -66,7 +67,9 @@ export async function POST() {
   for (const [status, ids] of byStatus) {
     const patch: Record<string, unknown> = { onboarding_status: status };
     if (status === 'complete') patch.onboarding_completed_at = new Date().toISOString();
-    const { data: rows, error } = await supabase
+    // M4 (migration 167): core.locations is service-role-write only — written after
+    // the settings_acct:edit gate (requirePortfolioContext), pinned to the session org.
+    const { data: rows, error } = await createAdminSupabase()
       .schema('core').from('locations')
       .update(patch)
       .eq('org_id', orgId)

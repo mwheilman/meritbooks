@@ -61,6 +61,7 @@ import { getTierPolicy, scoreToTier } from '@/lib/trust/score-tier';
 import { resolveDispositionDetailed } from '@/lib/autonomy/disposition';
 import { resolveApprover } from '@/lib/services/cost-approval';
 import { createApproval, submitForApproval, type ApprovalStatus } from '@/lib/money/approvals';
+import { isWriteScopeError, scopedWriter } from '@/lib/db/scoped-writer';
 
 /** The M10 autonomy feature governing the bill-creation proposal in this loop. */
 const BILL_FEATURE = 'BILL_PARSE';
@@ -280,8 +281,17 @@ async function createPendingBillFromProposal(
   // gated create route uses; keeps SoD routing consistent.
   const approver = await resolveApprover(ctx.supabase, ctx.orgId, { vendorId: po.vendorId, sourceType: 'BILL' });
 
+  // bills / bill_lines are SELECT-only for members (migration 171): written with the
+  // service role, org pinned, after the org / client-scope check on the PO's company.
+  let writer: SupabaseClient;
+  try {
+    writer = await scopedWriter(ctx.supabase, ctx.orgId, [po.locationId]);
+  } catch (e) {
+    if (isWriteScopeError(e)) return { error: e.message };
+    throw e;
+  }
   const billNumber = `PO-${po.poNumber}-${Date.now().toString().slice(-6)}`;
-  const { data: bill, error: billErr } = await ctx.supabase
+  const { data: bill, error: billErr } = await writer
     .from('bills')
     .insert({
       org_id: ctx.orgId,
@@ -318,9 +328,9 @@ async function createPendingBillFromProposal(
     unit_cost_cents: l.unitCostCents,
     amount_cents: l.amountCents,
   }));
-  const { error: linesErr } = await ctx.supabase.from('bill_lines').insert(lineInserts);
+  const { error: linesErr } = await writer.from('bill_lines').insert(lineInserts);
   if (linesErr) {
-    await ctx.supabase.from('bills').delete().eq('id', billId);
+    await writer.from('bills').delete().eq('id', billId).eq('org_id', ctx.orgId);
     return { error: linesErr.message };
   }
 

@@ -145,7 +145,11 @@ export async function ensurePreparerCapability(
     .eq('org_id', orgId);
 }
 
-/** Move companies from not_started → in_progress (leaves in_progress / complete alone). */
+/**
+ * Move companies from not_started → in_progress (leaves in_progress / complete alone).
+ * WRITE CLIENT: core.locations is service-role-write only (migration 167, M4) — pass
+ * the service-role client; the caller owns authorization and the org pin.
+ */
 export async function markOnboardingInProgress(
   supabase: SupabaseClient,
   orgId: string,

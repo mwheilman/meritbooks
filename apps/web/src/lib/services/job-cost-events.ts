@@ -10,6 +10,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+import { assertEventScope, eventsWriter } from '@/lib/events/emit-scope';
 
 type DB = SupabaseClient;
 
@@ -32,12 +33,25 @@ export interface JobCostEventInput {
   memo?: string | null;
 }
 
+export interface EmitOptions {
+  /** Service-role writer override (tests). Defaults to createAdminSupabase(). */
+  writer?: DB;
+}
+
 /**
  * Emit one JOB_COST lifecycle event (contract §3). Each lifecycle transition is
  * its own event with a fresh event_id; the consumer dedupes on event_id.
  * Returns the emitted event_id.
+ *
+ * Migration 168: core.events is SELECT-only for members, so the row is written with the
+ * SERVICE-ROLE writer regardless of the `db` the caller holds (`db` is kept for the
+ * signature; every caller has already authorized the cost action and passes its
+ * session org). The client and job are re-checked against `input.orgId` first.
  */
-export async function emitJobCostEvent(db: DB, input: JobCostEventInput): Promise<string> {
+export async function emitJobCostEvent(_db: DB, input: JobCostEventInput, opts: EmitOptions = {}): Promise<string> {
+  const db = eventsWriter(opts.writer);
+  await assertEventScope(db, input.orgId, { locationId: input.locationId, jobId: input.jobId });
+
   // Emit-side idempotency guard (migration 025): if a PENDING JOB_COST event
   // with the same (org_id, source_ref, lifecycle) already sits on the queue, do
   // not emit a duplicate — return the existing event_id. This is defense-in-depth

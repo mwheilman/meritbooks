@@ -9,6 +9,7 @@ import { learnVendorPattern } from '@/lib/services/categorization';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { decideVendor, resolveVendorIdByName, type CurrentVendor } from '@/lib/bank/vendor-resolution';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/bank-feed/approve
@@ -118,7 +119,13 @@ export const POST = apiHandler(
           return NextResponse.json({ error: 'No organization on request; cannot resolve vendor' }, { status: 400 });
         }
         try {
-          vendorId = (await resolveVendorIdByName(ctx.supabase, orgId, decision.name, ctx.userId)).id;
+          vendorId = (await resolveVendorIdByName(ctx.supabase, orgId, decision.name, ctx.userId, {
+            // A NEW vendor is a master-data create: gate it like the Vendors page.
+            mayCreate: async () => {
+              const g = await requirePermission(ctx.userId, 'vendors', 'create');
+              return g.ok && g.orgId === orgId;
+            },
+          })).id;
         } catch (e) {
           return NextResponse.json({ error: e instanceof Error ? e.message : 'Vendor resolution failed' }, { status: 400 });
         }
@@ -181,7 +188,9 @@ export const POST = apiHandler(
       const glLineId = (expenseLine as { id: string } | null)?.id ?? null;
 
       if (glLineId) {
-        await ctx.supabase.from('gl_entry_lines').update({ job_id: body.job_id }).eq('id', glLineId);
+        // gl_entry_lines is SELECT-only for members (migration 171); the line was just
+        // posted by this request (org + client scope checked in postJournalEntry).
+        await serviceWriter().from('gl_entry_lines').update({ job_id: body.job_id }).eq('id', glLineId).eq('org_id', orgId);
         await ctx.supabase.from('job_cost_entries').insert({
           org_id: orgId,
           job_id: body.job_id,

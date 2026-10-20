@@ -5,6 +5,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { hasModule } from '@/lib/services/entitlements';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 
 const REV_REC_METHODS = [
   { value: 'POINT_OF_SALE', label: 'Point of sale', poc: false,
@@ -91,8 +92,16 @@ export async function POST(request: Request) {
   const body = parsed.data;
 
   if (body.kind === 'default') {
-    const { error } = await supabase.schema('core').from('locations').update({ rev_rec_method: body.method }).eq('id', body.location_id);
+    // M4 (migration 167): core.locations is service-role-write only — written after the
+    // settings_acct:edit check above, pinned to the session org.
+    const { data, error } = await createAdminSupabase()
+      .schema('core').from('locations')
+      .update({ rev_rec_method: body.method })
+      .eq('id', body.location_id)
+      .eq('org_id', orgId)
+      .select('id');
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data || data.length === 0) return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     return NextResponse.json({ ok: true });
   }
 

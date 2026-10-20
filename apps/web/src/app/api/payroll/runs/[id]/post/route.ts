@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { logHumanAction } from '@/lib/trust/action-log';
-import { postRun, RunStateError } from '@/lib/payroll/run';
+import { runVisibleToCaller, postRun, RunStateError } from '@/lib/payroll/run';
 import { PostingError } from '@/lib/posting/account-roles';
 
 /**
@@ -24,8 +25,13 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const guard = await requirePermission(userId, 'payroll', 'approve');
   if (!guard.ok) return guard.response;
 
+  // The admin client bypasses client-scope RLS: the caller must be able to see this run.
+  if (!(await runVisibleToCaller(supabase, orgId, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
   try {
-    const result = await postRun(supabase, orgId, params.id);
+    // payroll_runs.gl_entry_id is written here: service role after the payroll:approve
+    // check (mig 170 write lock), org-pinned.
+    const result = await postRun(createAdminSupabase(), orgId, params.id);
     if (!result.alreadyPosted) {
       await logHumanAction(supabase, userId, orgId, {
         action: 'payroll.run.post',

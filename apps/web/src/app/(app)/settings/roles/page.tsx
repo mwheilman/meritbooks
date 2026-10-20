@@ -1,6 +1,8 @@
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { PageHeader } from '@/components/ui';
+import { TemplateSuggestionsNote } from '@/components/access/template-suggestions-note';
 import { RolesClient } from './roles-client';
+import { DualRunPanel } from './dual-run-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +26,10 @@ export default async function RolesPage() {
         title="Roles & Permissions"
         description="See exactly what each role can do, tune any permission, and create custom roles. System defaults ship ready to use; every change here is org-scoped and fails closed."
       />
+      {/* R-11 dual-run status + enforcement switch (tenant admins only; hidden otherwise). */}
+      <DualRunPanel />
+      {/* MeritBooks role suggestions (05 §1.7 / §6.10) — renders nothing when there are none. */}
+      <TemplateSuggestionsNote className="mb-4" />
       <RolesClient />
     </>
   );

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 
 /**
  * Bank-feed vendor resolution (audit 06 §5 bug 1).
@@ -57,8 +58,20 @@ export function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+export interface ResolveVendorOptions {
+  /**
+   * Authorization for the CREATE branch (e.g. requirePermission(…, 'vendors', 'create')).
+   * Absent = the caller's own gate already covers creating a vendor.
+   */
+  mayCreate?: () => Promise<boolean>;
+  /** Service-role writer override (tests). Defaults to createAdminSupabase(). */
+  writer?: SupabaseClient;
+}
+
 /**
- * Find-or-create a vendor by name in the caller's org (RLS-scoped client).
+ * Find-or-create a vendor by name in the caller's org. The lookup runs on the caller's
+ * RLS-scoped client; the create runs as the service role (core.vendors is member
+ * read-only since migration 168), pinned to `orgId` — the caller's session org.
  * Returns the vendor id, or throws with a readable message.
  */
 export async function resolveVendorIdByName(
@@ -66,6 +79,7 @@ export async function resolveVendorIdByName(
   orgId: string,
   name: string,
   createdBy?: string | null,
+  opts: ResolveVendorOptions = {},
 ): Promise<{ id: string; created: boolean }> {
   const clean = cleanVendorName(name);
   const pattern = escapeLike(clean);
@@ -91,7 +105,10 @@ export async function resolveVendorIdByName(
     rows.find((r) => sameVendorName(r.name, clean) || sameVendorName(r.display_name, clean));
   if (exact) return { id: exact.id, created: false };
 
-  const { data: created, error: insErr } = await supabase
+  if (opts.mayCreate && !(await opts.mayCreate())) {
+    throw new Error(`"${clean}" is not a vendor yet, and you can't add vendors. Pick an existing vendor or ask someone who can add one.`);
+  }
+  const { data: created, error: insErr } = await (opts.writer ?? createAdminSupabase())
     .schema('core')
     .from('vendors')
     .insert({ org_id: orgId, name: clean, display_name: clean, created_by: createdBy ?? null })

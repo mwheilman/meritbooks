@@ -7,23 +7,31 @@ import { addToast } from '@/hooks/use-toast';
 import { EmptyState, StatusBadge } from '@/components/ui';
 import { ALL_ROLES, ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
 import { WORKFLOW_DOC_TYPES, type WorkflowDocType } from '@/lib/approvals/workflow';
+import { CAPABILITIES } from '@/lib/rbac/capabilities';
+import { DOC_TYPE_APPROVE_CAPABILITY, capabilityPhrase, stepApproverLabel } from '@/lib/approvals/step-label';
 import { ChainVisualization } from './chain-visualization';
+import { ConflictRulesPanel } from './conflict-rules-panel';
 import { ChainSimulator } from './chain-simulator';
 import { CoverageReport } from './coverage-report';
 
-type ApprovalsTab = 'configure' | 'visualize' | 'simulate' | 'coverage';
+type ApprovalsTab = 'configure' | 'visualize' | 'simulate' | 'coverage' | 'conflicts';
 
 const TABS: Array<{ id: ApprovalsTab; label: string }> = [
   { id: 'configure', label: 'Configure' },
   { id: 'visualize', label: 'Visualize' },
   { id: 'simulate', label: 'Simulate' },
   { id: 'coverage', label: 'Coverage gaps' },
+  { id: 'conflicts', label: 'Conflict rules' },
 ];
 
 interface StepForm {
   stepOrder: number;
   minDollars: string;
   maxDollars: string; // '' = no ceiling
+  /** 'permission' = anyone holding the approval permission (05 R-12); 'role' = legacy role rank. */
+  approverMode: 'permission' | 'role';
+  approverCapability: string;
+  floorDollars: string; // '' = any holder of the permission
   approverRole: UserRole;
   requireDistinct: boolean;
 }
@@ -38,7 +46,9 @@ interface WorkflowView {
     stepOrder: number;
     minAmountCents: number;
     maxAmountCents: number | null;
-    approverRole: UserRole;
+    approverRole: UserRole | null;
+    approverCapability?: string | null;
+    minApproverLimitCents?: number | null;
     requireDistinct: boolean;
   }>;
 }
@@ -54,8 +64,25 @@ const DOC_TYPE_LABEL: Record<WorkflowDocType, string> = {
 // Roles that make sense as approvers (exclude the external business user).
 const APPROVER_ROLES: UserRole[] = ALL_ROLES.filter((r) => r !== 'business_user');
 
-function newStep(order: number): StepForm {
-  return { stepOrder: order, minDollars: '0', maxDollars: '', approverRole: 'accounting_manager', requireDistinct: true };
+/** Every approval-type permission (approve / post / release) as a plain-English option. */
+const APPROVAL_PERMISSIONS: Array<{ value: string; label: string }> = CAPABILITIES.filter(
+  (c) => c.status === 'active' && c.module === 'books',
+)
+  .flatMap((c) => c.actions.filter((a) => a === 'approve' || a === 'release').map((a) => `${c.key}:${a}`))
+  .map((ref) => ({ value: ref, label: capabilityPhrase(ref) }))
+  .sort((a, b) => a.label.localeCompare(b.label));
+
+function newStep(order: number, docType: WorkflowDocType = 'BILL'): StepForm {
+  return {
+    stepOrder: order,
+    minDollars: '0',
+    maxDollars: '',
+    approverMode: 'permission',
+    approverCapability: DOC_TYPE_APPROVE_CAPABILITY[docType],
+    floorDollars: '',
+    approverRole: 'accounting_manager',
+    requireDistinct: true,
+  };
 }
 
 export function ApprovalWorkflowsClient() {
@@ -68,7 +95,7 @@ export function ApprovalWorkflowsClient() {
   // Builder form state
   const [name, setName] = useState('Approval chain');
   const [docType, setDocType] = useState<WorkflowDocType>('BILL');
-  const [steps, setSteps] = useState<StepForm[]>([newStep(1)]);
+  const [steps, setSteps] = useState<StepForm[]>([newStep(1, 'BILL')]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,7 +116,15 @@ export function ApprovalWorkflowsClient() {
     void load();
   }, [load]);
 
-  const addStep = () => setSteps((s) => [...s, newStep((s[s.length - 1]?.stepOrder ?? 0) + 1)]);
+  const addStep = () => setSteps((s) => [...s, newStep((s[s.length - 1]?.stepOrder ?? 0) + 1, docType)]);
+  // Changing the document type moves steps still on the old default permission to the new one.
+  const changeDocType = (next: WorkflowDocType) => {
+    const oldDefault = DOC_TYPE_APPROVE_CAPABILITY[docType];
+    setSteps((s) =>
+      s.map((st) => (st.approverCapability === oldDefault ? { ...st, approverCapability: DOC_TYPE_APPROVE_CAPABILITY[next] } : st)),
+    );
+    setDocType(next);
+  };
   const removeStep = (i: number) => setSteps((s) => s.filter((_, idx) => idx !== i).map((st, idx) => ({ ...st, stepOrder: idx + 1 })));
   const patchStep = (i: number, patch: Partial<StepForm>) =>
     setSteps((s) => s.map((st, idx) => (idx === i ? { ...st, ...patch } : st)));
@@ -105,6 +140,13 @@ export function ApprovalWorkflowsClient() {
         const max = Number(st.maxDollars);
         if (!Number.isFinite(max) || max < 0) errs.push(`Step ${st.stepOrder}: maximum must be a non-negative number or blank.`);
         else if (max < min) errs.push(`Step ${st.stepOrder}: maximum is below minimum.`);
+      }
+      if (st.approverMode === 'permission') {
+        if (!st.approverCapability) errs.push(`Step ${st.stepOrder}: choose who can approve.`);
+        if (st.floorDollars.trim() !== '') {
+          const floor = Number(st.floorDollars);
+          if (!Number.isFinite(floor) || floor < 0) errs.push(`Step ${st.stepOrder}: the approver's limit must be $0 or more.`);
+        }
       }
     });
     return errs;
@@ -124,7 +166,13 @@ export function ApprovalWorkflowsClient() {
           stepOrder: st.stepOrder,
           minAmountCents: Math.round(Number(st.minDollars) * 100),
           maxAmountCents: st.maxDollars.trim() === '' ? null : Math.round(Number(st.maxDollars) * 100),
-          approverRole: st.approverRole,
+          ...(st.approverMode === 'role'
+            ? { approverRole: st.approverRole }
+            : {
+                approverRole: null,
+                approverCapability: st.approverCapability,
+                minApproverLimitCents: st.floorDollars.trim() === '' ? null : Math.round(Number(st.floorDollars) * 100),
+              }),
           requireDistinct: st.requireDistinct,
         })),
       };
@@ -139,7 +187,7 @@ export function ApprovalWorkflowsClient() {
       }
       addToast('success', 'Workflow saved and activated.');
       setName('Approval chain');
-      setSteps([newStep(1)]);
+      setSteps([newStep(1, docType)]);
       await load();
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Failed to save workflow');
@@ -185,17 +233,18 @@ export function ApprovalWorkflowsClient() {
         ))}
       </div>
 
-      {tab !== 'configure' && loading && (
+      {tab !== 'configure' && tab !== 'conflicts' && loading && (
         <div className="rounded-lg border border-white/5 bg-surface-900 p-4 text-xs text-slate-500">
           Loading workflows…
         </div>
       )}
-      {tab !== 'configure' && !loading && error && (
+      {tab !== 'configure' && tab !== 'conflicts' && !loading && error && (
         <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-xs text-red-300">{error}</div>
       )}
       {tab === 'visualize' && !loading && !error && <ChainVisualization workflows={workflows} />}
       {tab === 'simulate' && !loading && !error && <ChainSimulator workflows={workflows} />}
       {tab === 'coverage' && !loading && !error && <CoverageReport workflows={workflows} />}
+      {tab === 'conflicts' && <ConflictRulesPanel />}
 
       {tab === 'configure' && (
         <div className="space-y-8">
@@ -221,7 +270,7 @@ export function ApprovalWorkflowsClient() {
             <span className="text-2xs uppercase tracking-wide text-slate-500">Document type</span>
             <select
               value={docType}
-              onChange={(e) => setDocType(e.target.value as WorkflowDocType)}
+              onChange={(e) => changeDocType(e.target.value as WorkflowDocType)}
               className="mt-1 w-full rounded-lg border border-white/10 bg-surface-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
             >
               {WORKFLOW_DOC_TYPES.map((t) => (
@@ -246,7 +295,7 @@ export function ApprovalWorkflowsClient() {
                   </button>
                 )}
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-5">
                 <label className="block">
                   <span className="text-2xs text-slate-500">Min $</span>
                   <input
@@ -267,17 +316,40 @@ export function ApprovalWorkflowsClient() {
                   />
                 </label>
                 <label className="block">
-                  <span className="text-2xs text-slate-500">Approver role</span>
+                  <span className="text-2xs text-slate-500">Who approves</span>
                   <select
-                    value={st.approverRole}
-                    onChange={(e) => patchStep(i, { approverRole: e.target.value as UserRole })}
+                    value={st.approverMode === 'role' ? `role:${st.approverRole}` : st.approverCapability}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v.startsWith('role:')) patchStep(i, { approverMode: 'role', approverRole: v.slice(5) as UserRole });
+                      else patchStep(i, { approverMode: 'permission', approverCapability: v });
+                    }}
                     className="mt-1 w-full rounded-md border border-white/10 bg-surface-900 px-2 py-1.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
                   >
-                    {APPROVER_ROLES.map((r) => (
-                      <option key={r} value={r}>{ROLE_DEFINITIONS[r].label}</option>
-                    ))}
+                    <optgroup label="Anyone who can…">
+                      {APPROVAL_PERMISSIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="A role (older setup)">
+                      {APPROVER_ROLES.map((r) => (
+                        <option key={r} value={`role:${r}`}>{ROLE_DEFINITIONS[r].label}</option>
+                      ))}
+                    </optgroup>
                   </select>
                 </label>
+                {st.approverMode === 'permission' && (
+                  <label className="block">
+                    <span className="text-2xs text-slate-500">Their limit at least $ (blank = any)</span>
+                    <input
+                      inputMode="decimal"
+                      value={st.floorDollars}
+                      onChange={(e) => patchStep(i, { floorDollars: e.target.value })}
+                      placeholder="Any"
+                      className="mt-1 w-full rounded-md border border-white/10 bg-surface-900 px-2 py-1.5 font-mono text-sm text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                  </label>
+                )}
                 <label className="flex items-end gap-2 pb-1.5">
                   <input
                     type="checkbox"
@@ -345,7 +417,7 @@ export function ApprovalWorkflowsClient() {
                   {wf.steps.map((s) => (
                     <li key={s.stepOrder} className="flex items-center gap-3 text-xs text-slate-300">
                       <span className="font-mono text-2xs text-slate-500">#{s.stepOrder}</span>
-                      <span className="font-medium text-white">{ROLE_DEFINITIONS[s.approverRole]?.label ?? s.approverRole}</span>
+                      <span className="font-medium text-white">{stepApproverLabel(s)}</span>
                       <span className="text-slate-500">
                         {formatMoney(s.minAmountCents)}
                         {s.maxAmountCents === null ? '+' : `–${formatMoney(s.maxAmountCents)}`}

@@ -93,7 +93,25 @@ function fakeAdmin(tables: Record<string, Row[]>): SupabaseClient {
     return q;
   };
   const from = (t: string) => query(tables[t] ?? []);
-  return { from, schema: () => ({ from }) } as unknown as SupabaseClient;
+  // core.claim_pending_events / release_event_claims (migration 167), emulated.
+  const rpc = async (fn: string, args: Record<string, unknown>) => {
+    const events = tables.events ?? [];
+    if (fn === 'claim_pending_events') {
+      const claimed = events.filter((r) =>
+        r.status === 'pending' && r.event_type === args.p_event_type && !r.claimed_by
+        && (args.p_org == null || r.org_id === args.p_org)
+        && (args.p_source_module == null || r.source_module === args.p_source_module));
+      for (const r of claimed) r.claimed_by = args.p_token;
+      return { data: claimed, error: null };
+    }
+    if (fn === 'release_event_claims') {
+      const mine = events.filter((r) => r.claimed_by === args.p_token && r.status === 'pending');
+      for (const r of mine) r.claimed_by = null;
+      return { data: mine.length, error: null };
+    }
+    return { data: null, error: { message: `unknown rpc ${fn}` } };
+  };
+  return { from, rpc, schema: () => ({ from, rpc }) } as unknown as SupabaseClient;
 }
 
 const ORG = '11111111-1111-1111-1111-111111111111';
@@ -161,20 +179,44 @@ describe('GL-posting jobs only propose by default', () => {
   });
 
   it('events.drain leaves pending events for a human by default', async () => {
-    const res = await runEventsDrainJob(ctx(fakeAdmin({ events: [PENDING_BILLING] }), null));
+    const billing = { ...PENDING_BILLING };
+    const res = await runEventsDrainJob(ctx(fakeAdmin({ events: [billing] }), null));
     expect(mocks.processBillingEvents).not.toHaveBeenCalled();
     expect(res.summary).toMatch(/Waiting for a human/);
     expect(res.counts).toMatchObject({ billing_pending: 1, billing_gate: 'REVIEW' });
+    // M5: the gate said no → the claim is handed back for a human.
+    expect(billing.claimed_by).toBeNull();
   });
 
   it('events.drain processes billing (scoped to the org) when the dial allows, but never progress events', async () => {
     const admin = fakeAdmin({
-      events: [PENDING_BILLING, { org_id: ORG, event_type: 'JOB_PROGRESS', status: 'pending', payload: {} }],
+      events: [{ ...PENDING_BILLING }, { org_id: ORG, event_type: 'JOB_PROGRESS', status: 'pending', payload: {} }],
       autonomy_settings: [{ org_id: ORG, feature: 'SCHEDULED_EVENT_DRAIN', mode: 'AUTO_UNDER_LIMIT', materiality_limit_cents: 100_000 }],
     });
     const res = await runEventsDrainJob(ctx(admin, null));
-    expect(mocks.processBillingEvents).toHaveBeenCalledWith(admin, ORG);
+    // M5: the drain processes exactly the batch it claimed (and was gated on).
+    expect(mocks.processBillingEvents).toHaveBeenCalledWith(admin, ORG, {
+      claimed: expect.objectContaining({ rows: [expect.objectContaining({ event_type: 'JOB_BILLING' })] }),
+    });
     expect(mocks.processProgressEvents).not.toHaveBeenCalled();
     expect(res).toMatchObject({ itemsProcessed: 2, counts: { progress_gate: 'REVIEW' } });
+  });
+
+  it('events.drain gates on the CLAIMED amount: events arriving after the claim are not posted in this run (M5)', async () => {
+    const first: Row = { ...PENDING_BILLING, id: 'e1' };
+    const late: Row = { ...PENDING_BILLING, id: 'e2' };
+    const events: Row[] = [first];
+    const admin = fakeAdmin({
+      events,
+      autonomy_settings: [{ org_id: ORG, feature: 'SCHEDULED_EVENT_DRAIN', mode: 'AUTO_UNDER_LIMIT', materiality_limit_cents: 60_000 }],
+    });
+    mocks.processBillingEvents.mockImplementationOnce(async () => {
+      events.push(late); // arrives mid-run, after the claim
+      return { processed: 1, rejected: 0, results: [] };
+    });
+    await runEventsDrainJob(ctx(admin, null));
+    const call = mocks.processBillingEvents.mock.calls.at(-1) as unknown as [unknown, string, { claimed: { rows: Row[] } }];
+    expect(call[2].claimed.rows.map((r) => r.id)).toEqual(['e1']);
+    expect(late.claimed_by).toBeUndefined();
   });
 });

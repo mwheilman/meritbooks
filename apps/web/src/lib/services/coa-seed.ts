@@ -18,6 +18,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ACCOUNT_TYPE_HIERARCHY } from '@meritbooks/shared';
+import { writerFor } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -128,7 +129,10 @@ export async function seedChartOfAccounts(db: DB, orgId: string): Promise<CoaSee
       }
     }
   }
-  const { error: acctErr } = await db
+  // public.accounts is SELECT-only for members (migration 171): the org-level template
+  // accounts (company_location_id null, org_id pinned on every row) are written through
+  // writerFor(db) — the service role for a member caller. Callers authorize first (settings_acct:edit / import:run / sandbox).
+  const { error: acctErr } = await writerFor(db)
     .from('accounts')
     .upsert(accountRows, { onConflict: 'org_id,account_number', ignoreDuplicates: true });
   if (acctErr) throw new Error(`Failed seeding accounts: ${acctErr.message}`);

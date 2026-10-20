@@ -1,11 +1,13 @@
 export const dynamic = "force-dynamic";
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { markMemberClient } from './member-client';
 
 export async function createServerSupabase() {
   const cookieStore = await cookies();
 
-  return createServerClient(
+  // Member (RLS) client — see lib/supabase/member-client.ts (migration 171 write path).
+  return markMemberClient(createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -24,7 +26,7 @@ export async function createServerSupabase() {
         },
       },
     }
-  );
+  ));
 }
 
 export { createAdminSupabase } from './admin';

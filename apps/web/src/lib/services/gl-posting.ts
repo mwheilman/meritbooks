@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { isWriteScopeError, scopedWriter, writerFor } from '@/lib/db/scoped-writer';
 
 export interface JournalEntryLineInput {
   account_id: string;
@@ -36,6 +37,17 @@ export interface PostJournalEntryInput {
 /** A source_id must be a real uuid; anything else is an external ref. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * gl_entries / gl_entry_lines are SELECT-only for members (migration 171). The caller's
+ * client (`supabase`) is used for reads — so the period lookup stays RLS-scoped — and the
+ * writes go through the service role after the org / client-scope pin below. The DB
+ * triggers (balance, period lock, posted immutability, dimensions) still run.
+ */
+export interface GlWriteOptions {
+  /** Writer override (tests). Default: the service role for a member caller, else the caller. */
+  writer?: SupabaseClient;
+}
+
 export interface PostResult {
   success: boolean;
   entry_id?: string;
@@ -48,7 +60,8 @@ export interface PostResult {
  */
 export async function postJournalEntry(
   supabase: SupabaseClient,
-  input: PostJournalEntryInput
+  input: PostJournalEntryInput,
+  opts: GlWriteOptions = {}
 ): Promise<PostResult> {
   const totalDebits = input.lines.reduce((sum, l) => sum + l.debit_cents, 0);
   const totalCredits = input.lines.reduce((sum, l) => sum + l.credit_cents, 0);
@@ -80,8 +93,25 @@ export async function postJournalEntry(
     return { success: false, error: 'Cannot post to a hard-closed period' };
   }
 
+  // A member caller's write is escalated to the service role only after the org pin +
+  // client scope check on every client the entry lands on (the service role bypasses RLS,
+  // so this is what 163's client-scope WITH CHECK used to enforce). A service-role caller
+  // (drain / webhook / cron) writes as itself, unchanged.
+  let writer: SupabaseClient;
+  try {
+    writer = await scopedWriter(
+      supabase,
+      input.org_id,
+      [input.location_id, ...input.lines.map((l) => l.location_id)],
+      { writer: opts.writer, orgOnlyLocationIds: input.lines.map((l) => l.counterparty_location_id) },
+    );
+  } catch (e) {
+    if (isWriteScopeError(e)) return { success: false, error: e.message };
+    throw e;
+  }
+
   // Insert the journal entry header
-  const { data: entry, error: entryError } = await supabase
+  const { data: entry, error: entryError } = await writer
     .from('gl_entries')
     .insert({
       org_id: input.org_id,
@@ -137,12 +167,12 @@ export async function postJournalEntry(
     return row;
   });
 
-  const { error: linesError } = await supabase
+  const { error: linesError } = await writer
     .from('gl_entry_lines')
     .insert(lineInserts);
 
   if (linesError) {
-    await supabase.from('gl_entries').delete().eq('id', entry.id);
+    await writer.from('gl_entries').delete().eq('id', entry.id).eq('org_id', input.org_id);
     return { success: false, error: `Failed to post lines: ${linesError.message}` };
   }
 
@@ -166,7 +196,8 @@ export async function voidJournalEntry(
   orgId: string,
   entryId: string,
   userId: string | null,
-  reason: string
+  reason: string,
+  opts: GlWriteOptions = {}
 ): Promise<PostResult> {
   const { data: original, error: fetchError } = await supabase
     .from('gl_entries')
@@ -195,7 +226,9 @@ export async function voidJournalEntry(
     };
   }
 
-  const { error: updateError } = await supabase
+  // The entry was read through the caller's client above (org + client scope via RLS);
+  // a member caller's write goes through the service role, pinned to the org.
+  const { error: updateError } = await writerFor(supabase, opts.writer)
     .from('gl_entries')
     .update({
       status: 'VOIDED',

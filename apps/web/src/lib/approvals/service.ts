@@ -38,9 +38,12 @@ import { createAdminSupabase } from '@/lib/supabase/server';
 import { normalizeMembershipRole } from '@/lib/rbac/role-normalize';
 import type { UserRole } from '@/lib/rbac/permissions';
 import { approve as approveSingle } from '@/lib/money/approvals';
+import { loadAccessSnapshot, supabaseAccessSource, type AccessContext } from '@/lib/rbac/effective-access';
+import { meetsApproverFloor } from '@/lib/rbac/limits';
 import {
   applicableSteps,
   advanceChain,
+  isCapabilityStep,
   firstStepOrder,
   validateWorkflowSteps,
   WorkflowError,
@@ -74,7 +77,9 @@ interface StepRow {
   step_order: number;
   min_amount_cents: number;
   max_amount_cents: number | null;
-  approver_role: string;
+  approver_role: string | null;
+  approver_capability: string | null;
+  min_approver_limit_cents: number | string | null;
   require_distinct: boolean;
 }
 
@@ -89,6 +94,7 @@ interface RequestRow {
   status: RequestStatus;
   prepared_by: string;
   link_approval_id: string | null;
+  location_id?: string | null;
   decided_at: string | null;
   created_at: string;
   updated_at: string;
@@ -136,7 +142,14 @@ function toStepDef(r: StepRow): WorkflowStepDef {
     minAmountCents: Number(r.min_amount_cents),
     maxAmountCents: r.max_amount_cents === null ? null : Number(r.max_amount_cents),
     // Role vocabulary is validated in app code; unrecognized normalizes to a safe token.
-    approverRole: (normalizeMembershipRole(r.approver_role) ?? (r.approver_role as UserRole)),
+    // null = capability-routed step (05 R-12).
+    approverRole: r.approver_role
+      ? (normalizeMembershipRole(r.approver_role) ?? (r.approver_role as UserRole))
+      : null,
+    approverCapability: r.approver_capability ?? null,
+    minApproverLimitCents: r.min_approver_limit_cents === null || r.min_approver_limit_cents === undefined
+      ? null
+      : Number(r.min_approver_limit_cents),
     requireDistinct: r.require_distinct,
   };
 }
@@ -263,7 +276,9 @@ export async function createWorkflow(
     step_order: s.stepOrder,
     min_amount_cents: s.minAmountCents,
     max_amount_cents: s.maxAmountCents,
-    approver_role: s.approverRole,
+    approver_role: s.approverRole ?? null,
+    approver_capability: s.approverRole ? null : s.approverCapability ?? null,
+    min_approver_limit_cents: s.approverRole ? null : s.minApproverLimitCents ?? null,
     require_distinct: s.requireDistinct,
   }));
   const { error: stepErr } = await createAdminSupabase().from('approval_workflow_steps').insert(stepInserts);
@@ -339,6 +354,8 @@ export async function submitToWorkflow(
     amountCents: number;
     preparedBy: string;
     linkApprovalId?: string | null;
+    /** The client (location) the document belongs to — capability steps check grants there. */
+    locationId?: string | null;
   }
 ): Promise<SubmitResult> {
   const wf = await getActiveWorkflow(db, orgId, input.docType);
@@ -386,6 +403,7 @@ export async function submitToWorkflow(
       status: 'PENDING',
       prepared_by: input.preparedBy,
       link_approval_id: input.linkApprovalId ?? null,
+      ...(input.locationId ? { location_id: input.locationId } : {}),
     })
     .select('*')
     .single();
@@ -607,6 +625,53 @@ export async function getActiveRoleCounts(orgId: string): Promise<Record<string,
   }
 }
 
+/**
+ * Build the capability checker for a capability-routed step (05 R-12): the actor's
+ * EFFECTIVE access (core.access_assignments → roles / permission sets − mutes) in the
+ * document's client, with the step's dollar floor checked against the actor's approval
+ * limit (lib/rbac/limits.ts). With no client on the request, only all-clients / tenant
+ * grants count (never a grant scoped to some other client). Fail-closed: any error,
+ * missing / inactive membership or deactivated employee → a checker that denies.
+ *
+ * ADMIN CLIENT REQUIRED for the same reason as resolveActorRole (core identity + access
+ * tables are RLS-shielded); every read is pinned to the verified org.
+ */
+export async function resolveActorCapabilityCheck(
+  orgId: string,
+  clerkUserId: string,
+  locationId: string | null
+): Promise<(capability: string, floorCents: number | null) => boolean> {
+  const deny = () => false;
+  try {
+    const admin = createAdminSupabase();
+    const { data: user } = await admin.schema('core').from('users').select('id').eq('clerk_user_id', clerkUserId).maybeSingle();
+    if (!user?.id) return deny;
+    const { data: membership } = await admin
+      .schema('core')
+      .from('memberships')
+      .select('id')
+      .eq('user_id', (user as { id: string }).id)
+      .eq('org_id', orgId)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (!membership?.id) return deny;
+    const { data: emp } = await admin
+      .schema('core')
+      .from('employees')
+      .select('is_active')
+      .eq('org_id', orgId)
+      .eq('clerk_user_id', clerkUserId)
+      .maybeSingle();
+    if (emp && (emp as { is_active: boolean }).is_active === false) return deny;
+    const snapshot = await loadAccessSnapshot(supabaseAccessSource(admin), (membership as { id: string }).id);
+    if (!snapshot || snapshot.membership.orgId !== orgId) return deny;
+    const ctx: AccessContext = locationId ? { kind: 'client', locationId } : { kind: 'tenant' };
+    return (capability, floorCents) => meetsApproverFloor(snapshot, capability, floorCents, ctx);
+  } catch {
+    return deny;
+  }
+}
+
 export interface ActResult {
   request: RequestView;
   /** Set when the chain completed with full approval. */
@@ -659,11 +724,17 @@ export async function actOnRequest(
   }));
 
   const role = await resolveActorRole(orgId, input.actorUserId);
+  // Capability-routed current step (05 R-12): resolve the actor's effective access once.
+  const current = steps.find((s) => s.stepOrder === row.current_step);
+  const capabilityCheck =
+    current && isCapabilityStep(current)
+      ? await resolveActorCapabilityCheck(orgId, input.actorUserId, row.location_id ?? null)
+      : undefined;
 
   // Pure decision — throws WorkflowError on any violation (caller maps to 4xx).
   const result = advanceChain(
     { steps, currentStep: row.current_step, status: row.status, preparedBy: row.prepared_by, actions: priorActions },
-    { userId: input.actorUserId, role },
+    { userId: input.actorUserId, role, capabilityCheck },
     input.decision
   );
 

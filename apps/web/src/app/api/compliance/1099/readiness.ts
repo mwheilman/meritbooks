@@ -23,6 +23,8 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAdminSupabase } from '@/lib/supabase/admin';
+import { loadVendorTins } from '@/lib/vendors/tin-store';
 import { get1099Thresholds, type MiscThresholdBox } from '@/lib/tax/1099-thresholds';
 import {
   BOX_META,
@@ -286,23 +288,30 @@ export async function buildReadinessReport(
   >();
   for (let i = 0; i < candidateIds.length; i += 500) {
     const slice = candidateIds.slice(i, i + 500);
+    // RLS-scoped read of the non-sensitive facts; the TIN column is not member-
+    // readable (migration 167, R-6), so it is fetched server-side for THESE vendors,
+    // pinned to the org the RLS read returned them under.
     const { data: vRows } = await supabase
       .schema('core')
       .from('vendors')
-      .select('id, name, display_name, is_1099_eligible, tin_encrypted, w9_status')
+      .select('id, org_id, name, display_name, is_1099_eligible, w9_status')
       .in('id', slice);
-    for (const v of (vRows ?? []) as Array<{
+    const typed = (vRows ?? []) as Array<{
       id: string;
+      org_id: string;
       name: string;
       display_name: string | null;
       is_1099_eligible: boolean;
-      tin_encrypted: string | null;
       w9_status: string | null;
-    }>) {
+    }>;
+    const tins = typed.length > 0
+      ? await loadVendorTins(createAdminSupabase(), typed[0].org_id, typed.map((v) => v.id))
+      : new Map<string, string | null>();
+    for (const v of typed) {
       vendorFacts.set(v.id, {
         name: v.display_name || v.name,
         is1099: v.is_1099_eligible === true,
-        tin: v.tin_encrypted,
+        tin: tins.get(v.id) ?? null,
         w9: v.w9_status,
       });
     }

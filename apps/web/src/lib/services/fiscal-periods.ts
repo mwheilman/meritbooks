@@ -15,8 +15,15 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
+
+// public.fiscal_periods is SELECT-only for members (migration 171) — a member could
+// otherwise reopen a hard-closed period over PostgREST. Reads go through the caller's
+// client `db`; a member caller's writes go through the service role (scopedWriter),
+// pinned to the org, after the company is checked against the caller's org + client
+// scope. Callers authorize first.
 export type PeriodStatus = 'OPEN' | 'SOFT_CLOSE' | 'HARD_CLOSE';
 
 function pad(n: number): string { return n < 10 ? `0${n}` : String(n); }
@@ -60,6 +67,8 @@ export interface GenerateYearOptions {
    * `preGoLiveStatus` so a conversion year is never hard-closed.
    */
   statusFor?: (year: number, month: number, now: Date) => PeriodStatus;
+  /** Writer override (tests). Default: the service role for a member caller, else `db`. */
+  writer?: DB;
 }
 
 /**
@@ -100,23 +109,33 @@ export async function generateYear(
   }
 
   if (rows.length > 0) {
-    const { error } = await db.from('fiscal_periods').insert(rows);
+    const writer = await scopedWriter(db, orgId, [locationId], { writer: opts.writer });
+    const { error } = await writer.from('fiscal_periods').insert(rows);
     if (error) throw new Error(`generateYear: ${error.message}`);
   }
   return { locationId, created: rows.length, skipped: have.size };
 }
 
 /** Transition a period's status. Reopening a HARD_CLOSE requires a reason. */
-export async function setPeriodStatus(db: DB, orgId: string, periodId: string, status: PeriodStatus, actor: string, reason: string | null): Promise<void> {
+export async function setPeriodStatus(
+  db: DB,
+  orgId: string,
+  periodId: string,
+  status: PeriodStatus,
+  actor: string,
+  reason: string | null,
+  opts: { writer?: DB } = {},
+): Promise<void> {
   const { data: current } = await db
     .from('fiscal_periods')
-    .select('status, close_started_at')
+    .select('status, close_started_at, location_id')
     .eq('org_id', orgId)
     .eq('id', periodId)
     .single();
   if (!current) throw new Error('Period not found');
 
-  const cur = current as { status: PeriodStatus; close_started_at: string | null };
+  const cur = current as { status: PeriodStatus; close_started_at: string | null; location_id: string | null };
+  const writer = await scopedWriter(db, orgId, [cur.location_id], { writer: opts.writer });
   const wasHardClosed = cur.status === 'HARD_CLOSE';
   if (wasHardClosed && status !== 'HARD_CLOSE' && !reason) {
     throw new Error('Reopening a hard-closed period requires a reason');
@@ -137,6 +156,6 @@ export async function setPeriodStatus(db: DB, orgId: string, periodId: string, s
   }
   if (reason) update.close_override_reason = reason;
 
-  const { error } = await db.from('fiscal_periods').update(update).eq('org_id', orgId).eq('id', periodId);
+  const { error } = await writer.from('fiscal_periods').update(update).eq('org_id', orgId).eq('id', periodId);
   if (error) throw new Error(`setPeriodStatus: ${error.message}`);
 }

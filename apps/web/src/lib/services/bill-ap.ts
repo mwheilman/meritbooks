@@ -21,8 +21,15 @@ import { resolveRole } from '../posting/account-roles';
 import { recordBillPayment, reverseGlEntry } from '../posting/lifecycle';
 import { approveAttribution, resolveApprover, type ResolvedApprover, type RoutingContext } from './cost-approval';
 import type { CostType } from './job-cost-events';
+import { writerFor } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
+
+// bills / gl_entry_lines are SELECT-only for members (migration 171). Every function here
+// READS the bill through the caller's client `db` (RLS: org + client scope for a member;
+// everything for a service-role caller), and WRITES through `writerFor(db)` — the service
+// role for a member caller — pinned to `orgId`. The route has already authorized the
+// action (bills:approve / :edit / …).
 
 export interface BillLineRow {
   id: string;
@@ -206,12 +213,12 @@ export async function approveBill(db: DB, orgId: string, billId: string, approve
     if (!line.job_id) continue;
     const glLineId = glLineByNumber.get(i + 1);
     if (glLineId) {
-      await db.from('gl_entry_lines').update({ job_id: line.job_id }).eq('id', glLineId);
+      await writerFor(db).from('gl_entry_lines').update({ job_id: line.job_id }).eq('id', glLineId).eq('org_id', orgId);
     }
   }
 
   // Flip the bill to APPROVED.
-  const { error: upErr } = await db
+  const { error: upErr } = await writerFor(db)
     .from('bills')
     .update({
       status: 'APPROVED',
@@ -220,7 +227,8 @@ export async function approveBill(db: DB, orgId: string, billId: string, approve
       approved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq('id', billId);
+    .eq('id', billId)
+    .eq('org_id', orgId);
   if (upErr) throw new Error(upErr.message);
 
   // Clear the bill's PENDING attributions -> emits CLEARED JOB_COST (contract §3/§5).
@@ -246,10 +254,11 @@ export async function scheduleBill(db: DB, orgId: string, billId: string, schedu
   if (bill.status !== 'APPROVED' && bill.status !== 'SCHEDULED') {
     throw new Error(`Only approved bills can be scheduled (current status: ${bill.status})`);
   }
-  const { error } = await db
+  const { error } = await writerFor(db)
     .from('bills')
     .update({ status: 'SCHEDULED', scheduled_payment_date: scheduledDate, payment_method: method ?? null, updated_at: new Date().toISOString() })
-    .eq('id', billId);
+    .eq('id', billId)
+    .eq('org_id', orgId);
   if (error) throw new Error(error.message);
   return { id: billId, status: 'SCHEDULED' as const };
 }
@@ -304,10 +313,11 @@ export async function voidBill(db: DB, orgId: string, billId: string, reason: st
     if (!rev.success) throw new Error(rev.error ?? 'Failed to reverse the bill GL entry');
   }
 
-  const { error } = await db
+  const { error } = await writerFor(db)
     .from('bills')
     .update({ status: 'VOIDED', void_reason: reason, updated_at: new Date().toISOString() })
-    .eq('id', billId);
+    .eq('id', billId)
+    .eq('org_id', orgId);
   if (error) throw new Error(error.message);
 
   // Void any attributions (PENDING or CLEARED) tied to this bill.

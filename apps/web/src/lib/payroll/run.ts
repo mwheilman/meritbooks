@@ -23,6 +23,13 @@
  * not redefine it. The concrete engine is resolved lazily so this module — and
  * its unit tests — do not hard-depend on the engine implementation being present
  * (tests inject a fake). Type-only imports are erased at runtime.
+ *
+ * WRITES (migration 170): public.payroll_runs and public.payroll_run_employees are
+ * SELECT-only for members, and the per-person amount columns are not member-readable
+ * at all. Every function here that writes (createRun / previewRun / approveRun /
+ * releaseRun / postRun) MUST be handed the SERVICE-ROLE client (`createAdminSupabase()`
+ * from `@/lib/supabase/admin`) by a route that has already authorized the caller; every
+ * query is pinned to the explicit `orgId`.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -100,6 +107,78 @@ export class RunStateError extends Error {
   }
 }
 
+/** Another release of the same run holds the approval claim (or already released it). */
+export class RunReleaseConflictError extends Error {
+  constructor() {
+    super('This payroll run is already being released (or was released) by someone else.');
+    this.name = 'RunReleaseConflictError';
+  }
+}
+
+/** What was approved no longer matches what would be released (lines / amounts changed). */
+export class RunTamperedError extends Error {
+  constructor(detail: string) {
+    super(`This payroll run changed after it was approved (${detail}). Preview and approve it again before releasing.`);
+    this.name = 'RunTamperedError';
+  }
+}
+
+/**
+ * The provider accepted the release (money is moving) but Books could not record it.
+ * Never retried automatically and never rolled back — an operator must reconcile it.
+ */
+export class RunReleaseRecordingError extends Error {
+  readonly providerRunId: string;
+  constructor(providerRunId: string, cause: string) {
+    super(`Payroll was released to the provider (run ${providerRunId}) but recording the release failed: ${cause}. Do not release again — contact support to reconcile.`);
+    this.name = 'RunReleaseRecordingError';
+    this.providerRunId = providerRunId;
+  }
+}
+
+// ── Approved-lines fingerprint ──────────────────────────────────────────────
+
+/** The per-employee amounts a release commits to (payroll_run_employees money columns). */
+export interface PayrollLineAmounts {
+  employee_id: string | null;
+  gross_cents: number | string | null;
+  net_cents: number | string | null;
+  employee_tax_cents: number | string | null;
+  employer_tax_cents: number | string | null;
+  deductions_cents: number | string | null;
+  benefits_cents: number | string | null;
+}
+
+const n0 = (v: number | string | null | undefined): number => Number(v ?? 0);
+
+/**
+ * SHA-256 over the canonical, order-independent form of the run's per-employee
+ * amounts. Stored on the approval at approve time and re-checked at release, so the
+ * lines that move money are exactly the lines that were approved.
+ */
+export async function payrollLinesDigest(rows: readonly PayrollLineAmounts[]): Promise<string> {
+  const canon = rows
+    .map((r) => [r.employee_id ?? '', n0(r.gross_cents), n0(r.net_cents), n0(r.employee_tax_cents),
+      n0(r.employer_tax_cents), n0(r.deductions_cents), n0(r.benefits_cents)].join('|'))
+    .sort()
+    .join('\n');
+  const bytes = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canon));
+  return Array.from(new Uint8Array(bytes)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+const LINE_AMOUNT_COLUMNS =
+  'employee_id, gross_cents, net_cents, employee_tax_cents, employer_tax_cents, deductions_cents, benefits_cents';
+
+async function loadLineAmounts(db: DB, orgId: string, runId: string): Promise<PayrollLineAmounts[]> {
+  const { data, error } = await db
+    .from('payroll_run_employees')
+    .select(LINE_AMOUNT_COLUMNS)
+    .eq('org_id', orgId)
+    .eq('payroll_run_id', runId);
+  if (error) throw new RunStateError(`Failed to read run lines: ${error.message}`);
+  return (data ?? []) as PayrollLineAmounts[];
+}
+
 /** Pure guard — throws `InvalidRunTransitionError` on an illegal transition. */
 export function assertRunTransition(from: RunStatus, to: RunStatus): void {
   if (!RUN_TRANSITIONS[from]?.includes(to)) {
@@ -134,6 +213,22 @@ export interface PayrollRunRow {
   memo: string | null;
 }
 
+/**
+ * Client scope for service-role writes (mig 170). The service role bypasses 163's
+ * RESTRICTIVE client-scope policy, so before a route writes a run with the admin client
+ * it confirms — on the CALLER's RLS client — that the caller can see the run (or, for a
+ * new run, its company). false → the route answers 404.
+ */
+export async function runVisibleToCaller(callerDb: DB, orgId: string, runId: string): Promise<boolean> {
+  const { data, error } = await callerDb.from('payroll_runs').select('id').eq('org_id', orgId).eq('id', runId).maybeSingle();
+  return !error && !!data;
+}
+
+export async function companyVisibleToCaller(callerDb: DB, orgId: string, locationId: string): Promise<boolean> {
+  const { data, error } = await callerDb.schema('core').from('locations').select('id').eq('org_id', orgId).eq('id', locationId).maybeSingle();
+  return !error && !!data;
+}
+
 async function getRun(db: DB, orgId: string, runId: string): Promise<PayrollRunRow> {
   const { data, error } = await db
     .from('payroll_runs')
@@ -163,6 +258,15 @@ export interface CreateRunInput {
 /** Insert a DRAFT run + its per-employee input rows. No money math, no provider. */
 export async function createRun(db: DB, orgId: string, input: CreateRunInput): Promise<PayrollRunRow> {
   if (!input.employeeInputs.length) throw new RunStateError('A run needs at least one employee');
+
+  // Service-role write (mig 170): every employee must be a person of THIS tenant.
+  const employeeIds = [...new Set(input.employeeInputs.map((e) => e.employeeId))];
+  const { data: emps, error: empErr } = await db
+    .schema('core').from('employees').select('id').eq('org_id', orgId).in('id', employeeIds);
+  if (empErr) throw new RunStateError(`Failed to verify employees: ${empErr.message}`);
+  if (((emps ?? []) as Array<{ id: string }>).length !== employeeIds.length) {
+    throw new RunStateError('One or more employees are not in this organization');
+  }
 
   const { data: run, error } = await db
     .from('payroll_runs')
@@ -194,7 +298,8 @@ async function insertRunEmployees(
   runId: string,
   inputs: EmployeePayInput[],
 ): Promise<void> {
-  await db.from('payroll_run_employees').delete().eq('org_id', orgId).eq('payroll_run_id', runId);
+  const { error: delErr } = await db.from('payroll_run_employees').delete().eq('org_id', orgId).eq('payroll_run_id', runId);
+  if (delErr) throw new RunStateError(`Failed to reset run employees: ${delErr.message}`);
   const rows = inputs.map((e) => ({
     org_id: orgId,
     payroll_run_id: runId,
@@ -286,7 +391,8 @@ export async function previewRun(
   });
 
   // Persist per-employee results (replace) + run totals.
-  await db.from('payroll_run_employees').delete().eq('org_id', orgId).eq('payroll_run_id', runId);
+  const { error: delErr } = await db.from('payroll_run_employees').delete().eq('org_id', orgId).eq('payroll_run_id', runId);
+  if (delErr) throw new RunStateError(`Failed to reset preview results: ${delErr.message}`);
   if (preview.employees.length) {
     const { error: insErr } = await db
       .from('payroll_run_employees')
@@ -299,6 +405,7 @@ export async function previewRun(
     .update({ status: 'PREVIEWED', ...totalsToRunColumns(preview.totals), updated_at: new Date().toISOString() })
     .eq('org_id', orgId)
     .eq('id', runId)
+    .in('status', ['DRAFT', 'PREVIEWED']) // never re-price an approved / released run
     .select('*')
     .single();
   if (error || !updated) throw new RunStateError(`Failed to persist preview totals: ${error?.message ?? 'unknown'}`);
@@ -331,6 +438,11 @@ export async function approveRun(
 
   const { createApproval, submitForApproval, approve } = await import('@/lib/money/approvals');
 
+  // Fingerprint EXACTLY what is being approved; releaseRun re-checks it.
+  const lines = await loadLineAmounts(db, orgId, runId);
+  if (lines.length === 0) throw new RunStateError('The run has no previewed lines to approve');
+  const digest = await payrollLinesDigest(lines);
+
   // Prepare -> submit -> approve. The approval's preparedBy is the RUN preparer so
   // the SoD CHECK compares the approver against the true preparer, not the caller.
   const approval = await createApproval(db, orgId, {
@@ -339,6 +451,7 @@ export async function approveRun(
     subjectId: runId,
     amountCents: run.gross_cents,
     preparedBy,
+    metadata: { lines_digest: digest, line_count: lines.length, net_cents: run.net_cents, gross_cents: run.gross_cents },
   });
   await submitForApproval(db, orgId, approval.id, preparedBy);
   await approve(db, orgId, approval.id, approverClerkId); // throws on SoD / not-authorized
@@ -348,9 +461,10 @@ export async function approveRun(
     .update({ status: 'APPROVED', approved_by: approverClerkId, approval_id: approval.id, updated_at: new Date().toISOString() })
     .eq('org_id', orgId)
     .eq('id', runId)
+    .eq('status', 'PREVIEWED') // compare-and-set: a concurrent change loses
     .select('*')
-    .single();
-  if (error || !updated) throw new RunStateError(`Failed to mark run approved: ${error?.message ?? 'unknown'}`);
+    .maybeSingle();
+  if (error || !updated) throw new RunStateError(`Failed to mark run approved: ${error?.message ?? 'the run changed meanwhile'}`);
   return updated as PayrollRunRow;
 }
 
@@ -359,15 +473,25 @@ export async function approveRun(
 /**
  * Release funding. **This is the single step that instructs the provider to move
  * money** (engine.submitRun debits the tenant's bank and pays employees/agencies).
- * Requires an APPROVED run and an explicit human actor (the route additionally
- * gates payroll:approve). Records the provider run id + releaser and advances the
- * approval to RELEASED.
  *
- * Post-condition is exactly RELEASED (the asserted transition). Async provider
- * progress (RELEASED -> PROCESSING/PAID/FAILED) is driven later by a status-sync
- * / webhook step (engine.getRunStatus, Phase B), never guessed synchronously
- * here. Fail closed: if submitRun throws, the run stays APPROVED and no money
- * state is recorded.
+ * The AUTHORITY is the money-approval record (public.approvals, kind PAYROLL_RUN),
+ * not the run's own columns:
+ *   1. the run must be APPROVED and linked to an APPROVED PAYROLL_RUN approval for
+ *      THIS run whose preparer / approver / amount match the run;
+ *   2. separation of duties: the releaser is neither the preparer nor the approver
+ *      (strict for payroll — sole-approver mode does not relax it), re-checked by
+ *      assertReleaseSod inside the claim and by the DB release guard (mig 165);
+ *   3. the per-employee lines still hash to the digest stored at approval and sum
+ *      to the run totals — what moves is exactly what was approved;
+ *   4. the approval is CLAIMED (APPROVED → RELEASED compare-and-set) BEFORE the
+ *      provider is called, so two concurrent releases can never both pay;
+ *   5. if the provider call fails the claim is reverted (back to APPROVED, retryable);
+ *      once the provider accepted, the claim is finalized FIRST (provider reference
+ *      stamped — irreversible) and only then is the run marked RELEASED. Nothing is
+ *      swallowed: a recording failure after money moved raises RunReleaseRecordingError.
+ *
+ * Async provider progress (RELEASED -> PROCESSING/PAID/FAILED) is driven later by a
+ * status-sync / webhook step (engine.getRunStatus, Phase B).
  */
 export async function releaseRun(
   db: DB,
@@ -379,31 +503,73 @@ export async function releaseRun(
   const run = await getRun(db, orgId, runId);
   assertRunTransition(run.status, 'RELEASED');
 
-  // Separation of duties: the human releasing the money cannot be the one who
-  // approved it (mirrors the AP releaser != preparer check on /ap/disbursements).
-  // Fail closed BEFORE any provider call — no money moves on an SoD violation.
-  if (run.approved_by && run.approved_by === releaserClerkId) {
-    throw new RunReleaserCannotApproveError();
-  }
+  // Separation of duties on the run's recorded parties — fail closed BEFORE any
+  // further read, claim or provider call.
+  if (run.prepared_by && run.prepared_by === releaserClerkId) throw new RunPreparerCannotApproveError();
+  if (run.approved_by && run.approved_by === releaserClerkId) throw new RunReleaserCannotApproveError();
+  if (!run.approval_id) throw new RunStateError('This run has no approval on record; approve it before releasing');
 
-  const eng = await loadEngine(db, orgId, engine);
+  const approvals = await import('@/lib/money/approvals');
+  const approval = await approvals.loadApproval(orgId, run.approval_id);
+  if (!approval) throw new RunStateError('The approval for this run was not found');
+  if (approval.kind !== 'PAYROLL_RUN' || approval.subjectTable !== 'payroll_runs' || approval.subjectId !== runId) {
+    throw new RunTamperedError('the approval on record belongs to something else');
+  }
+  if (approval.status !== 'APPROVED') {
+    if (approval.status === 'RELEASED') throw new RunReleaseConflictError();
+    throw new RunStateError(`The approval for this run is ${approval.status}, not APPROVED`);
+  }
+  if (!approval.approvedBy) throw new RunStateError('The approval for this run has no approver');
+  if (approval.preparedBy !== run.prepared_by || approval.approvedBy !== run.approved_by) {
+    throw new RunTamperedError('preparer or approver differs from the approval record');
+  }
+  if (approval.amountCents !== null && Number(approval.amountCents) !== Number(run.gross_cents)) {
+    throw new RunTamperedError('gross pay differs from the approved amount');
+  }
+  // Strict H6 on the AUTHORITATIVE parties (the run row is only a mirror).
+  if (approval.preparedBy === releaserClerkId) throw new RunPreparerCannotApproveError();
+  if (approval.approvedBy === releaserClerkId) throw new RunReleaserCannotApproveError();
 
   // Rebuild the previewed run (persisted at preview time) into the engine's
   // PayrollRunPreview shape — submitRun commits exactly what was reviewed/approved.
-  const { data: empRows } = await db
+  const { data: empData, error: empErr } = await db
     .from('payroll_run_employees')
     .select('employee_id, gross_cents, net_cents, employee_tax_cents, employer_tax_cents, deductions_cents, benefits_cents, provider_ref')
     .eq('org_id', orgId)
     .eq('payroll_run_id', runId);
+  if (empErr) throw new RunStateError(`Failed to read run lines: ${empErr.message}`);
+  const empRows = (empData ?? []) as Array<PayrollLineAmounts & { provider_ref: string | null }>;
+  if (empRows.length === 0) throw new RunStateError('The run has no lines to release');
+
+  const sumGross = empRows.reduce((s, r) => s + n0(r.gross_cents), 0);
+  const sumNet = empRows.reduce((s, r) => s + n0(r.net_cents), 0);
+  if (sumGross !== Number(run.gross_cents) || sumNet !== Number(run.net_cents)) {
+    throw new RunTamperedError('per-employee lines no longer add up to the run totals');
+  }
+  const approvedDigest = typeof approval.metadata.lines_digest === 'string' ? approval.metadata.lines_digest : null;
+  if (approvedDigest && approvedDigest !== (await payrollLinesDigest(empRows))) {
+    throw new RunTamperedError('per-employee lines differ from the approved lines');
+  }
+
+  // Resolve the provider BEFORE claiming, so a setup error never churns the claim.
+  const eng = await loadEngine(db, orgId, engine);
+
+  // >>> claim the money approval (the DB is the concurrency guarantor) <<<
+  const claim = await approvals.claimApprovalForRelease(db, orgId, run.approval_id, releaserClerkId, {
+    preparedBy: approval.preparedBy,
+    approvedBy: approval.approvedBy,
+  });
+  if (claim !== 'CLAIMED') throw new RunReleaseConflictError();
+
   const preview: PayrollRunPreview = {
-    employees: ((empRows ?? []) as Array<Record<string, unknown>>).map((r) => ({
+    employees: empRows.map((r) => ({
       employeeId: String(r.employee_id ?? ''),
-      grossCents: Number(r.gross_cents ?? 0),
-      netCents: Number(r.net_cents ?? 0),
-      employeeTaxCents: Number(r.employee_tax_cents ?? 0),
-      employerTaxCents: Number(r.employer_tax_cents ?? 0),
-      deductionsCents: Number(r.deductions_cents ?? 0),
-      benefitsCents: Number(r.benefits_cents ?? 0),
+      grossCents: n0(r.gross_cents),
+      netCents: n0(r.net_cents),
+      employeeTaxCents: n0(r.employee_tax_cents),
+      employerTaxCents: n0(r.employer_tax_cents),
+      deductionsCents: n0(r.deductions_cents),
+      benefitsCents: n0(r.benefits_cents),
       providerRef: r.provider_ref ? String(r.provider_ref) : undefined,
     })),
     totals: {
@@ -417,15 +583,30 @@ export async function releaseRun(
   };
 
   // >>> the money moves here <<<
-  const submitted = await eng.submitRun({
-    providerRunId: run.provider_run_id ?? undefined,
-    preview,
-    periodStart: run.period_start,
-    periodEnd: run.period_end,
-    payDate: run.pay_date,
-  });
+  let providerRunId: string;
+  try {
+    const submitted = await eng.submitRun({
+      providerRunId: run.provider_run_id ?? undefined,
+      preview,
+      periodStart: run.period_start,
+      periodEnd: run.period_end,
+      payDate: run.pay_date,
+    });
+    providerRunId = submitted.providerRunId;
+    if (!providerRunId) throw new RunStateError('The payroll provider returned no run reference');
+  } catch (e) {
+    // Nothing was released: hand the claim back so the run can be retried.
+    await approvals.revertReleaseClaim(db, orgId, run.approval_id);
+    throw e;
+  }
 
-  const providerRunId = submitted.providerRunId;
+  // Money is in flight. Make the claim irreversible FIRST (provider reference stamped +
+  // immutable RELEASED audit step), then mirror it on the run. Never swallowed.
+  try {
+    await approvals.finalizeReleaseClaim(db, orgId, run.approval_id, releaserClerkId, providerRunId);
+  } catch (e) {
+    throw new RunReleaseRecordingError(providerRunId, e instanceof Error ? e.message : String(e));
+  }
 
   const { data: updated, error } = await db
     .from('payroll_runs')
@@ -438,16 +619,11 @@ export async function releaseRun(
     })
     .eq('org_id', orgId)
     .eq('id', runId)
+    .eq('status', 'APPROVED')
     .select('*')
-    .single();
-  if (error || !updated) throw new RunStateError(`Failed to mark run released: ${error?.message ?? 'unknown'}`);
-
-  // Advance the approval to RELEASED (records releaser + provider correlation id).
-  if (run.approval_id) {
-    const { markReleased } = await import('@/lib/money/approvals');
-    await markReleased(db, orgId, run.approval_id, releaserClerkId, providerRunId).catch(() => {
-      /* approval already RELEASED/terminal — the run state is authoritative here */
-    });
+    .maybeSingle();
+  if (error || !updated) {
+    throw new RunReleaseRecordingError(providerRunId, error?.message ?? 'the run was no longer APPROVED');
   }
   return updated as PayrollRunRow;
 }

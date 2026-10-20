@@ -7,6 +7,11 @@ import { pairsForVendor, type VendorDupInput } from '@/lib/vendors/dedupe';
 import { loadVendorPaymentProfiles } from '@/lib/ap/vendor-payment-details';
 import { computeReadiness, type W9State } from '@/app/api/compliance/1099/readiness';
 import { get1099Thresholds } from '@/lib/tax/1099-thresholds';
+import { createAdminSupabase } from '@/lib/supabase/admin';
+import { VENDOR_READ_SELECT } from '@/lib/vendors/columns';
+import { loadVendorTins, tinPresent as hasTin } from '@/lib/vendors/tin-store';
+import { z } from 'zod';
+import { maskMeta, maskValue, resolveFieldAccess, type RevealRequest } from '@/lib/rbac/field-masks';
 
 /**
  * GET /api/vendors/[id] — vendor detail + ledger rollup for the detail drawer/peek.
@@ -27,15 +32,54 @@ import { get1099Thresholds } from '@/lib/tax/1099-thresholds';
  *    doc_type ∈ W9|GL_COI|WC_COI|WC_EXEMPTION.
  */
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
+  // Wave 2G: a GET never reveals (a reveal is a logged, state-changing act — POST below).
+  return vendorDetail(params.id, null);
+}
+
+const revealSchema = z.object({
+  reveal: z.array(z.enum(['tin', 'bank'])).min(1).max(2),
+  reason: z.string().trim().min(3, 'Give a reason (3+ characters)').max(500),
+});
+
+/**
+ * POST /api/vendors/[id] { reveal: ['tin'], reason } — the same detail, with the
+ * requested class revealed for a role whose level is reveal_logged (logged to
+ * core.field_reveals + the action log BEFORE unmasking) or visible.
+ */
+export async function POST(req: Request, { params }: { params: { id: string } }) {
+  const parsed = revealSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Validation failed', code: 'VALIDATION_ERROR' }, { status: 422 });
+  }
+  return vendorDetail(params.id, { classes: [...new Set(parsed.data.reveal)], reason: parsed.data.reason });
+}
+
+async function vendorDetail(vendorId: string, reveal: RevealRequest | null): Promise<NextResponse> {
+  const params = { id: vendorId };
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const { data: v, error } = await supabase
-    .schema('core').from('vendors').select('*')
+    .schema('core').from('vendors').select(VENDOR_READ_SELECT)
     .eq('org_id', orgId).eq('id', params.id).single();
   if (error || !v) return NextResponse.json({ error: 'Vendor not found' }, { status: 404 });
+
+  // ---- TIN (05 R-6): never readable with the member's client (migration 167). Read
+  // server-side, pinned to the org, and returned at the caller's field level:
+  // masked "•••• 1234" by default; the raw value only on an explicit reveal (POST
+  // { reveal: ['tin'], reason }) by a role whose level is reveal_logged (logged to
+  // core.field_reveals) or visible.
+  const admin = createAdminSupabase();
+  const [vendorTins, fieldAccess] = await Promise.all([
+    loadVendorTins(admin, orgId, [params.id]),
+    resolveFieldAccess(admin, orgId, userId, {
+      request: reveal,
+      subject: { table: 'vendors', ids: [params.id] },
+    }),
+  ]);
+  const storedTin = vendorTins.get(params.id) ?? null;
 
   // ---- Bills (public), all of this vendor's — bounded, newest first. Used for
   // the open-bills list, A/P summary, spend rollups, and the payment-number map.
@@ -182,7 +226,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .filter((p) => p.payment_date && new Date(p.payment_date) >= yearStart && isReportableRail(p.method ?? null, p.rail ?? null))
     .reduce((s, p) => s + (Number(p.amount_cents) || 0), 0);
   const is1099Eligible = !!ven.is_1099_eligible;
-  const tinPresent = typeof ven.tin_encrypted === 'string' && ven.tin_encrypted.trim().length > 0;
+  const tinPresent = hasTin(storedTin);
   const w9State: W9State = ((): W9State => {
     const s = docStatus('W9');
     if (s === 'valid') return 'on_file';
@@ -232,7 +276,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     paymentTermsDays: ven.payment_terms_days ?? null,
     is1099: !!ven.is_1099_eligible,
     autoApprove: !!ven.auto_approve,
-    taxId: null, // no plaintext TIN column on core.vendors (tin_encrypted not surfaced)
+    taxId: tinPresent ? maskValue('tin', storedTin, fieldAccess) : null,
+    taxIdRevealed: tinPresent && fieldAccess.revealed.has('tin'),
     isActive: ven.is_active !== false,
     w9Status: ven.w9_status ?? null,
 
@@ -274,6 +319,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     payments,
     recentBills,
     possibleDuplicates,
+    fieldMasks: maskMeta(fieldAccess, tinPresent && !fieldAccess.revealed.has('tin') && fieldAccess.policy.tin !== 'visible' ? ['taxId'] : []),
   });
 }
 

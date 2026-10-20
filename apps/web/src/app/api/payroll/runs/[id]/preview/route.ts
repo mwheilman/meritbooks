@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { logHumanAction } from '@/lib/trust/action-log';
-import { previewRun, InvalidRunTransitionError, RunStateError } from '@/lib/payroll/run';
+import { runVisibleToCaller, previewRun, InvalidRunTransitionError, RunStateError } from '@/lib/payroll/run';
 import { PayrollProviderNotConfiguredError } from '@/lib/payroll/engine/types';
 import { PayrollCapabilityUnsupportedError } from '@/lib/payroll/providers/types';
 
@@ -24,8 +25,12 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const guard = await requirePermission(userId, 'payroll', 'create');
   if (!guard.ok) return guard.response;
 
+  // The admin client bypasses client-scope RLS: the caller must be able to see this run.
+  if (!(await runVisibleToCaller(supabase, orgId, params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
   try {
-    const run = await previewRun(supabase, orgId, params.id, userId);
+    // Service-role write after the payroll:create check (mig 170 write lock), org-pinned.
+    const run = await previewRun(createAdminSupabase(), orgId, params.id, userId);
     await logHumanAction(supabase, userId, orgId, {
       action: 'payroll.run.preview',
       subjectTable: 'payroll_runs',

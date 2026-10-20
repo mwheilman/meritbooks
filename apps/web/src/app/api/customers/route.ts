@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 
 interface CustomerInput {
   name: string;
@@ -116,6 +118,12 @@ export async function POST(req: NextRequest) {
     const { supabase, orgId, userId } = ctx;
     if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
+    // M4 (migration 167): core.customers is no longer member-writable over PostgREST.
+    // The write runs as the service role AFTER this permission check, pinned to the
+    // session org (the DB guard also rejects a location_id from another tenant).
+    const guard = await requirePermission(userId, 'customers', 'create');
+    if (!guard.ok) return guard.response;
+
     const body = (await req.json()) as CustomerInput;
 
     if (!body.name || body.name.trim().length === 0) {
@@ -169,7 +177,13 @@ export async function POST(req: NextRequest) {
       created_by: userId,
     };
 
-    const { data: customer, error } = await supabase
+    if (insertData.location_id) {
+      const { data: loc } = await supabase
+        .schema('core').from('locations').select('id').eq('id', insertData.location_id).eq('org_id', orgId).maybeSingle();
+      if (!loc) return NextResponse.json({ error: 'Unknown company' }, { status: 400 });
+    }
+
+    const { data: customer, error } = await createAdminSupabase()
       .schema('core').from('customers')
       .insert(insertData)
       .select('*')
@@ -191,7 +205,12 @@ export async function PATCH(req: NextRequest) {
   try {
     const ctx = await requireAuthedContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { supabase } = ctx;
+    const { orgId, userId } = ctx;
+    if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
+
+    // M4: service-role write after an explicit permission check, pinned to the org.
+    const guard = await requirePermission(userId, 'customers', 'edit');
+    if (!guard.ok) return guard.response;
 
     const body = await req.json();
     const { id, ...updates } = body as { id: string } & Partial<CustomerInput>;
@@ -222,17 +241,19 @@ export async function PATCH(req: NextRequest) {
 
     updateData.updated_at = new Date().toISOString();
 
-    const { data: customer, error } = await supabase
+    const { data: customer, error } = await createAdminSupabase()
       .schema('core').from('customers')
       .update(updateData)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select('*')
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Customer update error:', error);
       return NextResponse.json({ error: 'Failed to update customer' }, { status: 500 });
     }
+    if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
 
     return NextResponse.json({ customer });
   } catch (error) {

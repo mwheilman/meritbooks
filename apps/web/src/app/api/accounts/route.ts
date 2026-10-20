@@ -4,6 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/server';
 import { requireAuth, requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
+import { assertOrgRefs, assertWriteScope, isWriteScopeError } from '@/lib/db/scoped-writer';
 
 // GET — list accounts with hierarchy, SCOPED TO THE CALLER'S ORG.
 //
@@ -132,9 +133,9 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const authResult = await requireAuth();
+  const authResult = await requireAuthedContext();
   if (authResult instanceof NextResponse) return authResult;
-  const { userId, orgId: claimOrgId } = authResult;
+  const { userId, orgId: claimOrgId, supabase: caller } = authResult;
 
   // Authorize — requesting a new GL account is the chart_of_accounts:request action.
   const guard = await requirePermission(userId, 'chart_of_accounts', 'request');
@@ -179,6 +180,18 @@ export async function POST(request: Request) {
       error: `Account number ${body.account_number} already exists`,
       code: 'DUPLICATE',
     }, { status: 409 });
+  }
+
+  // public.accounts is SELECT-only for members (migration 171); this route writes it with
+  // the service role, so the referenced group and company are pinned to the org (FKs
+  // never check the tenant) and a company-specific account's company must be in the
+  // caller's client scope.
+  try {
+    await assertOrgRefs(orgId, [{ table: 'account_groups', ids: [body.account_group_id], label: 'account group' }]);
+    await assertWriteScope(caller, orgId, [body.company_location_id]);
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    throw e;
   }
 
   const { data: account, error: insertError } = await supabase

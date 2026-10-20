@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createCompany, REV_REC_METHODS } from '@/lib/companies/create-company';
 import { requirePortfolioContext } from '@/lib/companies/portfolio/guard';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { seedChartOfAccounts } from '@/lib/services/coa-seed';
 import type { BulkCreateResponse, BulkCreateRowResult } from '@/lib/companies/portfolio/types';
 
@@ -47,6 +48,8 @@ export async function POST(req: Request) {
     );
   }
 
+  // core.locations write: service role after settings_acct:edit (requirePortfolioContext), mig 167.
+  const admin = createAdminSupabase();
   const results: BulkCreateRowResult[] = [];
   for (const [index, c] of parsed.data.companies.entries()) {
     const res = await createCompany(supabase, {
@@ -56,7 +59,7 @@ export async function POST(req: Request) {
       industry: c.industry || null,
       fiscalYearStartMonth: c.fiscalYearStartMonth ?? 1,
       revRecMethod: c.revRecMethod ?? null,
-    });
+    }, { writer: admin });
     results.push(
       res.ok
         ? { index, name: c.name, ok: true, locationId: res.locationId, shortCode: res.shortCode, periodsCreated: res.periodsCreated }

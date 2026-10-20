@@ -25,6 +25,7 @@
  */
 
 import type { UserRole } from '@/lib/rbac/permissions';
+import { parseCapabilityRef } from '@/lib/rbac/capabilities';
 
 export type WorkflowDocType = 'BILL' | 'JOURNAL_ENTRY' | 'PAYMENT' | 'EXPENSE' | 'PAYROLL';
 
@@ -39,13 +40,32 @@ export const WORKFLOW_DOC_TYPES: readonly WorkflowDocType[] = [
 export type ApprovalDecision = 'APPROVE' | 'REJECT';
 export type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
-/** One configured step in a chain. `maxAmountCents` null = no upper bound. */
+/**
+ * One configured step in a chain. `maxAmountCents` null = no upper bound.
+ *
+ * Approver authority (05 R-12): a step names EITHER a legacy `approverRole` (role-rank
+ * routing, unchanged — compat for one release) OR, when `approverRole` is null, an
+ * `approverCapability` ('ap.bills:approve') plus an optional `minApproverLimitCents`
+ * floor: anyone whose effective grant holds the capability with a limit ≥ the floor
+ * (or no limit) satisfies the step. When both are present the ROLE decides (that is how
+ * pre-165 steps were backfilled — routing stays identical).
+ */
 export interface WorkflowStepDef {
   stepOrder: number;
   minAmountCents: number;
   maxAmountCents: number | null;
-  approverRole: UserRole;
+  approverRole: UserRole | null;
+  approverCapability?: string | null;
+  minApproverLimitCents?: number | null;
   requireDistinct: boolean;
+}
+
+/** Capability actions a workflow step may require. */
+export const STEP_CAPABILITY_ACTIONS = ['approve', 'post', 'release'] as const;
+
+/** True when the step routes on capability (approver_role null + capability set). */
+export function isCapabilityStep(step: Pick<WorkflowStepDef, 'approverRole' | 'approverCapability'>): boolean {
+  return !step.approverRole && !!step.approverCapability;
 }
 
 export interface WorkflowDef {
@@ -79,6 +99,12 @@ export interface ChainState {
 export interface Actor {
   userId: string;
   role: UserRole | null;
+  /**
+   * For capability-routed steps: does the actor hold `capability` with an approval limit
+   * of at least `floorCents` (null = any) in the document's client? Resolved by the
+   * service from the actor's effective access (lib/rbac/limits.ts). Absent = deny.
+   */
+  capabilityCheck?: (capability: string, floorCents: number | null) => boolean;
 }
 
 export type WorkflowErrorCode =
@@ -87,6 +113,7 @@ export type WorkflowErrorCode =
   | 'STEP_NOT_FOUND'
   | 'NOT_CURRENT_STEP'
   | 'ROLE_NOT_AUTHORIZED'
+  | 'CAPABILITY_NOT_AUTHORIZED'
   | 'PREPARER_CANNOT_APPROVE'
   | 'DISTINCT_APPROVER_REQUIRED';
 
@@ -117,9 +144,18 @@ const ROLE_RANK: Record<UserRole, number> = {
 };
 
 /** True when `actor` meets or exceeds the authority a step requires. */
-export function roleMeetsStep(actor: UserRole | null, required: UserRole): boolean {
-  if (!actor) return false;
+export function roleMeetsStep(actor: UserRole | null, required: UserRole | null): boolean {
+  if (!actor || !required) return false;
   return ROLE_RANK[actor] >= ROLE_RANK[required];
+}
+
+/** Does `actor` have the authority a step requires (role rank, or capability + floor)? */
+export function actorMeetsStep(actor: Actor, step: WorkflowStepDef): boolean {
+  if (step.approverRole) return roleMeetsStep(actor.role, step.approverRole);
+  if (step.approverCapability) {
+    return actor.capabilityCheck ? actor.capabilityCheck(step.approverCapability, step.minApproverLimitCents ?? null) : false;
+  }
+  return false;
 }
 
 /**
@@ -205,8 +241,17 @@ export function advanceChain(
     throw new WorkflowError('PREPARER_CANNOT_APPROVE', 'The preparer cannot act on their own document');
   }
 
-  // Role-at-step authority.
-  if (!roleMeetsStep(actor.role, step.approverRole)) {
+  // Authority at this step: legacy role rank, or capability + dollar floor (05 R-12).
+  if (!actorMeetsStep(actor, step)) {
+    if (isCapabilityStep(step)) {
+      const floor = step.minApproverLimitCents;
+      throw new WorkflowError(
+        'CAPABILITY_NOT_AUTHORIZED',
+        floor && floor > 0
+          ? `This step needs someone who can approve at least ${formatCents(floor)}`
+          : 'This step needs someone who can approve this kind of document'
+      );
+    }
     throw new WorkflowError(
       'ROLE_NOT_AUTHORIZED',
       `This step requires ${step.approverRole} authority`
@@ -271,9 +316,30 @@ export function validateWorkflowSteps(steps: WorkflowStepDef[]): string[] {
         errors.push(`Step ${s.stepOrder}: maximum amount is below the minimum.`);
       }
     }
-    if (!(s.approverRole in ROLE_RANK)) {
-      errors.push(`Step ${s.stepOrder}: unrecognized approver role "${s.approverRole}".`);
+    if (s.approverRole) {
+      if (!(s.approverRole in ROLE_RANK)) {
+        errors.push(`Step ${s.stepOrder}: unrecognized approver role "${s.approverRole}".`);
+      }
+    } else if (!s.approverCapability) {
+      errors.push(`Step ${s.stepOrder}: choose who can approve this step.`);
+    }
+    if (s.approverCapability) {
+      const ref = parseCapabilityRef(s.approverCapability);
+      if (!ref || !(STEP_CAPABILITY_ACTIONS as readonly string[]).includes(ref.action)) {
+        errors.push(`Step ${s.stepOrder}: "${s.approverCapability}" is not an approval permission.`);
+      }
+    }
+    const floor = s.minApproverLimitCents;
+    if (floor !== undefined && floor !== null && (!Number.isInteger(floor) || floor < 0)) {
+      errors.push(`Step ${s.stepOrder}: the approver's minimum limit must be a non-negative amount.`);
     }
   }
   return errors;
+}
+
+/** $1,234.56 without importing the shared money package into this pure module. */
+function formatCents(cents: number): string {
+  const dollars = Math.trunc(cents / 100);
+  const rem = Math.abs(cents % 100);
+  return `$${dollars.toLocaleString('en-US')}${rem ? `.${String(rem).padStart(2, '0')}` : ''}`;
 }

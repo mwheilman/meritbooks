@@ -10,6 +10,7 @@ import { usePlane } from '@/lib/hooks/use-plane';
 import { PLANES } from '@/lib/planes';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { useMe } from '@/lib/hooks/use-me';
+import { useIndustryPacks } from '@/lib/hooks/use-industry-packs';
 import { filterNavByPermissions } from '@/components/layout/nav-permissions';
 import { openCommandBar } from '@/components/nl/command-bar-events';
 
@@ -19,6 +20,7 @@ export function Sidebar() {
   const { plane } = usePlane();
   const { isAll } = useActiveCompany();
   const { permissions, can } = useMe();
+  const packs = useIndustryPacks();
   // Control: in the Book-of-Record plane the processing nav stays hidden until a
   // specific company is selected, so a bookkeeper can never start working (or land
   // on a page) without first choosing the account. Only Home (the consolidated
@@ -39,7 +41,9 @@ export function Sidebar() {
   const visibleNav = filterNavByPermissions(
     navigation
       .filter((g) => activeGroups.includes(g.label))
-      .filter((g) => !mustSelectCompany || g.label === 'Home'),
+      .filter((g) => !mustSelectCompany || g.label === 'Home')
+      // 2b) industry-pack groups only for clients that switched the pack on
+      .filter((g) => !g.requiresPack || packs[g.requiresPack]),
     { hasPermissionData, canView: (featureId) => can(featureId, 'view') },
   );
   const PlaneIcon = PLANES[plane].icon;

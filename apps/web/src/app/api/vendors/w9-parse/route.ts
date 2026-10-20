@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { parseW9Document, W9_EXTRACT_FEATURE } from '@/lib/vendors/w9-parse';
 
@@ -201,7 +202,10 @@ export async function PUT(request: Request): Promise<NextResponse> {
   if (b.zip !== undefined) update.zip = b.zip ?? null;
   if (b.mark_w9_on_file) update.w9_status = 'RECEIVED';
 
-  const { error: upErr } = await supabase
+  // Migration 168: core.vendors is SELECT-only for members — write with the service
+  // role after the vendors:edit check above, pinned to the session org.
+  if (guard.orgId !== orgId) return NextResponse.json({ error: 'Forbidden', code: 'FORBIDDEN' }, { status: 403 });
+  const { error: upErr } = await createAdminSupabase()
     .schema('core').from('vendors')
     .update(update)
     .eq('org_id', orgId).eq('id', b.vendor_id);

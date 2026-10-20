@@ -2,7 +2,6 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
@@ -14,6 +13,7 @@ import {
   DEFAULT_CASH_EFFECT,
   type CashEffect,
 } from '@/lib/services/reconciliation-adjustment';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/reconciliation/adjustment — book an adjusting entry from inside a
@@ -281,7 +281,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       .select('id')
       .maybeSingle();
     if (updErr || !updated) {
-      await compensatePostedAdjustment(supabase, orgId, posted.entry_id, sourceRef);
+      await compensatePostedAdjustment(orgId, posted.entry_id, sourceRef);
       return NextResponse.json({ error: 'Failed to attach the adjustment to the source line' }, { status: 500 });
     }
     txnId = (updated as { id: string }).id;
@@ -306,7 +306,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       .single();
 
     if (txnErr || !txn) {
-      await compensatePostedAdjustment(supabase, orgId, posted.entry_id, sourceRef);
+      await compensatePostedAdjustment(orgId, posted.entry_id, sourceRef);
       return NextResponse.json({ error: 'Failed to record the statement line for the adjustment' }, { status: 500 });
     }
     txnId = (txn as { id: string }).id;
@@ -354,13 +354,15 @@ export async function POST(request: Request): Promise<NextResponse> {
  * so the void is permitted by the period lock.
  */
 async function compensatePostedAdjustment(
-  supabase: SupabaseClient,
   orgId: string,
   entryId: string,
   sourceRef: string,
 ): Promise<void> {
   const now = new Date().toISOString();
-  const { error } = await supabase
+  // gl_entries is SELECT-only for members (migration 171): the entry was posted by this
+  // request (org / client scope checked in postJournalEntry); void it with the service
+  // role, pinned to the org and the still-POSTED row.
+  const { error } = await serviceWriter()
     .from('gl_entries')
     .update({
       status: 'VOIDED',

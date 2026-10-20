@@ -197,7 +197,7 @@ export async function PUT(req: NextRequest) {
       await ensurePreparerCapability(admin, orgId!, assigneeEmployeeId);
       // Assigning an owner nudges a not_started company into in_progress (unless the
       // caller is explicitly setting a status below).
-      if (status === undefined) await markOnboardingInProgress(supabase, orgId!, [locationId]);
+      if (status === undefined) await markOnboardingInProgress(admin, orgId!, [locationId]);
     }
   }
 
@@ -207,7 +207,9 @@ export async function PUT(req: NextRequest) {
       onboarding_status: status,
       onboarding_completed_at: status === 'complete' ? new Date().toISOString() : null,
     };
-    const { error } = await supabase
+    // core.locations is service-role-write only (migration 167, M4); authorized by
+    // requireManageUsers above and pinned to the session org.
+    const { error } = await admin
       .schema('core')
       .from('locations')
       .update(patch)

@@ -23,6 +23,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { effectiveAnyPermissionStrict, type EffectiveCellRef } from '@/lib/rbac/resolve-permissions';
+import { assertActionSod, SodViolationError, type ActionSodCode } from '@/lib/rbac/sod';
+import { loadTenantSodSettings } from '@/lib/rbac/sod-store';
 
 export type ApprovalKind = 'AR_REFUND' | 'AP_DISBURSEMENT' | 'AP_BATCH' | 'PAYROLL_RUN';
 export type ApprovalStatus =
@@ -51,6 +53,8 @@ export interface Approval {
   releasedBy: string | null;
   providerCorrelationId: string | null;
   rejectReason: string | null;
+  /** Free-form evidence captured with the approval (e.g. the payroll lines digest). */
+  metadata: Record<string, unknown>;
 }
 
 interface ApprovalRow {
@@ -66,6 +70,7 @@ interface ApprovalRow {
   released_by: string | null;
   provider_correlation_id: string | null;
   reject_reason: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 function toApproval(r: ApprovalRow): Approval {
@@ -73,6 +78,7 @@ function toApproval(r: ApprovalRow): Approval {
     id: r.id, orgId: r.org_id, kind: r.kind, subjectTable: r.subject_table, subjectId: r.subject_id,
     amountCents: r.amount_cents, status: r.status, preparedBy: r.prepared_by, approvedBy: r.approved_by,
     releasedBy: r.released_by, providerCorrelationId: r.provider_correlation_id, rejectReason: r.reject_reason,
+    metadata: r.metadata && typeof r.metadata === 'object' && !Array.isArray(r.metadata) ? r.metadata : {},
   };
 }
 
@@ -160,8 +166,59 @@ async function canApproveViaEmployeesFallback(
   return roleMayApproveMoney(adminDb, orgId, data.role as string);
 }
 
+export interface CanApproveOptions {
+  /** The item's approval kind — v2 checks that kind's capability (05 §5.1, closes C3). */
+  kind?: ApprovalKind;
+  /** Wave 2C passthrough (dollar limits) — not evaluated here. */
+  amountCents?: number;
+  /** Wave 2C passthrough (transaction SoD) — SoD stays enforced in approve() + DB CHECK. */
+  preparedBy?: string | null;
+  /** Client the money movement belongs to, when known. */
+  locationId?: string | null;
+  /** Route label for the dual-run log. */
+  route?: string;
+}
+
 /**
- * Role authorization — FAILS CLOSED, reconciled to Core identity.
+ * Money-approval authority through the single policy decision point (R-11).
+ *
+ * The LEGACY decision is exactly the pre-R-11 rule (legacyCanApprove below). In the
+ * tenant's 'legacy' / 'dual' enforcement modes that decision is returned unchanged
+ * ('dual' logs any disagreement with the capability model); in 'v2' the capability
+ * model decides: `<kind capability>:approve` when the kind is known (pay.batches /
+ * payroll.runs / pay.refunds), else ANY of the three money-approve capabilities —
+ * re-checked in the DB (core.assert_actor_capability) and by the approvals guard
+ * trigger (migration 164).
+ */
+export async function canApprove(
+  adminDb: SupabaseClient,
+  orgId: string,
+  clerkUserId: string,
+  opts: CanApproveOptions = {},
+): Promise<boolean> {
+  try {
+    const legacyAllowed = await legacyCanApprove(adminDb, orgId, clerkUserId);
+    const { authorizeAny, MONEY_APPROVE_REFS, MONEY_KIND_CAPABILITY } = await import('@/lib/rbac/authorize');
+    const refs = opts.kind
+      ? [{ capability: MONEY_KIND_CAPABILITY[opts.kind], action: 'approve' as const }]
+      : MONEY_APPROVE_REFS;
+    const decision = await authorizeAny({ userId: clerkUserId, orgId }, refs, {
+      legacy: async () => legacyAllowed,
+      equivalentRefs: opts.kind ? MONEY_APPROVE_REFS : undefined,
+      locationId: opts.locationId ?? null,
+      amountCents: opts.amountCents,
+      preparedBy: opts.preparedBy,
+      route: opts.route ?? `money:approve${opts.kind ? `:${opts.kind}` : ''}`,
+    });
+    return decision.allow;
+  } catch {
+    return false; // fail closed
+  }
+}
+
+/**
+ * LEGACY (pre-R-11) role authorization — the dual-run's legacy side. FAILS CLOSED,
+ * reconciled to Core identity.
  *
  * Resolution order (per the suite identity/access contract):
  *   1. CANONICAL: core.users (by clerk_user_id) -> core.memberships
@@ -179,7 +236,7 @@ async function canApproveViaEmployeesFallback(
  * Separation of duties (approver != preparer) is enforced separately in approve()
  * and by a DB CHECK; this only answers "may this role approve at all".
  */
-export async function canApprove(adminDb: SupabaseClient, orgId: string, clerkUserId: string): Promise<boolean> {
+async function legacyCanApprove(adminDb: SupabaseClient, orgId: string, clerkUserId: string): Promise<boolean> {
   try {
     // 1. Resolve the caller on the canonical identity spine.
     const { data: user, error: userErr } = await adminDb
@@ -258,6 +315,17 @@ export async function createApproval(
   return approval;
 }
 
+/**
+ * Read one approval with the SERVICE ROLE, pinned to the org. The authoritative record
+ * for a release (public.approvals is member read-only, mig 154; transitions are
+ * DB-guarded, mig 170). null when absent.
+ */
+export async function loadApproval(orgId: string, approvalId: string): Promise<Approval | null> {
+  const { data, error } = await svc().from('approvals').select('*').eq('org_id', orgId).eq('id', approvalId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? toApproval(data as ApprovalRow) : null;
+}
+
 async function getApproval(adminDb: SupabaseClient, orgId: string, approvalId: string): Promise<Approval> {
   const { data, error } = await adminDb.from('approvals').select('*').eq('org_id', orgId).eq('id', approvalId).single();
   if (error) throw new Error(error.message);
@@ -283,14 +351,31 @@ export class NotAuthorizedToApproveError extends Error {
   constructor() { super('Not authorized to approve money movement. Your role does not have approval authority on checks, bills, or payroll.'); this.name = 'NotAuthorizedToApproveError'; }
 }
 export class SeparationOfDutiesError extends Error {
-  constructor() { super('The approver cannot be the preparer (separation of duties).'); this.name = 'SeparationOfDutiesError'; }
+  /** The H6 rule behind it (05 §4.1), when raised through assertActionSod. */
+  readonly code: ActionSodCode;
+  constructor(code: ActionSodCode = 'PREPARER_CANNOT_APPROVE') {
+    super('The approver cannot be the preparer (separation of duties).');
+    this.name = 'SeparationOfDutiesError';
+    this.code = code;
+  }
 }
 
 export async function approve(adminDb: SupabaseClient, orgId: string, approvalId: string, approverId: string): Promise<Approval> {
   const a = await getApproval(adminDb, orgId, approvalId);
   assertTransition(a.status, 'APPROVED');
-  if (approverId === a.preparedBy) throw new SeparationOfDutiesError();
-  if (!(await canApprove(adminDb, orgId, approverId))) throw new NotAuthorizedToApproveError();
+  // H6 through the shared action-time check (wave 2C); the SeparationOfDutiesError
+  // contract callers map to 409 is preserved.
+  try {
+    assertActionSod({ actor: approverId, action: 'approve', preparedBy: a.preparedBy });
+  } catch (e) {
+    if (e instanceof SodViolationError) throw new SeparationOfDutiesError(e.code);
+    throw e;
+  }
+  if (!(await canApprove(adminDb, orgId, approverId, {
+    kind: a.kind,
+    amountCents: a.amountCents ?? undefined,
+    preparedBy: a.preparedBy,
+  }))) throw new NotAuthorizedToApproveError();
 
   const { error } = await svc()
     .from('approvals')
@@ -311,10 +396,80 @@ export async function reject(adminDb: SupabaseClient, orgId: string, approvalId:
   return { ...a, status: 'REJECTED', rejectReason: reason };
 }
 
+/**
+ * H6 at release (05 §4.1): the preparer never releases; the approver releases only in
+ * the tenant's sole-approver mode; and nobody releases a payment to a payee whose bank
+ * details THEY changed (or approved) in the last 10 days (H6_BANK_CHANGE_RELEASE).
+ * Throws SodViolationError (routes map it to 409 with its message). The DB trigger
+ * approvals_release_sod_guard (migration 165) re-checks the first two.
+ */
+export async function assertReleaseSod(
+  adminDb: SupabaseClient,
+  orgId: string,
+  actor: string,
+  parties: { preparedBy: string | null; approvedBy: string | null },
+  bankDetailChanges: ReadonlyArray<{ userId: string; at: string }> = [],
+): Promise<void> {
+  const settings = await loadTenantSodSettings(adminDb, orgId);
+  assertActionSod({
+    actor,
+    action: 'release',
+    preparedBy: parties.preparedBy,
+    approvedBy: parties.approvedBy,
+    soleApproverMode: settings.soleApproverMode,
+    bankDetailChanges,
+  });
+}
+
+/** Bank-detail authorship columns a vendor payment profile may carry (137 + later). */
+const BANK_DETAIL_ACTOR_COLUMNS: ReadonlyArray<{ who: string; when: readonly string[] }> = [
+  { who: 'captured_by', when: ['updated_at', 'captured_at'] },
+  { who: 'changed_by', when: ['changed_at', 'updated_at'] },
+  { who: 'approved_by', when: ['approved_at', 'updated_at'] },
+];
+
+/**
+ * Who changed / approved the payee's bank details, and when — for the 10-day
+ * bank-change → release rule. The payee is the vendor of the bill an AP approval
+ * covers. Fails CLOSED (throws) when the lookup errors; an approval that isn't a bill
+ * payment, or a vendor with no payment profile, has no bank-detail changes.
+ */
+export async function loadPayeeBankDetailChanges(
+  orgId: string,
+  approval: { kind: ApprovalKind; subjectTable: string; subjectId: string },
+  vendorId?: string | null,
+): Promise<Array<{ userId: string; at: string }>> {
+  if (approval.kind !== 'AP_DISBURSEMENT' && approval.kind !== 'AP_BATCH') return [];
+  let vid = vendorId ?? null;
+  if (!vid && approval.subjectTable === 'bills') {
+    const { data: bill, error } = await svc()
+      .from('bills').select('vendor_id').eq('org_id', orgId).eq('id', approval.subjectId).maybeSingle();
+    if (error) throw new Error(`Could not check the payee's bank details: ${error.message}`);
+    vid = ((bill ?? null) as { vendor_id: string | null } | null)?.vendor_id ?? null;
+  }
+  if (!vid) return [];
+  const { data: prof, error: pErr } = await svc()
+    .from('vendor_payment_profiles').select('*').eq('org_id', orgId).eq('vendor_id', vid).maybeSingle();
+  if (pErr) throw new Error(`Could not check the payee's bank details: ${pErr.message}`);
+  const row = (prof ?? null) as Record<string, unknown> | null;
+  if (!row) return [];
+  const out: Array<{ userId: string; at: string }> = [];
+  for (const c of BANK_DETAIL_ACTOR_COLUMNS) {
+    const who = row[c.who];
+    if (typeof who !== 'string' || !who) continue;
+    const at = c.when.map((k) => row[k]).find((v): v is string => typeof v === 'string' && v.length > 0);
+    // No timestamp → treat as just changed (fail toward enforcing).
+    out.push({ userId: who, at: at ?? new Date().toISOString() });
+  }
+  return out;
+}
+
 /** Record that the actual money movement was triggered (after APPROVED). */
 export async function markReleased(adminDb: SupabaseClient, orgId: string, approvalId: string, actor: string, providerCorrelationId: string): Promise<Approval> {
   const a = await getApproval(adminDb, orgId, approvalId);
   assertTransition(a.status, 'RELEASED');
+  await assertReleaseSod(svc(), orgId, actor, { preparedBy: a.preparedBy, approvedBy: a.approvedBy },
+    await loadPayeeBankDetailChanges(orgId, a));
   const { error } = await svc()
     .from('approvals')
     .update({ status: 'RELEASED', released_by: actor, provider_correlation_id: providerCorrelationId })
@@ -350,12 +505,44 @@ export type ReleaseClaimResult = 'CLAIMED' | 'ALREADY_CLAIMED';
  * finalizeReleaseClaim() AFTER the payment posts. If posting fails, the caller
  * MUST revertReleaseClaim() so the (un-posted) line returns to APPROVED for retry.
  */
+export interface ReleaseClaimSod {
+  /** Known parties of the item. Omit to read them from the approval. */
+  preparedBy?: string | null;
+  approvedBy?: string | null;
+  /** The payee vendor when the caller already knows it (skips the bill lookup). */
+  vendorId?: string | null;
+}
+
 export async function claimApprovalForRelease(
   db: SupabaseClient,
   orgId: string,
   approvalId: string,
   actor: string,
+  sod: ReleaseClaimSod = {},
 ): Promise<ReleaseClaimResult> {
+  // H6 BEFORE claiming, so an approver-who-releases (or the preparer, or the person who
+  // just changed the payee's bank details) gets a clean SodViolationError instead of a
+  // trigger failure mid-claim. The approval row is read (service role) for the payee.
+  const { data: row, error: readErr } = await svc()
+    .from('approvals')
+    .select('kind, subject_table, subject_id, prepared_by, approved_by')
+    .eq('org_id', orgId)
+    .eq('id', approvalId)
+    .maybeSingle();
+  if (readErr) throw new Error(readErr.message);
+  const r = (row ?? null) as {
+    kind: ApprovalKind; subject_table: string; subject_id: string; prepared_by: string | null; approved_by: string | null;
+  } | null;
+  if (!r) return 'ALREADY_CLAIMED'; // nothing to claim in this org
+  const parties = {
+    preparedBy: sod.preparedBy !== undefined ? sod.preparedBy : r.prepared_by ?? null,
+    approvedBy: sod.approvedBy !== undefined ? sod.approvedBy : r.approved_by ?? null,
+  };
+  const bankChanges = await loadPayeeBankDetailChanges(
+    orgId, { kind: r.kind, subjectTable: r.subject_table, subjectId: r.subject_id }, sod.vendorId,
+  );
+  await assertReleaseSod(svc(), orgId, actor, parties, bankChanges);
+
   const { data, error } = await svc()
     .from('approvals')
     .update({ status: 'RELEASED', released_by: actor })
@@ -401,13 +588,14 @@ export async function revertReleaseClaim(
   orgId: string,
   approvalId: string,
 ): Promise<void> {
-  await svc()
+  const { error } = await svc()
     .from('approvals')
-    .update({ status: 'APPROVED', released_by: null, provider_correlation_id: null })
+    .update({ status: 'APPROVED', released_by: null })
     .eq('org_id', orgId)
     .eq('id', approvalId)
     .eq('status', 'RELEASED')
     .is('provider_correlation_id', null);
+  if (error) throw new Error(`Could not hand the release claim back: ${error.message}`);
 }
 
 export async function markSettled(adminDb: SupabaseClient, orgId: string, approvalId: string, actor: string): Promise<Approval> {

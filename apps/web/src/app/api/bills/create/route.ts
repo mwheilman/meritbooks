@@ -6,6 +6,7 @@ import { createBillSchema } from '@/lib/validations/transactions';
 import { createAttribution, resolveApprover } from '@/lib/services/cost-approval';
 import { logHumanAction, logAction } from '@/lib/trust/action-log';
 import { evaluateProposedBill } from '@/lib/policy/ap-enforce';
+import { assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
 
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
@@ -98,7 +99,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: bill, error: billErr } = await supabase
+    // bills / bill_lines are SELECT-only for members (migration 171): written with the
+    // service role after bills:create, org pinned, the company checked against the
+    // caller's org + client scope (the service role bypasses 163's client-scope policy).
+    try {
+      await assertWriteScope(supabase, orgId, [body.location_id]);
+    } catch (e) {
+      if (isWriteScopeError(e)) return NextResponse.json({ error: e.message }, { status: 403 });
+      throw e;
+    }
+    const writer = serviceWriter();
+    const { data: bill, error: billErr } = await writer
       .from('bills')
       .insert({
         org_id: orgId,
@@ -142,13 +153,13 @@ export async function POST(request: Request) {
       job_id: line.job_id ?? null,
     }));
 
-    const { data: insertedLines, error: linesErr } = await supabase
+    const { data: insertedLines, error: linesErr } = await writer
       .from('bill_lines')
       .insert(lineInserts)
       .select('id, line_number, account_id, amount_cents, department_id, job_id');
 
     if (linesErr) {
-      await supabase.from('bills').delete().eq('id', bill.id);
+      await writer.from('bills').delete().eq('id', bill.id).eq('org_id', orgId);
       return NextResponse.json({ error: linesErr.message }, { status: 500 });
     }
 

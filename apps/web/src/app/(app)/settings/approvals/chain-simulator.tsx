@@ -15,13 +15,9 @@
 import { useMemo, useState } from 'react';
 import { ArrowRight, PlayCircle } from 'lucide-react';
 import { formatMoney, dollarsToCents } from '@meritbooks/shared';
-import { ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
+import { stepApproverLabel } from '@/lib/approvals/step-label';
 import { WORKFLOW_DOC_TYPES, type WorkflowDocType } from '@/lib/approvals/workflow';
 import { simulateChain, WORKFLOW_DOC_TYPE_LABEL, type AnalyzableWorkflow } from '@/lib/approvals/analysis';
-
-function roleLabel(role: string): string {
-  return ROLE_DEFINITIONS[role as UserRole]?.label ?? role;
-}
 
 export function ChainSimulator({ workflows }: { workflows: AnalyzableWorkflow[] }) {
   const [docType, setDocType] = useState<WorkflowDocType>('BILL');
@@ -117,7 +113,7 @@ export function ChainSimulator({ workflows }: { workflows: AnalyzableWorkflow[] 
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 font-mono text-2xs text-emerald-300">
                         {i + 1}
                       </span>
-                      <span className="text-xs font-medium text-white">{roleLabel(s.approverRole)}</span>
+                      <span className="text-xs font-medium text-white">{stepApproverLabel(s)}</span>
                       {s.requireDistinct && (
                         <span className="rounded bg-indigo-500/10 px-1.5 py-0.5 text-2xs text-indigo-300">
                           distinct

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { getImportType } from '@/lib/import/definitions';
 import { coerceValue } from '@/lib/import/csv';
 import { isMigrationProviderId } from '@/lib/integrations/erp/providers';
@@ -195,7 +196,9 @@ async function commitAr(
       payment_terms_days: c.paymentTermsDays,
       credit_limit_cents: c.creditLimitCents,
     }));
-    const { error } = await supabase.schema('core').from('customers').insert(rows);
+    // core.customers is service-role-write only (migration 167, M4): authorized by
+    // customers:create above; every row is pinned to the session org.
+    const { error } = await createAdminSupabase().schema('core').from('customers').insert(rows);
     if (error) return NextResponse.json({ error: `Could not save customers: ${error.message}` }, { status: 500 });
     insertedCustomers = rows.length;
   }

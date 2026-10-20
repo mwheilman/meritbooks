@@ -24,6 +24,14 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
+  claimPendingEvents,
+  finalizeClaimedEvent,
+  isUniqueViolation,
+  releaseEventClaims,
+  renewEventClaim,
+  type ClaimedEvent,
+} from '@/lib/events/claim';
+import {
   bookInternalInvoice,
   resolveChargeMethod,
   nextInternalInvoiceNumber,
@@ -32,7 +40,7 @@ import {
 type DB = SupabaseClient;
 
 interface DeptInvoiceLine { description: string; amount_cents: number; item_id?: string | null }
-interface DeptInvoicePayload {
+export interface DeptInvoicePayload {
   event_id: string;
   location_id: string;
   provider_department_id: string;
@@ -46,25 +54,63 @@ interface DeptInvoicePayload {
 export interface DeptInvoiceDrainResult {
   processed: number;
   rejected: number;
-  results: { event_id: string; status: 'processed' | 'rejected'; invoice_number?: string; error?: string }[];
+  /** Events another drain took over mid-run (lease lapsed) — left to their new owner. */
+  skipped?: number;
+  results: { event_id: string; status: 'processed' | 'rejected' | 'skipped'; invoice_number?: string; error?: string }[];
 }
 
-async function rejectEvent(db: DB, eventRowId: string, error: string) {
-  await db.schema('core').from('events').update({ status: 'rejected', error, processed_at: new Date().toISOString() }).eq('id', eventRowId);
+/** Reject — only while this drain still holds the claim (wave 2G). */
+async function rejectEvent(db: DB, eventRowId: string, token: string, error: string): Promise<boolean> {
+  return finalizeClaimedEvent(db, eventRowId, token, { status: 'rejected', error, processed_at: new Date().toISOString() });
 }
 
 async function processEvent(
   db: DB,
   orgId: string,
   ev: { id: string; event_id: string; payload: DeptInvoicePayload; occurred_on: string },
+  token: string,
   out: DeptInvoiceDrainResult,
 ): Promise<void> {
   const p = ev.payload;
   const reject = async (msg: string) => {
-    await rejectEvent(db, ev.id, msg);
+    await rejectEvent(db, ev.id, token, msg);
     out.rejected++;
     out.results.push({ event_id: ev.event_id, status: 'rejected', error: msg });
   };
+  const skip = (why: string) => {
+    out.skipped = (out.skipped ?? 0) + 1;
+    out.results.push({ event_id: ev.event_id, status: 'skipped', error: why });
+  };
+  /** Mark processed only while still the claim holder; false → skipped. */
+  const finalize = async (patch: Record<string, unknown>, invoiceNumber: string) => {
+    if (!(await finalizeClaimedEvent(db, ev.id, token, { status: 'processed', processed_at: new Date().toISOString(), ...patch }))) {
+      skip('Finalized by the drain that now holds the event');
+      return;
+    }
+    out.processed++;
+    out.results.push({ event_id: ev.event_id, status: 'processed', invoice_number: invoiceNumber });
+  };
+
+  // Wave 2G: work an event only while this drain still holds it (fresh lease).
+  if (!(await renewEventClaim(db, ev.id, token))) return skip('Claimed by another drain');
+
+  // One internal invoice per source event (mig 170 unique index) — self-heal a prior
+  // run that booked it but died before finalizing.
+  {
+    const { data: prior } = await db
+      .from('internal_invoices')
+      .select('invoice_number, status, booked_gl_entry_id')
+      .eq('org_id', orgId)
+      .eq('source_event_id', ev.id)
+      .maybeSingle();
+    const pr = prior as { invoice_number: string; status: string; booked_gl_entry_id: string | null } | null;
+    if (pr) {
+      if (pr.status !== 'booked' || !pr.booked_gl_entry_id) {
+        return reject(`Internal invoice ${pr.invoice_number} exists for this event but is not booked — review it`);
+      }
+      return finalize({ invoice_number: pr.invoice_number, gl_entry_id: pr.booked_gl_entry_id }, pr.invoice_number);
+    }
+  }
 
   // Validate lines.
   const lineTotal = (p.lines ?? []).reduce((s, l) => s + Math.round(Number(l.amount_cents ?? 0)), 0);
@@ -80,12 +126,7 @@ async function processEvent(
       .eq('source_ref', p.source_ref)
       .maybeSingle();
     const num = (existing as { invoice_number: string } | null)?.invoice_number;
-    if (num) {
-      await db.schema('core').from('events').update({ status: 'processed', invoice_number: num, processed_at: new Date().toISOString() }).eq('id', ev.id);
-      out.processed++;
-      out.results.push({ event_id: ev.event_id, status: 'processed', invoice_number: num });
-      return;
-    }
+    if (num) return finalize({ invoice_number: num }, num);
   }
 
   // Both departments must belong to this company (location).
@@ -130,10 +171,12 @@ async function processEvent(
       status: 'approved', // receiver approval already happened in Projects
       total_cents: lineTotal,
       source_ref: p.source_ref,
+      source_event_id: ev.id,
       approved_at: now,
     })
     .select('id, invoice_number')
     .single();
+  if (invErr && isUniqueViolation(invErr)) return skip('Another drain already booked this event');
   if (invErr || !inv) return reject(`Internal invoice insert: ${invErr?.message}`);
   const invoiceId = (inv as { id: string }).id;
 
@@ -173,10 +216,8 @@ async function processEvent(
 
   // Finalize the invoice + write the number back onto the event row.
   await db.from('internal_invoices').update({ status: 'booked', booked_at: now, booked_gl_entry_id: glEntryId }).eq('id', invoiceId);
-  await db.schema('core').from('events').update({ status: 'processed', invoice_number: invoiceNumber, gl_entry_id: glEntryId, processed_at: now }).eq('id', ev.id);
-
-  out.processed++;
-  out.results.push({ event_id: ev.event_id, status: 'processed', invoice_number: invoiceNumber });
+  // Lost the claim after booking → the new owner finds this invoice by source_event_id.
+  await finalize({ invoice_number: invoiceNumber, gl_entry_id: glEntryId }, invoiceNumber);
 }
 
 /**
@@ -187,26 +228,31 @@ async function processEvent(
  * `orgFilter` is optional: pass an org id to restrict the drain to one tenant;
  * omit it to drain all tenants. Per-event org is authoritative for the work.
  */
-export async function processDeptInvoiceEvents(db: DB, orgFilter?: string | null): Promise<DeptInvoiceDrainResult> {
-  let query = db
-    .schema('core').from('events')
-    .select('id, event_id, org_id, payload, occurred_on')
-    .eq('event_type', 'DEPT_INVOICE_ISSUE')
-    .eq('source_module', 'projects')
-    .eq('status', 'pending');
-  if (orgFilter) query = query.eq('org_id', orgFilter);
-  const { data: events } = await query.order('created_at', { ascending: true });
+export async function processDeptInvoiceEvents(
+  db: DB,
+  orgFilter?: string | null,
+  opts: { claimed?: { token: string; rows: ClaimedEvent<DeptInvoicePayload>[] } } = {},
+): Promise<DeptInvoiceDrainResult> {
+  // M5: process ONLY rows this drain atomically claimed (see lib/events/claim.ts).
+  const claim = opts.claimed ?? (await claimPendingEvents<DeptInvoicePayload>(db, {
+    eventType: 'DEPT_INVOICE_ISSUE', sourceModule: 'projects', orgId: orgFilter ?? null,
+  }));
 
-  const out: DeptInvoiceDrainResult = { processed: 0, rejected: 0, results: [] };
-  for (const ev of (events ?? []) as { id: string; event_id: string; org_id: string; payload: DeptInvoicePayload; occurred_on: string }[]) {
-    try {
-      // Per-event org — authoritative for validation, insert and GL booking.
-      await processEvent(db, ev.org_id, ev, out);
-    } catch (e) {
-      await rejectEvent(db, ev.id, e instanceof Error ? e.message : 'consumer error');
-      out.rejected++;
-      out.results.push({ event_id: ev.event_id, status: 'rejected', error: e instanceof Error ? e.message : 'consumer error' });
+  const out: DeptInvoiceDrainResult = { processed: 0, rejected: 0, skipped: 0, results: [] };
+  try {
+    for (const ev of claim.rows) {
+      try {
+        // Per-event org — authoritative for validation, insert and GL booking.
+        await processEvent(db, ev.org_id, ev, claim.token, out);
+      } catch (e) {
+        await rejectEvent(db, ev.id, claim.token, e instanceof Error ? e.message : 'consumer error');
+        out.rejected++;
+        out.results.push({ event_id: ev.event_id, status: 'rejected', error: e instanceof Error ? e.message : 'consumer error' });
+      }
     }
+  } finally {
+    // Anything still pending under this claim (an abort mid-run) is handed back.
+    await releaseEventClaims(db, claim.token).catch(() => 0);
   }
   return out;
 }

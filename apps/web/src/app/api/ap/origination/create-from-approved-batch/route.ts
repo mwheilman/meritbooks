@@ -7,6 +7,7 @@ import { logHumanAction } from '@/lib/trust/action-log';
 import { resolveOriginationProvider } from '@/lib/money/origination';
 import { createOriginationBatch, NothingToOriginateError } from '@/lib/money/origination';
 import type { OriginationRail } from '@/lib/money/origination';
+import { isWriteScopeError } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/ap/origination/create-from-approved-batch
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
     if (e instanceof NothingToOriginateError) {
       return NextResponse.json({ error: e.message, code: 'NOTHING_TO_ORIGINATE' }, { status: 409 });
     }
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to create origination batch' }, { status: 500 });
   }
 }

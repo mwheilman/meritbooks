@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { logAction } from '@/lib/trust/action-log';
 import { hasModule } from '@/lib/services/entitlements';
 import { shouldRepointJobs } from '@/lib/customers/merge-rules';
@@ -169,7 +170,9 @@ export async function POST(req: NextRequest) {
   }
   repoint.invoices = inv.data?.length ?? 0;
 
-  const pay = await supabase
+  // customer_payments is SELECT-only for members (migration 171): both customers were
+  // read through the caller's RLS client above (org + client scope); service-role write.
+  const pay = await createAdminSupabase()
     .from('customer_payments')
     .update({ customer_id: survivorId })
     .eq('org_id', orgId)
@@ -230,7 +233,9 @@ export async function POST(req: NextRequest) {
 
   // ── Retire the duplicate (SOFT delete — keeps core FKs valid) ────────────────
   const mergeNote = `Merged into ${survivor.display_name || survivor.name} (${survivorId}) on ${new Date().toISOString().slice(0, 10)}.`;
-  const { error: delErr } = await supabase
+  // M4 (migration 167): core.customers is service-role-write only; authorized above
+  // (customers:edit) and pinned to the session org.
+  const { error: delErr } = await createAdminSupabase()
     .schema('core')
     .from('customers')
     .update({

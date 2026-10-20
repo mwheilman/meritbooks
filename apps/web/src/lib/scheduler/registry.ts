@@ -22,6 +22,9 @@ import { runControlsNightlyJob } from './jobs/controls-nightly';
 import { runRecurringJeProposeJob, runVendorComplianceScanJob } from './jobs/proposal-jobs';
 import { runEventsDrainJob, runPrepaidAmortizeJob, runRevRecMonthlyJob } from './jobs/gl-gated-jobs';
 import { runPruneRunsJob } from './jobs/platform-jobs';
+import { runAccessExpirySweepJob } from './jobs/access-jobs';
+import { DEALER_MONTH_END_JOB } from './jobs/dealer-jobs';
+import { DEALER_CONTROLS_JOB } from './jobs/dealer-controls';
 import {
   SCHEDULED_EVENT_DRAIN_FEATURE,
   SCHEDULED_PREPAID_FEATURE,
@@ -59,6 +62,9 @@ function stub(
 }
 
 export const JOBS: readonly JobDefinition[] = [
+  // Dealer pack (industry module) — no-ops for clients without the pack enabled.
+  DEALER_MONTH_END_JOB,
+  DEALER_CONTROLS_JOB,
   // ── implemented ────────────────────────────────────────────────────────────
   {
     key: 'reports.packs',
@@ -192,6 +198,23 @@ export const JOBS: readonly JobDefinition[] = [
     run: runPruneRunsJob,
   },
 
+  {
+    key: 'access.expiry_sweep',
+    label: 'Access expiry sweep',
+    description: 'Ends access grants whose time box has passed and expires access requests nobody decided within 14 days. Every change lands in the access log. (Expiry reminders wait for the notifications sender.)',
+    scope: 'org',
+    cron: '0 6 * * *',
+    defaultEnabled: true,
+    implemented: true,
+    ownerCapability: 'ta.access_review',
+    owner: 'Access & roles (05-RBAC-SPEC §3.7)',
+    postsToGl: false,
+    timeoutMs: 60_000,
+    maxLatenessMinutes: 12 * 60,
+    maxAttempts: 3,
+    run: runAccessExpirySweepJob,
+  },
+
   // ── stubs: named in IA §6, not built yet (never run) ───────────────────────
   stub('bank.daily_pull', 'Daily bank pull', '0 11 * * *', 'Bank feed / Plaid', 'bk.feeds',
     'TODO(bank feed): incremental Plaid /transactions/sync per item using the stored cursor (mig 046); today pulls are user-triggered.'),
@@ -211,8 +234,6 @@ export const JOBS: readonly JobDefinition[] = [
     'TODO(M-14): draft compliance certificates / BBC / financial packs N days before each lender obligation is due.'),
   stub('payroll.funding_check', 'Payroll funding check', '0 12 * * 1-5', 'Payroll', 'hr.payroll',
     'TODO(payroll): compare upcoming payroll funding to cash; blocked on the payroll provider decision (task #32).'),
-  stub('access.expiry_sweep', 'Access expiry sweep', '0 6 * * *', 'Access & roles (05-RBAC-SPEC)', 'ta.access_review',
-    'TODO(RBAC R-4): reminders 7d/1d before an access assignment ends and deactivation at effective_to.'),
   stub('access.review_campaign', 'Quarterly access review', '0 14 1 1,4,7,10 *', 'Access & roles (05-RBAC-SPEC)', 'ta.access_review',
     'TODO(RBAC): open the quarterly access-review campaign.'),
   stub('notifications.digest', 'Notification digests', '0 13 * * *', 'Notifications & watch rules (IA M-13)', 'home.workspace',

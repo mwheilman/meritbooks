@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler, requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 
 /**
  * Entity functional-currency editor API (GATE 11a — multi-currency, migration 133).
@@ -105,7 +106,9 @@ export const POST = apiHandler(upsertSchema, async (body: UpsertBody, ctx) => {
   const raw = body.functional_currency;
   const value = raw && raw.length === 3 ? raw.toUpperCase() : null; // '' / null / absent → clear
 
-  const { error } = await ctx.supabase
+  // M4 (migration 167): core.locations is service-role-write only — written after the
+  // settings_acct:edit check above, pinned to the session org.
+  const { error } = await createAdminSupabase()
     .schema('core')
     .from('locations')
     .update({ functional_currency: value })

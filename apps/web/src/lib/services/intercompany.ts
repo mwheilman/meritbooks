@@ -28,6 +28,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry, voidJournalEntry, type JournalEntryLineInput } from './gl-posting';
 import { resolveRole, getAccountRef, PostingError } from '@/lib/posting/account-roles';
 import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
+import { writerFor } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -92,7 +93,9 @@ async function ensureIntercompanyAccounts(db: DB, orgId: string): Promise<void> 
     // of a raw DB constraint violation.
     if (!sib?.account_group_id) continue;
 
-    await db.from('accounts').upsert(
+    // public.accounts is SELECT-only for members (migration 171): org-level system account,
+    // org pinned on the row, written through writerFor(db) (the service role for a member caller).
+    await writerFor(db).from('accounts').upsert(
       {
         org_id: orgId,
         account_group_id: sib?.account_group_id ?? null,

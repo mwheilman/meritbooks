@@ -6,6 +6,10 @@
  * (approval lives in Projects). On approval, Projects emits a single core.events
  * row for Books to consume and issue.
  *
+ * Authorization: the CALLER authorizes (the route gates on invoices:approve and pins the
+ * session org); the row is written with the service role (core.events is member
+ * read-only since migration 168).
+ *
  * Boundary: this function writes ONLY the core.events row (and, in the real
  * Projects module, its own proj.* tables — none here). It never writes Books
  * ledger/core master tables. charge_method is intentionally NOT on the payload;
@@ -18,6 +22,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+import { assertEventScope, eventsWriter } from '@/lib/events/emit-scope';
 
 type DB = SupabaseClient;
 
@@ -56,7 +61,16 @@ export async function orgHasProjects(db: DB, orgId: string): Promise<boolean> {
  * Idempotent-ish: if a pending event with the same source_ref already sits on the
  * queue, returns that event_id instead of emitting a duplicate.
  */
-export async function emitDeptInvoiceIssue(db: DB, input: DeptInvoiceIssueInput): Promise<string> {
+export async function emitDeptInvoiceIssue(
+  _db: DB,
+  input: DeptInvoiceIssueInput,
+  opts: { writer?: DB } = {},
+): Promise<string> {
+  // Migration 168: core.events is SELECT-only for members — write with the service role
+  // (the caller already authorized the issue and passes its session org), and re-check
+  // the client belongs to that org before anything is emitted.
+  const db = eventsWriter(opts.writer);
+  await assertEventScope(db, input.orgId, { locationId: input.locationId });
   if (!(await orgHasProjects(db, input.orgId))) {
     throw new Error('Projects module is not entitled for this org; use the Books direct-create internal-invoice path.');
   }

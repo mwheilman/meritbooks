@@ -6,6 +6,7 @@ import { generateYear, setPeriodStatus, type PeriodStatus } from '@/lib/services
 import { logHumanAction } from '@/lib/trust/action-log';
 import { gatherHardCloseGate } from '@/lib/close/readiness';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { isWriteScopeError } from '@/lib/db/scoped-writer';
 
 interface PeriodRow { id: string; location_id: string; period_year: number; period_month: number; status: PeriodStatus; closed_at: string | null }
 
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ ok: true, year, companies: locationIds.length, periods_created: created });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Generation failed' }, { status: 500 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Generation failed' }, { status: isWriteScopeError(e) ? 403 : 500 });
   }
 }
 
@@ -206,6 +207,6 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true, closeGateOverridden: closeGateBlockers.length > 0 });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed' }, { status: 500 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed' }, { status: isWriteScopeError(e) ? 403 : 500 });
   }
 }

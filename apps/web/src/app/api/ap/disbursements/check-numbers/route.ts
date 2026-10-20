@@ -5,6 +5,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { loadCheckNumbers, upsertCheckNumbers, type CheckNumberInput } from '@/lib/ap/vendor-payment-details';
+import { isWriteScopeError } from '@/lib/db/scoped-writer';
 
 /**
  * Check-number capture for CHECK-method disbursement lines — the alternative to
@@ -53,9 +54,10 @@ export async function POST(request: Request) {
 
   let count: number;
   try {
-    count = await upsertCheckNumbers(supabase, orgId, entries, userId);
+    count = await upsertCheckNumbers(orgId, entries, userId);
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to save check numbers' }, { status: 500 });
+    const status = isWriteScopeError(e) ? 403 : 500;
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to save check numbers' }, { status });
   }
 
   await logHumanAction(supabase, userId, orgId, {

@@ -30,6 +30,7 @@ import { suggestCategory } from '@/lib/services/categorization';
 import { getTierPolicy, scoreToTier } from '@/lib/trust/score-tier';
 import { resolveDispositionDetailed } from '@/lib/autonomy/disposition';
 import { submitToWorkflow } from '@/lib/approvals/service';
+import { loadWritableRow, writerFor } from '@/lib/db/scoped-writer';
 
 const CATEGORIZE_FEATURE = 'CATEGORIZATION';
 
@@ -100,7 +101,12 @@ async function applyCodingToBill(
   billId: string,
   accountId: string,
 ): Promise<number> {
-  const { data } = await supabase
+  // bill_lines is SELECT-only for members (migration 171): the bill is pinned to the org
+  // and its company checked against the caller's client scope, then written with the
+  // service role.
+  const bill = await loadWritableRow(supabase, orgId, { table: 'bills', id: billId });
+  if (!bill) return 0;
+  const { data } = await writerFor(supabase)
     .from('bill_lines')
     .update({ account_id: accountId })
     .eq('org_id', orgId)
@@ -301,6 +307,8 @@ export const apIntakeRecipe: AgentRecipe = {
             docId: billId,
             amountCents: totalCents,
             preparedBy: ctx.userId ?? 'agent',
+            // Capability-routed steps check the approver's grant on THIS client.
+            locationId: (state.locationId as string | null) ?? ctx.locationId ?? null,
           });
           if (sub.entered && sub.request) {
             workflowNote = `Opened approval request at step ${sub.request.currentStep}. Approve it in Approvals.`;

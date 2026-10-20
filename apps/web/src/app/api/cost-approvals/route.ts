@@ -47,10 +47,17 @@ export async function POST(request: Request) {
 
   // Authorize — approve / void / override (re-route the approver) are approval
   // decisions on a job-cost attribution; gate them on bills:approve (the AP approval
-  // authority). 'create' stays a data-entry action open to any authed member.
+  // authority). 'create' is AP data entry: it also emits a JOB_COST event, which is
+  // written with the service role since migration 168, so it needs an explicit gate
+  // too (bills:create — the same roles that key bills).
   if (action === 'approve' || action === 'void' || action === 'override') {
     const guard = await requirePermission(userId, 'bills', 'approve');
     if (!guard.ok) return guard.response;
+    if (guard.orgId !== orgId) return NextResponse.json({ error: 'Forbidden', code: 'FORBIDDEN' }, { status: 403 });
+  } else if (action === 'create') {
+    const guard = await requirePermission(userId, 'bills', 'create');
+    if (!guard.ok) return guard.response;
+    if (guard.orgId !== orgId) return NextResponse.json({ error: 'Forbidden', code: 'FORBIDDEN' }, { status: 403 });
   }
 
   try {

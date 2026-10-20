@@ -26,6 +26,7 @@ interface ApprovalRow {
   subject_id: string;
   amount_cents: number | null;
   prepared_by: string;
+  approved_by: string | null;
 }
 interface BillRow {
   id: string;
@@ -68,7 +69,7 @@ export async function assembleApprovedBatch(
 ): Promise<AssembledBatchInput> {
   let q = supabase
     .from('approvals')
-    .select('id, subject_id, amount_cents, prepared_by')
+    .select('id, subject_id, amount_cents, prepared_by, approved_by')
     .eq('kind', 'AP_DISBURSEMENT')
     .eq('subject_table', 'bills')
     .eq('status', 'APPROVED');
@@ -137,6 +138,7 @@ export async function assembleApprovedBatch(
       method: methodFor(bill.payment_method),
       locationId: bill.location_id,
       preparedBy: a.prepared_by,
+      approvedBy: a.approved_by ?? null,
     });
   }
 

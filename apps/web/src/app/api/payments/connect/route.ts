@@ -101,7 +101,10 @@ export async function POST(req: Request) {
   try {
     if (!accountId) {
       accountId = await createConnectedAccount(null);
-      await connectProvider(db, org.id, {
+      // core.provider_connections is SELECT-only for members (migration 171): register
+      // the connection with the service role (settings_system:edit checked above),
+      // pinned to the guard-resolved session org.
+      await connectProvider(createAdminSupabase(), guard.orgId, {
         capability: 'AR_COLLECTION',
         provider: 'stripe',
         environment: ENV,

@@ -6,6 +6,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { getImportType, type ImportFieldDef } from '@/lib/import/definitions';
 import { coerceValue } from '@/lib/import/csv';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/admin';
 import { createCompany } from '@/lib/companies/create-company';
 import { seedChartOfAccounts } from '@/lib/services/coa-seed';
 
@@ -101,11 +102,28 @@ export async function POST(req: NextRequest) {
         const guard = await requirePermission(ctx.userId, 'settings_acct', 'edit');
         if (!guard.ok) return guard.response;
       }
+      // Customers are written with the service role (core.customers is not member-
+      // writable — migration 167, M4), so the customer-create grant is checked here.
+      if (def.key === 'customers' && !dryRun) {
+        const guard = await requirePermission(ctx.userId, 'customers', 'create');
+        if (!guard.ok) return guard.response;
+      }
+      // Same for vendors (core.vendors is not member-writable — migration 168).
+      if (def.key === 'vendors' && !dryRun) {
+        const guard = await requirePermission(ctx.userId, 'vendors', 'create');
+        if (!guard.ok) return guard.response;
+      }
       return await importMasterData(supabase, def.key, def.fields, body, orgId, errors, dryRun);
     }
 
     // ── LEDGER → BOOKS ───────────────────────────────────────────────────
     if (def.key === 'open_ar' || def.key === 'open_ap') {
+      // public.bills is SELECT-only for members (migration 171): the open-AP commit writes
+      // it with the service role, so the bill-create grant is checked here.
+      if (def.key === 'open_ap' && !dryRun) {
+        const guard = await requirePermission(ctx.userId, 'bills', 'create');
+        if (!guard.ok) return guard.response;
+      }
       return await importSubledger(supabase, def.key, def.fields, body, orgId, location!, errors, dryRun);
     }
     if (def.key === 'trial_balance') {
@@ -184,7 +202,12 @@ async function importMasterData(
     return await importCompanies(supabase, toInsert, orgId, skipped);
   }
 
-  const { error } = await supabase.schema('core').from(table).insert(toInsert);
+  // core.customers (migration 167, M4), core.vendors (168) and core.items (171) are
+  // service-role-write only (the remaining master-data target, locations, returned
+  // above through createCompany): authorized above (import:run + customers:create /
+  // vendors:create) and every row carries org_id = the session org.
+  const writer = createAdminSupabase();
+  const { error } = await writer.schema('core').from(table).insert(toInsert.map((r) => ({ ...r, org_id: orgId })));
   if (error) return NextResponse.json({ ok: false, inserted: 0, skipped, errors: [{ row: 0, message: error.message }] }, { status: 500 });
 
   return NextResponse.json({ ok: true, inserted: toInsert.length, skipped, errors: [], destination: `core.${table}` });
@@ -207,7 +230,7 @@ async function importCompanies(
       shortCode: r.short_code != null ? String(r.short_code) : null,
       industry: r.industry != null ? String(r.industry) : null,
       fiscalYearStartMonth: Number(r.fiscal_year_start_month ?? 1),
-    });
+    }, { writer: createAdminSupabase() }); // core.locations: service role after settings_acct:edit (mig 167)
     if (res.ok) inserted++;
     else if (res.status === 409) skipped++; // already exists (same name or code) — dedupe, as before
     else failures.push({ row: 0, message: `${String(r.name ?? '')}: ${res.error}` });
@@ -368,7 +391,12 @@ async function importSubledger(
     return NextResponse.json({ ok: true, inserted: 0, skipped, errors: [], destination: dest });
   }
 
-  const { error } = await supabase.from(isAr ? 'invoices' : 'bills').insert(toInsert);
+  // public.bills is SELECT-only for members (migration 171): the AP import writes it with
+  // the service role (import:run checked; the company was read through the caller's RLS
+  // client, so org + client scope are verified; every row carries org_id / location_id).
+  const { error } = isAr
+    ? await supabase.from('invoices').insert(toInsert)
+    : await createAdminSupabase().from('bills').insert(toInsert);
   if (error) return NextResponse.json({ ok: false, inserted: 0, skipped, errors: [{ row: 0, message: error.message }] }, { status: 500 });
 
   return NextResponse.json({ ok: true, inserted: toInsert.length, skipped, errors: [], destination: dest });
@@ -443,7 +471,10 @@ async function importTrialBalance(
   const fiscalPeriodId = period.id;
 
   const entryNumber = `OB-${location.short_code}-${asOf.replace(/-/g, '')}`;
-  const { data: entry, error: entryErr } = await supabase.from('gl_entries').insert({
+  // gl_entries / gl_entry_lines are SELECT-only for members (migration 171): service role,
+  // after import:run + journal_entries:post; company verified through the caller's client.
+  const glWriter = createAdminSupabase();
+  const { data: entry, error: entryErr } = await glWriter.from('gl_entries').insert({
     org_id: orgId,
     location_id: location.id,
     entry_number: entryNumber,
@@ -475,9 +506,9 @@ async function importTrialBalance(
     memo: 'Opening balance',
   }));
 
-  const { error: lineErr } = await supabase.from('gl_entry_lines').insert(lineRows);
+  const { error: lineErr } = await glWriter.from('gl_entry_lines').insert(lineRows);
   if (lineErr) {
-    await supabase.from('gl_entries').delete().eq('id', entry.id); // roll back the header
+    await glWriter.from('gl_entries').delete().eq('id', entry.id).eq('org_id', orgId); // roll back the header
     return NextResponse.json({ ok: false, inserted: 0, skipped: 0, errors: [{ row: 0, message: lineErr.message }] }, { status: 500 });
   }
 
@@ -560,12 +591,14 @@ async function importGlHistory(
 
   let inserted = 0;
   const failures: RowError[] = [];
+  // gl_entries / gl_entry_lines are SELECT-only for members (migration 171).
+  const glWriter = createAdminSupabase();
   for (const g of groups.values()) {
     const period = await periodOf(g.date);
     if (!period) { failures.push({ row: 0, message: `No fiscal period for ${g.date} (entry ${g.ref})` }); continue; }
     const fiscalPeriodId = period.id;
 
-    const { data: entry, error: entryErr } = await supabase.from('gl_entries').insert({
+    const { data: entry, error: entryErr } = await glWriter.from('gl_entries').insert({
       org_id: orgId,
       location_id: location.id,
       entry_number: `IMP-${g.ref}`,
@@ -586,9 +619,9 @@ async function importGlHistory(
       account_id: l.account_id, debit_cents: l.debit_cents, credit_cents: l.credit_cents,
       location_id: location.id,
     }));
-    const { error: lineErr } = await supabase.from('gl_entry_lines').insert(lineRows);
+    const { error: lineErr } = await glWriter.from('gl_entry_lines').insert(lineRows);
     if (lineErr) {
-      await supabase.from('gl_entries').delete().eq('id', entry.id);
+      await glWriter.from('gl_entries').delete().eq('id', entry.id).eq('org_id', orgId);
       failures.push({ row: 0, message: `Entry ${g.ref}: ${lineErr.message}` });
       continue;
     }
