@@ -12,3 +12,6 @@ supabase/.temp/
 
 # TypeScript incremental build cache (regenerated on every build)
 *.tsbuildinfo
+
+__pycache__/
+*.pyc
