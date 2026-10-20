@@ -11,6 +11,7 @@ import { PLANES } from '@/lib/planes';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { useMe } from '@/lib/hooks/use-me';
 import { filterNavByPermissions } from '@/components/layout/nav-permissions';
+import { openCommandBar } from '@/components/nl/command-bar-events';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -150,7 +151,11 @@ export function Sidebar() {
       {/* CPA Desk trigger */}
       {!collapsed && (
         <div className="p-3 border-t border-slate-800">
-          <button className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-slate-400 hover:text-brand-400 hover:bg-brand-500/5 transition-colors">
+          <button
+            type="button"
+            onClick={() => openCommandBar()}
+            aria-label="Open CPA Desk command bar (⌘K)"
+            className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-slate-400 hover:text-brand-400 hover:bg-brand-500/5 transition-colors">
             <Sparkles size={16} className="text-brand-500" />
             <span>CPA Desk</span>
             <kbd className="ml-auto text-2xs text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">⌘K</kbd>

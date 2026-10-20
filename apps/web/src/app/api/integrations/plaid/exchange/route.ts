@@ -1,10 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { resolveOrgId } from '@/lib/posting/lifecycle';
 import { completePlaidLink } from '@/lib/money/plaid-feed';
 import { requirePermission } from '@/lib/rbac/require-permission';
 
@@ -20,19 +19,16 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const a = await auth().catch(() => null);
-  const userId = (a as { userId?: string | null } | null)?.userId ?? null;
-  if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  // Caller + tenant via the app-wide resolver (06 §L.3 L2: explicit `org_id` claim OR
+  // Clerk's native `o.id`); an unresolved org fails CLOSED with 400.
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { userId, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
   // Authorize — exchanging the public token registers the bank connection
   // (Vault secret) and upserts bank accounts; same gate as payments/connect.
   const guard = await requirePermission(userId, 'settings_system', 'edit');
   if (!guard.ok) return guard.response;
-  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
-  // first-org lookup stays only as a transitional fallback when no claim.
-  const claimOrgId =
-    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
-      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
-      : null;
 
   let raw: unknown;
   try {
@@ -45,7 +41,6 @@ export async function POST(request: Request) {
 
   const supabase = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(supabase, claimOrgId);
     const linked = await completePlaidLink(supabase, orgId, {
       publicToken: parsed.data.public_token,
       connectedBy: userId,

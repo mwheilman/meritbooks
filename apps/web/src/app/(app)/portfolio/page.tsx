@@ -25,6 +25,7 @@ import { useQuery } from '@/hooks';
 import { addToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api-client';
 import { PageHeader } from '@/components/ui';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
 
 // ── Types (mirror /api/portfolio + /api/portfolio/assignments) ─────────────────
 
@@ -671,6 +672,10 @@ function BoardTable({
   entities: PortfolioEntity[];
   onboarding: Map<string, OnboardingApiRow>;
 }) {
+  // Every per-entity link switches the active company first (audit 06 §5 bug
+  // 11 / L.2 #11): these pages are company-scoped, so without this the click
+  // landed on the picker prompt or on the previously active company's data.
+  const { setActiveCompany } = useActiveCompany();
   if (entities.length === 0) {
     return (
       <div className="card py-12 text-center text-sm text-slate-500">
@@ -699,6 +704,7 @@ function BoardTable({
             <tr key={e.locationId} className="border-b border-slate-800/60 transition-colors last:border-0 hover:bg-slate-800/30">
               <td className="px-4 py-3">
                 <Link
+                  onClick={() => setActiveCompany(e.locationId)}
                   href={`/portfolio/${e.locationId}`}
                   className="font-medium text-white transition-colors hover:text-brand-300"
                 >
@@ -713,18 +719,18 @@ function BoardTable({
                 <RagDot rag={e.rag} />
               </td>
               <td className="px-4 py-3">
-                <Link href="/close" className="inline-block hover:opacity-80">
+                <Link onClick={() => setActiveCompany(e.locationId)} href="/close" className="inline-block hover:opacity-80">
                   <ClosePill e={e} />
                 </Link>
               </td>
               <td className={clsx('px-4 py-3 text-right font-mono tabular-nums', CASH_TONE[e.cashStatus])}>
-                <Link href={`/cash?location_id=${e.locationId}`} className="hover:underline">
+                <Link onClick={() => setActiveCompany(e.locationId)} href={`/cash?location_id=${e.locationId}`} className="hover:underline">
                   {formatMoney(e.cashCents, { compact: true })}
                 </Link>
               </td>
               <td className="px-4 py-3 text-right font-mono tabular-nums">
                 {e.openExceptions > 0 ? (
-                  <Link href="/exceptions" className="text-amber-400 hover:underline">
+                  <Link onClick={() => setActiveCompany(e.locationId)} href="/exceptions" className="text-amber-400 hover:underline">
                     {e.openExceptions}
                   </Link>
                 ) : (
@@ -733,7 +739,7 @@ function BoardTable({
               </td>
               <td className="px-4 py-3 text-right font-mono tabular-nums">
                 {e.overdueArCents > 0 ? (
-                  <Link href="/collections" className="text-amber-400 hover:underline">
+                  <Link onClick={() => setActiveCompany(e.locationId)} href="/collections" className="text-amber-400 hover:underline">
                     {formatMoney(e.overdueArCents, { compact: true })}
                   </Link>
                 ) : (
@@ -742,7 +748,7 @@ function BoardTable({
               </td>
               <td className="px-4 py-3 text-right font-mono tabular-nums">
                 {e.overdueApCents > 0 ? (
-                  <Link href="/bills" className="text-amber-400 hover:underline">
+                  <Link onClick={() => setActiveCompany(e.locationId)} href="/bills" className="text-amber-400 hover:underline">
                     {formatMoney(e.overdueApCents, { compact: true })}
                   </Link>
                 ) : (

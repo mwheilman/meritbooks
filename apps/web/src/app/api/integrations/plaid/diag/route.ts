@@ -1,9 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { resolveOrgId } from '@/lib/posting/lifecycle';
 
 /**
  * GET /api/integrations/plaid/diag
@@ -12,18 +12,21 @@ import { resolveOrgId } from '@/lib/posting/lifecycle';
  * connect/sync stopped, without server log access. Safe: no writes, no secrets.
  */
 export async function GET() {
-  const a = await auth().catch(() => null);
-  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
-  // first-org lookup stays only as a transitional fallback when no claim.
-  const claimOrgId =
-    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
-      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
-      : null;
+  // Caller + tenant via the app-wide resolver (06 §L.3 L2: explicit `org_id` claim OR
+  // Clerk's native `o.id`); an unresolved org fails CLOSED with 400.
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { userId, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+  // Authorize — the diagnostic exposes Item ids, account-role wiring and probes the
+  // Vault secret read; it was previously reachable by any signed-in member. System
+  // integration admin only. Fails closed (403).
+  const guard = await requirePermission(userId, 'settings_system', 'edit');
+  if (!guard.ok) return guard.response;
   const db = createAdminSupabase();
   const out: Record<string, unknown> = {};
 
   try {
-    const orgId = await resolveOrgId(db, claimOrgId);
     out.orgId = orgId;
 
     // 1. Locations (need at least one to attach a bank account)

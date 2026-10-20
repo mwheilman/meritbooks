@@ -19,7 +19,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const grant = await requireManageUsers(supabase, userId, orgId);
   if (grant instanceof NextResponse) return grant;
 
-  const res = await setMemberActive(supabase, orgId!, params.id, true);
+  const res = await setMemberActive(orgId!, params.id, true);
   if (res.ok) {
     // Reconcile the canonical spine: employee reactivated -> membership active,
     // so authority resolves off the membership again. Fail-safe (never throws).

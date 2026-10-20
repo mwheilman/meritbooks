@@ -7,6 +7,9 @@ import { z } from 'zod';
 import { createInvoice } from '@/lib/invoices/create-invoice';
 import { getHomeCurrency, normalizeCurrency } from '@/lib/currency';
 import { resolvePageParams, totalPages } from '@/lib/pagination';
+import { fetchAll } from '@/lib/supabase/fetch-all';
+import { getOrgToday } from '@/lib/dates/org-today';
+import { daysPastDue, effectiveInvoiceStatus, invoiceTabOrFilter, isInvoiceOverdue, isOpenInvoiceStatus } from '@/lib/ar/overdue';
 
 // ─── GET: List invoices ───────────────────────────────────────────────
 const querySchema = z.object({
@@ -36,6 +39,12 @@ export async function GET(request: Request) {
   // (ledger-scale) invoices table in one request. Defaults unchanged (50/page).
   const { page, perPage, rangeFrom: from, rangeTo: to } = resolvePageParams(params);
 
+  // Overdue is DERIVED (due_date < today in the ORG's timezone, open balance > 0)
+  // — never trusted from the stored status (audit L4). One helper, lib/ar/overdue.
+  const today = await getOrgToday(supabase, orgId);
+  const searchOr = params.search ? `or(invoice_number.ilike.%${params.search}%,memo.ilike.%${params.search}%)` : null;
+  const tabOr = params.status && params.status !== 'ALL' ? invoiceTabOrFilter(params.status, today) : null;
+
   // Base query.
   // NOTE: no PostgREST embeds on customers/locations/jobs here — those tables
   // now live in the `core` schema while invoices is in `public`, and PostgREST
@@ -55,8 +64,11 @@ export async function GET(request: Request) {
   query = query.eq('org_id', orgId);
   if (params.location_id) query = query.eq('location_id', params.location_id);
   if (params.customer_id) query = query.eq('customer_id', params.customer_id);
-  if (params.status && params.status !== 'ALL') query = query.eq('status', params.status);
-  if (params.search) query = query.or(`invoice_number.ilike.%${params.search}%,memo.ilike.%${params.search}%`);
+  if (params.status && params.status !== 'ALL' && !tabOr) query = query.eq('status', params.status);
+  // One `or` group: AND together the derived-status tab filter and the search.
+  const groups = [tabOr, searchOr].filter((g): g is string => !!g);
+  if (groups.length === 1) query = query.or(groups[0].startsWith('or(') ? groups[0].slice(3, -1) : groups[0]);
+  else if (groups.length === 2) query = query.or(`and(${groups.join(',')})`);
 
   const { data, count, error } = await query;
 
@@ -67,14 +79,20 @@ export async function GET(request: Request) {
   // Status counts — scoped to the SAME org + company as the list (but across all
   // statuses, so every tab shows its own total). Without matching the list scope
   // the tab counts and KPI cards disagree with the rows shown below them.
-  let countsQuery = supabase
-    .from('invoices')
-    .select('status, total_cents, balance_cents')
-    .eq('org_id', orgId);
-  if (params.location_id) countsQuery = countsQuery.eq('location_id', params.location_id);
-  if (params.customer_id) countsQuery = countsQuery.eq('customer_id', params.customer_id);
-  if (params.search) countsQuery = countsQuery.or(`invoice_number.ilike.%${params.search}%,memo.ilike.%${params.search}%`);
-  const { data: allInvoices } = await countsQuery;
+  // Paged — an unpaged read silently caps at 1,000 invoices and understates KPIs.
+  const { data: allInvoices } = await fetchAll(
+    () => {
+      let countsQuery = supabase
+        .from('invoices')
+        .select('id, status, total_cents, balance_cents, amount_paid_cents, due_date')
+        .eq('org_id', orgId);
+      if (params.location_id) countsQuery = countsQuery.eq('location_id', params.location_id);
+      if (params.customer_id) countsQuery = countsQuery.eq('customer_id', params.customer_id);
+      if (params.search) countsQuery = countsQuery.or(`invoice_number.ilike.%${params.search}%,memo.ilike.%${params.search}%`);
+      return countsQuery;
+    },
+    { label: 'invoices status counts' },
+  );
 
   const counts: Record<string, { count: number; totalCents: number; balanceCents: number }> = {
     ALL: { count: 0, totalCents: 0, balanceCents: 0 },
@@ -83,17 +101,29 @@ export async function GET(request: Request) {
     PARTIALLY_PAID: { count: 0, totalCents: 0, balanceCents: 0 },
     PAID: { count: 0, totalCents: 0, balanceCents: 0 },
     OVERDUE: { count: 0, totalCents: 0, balanceCents: 0 },
+    /** Every collectible invoice (SENT + PARTIALLY_PAID + OVERDUE) — open AR. */
+    OPEN: { count: 0, totalCents: 0, balanceCents: 0 },
   };
 
-  const now = new Date();
-  for (const inv of allInvoices ?? []) {
+  for (const inv of (allInvoices ?? []) as Array<Record<string, unknown>>) {
     const total = Number(inv.total_cents ?? 0);
     const balance = Number(inv.balance_cents ?? 0);
     counts.ALL.count++;
     counts.ALL.totalCents += total;
     counts.ALL.balanceCents += balance;
 
-    const status = inv.status as string;
+    const ov = {
+      status: inv.status as string,
+      dueDate: (inv.due_date as string | null) ?? null,
+      balanceCents: balance,
+      amountPaidCents: Number(inv.amount_paid_cents ?? 0),
+    };
+    if (isOpenInvoiceStatus(ov.status) && balance > 0) {
+      counts.OPEN.count++;
+      counts.OPEN.totalCents += total;
+      counts.OPEN.balanceCents += balance;
+    }
+    const status = effectiveInvoiceStatus(ov, today);
     if (counts[status]) {
       counts[status].count++;
       counts[status].totalCents += total;
@@ -129,8 +159,14 @@ export async function GET(request: Request) {
     const customer = inv.customer_id ? customerById.get(inv.customer_id as string) ?? null : null;
     const location = inv.location_id ? locationById.get(inv.location_id as string) ?? null : null;
     const job = inv.job_id ? jobById.get(inv.job_id as string) ?? null : null;
-    const dueDate = new Date(inv.due_date);
-    const daysOverdue = Math.max(0, Math.floor((now.getTime() - dueDate.getTime()) / 86400000));
+    const ov = {
+      status: inv.status as string,
+      dueDate: (inv.due_date as string | null) ?? null,
+      balanceCents: Number(inv.balance_cents ?? 0),
+      amountPaidCents: Number(inv.amount_paid_cents ?? 0),
+    };
+    const isOverdue = isInvoiceOverdue(ov, today);
+    const daysOverdue = isOverdue ? daysPastDue(ov.dueDate, today) : 0;
 
     return {
       id: inv.id,
@@ -144,7 +180,11 @@ export async function GET(request: Request) {
       totalCents: Number(inv.total_cents),
       amountPaidCents: Number(inv.amount_paid_cents),
       balanceCents: Number(inv.balance_cents),
-      status: inv.status,
+      // Display status is derived (OVERDUE when past due with a balance); the
+      // stored value is kept for workflows that act on it.
+      status: effectiveInvoiceStatus(ov, today),
+      storedStatus: inv.status,
+      isOverdue,
       isProgressBill: inv.is_progress_bill,
       applicationNumber: inv.application_number,
       memo: inv.memo,

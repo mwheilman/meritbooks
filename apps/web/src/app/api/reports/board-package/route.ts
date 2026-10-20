@@ -25,6 +25,8 @@ import {
   fetchTrendSeries,
 } from './queries';
 import type { TrendPoint } from '@/lib/reports/board-package';
+import { getOrgDateContext } from '@/lib/dates/org-today';
+import { monthBoundsIso } from '@/lib/dates/org-date';
 
 /** How many trailing months the KPI trend strip spans. */
 const TREND_PERIODS = 6;
@@ -84,9 +86,12 @@ function derivePriorPeriod(sd: string, ed: string): { s: string; e: string } {
 }
 
 export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContext) => {
-  const now = new Date();
-  const startDate = params.start_date ?? `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
-  const endDate = params.end_date ?? new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+  // Defaults anchor on TODAY IN THE ORG'S TIMEZONE (not the server's UTC clock),
+  // so a US-evening request doesn't roll into tomorrow / next month.
+  const { timeZone, today } = await getOrgDateContext(ctx.supabase, ctx.orgId);
+  const month = monthBoundsIso(today);
+  const startDate = params.start_date ?? month.start;
+  const endDate = params.end_date ?? month.end;
   const asOfDate = params.as_of_date ?? endDate;
   const basis = params.basis ?? 'accrual';
   const locationIds = params.location_ids ? params.location_ids.split(',').map((s) => s.trim()).filter(Boolean) : [];
@@ -103,11 +108,13 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
     [currentIS, priorIS, balanceSheet, cashFlow, arAging, apAging, debt, trendSeries] = await Promise.all([
       fetchIncomeStatement(ctx.supabase, { startDate, endDate, locationIds, basis }),
       fetchIncomeStatement(ctx.supabase, { startDate: prior.s, endDate: prior.e, locationIds, basis }),
-      fetchBalanceSheet(ctx.supabase, { asOfDate, locationIds }),
+      fetchBalanceSheet(ctx.supabase, { asOfDate, locationIds, orgId: ctx.orgId }),
       fetchCashFlow(ctx.supabase, ctx.orgId ?? '', { startDate, endDate, locationIds }),
-      fetchArAging(ctx.supabase, locationIds),
-      fetchApAging(ctx.supabase, locationIds),
-      fetchDebt(ctx.supabase, locationIds),
+      // Aging is "as of today" (open items now), in the org's calendar.
+      fetchArAging(ctx.supabase, locationIds, today),
+      fetchApAging(ctx.supabase, locationIds, today),
+      // Debt outstanding as of the statement date (schedule-derived).
+      fetchDebt(ctx.supabase, locationIds, asOfDate),
       fetchTrendSeries(ctx.supabase, ctx.orgId ?? '', { endDate, locationIds, basis, periods: TREND_PERIODS }),
     ]);
   } catch (e) {
@@ -137,6 +144,8 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
     generatedAt,
     basisLabel,
     accent: '#10b981',
+    timeZone,
+    evaluatedThrough: today,
   };
 
   // 2. Executive summary. Deterministic by default; AI phrasing only on ai=1.

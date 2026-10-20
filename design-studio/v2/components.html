@@ -624,6 +624,40 @@ body{min-width:1440px}
     </div>
   </div>
 </section>
+<section class="sec" aria-labelledby="s14">
+  <div class="sec-label"><div class="eyebrow">14<span class="sl">//</span>Access</div><h2 class="t-title" id="s14">Grants, duties, decisions</h2>
+    <p>A grant is a 16px square in a 32px target. Shape carries every state, so the matrix reads in greyscale. The monogram’s slash means something was taken away.</p>
+    <ul><li><code>.cap</code> + <code>.is-on .is-lim .is-set .is-muted .is-hard .is-soft .is-sel</code>, <code>[data-delta=add|rem]</code>, <code>.cap--ro .cap--sm</code></li><li><code>.capm</code> matrix · <code>.capm-dom</code> <code>.capm-res</code></li><li><code>.lvl--platform --tenant --client</code></li><li><code>.sod .sod-row--hard --soft --held</code></li><li><code>.trace</code> · <code>.verdict--allow --deny</code> · <code>.slash</code></li><li><code>.viewas-band</code> · <code>.attest</code></li></ul>
+    <p>In use on <a class="link" href="S13-role-library.html">S13</a>–<a class="link" href="S17-access-review.html">S17</a>.</p></div>
+  <div class="sec-body">
+    <div class="row" style="gap:24px;flex-wrap:wrap">
+      <span class="row"><button class="cap is-on" type="button" aria-pressed="true" aria-label="Granted"><i></i></button>Granted</span>
+      <span class="row"><button class="cap" type="button" aria-pressed="false" aria-label="Not granted"><i></i></button>Not granted</span>
+      <span class="row"><button class="cap is-on is-lim" type="button" aria-pressed="true" aria-label="Granted with a limit"><i></i></button>With a limit</span>
+      <span class="row"><span class="cap cap--ro is-set" role="img" aria-label="From a permission set"><i></i></span>Permission set</span>
+      <span class="row"><span class="cap cap--ro is-muted" role="img" aria-label="Muted"><i></i></span>Muted</span>
+      <span class="row"><button class="cap is-on" data-delta="add" type="button" aria-pressed="true" aria-label="Added vs template"><i></i></button>Added vs template</span>
+      <span class="row"><button class="cap" data-delta="rem" type="button" aria-pressed="false" aria-label="Removed vs template"><i></i></button>Removed vs template</span>
+      <span class="row"><button class="cap is-on is-hard" type="button" aria-pressed="true" aria-label="Hard conflict"><i></i></button>Hard conflict</span>
+      <span class="row"><button class="cap is-on is-soft" type="button" aria-pressed="true" aria-label="Soft conflict"><i></i></button>Soft conflict</span>
+    </div>
+    <div class="row" style="gap:8px;margin-top:24px"><span class="lvl lvl--platform">Platform template v5</span><span class="lvl lvl--tenant">Tenant · Merit Management Group</span><span class="lvl lvl--client">Client · Heritage Interiors</span></div>
+    <div class="sod" style="margin-top:24px">
+      <div class="sod-row sod-row--hard"><span class="sod-code">S4</span><p><b>Blocks publishing. Change pay, then release payroll:</b> Employee records: Edit + Payroll runs: Release. Hard for firms.</p><button class="btn" type="button">Remove payroll run release</button></div>
+      <div class="sod-row sod-row--soft"><span class="sod-code">S1 S7</span><p><b>2 soft conflicts.</b> Holders will need a written justification when you publish.</p><button class="btn btn--quiet" type="button">Show rules</button></div>
+      <div class="sod-row sod-row--held"><span class="sod-code">S5</span><p><b>Already in v5.</b> Exceptions on file for 3 people.</p><a class="link" href="#">See exceptions</a></div>
+    </div>
+    <div class="grid-12" style="margin-top:24px;row-gap:24px">
+      <div style="grid-column:span 5"><div class="verdict verdict--deny"><span class="slash" aria-hidden="true"></span><div>Can’t approve: over her $10,000 limit<p>Her button reads “Approve up to your limit → route”.</p></div></div>
+        <ol class="trace" style="margin-top:8px"><li><span class="tno">4</span><span><span class="tl">Grants</span><span class="td">Senior bookkeeper v3 via HVAC clients · Bills: approve</span></span><span class="tv tv--pass">Pass</span></li>
+        <li class="is-decider"><span class="tno">5</span><span><span class="tl">Limit</span><span class="td">Up to $10,000 a bill · this one is $31,400</span></span><span class="tv tv--fail"><span class="slash" aria-hidden="true"></span>Stops</span></li>
+        <li><span class="tno">6</span><span><span class="tl">Duties</span><span class="td">Not reached</span></span><span class="tv tv--skip">—</span></li></ol></div>
+      <div style="grid-column:span 7"><article class="attest is-cursor"><div><span class="attest-kind">Dormant access</span><div class="attest-claim">Luis Ortiz · Bookkeeper on Artistry Homes</div></div><div class="attest-acts"><button class="btn" type="button">Keep<span class="kbd">A</span></button><button class="btn btn--danger" type="button">Revoke<span class="kbd">X</span></button></div>
+        <ul class="ev"><li><span>Last activity</span><span class="dl"></span><span class="v">Jul 14 · 97 days ago</span></li><li><span>Actions in 90 days</span><span class="dl"></span><span class="v">0</span></li></ul></article></div>
+    </div>
+    <div class="app app--frame" style="min-height:0;margin-top:24px;grid-template-rows:auto"><div class="viewas-band" role="status" style="grid-column:1/-1"><span>Viewing as <b>Priya Natarajan</b></span><span class="sl">//</span><span>Read-only</span><span class="sp"></span><span class="clock">29:12</span><span>left</span><button class="btn" type="button">End</button></div></div>
+  </div>
+</section>
 </main>
 
 <script>

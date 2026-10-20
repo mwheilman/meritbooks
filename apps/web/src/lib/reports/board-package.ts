@@ -24,6 +24,8 @@
 
 import { z } from 'zod';
 import { formatMoney, pct } from '@meritbooks/shared';
+import { formatMarginPct } from '@/lib/reports/percent';
+import { formatIsoDateLong, isIsoDate } from '@/lib/dates/org-date';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Input payload schemas (subsets of the existing report-route responses).
@@ -75,6 +77,8 @@ export const bsAccountSchema = z.object({
   accountName: z.string().default(''),
   balanceCents: z.number().default(0),
   accountId: z.string().optional(),
+  /** True for presentation lines with no GL account (e.g. current-year net income). */
+  synthetic: z.boolean().optional(),
 });
 export const bsGroupSchema = z.object({
   name: z.string().default(''),
@@ -101,6 +105,10 @@ export const balanceSheetPayloadSchema = z.object({
     liabilitiesPlusEquityCents: z.number().default(0),
     isBalanced: z.boolean().default(false),
     varianceCents: z.number().default(0),
+    /** Earnings rolled into equity before the year-end close (lib/reports/bs-earnings). */
+    currentYearNetIncomeCents: z.number().optional(),
+    priorYearsUnclosedEarningsCents: z.number().optional(),
+    fiscalYearStart: z.string().optional(),
   }),
   filters: z.object({ asOfDate: z.string().optional() }).optional(),
 });
@@ -310,7 +318,7 @@ export function computeKpis(input: KpiInputs): KpiSummary {
       deltaCents: priorGP != null ? s.grossProfitCents - priorGP : null,
       deltaPct: grossProfitPct,
       favorable: priorGP != null ? s.grossProfitCents >= priorGP : null,
-      hint: `${s.grossMarginPct}% margin`,
+      hint: `${formatMarginPct(s.grossMarginPct, s.revenueCents)} margin`,
     },
     {
       key: 'net_income',
@@ -321,7 +329,7 @@ export function computeKpis(input: KpiInputs): KpiSummary {
       deltaCents: priorNI != null ? s.netIncomeCents - priorNI : null,
       deltaPct: netIncomePct,
       favorable: priorNI != null ? s.netIncomeCents >= priorNI : null,
-      hint: `${s.netMarginPct}% margin`,
+      hint: `${formatMarginPct(s.netMarginPct, s.revenueCents)} margin`,
     },
     {
       key: 'cash',
@@ -606,8 +614,8 @@ export function buildMdna(input: {
     id: 'results_of_operations',
     heading: 'Results of Operations',
     paragraphs: [
-      `For ${input.periodLabel}, ${input.entityLabel} recorded revenue of ${formatMoney(k.revenueCents)}, which ${trendWord(k.deltas.revenuePct)}${vs}. Gross profit was ${formatMoney(k.grossProfitCents)}, a ${k.grossMarginPct}% gross margin, and ${trendWord(k.deltas.grossProfitPct)} against the prior period.`,
-      `Operating income was ${formatMoney(k.operatingIncomeCents)}. Net income ${trendWord(k.deltas.netIncomePct)} to ${formatMoney(k.netIncomeCents)}, representing a ${k.netMarginPct}% net margin.`,
+      `For ${input.periodLabel}, ${input.entityLabel} recorded revenue of ${formatMoney(k.revenueCents)}, which ${trendWord(k.deltas.revenuePct)}${vs}. Gross profit was ${formatMoney(k.grossProfitCents)}, a ${formatMarginPct(k.grossMarginPct, k.revenueCents)} gross margin, and ${trendWord(k.deltas.grossProfitPct)} against the prior period.`,
+      `Operating income was ${formatMoney(k.operatingIncomeCents)}. Net income ${trendWord(k.deltas.netIncomePct)} to ${formatMoney(k.netIncomeCents)}, representing a ${formatMarginPct(k.netMarginPct, k.revenueCents)} net margin.`,
     ],
     bullets: [],
   });
@@ -701,6 +709,10 @@ export function buildBoardNotes(input: {
   apAging: AgingPayload;
   debt: DebtPayload;
   basisLabel: string;
+  /** Org-calendar date the subsequent-events evaluation runs through (ISO). */
+  evaluatedThrough?: string | null;
+  /** Org timezone, used when only `generatedAt` (an instant) is available. */
+  timeZone?: string | null;
 }): BoardNotes {
   const notes: NoteSection[] = [];
 
@@ -774,11 +786,16 @@ export function buildBoardNotes(input: {
   });
 
   // Note 5 — Subsequent Events (human-filled placeholder)
-  const throughDate = new Date(input.generatedAt).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  // The ORG's calendar date — the server's UTC clock read "October 20" for a US
+  // user still on October 19 (audit L14).
+  const throughDate = isIsoDate(input.evaluatedThrough)
+    ? formatIsoDateLong(input.evaluatedThrough)
+    : new Date(input.generatedAt).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        timeZone: input.timeZone || 'UTC',
+      });
   notes.push({
     id: 'subsequent_events',
     title: 'Note 5 — Subsequent Events',
@@ -809,9 +826,9 @@ export function buildExecutiveSummaryFacts(k: KpiSummary, entityLabel: string, p
     `Entity: ${entityLabel}`,
     `Period: ${periodLabel}`,
     withDelta('Revenue:', k.revenueCents, k.deltas.revenuePct),
-    withDelta('Gross profit:', k.grossProfitCents, k.deltas.grossProfitPct) + ` at ${k.grossMarginPct}% gross margin`,
+    withDelta('Gross profit:', k.grossProfitCents, k.deltas.grossProfitPct) + ` at ${formatMarginPct(k.grossMarginPct, k.revenueCents)} gross margin`,
     `Operating income: ${formatMoney(k.operatingIncomeCents)}`,
-    withDelta('Net income:', k.netIncomeCents, k.deltas.netIncomePct) + ` at ${k.netMarginPct}% net margin`,
+    withDelta('Net income:', k.netIncomeCents, k.deltas.netIncomePct) + ` at ${formatMarginPct(k.netMarginPct, k.revenueCents)} net margin`,
     `Cash & equivalents: ${formatMoney(k.cashCents)} (net change ${formatMoney(k.netChangeInCashCents, { showSign: true })})`,
     `Accounts receivable: ${formatMoney(k.arCents)}; accounts payable: ${formatMoney(k.apCents)}`,
     `Total assets ${formatMoney(k.totalAssetsCents)}; total liabilities ${formatMoney(k.totalLiabilitiesCents)}; total equity ${formatMoney(k.totalEquityCents)}`,
@@ -835,7 +852,7 @@ export function deterministicExecutiveSummary(k: KpiSummary, entityLabel: string
   const revMove =
     k.deltas.revenuePct == null ? '' : ` (${k.deltas.revenuePct > 0 ? 'up' : k.deltas.revenuePct < 0 ? 'down' : 'flat'} ${Math.abs(k.deltas.revenuePct)}% vs the prior period)`;
   parts.push(
-    `For ${periodLabel}, ${entityLabel} generated revenue of ${formatMoney(k.revenueCents)}${revMove}, producing gross profit of ${formatMoney(k.grossProfitCents)} (${k.grossMarginPct}% margin) and net income of ${formatMoney(k.netIncomeCents)} (${k.netMarginPct}% margin).`,
+    `For ${periodLabel}, ${entityLabel} generated revenue of ${formatMoney(k.revenueCents)}${revMove}, producing gross profit of ${formatMoney(k.grossProfitCents)} (${formatMarginPct(k.grossMarginPct, k.revenueCents)} margin) and net income of ${formatMoney(k.netIncomeCents)} (${formatMarginPct(k.netMarginPct, k.revenueCents)} margin).`,
   );
   parts.push(
     `Cash and equivalents ended the period at ${formatMoney(k.cashCents)}, a net ${k.netChangeInCashCents >= 0 ? 'increase' : 'decrease'} of ${formatMoney(Math.abs(k.netChangeInCashCents))}; receivables stood at ${formatMoney(k.arCents)} and payables at ${formatMoney(k.apCents)}.`,
@@ -871,6 +888,9 @@ export const boardPackageMetaSchema = z.object({
   generatedAt: z.string(),
   basisLabel: z.string(),
   accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#10b981'),
+  /** Org IANA timezone + the org-calendar "today" the package was evaluated on. */
+  timeZone: z.string().optional(),
+  evaluatedThrough: z.string().optional(),
 });
 
 export const executiveSummarySchema = z.object({
@@ -968,6 +988,8 @@ export function assembleBoardPackage(input: AssembleInput): BoardPackage {
     apAging: input.apAging,
     debt: input.debt,
     basisLabel: input.meta.basisLabel,
+    evaluatedThrough: input.meta.evaluatedThrough ?? null,
+    timeZone: input.meta.timeZone ?? null,
   });
 
   return {

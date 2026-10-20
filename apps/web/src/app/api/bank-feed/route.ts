@@ -39,6 +39,7 @@ export const GET = apiQueryHandler(
         matched_receipt_id,
         location_id,
         ai_vendor_id,
+        final_vendor_id,
         final_job_id,
         ai_account:accounts!bank_transactions_ai_account_id_fkey(id, account_number, name, account_type),
         final_account:accounts!bank_transactions_final_account_id_fkey(id, account_number, name, account_type),
@@ -74,6 +75,7 @@ export const GET = apiQueryHandler(
     type Row = {
       location_id: string | null;
       ai_vendor_id: string | null;
+      final_vendor_id?: string | null;
       final_job_id: string | null;
       ai_confidence: number | null;
       [k: string]: unknown;
@@ -82,7 +84,10 @@ export const GET = apiQueryHandler(
 
     // ---- Stitch core-schema references in JS (no cross-schema embeds) ----
     const locationIds = [...new Set(rows.map((r) => r.location_id).filter((v): v is string => !!v))];
-    const vendorIds = [...new Set(rows.map((r) => r.ai_vendor_id).filter((v): v is string => !!v))];
+    // The displayed vendor is the reviewer's final choice when one exists, else
+    // the AI suggestion — so an edited payee shows after approval.
+    const shownVendorId = (r: Row): string | null => r.final_vendor_id ?? r.ai_vendor_id;
+    const vendorIds = [...new Set(rows.map(shownVendorId).filter((v): v is string => !!v))];
     const jobIds = [...new Set(rows.map((r) => r.final_job_id).filter((v): v is string => !!v))];
 
     const [locsRes, vendorsRes, jobsRes] = await Promise.all([
@@ -104,7 +109,7 @@ export const GET = apiQueryHandler(
     const stitched = rows.map((r) => ({
       ...r,
       location: r.location_id ? locById.get(r.location_id) ?? null : null,
-      ai_vendor: r.ai_vendor_id ? venById.get(r.ai_vendor_id) ?? null : null,
+      ai_vendor: shownVendorId(r) ? venById.get(shownVendorId(r) as string) ?? null : null,
       final_job: r.final_job_id ? jobById.get(r.final_job_id) ?? null : null,
     }));
 

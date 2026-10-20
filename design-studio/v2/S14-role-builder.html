@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=1440">
+<title>S14 · Role builder · MeritBooks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="system.css">
+<!--BOARD--><style>
+/* Board layout only (shared by S13-S17) */
+body{min-width:1440px}
+.sheet-top{display:flex;align-items:center;gap:24px;height:48px;padding:0 48px;background:var(--midnight);color:var(--grey-300)}
+.sheet-top img{height:24px;width:auto}
+.sheet-top nav{margin-left:auto;display:flex;gap:4px}
+.sheet-top nav a{height:32px;display:inline-flex;align-items:center;padding:0 10px;color:var(--grey-300);font-weight:500;white-space:nowrap}
+.sheet-top nav a:hover,.sheet-top nav a[aria-current=page]{background:var(--night-800);color:var(--warm)}
+.sheet{padding:0 48px 96px}
+.board-h{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding:40px 0 16px;border-bottom:1px solid var(--electric)}
+.board-h p{margin-top:8px;color:var(--ink-2);max-width:84ch}
+.board-h .pg{display:flex;align-items:center;gap:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.frame{border:1px solid var(--line-2);border-left:0;border-right:0;overflow:hidden;position:relative;margin:24px -48px 0;background:var(--warm)}
+.frame-cap{display:flex;justify-content:space-between;gap:24px;margin-top:8px;font-size:12px;line-height:16px;color:var(--ink-3)}
+.pair-h{display:flex;align-items:baseline;gap:12px;margin-top:48px}
+.pair-h .t-section{color:var(--ink);white-space:nowrap}
+.anno{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:24px}
+.anno div{border-top:1px solid var(--line-2);padding-top:12px}
+.anno b{display:block;font-weight:600;margin-bottom:4px}
+.anno p{color:var(--ink-2)}
+.legend{display:flex;flex-wrap:wrap;align-items:center;gap:4px 20px;color:var(--ink-2);font-size:12px;line-height:16px}
+.legend>span{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
+.toast-region{bottom:32px}
+[hidden]{display:none!important}
+.audit-badge{position:fixed;right:16px;bottom:16px;z-index:999;max-width:460px;max-height:60vh;overflow:auto;padding:8px 12px;background:var(--midnight);color:var(--warm);font-size:12px;line-height:16px}
+.audit-hit{outline:2px solid var(--neg)!important;outline-offset:-2px}
+.l1.neg,.l2.neg{color:var(--neg)} .l1.warn,.l2.warn{color:var(--warn)} .l1.pos,.l2.pos{color:var(--pos)} .l2.blue{color:var(--electric)} .l2.ink-2{color:var(--ink-2)}
+.app--frame{min-height:0;height:100%}
+.app--frame .main{overflow:hidden}
+.bar .ctx{flex:none}
+.page-head .t-title{white-space:nowrap}
+</style><!--/BOARD-->
+<style>
+.b-main{display:flex;flex-direction:column;height:calc(100% - 32px)}
+.b-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;padding:20px 32px 0}
+.b-head .meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+.b-head .desc{color:var(--ink-2);margin-top:6px;max-width:72ch}
+.b-tabs{padding:0 32px;margin-top:12px}
+.b-body{flex:1;min-height:0;display:grid;grid-template-columns:200px minmax(0,1fr) 336px;border-top:0}
+.doms{overflow:auto;background:var(--white);border-right:1px solid var(--line);padding:8px 0 16px}
+.doms a{display:flex;align-items:center;gap:8px;height:32px;padding:0 16px 0 20px;color:var(--ink-2);font-weight:500;transition:background-color var(--fast)}
+.doms a:hover{background:var(--grey-100);color:var(--ink)}
+.doms a[aria-current=true]{background:var(--sky);color:var(--ink);box-shadow:inset 3px 0 var(--electric)}
+.doms a .n{margin-left:auto;color:var(--ink-3);font-weight:500}
+.doms a.has-chg .n{color:var(--electric);font-weight:600}
+.doms .eyebrow{display:block;padding:16px 20px 6px}
+.doms .off{padding:0 20px;color:var(--ink-3);font-size:12px;line-height:16px}
+.mx{display:flex;flex-direction:column;min-width:0;min-height:0}
+.mx-tools{display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--warm)}
+.mx-tools .search{width:240px}
+.mx-scroll{flex:1;min-height:0;overflow:auto}
+.capm col.c-act{width:56px}
+.capm th{padding:0 1px}
+.b-panel{border-left:1px solid var(--line-2)}
+.b-panel .panel-body{padding-bottom:32px}
+.pol{display:grid;grid-template-columns:minmax(0,1fr) 128px;align-items:center;gap:8px 12px}
+.pol .select{height:32px}
+.pol dt{color:var(--ink-2)}
+.lim2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.b-panel{min-width:0;overflow:hidden}
+.bar .ctx{flex:none}
+.sod-more{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:2px}
+.sel-h{display:flex;align-items:center;gap:8px}
+.sel-h .t-head{flex:1;min-width:0}
+.diff{table-layout:fixed}
+.diff td,.diff th{height:44px;padding:0 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+.diff th{height:40px;border-bottom:1px solid var(--electric);font:500 12px/16px var(--f-text);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);text-align:left}
+.diff tr.g td{height:36px;background:var(--canvas)}
+.diff td.cur{background:var(--sky)}
+.diff .gone{color:var(--ink-3)}
+.dx{display:inline-flex;align-items:center;gap:8px}
+.pubwrap{height:100%;background:rgba(10,22,40,.48);display:flex;justify-content:center;align-items:flex-start;padding-top:32px}
+.pub{width:960px}
+.pub-grid{display:grid;grid-template-columns:minmax(0,1fr) 288px}
+.pub-main{padding:8px 24px 24px}
+.pub-side{padding:16px 20px 24px;background:var(--canvas);border-left:1px solid var(--line)}
+.pub h4{font:600 12px/16px var(--f-text);letter-spacing:.12em;text-transform:uppercase;color:var(--ink);margin:20px 0 8px}
+.pub-side h4:first-child{margin-top:0}
+.chg{list-style:none;border-top:1px solid var(--line)}
+.chg li{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:8px;align-items:center;min-height:36px;border-bottom:1px solid var(--line)}
+.chg .pm{font-weight:700;text-align:center}
+.ppl{table-layout:fixed}
+.ppl td,.ppl th{padding:0 8px;height:48px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ppl th{height:32px;font:500 12px/16px var(--f-text);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);text-align:left}
+.ppl tr>*:first-child{padding-left:0}
+.ppl tr.more td{height:auto;padding:4px 8px 12px 32px;white-space:normal;color:var(--ink-2)}
+.when{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.prog{display:flex;align-items:center;gap:12px;margin-top:8px}
+</style></head>
+<body>
+<!--SPRITE--><svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></symbol>
+<symbol id="i-down" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></symbol>
+<symbol id="i-right" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></symbol>
+<symbol id="i-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3.5 10.5 8 6 12.5"/></symbol>
+<symbol id="i-layers" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2 14 5 8 8 2 5Z" stroke-linejoin="round"/><path d="M2 8.2l6 3 6-3"/><path d="M2 11.2l6 3 6-3"/></symbol>
+<symbol id="i-grid" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/></symbol>
+<symbol id="i-lock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="7" width="9" height="6.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></symbol>
+<symbol id="i-x" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke-width="1.75"/></symbol>
+<symbol id="i-eye" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></symbol>
+<symbol id="i-eye-off" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/><path d="M2.5 13.5 13.5 2.5"/></symbol>
+<symbol id="i-history" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9"/><path d="M2.5 2.5v2.5H5"/><path d="M8 5v3.2l2 1.3"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></symbol>
+<symbol id="i-minus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 8h9"/></symbol>
+<symbol id="i-alert" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.2 14.2 13.5H1.8Z" stroke-linejoin="round"/><path d="M8 6.5v3.2M8 11.2v1"/></symbol>
+<symbol id="i-shield" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.8 13.2 3.8v4.1c0 3-2.3 5.2-5.2 6.4C5.1 13.1 2.8 10.9 2.8 7.9V3.8Z" stroke-linejoin="round"/></symbol>
+<symbol id="i-clock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.4"/></symbol>
+<symbol id="i-user" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="2.6"/><path d="M2.8 14c.6-2.8 2.7-4.3 5.2-4.3s4.6 1.5 5.2 4.3"/></symbol>
+<symbol id="i-users" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5.5" r="2.4"/><path d="M1.5 13.5c.5-2.5 2.3-3.8 4.5-3.8s4 1.3 4.5 3.8"/><path d="M10.5 3.4a2.4 2.4 0 0 1 0 4.4M12 9.9c1.3.5 2.2 1.7 2.5 3.6"/></symbol>
+<symbol id="i-user-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="5.5" r="2.6"/><path d="M1.5 14c.6-2.8 2.6-4.3 5-4.3 1.2 0 2.3.3 3.1 1M12.5 9v5M10 11.5h5"/></symbol>
+<symbol id="i-log" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 4h8M5.5 8h8M5.5 12h8"/><path d="M2.5 4h1M2.5 8h1M2.5 12h1"/></symbol>
+<symbol id="i-key" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="10.5" r="2.8"/><path d="M7 8.5 13.5 2M11 4.5l2 2M9.5 6l1.5 1.5"/></symbol>
+<symbol id="i-send" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8 14 2.5 10.5 14 8 9Z" stroke-linejoin="round"/><path d="M8 9l6-6.5"/></symbol>
+<symbol id="i-copy" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8"/><path d="M10.5 5.5v-3h-8v8h3"/></symbol>
+<symbol id="i-cols" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M6.2 2.5v11M9.8 2.5v11"/></symbol>
+<symbol id="i-download" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7"/><path d="M2.5 13.5h11"/></symbol>
+<symbol id="i-home" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 7.5 8 2.5l5.5 5v6h-11Z" stroke-linejoin="round"/><path d="M6.5 13.5v-4h3v4"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 9.5 4 3h8l1.5 6.5v4h-11Z" stroke-linejoin="round"/><path d="M2.5 9.5h3.5l.8 1.5h2.4l.8-1.5h3.5"/></symbol>
+<symbol id="i-building" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2.5" width="10" height="11"/><path d="M6 5.5h1M9 5.5h1M6 8.5h1M9 8.5h1M7 13.5v-2h2v2"/></symbol>
+<symbol id="i-work" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 4.5h2M2.5 8h2M2.5 11.5h2M6.5 4.5h7M6.5 8h7M6.5 11.5h7"/></symbol>
+<symbol id="i-chart" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 13.5h11"/><path d="M4 11V7.5M7 11V4M10 11V6M13 11V9"/></symbol>
+<symbol id="i-plug" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2v3.5M10 2v3.5M4 5.5h8v2a4 4 0 0 1-8 0Z"/><path d="M8 11.5V14"/></symbol>
+<symbol id="i-gear" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6 5 5M11 11l1.4 1.4M3.6 12.4 5 11M11 5l1.4-1.4"/></symbol>
+<symbol id="i-bill" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h5.5L12 4.5V14H4Z" stroke-linejoin="round"/><path d="M6 7.5h4M6 10.5h3"/></symbol>
+<symbol id="i-receipt" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v12l-2-1.2L8 14l-2-1.2L4 14Z" stroke-linejoin="round"/><path d="M6 6h4M6 9h4"/></symbol>
+<symbol id="i-doc" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h5.5L12 4.5V14H4Z" stroke-linejoin="round"/></symbol>
+<symbol id="i-ask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3h11v8H7l-3 2.5V11H2.5Z" stroke-linejoin="round"/></symbol>
+<symbol id="i-cash" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="4" width="13" height="8"/><circle cx="8" cy="8" r="1.8"/></symbol>
+<symbol id="i-money" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v12M11 4.5H6.7a1.8 1.8 0 0 0 0 3.6h2.6a1.8 1.8 0 0 1 0 3.6H5"/></symbol>
+<symbol id="i-mail" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3.5" width="12" height="9"/><path d="M2 4l6 5 6-5" stroke-linejoin="round"/></symbol>
+<symbol id="i-info" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.8"/><path d="M8 7.2v4M8 4.8v.6"/></symbol>
+<symbol id="i-undo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 3.5 2.5 6.5l3 3"/><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7"/></symbol>
+<symbol id="i-filter" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3.5h11L9.2 8.5v4l-2.4 1.2V8.5Z" stroke-linejoin="round"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3.5" width="11" height="10"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/></symbol>
+<symbol id="i-phone" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="1.8" width="7" height="12.4"/><path d="M7 12h2"/></symbol>
+</defs></svg><!--/SPRITE-->
+<a class="skip" href="#main">Skip to content</a><header class="sheet-top on-dark"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"><span class="eyebrow" style="color:var(--slate)">MeritBooks<span class="sl">//</span>Access &amp; roles</span><nav aria-label="Design system pages"><a href="index.html">Index</a><a href="S13-role-library.html">S13 Roles</a><a href="S14-role-builder.html" aria-current=page>S14 Builder</a><a href="S15-user-access.html">S15 Person</a><a href="S16-client-roles.html">S16 Client roles</a><a href="S17-access-review.html">S17 Review</a></nav></header><main id="main" class="sheet"><div class="board-h"><div><div class="eyebrow">S14<span class="sl">//</span>05-RBAC §6.2 · A2</div><h1 class="t-title" style="margin-top:8px">Build a role, see who it touches before it ships</h1><p>Mike gives the Accounting manager role release on pay runs up to $25,000. The matrix marks every cell against the template it came from; the duties strip catches the payroll conflict before publishing can; the panel holds the limit, the clients, the masking and the sign-in rules. Click any cell, or a <i>Remove</i> button in the red row.</p></div><span class="pg"><span class="tag">Sample data</span>S14.1</span></div><div style="margin-top:16px"><div class="legend" aria-label="Legend"><span><span class="cap cap--sm is-on"><i></i></span>Granted</span><span><span class="cap cap--sm"><i></i></span>Not granted</span><span><span class="cap cap--sm is-on is-lim"><i></i></span>Granted with a limit</span><span><span class="cap cap--sm is-set"><i></i></span>From a permission set</span><span><span class="cap cap--sm is-muted"><i></i></span>Muted on this assignment</span><span><span class="cap cap--sm is-on" data-delta="add"><i></i></span>Added vs template</span><span><span class="cap cap--sm" data-delta="rem"><i></i></span>Removed vs template</span><span><span class="cap cap--sm is-on is-hard"><i></i></span>Hard conflict</span><span><span class="cap cap--sm is-on is-soft"><i></i></span>Soft conflict</span><span><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-money"/></svg>Moves money</span><span><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-eye-off"/></svg>Sensitive fields</span><span><svg class="ico" width="14" height="14" aria-hidden="true"><use href="#i-lock"/></svg>Re-verify to use</span></div></div><div class="frame" id="f1" style="height:1180px"><div class="app app--frame app--mini density-cockpit" data-context="workspace">
+<aside class="rail" aria-label="Primary (collapsed)"><div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24" style="height:16px"></div><nav class="rail-nav" style="padding-top:12px"><a class="rail-icon" href="#" aria-label="Home" title="Home"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-home"/></svg></a><a class="rail-icon" href="#" aria-label="Inbox · 6" title="Inbox · 6"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-inbox"/></svg></a><a class="rail-icon" href="#" aria-label="Clients" title="Clients"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-building"/></svg></a><a class="rail-icon" href="#" aria-label="Work" title="Work"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-work"/></svg></a><a class="rail-icon" href="#" aria-label="Team" title="Team"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-users"/></svg></a><a class="rail-icon" href="#" aria-label="Consolidations" title="Consolidations"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-layers"/></svg></a><a class="rail-icon" href="#" aria-label="Insights" title="Insights"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-chart"/></svg></a><a class="rail-icon" href="#" aria-label="Integrations" title="Integrations"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-plug"/></svg></a><a class="rail-icon" href="#" aria-label="Settings" title="Settings" aria-current=page><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-gear"/></svg></a></nav><div class="rail-foot" style="padding:16px 0;display:grid;place-items:center"><span class="avatar" title="Mike Heilman">MH</span></div></aside>
+<header class="bar"><button class="ctx" type="button" aria-haspopup="dialog" aria-expanded="false"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-grid"/></svg><span class="ctx-name">Merit Management Group</span><span class="ctx-meta">Workspace</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg><span class="kbd">⌘J</span></button><span class="crumbs">Settings<span class="sl">//</span>Access &amp; roles<span class="sl">//</span><b>Accounting manager</b></span><button class="cmdk" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><span>Jump to client, person, role…</span><span class="kbd">⌘K</span></button><span class="sync"><i aria-hidden="true"></i>Synced 9:12 AM</span></header>
+<main class="main"><div class="ctxline"><span>Roles</span><span class="sl">//</span><span>Accounting manager</span><span class="sl">//</span><span id="ctx-saved">Draft v6 saved 9:04 AM</span><span class="sl">//</span><b id="ctx-sod">1 conflict blocks publishing</b><span class="sp"></span><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-log"/></svg>Access log</button></div>
+<div class="b-main"><div class="b-head"><div style="min-width:0">
+<div class="eyebrow">Tenant role<span class="sl">//</span>Accounting manager<span class="sl">//</span>firm label “Practice manager”</div>
+<h1 class="t-title" style="margin-top:4px">Accounting manager</h1>
+<p class="desc">Runs the close across assigned clients, reviews bookkeepers’ work, approves bills and pay runs inside a limit, and hands out client access within their own.</p>
+<div class="meta"><span class="lvl lvl--tenant">Tenant · Merit Management Group</span><span class="tag">Standard · modified</span><span class="tag">Internal staff</span>
+<span class="t-cap">Based on <a class="link" href="#">Accounting manager · template v4</a></span><span class="tag tag--ai">Template v5 available</span>
+<span class="t-cap">·</span><span class="tag tag--solid">v5 published Oct 2</span><span class="tag tag--warn" id="draft-tag">Draft v6 · 4 changes</span>
+<a class="link" href="#" style="font-size:12px">3 people · 13 clients</a></div></div>
+<div class="btn-row" style="flex-wrap:nowrap;flex:none"><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-history"/></svg>Versions</button><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-cols"/></svg>Compare</button>
+<button class="btn" type="button" id="save">Save draft</button><button class="btn btn--primary" type="button" id="publish" aria-disabled="true">Review &amp; publish</button></div></div>
+<div class="b-tabs"><div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="true">Capabilities<span class="n tnum">120</span></button><button class="tab" role="tab" aria-selected="false">Diff<span class="n tnum" id="tab-diff">4</span></button><button class="tab" role="tab" aria-selected="false">People<span class="n tnum">3</span></button><button class="tab" role="tab" aria-selected="false">Version history<span class="n tnum">5</span></button></div></div>
+<div class="b-body"><nav class="doms" aria-label="Domains"><span class="eyebrow">Domains</span><a href="#" data-dom="GL">GL<span class="n tnum"></span></a><a href="#" data-dom="Close">Close<span class="n tnum"></span></a><a href="#" data-dom="Bank">Bank<span class="n tnum"></span></a><a href="#" data-dom="Cards">Cards<span class="n tnum"></span></a><a href="#" data-dom="AP">AP<span class="n tnum"></span></a><a href="#" data-dom="Payments">Payments<span class="n tnum"></span></a><a href="#" data-dom="Expenses">Expenses<span class="n tnum"></span></a><a href="#" data-dom="AR">AR<span class="n tnum"></span></a><a href="#" data-dom="Rev rec">Rev rec<span class="n tnum"></span></a><a href="#" data-dom="Jobs">Jobs<span class="n tnum"></span></a><a href="#" data-dom="Inventory">Inventory<span class="n tnum"></span></a><a href="#" data-dom="Assets">Assets<span class="n tnum"></span></a><a href="#" data-dom="Debt">Debt<span class="n tnum"></span></a><a href="#" data-dom="Cash">Cash<span class="n tnum"></span></a><a href="#" data-dom="Payroll">Payroll<span class="n tnum"></span></a><a href="#" data-dom="Tax">Tax<span class="n tnum"></span></a><a href="#" data-dom="FP&A">FP&amp;A<span class="n tnum"></span></a><a href="#" data-dom="Reports">Reports<span class="n tnum"></span></a><a href="#" data-dom="Consolidation">Consolidation<span class="n tnum"></span></a><a href="#" data-dom="Controls">Controls<span class="n tnum"></span></a><a href="#" data-dom="Masters">Masters<span class="n tnum"></span></a><a href="#" data-dom="Requests">Requests<span class="n tnum"></span></a><a href="#" data-dom="Onboarding">Onboarding<span class="n tnum"></span></a><a href="#" data-dom="Integrations">Integrations<span class="n tnum"></span></a><a href="#" data-dom="AI">AI<span class="n tnum"></span></a><a href="#" data-dom="Workspace">Workspace<span class="n tnum"></span></a><a href="#" data-dom="Access">Access<span class="n tnum"></span></a><a href="#" data-dom="Tenant">Tenant<span class="n tnum"></span></a><span class="eyebrow">Not in your plan</span><p class="off">Projects (module 2). Its capabilities appear here once Merit adds it.</p></nav>
+<div class="mx"><div id="sod" class="sod" aria-live="polite"></div>
+<div class="mx-tools"><label class="search"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><input id="mx-q" placeholder="Find a capability, e.g. release a payment" aria-label="Find a capability"></label>
+<label class="switch"><input type="checkbox" id="mx-chg"><i></i>Changes vs template only</label><span class="sp"></span>
+<span class="t-cap" id="mx-count"></span></div>
+<div class="mx-scroll" id="mx-scroll"><table class="tbl capm" id="mx"><colgroup><col><col style="width:104px"><col class="c-act" style="width:56px"><col class="c-act" style="width:56px"><col class="c-act" style="width:56px"><col class="c-act" style="width:56px"><col class="c-act" style="width:56px"><col class="c-act" style="width:56px"><col class="c-act" style="width:56px"><col class="c-act" style="width:56px"><col class="c-act" style="width:56px"></colgroup></table></div></div>
+<aside class="panel b-panel" aria-label="Scope and constraints">
+<div class="panel-head"><div class="eyebrow">Scope &amp; constraints</div>
+<div class="sel-h" style="margin-top:8px"><span class="cap is-on is-lim cap--sm" id="sel-glyph"><i></i></span><span class="t-head" id="sel-name">Pay runs · Release</span><svg class="ico" width="14" height="14" role="img" aria-label="Moves money"><use href="#i-money"/></svg><svg class="ico" width="14" height="14" role="img" aria-label="Re-verify to use"><use href="#i-lock"/></svg></div>
+<p class="t-cap" id="sel-note" style="margin-top:4px">Added in this draft. Not in template v4.</p></div>
+<div class="panel-body">
+<section class="panel-sec" id="sec-lim"><div class="panel-sec-h"><h3>Dollar limit</h3><span class="t-cap">this capability</span></div>
+<div class="lim2"><label class="field"><span class="field-label">Per pay run</span><input class="input input--money" id="lim-item" value="25,000.00" inputmode="decimal"></label>
+<label class="field" id="lim-day-f"><span class="field-label">Per day, per client</span><input class="input input--money" id="lim-day" value="60,000.00" inputmode="decimal"></label></div>
+<p class="field-help" style="margin-top:8px">Over the limit, the button reads “Release up to your limit → route to Nora Lindqvist”. Your own limit is unlimited, so you can set any amount.</p>
+<p class="t-cap" style="margin-top:8px">Pay runs don’t take document-type, department or ownership limits.</p>
+<div class="inline-notice" style="margin-top:12px"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-lock"/></svg><div>Releasing always asks for a fresh sign-in check within 10 minutes. Platform rule; can’t be turned off.</div></div>
+<div class="btn-row" style="margin-top:12px"><button class="btn btn--danger" type="button" id="sel-remove">Remove this grant</button></div></section>
+<section class="panel-sec"><div class="panel-sec-h"><h3>Which clients</h3><span class="t-cap">default when assigned</span></div>
+<div class="seg" role="group" aria-label="Default scope"><button type="button" aria-pressed="true">Assigned clients</button><button type="button" aria-pressed="false">All clients</button><button type="button" aria-pressed="false">A client set</button></div>
+<p class="field-help" style="margin-top:8px">Each client is one legal entity. A subsidiary is its own client; seeing a parent never shows its subsidiaries.</p></section>
+<section class="panel-sec"><div class="panel-sec-h"><h3>Departments &amp; jobs</h3></div>
+<label class="field"><span class="sr">Department restriction</span><select class="select"><option selected>No restriction</option><option>Their departments · edit only</option><option>Their departments · see and edit</option><option>Chosen jobs…</option></select></label></section>
+<section class="panel-sec"><div class="panel-sec-h"><h3>Sensitive fields</h3><span class="t-cap">assignments can only tighten</span></div>
+<dl class="pol"><dt>Pay rates &amp; payroll lines</dt><dd><select class="select" aria-label="Pay rates"><option>Hidden</option><option selected>Grouped</option><option>Visible</option></select></dd>
+<dt>SSN and TIN</dt><dd><select class="select" aria-label="SSN and TIN"><option>Hidden</option><option selected>Last 4</option><option>Reveal, logged</option><option>Visible</option></select></dd>
+<dt>Bank &amp; routing numbers</dt><dd><select class="select" aria-label="Bank numbers"><option>Hidden</option><option selected>Last 4</option><option>Reveal, logged</option><option>Visible</option></select></dd>
+<dt>Home address, birth date</dt><dd><select class="select" aria-label="Personal details"><option selected>Hidden</option><option>Visible</option></select></dd></dl></section>
+<section class="panel-sec"><div class="panel-sec-h"><h3>Time box</h3></div>
+<dl class="pol"><dt>Longest assignment</dt><dd><select class="select" aria-label="Longest assignment"><option selected>No limit</option><option>90 days</option><option>120 days</option><option>365 days</option></select></dd></dl></section>
+<section class="panel-sec"><div class="panel-sec-h"><h3>Sign-in</h3></div>
+<label class="switch"><input type="checkbox" checked disabled><i></i>Two-step sign-in required</label>
+<p class="field-help">Locked on: this role can approve money.</p>
+<dl class="pol" style="margin-top:8px"><dt>Re-verify for release &amp; settings</dt><dd><select class="select" aria-label="Re-verify window"><option>5 min</option><option selected>10 min</option><option>15 min</option></select></dd>
+<dt>Only from these networks</dt><dd><select class="select" aria-label="Network allowlist"><option selected>Any network</option><option>Merit office + VPN</option></select></dd>
+<dt>Session · idle timeout</dt><dd><select class="select" aria-label="Session length"><option selected>12 h · 60 min</option><option>8 h · 30 min</option></select></dd></dl></section>
+<section class="panel-sec"><div class="panel-sec-h"><h3>Who can assign it</h3></div>
+<label class="field"><span class="sr">Assignable by</span><select class="select"><option>Tenant admins only</option><option selected>Tenant admins and managers</option><option>Anyone who can grant access</option></select></label>
+<p class="field-help" style="margin-top:8px">Audience: internal staff. Fixed after the first publish.</p></section>
+</div></aside></div></div></main></div></div><div class="frame-cap"><span>Builder · app rail collapsed to 64px so the matrix gets 840px. Cells that don’t apply to a resource are absent, not greyed.</span><span>Live: cells, presets, search, changes-only, removing a conflict, Save draft</span></div><div class="anno"><div><b>Shape, not colour</b><p>Filled means granted; the cut corner means a limit sits on it; the small square top right marks a change from the template. Each reads in greyscale.</p></div><div><b>Hard blocks, soft asks</b><p>S4 is hard for firms, so Publish stays off and the row names both cells with a fix for each. Soft rules ask for one justification at publish.</p></div><div><b>Already-known conflicts stay quiet</b><p>S5 was in v5 with exceptions on file, so it sits in a grey row and doesn’t nag.</p></div><div><b>Limits live on the grant</b><p>The panel opens on the cell you click and only offers constraints that capability supports.</p></div></div><div class="pair-h"><h2 class="t-section">Diff</h2><span class="t-cap">Published ↔ draft ↔ latest template, differences only</span></div><div class="frame" style="height:760px"><div class="app app--frame app--mini density-cockpit" data-context="workspace">
+<aside class="rail" aria-label="Primary (collapsed)"><div class="rail-logo"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24" style="height:16px"></div><nav class="rail-nav" style="padding-top:12px"><a class="rail-icon" href="#" aria-label="Home" title="Home"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-home"/></svg></a><a class="rail-icon" href="#" aria-label="Inbox · 6" title="Inbox · 6"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-inbox"/></svg></a><a class="rail-icon" href="#" aria-label="Clients" title="Clients"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-building"/></svg></a><a class="rail-icon" href="#" aria-label="Work" title="Work"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-work"/></svg></a><a class="rail-icon" href="#" aria-label="Team" title="Team"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-users"/></svg></a><a class="rail-icon" href="#" aria-label="Consolidations" title="Consolidations"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-layers"/></svg></a><a class="rail-icon" href="#" aria-label="Insights" title="Insights"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-chart"/></svg></a><a class="rail-icon" href="#" aria-label="Integrations" title="Integrations"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-plug"/></svg></a><a class="rail-icon" href="#" aria-label="Settings" title="Settings" aria-current=page><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-gear"/></svg></a></nav><div class="rail-foot" style="padding:16px 0;display:grid;place-items:center"><span class="avatar" title="Mike Heilman">MH</span></div></aside>
+<header class="bar"><button class="ctx" type="button" aria-haspopup="dialog" aria-expanded="false"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-grid"/></svg><span class="ctx-name">Merit Management Group</span><span class="ctx-meta">Workspace</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg><span class="kbd">⌘J</span></button><span class="crumbs">Settings<span class="sl">//</span>Access &amp; roles<span class="sl">//</span><b>Accounting manager</b></span><button class="cmdk" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><span>Jump to client, person, role…</span><span class="kbd">⌘K</span></button><span class="sync"><i aria-hidden="true"></i>Synced 9:12 AM</span></header>
+<main class="main"><div class="ctxline"><span>Roles</span><span class="sl">//</span><span>Accounting manager</span><span class="sl">//</span><span>Draft v6</span></div>
+<div class="b-main"><div class="b-head"><div style="min-width:0">
+<div class="eyebrow">Tenant role<span class="sl">//</span>Accounting manager<span class="sl">//</span>firm label “Practice manager”</div>
+<h1 class="t-title" style="margin-top:4px">Accounting manager</h1>
+<p class="desc">Runs the close across assigned clients, reviews bookkeepers’ work, approves bills and pay runs inside a limit, and hands out client access within their own.</p>
+<div class="meta"><span class="lvl lvl--tenant">Tenant · Merit Management Group</span><span class="tag">Standard · modified</span><span class="tag">Internal staff</span>
+<span class="t-cap">Based on <a class="link" href="#">Accounting manager · template v4</a></span><span class="tag tag--ai">Template v5 available</span>
+<span class="t-cap">·</span><span class="tag tag--solid">v5 published Oct 2</span><span class="tag tag--warn">Draft v6 · 3 changes</span>
+<a class="link" href="#" style="font-size:12px">3 people · 13 clients</a></div></div>
+<div class="btn-row" style="flex-wrap:nowrap;flex:none"><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-history"/></svg>Versions</button><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-cols"/></svg>Compare</button>
+<button class="btn" type="button">Save draft</button><button class="btn btn--primary" type="button" >Review &amp; publish</button></div></div>
+<div class="b-tabs"><div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="false">Capabilities<span class="n tnum">120</span></button><button class="tab" role="tab" aria-selected="true">Diff<span class="n tnum">7</span></button><button class="tab" role="tab" aria-selected="false">People<span class="n tnum">3</span></button><button class="tab" role="tab" aria-selected="false">Version history<span class="n tnum">5</span></button></div></div>
+<div style="padding:16px 32px 24px;overflow:auto">
+<div class="row" style="gap:16px;margin-bottom:12px"><div class="seg" role="group" aria-label="Compare"><button type="button" aria-pressed="true">Published ↔ draft ↔ latest template</button><button type="button" aria-pressed="false">Draft ↔ template v4</button></div><span class="sp"></span><span class="t-cap">Differences only. Same order as the matrix.</span><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-download"/></svg>Export</button></div>
+<table class="diff" id="diff"><colgroup><col style="width:180px"><col><col style="width:220px"><col style="width:252px"><col style="width:220px"><col style="width:160px"></colgroup>
+<thead><tr><th>Domain</th><th>Capability</th><th>Published v5</th><th>Draft v6</th><th>Template v5 · Oct 14</th><th></th></tr></thead><tbody></tbody></table>
+<p class="t-cap" style="margin-top:12px">Template v5 also moved “Connect bank and card feeds” to Tenant admin. Your draft already matches it, so adopting v5 now would add one thing: posting sales tax.</p>
+</div></div></main></div></div><div class="frame-cap"><span>Three-way diff after payroll release is removed. “Adopt” pulls one change from the new template into the draft.</span><span>S14.2</span></div><div class="pair-h"><h2 class="t-section">Review &amp; publish</h2><span class="t-cap">People affected, justification, second approver</span></div><div class="frame" id="f3" style="height:1140px"><div class="pubwrap"><div class="dialog pub" role="dialog" aria-modal="true" aria-labelledby="pub-h">
+<div class="dialog-head"><div class="eyebrow">Accounting manager<span class="sl">//</span>v5 → v6</div><h3 class="t-section" id="pub-h" style="margin-top:4px">Review and publish v6</h3></div>
+<div class="pub-grid"><div class="pub-main">
+<h4>What changes</h4>
+<ul class="chg"><li><span class="pm pos">+</span><span><span class="l1">Release pay runs</span><span class="l2">≤ $25,000 a run · $60,000 a day per client</span></span><span class="tag tag--warn">3 soft conflicts</span></li>
+<li><span class="pm">~</span><span><span class="l1">Approve bills</span><span class="l2">limit $25,000 → $35,000</span></span><span></span></li>
+<li><span class="pm neg">−</span><span><span class="l1">Connect bank and card feeds</span><span class="l2">matches template v5; Tenant admin keeps it</span></span><span></span></li></ul>
+<h4>People affected<span class="t-cap" style="text-transform:none;letter-spacing:0;margin-left:8px;font-weight:400">3 people across 13 clients</span></h4>
+<table class="ppl"><colgroup><col style="width:168px"><col style="width:64px"><col><col style="width:120px"></colgroup>
+<thead><tr><th>Person</th><th>Clients</th><th>Gains · loses</th><th>Exceptions</th></tr></thead><tbody>
+<tr><td><span class="l1">Jordan Smith</span><span class="l2">Last active 9:41 AM</span></td><td class="tnum">13</td><td><span class="l1 pos">+ Release ≤ $25k · bills ≤ $35k</span><span class="l2 neg">− Connect feeds · never used</span></td><td><span class="tag tag--warn">S1 · S6 · S7</span></td></tr>
+<tr><td><span class="l1">Grace Whitfield</span><span class="l2">Last active Yesterday</span></td><td class="tnum">5</td><td><span class="l1 pos">+ Release ≤ $25k · bills ≤ $35k</span><span class="l2 neg">− Connect feeds · never used</span></td><td><span class="tag tag--warn">S1 · S6 · S7</span></td></tr>
+<tr><td><span class="l1">Owen Pratt</span><span class="l2">Last active 8:15 AM</span></td><td class="tnum">4</td><td><span class="l1 pos">+ Release ≤ $25k · bills ≤ $35k</span><span class="l2 warn">− Connect feeds · used 6 days ago</span></td><td><span class="tag tag--warn">S1 · S6 · S7</span></td></tr>
+<tr class="more"><td colspan="4">Owen connected Metro Heating &amp; Cooling’s new Ramp account on Oct 13. After this, he’ll need to ask a tenant admin. He’s told when v6 goes live.</td></tr></tbody></table>
+<h4>Justification for the soft conflicts</h4>
+<div class="grid-12" style="row-gap:8px"><label class="field" style="grid-column:span 7"><span class="field-label">Why managers need release · attached to 9 exceptions</span><textarea class="textarea" rows="2">Covers small vendor runs when Nora is out. Bigger runs still go to her.</textarea></label>
+<label class="field" style="grid-column:span 5"><span class="field-label">Compensating control</span><textarea class="textarea" rows="2">Nora reviews the release report every Friday.</textarea></label></div>
+<p class="field-help" style="margin-top:6px">Exceptions expire Oct 19, 2027 and come up in every access review until then.</p>
+<h4>When</h4>
+<div class="when" role="radiogroup" aria-label="When"><label class="opt-card"><input type="radio" name="when" checked><span class="t-head">After approval</span><p>Goes live the moment the second approver says yes.</p></label>
+<label class="opt-card"><input type="radio" name="when"><span class="t-head">On a date</span><p>Schedule for Nov 2, start of the October close.</p></label></div>
+<label class="field" style="margin-top:12px"><span class="field-label">Reason · required, shown in the access log</span><textarea class="textarea" rows="2" id="pub-reason">Managers release vendor runs up to $25k so Clive and Swan Creek don’t wait on Nora’s travel days.</textarea></label>
+<div class="inline-notice inline-notice--info" style="margin-top:12px"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-shield"/></svg><div><b>This needs a second approver.</b> It adds a way to move money. Nora Lindqvist (CFO) or Erin Vance (Controller) can approve; you can’t approve your own change.</div></div>
+<div class="prog" id="pub-prog" hidden><span class="meter meter--lg" role="img" aria-label="Waiting for approval"><i class="on"></i><i class="cur"></i><i></i></span><span><b>Sent to Nora Lindqvist</b> · access rebuilds for 3 people once she approves (about 10 seconds)</span></div>
+</div>
+<aside class="pub-side" aria-labelledby="vh"><h4 id="vh">Version history</h4>
+<ul class="versions"><li><span class="vno">6</span><span><span class="b">Draft</span><span class="l2">Today · Mike Heilman</span></span><span class="tag tag--ai">This</span></li>
+<li class="is-current"><span class="vno">5</span><span><span class="b">Current</span><span class="l2">Oct 2 · bills limit to $25k</span></span><span></span></li>
+<li><span class="vno">4</span><span><span class="b">Sep 3</span><span class="l2">Can publish dashboards</span></span><button class="btn btn--quiet" type="button">Restore</button></li>
+<li><span class="vno">3</span><span><span class="b">Aug 14</span><span class="l2">Write-off approval off</span></span><button class="btn btn--quiet" type="button">Restore</button></li>
+<li><span class="vno">1</span><span><span class="b">Aug 1</span><span class="l2">Cloned from template v4</span></span><button class="btn btn--quiet" type="button">Restore</button></li></ul>
+<p class="t-cap" style="margin-top:12px">Restoring publishes the old grants as a new version. Nothing is deleted.</p>
+<h4 style="margin-top:24px">Checks</h4>
+<ul class="why"><li><b>No hard conflicts.</b> Payroll release was removed.</li><li><b>Within the catalog.</b> Every capability is in your plan.</li><li class="against"><b>Doesn’t widen your access.</b> You don’t hold this role.</li></ul>
+</aside></div>
+<div class="dialog-foot"><span class="t-cap" id="pub-sum">3 changes · 3 people · 9 exceptions · after approval</span><span class="sp"></span><button class="btn" type="button">Back to draft</button><button class="btn btn--primary" type="button" id="pub-go">Send v6 for approval</button></div>
+</div></div></div><div class="frame-cap"><span>Dialog 960px. Per-person gains and losses, the one warning that matters (Owen used what he’s losing), and why a second person must say yes.</span><span>S14.3 · press Send to see the waiting state</span></div></main><div class="toast-region" aria-live="polite" id="toasts"></div>
+<script>
+window.mbToast=function(msg,undo){
+  var r=document.getElementById('toasts');r.innerHTML='';
+  var t=document.createElement('div');t.className='toast';t.setAttribute('role','status');
+  t.innerHTML='<span class="toast-mark"></span><span></span>';t.children[1].textContent=msg;
+  if(undo){var b=document.createElement('button');b.className='btn btn--quiet';b.type='button';b.innerHTML='Undo<span class="kbd">⌘</span><span class="kbd">Z</span>';
+    b.onclick=function(){undo();r.innerHTML=''};t.appendChild(b);}
+  r.appendChild(t);clearTimeout(window.__tt);window.__tt=setTimeout(function(){r.innerHTML=''},6000);
+};
+document.querySelectorAll('[data-scroll-current]').forEach(function(n){var c=n.querySelector('[aria-current=page]');if(c){n.scrollTop=Math.max(0,c.offsetTop-n.clientHeight/2)}});
+</script>
+<script>
+window.MB={"actions":[["V","View"],["C","Create"],["E","Edit"],["D","Delete"],["A","Approve"],["P","Post"],["R","Release"],["X","Export"],["K","Configure"]],"catalog":[["GL","General ledger",[["gl.accounts","Chart of accounts","VCEDAXK",""],["gl.journal_entries","Journal entries","VCEDAPX",""],["gl.recurring_entries","Recurring entries","VCEDAP",""],["gl.periods","Periods","VEAK",""],["gl.period_override","Post to a soft-closed period","P","L"],["gl.reporting_basis","Cash and tax basis adjustments","VCEP",""],["gl.dimensions","Departments, classes, items","VCEDK",""],["gl.year_end","Year-end close","VP",""],["gl.intercompany","Intercompany","VCEAP",""],["gl.internal_invoices","Internal invoices","VCEAPR",""],["gl.posted_edit","Edit posted records","E","L"]]],["Close","Close",[["close.checklist","Close checklist","VEAK",""],["close.package","Client close packet","VXR",""]]],["Bank","Bank",[["bank.connections","Bank connections","VCDK","S"],["bank.transactions","Bank transactions","VEAX",""],["bank.rules","Coding rules","VCED",""],["bank.statements","Statements","VC",""],["bank.reconciliations","Reconciliations","VCEAX",""],["bank.transfers","Transfers","VCAR","M"]]],["Cards","Cards",[["cards.transactions","Card transactions","VEAX",""],["cards.ramp_sync","Ramp sync","VK",""]]],["AP","Bills & purchasing",[["ap.bills","Bills","VCEDAPX",""],["ap.vendor_credits","Vendor credits","VCAP",""],["ap.purchase_orders","Purchase orders","VCEDA",""],["ap.policy","AP policy","VK",""]]],["Payments","Payments",[["pay.batches","Pay runs","VCEARX","M"],["pay.checks","Checks","VCEP",""],["pay.customer_payments","Customer payments","VCEP",""],["pay.refunds","Refunds","VCAR","M"],["pay.vendor_bank_details","Vendor bank details","VE","SL"],["pay.provider_connections","Payment provider setup","VK","L"]]],["Expenses","Expenses",[["exp.receipts","Receipts","VCEDA",""],["exp.reports","Expense reports","VCEA",""],["exp.reimbursements","Reimbursements","VCAR","M"],["exp.policy","Expense policy","VK",""]]],["AR","Invoices & collections",[["ar.invoices","Invoices","VCEDAPRX",""],["ar.credit_memos","Credit memos","VCAP",""],["ar.write_offs","Write-offs","VCAP",""],["ar.estimates","Estimates","VCEDR",""],["ar.deposits","Customer deposits","VCP",""],["ar.recurring","Recurring invoices","VCED",""],["ar.collections","Collections","VER",""],["ar.statements","Customer statements","VR",""],["ar.payment_links","Pay Now links","VK",""]]],["Rev rec","Revenue recognition",[["revrec.methods","Methods by job","VEK",""],["revrec.runs","Recognition runs","VCP",""],["revrec.schedules","Schedules","VX",""]]],["Jobs","Jobs",[["jobs.jobs","Jobs and cost codes","VCED",""],["jobs.change_orders","Change orders","VCA",""],["jobs.wip","WIP schedule","VEPX",""]]],["Inventory","Inventory",[["inv.items","Items","VCED",""],["inv.movements","Movements","VCAP",""],["inv.valuation","Valuation","VPK",""]]],["Assets","Assets, leases, prepaids",[["fa.assets","Fixed assets","VCEDP",""],["fa.leases","Leases","VCEP",""],["fa.prepaids","Prepaids","VCEP",""]]],["Debt","Debt & covenants",[["debt.loans","Loans","VCEP",""],["debt.covenants","Covenants","VEK",""],["debt.certificates","Compliance certificates","VCAR",""],["debt.borrowing_base","Borrowing base","VCAR",""]]],["Cash","Cash",[["cash.position","Cash position","V",""],["cash.forecast","Forecast","VCE",""],["cash.obligations","Renewals and subscriptions","VCE",""]]],["Payroll","Payroll",[["payroll.runs","Payroll runs","VCEAR","M"],["payroll.register","Payroll register","VCP",""],["payroll.employees","Employee records","VCE","S"],["payroll.remittances","Remittances","VCR","M"],["payroll.settings","Payroll settings","VK",""]]],["Tax","Tax",[["tax.sales_tax","Sales tax","VEPK",""],["tax.filings","Filings","VCAR",""],["tax.1099","1099s","VCEX","S"],["tax.provision","Tax provision","VCEP",""]]],["FP&A","Budgets & planning",[["fpa.budgets","Budgets","VCEAX",""],["fpa.scenarios","Scenarios","VCE",""],["fpa.profitability","Profitability","VX",""]]],["Reports","Reports",[["reports.financial","Financial reports","VX",""],["reports.saved_views","Saved views","VCED",""],["reports.packs","Report packs","VCER",""],["reports.board_package","Board package","VCAR",""]]],["Consolidation","Consolidation",[["consol.groups","Groups","VCEDK",""],["consol.statements","Consolidated statements","VX",""],["consol.eliminations","Group adjustments","VCP",""]]],["Controls","Controls & audit",[["ctl.exceptions","Exceptions","VEA",""],["ctl.approval_workflows","Approval workflows","VK",""],["ctl.compliance","Compliance","VEA",""],["ctl.vendor_compliance","W-9 and COI","VEA",""],["ctl.pbc","Auditor requests","VCEA",""],["ctl.audit_trail","Audit trail","VX",""],["ctl.ai_decisions","AI decision log","VX",""]]],["Masters","Vendors & customers",[["mdm.vendors","Vendors","VCED",""],["mdm.customers","Customers","VCED",""],["mdm.items","Products and services","VCED",""]]],["Requests","Requests & portals",[["docs.documents","Documents","VCDX",""],["req.client_requests","Client requests","VCER",""],["portal.customer","Customer portal","VKR",""],["portal.vendor","Vendor portal","VKR",""]]],["Onboarding","Onboarding",[["onb.clients","Clients","VCED",""],["onb.wizard","Setup wizard","VE",""],["onb.imports","Imports","VCP",""],["onb.conversion","Conversion tie-out","VAP",""]]],["Integrations","Integrations",[["int.connections","Connections","VCDK","L"],["int.api_keys","API keys","VCD","L"],["int.sync_runs","Sync runs","VE",""]]],["AI","AI & automation",[["ai.assist","Assistant","V",""],["ai.agents","Agents","VCK",""],["ai.autonomy","Autonomy dial","VK","L"]]],["Workspace","Workspace",[["home.workspace","Workspace home","V",""],["ws.client_health","Client health","V",""],["ws.assignments","Capacity assignments","VCED",""]]],["Access","Access",[["core.access.members","Members","VCED",""],["core.access.roles","Roles","VCEDK","L"],["core.access.assignments","Grant access","VCED","L"],["core.access.reviews","Access reviews","VCAX",""],["core.access.simulate","View as","V",""],["core.access.sod_policy","Duties policy","VK","L"]]],["Tenant","Tenant settings",[["core.tenant.settings","Security and branding","VK","L"],["core.tenant.accounting_settings","Accounting settings","VK",""],["core.tenant.billing","Plan and billing","VK",""],["core.tenant.dashboard_layouts","Dashboard layouts","VK",""],["core.tenant.export","Full export","X","L"]]]],"sod":[{"id":"S1","need":["pay.batches:C","pay.batches:A","pay.batches:R"],"hard":false,"t":"Whole payment chain in one person","w":"Builds, approves and releases the same pay run."},{"id":"S2","need":["pay.vendor_bank_details:E","pay.batches:R"],"hard":true,"t":"Change bank details, then pay","w":"Hard for firms. Can edit where money goes and send it."},{"id":"S4","need":["payroll.employees:E","payroll.runs:R"],"hard":true,"t":"Change pay, then release payroll","w":"Hard for firms. Can edit a rate or bank account and release the run."},{"id":"S5","need":["gl.journal_entries:P","gl.periods:E"],"hard":false,"t":"Reopen a period and post into it","w":"Posting into a reopened period without oversight."},{"id":"S6","need":["core.access.assignments:C","@release_money"],"hard":false,"t":"Grants access and releases money","w":"Two admins could grant each other release."},{"id":"S7","need":["mdm.vendors:C","ap.bills:A","pay.batches:R"],"hard":false,"t":"Create a vendor, approve its bill, pay it","w":"The fictitious-vendor chain."},{"id":"S8","need":["ai.autonomy:K","pay.batches:R"],"hard":false,"t":"Turns on auto-actions and releases","w":"Enabling automation on what one releases."}]};
+Object.assign(MB,{"v5":{"gl.accounts":"VCEDAX","gl.journal_entries":"VCEDAPX","gl.recurring_entries":"VCEDAP","gl.periods":"VE","gl.reporting_basis":"VCEP","gl.dimensions":"VCED","gl.year_end":"V","gl.intercompany":"VCEAP","gl.internal_invoices":"VCEAP","close.checklist":"VEA","close.package":"VXR","bank.connections":"VC","bank.transactions":"VEAX","bank.rules":"VCED","bank.statements":"VC","bank.reconciliations":"VCEAX","bank.transfers":"VC","cards.transactions":"VEAX","cards.ramp_sync":"V","ap.bills":"VCEDAPX","ap.vendor_credits":"VCAP","ap.purchase_orders":"VCEDA","ap.policy":"V","pay.batches":"VCEAX","pay.checks":"VCE","pay.customer_payments":"VCEP","pay.refunds":"VCA","pay.vendor_bank_details":"V","pay.provider_connections":"V","exp.receipts":"VCEDA","exp.reports":"VCEA","exp.reimbursements":"VCA","exp.policy":"V","ar.invoices":"VCEDAPRX","ar.credit_memos":"VCAP","ar.write_offs":"VC","ar.estimates":"VCEDR","ar.deposits":"VCP","ar.recurring":"VCED","ar.collections":"VER","ar.statements":"VR","ar.payment_links":"V","revrec.methods":"VE","revrec.runs":"VCP","revrec.schedules":"VX","jobs.jobs":"VCED","jobs.change_orders":"VCA","jobs.wip":"VEPX","inv.items":"VCED","inv.movements":"VCA","inv.valuation":"V","fa.assets":"VCEDP","fa.leases":"VCEP","fa.prepaids":"VCEP","debt.loans":"VCE","debt.covenants":"VE","debt.certificates":"VC","debt.borrowing_base":"VC","cash.position":"V","cash.forecast":"VCE","cash.obligations":"VCE","payroll.runs":"VCEA","payroll.register":"VCP","payroll.employees":"VCE","payroll.remittances":"VC","payroll.settings":"V","tax.sales_tax":"VE","tax.filings":"VC","tax.1099":"VCEX","tax.provision":"VCE","fpa.budgets":"V","fpa.scenarios":"V","fpa.profitability":"VX","reports.financial":"VX","reports.saved_views":"VCED","reports.packs":"VCER","reports.board_package":"V","ctl.exceptions":"VEA","ctl.approval_workflows":"V","ctl.compliance":"VE","ctl.vendor_compliance":"VEA","ctl.pbc":"VCEA","ctl.audit_trail":"VX","ctl.ai_decisions":"VX","mdm.vendors":"VCED","mdm.customers":"VCED","mdm.items":"VCED","docs.documents":"VCDX","req.client_requests":"VCER","portal.customer":"VR","portal.vendor":"VR","onb.clients":"VCE","onb.wizard":"VE","onb.imports":"VCP","onb.conversion":"VAP","int.connections":"VC","int.sync_runs":"VE","ai.assist":"V","ai.agents":"VC","ai.autonomy":"V","home.workspace":"V","ws.client_health":"V","ws.assignments":"VCED","core.access.members":"VCE","core.access.roles":"V","core.access.assignments":"VCED","core.access.reviews":"VA","core.access.simulate":"V","core.access.sod_policy":"V","core.tenant.settings":"V","core.tenant.accounting_settings":"V","core.tenant.dashboard_layouts":"VK"},"p4":{"ar.write_offs":"VCAP","core.tenant.dashboard_layouts":"V"},"p5":{"ar.write_offs":"VCAP","tax.sales_tax":"VEP","int.connections":"V","core.tenant.dashboard_layouts":"V"},"pd":{"pay.batches":"VCEARX","payroll.runs":"VCEAR","int.connections":"V"},"limV5":{"ap.bills:A":"≤ $25,000","gl.journal_entries:P":"≤ $25,000","pay.batches:A":"≤ $25,000","payroll.runs:A":"≤ $40,000","exp.reports:A":"≤ $5,000"},"limDraft":{"ap.bills:A":"≤ $35,000","gl.journal_entries:P":"≤ $25,000","pay.batches:A":"≤ $25,000","payroll.runs:A":"≤ $40,000","exp.reports:A":"≤ $5,000","pay.batches:R":"≤ $25,000 · $60,000 a day"}});
+MB.tpl4=Object.assign({},MB.v5,MB.p4);MB.tpl5=Object.assign({},MB.v5,MB.p5);MB.draft=Object.assign({},MB.v5,MB.pd);
+
+window.MBM=(function(){
+  var A=MB.actions,CAT={},ORDER=[];
+  MB.catalog.forEach(function(d){d[2].forEach(function(r){CAT[r[0]]={dom:d[0],domL:d[1],label:r[1],acts:r[2],flags:r[3]};ORDER.push(r[0]);});});
+  var AN={};A.forEach(function(a){AN[a[0]]=a[1]});
+  function has(g,cap){var p=cap.split(':');return (g[p[0]]||'').indexOf(p[1])>-1}
+  function relMoney(g){return Object.keys(g).some(function(k){return CAT[k]&&CAT[k].flags.indexOf('M')>-1&&(g[k]||'').indexOf('R')>-1})}
+  function sodHits(g){return MB.sod.filter(function(r){return r.need.every(function(n){return n==='@release_money'?relMoney(g):has(g,n)})})}
+  function capName(cap){var p=cap.split(':');if(p[0]==='@release_money')return 'Any money release';var c=CAT[p[0]];return c.label+': '+AN[p[1]]}
+  function norm(s,acts){return acts.split('').filter(function(c){return s.indexOf(c)>-1}).join('')}
+  var PRESETS={None:'',View:'VX',Prepare:'VCED',Approve:'VA',Full:'VCEDAPRXK'};
+  function presetOf(acts,g){g=g||'';if(!g)return 'None';if(norm(PRESETS.Full,acts)===g)return 'Full';
+    for(var k in PRESETS){if(k!=='Full'&&k!=='None'&&norm(PRESETS[k],acts)===g)return k}return 'Custom'}
+  function applyPreset(acts,p){return norm(PRESETS[p]||'',acts)}
+  function flags(f){var h='';
+    if(f.indexOf('M')>-1)h+='<svg class="ico" width="14" height="14" role="img" aria-label="Moves money"><title>Moves money</title><use href="#i-money"/></svg>';
+    if(f.indexOf('S')>-1)h+='<svg class="ico" width="14" height="14" role="img" aria-label="Sensitive fields"><title>Sensitive fields</title><use href="#i-eye-off"/></svg>';
+    if(f.indexOf('L')>-1)h+='<svg class="ico" width="14" height="14" role="img" aria-label="Re-verify to use"><title>Re-verify to use</title><use href="#i-lock"/></svg>';
+    return h?'<span class="flags">'+h+'</span>':''}
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')}
+  /* o: {grants, base?, limits?, edit?, doms?(list), only?(fn key->bool), src?(fn key,act->{t,set,muted}), hits?, sel?} */
+  function render(tbl,o){
+    var rows=[],cols=A.length+(o.edit?2:1),hard={},soft={};
+    (o.hits||[]).forEach(function(r){r.need.forEach(function(n){(r.hard?hard:soft)[n]=1})});
+    MB.catalog.forEach(function(d){
+      if(o.doms&&o.doms.indexOf(d[0])<0)return;
+      var res=d[2].filter(function(r){return !o.only||o.only(r[0])});
+      if(!res.length)return;
+      var n=0;res.forEach(function(r){n+=norm(o.grants[r[0]]||'',r[2]).length});
+      rows.push('<tr class="capm-dom" id="'+(o.idp||'d')+'-'+d[0].replace(/\W/g,'')+'"><td colspan="'+cols+'"><span class="q-group-t">'+esc(d[1])+'</span><span class="t-cap tnum">'+n+' granted</span></td></tr>');
+      res.forEach(function(r){
+        var k=r[0],g=o.grants[k]||'',lim=[],acts=o.acts?o.acts(k):r[2];
+        r[2].split('').forEach(function(a){var L=o.limits&&o.limits[k+':'+a];if(L)lim.push(AN[a]+' '+L)});
+        var tr='<tr class="capm-res" data-k="'+k+'"><td><div class="res"><span class="l1">'+esc(r[1])+'</span>'+flags(r[3])+'</div>'+(lim.length?'<span class="l2">'+esc(lim.join(' · '))+'</span>':'')+'</td>';
+        if(o.edit){var p=presetOf(acts,g);tr+='<td><select class="select" aria-label="Preset for '+esc(r[1])+'" data-preset="'+k+'">'+['None','View','Prepare','Approve','Full','Custom'].map(function(x){return '<option'+(x===p?' selected':'')+(x==='Custom'?' disabled':'')+'>'+x+'</option>'}).join('')+'</select></td>';}
+        A.forEach(function(a){
+          var c=a[0];
+          if(acts.indexOf(c)<0){tr+='<td></td>';return}
+          var on=g.indexOf(c)>-1,cap=k+':'+c,cls='cap',extra='',lab=r[1]+': '+a[1];
+          var s=o.src?o.src(k,c):null;
+          if(s&&s.muted){cls+=' is-muted';lab+=', muted'}
+          else if(s&&s.set&&on){cls+=' is-set';lab+=', from a permission set'}
+          else if(on)cls+=' is-on';
+          if(on&&o.limits&&o.limits[cap]){cls+=' is-lim';lab+=', limit '+o.limits[cap]}
+          if(on&&hard[cap])cls+=' is-hard';else if(on&&soft[cap])cls+=' is-soft';
+          if(o.base){var b=(o.base[k]||'').indexOf(c)>-1;if(on&&!b)extra+=' data-delta="add"';if(!on&&b)extra+=' data-delta="rem"';}
+          if(o.sel===cap)cls+=' is-sel';
+          if(o.edit){tr+='<td><button type="button" class="'+cls+'" aria-pressed="'+on+'" data-c="'+cap+'" aria-label="'+esc(lab+(on?', granted':', not granted'))+'"'+extra+'><i></i></button></td>';}
+          else{tr+='<td><span class="'+cls+' cap--ro" tabindex="0" role="img" data-c="'+cap+'" aria-label="'+esc(lab+(on?', granted':', not granted')+(s&&s.t?'. '+s.t:''))+'" data-tip="'+esc(s&&s.t?s.t:(on?'Granted':'Not granted'))+'"'+extra+'><i></i></span></td>';}
+        });
+        rows.push(tr+'</tr>');
+      });
+    });
+    tbl.querySelector('tbody').innerHTML=rows.join('');
+  }
+  function head(edit,first){return '<thead><tr><th>'+(first||'Capability')+'</th>'+(edit?'<th style="text-align:left">Preset</th>':'')+A.map(function(a){return '<th>'+a[1]+'</th>'}).join('')+'</tr></thead><tbody></tbody>'}
+  /* tooltip for read-only cells */
+  var tip;function showTip(el){var t=el.getAttribute('data-tip');if(!t)return;if(!tip){tip=document.createElement('div');tip.className='tooltip';tip.setAttribute('role','tooltip');document.body.appendChild(tip)}
+    tip.textContent=t;var r=el.getBoundingClientRect();tip.style.left=Math.max(8,r.left+window.scrollX+16-tip.offsetWidth/2)+'px';tip.style.top=(r.top+window.scrollY-30)+'px';tip.hidden=false}
+  function hideTip(){if(tip)tip.hidden=true}
+  document.addEventListener('mouseover',function(e){var c=e.target.closest&&e.target.closest('[data-tip]');if(c)showTip(c)});
+  document.addEventListener('mouseout',function(e){if(e.target.closest&&e.target.closest('[data-tip]'))hideTip()});
+  document.addEventListener('focusin',function(e){if(e.target.matches&&e.target.matches('[data-tip]'))showTip(e.target)});
+  document.addEventListener('focusout',hideTip);
+  return {CAT:CAT,ORDER:ORDER,AN:AN,has:has,sodHits:sodHits,capName:capName,presetOf:presetOf,applyPreset:applyPreset,norm:norm,render:render,head:head,esc:esc};
+})();
+
+(function(){
+  var g=JSON.parse(JSON.stringify(MB.draft)),lim=JSON.parse(JSON.stringify(MB.limDraft)),base=MB.tpl4,sel='pay.batches:R';
+  var tbl=document.getElementById('mx');tbl.insertAdjacentHTML('beforeend',MBM.head(true));
+  var q=document.getElementById('mx-q'),chg=document.getElementById('mx-chg');
+  function changed(k){return (g[k]||'')!==(base[k]||'')}
+  function draw(){
+    var hits=MBM.sodHits(g),t=q.value.trim().toLowerCase();
+    MBM.render(tbl,{grants:g,base:base,limits:lim,edit:true,hits:hits,sel:sel,idp:'b',
+      only:function(k){var c=MBM.CAT[k];if(chg.checked&&!changed(k))return false;if(t&&(c.label+' '+c.domL+' '+k).toLowerCase().indexOf(t)<0&&!(t.indexOf('releas')>-1&&c.acts.indexOf('R')>-1))return false;return true}});
+    var vis=tbl.querySelectorAll('tr.capm-res').length;document.getElementById('mx-count').textContent=vis+' of '+MBM.ORDER.length+' capabilities';
+    /* domain counts */
+    document.querySelectorAll('.doms a[data-dom]').forEach(function(a){var d=a.dataset.dom,n=0,c=false;
+      MBM.ORDER.forEach(function(k){if(MBM.CAT[k].dom===d){n+=MBM.norm(g[k]||'',MBM.CAT[k].acts).length;if(changed(k))c=true}});
+      a.querySelector('.n').textContent=n;a.classList.toggle('has-chg',c);a.title=c?'Changed vs template':''});
+    /* SoD strip */
+    var held=hits.filter(function(r){return MBM.sodHits(MB.v5).some(function(x){return x.id===r.id})}),fresh=hits.filter(function(r){return held.indexOf(r)<0});
+    fresh.sort(function(a,b){return (b.hard?1:0)-(a.hard?1:0)});
+    var hardR=fresh.filter(function(r){return r.hard}),softR=fresh.filter(function(r){return !r.hard});
+    var h=hardR.map(function(r){
+      var caps=r.need.map(function(n){return '<b>'+MBM.esc(MBM.capName(n))+'</b>'}).join(' + ');
+      var acts=r.need.map(function(n){var p=n.split(':');return '<button class="btn" type="button" data-rm="'+n+'">Remove '+MBM.esc(MBM.CAT[p[0]].label.toLowerCase().replace(/s$/,''))+' '+MBM.esc(MBM.AN[p[1]].toLowerCase())+'</button>'}).join('');
+      return '<div class="sod-row sod-row--hard" data-need="'+r.need.join(' ')+'"><span class="sod-code">'+r.id+'</span><p><b>Blocks publishing. '+MBM.esc(r.t)+':</b> '+caps+'. Hard for firms.</p><span class="btn-row" style="flex-wrap:nowrap">'+acts+'</span></div>'}).join('');
+    if(softR.length){var open=window.__sodOpen;
+      h+='<div class="sod-row sod-row--soft" data-need="'+softR.map(function(r){return r.need.join(' ')}).join(' ')+'"><span class="sod-code">'+softR.map(function(r){return r.id}).join(' ')+'</span><div><p><b>'+softR.length+' soft conflict'+(softR.length>1?'s':'')+'.</b> Holders will need a written justification when you publish.</p>'+
+        (open?'<div class="sod-more">'+softR.map(function(r){return '<span class="t-cap" data-need="'+r.need.join(' ')+'"><b class="warn">'+r.id+'</b> '+MBM.esc(r.t)+'</span>'}).join('')+'</div>':'')+
+        '</div><button class="btn btn--quiet" type="button" id="sod-tg" aria-expanded="'+(open?'true':'false')+'">'+(open?'Hide':'Show')+' rules</button></div>';}
+    document.getElementById('sod').innerHTML=h;
+    var nh=fresh.filter(function(r){return r.hard}).length,ns=fresh.length-nh;
+    var pb=document.getElementById('publish');if(nh){pb.setAttribute('aria-disabled','true');pb.title='Resolve the hard conflict first'}else{pb.removeAttribute('aria-disabled');pb.title=''}
+    document.getElementById('ctx-sod').textContent=nh?(nh+' conflict blocks publishing'):(ns?ns+' soft conflicts · justification needed':'No conflicts');
+    document.getElementById('ctx-sod').className=nh?'neg':'';
+    var nchg=MBM.ORDER.filter(function(k){return (g[k]||'')!==(MB.v5[k]||'')}).length+(lim['ap.bills:A']!==MB.limV5['ap.bills:A']?1:0);
+    document.getElementById('draft-tag').textContent='Draft v6 · '+nchg+' change'+(nchg===1?'':'s');document.getElementById('tab-diff').textContent=nchg;
+    selPanel();
+  }
+  function selPanel(){var p=sel.split(':'),c=MBM.CAT[p[0]],on=(g[p[0]]||'').indexOf(p[1])>-1;
+    document.getElementById('sel-name').textContent=c.label+' · '+MBM.AN[p[1]];
+    document.getElementById('sel-glyph').className='cap cap--sm'+(on?' is-on':'')+(on&&lim[sel]?' is-lim':'');
+    var b=(base[p[0]]||'').indexOf(p[1])>-1,v=(MB.v5[p[0]]||'').indexOf(p[1])>-1;
+    document.getElementById('sel-note').textContent=(on?'Granted':'Not granted')+'. '+(on===v?'Same as v5':(on?'Added in this draft':'Removed in this draft'))+'; '+(on===b?'same as template v4.':(on?'not in template v4.':'template v4 grants it.'));
+    var money=/[APR]/.test(p[1]);document.getElementById('sec-lim').hidden=!(on&&money);
+    document.getElementById('lim-day-f').hidden=p[1]!=='R';
+  }
+  tbl.addEventListener('click',function(e){var b=e.target.closest('button.cap');if(!b)return;var p=b.dataset.c.split(':'),k=p[0],a=p[1],cur=g[k]||'';
+    if(sel===b.dataset.c||cur.indexOf(a)<0){cur=cur.indexOf(a)>-1?cur.replace(a,''):cur+a;if(a!=='V'&&cur&&cur.indexOf('V')<0)cur='V'+cur;g[k]=MBM.norm(cur,MBM.CAT[k].acts)}
+    sel=b.dataset.c;draw();var nb=tbl.querySelector('[data-c="'+sel+'"]');if(nb)nb.focus()});
+  tbl.addEventListener('change',function(e){var s=e.target.closest('select[data-preset]');if(!s)return;var k=s.dataset.preset;g[k]=MBM.applyPreset(MBM.CAT[k].acts,s.value);draw()});
+  document.getElementById('sod').addEventListener('click',function(e){if(e.target.closest('#sod-tg')){window.__sodOpen=!window.__sodOpen;draw();return}var b=e.target.closest('[data-rm]');if(!b)return;var p=b.dataset.rm.split(':');g[p[0]]=(g[p[0]]||'').replace(p[1],'');delete lim[b.dataset.rm];
+    draw();mbToast('Removed '+MBM.capName(b.dataset.rm).toLowerCase(),function(){g[p[0]]=MBM.norm((g[p[0]]||'')+p[1],MBM.CAT[p[0]].acts);draw()})});
+  document.getElementById('sod').addEventListener('mouseover',function(e){var r=e.target.closest('[data-need]');tbl.querySelectorAll('.cap.is-lit').forEach(function(c){c.classList.remove('is-lit')});if(!r||!r.dataset.need)return;
+    r.dataset.need.split(' ').forEach(function(n){var c=tbl.querySelector('[data-c="'+n+'"]');if(c)c.classList.add('is-lit')})});
+  document.getElementById('sel-remove').onclick=function(){var p=sel.split(':');g[p[0]]=(g[p[0]]||'').replace(p[1],'');draw()};
+  q.addEventListener('input',function(){clearTimeout(q._t);q._t=setTimeout(draw,150)});chg.addEventListener('change',draw);
+  document.querySelector('.doms').addEventListener('click',function(e){var a=e.target.closest('a[data-dom]');if(!a)return;e.preventDefault();
+    var r=document.getElementById('b-'+a.dataset.dom.replace(/\W/g,''));if(r){var s=document.getElementById('mx-scroll');s.scrollTop=r.offsetTop-0}});
+  var sc=document.getElementById('mx-scroll');sc.addEventListener('scroll',function(){var top=sc.scrollTop+4,cur=null;tbl.querySelectorAll('tr.capm-dom').forEach(function(r){if(r.offsetTop<=top)cur=r.id});
+    document.querySelectorAll('.doms a').forEach(function(a){a.setAttribute('aria-current',String('b-'+(a.dataset.dom||'').replace(/\W/g,'')===cur))})});
+  document.getElementById('save').onclick=function(){document.getElementById('ctx-saved').textContent='Draft v6 saved just now';mbToast('Saved draft v6')};
+  document.getElementById('publish').onclick=function(){if(this.getAttribute('aria-disabled')==='true'){mbToast('Resolve S4 first: remove payroll release or employee-record edit');return}document.getElementById('f3').scrollIntoView({behavior:'smooth'})};
+  draw();
+  var pr=document.getElementById('b-Payments');if(pr)sc.scrollTop=pr.offsetTop;sc.dispatchEvent(new Event('scroll'));
+  /* diff (three-way) */
+  var dt=document.querySelector('#diff tbody'),rows=[],L5=MB.limV5,LD=MB.limDraft,pubG=JSON.parse(JSON.stringify(MB.draft));pubG['payroll.runs']='VCEA';
+  var lastDom='';
+  MBM.ORDER.forEach(function(k){var c=MBM.CAT[k];c.acts.split('').forEach(function(a){
+    var cap=k+':'+a,v=(MB.v5[k]||'').indexOf(a)>-1,d=(pubG[k]||'').indexOf(a)>-1,t=(MB.tpl5[k]||'').indexOf(a)>-1;
+    var lv=L5[cap],ld=LD[cap];
+    if(v===d&&d===t&&lv===ld)return;
+    function cell(on,l){return on?'<span class="dx"><span class="cap cap--sm is-on'+(l?' is-lim':'')+'"><i></i></span>'+(l?MBM.esc(l):'Granted')+'</span>':'<span class="dx gone"><span class="cap cap--sm"><i></i></span>Not granted</span>'}
+    var t4=(MB.tpl4[k]||'').indexOf(a)>-1;var act=(t&&!d&&!t4)?'<button class="btn btn--quiet" type="button">Adopt</button>':(t&&!d&&t4)?'<span class="t-cap">Removed by you in v3</span>':((!t&&d&&!v)?'<span class="t-cap">Your change</span>':((v&&!d)?'<span class="t-cap">Removed in draft</span>':'<span class="t-cap">Your change</span>'));
+    rows.push('<tr><td>'+(c.domL!==lastDom?MBM.esc(c.domL):'')+'</td><td><span class="l1">'+MBM.esc(c.label)+' · '+MBM.AN[a]+'</span></td><td>'+cell(v,v?lv:'')+'</td><td class="cur">'+cell(d,d?ld:'')+'</td><td>'+cell(t,t?lv:'')+'</td><td>'+act+'</td></tr>');lastDom=c.domL;})});
+  dt.innerHTML=rows.join('');
+  document.getElementById('pub-go').onclick=function(){if(!document.getElementById('pub-reason').value.trim()){mbToast('Add a reason to publish');return}
+    this.disabled=true;this.textContent='Sent for approval';document.getElementById('pub-prog').hidden=false;document.getElementById('pub-sum').textContent='Waiting for Nora Lindqvist · v5 stays live until then';mbToast('Sent v6 to Nora Lindqvist for approval')};
+})();
+</script>
+<script>
+/* Layout audit: add ?audit (or set window.__AUDIT). Outlines clipped text and targets under 32px. */
+(function(){
+  var on=/[?&]audit/.test(location.search)||window.__AUDIT;
+  function run(){
+    var bad=[],small=[];
+    document.querySelectorAll('.l1,.l2,td,th,.btn,.tag,.lvl,.ctx-name,.status,.field-label,.seg button,.rail-link,.tab,.crumbs,.kv dd,.kv dt,.sod-row p,.trace .tl,.attest-claim,.fit').forEach(function(el){
+      if(!el.offsetParent&&getComputedStyle(el).position!=='fixed')return;
+      if(el.closest('[data-audit-skip]'))return;
+      if(el.scrollWidth>el.clientWidth+1&&getComputedStyle(el).overflow!=='visible'){bad.push(el)}
+    });
+    document.querySelectorAll('button,a.btn,.btn,input[type=checkbox],input[type=radio],select,.input,.rail-link,.popover-item,.cap:not(.cap--sm)').forEach(function(el){
+      if(!el.offsetParent)return; if(el.closest('[data-audit-skip]'))return;
+      var t=el.matches('input[type=checkbox],input[type=radio]')?el.parentElement:el;
+      var r=t.getBoundingClientRect(); if(r.width===0)return;
+      if(r.height<31.5){small.push(t)}
+    });
+    window.__auditResult={overflow:bad.length,small:small.length};
+    if(on){
+      bad.concat(small).forEach(function(e){e.classList.add('audit-hit')});
+      var b=document.createElement('div');b.className='audit-badge';b.setAttribute('data-audit-skip','');
+      b.innerHTML='<b>Layout audit</b> · '+bad.length+' overflow · '+small.length+' small targets<br>'+
+        bad.slice(0,16).map(function(e){return 'overflow: '+(e.textContent||'').trim().slice(0,48).replace(/</g,'&lt;')+' ('+e.scrollWidth+'>'+e.clientWidth+')'}).join('<br>')+
+        (small.length?'<br>'+small.slice(0,10).map(function(e){return 'small: '+(e.textContent||e.getAttribute('aria-label')||e.tagName).trim().slice(0,40)+' h'+Math.round(e.getBoundingClientRect().height)}).join('<br>'):'');
+      document.body.appendChild(b);
+    }
+  }
+  (document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(function(){setTimeout(run,400)});
+})();
+</script>
+</body></html>

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { createAdminSupabase } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logAction } from '@/lib/trust/action-log';
 import { parseApRuleset, apPolicyRulesetSchema } from '@/lib/policy/ap-schema';
@@ -98,9 +99,14 @@ export async function POST(request: Request) {
 
   const activate = parsed.data.activate === true;
 
+  // ap_approval_policies is SELECT-only for members (migration 154) — a member could
+  // otherwise rewrite the live AP approval policy via PostgREST. Writes run as the
+  // service role, gated by bills:approve above and pinned to the session org.
+  const admin = createAdminSupabase();
+
   // If activating, archive the current ACTIVE first (partial unique index guards it).
   if (activate) {
-    const { error: archErr } = await supabase
+    const { error: archErr } = await admin
       .from('ap_approval_policies')
       .update({ status: 'ARCHIVED' })
       .eq('org_id', orgId)
@@ -109,7 +115,7 @@ export async function POST(request: Request) {
   }
 
   const nowIso = new Date().toISOString();
-  const { data: created, error } = await supabase
+  const { data: created, error } = await admin
     .from('ap_approval_policies')
     .insert({
       org_id: orgId,

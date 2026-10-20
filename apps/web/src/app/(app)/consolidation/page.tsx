@@ -43,7 +43,7 @@ interface NciShare {
   entityId: string; name: string; ownershipPercent: number; minorityPercent: number; equityCents: number; netIncomeCents: number;
 }
 interface Totals {
-  eliminationsCents: number; eliminatingResidualCents: number;
+  eliminationsCents: number; eliminatingResidualCents: number; externalIntercompanyCents?: number;
   revenueCents: number; cogsCents: number; opexCents: number; otherCents: number;
   netIncomeFullCents: number; netIncomeCents: number; netIncomeParentCents: number; netIncomeNciCents: number;
   assetsCents: number; liabilitiesCents: number; equityBookedCents: number; equitySectionCents: number; balanceCheckCents: number;
@@ -343,6 +343,13 @@ function StatementsTab() {
         <Banner tone="warning">
           Intercompany positions are out of balance by {money(Math.abs(data.totals.eliminatingResidualCents))} — they will not
           fully eliminate. Review the intercompany-balance exceptions before relying on this consolidation.
+        </Banner>
+      )}
+      {data?.totals && (data.totals.externalIntercompanyCents ?? 0) !== 0 && (
+        <Banner tone="info">
+          {money(Math.abs(data.totals.externalIntercompanyCents ?? 0))} of intercompany balances are with companies
+          <strong> outside this group</strong>, so they are kept as third-party balances rather than eliminated.
+          Consolidate the full group to eliminate them.
         </Banner>
       )}
       {data?.fx?.multiCurrency && data.fx.translationApplied && (

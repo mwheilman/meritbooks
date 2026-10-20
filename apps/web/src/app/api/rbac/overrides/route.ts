@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { createAdminSupabase } from '@/lib/supabase/server';
 import { requireManageUsers } from '@/lib/team/guard';
 import { setOverrideSchema, resetOverrideSchema } from '@/lib/validations/rbac';
 import { isValidCell } from '@/lib/rbac/permission-catalog';
@@ -47,7 +48,9 @@ export async function PUT(req: NextRequest) {
   const invalid = await validateCell(supabase, orgId!, roleKey, feature, action);
   if (invalid) return invalid;
 
-  const { error } = await supabase
+  // Write via the service role: core.role_permission_overrides is SELECT-only for
+  // members (migration 154) — authorization is the requireManageUsers gate above.
+  const { error } = await createAdminSupabase()
     .schema('core')
     .from('role_permission_overrides')
     .upsert(
@@ -102,7 +105,8 @@ export async function DELETE(req: NextRequest) {
   }
   const { roleKey, feature, action } = parsed.data;
 
-  const { error } = await supabase
+  // Service-role write (migration 154); gated by requireManageUsers above.
+  const { error } = await createAdminSupabase()
     .schema('core')
     .from('role_permission_overrides')
     .delete()

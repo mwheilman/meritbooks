@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { buildCovenantStatus, type CovenantRow } from '@/lib/covenants/status';
+import { getOrgToday } from '@/lib/dates/org-today';
+import { scheduledOutstandingAsOf } from '@/lib/debt/outstanding';
 
 /**
  * GET /api/debt/summary?location_id=<uuid>
@@ -28,7 +30,6 @@ interface ScheduleRow {
   principal_cents: number | string | null; principal_balance_cents: number | string | null;
 }
 
-function isoDate(d: Date): string { return d.toISOString().slice(0, 10); }
 
 export async function GET(request: Request): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
@@ -36,12 +37,10 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { supabase } = ctx;
 
   const locationId = new URL(request.url).searchParams.get('location_id');
-  const today = new Date();
-  const anchor = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-  const todayIso = isoDate(anchor);
-  const in12mo = new Date(anchor);
-  in12mo.setUTCFullYear(in12mo.getUTCFullYear() + 1);
-  const in12moIso = isoDate(in12mo);
+  // "Today" is the ORG's calendar date (not UTC) — the same anchor /api/debt uses.
+  const todayIso = await getOrgToday(supabase, ctx.orgId);
+  const [ty, tm, td] = todayIso.split('-').map(Number);
+  const in12moIso = `${ty + 1}-${String(tm).padStart(2, '0')}-${String(td).padStart(2, '0')}`;
 
   // 1. Active instruments in scope.
   let instQ = supabase
@@ -84,15 +83,19 @@ export async function GET(request: Request): Promise<NextResponse> {
       const sched = byInstrument.get(inst.id) ?? [];
       // Current balance = balance after the most recent past-or-today line, else
       // the full original principal (mirrors /api/debt list derivation).
-      let currentBalance = Number(inst.original_amount_cents ?? 0);
-      if (sched.length > 0) {
-        loansWithSchedule += 1;
-        for (const l of sched) {
-          if (l.period_date && l.period_date <= todayIso) {
-            currentBalance = Number(l.principal_balance_cents ?? currentBalance);
-          }
-        }
-      }
+      if (sched.length > 0) loansWithSchedule += 1;
+      const currentBalance = scheduledOutstandingAsOf(
+        sched.map((l) => ({
+          period: Number(l.period),
+          period_date: l.period_date,
+          payment_cents: Number(l.payment_cents ?? 0),
+          interest_cents: Number(l.interest_cents ?? 0),
+          principal_cents: Number(l.principal_cents ?? 0),
+          principal_balance_cents: Number(l.principal_balance_cents ?? 0),
+        })),
+        todayIso,
+        Number(inst.original_amount_cents ?? 0),
+      ).outstandingCents;
       totalOutstandingCents += currentBalance;
 
       // Upcoming lines (due after today) drive current portion + 12-mo service.

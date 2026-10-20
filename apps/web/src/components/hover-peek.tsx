@@ -1,6 +1,8 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { useRef, useState, useCallback, useEffect, useLayoutEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { placePeekCard } from '@/lib/peek-position';
 
 /**
  * Interactive hover-peek: hover a row and, after a short delay, a card anchored
@@ -22,7 +24,11 @@ export function useHoverPeek<T>(opts?: { openDelay?: number; closeDelay?: number
   const rowHandlers = useCallback((item: T) => ({
     onMouseEnter: (e: React.MouseEvent) => {
       cancelClose();
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      // Anchor at the POINTER's x within the row's vertical band. Rows span the
+      // full table width, so anchoring to the row's edges pushed the card off to
+      // the far left over the sidebar (audit 06 §L.3 L11).
+      const row = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const rect = new DOMRect(e.clientX, row.top, 0, row.height);
       cancelOpen();
       openTimer.current = window.setTimeout(() => setPeek({ item, rect }), openDelay);
     },
@@ -62,6 +68,8 @@ export function usePeekDetail<D>(url: string | null) {
 }
 
 const CARD_W = 340;
+// useLayoutEffect warns during SSR; this component only measures on the client.
+const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 export function HoverPeekCard({ rect, visible, cardHandlers, onOpen, children }: {
   rect: DOMRect | null;
@@ -70,15 +78,30 @@ export function HoverPeekCard({ rect, visible, cardHandlers, onOpen, children }:
   onOpen?: () => void;
   children: ReactNode;
 }) {
-  if (!visible || !rect) return null;
-  const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
-  const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
-  // Anchor to the right of the row; flip to the left if there's no room.
-  const left = rect.right + 12 + CARD_W > vw ? Math.max(12, rect.left - CARD_W - 12) : rect.right + 12;
-  const top = Math.min(Math.max(12, rect.top - 8), vh - 360);
+  // Measure the rendered card so placement can keep it fully on-screen.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [cardH, setCardH] = useState(240);
+  useIsoLayoutEffect(() => {
+    if (!visible || !cardRef.current) return;
+    const h = cardRef.current.offsetHeight;
+    if (h && Math.abs(h - cardH) > 1) setCardH(h);
+  });
 
-  return (
-    <div className="fixed z-[60] animate-in fade-in zoom-in-95 duration-100" style={{ left, top, width: CARD_W }} {...cardHandlers}>
+  if (!visible || !rect || typeof document === 'undefined') return null;
+  const { left, top } = placePeekCard({
+    anchorX: rect.left,
+    rowTop: rect.top,
+    rowBottom: rect.bottom,
+    viewportW: window.innerWidth,
+    viewportH: window.innerHeight,
+    cardW: CARD_W,
+    cardH,
+  });
+
+  // Portal to <body> so a transformed/overflowing ancestor can't re-anchor or
+  // clip the fixed-position card.
+  return createPortal(
+    <div ref={cardRef} className="fixed z-[60] animate-in fade-in zoom-in-95 duration-100" style={{ left, top, width: CARD_W, maxHeight: 'calc(100vh - 24px)', overflowY: 'auto' }} {...cardHandlers}>
       <div className="rounded-xl border border-slate-700 bg-surface-900 shadow-2xl overflow-hidden">
         {children}
         {onOpen && (
@@ -87,6 +110,7 @@ export function HoverPeekCard({ rect, visible, cardHandlers, onOpen, children }:
           </button>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

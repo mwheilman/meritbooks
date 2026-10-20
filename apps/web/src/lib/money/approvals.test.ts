@@ -14,9 +14,16 @@
  * resolution order and fail-closed behavior are pinned.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { canApprove } from './approvals';
+
+// Since migration 154 the engine WRITES approvals/approval_steps through the service
+// client (members are SELECT-only there), regardless of the client a caller passes.
+// Route that service writer to the same fake so the write path stays exercised.
+const serviceWriter = vi.hoisted(() => ({ db: null as unknown }));
+vi.mock('@/lib/supabase/server', () => ({ createAdminSupabase: () => serviceWriter.db }));
+
+import { canApprove, approve, SeparationOfDutiesError, NotAuthorizedToApproveError } from './approvals';
 import { normalizeMembershipRole } from '@/lib/rbac/role-normalize';
 
 // ── normalizeMembershipRole (pure) ──────────────────────────────────────────
@@ -56,23 +63,47 @@ describe('normalizeMembershipRole', () => {
 
 type Resp = { data: unknown; error: unknown };
 
+interface FakeTables {
+  users?: Resp;
+  memberships?: Resp;
+  employees?: Resp;
+  /** core.custom_roles (maybeSingle) — a tenant custom role definition. */
+  custom_roles?: Resp;
+  /** core.role_permission_overrides (awaited list) — the org's role edits. */
+  role_permission_overrides?: Resp;
+  /** public.approvals (single) — used by approve(). */
+  approvals?: Resp;
+}
+
 /**
- * Minimal fake of the chained Supabase builder used by canApprove:
+ * Minimal fake of the chained Supabase builder used by canApprove / approve:
  *   adminDb.schema('core').from(<table>).select(..).eq(..)....maybeSingle()
- * Returns the configured response for whichever core table is queried.
+ *   adminDb.schema('core').from('role_permission_overrides').select(..).eq(..).eq(..)  (awaited)
+ *   adminDb.from('approvals').select('*').eq(..).eq(..).single()
+ * Returns the configured response for whichever table is queried; an unconfigured
+ * list query resolves to an empty list, an unconfigured single to null.
  */
-function makeDb(responses: { users?: Resp; memberships?: Resp; employees?: Resp }): SupabaseClient {
+function makeDb(responses: FakeTables): SupabaseClient {
   const chainFor = (table: string) => {
+    const configured = (responses as Record<string, Resp | undefined>)[table];
     const chain: Record<string, unknown> = {};
     chain.select = () => chain;
     chain.eq = () => chain;
-    chain.maybeSingle = async () =>
-      (responses as Record<string, Resp | undefined>)[table] ?? { data: null, error: null };
+    chain.update = () => chain;
+    chain.insert = async () => ({ data: null, error: null });
+    chain.maybeSingle = async () => configured ?? { data: null, error: null };
+    chain.single = async () => configured ?? { data: null, error: null };
+    // Awaiting the chain directly (list query) — e.g. the overrides read.
+    chain.then = (resolve: (r: Resp) => unknown, reject?: (e: unknown) => unknown) =>
+      Promise.resolve(configured ?? { data: [], error: null }).then(resolve, reject);
     return chain;
   };
-  return {
+  const fake = {
     schema: () => ({ from: (table: string) => chainFor(table) }),
+    from: (table: string) => chainFor(table),
   } as unknown as SupabaseClient;
+  serviceWriter.db = fake;
+  return fake;
 }
 
 const ok = (data: unknown): Resp => ({ data, error: null });
@@ -140,5 +171,152 @@ describe('canApprove — transitional employees fallback', () => {
   it('fails closed on an employees lookup error in the fallback', async () => {
     const db = makeDb({ users: empty, employees: boom });
     expect(await canApprove(db, 'org1', 'clerk_1')).toBe(false);
+  });
+});
+
+// ── R0: tenant role edits + custom roles are honored (05-RBAC C3) ───────────
+
+/** Overrides rows that revoke (or grant) approve on all three money surfaces. */
+const allMoneyApprove = (allowed: boolean): Resp =>
+  ok([
+    { feature: 'checks', action: 'approve', allowed },
+    { feature: 'bills', action: 'approve', allowed },
+    { feature: 'payroll', action: 'approve', allowed },
+  ]);
+
+describe('canApprove — honors the org\'s effective permissions (R0)', () => {
+  it('denies a default approver once the tenant revokes approve on every money surface', async () => {
+    // merit_controller approves checks/bills/payroll by default …
+    const base = { users: ok({ id: 'u1' }), memberships: ok({ role: 'merit_controller' }) };
+    expect(await canApprove(makeDb(base), 'org1', 'clerk_1')).toBe(true);
+    // … until the tenant edits the role.
+    const revoked = makeDb({ ...base, role_permission_overrides: allMoneyApprove(false) });
+    expect(await canApprove(revoked, 'org1', 'clerk_1')).toBe(false);
+  });
+
+  it('denies CFO when the tenant has revoked approve (and allows once the tenant grants it)', async () => {
+    const base = { users: ok({ id: 'u1' }), memberships: ok({ role: 'cfo' }) };
+    expect(await canApprove(makeDb({ ...base, role_permission_overrides: allMoneyApprove(false) }), 'org1', 'clerk_1')).toBe(false);
+    // CFO is view-only on checks/bills/payroll by default; a tenant grant now takes effect.
+    expect(
+      await canApprove(
+        makeDb({ ...base, role_permission_overrides: ok([{ feature: 'bills', action: 'approve', allowed: true }]) }),
+        'org1',
+        'clerk_1',
+      ),
+    ).toBe(true);
+  });
+
+  it('honors the revoke on the transitional employees fallback too', async () => {
+    const db = makeDb({
+      users: empty,
+      employees: ok({ role: 'company_admin' }),
+      role_permission_overrides: allMoneyApprove(false),
+    });
+    expect(await canApprove(db, 'org1', 'clerk_1')).toBe(false);
+  });
+
+  it('allows a custom role that the tenant granted approve', async () => {
+    const db = makeDb({
+      users: ok({ id: 'u1' }),
+      memberships: ok({ role: 'ap_lead' }),
+      custom_roles: ok({ key: 'ap_lead', name: 'AP lead', description: null, base_role: 'accounting_specialist' }),
+      role_permission_overrides: ok([{ feature: 'bills', action: 'approve', allowed: true }]),
+    });
+    expect(await canApprove(db, 'org1', 'clerk_1')).toBe(true);
+  });
+
+  it('denies a custom role whose base role cannot approve and has no grant', async () => {
+    const db = makeDb({
+      users: ok({ id: 'u1' }),
+      memberships: ok({ role: 'ap_clerk' }),
+      custom_roles: ok({ key: 'ap_clerk', name: 'AP clerk', description: null, base_role: 'accounting_specialist' }),
+    });
+    expect(await canApprove(db, 'org1', 'clerk_1')).toBe(false);
+  });
+
+  it('denies a custom role that inherits approve but the tenant revoked it', async () => {
+    const db = makeDb({
+      users: ok({ id: 'u1' }),
+      memberships: ok({ role: 'ctl_lite' }),
+      custom_roles: ok({ key: 'ctl_lite', name: 'Controller lite', description: null, base_role: 'merit_controller' }),
+      role_permission_overrides: allMoneyApprove(false),
+    });
+    expect(await canApprove(db, 'org1', 'clerk_1')).toBe(false);
+  });
+
+  it('fails closed when the overrides read errors (a revoke may be hidden)', async () => {
+    const db = makeDb({
+      users: ok({ id: 'u1' }),
+      memberships: ok({ role: 'company_admin' }),
+      role_permission_overrides: boom,
+    });
+    expect(await canApprove(db, 'org1', 'clerk_1')).toBe(false);
+  });
+
+  it('fails closed when the custom-role lookup errors', async () => {
+    const db = makeDb({ users: ok({ id: 'u1' }), memberships: ok({ role: 'ap_lead' }), custom_roles: boom });
+    expect(await canApprove(db, 'org1', 'clerk_1')).toBe(false);
+  });
+
+  it('still denies a deactivated employee even with a granted custom role (H1)', async () => {
+    const db = makeDb({
+      users: ok({ id: 'u1' }),
+      memberships: ok({ role: 'ap_lead' }),
+      custom_roles: ok({ key: 'ap_lead', name: 'AP lead', description: null, base_role: 'accounting_specialist' }),
+      role_permission_overrides: ok([{ feature: 'bills', action: 'approve', allowed: true }]),
+      employees: ok({ is_active: false }),
+    });
+    expect(await canApprove(db, 'org1', 'clerk_1')).toBe(false);
+  });
+});
+
+// ── Separation of duties survives the effective-permission change ───────────
+
+const pendingRow = (preparedBy: string) =>
+  ok({
+    id: 'a1', org_id: 'org1', kind: 'AP_BATCH', subject_table: 'bills', subject_id: 'b1',
+    amount_cents: 10_000, status: 'PENDING_APPROVAL', prepared_by: preparedBy, approved_by: null,
+    released_by: null, provider_correlation_id: null, reject_reason: null,
+  });
+
+describe('approve() — preparer != approver is enforced regardless of authority', () => {
+  it('blocks the preparer even when their (custom) role is granted approve', async () => {
+    const db = makeDb({
+      approvals: pendingRow('clerk_1'),
+      users: ok({ id: 'u1' }),
+      memberships: ok({ role: 'ap_lead' }),
+      custom_roles: ok({ key: 'ap_lead', name: 'AP lead', description: null, base_role: 'accounting_specialist' }),
+      role_permission_overrides: ok([{ feature: 'bills', action: 'approve', allowed: true }]),
+    });
+    await expect(approve(db, 'org1', 'a1', 'clerk_1')).rejects.toBeInstanceOf(SeparationOfDutiesError);
+  });
+
+  it('blocks the preparer even for a full company_admin', async () => {
+    const db = makeDb({ approvals: pendingRow('clerk_1'), users: ok({ id: 'u1' }), memberships: ok({ role: 'owner' }) });
+    await expect(approve(db, 'org1', 'a1', 'clerk_1')).rejects.toBeInstanceOf(SeparationOfDutiesError);
+  });
+
+  it('a different approver whose approve was revoked is NOT authorized', async () => {
+    const db = makeDb({
+      approvals: pendingRow('clerk_preparer'),
+      users: ok({ id: 'u2' }),
+      memberships: ok({ role: 'merit_controller' }),
+      role_permission_overrides: allMoneyApprove(false),
+    });
+    await expect(approve(db, 'org1', 'a1', 'clerk_2')).rejects.toBeInstanceOf(NotAuthorizedToApproveError);
+  });
+
+  it('a different approver with a granted custom role approves', async () => {
+    const db = makeDb({
+      approvals: pendingRow('clerk_preparer'),
+      users: ok({ id: 'u2' }),
+      memberships: ok({ role: 'ap_lead' }),
+      custom_roles: ok({ key: 'ap_lead', name: 'AP lead', description: null, base_role: 'accounting_specialist' }),
+      role_permission_overrides: ok([{ feature: 'bills', action: 'approve', allowed: true }]),
+    });
+    const res = await approve(db, 'org1', 'a1', 'clerk_2');
+    expect(res.status).toBe('APPROVED');
+    expect(res.approvedBy).toBe('clerk_2');
   });
 });

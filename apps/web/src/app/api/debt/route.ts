@@ -8,6 +8,8 @@ import { AmortizationError } from '@/lib/debt/amortization';
 import { PostingError } from '@/lib/posting/account-roles';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { listSessions } from '@/lib/onboarding/session';
+import { scheduledOutstandingAsOf, type DebtScheduleLine } from '@/lib/debt/outstanding';
+import { getOrgToday } from '@/lib/dates/org-today';
 
 /**
  * /api/debt
@@ -39,14 +41,7 @@ const INSTRUMENT_COLS =
   'liability_account_id:gl_liability_account_id, interest_expense_account_id:gl_interest_account_id, ' +
   'interest_payable_account_id, cash_account_id, notes, created_at, updated_at';
 
-interface ScheduleLine {
-  period: number;
-  period_date: string | null;
-  payment_cents: number;
-  interest_cents: number;
-  principal_cents: number;
-  principal_balance_cents: number;
-}
+type ScheduleLine = DebtScheduleLine;
 
 interface InstrumentRow {
   id: string;
@@ -94,24 +89,16 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // "Today" in the ORG's timezone (not UTC) — the same anchor the board package
+  // uses for its period-end outstanding balance (lib/debt/outstanding).
+  const today = await getOrgToday(supabase, ctx.orgId);
   const data = rows.map((inst) => {
     const lines = linesByInstrument.get(inst.id) ?? [];
     // Current balance = the balance after the most recent past-or-today period; if
-    // no period has elapsed yet, the schedule's OPENING balance is still outstanding
-    // (balance after period 1 + period 1's principal — exact for new loans and for
-    // existing loans brought over at their cutover balance).
-    let currentBalanceCents = lines.length > 0
-      ? lines[0].principal_balance_cents + lines[0].principal_cents
-      : inst.principal_cents;
-    let nextPayment: ScheduleLine | null = null;
-    for (const l of lines) {
-      if (l.period_date && l.period_date <= today) {
-        currentBalanceCents = l.principal_balance_cents;
-      } else if (!nextPayment) {
-        nextPayment = l;
-      }
-    }
+    // no period has elapsed yet, the schedule's OPENING balance is still outstanding.
+    const derived = scheduledOutstandingAsOf(lines, today, Number(inst.principal_cents ?? 0));
+    const currentBalanceCents = derived.outstandingCents;
+    let nextPayment: ScheduleLine | null = derived.nextPayment;
     // If dates aren't set, fall back to the first unpaid line as "next".
     if (!nextPayment && lines.length > 0) nextPayment = lines[0];
     return {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Sparkles, Loader2, FileText, Download, AlertTriangle, ChevronRight, X, Wand2, Save, Sheet } from 'lucide-react';
 import { clsx } from 'clsx';
 import { addToast } from '@/hooks';
@@ -42,7 +42,22 @@ const EXAMPLES = [
   'Cash flow statement and P&L for the last 12 months',
 ];
 
-export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: string; locationIds: string[] }) {
+/** A request handed in from outside (the sidebar "Ask for any report…" box). */
+export interface CompilerRequest {
+  prompt: string;
+  /** Bump to re-run the same prompt. */
+  nonce: number;
+}
+
+export function ReportCompiler({
+  entityLabel,
+  locationIds,
+  request,
+}: {
+  entityLabel: string;
+  locationIds: string[];
+  request?: CompilerRequest | null;
+}) {
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [parsing, setParsing] = useState(false);
@@ -58,8 +73,8 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
     setSaveName('');
   }, []);
 
-  const parse = useCallback(async () => {
-    const p = prompt.trim();
+  const parse = useCallback(async (override?: string) => {
+    const p = (override ?? prompt).trim();
     if (p.length < 2 || parsing) return;
     setParsing(true);
     setError(null);
@@ -79,6 +94,20 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
       setParsing(false);
     }
   }, [prompt, parsing, entityLabel, locationIds]);
+
+  // External handoff: open, prefill and run the request once per nonce. Errors
+  // (incl. 503 AI_UNAVAILABLE) render in this panel's own error state.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const lastNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!request || request.nonce === lastNonce.current) return;
+    lastNonce.current = request.nonce;
+    setOpen(true);
+    setPrompt(request.prompt);
+    reset();
+    rootRef.current?.scrollIntoView({ block: 'nearest' });
+    void parse(request.prompt);
+  }, [request, parse, reset]);
 
   const generate = useCallback(async (fmt: 'pdf' | 'xlsx') => {
     if (!result?.pack || generating) return;
@@ -143,7 +172,7 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
   const totalSections = result?.totalSections ?? 0;
 
   return (
-    <div className="mb-5 rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-500/[0.07] to-transparent overflow-hidden">
+    <div ref={rootRef} className="mb-5 rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-500/[0.07] to-transparent overflow-hidden">
       {/* Header / trigger */}
       <button
         onClick={() => setOpen((o) => !o)}
@@ -192,7 +221,7 @@ export function ReportCompiler({ entityLabel, locationIds }: { entityLabel: stri
           {/* Actions */}
           <div className="flex items-center gap-2 mt-3">
             <button
-              onClick={parse}
+              onClick={() => { void parse(); }}
               disabled={prompt.trim().length < 2 || parsing}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >

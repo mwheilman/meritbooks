@@ -11,6 +11,10 @@ export const approveBankTransactionSchema = z.object({
   department_id: z.string().uuid().optional().nullable(),
   class_id: z.string().uuid().optional().nullable(),
   job_id: z.string().uuid().optional().nullable(),
+  /** Payee as typed in the edit panel; resolved (find-or-create) server-side. */
+  vendor_name: z.string().max(200).optional().nullable(),
+  /** Reviewer note; appended to the JE memo. */
+  notes: z.string().max(1000).optional().nullable(),
 });
 
 export const batchApproveSchema = z.object({

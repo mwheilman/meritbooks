@@ -13,8 +13,12 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
-import { fetchCoreMap } from '@/lib/stitch-core';
 import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
+import { fetchBookCashSeries, resolveCashAccountIds } from '@/lib/cash/book-cash';
+import { applyEarningsToBalanceSheet, fetchUnclosedEarnings } from '@/lib/reports/bs-earnings';
+import { fetchDebtRegister } from '@/lib/debt/register';
+import { agingBucketFor, AGING_BUCKETS } from '@/lib/ar/overdue';
+import { addDaysIso } from '@/lib/dates/org-date';
 import type {
   IncomeStatementPayload,
   BalanceSheetPayload,
@@ -199,7 +203,7 @@ export async function fetchIncomeStatement(
 // ── Balance Sheet ────────────────────────────────────────────────────────────
 export async function fetchBalanceSheet(
   supabase: SupabaseClient,
-  scope: { asOfDate: string; locationIds: string[] },
+  scope: { asOfDate: string; locationIds: string[]; orgId?: string | null },
 ): Promise<BalanceSheetPayload> {
   const { data, error } = await fetchAll(
     () =>
@@ -297,7 +301,7 @@ export async function fetchBalanceSheet(
   const totalLiabilities = sections.find((s) => s.type === 'LIABILITY')?.totalCents ?? 0;
   const totalEquity = sections.find((s) => s.type === 'EQUITY')?.totalCents ?? 0;
 
-  return {
+  const booked: BalanceSheetPayload = {
     sections,
     summary: {
       totalAssetsCents: totalAssets,
@@ -309,6 +313,14 @@ export async function fetchBalanceSheet(
     },
     filters: { asOfDate: scope.asOfDate },
   };
+  // Present the not-yet-closed earnings in equity (prior years + current-year net
+  // income) so A = L + E before the year-end close — the same roll-in the
+  // on-screen balance sheet applies (lib/reports/bs-earnings).
+  const earnings = await fetchUnclosedEarnings(supabase, scope.orgId ?? null, {
+    asOfDate: scope.asOfDate,
+    locationIds: scope.locationIds,
+  });
+  return applyEarningsToBalanceSheet(booked, earnings);
 }
 
 // ── Cash Flow (indirect) ───────────────────────────────────────────────────
@@ -334,29 +346,22 @@ export async function fetchCashFlow(
   orgId: string,
   scope: { startDate: string; endDate: string; locationIds: string[] },
 ): Promise<CashFlowPayload> {
-  const empty: CashFlowPayload = {
-    period: { startDate: scope.startDate, endDate: scope.endDate },
-    operating: { netIncome: 0, adjustments: [], changesInWorkingCapital: [], totalCents: 0 },
-    investing: { items: [], totalCents: 0 },
-    financing: { items: [], totalCents: 0 },
-    netChangeCents: 0,
-    beginningCashCents: 0,
-    endingCashCents: 0,
-  };
+  // Cash bookends come from the CANONICAL cash definition (lib/cash/book-cash):
+  // beginning = cash as of the day before the period, ending = cash as of period
+  // end. Previously an empty period returned beginning AND ending cash = $0 (the
+  // board package read "Cash $0" while its trend showed $1.4M — audit L6).
+  const cashIds = await resolveCashAccountIds(supabase, orgId || null);
+  const [beginningCash, endingCash] = await fetchBookCashSeries(supabase, orgId || null, {
+    asOfDates: [addDaysIso(scope.startDate, -1), scope.endDate],
+    locationIds: scope.locationIds,
+  });
 
-  const { data: entryIds } = await fetchAll(
-    () =>
-      applyLoc(
-        supabase.from('gl_entries').select('id').eq('status', 'POSTED').gte('entry_date', scope.startDate).lte('entry_date', scope.endDate),
-        scope.locationIds,
-      ),
-    { label: 'board-package cash-flow gl_entries' },
+  const { data: accts } = await fetchAll(
+    () => supabase.from('accounts').select('id, account_type, account_sub_type, is_bank_account, name'),
+    { label: 'board-package cash-flow accounts' },
   );
-  if (!entryIds || entryIds.length === 0) return empty;
-
-  const { data: accts } = await supabase.from('accounts').select('id, account_type, account_sub_type, is_bank_account, name');
   const acctMeta = new Map<string, AcctMeta>();
-  for (const a of accts ?? []) {
+  for (const a of (accts ?? []) as Array<Record<string, unknown>>) {
     acctMeta.set(a.id as string, {
       type: (a.account_type as string) ?? '',
       subType: (a.account_sub_type as string) ?? '',
@@ -365,19 +370,22 @@ export async function fetchCashFlow(
     });
   }
 
-  const cashIds = new Set<string>();
-  for (const [id, m] of acctMeta) if (m.isBank) cashIds.add(id);
-  if (orgId) for (const id of await resolveRoleIds(supabase, orgId, ['CASH_ON_HAND', 'UNDEPOSITED_FUNDS', 'OPERATING_BANK'])) cashIds.add(id);
   const arIds = orgId ? await resolveRoleIds(supabase, orgId, ['AR_CONTROL', 'UNBILLED_RECEIVABLE', 'RETAINAGE_RECEIVABLE', 'ALLOWANCE_DOUBTFUL']) : new Set<string>();
   const apIds = orgId ? await resolveRoleIds(supabase, orgId, ['AP_CONTROL', 'RETAINAGE_PAYABLE', 'ACCRUED_EXPENSES']) : new Set<string>();
 
-  const { data: lines } = await fetchAllIn(
-    entryIds.map((e: { id: string }) => e.id),
-    (chunk) =>
-      supabase
-        .from('gl_entry_lines')
-        .select('account_id, debit_cents, credit_cents')
-        .in('gl_entry_id', chunk),
+  // Period activity, LINE-level company scope (the same scope the balance sheet
+  // and the canonical cash use), paged.
+  const { data: lines } = await fetchAll(
+    () =>
+      applyLoc(
+        supabase
+          .from('gl_entry_lines')
+          .select('id, account_id, debit_cents, credit_cents, gl_entries!inner(entry_date, status)')
+          .eq('gl_entries.status', 'POSTED')
+          .gte('gl_entries.entry_date', scope.startDate)
+          .lte('gl_entries.entry_date', scope.endDate),
+        scope.locationIds,
+      ),
     { label: 'board-package cash-flow gl_entry_lines' },
   );
 
@@ -385,7 +393,7 @@ export async function fetchCashFlow(
   let arChange = 0, otherCurrentAssetChange = 0, apChange = 0, otherCurrentLiabChange = 0;
   let fixedAssetChange = 0, debtChange = 0, equityChange = 0;
 
-  for (const line of lines ?? []) {
+  for (const line of (lines ?? []) as Array<Record<string, unknown>>) {
     const m = acctMeta.get(line.account_id as string);
     if (!m) continue;
     const debit = Number(line.debit_cents ?? 0);
@@ -412,36 +420,24 @@ export async function fetchCashFlow(
   }
 
   const netIncome = revenue - cogs - opex + otherIncome - otherExpense;
-  const operatingTotal = netIncome + depreciation - arChange - otherCurrentAssetChange + apChange + otherCurrentLiabChange;
+  const operatingComputed = netIncome + depreciation - arChange - otherCurrentAssetChange + apChange + otherCurrentLiabChange;
   const investingTotal = -fixedAssetChange;
   const financingTotal = debtChange + equityChange;
-  const netChange = operatingTotal + investingTotal + financingTotal;
-
-  let beginningCash = 0;
-  if (cashIds.size > 0) {
-    // Cash-account lines of every POSTED entry before the period (entry-location
-    // scoped, as before) — inner join on the same entry filters, paged. The old
-    // all-history entry-id list was capped at 1,000 rows (understated cash).
-    const cashIdList = Array.from(cashIds);
-    const { data: cashLines } = await fetchAll(() => {
-      let q = supabase
-        .from('gl_entry_lines')
-        .select('account_id, debit_cents, credit_cents, gl_entries!inner(id)')
-        .eq('gl_entries.status', 'POSTED')
-        .lt('gl_entries.entry_date', scope.startDate)
-        .in('account_id', cashIdList);
-      if (scope.locationIds.length === 1) q = q.eq('gl_entries.location_id', scope.locationIds[0]);
-      else if (scope.locationIds.length > 1) q = q.in('gl_entries.location_id', scope.locationIds);
-      return q;
-    }, { label: 'board-package beginning-cash gl_entry_lines' });
-    for (const cl of cashLines ?? []) beginningCash += Number(cl.debit_cents ?? 0) - Number(cl.credit_cents ?? 0);
-  }
+  // Tie-out: the statement must foot to the canonical cash movement. Any gap
+  // (e.g. an entry whose lines straddle companies outside the scope) is shown as
+  // an explicit line rather than silently breaking beginning + change = ending.
+  const actualChange = endingCash - beginningCash;
+  const unreconciled = actualChange - (operatingComputed + investingTotal + financingTotal);
+  const operatingTotal = operatingComputed + unreconciled;
 
   return {
     period: { startDate: scope.startDate, endDate: scope.endDate },
     operating: {
       netIncome,
-      adjustments: [{ label: 'Depreciation & Amortization', amountCents: depreciation }].filter((a) => a.amountCents !== 0),
+      adjustments: [
+        { label: 'Depreciation & Amortization', amountCents: depreciation },
+        { label: 'Unreconciled cash movement (cross-company entries)', amountCents: unreconciled },
+      ].filter((a) => a.amountCents !== 0),
       changesInWorkingCapital: [
         { label: 'Accounts Receivable', amountCents: -arChange },
         { label: 'Other Current Assets', amountCents: -otherCurrentAssetChange },
@@ -458,85 +454,68 @@ export async function fetchCashFlow(
       ].filter((a) => a.amountCents !== 0),
       totalCents: financingTotal,
     },
-    netChangeCents: netChange,
+    netChangeCents: actualChange,
     beginningCashCents: beginningCash,
-    endingCashCents: beginningCash + netChange,
+    endingCashCents: endingCash,
   };
 }
 
 // ── AR / AP Aging ────────────────────────────────────────────────────────────
-async function fetchAging(supabase: SupabaseClient, view: 'v_ar_aging' | 'v_ap_aging', locationIds: string[]): Promise<AgingPayload> {
+/**
+ * Aging buckets are re-derived from `due_date` against the ORG's `today`
+ * (lib/ar/overdue) instead of the view's `aging_bucket`, which is computed from
+ * the database's UTC CURRENT_DATE and so runs a day ahead in US evenings.
+ */
+async function fetchAging(
+  supabase: SupabaseClient,
+  view: 'v_ar_aging' | 'v_ap_aging',
+  locationIds: string[],
+  today: string,
+): Promise<AgingPayload> {
   // `> 0` defensively excludes WRITTEN_OFF/settled rows (balance 0) from aging,
   // for both AR and AP, before the v_ar_aging view drops WRITTEN_OFF.
-  let query = applyLoc(supabase.from(view).select('*').gt('balance_cents', 0), locationIds);
+  const query = applyLoc(supabase.from(view).select('due_date, balance_cents').gt('balance_cents', 0), locationIds);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  const buckets: AgingPayload['buckets'] = {
-    CURRENT: { count: 0, totalCents: 0 },
-    '1-30': { count: 0, totalCents: 0 },
-    '31-60': { count: 0, totalCents: 0 },
-    '61-90': { count: 0, totalCents: 0 },
-    '90+': { count: 0, totalCents: 0 },
-  };
-  for (const row of data ?? []) {
-    const b = row.aging_bucket as string;
-    if (buckets[b]) {
-      buckets[b].count++;
-      buckets[b].totalCents += Number(row.balance_cents ?? 0);
-    }
+  const buckets: AgingPayload['buckets'] = {};
+  for (const b of AGING_BUCKETS) buckets[b] = { count: 0, totalCents: 0 };
+  for (const row of (data ?? []) as Array<{ due_date: string | null; balance_cents: number | string | null }>) {
+    const b = agingBucketFor(row.due_date, today);
+    buckets[b].count++;
+    buckets[b].totalCents += Number(row.balance_cents ?? 0);
   }
   return { buckets, totalOutstanding: Object.values(buckets).reduce((s, b) => s + b.totalCents, 0) };
 }
 
-export const fetchArAging = (supabase: SupabaseClient, locationIds: string[]) => fetchAging(supabase, 'v_ar_aging', locationIds);
-export const fetchApAging = (supabase: SupabaseClient, locationIds: string[]) => fetchAging(supabase, 'v_ap_aging', locationIds);
+export const fetchArAging = (supabase: SupabaseClient, locationIds: string[], today: string) =>
+  fetchAging(supabase, 'v_ar_aging', locationIds, today);
+export const fetchApAging = (supabase: SupabaseClient, locationIds: string[], today: string) =>
+  fetchAging(supabase, 'v_ap_aging', locationIds, today);
 
 // ── Debt Schedule ────────────────────────────────────────────────────────────
-export async function fetchDebt(supabase: SupabaseClient, locationIds: string[]): Promise<DebtPayload> {
-  let query = supabase
-    .from('debt_instruments')
-    .select('id, name, lender, instrument_type, original_amount_cents, current_balance_cents, interest_rate, maturity_date, monthly_payment_cents, payment_type, location_id')
-    .order('current_balance_cents', { ascending: false });
-  if (locationIds.length > 0) query = query.in('location_id', locationIds);
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  const rows = (data ?? []) as Array<Record<string, unknown>>;
-  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
-    supabase,
-    'locations',
-    'id, name, short_code',
-    rows.map((r) => r.location_id as string),
-  );
-
-  const instruments = rows.map((d) => {
-    const loc = d.location_id ? locMap.get(d.location_id as string) ?? null : null;
-    const monthly = Number(d.monthly_payment_cents ?? 0);
-    return {
-      name: (d.name as string) ?? '',
-      lender: (d.lender as string) ?? '',
-      type: (d.instrument_type as string) ?? '',
-      balanceCents: Number(d.current_balance_cents ?? 0),
-      interestRate: Number(d.interest_rate ?? 0),
-      maturityDate: (d.maturity_date as string) ?? null,
-      monthlyPaymentCents: monthly,
-      annualPaymentCents: monthly * 12,
-      locationName: (loc as { name: string } | null)?.name ?? '',
-    };
-  });
-
-  const totalBalance = instruments.reduce((s, d) => s + d.balanceCents, 0);
-  const totalMonthly = instruments.reduce((s, d) => s + d.monthlyPaymentCents, 0);
-  const weightedRate = totalBalance > 0 ? instruments.reduce((s, d) => s + d.interestRate * d.balanceCents, 0) / totalBalance : 0;
-
+/**
+ * Debt as of the period end: OUTSTANDING principal from the amortization schedule
+ * (lib/debt/register) — the same figure /debt shows — not the stale stored
+ * `current_balance_cents` / original principal (audit L7). Matured / paid-off
+ * instruments carry $0 and drop out of the count and the weighted rate.
+ */
+export async function fetchDebt(supabase: SupabaseClient, locationIds: string[], asOfDate: string): Promise<DebtPayload> {
+  const register = await fetchDebtRegister(supabase, { asOfDate, locationIds });
   return {
-    data: instruments,
-    summary: {
-      totalBalanceCents: totalBalance,
-      totalMonthlyPaymentCents: totalMonthly,
-      instrumentCount: instruments.length,
-      weightedAvgRate: Math.round(weightedRate * 100) / 100,
-    },
+    data: register.instruments
+      .filter((d) => d.balanceCents > 0)
+      .map((d) => ({
+        name: d.name,
+        lender: d.lender,
+        type: d.type,
+        balanceCents: d.balanceCents,
+        interestRate: d.interestRate,
+        maturityDate: d.maturityDate,
+        monthlyPaymentCents: d.monthlyPaymentCents,
+        annualPaymentCents: d.annualPaymentCents,
+        locationName: d.locationName,
+      })),
+    summary: register.summary,
   };
 }
 
@@ -550,10 +529,8 @@ function lastDom(y: number, m: number): number {
 }
 
 /**
- * Ending cash as-of each of `asOfDates`, computed in ONE query: pull all POSTED
- * cash-account lines (with their entry date) up to the latest date, then take a
- * cumulative debit−credit balance per as-of. Cash accounts are resolved BY ROLE
- * plus the `is_bank_account` flag — never by number range.
+ * Ending cash as-of each of `asOfDates` — the CANONICAL cash definition
+ * (lib/cash/book-cash), one line read for the whole series.
  */
 async function fetchCashAsOfSeries(
   supabase: SupabaseClient,
@@ -561,38 +538,7 @@ async function fetchCashAsOfSeries(
   asOfDates: string[],
   locationIds: string[],
 ): Promise<number[]> {
-  if (asOfDates.length === 0) return [];
-  const maxDate = asOfDates.reduce((a, b) => (a > b ? a : b));
-
-  const { data: accts } = await supabase.from('accounts').select('id, is_bank_account');
-  const cashIds = new Set<string>();
-  for (const a of accts ?? []) if (a.is_bank_account) cashIds.add(a.id as string);
-  if (orgId) for (const id of await resolveRoleIds(supabase, orgId, ['CASH_ON_HAND', 'UNDEPOSITED_FUNDS', 'OPERATING_BANK'])) cashIds.add(id);
-  if (cashIds.size === 0) return asOfDates.map(() => 0);
-
-  const cashIdList = Array.from(cashIds);
-  const { data: lines } = await fetchAll(
-    () =>
-      applyLoc(
-        supabase
-          .from('gl_entry_lines')
-          .select('debit_cents, credit_cents, gl_entries!inner(entry_date, status)')
-          .eq('gl_entries.status', 'POSTED')
-          .lte('gl_entries.entry_date', maxDate)
-          .in('account_id', cashIdList),
-        locationIds,
-      ),
-    { label: 'board-package cash series gl_entry_lines' },
-  );
-  const rows = (lines ?? []) as unknown as Array<{ debit_cents: number; credit_cents: number; gl_entries: { entry_date: string } }>;
-
-  return asOfDates.map((asOf) => {
-    let bal = 0;
-    for (const l of rows) {
-      if (l.gl_entries.entry_date <= asOf) bal += Number(l.debit_cents ?? 0) - Number(l.credit_cents ?? 0);
-    }
-    return bal;
-  });
+  return fetchBookCashSeries(supabase, orgId || null, { asOfDates, locationIds });
 }
 
 /**

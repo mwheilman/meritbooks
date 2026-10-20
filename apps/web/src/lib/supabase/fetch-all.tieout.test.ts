@@ -77,6 +77,10 @@ class FakeQuery implements PromiseLike<FakeResult> {
     this.to = to;
     return this;
   }
+  limit(n: number): this {
+    this.to = Math.min(this.to, this.from + n - 1);
+    return this;
+  }
 
   private exec(): FakeResult {
     let out = this.rows.filter((r) => this.filters.every((f) => f(r)));
@@ -105,6 +109,8 @@ class FakeQuery implements PromiseLike<FakeResult> {
 function fakeClient(tables: Record<string, Row[]>): SupabaseClient {
   const client = {
     from: (table: string) => new FakeQuery(tables[table] ?? []),
+    // `core` schema tables are keyed "core.<table>".
+    schema: (schema: string) => ({ from: (table: string) => new FakeQuery(tables[`${schema}.${table}`] ?? []) }),
   };
   return client as unknown as SupabaseClient;
 }
@@ -213,7 +219,11 @@ function buildLedger(): Ledger {
 
 describe('statement tie-out over a >1,000-line ledger (PostgREST 1,000-row cap)', () => {
   const ledger = buildLedger();
-  const supabase = fakeClient({ gl_entry_lines: ledger.lines });
+  const supabase = fakeClient({
+    gl_entry_lines: ledger.lines,
+    'core.organizations': [{ id: 'org-1', fiscal_year_start_month: 1 }],
+    'core.locations': [{ id: 'loc-other', fiscal_year_start_month: 1 }],
+  });
 
   it('the cap is real: an unpaged read silently returns only 1,000 of 2,600 posted lines', async () => {
     const { data } = await supabase.from('gl_entry_lines').select('*').eq('gl_entries.status', 'POSTED');
@@ -248,7 +258,7 @@ describe('statement tie-out over a >1,000-line ledger (PostgREST 1,000-row cap)'
     expect(is.summary.netIncomeCents).toBe(ledger.expected.revenue - ledger.expected.opex);
   });
 
-  it('balance sheet ties: Assets = Liabilities + Equity + current-period net income', async () => {
+  it('balance sheet ties: Assets = Liabilities + Equity, with current-year net income IN equity', async () => {
     const bs = await fetchBalanceSheet(supabase, { asOfDate: '2026-12-31', locationIds: [] });
     const is = await fetchIncomeStatement(supabase, {
       startDate: '2026-01-01',
@@ -258,11 +268,13 @@ describe('statement tie-out over a >1,000-line ledger (PostgREST 1,000-row cap)'
     });
     expect(bs.summary.totalAssetsCents).toBe(ledger.expected.cash);
     expect(bs.summary.totalLiabilitiesCents).toBe(ledger.expected.loan);
-    expect(bs.summary.totalEquityCents).toBe(ledger.expected.equity);
-    // No year-end close has run, so retained earnings for the year live in the P&L.
-    expect(bs.summary.totalAssetsCents).toBe(
-      bs.summary.totalLiabilitiesCents + bs.summary.totalEquityCents + is.summary.netIncomeCents,
-    );
+    // No year-end close has run, so equity = booked equity + current-year NI
+    // (presented as "Net income (current year)") — the statement balances itself.
+    expect(bs.summary.currentYearNetIncomeCents).toBe(is.summary.netIncomeCents);
+    expect(bs.summary.totalEquityCents).toBe(ledger.expected.equity + is.summary.netIncomeCents);
+    expect(bs.summary.isBalanced).toBe(true);
+    expect(bs.summary.varianceCents).toBe(0);
+    expect(bs.summary.totalAssetsCents).toBe(bs.summary.totalLiabilitiesCents + bs.summary.totalEquityCents);
   });
 
   it('location-scoped statements still respect the filter while paging', async () => {

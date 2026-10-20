@@ -11,6 +11,7 @@ import { isSpecificCompany } from '@/lib/company-scope';
 import { JournalEntryDrawer } from './je-drawer';
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { JournalEntryPeek } from './je-peek';
+import { jeDeepLinkId, withCanonicalJeId } from '@/lib/je-deep-link';
 
 interface JERow {
   id: string;
@@ -78,15 +79,19 @@ export function JournalEntryList() {
   // Deep-link: open the drawer from ?id=<uuid> on load (e.g. an Explain "based on"
   // link), and keep the URL in sync so the record is shareable and refresh-safe.
   // A bad/missing id degrades to the list, as before.
+  // `?entry=` and `?highlight=` (payroll, internal invoices, search) are
+  // honored too and normalized to `?id=`. The linked row is also highlighted
+  // and scrolled into view once the list loads.
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get('id');
-    if (id) setSelectedId(id);
+    const id = jeDeepLinkId(window.location.search);
+    if (id) {
+      setSelectedId(id);
+      setHighlightId(id);
+    }
   }, []);
   useEffect(() => {
-    const url = new URL(window.location.href);
-    if (selectedId) url.searchParams.set('id', selectedId);
-    else url.searchParams.delete('id');
-    window.history.replaceState(null, '', url.toString());
+    window.history.replaceState(null, '', withCanonicalJeId(window.location.href, selectedId));
   }, [selectedId]);
 
   const params: Record<string, string> = {};
@@ -100,6 +105,12 @@ export function JournalEntryList() {
   );
 
   const entries = data?.data ?? [];
+
+  useEffect(() => {
+    if (!highlightId || entries.length === 0) return;
+    const row = document.querySelector<HTMLElement>(`[data-je-id="${highlightId}"]`);
+    row?.scrollIntoView({ block: 'center' });
+  }, [highlightId, entries.length]);
   const counts = data?.counts ?? null;
 
   return (
@@ -173,7 +184,14 @@ export function JournalEntryList() {
               {entries.map((je) => {
                 const source = SOURCE_LABELS[je.sourceModule ?? ''] ?? SOURCE_LABELS.SYSTEM;
                 return (
-                  <tr key={je.id} {...rowHandlers(je)} onClick={() => setSelectedId(je.id)} className="row-clickable">
+                  <tr
+                    key={je.id}
+                    {...rowHandlers(je)}
+                    data-je-id={je.id}
+                    aria-current={highlightId === je.id ? 'true' : undefined}
+                    onClick={() => setSelectedId(je.id)}
+                    className={clsx('row-clickable', highlightId === je.id && 'bg-brand-500/10 ring-1 ring-inset ring-brand-500/40')}
+                  >
                     <td className="px-4 py-3 text-sm font-mono text-slate-300 whitespace-nowrap">
                       {je.entryNumber}
                     </td>

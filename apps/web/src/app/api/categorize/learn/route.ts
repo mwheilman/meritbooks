@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
 import { learnVendorPattern } from '@/lib/services/categorization';
 
@@ -15,8 +16,12 @@ const schema = z.object({
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+  // R0b — learning a vendor→account pattern changes how FUTURE transactions are coded,
+  // so it carries the same coding gate as the categorizer itself. Fails closed (403).
+  const guard = await requirePermission(userId, 'journal_entries', 'create');
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try { raw = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }

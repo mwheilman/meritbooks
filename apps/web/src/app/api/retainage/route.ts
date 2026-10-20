@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
 import { getRetainageRegister, releaseRetainage } from '@/lib/services/retainage';
 import {
@@ -13,10 +14,13 @@ import {
 export async function GET() {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) {
     return NextResponse.json({ rows: [], totals: { withheldCents: 0, releasedCents: 0, outstandingCents: 0 } });
   }
+  // R0b — the retainage register is AP sub-ledger data (amounts owed to subs).
+  const guard = await requirePermission(userId, 'bills', 'view');
+  if (!guard.ok) return guard.response;
   const overview = await getRetainageRegister(supabase, orgId);
   return NextResponse.json(overview);
 }

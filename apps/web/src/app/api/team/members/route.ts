@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { createAdminSupabase } from '@/lib/supabase/server';
+import { allOrgLocations } from '@/lib/team/org-locations';
 import { requireManageUsers } from '@/lib/team/guard';
 import { createMemberSchema } from '@/lib/validations/team';
 import { ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
@@ -189,6 +191,15 @@ export async function POST(req: NextRequest) {
   const { email, firstName, lastName, role, companyIds } = parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
 
+  // Every granted company must belong to THIS org — the grant write below runs as the
+  // service role (migration 154), so the tenant check is ours, not RLS's.
+  if (!(await allOrgLocations(supabase, orgId!, companyIds))) {
+    return NextResponse.json(
+      { error: 'One or more companies are not in this organization', code: 'INVALID_COMPANY' },
+      { status: 422 }
+    );
+  }
+
   // Reject a duplicate email within the org (case-insensitive).
   const { data: existing } = await supabase
     .schema('core')
@@ -205,7 +216,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { data: created, error: insertErr } = await supabase
+  // core.employees / employee_locations are SELECT-only for members (migration 154):
+  // writes run as the service role, authorized by requireManageUsers above and pinned
+  // to the session org.
+  const admin = createAdminSupabase();
+  const { data: created, error: insertErr } = await admin
     .schema('core')
     .from('employees')
     .insert({
@@ -236,7 +251,7 @@ export async function POST(req: NextRequest) {
       org_id: orgId!,
       assigned_by: grant.employeeId,
     }));
-    const { error: linkErr } = await supabase.from('employee_locations').insert(rows);
+    const { error: linkErr } = await admin.from('employee_locations').insert(rows);
     if (linkErr) {
       return NextResponse.json(
         { error: `Member created but company access failed: ${linkErr.message}`, code: 'LINK_ERROR' },

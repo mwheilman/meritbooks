@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiQueryHandler } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { loadConsolidated } from '@/lib/consolidation/load';
 
 /**
@@ -24,6 +25,10 @@ export const GET = apiQueryHandler(querySchema, async (params: Query, ctx) => {
   if (!ctx.orgId) {
     return NextResponse.json({ error: 'No organization in session', code: 'NO_ORG' }, { status: 400 });
   }
+  // R0b — consolidated P&L / balance sheet across the whole entity group is a
+  // financial-reports read. Fails closed (403).
+  const guard = await requirePermission(ctx.userId, 'reports', 'view');
+  if (!guard.ok) return guard.response;
   const now = new Date();
   const yyyy = now.getUTCFullYear();
   const mm = String(now.getUTCMonth() + 1).padStart(2, '0');

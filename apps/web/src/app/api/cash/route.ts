@@ -2,12 +2,21 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { fetchBookCash, CASH_DEFINITION } from '@/lib/cash/book-cash';
+import { getOrgToday } from '@/lib/dates/org-today';
 
 /**
  * GET /api/cash?location_id=<uuid>
  *
- * Current cash position across bank accounts, grouped by company (location).
- * Optional `location_id` narrows to one company.
+ * Current cash position grouped by company (location). Optional `location_id`
+ * narrows to one company.
+ *
+ * `totalCashCents` is the CANONICAL book cash (lib/cash/book-cash — posted GL
+ * balance of bank/cash-role accounts as of today in the org's timezone), the
+ * same figure the dashboard, entity snapshot, board package and FP&A show.
+ * Bank-feed balances are returned per account and as `bankBalanceCents` (credit
+ * cards excluded — they are liabilities, not cash) with the book−bank gap as
+ * `unreconciledCents`, a reconciliation reference only.
  *
  * RLS-scoped: runs as the user so tenant isolation is enforced by the database
  * (previously this route used the RLS-bypassing admin client + v_cash_position
@@ -48,7 +57,12 @@ interface CashLocation {
   locationName: string;
   minimumCashCents: number;
   accounts: CashAccount[];
+  /** Canonical book cash (GL). */
   totalCashCents: number;
+  /** Σ bank-feed balances of non-credit-card accounts (the bank's view). */
+  bankBalanceCents: number;
+  /** totalCashCents − bankBalanceCents (unreconciled items / stale feed). */
+  unreconciledCents: number;
   cashStatus: string;
   staleCount: number;
 }
@@ -98,6 +112,20 @@ export async function GET(request: Request) {
     for (const l of (locs ?? []) as LocationRow[]) locMap.set(l.id, l);
   }
 
+  const today = await getOrgToday(supabase, orgId);
+  let bookCash;
+  try {
+    bookCash = await fetchBookCash(supabase, orgId, { asOfDate: today, locationIds: locationId ? [locationId] : [] });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to compute cash' }, { status: 500 });
+  }
+  // Companies that carry book cash but have no bank feed still appear.
+  const bookLocIds = Object.keys(bookCash.byLocation).filter((id) => id !== 'unassigned' && !locMap.has(id));
+  if (bookLocIds.length) {
+    const { data: more } = await supabase.schema('core').from('locations').select('id, name, minimum_cash_cents').in('id', bookLocIds);
+    for (const l of (more ?? []) as LocationRow[]) locMap.set(l.id, l);
+  }
+
   const staleBefore = Date.now() - STALE_DAYS * 86_400_000;
   let asOfDate: string | null = null;
 
@@ -118,10 +146,11 @@ export async function GET(request: Request) {
       updatedAt,
       stale,
     };
+    const bankCash = account.type === 'CREDIT_CARD' ? 0 : account.balanceCents;
     const existing = byLoc.get(row.location_id);
     if (existing) {
       existing.accounts.push(account);
-      existing.totalCashCents += account.balanceCents;
+      existing.bankBalanceCents += bankCash;
       if (stale) existing.staleCount += 1;
     } else {
       byLoc.set(row.location_id, {
@@ -129,18 +158,44 @@ export async function GET(request: Request) {
         locationName: loc?.name ?? 'Unknown',
         minimumCashCents: Number(loc?.minimum_cash_cents ?? 0),
         accounts: [account],
-        totalCashCents: account.balanceCents,
+        totalCashCents: 0,
+        bankBalanceCents: bankCash,
+        unreconciledCents: 0,
         cashStatus: 'ADEQUATE',
         staleCount: stale ? 1 : 0,
       });
     }
   }
+  for (const [locId, cents] of Object.entries(bookCash.byLocation)) {
+    if (locId === 'unassigned' || byLoc.has(locId)) continue;
+    const loc = locMap.get(locId);
+    byLoc.set(locId, {
+      locationId: locId,
+      locationName: loc?.name ?? 'Unknown',
+      minimumCashCents: Number(loc?.minimum_cash_cents ?? 0),
+      accounts: [],
+      totalCashCents: cents,
+      bankBalanceCents: 0,
+      unreconciledCents: 0,
+      cashStatus: 'ADEQUATE',
+      staleCount: 0,
+    });
+  }
 
   const locations = Array.from(byLoc.values())
-    .map((l) => ({ ...l, cashStatus: cashStatus(l.totalCashCents, l.minimumCashCents) }))
+    .map((l) => {
+      const book = bookCash.byLocation[l.locationId] ?? 0;
+      return {
+        ...l,
+        totalCashCents: book,
+        unreconciledCents: book - l.bankBalanceCents,
+        cashStatus: cashStatus(book, l.minimumCashCents),
+      };
+    })
     .sort((a, b) => a.locationName.localeCompare(b.locationName));
 
   const totalCash = locations.reduce((s, l) => s + l.totalCashCents, 0);
+  const totalBank = locations.reduce((s, l) => s + l.bankBalanceCents, 0);
   const criticalCount = locations.filter((l) => l.cashStatus === 'CRITICAL').length;
   const nearMinCount = locations.filter((l) => l.cashStatus === 'NEAR_MINIMUM').length;
   const totalAccounts = locations.reduce((s, l) => s + l.accounts.length, 0);
@@ -150,6 +205,10 @@ export async function GET(request: Request) {
     locations,
     summary: {
       totalCashCents: totalCash,
+      bankBalanceCents: totalBank,
+      unreconciledCents: totalCash - totalBank,
+      cashAsOfDate: today,
+      definition: CASH_DEFINITION,
       entityCount: locations.length,
       accountCount: totalAccounts,
       criticalCount,

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { X, Loader2, ChevronLeft, ChevronRight, Inbox, AlertCircle } from 'lucide-react';
 import { formatMoney } from '@meritbooks/shared';
+import { useEscapeKey } from '@/hooks/use-escape-key';
 
 // Full general-ledger detail for a single account, reusing the existing
 // read route (/api/reports/gl-detail). Opened from the Chart of Accounts
@@ -84,6 +85,7 @@ export function GlDetailModal({
     return () => { alive = false; };
   }, [accountId, startDate, endDate, locationId, page]);
 
+  useEscapeKey(onClose);
   const txns = data?.data ?? [];
   const summary = data?.summary;
   const pagination = data?.pagination;
@@ -91,6 +93,9 @@ export function GlDetailModal({
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center pt-8 overflow-y-auto" onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`GL detail for ${accountNumber}`}
         className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-4xl mb-8 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >

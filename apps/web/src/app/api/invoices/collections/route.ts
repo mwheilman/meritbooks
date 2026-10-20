@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
+import { getOrgToday } from '@/lib/dates/org-today';
+import { daysPastDue } from '@/lib/ar/overdue';
 
 /**
  * GET /api/invoices/collections — the AR Collections / DSO surface.
@@ -86,7 +88,10 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const locationId = searchParams.get('location_id');
-  const asOf = parseDate(searchParams.get('as_of')) ?? new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  // Default as-of = TODAY IN THE ORG'S TIMEZONE (the UTC date ran a day ahead
+  // for US evenings — audit L14). Same anchor as the invoice list's overdue flag.
+  const asOf = parseDate(searchParams.get('as_of')) ?? (parseDate(await getOrgToday(supabase, orgId)) as Date);
+  const asOfIso = asOf.toISOString().slice(0, 10);
   const agingMethod = searchParams.get('aging_method') === 'INVOICE_DATE' ? 'INVOICE_DATE' : 'DUE_DATE';
   const dsoDays = Math.min(365, Math.max(30, parseInt(searchParams.get('dso_days') ?? '90', 10) || 90));
   const windowStart = new Date(asOf.getTime() - dsoDays * DAY_MS);
@@ -216,7 +221,8 @@ export async function GET(request: Request) {
     const agingRef = agingMethod === 'INVOICE_DATE' ? invDate : (dueDate ?? invDate);
     const daysPast = daysBetween(asOf, agingRef);
     const bucket = bucketFor(daysPast);
-    const daysOverdueByDue = dueDate ? daysBetween(asOf, dueDate) : 0;
+    // Same predicate as the invoice list (lib/ar/overdue): open ∧ balance > 0 ∧ due < as-of.
+    const daysOverdueByDue = daysPastDue(inv.due_date, asOfIso);
 
     totalAR += balance;
     buckets[bucket].count++;

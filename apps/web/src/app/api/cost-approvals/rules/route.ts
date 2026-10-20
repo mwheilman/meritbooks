@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { createAdminSupabase } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/rbac/require-permission';
 
 export async function GET() {
@@ -42,8 +43,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid approver_type' }, { status: 422 });
   }
 
-  const { data, error } = await supabase.from('cost_approval_rules').insert({
-    org_id: orgId,
+  // cost_approval_rules is SELECT-only for members (migration 154): service-role write,
+  // gated by bills:approve above and pinned to the guard-resolved session org.
+  const { data, error } = await createAdminSupabase().from('cost_approval_rules').insert({
+    org_id: guard.orgId,
     match_type: matchType,
     match_value: matchType === 'DEFAULT' ? null : (body.match_value as string) ?? null,
     approver_type: approverType,
@@ -68,7 +71,8 @@ export async function DELETE(request: Request) {
 
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
-  const { error } = await supabase.from('cost_approval_rules').delete().eq('org_id', orgId).eq('id', id);
+  // Service-role delete (migration 154), gated above, pinned to the session org.
+  const { error } = await createAdminSupabase().from('cost_approval_rules').delete().eq('org_id', guard.orgId).eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

@@ -7,6 +7,8 @@ import { z } from 'zod';
 import { buildReforecast, type ReforecastAccountInput } from '@/lib/budget/reforecast';
 import type { AccountType } from '@/lib/budget/drivers';
 import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
+import { resolveCashAccountIds } from '@/lib/cash/book-cash';
+import { getOrgToday } from '@/lib/dates/org-today';
 import {
   computeKpiSet,
   computeRunway,
@@ -84,10 +86,11 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
   if (!guard.ok) return guard.response;
 
   const { supabase } = ctx;
-  const now = new Date();
-  const fiscalYear = parseInt(params.fiscal_year ?? String(now.getFullYear()), 10);
-  const isCurrentYear = fiscalYear === now.getFullYear();
-  const defaultMonth = isCurrentYear ? now.getMonth() + 1 : 12;
+  // "Now" is the ORG's calendar date, not the server's UTC clock.
+  const [todayY, todayM] = (await getOrgToday(supabase, ctx.orgId)).split('-').map(Number);
+  const fiscalYear = parseInt(params.fiscal_year ?? String(todayY), 10);
+  const isCurrentYear = fiscalYear === todayY;
+  const defaultMonth = isCurrentYear ? todayM : 12;
   const asOfMonth = params.as_of_month ? parseInt(params.as_of_month, 10) : defaultMonth;
 
   const locationIds = [
@@ -188,6 +191,9 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
 
   // ── 3. Balance-sheet snapshot (as-of date) — cash / AR / AP / working capital
   //      Classified by account_type + sub_type + is_bank flag (never by number).
+  // Cash uses the CANONICAL cash-account set (lib/cash/book-cash) so FP&A ties to
+  // every other "cash" figure in the app.
+  const cashIds = await resolveCashAccountIds(supabase, ctx.orgId);
   const snapshot = async (asOf: string) => {
     const buildQ = () => {
       let q = supabase
@@ -210,7 +216,6 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
       const acct = line.accounts as unknown as Record<string, unknown>;
       const type = acct.account_type as string;
       const subType = (acct.account_sub_type as string) ?? '';
-      const isBank = Boolean(acct.is_bank_account);
       const name = ((acct.name as string) ?? '').toLowerCase();
       const debit = Number(line.debit_cents ?? 0);
       const credit = Number(line.credit_cents ?? 0);
@@ -221,7 +226,7 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
       const isCurrentAsset = CURRENT_ASSET_SUBTYPES.includes(subType);
       const isCurrentLiab = CURRENT_LIAB_SUBTYPES.includes(subType);
       if (type === 'ASSET') {
-        if (isBank || subType === 'CASH') cashCents += bal;
+        if (cashIds.has(line.account_id as string)) cashCents += bal;
         if (isCurrentAsset) currentAssetsCents += bal;
         // AR family: current assets named "…receivable" (control + sub-ledgers).
         if (isCurrentAsset && name.includes('receivable')) arCents += bal;

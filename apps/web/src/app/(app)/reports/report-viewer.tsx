@@ -16,6 +16,7 @@ import { canConsolidate, isSpecificCompany } from '@/lib/company-scope';
 import { formatMoney } from '@meritbooks/shared';
 import type { Location } from '@meritbooks/shared';
 import { LEDGER_TH, LEDGER_TOTAL, LEDGER_SUBTOTAL, figColor } from '@/lib/reports/ledger';
+import { pctOfBase, formatPctOfBase, formatMarginPct } from '@/lib/reports/percent';
 import { CashFlowReport } from './cash-flow-report';
 import { CashFlowDirectReport } from './cash-flow-direct-report';
 import { GlDrillDown } from './gl-drill-down';
@@ -25,7 +26,8 @@ import { JobProfitabilityReport } from './job-profitability-report';
 import { ExpenseByVendorReport } from './expense-by-vendor-report';
 import { ExportMenu } from './export-menu';
 import { NarrativePanel } from './narrative-panel';
-import { ReportCompiler } from './report-compiler';
+import { ReportCompiler, type CompilerRequest } from './report-compiler';
+import { matchCatalogReport } from './report-search';
 import { SavedPacks } from './saved-packs';
 import { SavedViews, type SavedView, type ViewConfig } from './saved-views';
 import { useBasisOverlay, type PresentationBasis, type BasisOverlay } from './use-basis-overlay';
@@ -225,6 +227,8 @@ export function ReportViewer() {
   const [compareMode, setCompareMode] = useState<CompareMode>('none');
   const [drill, setDrill] = useState<DrillDownTarget | null>(null);
   const [nlQuery, setNlQuery] = useState('');
+  const [compilerRequest, setCompilerRequest] = useState<CompilerRequest | null>(null);
+  const [nlHint, setNlHint] = useState<string | null>(null);
   // ── Learned report preferences (M14): remember how the user usually runs each
   // report and default the selectors to that. Read-only personalization — it only
   // pre-selects; the user can change anything. ──
@@ -428,6 +432,22 @@ export function ReportViewer() {
     [locations]
   );
 
+  // "Ask for any report…": open a catalog report by name, else hand the request
+  // to the NL Report Compiler (which shows its own AI-unavailable message).
+  const askForReport = () => {
+    const q = nlQuery.trim();
+    if (q.length < 2) return;
+    const hit = matchCatalogReport(q, CATALOG);
+    if (hit) {
+      setCatKey(hit.categoryKey);
+      setReportKey(hit.reportKey);
+      setNlHint(`Opened ${hit.label}`);
+      return;
+    }
+    setCompilerRequest((prev) => ({ prompt: q, nonce: (prev?.nonce ?? 0) + 1 }));
+    setNlHint('Sent to the report compiler →');
+  };
+
   const industryOptions = useMemo(() =>
     industries.map((i) => ({ value: i, label: i })),
     [industries]
@@ -439,8 +459,13 @@ export function ReportViewer() {
       <div className="w-60 shrink-0 overflow-y-auto">
         <div className="relative mb-4">
           <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-400" />
-          <input type="text" placeholder="Ask for any report..." value={nlQuery} onChange={(e) => setNlQuery(e.target.value)}
+          <input type="text" placeholder="Ask for any report..." value={nlQuery}
+            onChange={(e) => { setNlQuery(e.target.value); setNlHint(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); askForReport(); } }}
+            aria-label="Ask for any report"
+            aria-describedby={nlHint ? 'report-ask-hint' : undefined}
             className="w-full pl-9 pr-3 py-2.5 bg-indigo-500/[0.06] border border-indigo-500/20 rounded-xl text-sm text-white placeholder:text-indigo-300/40 focus:outline-none focus:border-indigo-500/40" />
+          {nlHint && <p id="report-ask-hint" role="status" className="mt-1.5 px-1 text-[11px] text-slate-500">{nlHint}</p>}
         </div>
         <nav className="space-y-0.5">
           {CATALOG.map((cat) => {
@@ -476,7 +501,7 @@ export function ReportViewer() {
         <div className="flex justify-end mb-3">
           <SavedViews currentReportKey={reportKey} currentConfig={currentConfig} reportLabelFor={reportLabelFor} onApply={applyView} />
         </div>
-        <ReportCompiler entityLabel={entityLabel} locationIds={selectedLocs} />
+        <ReportCompiler entityLabel={entityLabel} locationIds={selectedLocs} request={compilerRequest} />
         <SavedPacks />
         {!reportKey ? (
           <div>
@@ -835,14 +860,14 @@ function applyOverlayToPnl(data: ISR, overlay: BasisOverlay): { data: ISR; label
   const revenueCents = s.revenueCents + dRev;
   const grossProfitCents = s.grossProfitCents + dRev - dCogs;
   const netIncomeCents = s.netIncomeCents + dRev - dCogs - dOpex - dOther;
-  const rb = Math.abs(revenueCents) || 1;
   const summary = {
     ...s,
     revenueCents,
     grossProfitCents,
     netIncomeCents,
-    grossMarginPct: Math.round((grossProfitCents / rb) * 10000) / 100,
-    netMarginPct: Math.round((netIncomeCents / rb) * 10000) / 100,
+    // 0 when revenue is 0; the UI renders "—" for a zero base (formatMarginPct).
+    grossMarginPct: pctOfBase(grossProfitCents, revenueCents, 2) ?? 0,
+    netMarginPct: pctOfBase(netIncomeCents, revenueCents, 2) ?? 0,
   };
   return { data: { ...data, sections, summary }, labels };
 }
@@ -874,7 +899,7 @@ function PnlReport({ p, onDrill, compareMode, overlay }: { p: Record<string, str
 
   if (isLoading || overlay.loading) return <Ld />; if (error) return <Er m={String(error)} />; if (!data) return <Em />;
   const adjusted = applyOverlayToPnl(data, overlay);
-  const { sections, summary: s } = adjusted.data; const rb = Math.abs(s.revenueCents) || 1;
+  const { sections, summary: s } = adjusted.data; const rb = s.revenueCents;
   const comparing = compareMode !== 'none';
 
   // ── Merge comparison figures by account number. ──
@@ -898,10 +923,10 @@ function PnlReport({ p, onDrill, compareMode, overlay }: { p: Record<string, str
       <BasisBanner overlay={overlay} />
     <div className="card overflow-hidden"><table className="w-full"><thead><tr className="border-b border-slate-800/50"><th className="px-6 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 font-mono tracking-caps w-24">Acct</th><th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 font-mono tracking-caps">Description</th><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 font-mono tracking-caps">Amount</th><th className="px-3 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 font-mono tracking-caps w-12">%</th>{comparing&&<><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 font-mono tracking-caps">{cmpLabel}</th><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 font-mono tracking-caps">Var $</th><th className="px-3 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 font-mono tracking-caps w-14">Var %</th></>}</tr></thead><tbody>
       {sections.map((sec: ISSection) => (<React.Fragment key={sec.type}><tr className="bg-slate-800/30"><td colSpan={cols} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase">{sec.label} <span className="font-mono text-slate-500 ml-1">{formatMoney(sec.totalCents)}</span></td></tr>
-        {sec.groups.flatMap((g: ISGroup) => g.accounts.map((a: ISAcct) => { const pv=cmpMap.get(a.accountNumber)??0; const v=a.amountCents-pv; const f=favorability(sec.type,v); return <tr key={a.accountNumber} onClick={() => onDrill({accountId:a.accountId,accountNumber:a.accountNumber,accountName:a.accountName})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td><td className="px-4 py-1.5 text-sm text-slate-300 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600"/></td><td className={clsx('px-4 py-1.5 text-right text-sm font-mono', figColor(a.amountCents))}>{formatMoney(a.amountCents)}</td><td className="px-3 py-1.5 text-right text-2xs font-mono text-slate-600">{Math.round(Math.abs(a.amountCents)/rb*100)}%</td>{comparing&&<><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-400">{formatMoney(pv)}</td><td className={clsx('px-4 py-1.5 text-right text-sm font-mono',favClass(f))}>{v>0?'+':''}{formatMoney(v)}</td><td className={clsx('px-3 py-1.5 text-right text-2xs font-mono',favClass(f))}>{variancePct(v,pv)}</td></>}</tr>; }))}
+        {sec.groups.flatMap((g: ISGroup) => g.accounts.map((a: ISAcct) => { const pv=cmpMap.get(a.accountNumber)??0; const v=a.amountCents-pv; const f=favorability(sec.type,v); return <tr key={a.accountNumber} onClick={() => onDrill({accountId:a.accountId,accountNumber:a.accountNumber,accountName:a.accountName})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td><td className="px-4 py-1.5 text-sm text-slate-300 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600"/></td><td className={clsx('px-4 py-1.5 text-right text-sm font-mono', figColor(a.amountCents))}>{formatMoney(a.amountCents)}</td><td className="px-3 py-1.5 text-right text-2xs font-mono text-slate-600">{formatPctOfBase(a.amountCents, rb, { decimals: 0, absolute: true })}</td>{comparing&&<><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-400">{formatMoney(pv)}</td><td className={clsx('px-4 py-1.5 text-right text-sm font-mono',favClass(f))}>{v>0?'+':''}{formatMoney(v)}</td><td className={clsx('px-3 py-1.5 text-right text-2xs font-mono',favClass(f))}>{variancePct(v,pv)}</td></>}</tr>; }))}
       </React.Fragment>))}
-      <tr className={clsx(LEDGER_SUBTOTAL, 'bg-slate-800/20')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Gross Profit</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(s.grossProfitCents)} <span className="text-2xs text-slate-500">{s.grossMarginPct}%</span></td><td/>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{formatMoney(cmpGP)}</td><td className={clsx('px-4 py-2.5 text-right font-mono text-sm',favClass(favorability('REVENUE',gpVar)))}>{gpVar>0?'+':''}{formatMoney(gpVar)}</td><td className={clsx('px-3 py-2.5 text-right text-2xs font-mono',favClass(favorability('REVENUE',gpVar)))}>{variancePct(gpVar,cmpGP)}</td></>}</tr>
-      <tr className={clsx(LEDGER_TOTAL, 'bg-brand-500/[0.04]')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Net Income</td><td className={clsx('px-4 py-2.5 text-right font-mono font-semibold',s.netIncomeCents>=0?'text-emerald-400':'text-red-fig')}>{formatMoney(s.netIncomeCents)} <span className="text-2xs text-slate-500">{s.netMarginPct}%</span></td><td/>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{formatMoney(cmpNI)}</td><td className={clsx('px-4 py-2.5 text-right font-mono text-sm',favClass(favorability('REVENUE',niVar)))}>{niVar>0?'+':''}{formatMoney(niVar)}</td><td className={clsx('px-3 py-2.5 text-right text-2xs font-mono',favClass(favorability('REVENUE',niVar)))}>{variancePct(niVar,cmpNI)}</td></>}</tr>
+      <tr className={clsx(LEDGER_SUBTOTAL, 'bg-slate-800/20')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Gross Profit</td><td className="px-4 py-2.5 text-right font-mono font-semibold text-white">{formatMoney(s.grossProfitCents)} <span className="text-2xs text-slate-500">{formatMarginPct(s.grossMarginPct, s.revenueCents)}</span></td><td/>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{formatMoney(cmpGP)}</td><td className={clsx('px-4 py-2.5 text-right font-mono text-sm',favClass(favorability('REVENUE',gpVar)))}>{gpVar>0?'+':''}{formatMoney(gpVar)}</td><td className={clsx('px-3 py-2.5 text-right text-2xs font-mono',favClass(favorability('REVENUE',gpVar)))}>{variancePct(gpVar,cmpGP)}</td></>}</tr>
+      <tr className={clsx(LEDGER_TOTAL, 'bg-brand-500/[0.04]')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Net Income</td><td className={clsx('px-4 py-2.5 text-right font-mono font-semibold',s.netIncomeCents>=0?'text-emerald-400':'text-red-fig')}>{formatMoney(s.netIncomeCents)} <span className="text-2xs text-slate-500">{formatMarginPct(s.netMarginPct, s.revenueCents)}</span></td><td/>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{formatMoney(cmpNI)}</td><td className={clsx('px-4 py-2.5 text-right font-mono text-sm',favClass(favorability('REVENUE',niVar)))}>{niVar>0?'+':''}{formatMoney(niVar)}</td><td className={clsx('px-3 py-2.5 text-right text-2xs font-mono',favClass(favorability('REVENUE',niVar)))}>{variancePct(niVar,cmpNI)}</td></>}</tr>
     </tbody></table></div>
       <BasisAdjustmentsSchedule overlay={overlay} labels={adjusted.labels} />
     </>
@@ -994,7 +1019,9 @@ function PnlByMonthReport({ locIds, basis, year }: { locIds: string; basis: stri
 // BS (multi-location)
 // ═══════════════════════════════════════════════════════════════
 
-interface BSData { sections: { type: string; label: string; subTypes: { groups: { accounts: { accountId: string; accountNumber: string; accountName: string; balanceCents: number }[] }[] }[]; totalCents: number }[]; summary: { totalAssetsCents: number; totalLiabilitiesCents: number; totalEquityCents: number; isBalanced: boolean; varianceCents: number } }
+interface BSData { sections: { type: string; label: string; subTypes: { groups: { accounts: { accountId: string; accountNumber: string; accountName: string; balanceCents: number; synthetic?: boolean }[] }[] }[]; totalCents: number }[]; summary: { totalAssetsCents: number; totalLiabilitiesCents: number; totalEquityCents: number; isBalanced: boolean; varianceCents: number } }
+/** Comparison/row key: synthetic presentation lines (current-year net income) have no account number. */
+const bsKey = (a: { accountId: string; accountNumber: string; synthetic?: boolean }) => (a.synthetic ? a.accountId : a.accountNumber);
 
 function applyOverlayToBs(data: BSData, overlay: BasisOverlay): { data: BSData; labels: Map<string, OverlayAcctLabel> } {
   const labels = new Map<string, OverlayAcctLabel>();
@@ -1048,7 +1075,7 @@ function BsReport({ ed, locIds, onDrill, compareMode, overlay }: { ed: string; l
   const { sections, summary: s } = adjusted.data;
   const comparing = !!cmpAsOf;
   const cmpMap = new Map<string, number>();
-  if (cmpData) cmpData.sections.forEach((sec) => sec.subTypes.forEach((st) => st.groups.forEach((g) => g.accounts.forEach((a) => cmpMap.set(a.accountNumber, a.balanceCents)))));
+  if (cmpData) cmpData.sections.forEach((sec) => sec.subTypes.forEach((st) => st.groups.forEach((g) => g.accounts.forEach((a) => cmpMap.set(bsKey(a), a.balanceCents)))));
   const cmpLabel = compareMode === 'prior_year' ? 'Prior Yr' : 'Prior';
   const cmpAssets = cmpData?.summary.totalAssetsCents ?? 0;
   const cmpLE = (cmpData?.summary.totalLiabilitiesCents ?? 0) + (cmpData?.summary.totalEquityCents ?? 0);
@@ -1059,8 +1086,8 @@ function BsReport({ ed, locIds, onDrill, compareMode, overlay }: { ed: string; l
     <div className="card overflow-hidden">
       <div className="px-6 py-3 border-b border-slate-800 flex items-center justify-between"><p className="text-2xs text-slate-500 font-mono">As of {ed}{comparing && <span className="text-slate-600"> · vs {cmpAsOf}</span>}</p>{s.isBalanced?<span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs bg-emerald-500/10 text-pos"><span className="w-1.5 h-1.5 rounded-full bg-pos" aria-hidden />In balance</span>:<span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-fig"><span className="w-1.5 h-1.5 rounded-full bg-red-fig" aria-hidden />Off by {formatMoney(Math.abs(s.varianceCents))}</span>}</div>
       <table className="w-full"><thead><tr className="border-b border-slate-800/50"><th className="px-6 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 font-mono tracking-caps w-24">Acct</th><th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 font-mono tracking-caps">Description</th><th className="px-6 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 font-mono tracking-caps">Balance</th>{comparing&&<><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 font-mono tracking-caps">{cmpLabel}</th><th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 font-mono tracking-caps">Change</th></>}</tr></thead><tbody>
-        {sections.map((sec) => { let secPrior=0; sec.subTypes.forEach((st) => st.groups.forEach((g) => g.accounts.forEach((a) => { secPrior += cmpMap.get(a.accountNumber)??0; }))); const secChg=sec.totalCents-secPrior; return (<React.Fragment key={sec.type}><tr className="bg-slate-800/30"><td colSpan={2} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase">{sec.label}</td><td className="px-6 py-2 text-right text-xs font-mono font-semibold text-slate-300">{formatMoney(sec.totalCents)}</td>{comparing&&<><td className="px-4 py-2 text-right text-xs font-mono text-slate-500">{formatMoney(secPrior)}</td><td className="px-4 py-2 text-right text-xs font-mono text-slate-400">{secChg>0?'+':''}{formatMoney(secChg)}</td></>}</tr>
-          {sec.subTypes.flatMap((st) => st.groups.flatMap((g) => g.accounts.map((a) => { const pv=cmpMap.get(a.accountNumber)??0; const chg=a.balanceCents-pv; return <tr key={a.accountNumber} onClick={() => onDrill({accountId:a.accountId,accountNumber:a.accountNumber,accountName:a.accountName})} className="cursor-pointer hover:bg-slate-800/40"><td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td><td className="px-4 py-1.5 text-sm text-slate-400 flex items-center gap-1">{a.accountName}<ChevronRight size={10} className="text-slate-600"/></td><td className={clsx('px-6 py-1.5 text-right text-sm font-mono', figColor(a.balanceCents, 'text-slate-300'))}>{formatMoney(a.balanceCents)}</td>{comparing&&<><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-500">{formatMoney(pv)}</td><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-400">{chg>0?'+':''}{formatMoney(chg)}</td></>}</tr>; })))}
+        {sections.map((sec) => { let secPrior=0; sec.subTypes.forEach((st) => st.groups.forEach((g) => g.accounts.forEach((a) => { secPrior += cmpMap.get(bsKey(a))??0; }))); const secChg=sec.totalCents-secPrior; return (<React.Fragment key={sec.type}><tr className="bg-slate-800/30"><td colSpan={2} className="px-6 py-2 text-xs font-semibold text-slate-300 uppercase">{sec.label}</td><td className="px-6 py-2 text-right text-xs font-mono font-semibold text-slate-300">{formatMoney(sec.totalCents)}</td>{comparing&&<><td className="px-4 py-2 text-right text-xs font-mono text-slate-500">{formatMoney(secPrior)}</td><td className="px-4 py-2 text-right text-xs font-mono text-slate-400">{secChg>0?'+':''}{formatMoney(secChg)}</td></>}</tr>
+          {sec.subTypes.flatMap((st) => st.groups.flatMap((g) => g.accounts.map((a) => { const pv=cmpMap.get(bsKey(a))??0; const chg=a.balanceCents-pv; return <tr key={bsKey(a)} onClick={a.synthetic ? undefined : () => onDrill({accountId:a.accountId,accountNumber:a.accountNumber,accountName:a.accountName})} className={a.synthetic ? 'italic' : 'cursor-pointer hover:bg-slate-800/40'} title={a.synthetic ? 'Earnings not yet closed to retained earnings (computed from the P&L)' : undefined}><td className="px-6 py-1.5 text-xs font-mono text-slate-500 pl-10">{a.accountNumber}</td><td className="px-4 py-1.5 text-sm text-slate-400 flex items-center gap-1">{a.accountName}{!a.synthetic && <ChevronRight size={10} className="text-slate-600"/>}</td><td className={clsx('px-6 py-1.5 text-right text-sm font-mono', figColor(a.balanceCents, 'text-slate-300'))}>{formatMoney(a.balanceCents)}</td>{comparing&&<><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-500">{formatMoney(pv)}</td><td className="px-4 py-1.5 text-right text-sm font-mono text-slate-400">{chg>0?'+':''}{formatMoney(chg)}</td></>}</tr>; })))}
         </React.Fragment>); })}
         <tr className={clsx(LEDGER_TOTAL, 'bg-slate-800/30')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Total Assets</td><td className={clsx('px-6 py-2.5 text-right text-base font-mono font-semibold', figColor(s.totalAssetsCents, 'text-white'))}>{formatMoney(s.totalAssetsCents)}</td>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-500">{formatMoney(cmpAssets)}</td><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{s.totalAssetsCents-cmpAssets>0?'+':''}{formatMoney(s.totalAssetsCents-cmpAssets)}</td></>}</tr>
         <tr className={clsx(LEDGER_TOTAL, 'bg-brand-500/[0.04]')}><td/><td className="px-4 py-2.5 text-sm font-semibold text-white">Total L + E</td><td className={clsx('px-6 py-2.5 text-right text-base font-mono font-semibold', figColor(s.totalLiabilitiesCents+s.totalEquityCents, 'text-white'))}>{formatMoney(s.totalLiabilitiesCents+s.totalEquityCents)}</td>{comparing&&<><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-500">{formatMoney(cmpLE)}</td><td className="px-4 py-2.5 text-right font-mono text-sm text-slate-400">{(s.totalLiabilitiesCents+s.totalEquityCents)-cmpLE>0?'+':''}{formatMoney((s.totalLiabilitiesCents+s.totalEquityCents)-cmpLE)}</td></>}</tr>

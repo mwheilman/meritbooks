@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatMoney } from '@meritbooks/shared';
+import { useEscapeKey } from '@/hooks/use-escape-key';
 
 interface GlTransaction {
   id: string;
@@ -61,6 +62,7 @@ export function GlDrillDown({
   const [page, setPage] = useState(1);
 
   const locKey = locationIds.join(',');
+  useEscapeKey(onClose);
 
   useEffect(() => {
     setLoading(true);
@@ -86,8 +88,14 @@ export function GlDrillDown({
   const pagination = data?.pagination;
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center pt-8 overflow-y-auto">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-4xl mb-8 shadow-2xl">
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center pt-8 overflow-y-auto" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`GL detail for ${accountNumber} ${accountName}`}
+        className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-4xl mb-8 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700/50">
           <div>

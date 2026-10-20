@@ -1,9 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { resolveOrgId } from '@/lib/posting/lifecycle';
 import { isCapabilityEntitled } from '@/lib/money/connections';
 import { createLinkToken, type PlaidEnv } from '@/lib/money/providers/plaid';
 import { requirePermission } from '@/lib/rbac/require-permission';
@@ -16,23 +15,19 @@ const ENV: PlaidEnv = process.env.PLAID_ENV === 'production' ? 'production' : 's
  * Requires auth + the BANK_FEED entitlement (fails closed otherwise).
  */
 export async function POST() {
-  const a = await auth().catch(() => null);
-  const userId = (a as { userId?: string | null } | null)?.userId ?? null;
-  if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  // Caller + tenant via the app-wide resolver (06 §L.3 L2: explicit `org_id` claim OR
+  // Clerk's native `o.id`); an unresolved org fails CLOSED with 400.
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { userId, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
   // Authorize — opening Plaid Link starts a bank connection (system integration);
   // same gate as the exchange step and payments/connect.
   const guard = await requirePermission(userId, 'settings_system', 'edit');
   if (!guard.ok) return guard.response;
-  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
-  // first-org lookup stays only as a transitional fallback when no claim.
-  const claimOrgId =
-    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
-      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
-      : null;
 
   const supabase = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(supabase, claimOrgId);
     if (!(await isCapabilityEntitled(supabase, orgId, 'BANK_FEED'))) {
       return NextResponse.json({ error: 'Bank feed is not enabled for this tenant.' }, { status: 403 });
     }

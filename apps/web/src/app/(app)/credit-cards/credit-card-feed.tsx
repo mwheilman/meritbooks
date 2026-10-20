@@ -11,6 +11,7 @@ import { CreditCardDrawer, type CCLike } from './cc-drawer';
 import type { ApproveBankTransactionInput } from '@/lib/validations/transactions';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { isSpecificCompany } from '@/lib/company-scope';
+import { FlagDialog, useFlagTransaction } from '../bank-feed/flag-dialog';
 
 interface CCRow {
   id: string;
@@ -124,6 +125,21 @@ export function CreditCardFeed() {
     }
     setApprovingId(null);
   }, [approveTxn, refetch]);
+
+  // Flag — same action/route as the Bank Feed (card lines are bank_transactions).
+  const [flaggingTxn, setFlaggingTxn] = useState<CCRow | null>(null);
+  const { flag, isFlagging } = useFlagTransaction();
+  const handleFlagSubmit = useCallback(async (reason: string) => {
+    if (!flaggingTxn) return;
+    const res = await flag(flaggingTxn.id, reason);
+    if (res.ok) {
+      addToast('success', 'Transaction flagged for review');
+      setFlaggingTxn(null);
+      refetch();
+    } else {
+      addToast('error', res.error);
+    }
+  }, [flaggingTxn, flag, refetch]);
 
   const transactions = data?.data ?? [];
   const counts = data?.counts ?? null;
@@ -268,7 +284,18 @@ export function CreditCardFeed() {
                         >
                           {approvingId === txn.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                         </button>
-                        <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-md text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors" title="Flag" aria-label={`Flag transaction ${txn.description}`}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setFlaggingTxn(txn); }}
+                          disabled={isPosted || txn.status === 'FLAGGED'}
+                          className={clsx(
+                            'p-1.5 rounded-md transition-colors',
+                            isPosted || txn.status === 'FLAGGED'
+                              ? 'text-slate-700 cursor-not-allowed'
+                              : 'text-slate-500 hover:text-amber-400 hover:bg-amber-500/10'
+                          )}
+                          title={txn.status === 'FLAGGED' ? 'Already flagged' : 'Flag'}
+                          aria-label={`Flag transaction ${txn.description}`}
+                        >
                           <Flag size={14} />
                         </button>
                         <ChevronRight size={14} className="row-chevron" />
@@ -301,6 +328,15 @@ export function CreditCardFeed() {
       </HoverPeekCard>
 
       <CreditCardDrawer txn={selectedTxn} onClose={() => setSelectedTxn(null)} />
+
+      {flaggingTxn && (
+        <FlagDialog
+          transaction={flaggingTxn}
+          isLoading={isFlagging}
+          onSubmit={handleFlagSubmit}
+          onClose={() => setFlaggingTxn(null)}
+        />
+      )}
     </div>
   );
 }

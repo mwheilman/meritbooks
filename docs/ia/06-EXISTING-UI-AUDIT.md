@@ -8,7 +8,9 @@ IA-SPEC / design-studio v2 redesign is built. Read-only; no code changed.
 
 ## 0. Method and a limitation you need to know
 
-- **Live pass was blocked.** The Chrome session was **not signed in**. Both `/dashboard` and `/` redirected to the
+- **Update 2026-10-19:** the owner signed in and the live pass is now complete. Results are in **§L**, which supersedes the
+  "blocked" notes below.
+- **Live pass was blocked (first attempt).** The Chrome session was **not signed in**. Both `/dashboard` and `/` redirected to the
   Clerk dev sign-in page (`concise-dolphin-51.accounts.dev/sign-in`, "Development mode"). I did not sign in: entering
   credentials or authorizing Google SSO needs the owner. So there are **no live screenshots, no observed render or
   load timing, and no console or network capture** from the authenticated app. The tab was put back on the S6 design URL.
@@ -337,7 +339,7 @@ These are capabilities that are live today with no stated home in IA-SPEC §3–
 
 ## 5. Bugs and quality issues found (report only, not fixed)
 
-**Live/console/network:** not captured (session signed out; see §0). The only observed behaviour is that
+**Live/console/network:** see §L for the signed-in pass (confirmed bugs, new bugs L1–L21). Original note: The only observed behaviour is that
 `/dashboard` and `/` redirect to the Clerk dev sign-in page.
 
 ### Functional bugs (from code; ✔ = re-verified by hand)
@@ -427,77 +429,358 @@ peek, Recurring) · `/bills` (+ intake queue) · `/checks` · `/expenses` · `/i
 
 ---
 
-## §L Live walkthrough (2026-10-19)
+## §L Live walkthrough (2026-10-19, signed in)
 
-**Result: blocked again. The Chrome session is not signed in, so no authenticated page could be visited.** Nothing in
-§1–§7 has changed. No credentials were entered and no SSO was attempted. Signing in is the owner's job.
+**Result: done.** The owner signed in to `meritbooks-web.vercel.app` (Clerk **dev** instance) and the pass ran
+read-only in tab 526063231. Nothing was approved, posted, sent, saved, dismissed or reconciled. The only state changed
+was the active-company cookie (left on Northwind, where it started) and the plane switcher.
 
-### L.1 What was observed
+### L.0 Scope, data and method
 
-- **Browser:** one connected Chrome ("Browser 1", macOS). Navigating to `https://meritbooks-web.vercel.app/dashboard`
-  redirects to `concise-dolphin-51.accounts.dev/sign-in` ("Sign in to Merit Enterprise Suite", Google or email,
-  "Last used" badge, **"Development mode"**, Clerk dev instance). This was seen in two tabs.
-- **Tab instability:** the first tab (the S6 design page) froze when it navigated. `Page.captureScreenshot` timed
-  out after 30 s and the tab then dropped out of the MCP group. A fresh tab worked normally. This is worth knowing
-  for the next chrome-auditor run.
-- **Screenshots:** one only, of the sign-in page. None of the app.
-- **What production is running:** the Vercel `meritbooks-web` production deployment is `e8b9aa1` (READY). The
-  `apps/web` code there is **identical to repo HEAD `8d4ea41`**: `git diff e8b9aa1 HEAD -- apps/web` is empty, because
-  `daee098` (brand re-skin) and its revert `5b3cc41` cancel out. **So every code-audit finding in §1–§5 describes the
-  code that is live.** The deploy before it, `c4569ff`, failed (ERROR) and was superseded.
+- **Tenant seen:** org "Merit Management Group" (slug `revived-interiors`) with **3 companies**: `[SANDBOX] Coho Flooring`
+  (CHF, most data), `[SANDBOX] Northwind Construction` (NWC, one $150K AR invoice) and `Acme Test Co` (ATC, 48 AI
+  proposals). This is not the 17-company Merit seed, so most pages render **real but thin or empty** data.
+- **States walked:** "All companies", then **Coho** (every Books page), then **Northwind** (Invoices, Collections, Bills,
+  Cash, Practice and Platform). Acme was seen only on the Dashboard, Close and Entities roll-ups.
+- **Coverage:**
+  - All 64 sidebar destinations across Books, Practice and Platform.
+  - The §7 key pages, including the sub-surfaces listed there: bank-feed tabs, explainer and edit panel; recon
+    Autopilot and Statement tab; Close Tasks, Status and Year-End; the JE drawer and peek; Approvals Simulate; the
+    entity snapshot.
+  - **Not visited:** off-nav routes (`/retainage`, `/fixed-assets`, `/leases`, the `/tax-*` sub-pages,
+    `/settings/new-entity`, `/inventory/[id]`, `/jobs/[id]`).
+- **Evidence:** a 0.5-scale screenshot was taken of every page in the table below (shown in-session, not saved to the
+  repo). Console errors were read with an errors-only filter, and network calls to `/api/*` were checked for 4xx/5xx.
+- **Speed:** in-app navigation through the sidebar renders in **1–3 s**. A **hard load** (typing a URL, refresh or a
+  deep link) is much slower. **8–15 s** was typical, `/close` never finished (spinner for more than 35 s), and some
+  hard loads stayed stuck until the first click. See L.3 bug **L1**.
+  - Caveat: the automated Chrome window may not have had focus, which can make React's idle hydration slower. The React
+    hydration errors in L1 are real regardless of that.
 
-### L.2 Per-page live status
+### L.1 Per-page live status
 
-| Route(s) | Renders? | Data? | Issues seen live | Console/network | Screenshot |
-|---|---|---|---|---|---|
-| `/dashboard` (also `/`) | Redirects to Clerk sign-in | n/a | Signed out | not captured | sign-in page only |
-| All other §7 routes (`/inbox`, `/bank-feed`, `/reconciliation`, `/close`, `/journal-entries`, `/bills`, `/checks`, `/expenses`, `/invoices`, `/collections`, `/cash`, `/debt`, `/reports`, `/fpna`, `/consolidation`, `/portfolio`, `/team`, `/settings`, `/settings/approvals`, `/settings/autonomy`, `/onboarding`, `/platform`, `/vendor-compliance`, `/payroll`) and all 64 sidebar destinations | **Not visited** (signed out) | n/a | n/a | n/a | n | 
+Legend: Y = renders, E = renders an empty state. "Net" lists only non-2xx `/api/*` calls; otherwise every call was
+200. Screenshot = y for every row.
 
-### L.3 Code-audit bug verification
+**Books — Home and Payables**
 
-None of these could be reproduced live while signed out. "Code ✔ at prod" means the ✔ in §5 was made against code
-that is identical to what production runs (L.1).
+| Route | Renders | Data | Issues seen live | Console / Net |
+|---|---|---|---|---|
+| `/dashboard` (All, Coho, NWC) | Y | Real (3 cos) | **Same board whatever company is selected**, and the selected card isn't highlighted. Consolidated "Approvals 0" vs card "Proposals 50 / 48". Activity feed repeats identical rows (e.g. `INTRST PYMNT $4.22` ×3). "Cash $213.5K" is the bank-feed balance, not GL cash (L6). | — |
+| `/inbox` | Y | Real | Badge says "99+ need you" but it **opens on the empty Approvals tab**; the work is under Exceptions. Rows show raw filenames, UUIDs and codes (`DEBT_EXTRACT`, `COVENANT_DRIFT`), and one loan extraction appears 4×. Clicking a row goes to the generic `/ai-decisions` list, not the item. `j` moves focus, but the focus ring is faint. | — |
+| `/bills` | E (all 3 cos) | Empty | Tabs: All Bills / Intake / Retainage / AP Policy. Hard load about 5 s. | — |
+| `/expenses`, `/receipts`, `/purchase-orders` | E | Empty | Good empty states. Receipts are separate from Expenses, even though Expenses are "built from receipts". | — |
+| `/checks` | E | Empty | Sidebar says "**Pay Runs**", page says "**Check Run**". Hard load more than 8 s. | — |
+| `/payroll` | E | Empty | Hard load about 10 s. | **`GET /api/integrations/connections` 500** (L2) |
+| `/vendors` | Y | 2 vendors | **Not company-scoped**: no `location_id` is sent. Builds its own `<h1>` (no "Working in" chip) and uses a different page padding. | — |
+| `/vendor-compliance` | Y | "0/0" | Says "No vendors tracking compliance documents", while `/vendors` shows red ✕ W9/GL/WC badges on both vendors. | — |
 
-| # | Claimed bug | Live result | Code status at prod `e8b9aa1` |
-|---|---|---|---|
-| 1 | Bank-feed edit panel drops vendor-name edits | Not testable (signed out). Even signed in, it can only be fully proven by saving, which is a write. | Code ✔ at prod |
-| 2 | Credit Cards Flag is dead | Not testable (signed out) | Code ✔ at prod |
-| 3 | ⌘K opens two overlays | Not testable (signed out) | Code ✔ at prod |
-| 4 | "CPA Desk ⌘K" button is dead | Not testable (signed out) | Code ✔ at prod |
-| 5 | "View GL" links (`?highlight=`, `?entry=`) are ignored | Not testable (signed out) | Code ✔ at prod |
-| 6 | CoA Approve/Reject failures are silent | Not testable read-only (clicking would write) | From code (unchanged) |
-| 7 | Bills/Receipts capped at 50 rows | Not testable (signed out) | From code (unchanged) |
-| 9 | Board Package "Operating Income" shows `ebitdaCents` | Not testable (signed out) | From code (unchanged) |
-| 10 | Platform "Companies" column sorts by MRR | Not testable (signed out) | From code (unchanged) |
+**Books — Receivables**
 
-### L.4 New bug found (from Vercel production runtime logs, the only live signal available)
+| Route | Renders | Data | Issues seen live | Console / Net |
+|---|---|---|---|---|
+| `/invoices` | Y | Coho empty; NWC 2 | In-page "**All Companies**" picker contradicts the header. A $150K invoice **97 days late** has status *Sent*: Overdue tile $0.00 and Overdue tab 0 (L4). Tabs sit **above** the title. Peek opens pinned bottom-left (L11). Drawer title truncates to "Invoice I…". Hard load about 10 s. | — |
+| `/estimates` | E | Empty | Hard load about 15 s. | — |
+| `/collections` | Y | NWC $150K in 90+ | **As-of date defaults to tomorrow** (10/20 at 8:45 PM CT on 10/19; UTC date, L14). In-page "All companies" picker. Good aging strip and worklist. | — |
+| `/customers` | Y | 3 | Not company-scoped. Builds its own `<h1>`. | — |
+| `/customer-deposits` | E | Empty | Subledger ⇄ GL 2420 tie-out reads "In balance". Good. | — |
+| `/rev-rec` | Y | 1 job (POS) | Clean. | — |
 
-- **N1. The obligations "subscriptions" source fails on every load in production.**
-  - **Log:** `[obligations] source 'subscriptions' degraded: column subscriptions.name does not exist`. Count 281
-    over 7 days, 6 users, route `/api/inbox`, first seen 2026-08-09, last seen 2026-10-20 00:54Z. It is the **only**
-    runtime error group in the 7-day window.
-  - **Cause:** `apps/web/src/lib/obligations/collect.ts:467` runs
-    `.select('id, name, vendor_name, next_renewal_date, amount_cents, status')`, but migration `085_subscriptions.sql`
-    has no `name` column. The table has `vendor_name` and `product`.
-  - **Effect:** subscription renewals never appear on `/obligations` or in the Inbox alerts that are built from it.
-    The loader degrades the source on purpose, so the page doesn't crash. The gap is silent, apart from a
-    "sources skipped" note where the UI shows one.
-  - **Fix (not applied):** select `product` instead of `name`, or drop it, and use `vendor_name` for the label.
-  - **Test gap:** `schema-contract.test.ts` doesn't catch it, because it checks the literals written to CHECK/enum
-    columns, not the columns that are selected.
-- The rest of the runtime-error picture is clean: no other error groups in 7 days. That is mild evidence that the
-  main pages are not throwing server-side, but it says nothing about client-side console errors or dead buttons.
+**Books — Banking & Cash**
 
-### L.5 Refined recommendations
+| Route | Renders | Data | Issues seen live | Console / Net |
+|---|---|---|---|---|
+| `/bank-feed` (3 tabs, explainer, edit panel) | Y | Coho 46 txns / $33.5K | Explainer and edit panel are excellent; the panel deep-links with `?id=`; `j`/`k` work. Company column truncates "[SANDBOX] …" and is redundant once one company is selected. Status tabs read "Pending 0 · Categorized 46", yet all 46 still need review. The **Credit Cards tab repeats rows already shown on the Bank Feed tab** (Tectra $500, AUTOMATIC PAYMENT $2,078.50). Apply Deposits prints its subtitle twice. | **`GET /api/integrations/plaid/sync` 500** (L2) |
+| `/reconciliation` | Y | 12 Plaid accts | **Autopilot is the best screen in the app** (May checking: Auto 2 / Review 1 / Escalate 1, confidence bars, GL vs statement vs difference strip). Statement tab has an in-page "All Companies" picker. The workspace opens as a modal that needs **Start** (a write), so the decomposer can't be reached read-only. **Tabs are not in the URL** (confirmed). | — |
+| `/cash` | Y | Coho | Cash "as of 6/9/2026"; "12 accounts have no recent feed activity". Balance Trend shows $208.1K **and** "No feed history to chart yet". | **`plaid/sync` 500, `plaid/map` 500** (L2) |
+| `/debt` | Y | 2 loans | The loans carry real portfolio names (Clive Power Equipment note, Farmers State Bank) inside a [SANDBOX] company (L17). Raw technical footnote. | — |
+| `/borrowing-base` | E | — | Breadcrumb says "← Reports", but the page sits under Banking in the nav. | — |
+| `/obligations` | Y | 2 items | **N1 confirmed live**: "Some sources were unavailable and skipped: subscriptions." The revolver shows "398d overdue". | — |
+| `/subscriptions` | E | — | Clean. | — |
 
-- **Add N1 to §6 item 2 (fix now).** It is a one-line change, and the error has been live and silent for about
-  10 weeks.
-- **Add a guard test:** a schema test that checks every column named in a `.select('…')` string literal exists in
-  the migrations. It would have caught N1 and would catch the same mistake elsewhere.
-- **Keep/merge recommendations stand unchanged** until a signed-in pass confirms them. The patterns marked KEEP in §2
-  are still code-only judgements: Inbox keynav, bank-feed confidence explainer and vendor recents, reconciliation
-  difference decomposer and never-auto-plug, hover peek with mini Dr/Cr, audit TimelineDrawer, approvals Simulate,
-  autonomy kill switch with reason.
-- **To unblock (owner, about 1 minute):** sign in to `meritbooks-web.vercel.app` in the Chrome profile that the
-  Claude extension controls. "Browser 1" is the only one connected. Then re-run this pass. Note that the sign-in page
-  is the Clerk **development** instance; standing up the Clerk production instance is still an open owner item.
+**Books — Accounting, Jobs & Costing**
+
+| Route | Renders | Data | Issues seen live | Console / Net |
+|---|---|---|---|---|
+| `/journal-entries` | Y | 7 JEs | Drawer is excellent: Dr/Cr lines, "Balanced", Explain. Hover peek works but **renders bottom-left over the sidebar** (L11). `?highlight=` and `?entry=` are ignored (bug 5). An **Edit** button shows on POSTED entries. | — |
+| `/chart-of-accounts` | Y | 151 accts | Balance-sheet accounts show period and YTD **activity**, not balances: Liabilities shows "—" although $1.46M of loans were posted in 2024. | — |
+| `/assets`, `/tax` | Y | Card hubs | `/tax` hard load sat in the pre-hydration shell for about 13 s (L1). | — |
+| `/internal-invoices` | E | — | Clean. | — |
+| `/departments` | Y | 5 depts | Lists all 3 companies' departments with one company selected. | — |
+| `/documents` | Y | 1 doc (unlinked) | Description runs to about 60 words. | — |
+| `/periods` | Y | 3 × 12 grid | Good. | — |
+| `/close` (Tasks / Status / Year-End) | Hard load: **never** (>35 s); sidebar: Y in about 3 s | Real | Tasks are excellent (live-verified checks, blocker chips, deep links). Counts contradict each other: "Uncategorized activity cleared · 46 item(s), none material" vs "$33,465.37 uncoded" vs Status "Not in GL $33.5K". Status shows "Bank rec: Not started" while Autopilot shows 2/4 cleared. Year-End prints its subtitle twice. | **RSC prefetch `/close?_rsc` 503** (L3) |
+| `/jobs` | Y | 1 job | Scoped correctly. | — |
+| `/jobs/wip` | Y | 5 jobs | **Not scoped**: shows NWC and DEMO jobs while Coho is selected. "100%" margin on jobs with $0 cost. | — |
+| `/inventory` | E | — | Header chip is squeezed beside the title. | — |
+
+**Books — Reporting & Analytics**
+
+| Route | Renders | Data | Issues seen live | Console / Net |
+|---|---|---|---|---|
+| `/reports` (All + Coho) | Y | Real | Renders fine in **All** (the sidebar hides it in All). Defaults to "This Month", which is empty. **% column shows 120000% and 5000000%** when revenue is 0 (L8). GL drill-down works; its modal **ignores Esc** (L12). "Ask for any report…" does nothing (bug 8). The URL never reflects the open report. Viewing a report POSTs `/api/learning/preferences` (L19). | — |
+| `/reports/basis-adjustments` | E | — | API call carries no `location_id`. Description runs to about 90 words. | — |
+| `/fpna` | Y | Coho | Cash **$1.4M** and AR **$50K**; the Dashboard shows Coho AR $0 (L6). | — |
+| `/budgets` | Y | Grid | Two stacked tab rows (Plan / Driver Builder / Reforecast over Budget Entry / BvA / Scenarios). | — |
+| `/profitability` | E (Oct) | — | Clean. | — |
+| `/consolidation` | Y | Coho | **Balance check −$50,000** in red. Total eliminations −$50,000 on a one-entity group (L5). | — |
+| `/board-package` | Y | Coho Sep | Balance sheet "**Off by $488.00**" with equity $0. Cash $0, yet the trend shows $1.4M. Total debt **$1.46M** (original principal) vs Debt page **$897.8K** outstanding (L7). Fetched 3× (L20). | — |
+| `/search` | Y | 9 hits for "United" | Titles read "**JEJE**-2026-000032" (L13). Results don't refresh after a company switch. | — |
+| `/ai-decisions` | Y | ~100 rows | Narrower centred layout. Raw codes. | — |
+| `/categorize` | Y | Form | In-page company "Select…" ignores the header picker. | — |
+| `/agents` | Y | — | Asks the user to paste a "`bill_id (uuid of a PENDING / ON_HOLD bill)`". | — |
+
+**Practice**
+
+| Route | Renders | Data | Issues seen live | Console / Net |
+|---|---|---|---|---|
+| `/portfolio` (Entities) | Y | 3 cos | Good red/amber/green board, but it overlaps the Dashboard almost completely. | — |
+| `/portfolio/[id]` | Y | Coho | "Out of balance by $488.00". GL cash $1.41M vs bank cash $213.5K. Links pass `?location_id=`, which is ignored (bug 11). | — |
+| `/team` | Y | 3 members | Clean. | — |
+| `/compliance` | E | — | Filings / Controls tabs. | — |
+| `/audit` | Y | 4 events | Human-vs-AI attribution is good. "AI pending 103". | — |
+| `/pbc` | E | — | Clean. | — |
+| `/onboarding` | Y (after hydration) | 3 cos | Renders in the **Book of Record** plane, though its nav entry is in Practice. | — |
+| `/onboarding/portfolio` | Y | 3 cos | Sidebar highlights **Get Started and Many Companies at once** (L15). | **React #425, #418, #423 (hydration failure)** (L1) |
+| `/settings/billing`, `/settings/approvals` (+Simulate), `/settings/autonomy`, `/integrations/erp`, `/onboarding/conversion` | Y | Real | Simulate works read-only and is good. `/onboarding/conversion` also double-highlights in the sidebar. | — |
+| `/settings/payments` | Y | — | "Connected — payments are live and payouts are enabled" in a sandbox org on a dev auth instance (L21). | — |
+| `/settings/roles` | Y | 10 roles | A system role is named "**Merit Controller**", a tenant name hard-coded into a white-label product (L17). | — |
+| `/import` | Y | — | Shows raw table names (`core.locations`, `public.gl_entries`). | — |
+| `/operations` | Y | — | "**All books are current — nothing needs your attention**" while 98 exceptions are open (L9). | — |
+| `/settings` | Y | Org | 10 in-page sub-tabs, on top of 6 separate settings pages in the sidebar. | — |
+
+**Platform**
+
+| Route | Renders | Data | Issues seen live | Console / Net |
+|---|---|---|---|---|
+| `/platform` | Y | 2 tenants | Both tenants are named "Merit Management Group". "Ops health: No open errors" while L1/L2 errors were firing (L18). The cross-tenant fee call carries a tenant `location_id`. | — |
+
+**Broken pages:** none are hard-broken through in-app navigation.
+- `/close` never completes on a hard load (a 503 was seen).
+- Bank Feed, Cash and Payroll each make 1–2 failing status calls (500) on every load.
+- Hard-loaded pages hit a hydration failure (L1).
+
+### L.2 Code-audit bug verification
+
+| # | Claimed bug | Live result |
+|---|---|---|
+| 1 | Bank-feed edit panel drops vendor-name edits | **Not testable read-only.** The "Vendor name…" field is present, empty for an unidentified vendor, and editable. Proving the drop needs a Save & Approve, which writes. |
+| 2 | Credit Cards Flag is dead | **Not tested.** If the button works, clicking it writes. The flag icon is on every card row. Card rows have no edit pencil (only approve and flag). |
+| 3 | ⌘K opens two overlays | **CONFIRMED.** The `Search` and `Natural language command` dialogs are both in the DOM. Esc closes the command bar and reveals the search palette underneath. |
+| 4 | "CPA Desk ⌘K" button is dead | **CONFIRMED.** Clicking it opens nothing (no dialog). |
+| 5 | "View GL" links ignored | **CONFIRMED.** `/journal-entries?highlight=<id>` and `?entry=<id>` both load the plain list. `?id=<id>` opens the drawer. |
+| 6 | CoA Approve/Reject failures are silent | Not testable read-only. |
+| 7 | Bills/Receipts capped at 50 rows | **Not reproducible.** There are 0 bills and 0 receipts in all 3 companies. |
+| 8 | Reports "Ask for any report…" does nothing | **CONFIRMED.** Typing "balance sheet" + Enter filtered nothing and sent no request. |
+| 9 | Board Package "Operating Income" bound to EBITDA | **Not distinguishable**: every P&L line is $0 for Sep. The package has bigger defects (L5, L7). |
+| 10 | Platform "Companies" column sorts by MRR | **Not distinguishable.** Both tenants rank the same by companies and by MRR (3 / $297 and 1 / $99). |
+| 11 | Portfolio and snapshot links don't switch company | **CONFIRMED.** `/cash?location_id=<Coho>` with Northwind active showed Northwind's $0 and called `/api/cash?location_id=<Northwind>`. |
+| §1.2 | The sidebar hides every group but Home in "All" | **CONFIRMED.** Meanwhile `/reports` renders correctly in All. |
+| §5 | Tabs not in the URL | **CONFIRMED** on Reconciliation. Inbox, Close and Bank Feed *do* use `?tab=`. |
+| §5 | In-page company pickers | **CONFIRMED** on Invoices, Collections, Recon Statement tab and AI Categorizer. |
+| §5 | Pages with their own `<h1>` lose the chip | **CONFIRMED** on Vendors, Customers and Estimates (no "Working in" chip). Invoices has a non-standard header. |
+| N1 | Obligations "subscriptions" source fails | **CONFIRMED live**: the banner on `/obligations`. |
+
+### L.3 New bugs found live (report only, not fixed)
+
+**Carried over from the first (signed-out) attempt, now confirmed live:**
+
+- **N1 · The obligations "subscriptions" source fails on every load.**
+  - **Evidence:** the Vercel log `[obligations] source 'subscriptions' degraded: column subscriptions.name does not
+    exist` (281 hits in 7 days, route `/api/inbox`), plus the live `/obligations` banner.
+  - **Cause:** `lib/obligations/collect.ts:467` selects `name`, but migration `085_subscriptions.sql` has only
+    `vendor_name` and `product`.
+  - **Fix (not applied):** select `product` and label the row with `vendor_name`.
+  - **Guard test to add:** check that every column named in a `.select('…')` literal exists in the migrations.
+
+**Platform and performance**
+
+- **L1 · Hydration failure on hard loads (high).**
+  - **Error:** React **#425** (text mismatch), **#418** (hydration mismatch) and **#423** (root falls back to client
+    rendering), logged once the stalled `/onboarding` hard load hydrated.
+  - **Symptom:** after a refresh or deep link the shell sits for 8–35 s+ in its pre-hydration state. The header shows
+    "**All Companies**" whatever the cookie says, the sidebar shows Home only, the avatar and badge are missing, and the
+    body is a spinner. In-app navigation is fine. A user who refreshes sees the wrong company for several seconds.
+  - **Likely cause:** server-UTC vs browser-local values in rendered output, e.g. `new Date().toISOString().slice(0,10)`
+    in `collections/collections-workflow.tsx:116` and `invoices/collections/collections-dashboard.tsx:93`, or
+    cookie-derived shell state.
+- **L2 · Integration status endpoints 500 on every load (high).**
+  - **Endpoints:** `GET /api/integrations/plaid/sync`, `/plaid/map` and `/connections`.
+  - **Error:** `{"error":"No organization claim on request; cannot resolve tenant"}`.
+  - **Cause:** the Clerk session has no `org_id` claim, and these routes resolve the tenant from the claim only. Other
+    routes use the membership resolver. This is part of identity gate #9.
+  - **Callers:** Bank Feed, Cash and Payroll, so Plaid connection status never loads.
+- **L3 · The sidebar prefetches every link.** One click fires about 40–60 `?_rsc=` requests for `force-dynamic` pages,
+  and one `/close?_rsc` returned **503**. This is server load and likely part of the slowness. Fix: `prefetch={false}`
+  on the nav links.
+- **L18 · Ops health misses errors.** The Platform console reports "No open errors" while L1 and L2 were firing.
+- **L19 · A report view causes a write.** Opening a report POSTs `/api/learning/preferences`.
+- **L20 · Duplicate fetches.** JE, invoice and bank-feed-insight drawers each fetch twice (with and without
+  `location_id`). The board package fetches three times.
+- **L21 · Payments setting.** `/settings/payments` says "payments are live" in a sandbox org. Confirm whether Stripe is
+  in live mode.
+
+**Accounting correctness**
+
+- **L4 · Overdue is not derived.** An invoice 97 days past due stays *Sent*. Invoices shows Overdue $0 / 0, while
+  Collections shows $150K overdue in the 90+ bucket.
+- **L5 · Balance sheets don't balance.**
+  - The board package says "Off by $488.00" and the entity snapshot says "Out of balance by $488.00". Current-year net
+    income is not rolled into equity, which shows $0.
+  - Consolidation's balance check is **−$50,000**, from a one-sided intercompany elimination on a one-entity group.
+- **L6 · Five different "cash" numbers for one company.** Dashboard/Entities $213.5K (bank balances), FP&A $1.4M,
+  snapshot GL $1.41M, CoA Assets YTD $488, board-package cash $0 (but its trend shows $1.4M).
+- **L7 · Board package debt is wrong.** It uses original principal: $1.46M vs $897.8K outstanding on `/debt`. The
+  matured revolver shows $400K there but $0.00 on `/debt`.
+- **L8 · P&L % of revenue breaks when revenue is 0.** It shows 120000% and 5000000%; it should show "—".
+
+**Workflow and data consistency**
+
+- **L9 · Attention counts disagree.** Dashboard Approvals 0 / Proposals 98; Inbox 99+ but lands on an empty tab; Close
+  98 exceptions; Operations "nothing needs your attention"; Audit "AI pending 103".
+- **L10 · Scope leaks with one company selected.** Vendors, Customers, Departments, Job WIP, Basis Adjustments and
+  Search show every company, or call the API without `location_id`. The Jobs list *is* scoped.
+- **L14 · Dates in UTC.** Collections as-of and days-late, and the board package's "evaluated through October 20", run
+  a day ahead for US evenings.
+- **L17 · White-label leaks.**
+  - The system role is called "Merit Controller".
+  - Two tenants are both called "Merit Management Group", and the slug is `revived-interiors`.
+  - Real portfolio names (Clive Power Equipment, MERIT SPE 2 LLC, Farmers State Bank) appear inside [SANDBOX]
+    companies' loans and exceptions. This is test-data hygiene, and worth checking for cross-tenant seeding.
+- **Smaller items.**
+  - The Credit Cards tab duplicates Bank Feed rows.
+  - Vendor Compliance reports 0/0 while Vendors shows failing badges.
+  - WIP shows 100% margin on $0-cost jobs.
+  - The Inbox shows duplicate loan-extraction items.
+  - Apply Deposits and Year-End print their subtitles twice.
+  - "Pay Runs" in the nav vs "Check Run" on the page.
+  - The Borrowing Base breadcrumb points to Reports.
+
+**Navigation and interaction**
+
+- **L11 · Hover peeks are mispositioned.** JE and invoice peeks render pinned bottom-left over the sidebar, not beside
+  the row.
+- **L12 · The report GL-detail modal ignores Esc.** Clicks behind it are swallowed; only the ✕ closes it.
+- **L13 · Search.** Titles read "JEJE-…" (doubled prefix), and results don't re-run after a company switch.
+- **L15 · Nav highlighting uses prefix matching.** "Get Started" stays lit on `/onboarding/portfolio` and
+  `/onboarding/conversion`.
+- **L16 · The plane switcher doesn't navigate.**
+  - Switching to Practice on `/bills` leaves the Bills page up with no picker.
+  - Hard-loaded Practice pages render in the Book of Record plane.
+  - `/onboarding` renders in Book of Record, though its nav entry is in Practice.
+
+### L.4 Visual design today, and what feels genuinely good
+
+**Visual design**
+
+- The base is a near-black, green-tinted dark theme with an emerald accent, and indigo reserved for AI actions.
+  - Plus Jakarta Sans for UI and JetBrains Mono for every number and code.
+  - Pill tabs, 1-px bordered cards, and good empty states (icon + sentence + one CTA).
+- Almost every page opens with a 4–8 tile KPI strip of equal weight, so nothing reads as primary.
+- Type is small: labels about 10 px uppercase in slate-500 on near-black, which is a **contrast risk**. The tables are
+  dense and readable.
+- Three different page widths are in use:
+  - full-bleed: most pages;
+  - centred max-width: Vendors, Customers, Estimates, AI Decision Log, Assets, Tax, Agents, Onboarding;
+  - squeezed header: Inventory.
+- There is no chart vocabulary beyond a few hand-drawn trends.
+
+**Keep — confirmed good live**
+
+- Bank feed:
+  - the "Why this confidence" modal (AI confidence + auto-approve checklist + reasoning);
+  - the deep-linked edit slide-out;
+  - `j`/`k` row movement;
+  - the confidence-bucket quick-select chips.
+- Reconciliation Autopilot: Auto / Review / Escalate chips, per-line pattern and confidence bar, and the
+  GL-vs-statement-vs-difference strip.
+- The JE drawer: Dr/Cr table, "Balanced", Explain, and the `?id=` deep link.
+- Report → GL-detail drill-down (fix only the Esc behaviour).
+- Close Tasks: auto-verified checks with amounts and blocker chips. Also the Close **Status** board.
+- The Entities board (red/amber/green roll-up with blockers per company). It is the best "portfolio" view and should
+  *become* the Dashboard.
+- Collections: aging strip + worklist. Customer Deposits: subledger ⇄ GL tie-out badge.
+- The fiscal-period grid. The Many Companies control tower. Approvals **Simulate**. The autonomy kill switch.
+- The Audit Trail's human-vs-AI attribution.
+- Client-side navigation speed (1–3 s).
+
+### L.5 How the work naturally groups (organization evidence)
+
+These are observations from walking the app as an operator. The owner wants a from-scratch structure, so the point is
+where today's tabs **split one job across places** or **join unrelated jobs**.
+
+1. **"What needs me" is spread across six surfaces.** Dashboard counts, Inbox (4 tabs), Close Tasks blockers,
+   Operations "needs your attention", the AI Decision Log, and Entities exceptions. They disagree (L9). Users think
+   *"my queue"*, not *"which module raised it"*. **There should be one Work queue**, filterable by company and type,
+   with every item deep-linking to its record.
+2. **Customer money is split across three nav groups.** Invoices, Estimates, Collections (which is also a button on
+   Invoices), Customers, Deposits and Rev-rec sit in Receivables. **Apply Deposits** lives in *Bank Feed*. **AR ⇄ GL
+   tie-out** lives in *Reconciliation*. A user collecting cash moves invoice → payment → application → tie-out, and that
+   path should live in one place.
+3. **Vendor money is split the same way.** Bills (with Intake / Retainage / AP Policy tabs), Expenses, **Receipts
+   (separate, though expenses are built from receipts)**, POs, Pay Runs, Payroll, Vendors and Vendor Compliance (with a
+   1099 tab). Credit-card charges sit in *Bank Feed*. The natural flow is: request/PO → bill or receipt → approve → pay.
+   1099 and compliance are vendor attributes, not pages.
+4. **"Banking" really holds two jobs.** One is *clearing transactions* (bank feed, cards, reconciliation). The other is
+   *knowing cash and commitments* (cash position, 13-week forecast, debt, borrowing base, obligations, subscriptions).
+   Debt payments already appear inside Obligations; subscriptions are obligations; the Borrowing Base breadcrumb says
+   Reports. **Merge them into "Cash & commitments"**, separate from transaction clearing.
+5. **The ledger and close are one workspace.** JEs, CoA, Periods, Close (with Year-End), Assets & Schedules, Internal
+   Invoices, Departments, Tax, Documents, and **Basis Adjustments (filed under Reporting, but it is a ledger
+   presentation layer)**. The Close checklist already deep-links into most of these; it is the natural hub.
+6. **"AI" is not a destination.** The AI Categorizer, AI Decision Log, Agents and Search are filed under "Reporting &
+   Analytics". The live app shows AI is best *embedded*: explainer, Autopilot, Explain buttons. Users need one AI
+   *log/controls* page (with Audit and Autonomy), not four AI pages.
+7. **Insight pages overlap.** Dashboard ≈ Entities. FP&A ≈ Profitability ≈ entity snapshot. Reports, Consolidation and
+   Board Package all compute statements, with different numbers (L5–L7). A user wants one statements engine, viewed as
+   report / pack / board deck.
+8. **Setup is scattered.** Get Started, Many Companies, Historical Conversion, Import Data and Integrations are all
+   "getting data in". Settings is split into 10 in-page tabs *plus* 6 sidebar entries. Entities (an owner/CFO view)
+   sits under "Team & Oversight" next to admin.
+9. **Company scope must be one honest control.** Half the pages ignore the header picker: in-page pickers, unscoped
+   lists (L10), ignored `?location_id=` links. Planes don't navigate (L16). The redesign should make "which company"
+   a single control, label portfolio-level pages explicitly as All-companies views, and never hide them when "All" is
+   selected.
+
+**A grouping the evidence supports (input to IA-SPEC, not a decision):**
+
+| Group | Contents |
+|---|---|
+| **Home** | Work queue + portfolio overview (Entities board) |
+| **Money in** | Quotes → invoices → collections → payments/application → deposits, rev-rec, customers |
+| **Money out** | POs → bills/receipts/expenses/cards → approvals → pay runs, payroll, vendors (compliance and 1099 inside the vendor record) |
+| **Banking** | Feed + cards clearing, reconciliation (with tie-outs) |
+| **Cash & commitments** | Position, forecast, debt, borrowing base, obligations, subscriptions |
+| **Books** | Journal, accounts, schedules, internal invoices, dimensions, close + periods + year-end, tax, documents |
+| **Insights** | One statements engine: reports / FP&A / budgets / consolidation / board pack |
+| **Controls** | Audit trail, AI log + autonomy, approvals, compliance, PBC |
+| **Setup** | Companies, team & roles, data in (import / conversion / integrations), billing, settings |
+| **Platform** | Kept separate |
+
+### L.6 Refined recommendations (updates §6)
+
+1. **Fix before the redesign** (most are small):
+   - L2: use the membership resolver on the three integrations routes.
+   - L1: remove UTC/local and cookie-driven text from server-rendered output; render dates client-side or from a fixed
+     org timezone.
+   - L3: turn off nav-link prefetch.
+   - L4: derive overdue from the due date.
+   - L5: roll current-year earnings into equity in the balance-sheet builders, and fix the single-entity elimination.
+   - L7: use outstanding balance in the board-package debt figure.
+   - L8: show "—" for % of revenue when revenue is 0.
+   - Confirmed code bugs 3, 4, 5, 8 and 11; N1.
+2. **Pick one source per figure** (cash, AR, debt, exception count) and use it on every surface. Today every surface
+   computes its own.
+3. **Keep/merge changes from the live pass:**
+   - Make the Entities board the Dashboard. Retire the duplicate company cards.
+   - Fold Operations' "needs attention" and the AI Decision Log into the Work queue.
+   - Move Apply Deposits next to invoices and payments. Put AR tie-out with reconciliation and close.
+   - Put Credit Cards inside the feed as a filter, not a tab with the same rows.
+   - Merge Receipts into Expenses.
+   - Move Basis Adjustments into Books.
+   - Retire the in-page company pickers.
+4. **Keep everything in L.4 "Keep"**, and port the bank-feed explainer, Recon Autopilot, JE drawer and Close Tasks
+   patterns into the shared component kit (`components.html`) as reference implementations.
+5. **Re-run** the Bills/Receipts 50-row cap and the Board "Operating Income" label checks once a company has more than
+   50 bills and non-zero P&L (e.g. the 17-company Merit seed). Re-run L1 in a normal, focused browser to measure real
+   hard-load time.

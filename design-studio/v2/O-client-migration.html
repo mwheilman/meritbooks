@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=1440">
+<title>O11 · Client migration · MeritBooks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="system.css">
+<style>
+/* Board layout only — not part of the system */
+body{min-width:1440px}
+.sheet-top{display:flex;align-items:center;gap:24px;height:48px;padding:0 48px;background:var(--midnight);color:var(--grey-300)}
+.sheet-top img{height:24px;width:auto}
+.sheet-top nav{margin-left:auto;display:flex;gap:4px}
+.sheet-top nav a{height:32px;display:inline-flex;align-items:center;padding:0 10px;color:var(--grey-300);font-weight:500;white-space:nowrap}
+.sheet-top nav a:hover,.sheet-top nav a[aria-current=page]{background:var(--night-800);color:var(--warm)}
+.sheet{padding:0 48px 96px}
+.board-h{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding:40px 0 16px;border-bottom:1px solid var(--electric)}
+.board-h p{margin-top:8px;color:var(--ink-2);max-width:80ch}
+.board-h .pg{font-variant-numeric:tabular-nums;white-space:nowrap}
+.frame{border:1px solid var(--line-2);border-left:0;border-right:0;overflow:hidden;position:relative;margin:24px -48px 0;background:var(--warm)}
+.frame-cap{display:flex;justify-content:space-between;gap:24px;margin-top:8px;font-size:12px;line-height:16px;color:var(--ink-3)}
+.anno{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:24px}
+.anno div{border-top:1px solid var(--line-2);padding-top:12px}
+.anno b{display:block;font-weight:600;margin-bottom:4px}
+.anno p{color:var(--ink-2)}
+.app--frame .rail{min-height:100%}
+[hidden]{display:none!important}
+.sample{margin-left:16px;color:var(--ink-3);font-size:12px}
+/* Privacy: figures become redaction bars of their own width, so nothing reflows */
+.is-private .pv{color:transparent!important;background:var(--grey-300);box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.is-private .pv *{visibility:hidden}
+.btn--primary .pv{background:transparent}
+.is-private .btn--primary .pv{background:var(--blue-300)}
+
+/* ---- onboarding marks (shared by O-screens + S18) ---- */
+.sheet-top nav a{padding:0 8px}
+.src{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border:1px solid var(--line-2);background:var(--white);
+  font:500 12px/16px var(--f-text);color:var(--ink);white-space:nowrap}
+.src .pip{width:8px;height:8px}
+.src small{font:inherit;color:var(--ink-3)}
+.src--bridge{border-style:dashed}
+.srcs{display:flex;gap:4px;flex-wrap:nowrap;min-width:0}
+.prov{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:16px;color:var(--ink-3);white-space:nowrap}
+.prov::before{content:"";width:6px;height:6px;background:var(--electric);transform:skewX(-45deg);flex:none}
+.tier{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;font-weight:500}
+.tier--live{color:var(--pos)} .tier--partner{color:var(--warn)} .tier--bridge,.tier--file{color:var(--ink-2)}
+.stgw{display:flex;align-items:center;gap:8px;min-width:0}
+.stgw .meter{padding:0 4px 0 6px}
+.promise{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--sky);box-shadow:inset 3px 0 var(--electric);color:var(--ink)}
+.promise b{font-weight:600}
+.promise .ico{color:var(--electric)}
+.steps{display:flex;border:1px solid var(--line);background:var(--white)}
+.steps li{list-style:none;flex:1;display:flex;align-items:center;gap:10px;min-height:48px;padding:0 16px;border-right:1px solid var(--line);color:var(--ink-2)}
+.steps li:last-child{border-right:0}
+.steps .no{display:inline-grid;place-items:center;width:24px;height:24px;border:1.5px solid var(--grey-400);font:600 12px/1 var(--f-text);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.steps li.is-done{color:var(--ink)} .steps li.is-done .no{background:var(--electric);border-color:var(--electric);color:var(--white)}
+.steps li[aria-current=step]{background:var(--sky);box-shadow:inset 0 -2px var(--electric);color:var(--ink);font-weight:600}
+.steps li[aria-current=step] .no{border-color:var(--electric);color:var(--electric)}
+.sec-h{display:flex;align-items:baseline;gap:12px;margin:32px 0 12px}
+.sec-h h2,.sec-h h3{font:600 15px/24px var(--f-text);color:var(--ink)}
+.sec-h .sp{flex:1}
+.card{background:var(--white);border:1px solid var(--line)}
+.card-h{display:flex;align-items:center;gap:12px;min-height:48px;padding:0 8px 0 16px;border-bottom:1px solid var(--line)}
+.card-h h3{font:600 15px/24px var(--f-text);color:var(--ink);white-space:nowrap}
+.card-b{padding:16px}
+.card-f{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 8px 0 16px;border-top:1px solid var(--line);color:var(--ink-3);font-size:12px}
+.card-f .sp{flex:1}
+.states{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;padding:24px 32px 32px}
+.state{background:var(--white);border:1px solid var(--line);min-height:248px;display:flex;flex-direction:column}
+.state .wg-state{flex:1}
+.state-h{display:flex;align-items:center;gap:8px;height:40px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--canvas)}
+.state-h .eyebrow{color:var(--ink-2)}
+.who{display:flex;flex-direction:column;min-width:0}
+.ctx .pip{flex:none}
+.bar-l{display:block;height:12px;margin:10px 0;background:linear-gradient(90deg,var(--grey-100),var(--grey-200),var(--grey-100));background-size:200% 100%;animation:mb-shimmer 1.4s linear infinite}
+.vsep{width:1px;align-self:stretch;background:var(--line)}
+.dl-leader{display:flex;align-items:baseline;gap:8px;line-height:24px}
+.dl-leader .dl{flex:1;border-bottom:1px dotted var(--grey-400);transform:translateY(-4px)}
+.dl-leader .v{font-variant-numeric:tabular-nums;font-weight:500;white-space:nowrap}
+
+.page{padding-top:24px}
+.mig{display:grid;grid-template-columns:248px minmax(0,1fr) 336px;gap:24px;align-items:start}
+/* stage rail — the eight stages, current one open with its sub-steps */
+.srail{background:var(--white);border:1px solid var(--line)}
+.srail-h{padding:12px 16px;border-bottom:1px solid var(--line)}
+.srail ol{list-style:none}
+.srail li{border-bottom:1px solid var(--line)}
+.srail li:last-child{border-bottom:0}
+.srail a{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:10px;align-items:center;min-height:48px;padding:6px 12px 6px 16px;transition:background-color var(--fast)}
+.srail a:hover{background:var(--grey-100)}
+.srail .sk{display:block;width:6px;height:18px;margin-left:4px;background:var(--grey-200);transform:skewX(-45deg)}
+.srail .is-done .sk{background:var(--electric)}
+.srail .is-cur>a{background:var(--sky);box-shadow:inset 3px 0 var(--electric)}
+.srail .is-cur .sk{background:transparent;box-shadow:inset 0 0 0 1.5px var(--electric)}
+.srail .is-done .r{color:var(--pos)}
+.srail .r{font-size:12px;color:var(--ink-3);white-space:nowrap}
+.srail .subs{list-style:none;padding:0 12px 8px 46px;background:var(--sky)}
+.srail .subs li{display:flex;justify-content:space-between;gap:8px;border:0;min-height:28px;align-items:center;font-size:12px;color:var(--ink-2)}
+.srail .subs li b{font-weight:600;color:var(--ink)}
+.srail .subs .neg{font-weight:600}
+.srail-f{padding:12px 16px;border-top:1px solid var(--line);background:var(--canvas);font-size:12px;line-height:16px;color:var(--ink-2)}
+.need li{list-style:none;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+.need li:last-child{border-bottom:0}
+.need li.is-attn{box-shadow:inset 3px 0 var(--neg)}
+.need .t-head{font-size:13px;line-height:20px}
+.need p{color:var(--ink-2);margin-top:2px}
+.need .lock{display:flex;align-items:center;gap:6px;color:var(--ink-3);font-size:12px;margin-top:4px}
+.srcs-t td{height:auto;padding-top:12px;padding-bottom:12px;white-space:normal;vertical-align:top}
+.srcs-t td .l1,.srcs-t td .l2{white-space:normal}
+.srcs-t .sysn{font-weight:600}
+.srcs-t tr.q-row.is-selected td{background:var(--sky)}
+.did{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.did>div{padding:12px 16px 16px}
+.did>div+div{border-left:1px solid var(--line)}
+.did .eyebrow{margin-bottom:8px;display:block}
+.did .ev li{font-size:13px}
+.plan .kv{grid-template-columns:120px minmax(0,1fr) auto;align-items:baseline;gap:10px 16px}
+.plan .kv dd{text-align:left;font-weight:400;color:var(--ink-2)}
+.plan .kv dd b{color:var(--ink);font-weight:600}
+.plan .kv .btn{height:32px}
+.drawer{background:var(--white);border:1px solid var(--line-2)}
+.drawer .panel-sec{padding:16px}
+.drawer .panel-sec+.panel-sec{border-top:1px solid var(--line)}
+.cmt{list-style:none}
+.cmt li{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;padding:8px 0}
+.cmt p{color:var(--ink-2)}
+.ask{display:grid;gap:8px;margin-top:8px}
+.ask .btn{justify-content:flex-start}
+.drawer .note-acts{flex-wrap:wrap}
+.fig-link{color:inherit;border-bottom:1px dashed var(--electric)}
+.fig-link.is-lit{background:var(--sky);box-shadow:inset 0 -1px var(--electric)}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></symbol>
+<symbol id="i-down" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></symbol>
+<symbol id="i-right" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></symbol>
+<symbol id="i-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3.5 10.5 8 6 12.5"/></symbol>
+<symbol id="i-layers" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2 14 5 8 8 2 5Z"/><path d="M2 8.2l6 3 6-3"/><path d="M2 11.2l6 3 6-3"/></symbol>
+<symbol id="i-grid" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/></symbol>
+<symbol id="i-lock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="7" width="9" height="6.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h12M2 11h12"/><rect x="9" y="3" width="2.5" height="4" fill="#fff"/><rect x="4.5" y="9" width="2.5" height="4" fill="#fff"/></symbol>
+<symbol id="i-x" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></symbol>
+<symbol id="i-bill" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h5.5L12 4.5V14H4Z"/><path d="M6 7.5h4M6 10.5h3"/></symbol>
+<symbol id="i-eye" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></symbol>
+<symbol id="i-eye-off" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/><path d="M2.5 13.5 13.5 2.5"/></symbol>
+<symbol id="i-undo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 3.5 2.5 6.5l3 3"/><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7"/></symbol>
+<symbol id="i-plug" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2v3.5M10 2v3.5M4 5.5h8v2a4 4 0 0 1-8 0Z"/><path d="M8 11.5V14"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></symbol>
+<symbol id="i-flag" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3.5 14V2.5h8l-1.5 3 1.5 3h-8"/></symbol>
+<symbol id="i-ask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 3h11v8H7l-3 2.5V11H2.5Z"/></symbol>
+<symbol id="i-book" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 2.5h7.5L13 5v8.5H3Z"/><path d="M5.5 6.5h5M5.5 9h5M5.5 11.5h3"/></symbol>
+<symbol id="i-pause" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3.5v9M10 3.5v9"/></symbol>
+<symbol id="i-shield" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 1.8 13 3.6v4c0 3-2.2 5.3-5 6.6-2.8-1.3-5-3.6-5-6.6v-4Z"/></symbol>
+<symbol id="i-alert" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2 14.5 13.5h-13Z"/><path d="M8 6.5v3.5M8 11.4v.1"/></symbol>
+</defs></svg>
+<a class="skip" href="#main">Skip to content</a><svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-upload" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 11V2.5M4.5 6 8 2.5 11.5 6"/><path d="M2.5 10.5v3h11v-3"/></symbol>
+<symbol id="i-link" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6.5 9.5l3-3"/><path d="M7 4.5 8.5 3a2.5 2.5 0 0 1 3.5 3.5L10.5 8M9 11.5 7.5 13A2.5 2.5 0 0 1 4 9.5L5.5 8"/></symbol>
+<symbol id="i-retry" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 3v3.5H9.5"/><path d="M12.6 6.5A5 5 0 1 0 13 9"/></symbol>
+<symbol id="i-file" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 1.5h5.5L12.5 4.5V14.5H4Z"/><path d="M9.5 1.5v3h3"/></symbol>
+<symbol id="i-send" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 8 14 2.5 10.5 14 8 9Z"/><path d="M8 9 14 2.5"/></symbol>
+<symbol id="i-download" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.5V11M4.5 7.5 8 11l3.5-3.5"/><path d="M2.5 10.5v3h11v-3"/></symbol>
+<symbol id="i-sign" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 13.5h12"/><path d="M3.5 11 10.5 4l2 2-7 7H3.5Z"/></symbol>
+<symbol id="i-swap" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5.5h10M10 2.5l3 3-3 3"/><path d="M13 10.5H3M6 7.5l-3 3 3 3"/></symbol>
+<symbol id="i-merge" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2.5v3a3 3 0 0 0 3 3h5M4 13.5v-3a3 3 0 0 1 3-3"/><path d="M10 6l2.5 2.5L10 11"/></symbol>
+</defs></svg><header class="sheet-top on-dark"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"><span class="eyebrow" style="color:var(--slate)">MeritBooks<span class="sl">//</span>Design System v2</span><nav aria-label="Design system pages"><a href="index.html">Index</a><a href="O-control-tower.html">Tower</a><a href="O-client-migration.html" aria-current="page">Client</a><a href="O-connect-source.html">Connect</a><a href="O-preflight.html">Preflight</a><a href="O-mapping.html">Mapping</a><a href="O-tieout-certificate.html">Tie-out &amp; certificate</a><a href="O-buy-in.html">Buy-in</a><a href="S18-integrations-hub.html">S18 Hub</a></nav></header><main class="sheet" id="main"><div class="board-h"><div><div class="eyebrow">O11<span class="sl">//</span>08-ONBOARDING §5.3</div><h1 class="t-title" style="margin-top:8px">One client’s move, start to proof</h1><p>Sam Kovac is preparing Heartland’s migration. The left rail is the eight stages with the current one opened into its sub-steps. The page leads with the three things that need a person; everything the system did is a ledger that sums. The drawer answers “where did this number come from” for the open-invoice figure he clicked.</p></div><span class="pg"><span class="tag">Sample data</span> O11</span></div><div class="frame"><div data-live class="app app--frame density-cockpit app--mini" data-context="client"><aside class="rail" aria-label="Primary"><div class="rail-logo"><img src="assets/merit-icon.png" alt="Merit" width="22" height="20"></div><nav class="rail-nav"><a class="rail-icon" href="#" aria-label="Client home"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-grid"/></svg></a><a class="rail-icon" href="#" aria-label="Migration" aria-current="page"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-layers"/></svg></a><a class="rail-icon" href="#" aria-label="Requests"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-ask"/></svg></a><a class="rail-icon" href="#" aria-label="Documents"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-file"/></svg></a><a class="rail-icon" href="#" aria-label="Sources &amp; feeds"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-plug"/></svg></a><a class="rail-icon" href="#" aria-label="Reports"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-book"/></svg></a></nav><div class="rail-foot" style="padding:16px 0;display:grid;place-items:center"><span class="avatar">SK</span></div></aside><header class="bar"><button class="ctx" type="button" aria-haspopup="dialog" aria-expanded="false"><i class="pip pip--soft" aria-hidden="true"></i><span class="ctx-name">Heartland Heating &amp; Cooling</span><span class="ctx-meta tnum">C-103 · Migrating</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg><span class="kbd">⌘J</span></button><span class="crumbs"><b>Migration</b></span><button class="cmdk" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><span>Jump to account, job, customer…</span><kbd class="kbd">⌘K</kbd></button><span class="sync"><i aria-hidden="true"></i>simPRO synced 4 min ago</span></header><div class="main"><div class="ctxline">Mon Oct 19<span class="sl">//</span>Cutover Sep 30<span class="sl">//</span><b>Tie-out · day 2</b><span class="sl">//</span><b class="neg">2 cells open · $3,140.00</b><span class="sl">//</span>Target go-live Thu Oct 22<span class="sp"></span><span class="tag" style="margin-right:12px">Sample data</span></div><div class="page"><div class="page-head"><div><div class="eyebrow">Migration<span class="sl">//</span>Heartland Heating &amp; Cooling<span class="sl">//</span>Wave 2</div><h1 class="t-title" style="margin-top:8px">Moving Heartland onto MeritBooks</h1></div><div class="btn-row"><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-file"/></svg>Drop files</button><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-eye"/></svg>Side-by-side reports</button></div></div><div class="mig"><nav class="srail" aria-label="Migration stages"><div class="srail-h"><span class="eyebrow">Stage 5 of 8</span><div style="margin-top:6px"><span class="meter" role="img" aria-label="Stage 5 of 8, Tie-out"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="cur"></i><i></i><i></i><i></i></span></div></div><ol><li class="is-done"><a href="#"><span class="sk" aria-hidden="true"></span><span class="l1">Plan</span><span class="r"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">done</span> Oct 12</span></a></li><li class="is-done"><a href="#"><span class="sk" aria-hidden="true"></span><span class="l1">Connect</span><span class="r"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">done</span> Oct 13</span></a></li><li class="is-done"><a href="#"><span class="sk" aria-hidden="true"></span><span class="l1">Preflight</span><span class="r"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">done</span> Oct 15</span></a></li><li class="is-done"><a href="#"><span class="sk" aria-hidden="true"></span><span class="l1">Map</span><span class="r"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">done</span> Oct 16</span></a></li><li class="is-cur"><a href="#" aria-current="step"><span class="sk" aria-hidden="true"></span><span class="l1">Tie-out</span><span class="r">2 open</span></a><ul class="subs"><li><span>Opening &amp; schedules</span><b class="">11 tied</b></li><li><span>Monthly grid</span><b class="neg">2 cells · 1 stale</b></li><li><span>Subledger ties</span><b class="">9 tied</b></li><li><span>Independent ties</span><b class="warn">4 of 5</b></li><li><span>Preparer signs</span><b class="">locked</b></li></ul></li><li class=""><a href="#"><span class="sk" aria-hidden="true"></span><span class="l1">Shadow close</span><span class="r">Oct, parallel</span></a></li><li class=""><a href="#"><span class="sk" aria-hidden="true"></span><span class="l1">Certified</span><span class="r">Priya</span></a></li><li class=""><a href="#"><span class="sk" aria-hidden="true"></span><span class="l1">Live</span><span class="r">target Oct 22</span></a></li></ol><div class="srail-f">Stages can be worked out of order where the data allows. Skipped shows as skipped, never as done.</div></nav><div><section class="wg wg--primary" style="grid-column:auto;grid-row:auto" aria-labelledby="h-need"><div class="wg-head"><h2 class="wg-title" id="h-need">Needs you</h2><span class="wg-count">3</span><span class="wg-meta">everything else is done or running</span></div><ol class="need" style="padding:0"><li class="is-attn"><div><p class="t-head" style="margin:0">Resolve 2 tie-out cells · $3,140.00</p><p>One August invoice is Install in QuickBooks and Service in simPRO, so it shows in both rows. A June 2025 fuel entry changed in QuickBooks after the pull.</p></div><button class="btn btn--primary" type="button">Open the grid</button></li><li class=""><div><p class="t-head" style="margin:0">Attach the Bank of Iowa loan statement at Sep 30</p><p>The loan ties to QuickBooks but not yet to the lender. Without the statement it prints as Internal only on the certificate.</p></div><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-ask"/></svg>Ask Heartland</button></li><li class=""><div><p class="t-head" style="margin:0">Sign the tie-out</p><p>You sign; Priya Natarajan reviews and approves the certificate after October’s shadow close.</p><span class="lock"><svg class="ico" width="12" height="12" aria-hidden="true"><use href="#i-lock"/></svg>Locked until the grid is all zero</span></div><button class="btn" type="button" aria-disabled="true"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-sign"/></svg>Sign tie-out</button></li></ol></section><section class="card" aria-labelledby="h-src" style="margin-top:24px"><div class="card-h"><h3 id="h-src">Sources</h3><span class="t-cap">5 connected · ledger, field system, bank, card spend, documents</span><span style="flex:1"></span><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-plus"/></svg>Add a source</button></div><table class="tbl tbl-q tbl-q--flush srcs-t" aria-label="Sources connected for Heartland"><colgroup><col style="width:184px"><col><col style="width:176px"></colgroup><thead><tr><th>Source</th><th>What it brought</th><th>After go-live</th></tr></thead><tbody><tr class="q-row"><td><span class="l1 sysn">QuickBooks Online</span><span class="l2">Ledger · one-time</span><div style="margin-top:6px"><span class="tier tier--live"><i class="pip pip--ready" aria-hidden="true"></i>Live API</span></div></td><td><span class="l1" style="font-weight:400">21 monthly trial balances, 251 accounts, 18,412 transactions kept for drill-down, 388 vendors</span><span class="l2">Pulled Oct 17, 6:02 AM</span></td><td><span class="l1" style="font-weight:400">Disconnects and archives when certified</span></td></tr><tr class="q-row is-selected"><td><span class="l1 sysn">simPRO</span><span class="l2">Field system</span><div style="margin-top:6px"><span class="tier tier--live"><i class="pip pip--ready" aria-hidden="true"></i>Live API</span></div></td><td><span class="l1" style="font-weight:400">1,284 jobs (312 open), <a href="#" class="fig-link is-lit" data-note="ar">86 open invoices · 214,880.40</a>, 1,206 customers (1,171 linked to QuickBooks)</span><span class="l2">Webhooks on · 4 min ago</span></td><td><span class="l1" style="font-weight:400">Stays connected. Jobs, invoices and payments after Sep 30 flow in</span></td></tr><tr class="q-row"><td><span class="l1 sysn">Plaid · Farmers State</span><span class="l2">Bank · ••4471, ••4489</span><div style="margin-top:6px"><span class="tier tier--live"><i class="pip pip--ready" aria-hidden="true"></i>Live API</span></div></td><td><span class="l1" style="font-weight:400">Balances at Sep 30, 17 outstanding items from the September recs</span><span class="l2">Balance 6:00 AM</span></td><td><span class="l1" style="font-weight:400">Stays connected as the bank feed</span></td></tr><tr class="q-row"><td><span class="l1 sysn">Ramp</span><span class="l2">Card spend · tenant</span><div style="margin-top:6px"><span class="tier tier--live"><i class="pip pip--ready" aria-hidden="true"></i>Live API</span></div></td><td><span class="l1" style="font-weight:400">Heartland entity, 14 cards, departments pushed from MeritBooks</span><span class="l2">Synced 7:40 AM</span></td><td><span class="l1" style="font-weight:400">Stays connected. Never export from Ramp by hand</span></td></tr><tr class="q-row"><td><span class="l1 sysn">Documents</span><span class="l2">Dropped Oct 13</span><div style="margin-top:6px"><span class="tier tier--file"><i class="pip pip--track" aria-hidden="true"></i>Drop</span></div></td><td><span class="l1" style="font-weight:400">Loan agreement, 2 bank recs, WIP schedule, 2026 budget, operating agreement, insurance</span><span class="l2">14 files, 14 classified</span></td><td><span class="l1" style="font-weight:400">Kept with the client; linked to each schedule</span></td></tr></tbody></table></section><section class="card" aria-labelledby="h-did" style="margin-top:24px"><div class="card-h"><h3 id="h-did">What the system did, and what you decided</h3></div><div class="did"><div><span class="eyebrow">Done for you</span><ul class="ev" style="margin-top:0"><li><span>Accounts mapped from Merit standard v3</span><span class="dl"></span><span class="v">231</span></li><li><span>Mapped by the QuickBooks crosswalk</span><span class="dl"></span><span class="v">14</span></li><li><span>Mapped by you</span><span class="dl"></span><span class="v">6</span></li><li class="ev-total"><span>Accounts mapped</span><span class="dl"></span><span class="v">251</span></li></ul><ul class="ev"><li><span>History months posted, one entry each</span><span class="dl"></span><span class="v">21</span></li><li><span>Open invoices linked by invoice #</span><span class="dl"></span><span class="v">86 of 86</span></li><li><span>Departments from simPRO business units</span><span class="dl"></span><span class="v">3</span></li><li><span>Vendor habits learned from history</span><span class="dl"></span><span class="v">214</span></li><li><span>Outstanding bank items loaded</span><span class="dl"></span><span class="v">17</span></li></ul></div><div><span class="eyebrow">Decided by Sam Kovac</span><ul class="ev" style="margin-top:0"><li><span>Mapping decisions</span><span class="dl"></span><span class="v">6</span></li><li><span>Preflight dispositions</span><span class="dl"></span><span class="v">9</span></li><li><span>Customer merges decided</span><span class="dl"></span><span class="v">23</span></li><li><span>Schedules confirmed</span><span class="dl"></span><span class="v">11</span></li></ul><p class="t-cap" style="margin-top:16px">Human-active time so far: 38 minutes across 4 sittings. Every run above can be undone with reversing entries until the certificate is issued.</p><div class="btn-row" style="margin-top:12px;margin-left:-12px"><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-undo"/></svg>Runs &amp; undo</button></div></div></div></section><section class="card plan" aria-labelledby="h-plan" style="margin-top:24px"><div class="card-h"><h3 id="h-plan">The plan</h3><span class="t-cap">Confirmed by Jordan Smith, Oct 12 · 2 minutes</span></div><div class="card-b"><dl class="kv"><dt>Cutover</dt><dd><b>Sep 30, 2026.</b> MeritBooks takes over Oct 1. September and earlier stay as they were in QuickBooks.<div style="margin-top:2px"><span class="prov">Period check passed</span></div></dd><dd><button class="btn btn--quiet" type="button">Change</button></dd><dt>History</dt><dd><b>Monthly, Jan 2025 – Sep 2026.</b> 21 months, one summary entry per month, plus transaction detail kept read-only for drill-down.<div style="margin-top:2px"><span class="prov">Wave default</span></div></dd><dd><button class="btn btn--quiet" type="button">Change</button></dd><dt>Shadow close</dt><dd><b>Parallel for October.</b> QuickBooks keeps running one more month and we diff the close. Bank of Iowa gets a lender package.<div style="margin-top:2px"><span class="prov">Required by tenant rule</span></div></dd><dd><button class="btn btn--quiet" type="button">Change</button></dd><dt>Chart</dt><dd><b>Merit standard chart v3</b> with departments, not Heartland’s own chart.<div style="margin-top:2px"><span class="prov">Firm default</span></div></dd><dd><button class="btn btn--quiet" type="button">Change</button></dd><dt>People</dt><dd><b>Jordan Smith</b> leads · <b>Sam Kovac</b> prepares · <b>Priya Natarajan</b> reviews and approves<div style="margin-top:2px"><span class="prov">Reviewer ≠ preparer</span></div></dd><dd><button class="btn btn--quiet" type="button">Change</button></dd></dl></div></section></div><aside class="drawer" aria-label="Details"><div class="panel-sec"><article class="note note--panel" data-note="ar">
+<div class="note-kind">Where this came from</div>
+<div class="note-title">Opening receivables are 214,880.40 and load once</div>
+<p>QuickBooks is the control for open invoices at cutover. simPRO adds the job, lines and deposits to each one. Nothing is counted twice.</p>
+<ul class="ev">
+<li><span>QuickBooks A/R aging, Sep 30</span><span class="dl"></span><span class="v">214,880.40</span></li>
+<li><span>simPRO open invoices to Sep 30</span><span class="dl"></span><span class="v">214,880.40</span></li>
+<li class="ev-total"><span>Difference</span><span class="dl"></span><span class="v">0.00</span></li></ul>
+<div class="basis"><span>Rule <b>ledger aging is control</b></span><span>Run <b>pull · Oct 17 · 9f3c…a1</b></span><span>Approved <b>Sam Kovac, Oct 16</b></span></div>
+<div class="note-acts"><button class="btn btn--quiet" type="button">Open the 86 invoices</button><button class="btn btn--quiet" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-flag"/></svg>Report a mismatch</button></div>
+</article></div><div class="panel-sec"><div class="panel-sec-h"><h3>Comments</h3><span class="t-cap">2</span></div><ul class="cmt"><li><span class="avatar" style="width:24px;height:24px;font-size:11px" aria-hidden="true">PN</span><div><span class="l1">Priya Natarajan <span class="t-cap">· Oct 18</span></span><p>Bank of Iowa sends statements to Heartland’s office, not to us. Ask Karen?</p></div></li><li><span class="avatar" style="width:24px;height:24px;font-size:11px" aria-hidden="true">SK</span><div><span class="l1">Sam Kovac <span class="t-cap">· Oct 18</span></span><p>Asked. She’s out until Wednesday.</p></div></li></ul><textarea class="textarea" aria-label="Add a comment" placeholder="Add a comment. @ to mention"></textarea></div><div class="panel-sec"><div class="panel-sec-h"><h3>Ask someone</h3></div><p class="t-cap">Any step can go to anyone. Client links open only that one step.</p><div class="ask"><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-ask"/></svg>Hand to a teammate</button><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-send"/></svg>Ask the client contact</button><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-shield"/></svg>Ask MeritBooks concierge</button></div></div></aside></div></div></div></div></div><div class="frame-cap"><span>O11.1 · Tie-out stage, “where this came from” open on simPRO’s open invoices. Mini rail so the drawer never covers the work.</span><span>1440 × variable · sample data</span></div><div class="anno"><div><b>What the system did vs what’s needed</b><p>Done-for-you lines sum (231 + 14 + 6 = 251 accounts). The three things that need a person are the primary module, with the lock reason on the one that can’t be done yet.</p></div><div><b>Sources by role</b><p>Ledger, field system, bank, card spend and documents, each with how it connects and what happens to it at go-live. QuickBooks leaves; simPRO, Plaid and Ramp stay as feeds.</p></div><div><b>Plain-English plan</b><p>Cutover, history, shadow and chart are sentences, each with a provenance chip saying where the default came from. Every one has a Change button.</p></div><div><b>Delegate anything</b><p>Ask a teammate, the client contact (a link that opens only that step) or MeritBooks concierge. Comments live on the migration, not in email.</p></div></div><div class="pair-h" style="display:flex;align-items:baseline;gap:12px;margin-top:56px"><h2 class="t-section" style="color:var(--ink)">O11.2 · Plan without answers, done, and source changed</h2><span class="t-cap"></span></div><div class="frame" style="background:var(--canvas)"><div class="states"><div class="state"><div class="state-h"><span class="eyebrow">Plan · Metro Heating &amp; Cooling</span></div><div class="card-b"><p class="t-head" style="margin:0">Which systems does Metro use?</p><p class="ink-2" style="margin-top:4px">Pre-checked from what Merit already knows. Nothing is assumed.</p><div style="display:grid;gap:0;margin-top:8px"><label class="check"><input type="checkbox"><i></i>QuickBooks Online <span class="t-cap">· ledger</span></label><label class="check"><input type="checkbox"><i></i>ServiceTitan <span class="t-cap">· field system</span></label><label class="check"><input type="checkbox" checked><i></i>Ramp <span class="t-cap">· card spend, tenant-wide</span></label><label class="check"><input type="checkbox" checked><i></i>Plaid <span class="t-cap">· bank</span></label></div><div class="inline-notice inline-notice--info" style="margin-top:8px"><span><b>Sent Oct 17 to Metro’s owner:</b> “Which software runs your jobs? Which keeps your books? Who has the login?” 3 questions, answers by text.</span></div><div class="btn-row" style="margin-top:12px"><button class="btn" type="button">Nudge the owner</button><button class="btn btn--quiet" type="button">I know, set it myself</button></div></div></div><div class="state"><div class="state-h"><span class="eyebrow">Done · live and certified · Merit Fund III</span></div><div class="wg-state"><span class="wg-done-mark"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg></span><p class="t-head">Live since Oct 9. Certificate CC-0002.</p><p>QuickBooks was disconnected and archived after 20 monthly reports, GL detail and the 1099 report were pulled. Plaid stays on as the bank feed. Luis Ortiz has Merit Fund III on his home.</p><div class="btn-row"><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-download"/></svg>Certificate PDF</button><button class="btn btn--quiet" type="button">Open client home</button></div></div></div><div class="state"><div class="state-h"><span class="eyebrow">Error · source changed since the pull · Heartland</span></div><div class="wg-state"><span class="wg-empty-mark" style="border:1.5px solid var(--neg);color:var(--neg)"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-alert"/></svg></span><p class="t-head">QuickBooks changed after Oct 17’s pull</p><p>A fuel transaction dated Jun 2025, a month QuickBooks shows as closed, was edited yesterday at 4:12 PM. That cell is stale, and the tie-out can’t be signed until you re-pull or accept the change.</p><div class="btn-row"><button class="btn btn--primary" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-retry"/></svg>Re-pull Jun 2025</button><button class="btn" type="button">See the edit</button></div></div></div></div></div></main><div class="toast-region" aria-live="polite"><div class="toast" id="toast" hidden><span class="toast-mark" aria-hidden="true"></span><span data-msg>Approved</span><button class="btn btn--quiet" type="button" data-undo>Undo</button></div></div><script>
+(function(){
+  /* privacy toggle — per frame; ⇧H toggles the first frame */
+  function setPriv(appEl,on){appEl.classList.toggle('is-private',on);
+    appEl.querySelectorAll('[data-privacy]').forEach(function(b){b.setAttribute('aria-pressed',on?'true':'false');
+      b.querySelector('span').textContent=on?'Show figures':'Hide figures';
+      b.querySelector('use').setAttribute('href',on?'#i-eye-off':'#i-eye');});}
+  document.querySelectorAll('[data-privacy]').forEach(function(b){b.addEventListener('click',function(){var a=b.closest('.app');setPriv(a,!a.classList.contains('is-private'));});});
+  document.addEventListener('keydown',function(e){if(e.shiftKey&&(e.key==='H'||e.key==='h')&&!/input|textarea|select/i.test(e.target.tagName)){var a=document.querySelector('.app[data-live]');if(a)setPriv(a,!a.classList.contains('is-private'));}});
+  /* decisions: the button's verb is repeated by the toast and the done line */
+  var toast=document.getElementById('toast'),tt;
+  function say(msg,undo){if(!toast)return;toast.querySelector('[data-msg]').textContent=msg;toast.hidden=false;clearTimeout(tt);tt=setTimeout(function(){toast.hidden=true},5000);toast._undo=undo;}
+  if(toast){toast.querySelector('[data-undo]').addEventListener('click',function(){if(toast._undo)toast._undo();toast.hidden=true;});}
+  document.querySelectorAll('[data-done]').forEach(function(btn){btn.addEventListener('click',function(){
+    var item=btn.closest('[data-dec]'),wgEl=btn.closest('.wg'),cnt=wgEl.querySelector('.wg-count');
+    var line=item.querySelector('[data-doneline]');
+    item.classList.add('is-resolved');line.querySelector('[data-what]').textContent=btn.getAttribute('data-done');
+    var n=parseInt(cnt.textContent,10)-1;cnt.textContent=n;
+    var all=wgEl.querySelector('[data-alldone]');if(n===0&&all){all.hidden=false;var mt=wgEl.querySelector('.wg-meta');if(mt){mt.dataset.was=mt.textContent;mt.textContent='All done';}}
+    say(btn.getAttribute('data-done'),function(){item.classList.remove('is-resolved');cnt.textContent=parseInt(cnt.textContent,10)+1;if(all)all.hidden=true;});
+    line.querySelector('[data-undo-line]').onclick=function(){item.classList.remove('is-resolved');cnt.textContent=parseInt(cnt.textContent,10)+1;if(all)all.hidden=true;};
+  });});
+  /* drill rows: Enter or click */
+  document.querySelectorAll('tr[data-drill]').forEach(function(r){r.addEventListener('keydown',function(e){if(e.key==='Enter'){say('Opening '+r.getAttribute('data-drill'));}});r.addEventListener('click',function(e){if(!e.target.closest('a,button'))say('Opening '+r.getAttribute('data-drill'));});});
+  /* seg buttons */
+  document.querySelectorAll('.seg').forEach(function(g){g.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;g.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed','false')});b.setAttribute('aria-pressed','true');});});
+  /* tabs */
+  document.querySelectorAll('[role=tablist]').forEach(function(g){g.addEventListener('click',function(e){var b=e.target.closest('[role=tab]');if(!b)return;g.querySelectorAll('[role=tab]').forEach(function(x){x.setAttribute('aria-selected','false')});b.setAttribute('aria-selected','true');});});
+})();
+</script></body></html>

@@ -195,7 +195,9 @@ export async function POST(request: Request) {
       require_class: body.require_class,
       require_item: body.require_item,
       approval_status: 'PENDING',
-      requested_by: userId,
+      // uuid column; the Clerk text id has no uuid mapping yet (writing it
+      // failed every request with an invalid-uuid error). See PATCH below.
+      requested_by: null,
       is_active: false, // Not active until approved
     })
     .select('id, account_number, name, approval_status')
@@ -243,19 +245,29 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'No organization found', code: 'NO_ORG' }, { status: 404 });
   }
 
+  // accounts.approved_by is a uuid column (migration 003) and the actor is a
+  // Clerk text id with no uuid mapping yet — writing it made EVERY approve fail
+  // with "invalid input syntax for type uuid", which the page then swallowed
+  // (audit 06 §5 bug 6). Same convention as bank-feed approve: leave it null;
+  // the actor is still captured by approved_at + the request log.
   const updates: Record<string, unknown> = action === 'approve'
-    ? { approval_status: 'APPROVED', approved_by: userId, approved_at: new Date().toISOString(), is_active: true }
+    ? { approval_status: 'APPROVED', approved_by: null, approved_at: new Date().toISOString(), is_active: true }
     : { approval_status: 'REJECTED' };
 
-  const { error: updateError } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from('accounts')
     .update(updates)
     .eq('org_id', orgId)
-    .eq('id', account_id);
+    .eq('id', account_id)
+    .select('id, account_number, name, approval_status');
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message, code: 'UPDATE_ERROR' }, { status: 500 });
   }
+  const row = (updated ?? [])[0] as { id: string; account_number: string; name: string; approval_status: string } | undefined;
+  if (!row) {
+    return NextResponse.json({ error: 'Account not found in this organization', code: 'NOT_FOUND' }, { status: 404 });
+  }
 
-  return NextResponse.json({ success: true, action });
+  return NextResponse.json({ success: true, action, account: row });
 }

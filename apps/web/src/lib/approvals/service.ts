@@ -13,6 +13,14 @@
  * DATABASE refuses another tenant's rows even if an .eq('org_id', ...) filter is ever
  * dropped. We ALSO keep the explicit org filter on each query as belt-and-suspenders.
  *
+ * WRITES (migration 154): the four workflow tables are SELECT-only for members — a
+ * member could otherwise forge an APPROVED request or an approval action straight
+ * through PostgREST. Every INSERT/UPDATE here therefore runs on the service-role client,
+ * always pinned with an explicit org_id = the caller's session org, and only after this
+ * module's own gates: workflow definition writes are gated at the route
+ * (settings_system:edit); request actions are gated by the pure engine (advanceChain:
+ * role-at-step, preparer != approver, distinct approver). Reads stay on the RLS client.
+ *
  * TWO operations genuinely need the RLS-BYPASSING admin client and build it internally
  * (never taken from the route): (1) `resolveActorRole` reads the `core` identity spine
  * (core.users/memberships/employees), which RLS shields from the user client; (2) the
@@ -226,7 +234,7 @@ export async function createWorkflow(
 
   const active = input.active ?? true;
   if (active) {
-    await db
+    await createAdminSupabase()
       .from('approval_workflows')
       .update({ active: false })
       .eq('org_id', orgId)
@@ -234,7 +242,7 @@ export async function createWorkflow(
       .eq('active', true);
   }
 
-  const { data: wf, error } = await db
+  const { data: wf, error } = await createAdminSupabase()
     .from('approval_workflows')
     .insert({
       org_id: orgId,
@@ -258,7 +266,7 @@ export async function createWorkflow(
     approver_role: s.approverRole,
     require_distinct: s.requireDistinct,
   }));
-  const { error: stepErr } = await db.from('approval_workflow_steps').insert(stepInserts);
+  const { error: stepErr } = await createAdminSupabase().from('approval_workflow_steps').insert(stepInserts);
   if (stepErr) throw new Error(stepErr.message);
 
   return {
@@ -287,7 +295,7 @@ export async function setWorkflowActive(
       .eq('id', workflowId)
       .maybeSingle();
     if (wf) {
-      await db
+      await createAdminSupabase()
         .from('approval_workflows')
         .update({ active: false })
         .eq('org_id', orgId)
@@ -295,7 +303,7 @@ export async function setWorkflowActive(
         .eq('active', true);
     }
   }
-  const { error } = await db
+  const { error } = await createAdminSupabase()
     .from('approval_workflows')
     .update({ active })
     .eq('org_id', orgId)
@@ -353,7 +361,20 @@ export async function submitToWorkflow(
     return { entered: true, request: await hydrateRequest(db, orgId, existing as RequestRow, wf) };
   }
 
-  const { data: req, error } = await db
+  // The request is written as the service role (RLS no longer checks it), so a
+  // client-supplied link must be proven to be one of THIS org's approval rows — the
+  // bridge in actOnRequest drives the linked row to APPROVED on chain completion.
+  if (input.linkApprovalId) {
+    const { data: link } = await db
+      .from('approvals')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('id', input.linkApprovalId)
+      .maybeSingle();
+    if (!link) throw new Error('Linked approval not found in this organization');
+  }
+
+  const { data: req, error } = await createAdminSupabase()
     .from('approval_requests')
     .insert({
       org_id: orgId,
@@ -647,7 +668,7 @@ export async function actOnRequest(
   );
 
   // Append the audit action.
-  const { error: actErr } = await db.from('approval_request_actions').insert({
+  const { error: actErr } = await createAdminSupabase().from('approval_request_actions').insert({
     org_id: orgId,
     request_id: row.id,
     step_order: row.current_step,
@@ -660,7 +681,7 @@ export async function actOnRequest(
   // Advance/close the request.
   const patch: Record<string, unknown> = { status: result.status, current_step: result.currentStep };
   if (result.completed) patch.decided_at = new Date().toISOString();
-  const { error: updErr } = await db
+  const { error: updErr } = await createAdminSupabase()
     .from('approval_requests')
     .update(patch)
     .eq('org_id', orgId)

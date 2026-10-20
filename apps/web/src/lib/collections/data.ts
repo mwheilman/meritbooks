@@ -8,6 +8,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getOrgToday } from '@/lib/dates/org-today';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { buildDossier, type DossierInvoice, type DossierPayment } from '@/lib/customers/dossier';
 import {
@@ -71,7 +72,8 @@ export async function loadWorklist(
   orgId: string,
   opts: { asOf?: string; locationId?: string | null } = {},
 ): Promise<WorklistResult> {
-  const asOf = opts.asOf || new Date().toISOString().slice(0, 10);
+  // Default as-of = today in the ORG's timezone (not UTC) — lib/dates.
+  const asOf = opts.asOf || (await getOrgToday(supabase, orgId));
   const asOfDate = parseDate(asOf) ?? new Date();
 
   // ── 1. Non-draft, non-void invoices (need PAID too for pay-history). ──────────

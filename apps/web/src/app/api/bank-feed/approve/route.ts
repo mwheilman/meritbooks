@@ -8,6 +8,7 @@ import { createAttribution } from '@/lib/services/cost-approval';
 import { learnVendorPattern } from '@/lib/services/categorization';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { decideVendor, resolveVendorIdByName, type CurrentVendor } from '@/lib/bank/vendor-resolution';
 
 /**
  * POST /api/bank-feed/approve
@@ -94,6 +95,37 @@ export const POST = apiHandler(
       }
     }
 
+    // Resolve the payee the reviewer typed (audit 06 §5 bug 1: the edit was
+    // previously never sent, so a corrected vendor name was silently lost).
+    let vendorId: string | null = body.vendor_id ?? null;
+    {
+      const suggestedId = (body.vendor_id ?? (txn.ai_vendor_id as string | null)) || null;
+      let current: CurrentVendor | null = null;
+      if (suggestedId) {
+        const { data: v } = await ctx.supabase
+          .schema('core')
+          .from('vendors')
+          .select('id, name, display_name')
+          .eq('id', suggestedId)
+          .maybeSingle();
+        current = (v as CurrentVendor | null) ?? null;
+      }
+      const decision = decideVendor(body.vendor_name, body.vendor_id, current);
+      if (decision.kind === 'keep') {
+        vendorId = decision.vendorId;
+      } else {
+        if (!orgId) {
+          return NextResponse.json({ error: 'No organization on request; cannot resolve vendor' }, { status: 400 });
+        }
+        try {
+          vendorId = (await resolveVendorIdByName(ctx.supabase, orgId, decision.name, ctx.userId)).id;
+        } catch (e) {
+          return NextResponse.json({ error: e instanceof Error ? e.message : 'Vendor resolution failed' }, { status: 400 });
+        }
+      }
+    }
+    const note = body.notes?.trim() || null;
+
     // Periods are a product of setup, not auto-created here (suite contract Rule F):
     // postJournalEntry rejects a missing/closed period with a clear error.
     const lines = isOutflow
@@ -111,7 +143,7 @@ export const POST = apiHandler(
       location_id: locationId,
       entry_date: txn.transaction_date,
       entry_type: 'STANDARD',
-      memo: `Bank feed: ${txn.description}`,
+      memo: note ? `Bank feed: ${txn.description} — ${note}` : `Bank feed: ${txn.description}`,
       source_module: 'BANK_FEED',
       source_id: txn.id,
       created_by: null, // Clerk user id is text; gl_entries.created_by is uuid (nullable per migration 018). No core.users mapping yet.
@@ -127,7 +159,7 @@ export const POST = apiHandler(
       .update({
         status: 'POSTED',
         final_account_id: body.account_id,
-        final_vendor_id: body.vendor_id,
+        final_vendor_id: vendorId,
         final_department_id: body.department_id,
         final_class_id: body.class_id,
         final_job_id: body.job_id ?? null,
@@ -184,19 +216,19 @@ export const POST = apiHandler(
     // the (org_id, normalized_description) key migration 040 introduced — a raw
     // upsert on the old (org_id, vendor_id, normalized_description) target would
     // now collide with that index when two vendors share a description.
-    if (body.vendor_id) {
+    if (vendorId) {
       await learnVendorPattern(ctx.supabase, {
         orgId,
         description: txn.description,
         accountId: body.account_id,
-        vendorId: body.vendor_id,
+        vendorId,
         departmentId: body.department_id ?? null,
         classId: body.class_id ?? null,
         locationId,
       });
 
       await ctx.supabase.rpc('increment_vendor_stats', {
-        p_vendor_id: body.vendor_id,
+        p_vendor_id: vendorId,
         p_amount_cents: absCents,
       });
     }

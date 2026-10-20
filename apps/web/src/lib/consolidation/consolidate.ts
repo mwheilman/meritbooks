@@ -95,7 +95,24 @@ export interface EntityAccountBalance {
   role?: string | null;
   /** Net balance in cents, signed to the account's NATURAL (normal) side. */
   naturalBalanceCents: number;
+  /**
+   * For intercompany (role-eliminating) balances: the counterparty entity the
+   * position is due to / from (gl_entry_lines.counterparty_location_id). An IC
+   * position is eliminated ONLY when its counterparty is inside the consolidated
+   * group — a receivable from a company OUTSIDE the group is a real third-party
+   * asset of this group. null/undefined = unknown (legacy lines without a tag).
+   */
+  counterpartyEntityId?: string | null;
 }
+
+/**
+ * Synthetic equity line for P&L recorded BEFORE the statement period that has not
+ * been closed to retained earnings yet. Loaders fold pre-period P&L into it so the
+ * period-end balance sheet carries ALL undistributed earnings (A = L + E) — not
+ * just the period's net income.
+ */
+export const UNCLOSED_EARNINGS_ACCOUNT_NUMBER = 'RE-UNCLOSED';
+export const UNCLOSED_EARNINGS_ACCOUNT_NAME = 'Retained earnings — before period (not yet closed)';
 
 export interface ConsolidationInput {
   entities: EntityMeta[];
@@ -157,8 +174,16 @@ export interface NciResult {
 export interface ConsolidationTotals {
   /** Total of the eliminations column (≤ 0). */
   eliminationsCents: number;
-  /** Post-elimination sum of every eliminating account — must be exactly 0. */
+  /**
+   * How far the eliminations fail to offset each other, as their net effect on
+   * the balance check (assets − liabilities − equity section). 0 when every
+   * eliminated intercompany receivable has a matching payable (and interdept
+   * revenue a matching cost); otherwise the consolidated balance sheet is off by
+   * exactly this amount and the IC pair must be reconciled.
+   */
   eliminatingResidualCents: number;
+  /** Intercompany positions with a counterparty OUTSIDE the group (kept, not eliminated). */
+  externalIntercompanyCents: number;
   revenueCents: number;
   cogsCents: number;
   opexCents: number;
@@ -281,6 +306,21 @@ export function consolidate(input: ConsolidationInput): ConsolidationResult {
   const fullSet = new Set(entitiesFull);
 
   // --- 1 + 2: FULL consolidation, line by line, with eliminations. ------------
+  // A flagged interdept account (is_eliminating) nets within the group always.
+  // A role-based intercompany position eliminates only when its counterparty is
+  // a FULL member of this group (or, for untagged legacy lines, when the group
+  // has more than one entity) — eliminating a receivable from a company outside
+  // the group is a one-sided elimination that breaks A = L + E (audit L5: the
+  // single-entity group showed a −$50,000 balance check).
+  const eliminableAmount = (b: EntityAccountBalance): number => {
+    if (!eliminate || !isEliminatingAccount(b, eliminatingRoles)) return 0;
+    if (b.isEliminating) return b.naturalBalanceCents;
+    const cp = b.counterpartyEntityId ?? null;
+    if (cp == null) return fullSet.size > 1 ? b.naturalBalanceCents : 0;
+    return fullSet.has(cp) && cp !== b.entityId ? b.naturalBalanceCents : 0;
+  };
+  let externalIntercompanyCents = 0;
+  let eliminatingResidualCents = 0;
   const lineByAccount = new Map<string, ConsolAccountLine>();
   for (const b of input.balances) {
     if (!fullSet.has(b.entityId)) continue;
@@ -304,21 +344,20 @@ export function consolidate(input: ConsolidationInput): ConsolidationResult {
     line.isEliminating = line.isEliminating || elim;
     line.grossCents += b.naturalBalanceCents;
     line.byEntity[b.entityId] = (line.byEntity[b.entityId] ?? 0) + b.naturalBalanceCents;
+    const removed = eliminableAmount(b);
+    line.eliminationCents -= removed;
+    if (elim && !b.isEliminating && removed === 0 && eliminate) externalIntercompanyCents += b.naturalBalanceCents;
+    eliminatingResidualCents += balanceCheckEffectOfRemoval(b.accountType, removed);
   }
 
   let eliminationsCents = 0;
   const accounts: ConsolAccountLine[] = [];
   for (const line of lineByAccount.values()) {
-    line.eliminationCents = eliminate && line.isEliminating ? -line.grossCents : 0;
     line.consolidatedCents = line.grossCents + line.eliminationCents;
     eliminationsCents += line.eliminationCents;
     accounts.push(line);
   }
   accounts.sort((a, b) => a.accountNumber.localeCompare(b.accountNumber));
-
-  const eliminatingResidualCents = accounts
-    .filter((a) => a.isEliminating)
-    .reduce((s, a) => s + a.consolidatedCents, 0);
 
   // --- Post-elimination statement subtotals (FULL group). ---------------------
   let revenueCents = 0;
@@ -419,6 +458,7 @@ export function consolidate(input: ConsolidationInput): ConsolidationResult {
     totals: {
       eliminationsCents,
       eliminatingResidualCents,
+      externalIntercompanyCents,
       revenueCents,
       cogsCents,
       opexCents,
@@ -438,6 +478,25 @@ export function consolidate(input: ConsolidationInput): ConsolidationResult {
     entitiesExcluded,
     eliminationsApplied: eliminate,
   };
+}
+
+/**
+ * Effect on the balance check (assets − liabilities − (equity + net income)) of
+ * REMOVING `removedNatural` cents (natural sign) from an account of `type`.
+ * Removing an asset lowers assets (−); removing a liability / equity lowers L+E
+ * (+); removing revenue lowers net income (+); removing an expense raises it (−).
+ */
+export function balanceCheckEffectOfRemoval(type: AccountType, removedNatural: number): number {
+  if (removedNatural === 0) return 0;
+  switch (type) {
+    case 'ASSET':
+    case 'COGS':
+    case 'OPEX':
+    case 'OTHER':
+      return -removedNatural;
+    default:
+      return removedNatural; // LIABILITY / EQUITY / REVENUE
+  }
 }
 
 /** Clamp a percent into [0, 100]; non-finite → 100 (safe default = wholly owned). */

@@ -592,3 +592,107 @@ table{border-collapse:collapse;width:100%}
 .ico{display:inline-block;flex:none;vertical-align:middle}
 
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+/* -------------------------------------------------------------- 17. ACCESS (v2.2)
+   Grants are drawn, not ticked. A cap cell is a 16px square inside a 32px
+   target: filled = granted · hollow = not granted · absent = doesn't apply.
+   Shape carries meaning, never colour alone:
+     corner notch   = constrained (limit, departments, doc types)
+     ring           = granted by a permission set, not the role
+     6px square TR  = added vs template (filled) / removed vs template (hollow)
+     45° slash      = taken away: muted, denied, revoked (the monogram's stroke)
+     outline        = separation-of-duties conflict (solid hard, dashed soft)   */
+.cap{position:relative;display:inline-grid;place-items:center;width:32px;height:32px;flex:none;cursor:pointer;vertical-align:middle}
+.cap i{position:relative;display:block;width:16px;height:16px;border:1.5px solid var(--night-500);   /* 4.9:1, meets 1.4.11 for the only cue */
+ background:var(--white);
+  transition:background-color var(--fast) var(--ease),border-color var(--fast) var(--ease),box-shadow var(--fast) var(--ease)}
+.cap:hover i{border-color:var(--electric)}
+.cap[aria-pressed=true] i,.cap.is-on i{background:var(--electric);border-color:var(--electric)}
+.cap.is-lim i::after{content:"";position:absolute;right:-1.5px;bottom:-1.5px;width:0;height:0;border-style:solid;border-width:0 0 7px 7px;border-color:transparent transparent var(--white) transparent}
+.cap.is-set i{background:var(--white);border-color:var(--electric);box-shadow:inset 0 0 0 2.5px var(--white),inset 0 0 0 8px var(--electric)}
+.cap.is-muted i{background:var(--white);border-color:var(--ink-2)}
+.cap.is-muted i::before,.slash::before{content:"";position:absolute;left:50%;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--ink);transform:rotate(45deg)}
+.cap[data-delta]::after{content:"";position:absolute;top:3px;right:3px;width:6px;height:6px;background:var(--electric)}
+.cap[data-delta=rem]::after{background:var(--white);box-shadow:inset 0 0 0 1.5px var(--electric)}
+.cap.is-hard i{outline:2px solid var(--neg);outline-offset:3px}
+.cap.is-soft i{outline:2px dashed var(--warn);outline-offset:3px}
+.cap.is-lit i{box-shadow:0 0 0 4px var(--blue-100)}
+.cap.is-set.is-lit i{box-shadow:inset 0 0 0 2.5px var(--white),inset 0 0 0 8px var(--electric),0 0 0 4px var(--blue-100)}
+.cap.is-sel{background:var(--sky);box-shadow:inset 0 0 0 1px var(--electric)}
+.cap--ro{cursor:default}
+.cap--ro:hover i{border-color:var(--night-500)}
+.cap--ro[aria-pressed=true]:hover i,.cap--ro.is-on:hover i{border-color:var(--electric)}
+.cap--sm{width:20px;height:20px;cursor:default}
+.cap--sm i{width:12px;height:12px}
+.slash{position:relative;display:inline-block;width:12px;height:12px;flex:none}
+
+/* Capability matrix — one row per resource, 9 action columns, inapplicable cells absent */
+.capm{table-layout:fixed}
+.capm th{height:40px;padding:0 4px;font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:0;text-transform:none;color:var(--ink-2);text-align:center;border-bottom:1px solid var(--line-2);background:var(--warm);position:sticky;top:0;z-index:2}
+.capm th:first-child{text-align:left}
+.capm td{height:40px;padding:0 4px;border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
+.capm td:first-child{text-align:left;padding-left:16px;overflow:hidden}
+.capm tr>*:last-child{padding-right:16px}
+.capm tr.capm-dom td{height:40px;background:var(--canvas);text-align:left}
+.capm tr.capm-dom .q-group-t{margin-right:8px}
+.capm tr.capm-res:hover td{background:var(--grey-100)}
+.capm .res{display:flex;align-items:center;gap:6px;min-width:0}
+.capm .res .l1{min-width:0}
+.capm .flags{display:inline-flex;gap:2px;color:var(--ink-3);flex:none}
+.capm .select{height:32px;padding:0 24px 0 8px;background-position:right 8px center}
+
+/* Ownership level chips — platform · tenant · client */
+.lvl{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 6px;font:600 var(--t-12)/18px var(--f-text);letter-spacing:.02em;white-space:nowrap;border:1px solid transparent}
+.lvl--platform{background:var(--midnight);color:var(--warm)}
+.lvl--tenant{background:var(--white);border-color:var(--electric);color:var(--electric)}
+.lvl--client{background:var(--sky);border-color:var(--blue-200);color:var(--ink)}
+
+/* Separation-of-duties strip — sits above the matrix, lists triggered rules */
+.sod{display:flex;flex-direction:column;gap:1px;background:var(--line)}
+.sod-row{display:grid;grid-template-columns:48px minmax(0,1fr) auto;align-items:center;gap:12px;min-height:56px;padding:8px 16px;background:var(--white)}
+.sod-row--hard{background:var(--neg-wash);box-shadow:inset 3px 0 var(--neg)}
+.sod-row--soft{background:var(--warn-wash);box-shadow:inset 3px 0 var(--warn)}
+.sod-row--held{background:var(--canvas);box-shadow:inset 3px 0 var(--steel)}
+.sod-code{font:700 var(--t-15)/var(--lh-15) var(--f-text);font-variant-numeric:tabular-nums}
+.sod-row--hard .sod-code{color:var(--neg)} .sod-row--soft .sod-code{color:var(--warn)} .sod-row--held .sod-code{color:var(--ink-2)}
+.sod-row p{color:var(--ink-2)}
+.sod-row b{color:var(--ink);font-weight:600}
+
+/* Decision trace — the resolution order as a numbered ledger. The step that
+   decided carries the slash (deny) or the check (allow).                    */
+.trace{list-style:none;counter-reset:tr}
+.trace li{display:grid;grid-template-columns:32px minmax(0,1fr) auto;column-gap:8px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line)}
+.trace .tno{font:700 var(--t-15)/var(--lh-15) var(--f-display);color:transparent;-webkit-text-stroke:1px var(--electric);font-variant-numeric:tabular-nums}
+.trace .tl{color:var(--ink);font-weight:500}
+.trace .td{display:block;color:var(--ink-2);font-size:var(--t-12);line-height:var(--lh-12);margin-top:2px}
+.trace .tv{display:inline-flex;align-items:center;gap:6px;font-weight:600;white-space:nowrap}
+.trace .tv--pass{color:var(--pos)} .trace .tv--fail{color:var(--neg)} .trace .tv--skip{color:var(--ink-3);font-weight:500}
+.trace li.is-decider{background:var(--white);box-shadow:-12px 0 0 var(--white),12px 0 0 var(--white),inset 3px 0 0 var(--neg)}
+.trace li.is-decider.is-allow{box-shadow:-12px 0 0 var(--white),12px 0 0 var(--white),inset 3px 0 0 var(--pos)}
+.trace li.is-decider .tno{color:var(--electric);-webkit-text-stroke:0}
+.verdict{display:flex;align-items:center;gap:12px;padding:12px 16px;font-weight:600}
+.verdict--deny{background:var(--neg-wash);color:var(--neg);box-shadow:inset 3px 0 var(--neg)}
+.verdict--allow{background:var(--pos-wash);color:var(--pos);box-shadow:inset 3px 0 var(--pos)}
+.verdict p{color:var(--ink);font-weight:400}
+
+/* View-as — read-only simulation. A Sky band above the shell (info, not alarm:
+   it's you, looking through someone else's access). Same slot as support.   */
+.viewas-band{grid-area:band;display:flex;align-items:center;gap:16px;height:32px;padding:0 16px 0 0;background:var(--sky);color:var(--ink);font-weight:500;white-space:nowrap;box-shadow:inset 0 -1px var(--blue-200)}
+.viewas-band::before{content:"";align-self:stretch;width:var(--rail);flex:none;background:repeating-linear-gradient(135deg,transparent 0 6px,var(--blue-200) 6px 9px),var(--blue-100)}
+.app--mini .viewas-band::before,.app--mini .support-band::before{width:var(--rail-mini)}
+.viewas-band b{font-weight:700}
+.viewas-band .sp{flex:1}
+.viewas-band .clock{font-variant-numeric:tabular-nums;font-weight:700;min-width:44px}
+.viewas-band .btn{height:24px;padding:0 10px}
+.viewas-band .btn::after{content:"";position:absolute;inset:-4px -2px}
+
+/* Attestation card — one access-review item: claim, evidence, decision keys */
+.attest{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 24px;padding:16px 24px;background:var(--white);border:1px solid var(--line);transition:border-color var(--fast),box-shadow var(--fast)}
+.attest+.attest{border-top:0}
+.attest.is-cursor{border-color:var(--electric);box-shadow:inset 3px 0 var(--electric)}
+.attest.is-kept{background:var(--canvas)}
+.attest.is-revoked .attest-claim{text-decoration:line-through;text-decoration-color:var(--ink-2)}
+.attest-kind{font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+.attest-claim{font:600 var(--t-15)/var(--lh-15) var(--f-text);color:var(--ink);margin-top:4px}
+.attest-acts{display:flex;align-items:flex-start;gap:8px}
+.attest .ev{grid-column:1/2;margin-top:4px}

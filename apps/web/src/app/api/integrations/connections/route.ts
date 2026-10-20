@@ -1,10 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { z } from 'zod';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { resolveOrgId } from '@/lib/posting/lifecycle';
 import {
   listCapabilityStatus,
   connectProvider,
@@ -27,24 +26,33 @@ import { requirePermission } from '@/lib/rbac/require-permission';
  *
  * Secrets are write-only here and never returned. Connecting requires the
  * capability's entitlement to be set on the tenant (Core ruling).
+ *
+ * ORG RESOLUTION (06 §L.3 L2): the tenant comes from requireAuthedContext() — the same
+ * caller-org resolution as the rest of the app (explicit `org_id` claim OR Clerk's
+ * native `o.id`). An unresolved org fails CLOSED with 400 (it used to 500).
  */
 
 const CAPS: Capability[] = ['AR_COLLECTION', 'AP_DISBURSEMENT', 'PAYROLL', 'BANK_FEED'];
 const ENVS: ProviderEnvironment[] = ['test', 'live'];
 
 export async function GET() {
-  const a = await auth().catch(() => null);
-  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
-  // first-org lookup stays only as a transitional fallback when no claim.
-  const claimOrgId =
-    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
-      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
-      : null;
-  const supabase = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
   try {
-    const orgId = await resolveOrgId(supabase, claimOrgId);
-    const status = await listCapabilityStatus(supabase, orgId);
-    return NextResponse.json({ ok: true, capabilities: status });
+    // Status read runs AS THE USER (RLS on core.provider_connections + organizations);
+    // the helpers also scope every query to orgId.
+    const status = await listCapabilityStatus(ctx.supabase, orgId);
+    // Never return a Vault secret reference to the browser (the POST already strips it).
+    const capabilities = status.map((cap) => ({
+      ...cap,
+      connections: cap.connections.map(({ secretRef: _omit, ...safe }) => {
+        void _omit;
+        return safe;
+      }),
+    }));
+    return NextResponse.json({ ok: true, capabilities });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 });
   }
@@ -60,19 +68,14 @@ const postSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const a = await auth().catch(() => null);
-  const userId = (a as { userId?: string | null } | null)?.userId ?? null;
-  if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { userId, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
   // Authorize — connecting/disconnecting a provider (secrets in Vault) is a
   // system-integration setting; same gate as erp/connect and payments/connect.
   const guard = await requirePermission(userId, 'settings_system', 'edit');
   if (!guard.ok) return guard.response;
-  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
-  // first-org lookup stays only as a transitional fallback when no claim.
-  const claimOrgId =
-    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
-      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
-      : null;
 
   let raw: unknown;
   try {
@@ -83,9 +86,9 @@ export async function POST(request: Request) {
   const parsed = postSchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: 'Validation failed' }, { status: 422 });
 
+  // Vault secret writes/deletes are service-role only; scoped to the caller's resolved tenant.
   const supabase = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(supabase, claimOrgId);
     const conn = await connectProvider(supabase, orgId, {
       capability: parsed.data.capability,
       provider: parsed.data.provider,
@@ -111,19 +114,14 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(request: Request) {
-  const a = await auth().catch(() => null);
-  const userId = (a as { userId?: string | null } | null)?.userId ?? null;
-  if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { userId, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
   // Authorize — connecting/disconnecting a provider (secrets in Vault) is a
   // system-integration setting; same gate as erp/connect and payments/connect.
   const guard = await requirePermission(userId, 'settings_system', 'edit');
   if (!guard.ok) return guard.response;
-  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
-  // first-org lookup stays only as a transitional fallback when no claim.
-  const claimOrgId =
-    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
-      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
-      : null;
 
   let raw: unknown;
   try {
@@ -134,9 +132,9 @@ export async function PATCH(request: Request) {
   const parsed = patchSchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: 'Validation failed' }, { status: 422 });
 
+  // Vault secret writes/deletes are service-role only; scoped to the caller's resolved tenant.
   const supabase = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(supabase, claimOrgId);
     await disconnectProvider(supabase, orgId, parsed.data.connection_id);
     return NextResponse.json({ ok: true });
   } catch (e) {

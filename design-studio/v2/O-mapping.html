@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=1440">
+<title>O15 · Chart mapping · MeritBooks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="system.css">
+<style>
+/* Board layout only — not part of the system */
+body{min-width:1440px}
+.sheet-top{display:flex;align-items:center;gap:24px;height:48px;padding:0 48px;background:var(--midnight);color:var(--grey-300)}
+.sheet-top img{height:24px;width:auto}
+.sheet-top nav{margin-left:auto;display:flex;gap:4px}
+.sheet-top nav a{height:32px;display:inline-flex;align-items:center;padding:0 10px;color:var(--grey-300);font-weight:500;white-space:nowrap}
+.sheet-top nav a:hover,.sheet-top nav a[aria-current=page]{background:var(--night-800);color:var(--warm)}
+.sheet{padding:0 48px 96px}
+.board-h{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding:40px 0 16px;border-bottom:1px solid var(--electric)}
+.board-h p{margin-top:8px;color:var(--ink-2);max-width:80ch}
+.board-h .pg{font-variant-numeric:tabular-nums;white-space:nowrap}
+.frame{border:1px solid var(--line-2);border-left:0;border-right:0;overflow:hidden;position:relative;margin:24px -48px 0;background:var(--warm)}
+.frame-cap{display:flex;justify-content:space-between;gap:24px;margin-top:8px;font-size:12px;line-height:16px;color:var(--ink-3)}
+.anno{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:24px}
+.anno div{border-top:1px solid var(--line-2);padding-top:12px}
+.anno b{display:block;font-weight:600;margin-bottom:4px}
+.anno p{color:var(--ink-2)}
+.app--frame .rail{min-height:100%}
+[hidden]{display:none!important}
+.sample{margin-left:16px;color:var(--ink-3);font-size:12px}
+/* Privacy: figures become redaction bars of their own width, so nothing reflows */
+.is-private .pv{color:transparent!important;background:var(--grey-300);box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.is-private .pv *{visibility:hidden}
+.btn--primary .pv{background:transparent}
+.is-private .btn--primary .pv{background:var(--blue-300)}
+
+/* ---- onboarding marks (shared by O-screens + S18) ---- */
+.sheet-top nav a{padding:0 8px}
+.src{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border:1px solid var(--line-2);background:var(--white);
+  font:500 12px/16px var(--f-text);color:var(--ink);white-space:nowrap}
+.src .pip{width:8px;height:8px}
+.src small{font:inherit;color:var(--ink-3)}
+.src--bridge{border-style:dashed}
+.srcs{display:flex;gap:4px;flex-wrap:nowrap;min-width:0}
+.prov{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:16px;color:var(--ink-3);white-space:nowrap}
+.prov::before{content:"";width:6px;height:6px;background:var(--electric);transform:skewX(-45deg);flex:none}
+.tier{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;font-weight:500}
+.tier--live{color:var(--pos)} .tier--partner{color:var(--warn)} .tier--bridge,.tier--file{color:var(--ink-2)}
+.stgw{display:flex;align-items:center;gap:8px;min-width:0}
+.stgw .meter{padding:0 4px 0 6px}
+.promise{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--sky);box-shadow:inset 3px 0 var(--electric);color:var(--ink)}
+.promise b{font-weight:600}
+.promise .ico{color:var(--electric)}
+.steps{display:flex;border:1px solid var(--line);background:var(--white)}
+.steps li{list-style:none;flex:1;display:flex;align-items:center;gap:10px;min-height:48px;padding:0 16px;border-right:1px solid var(--line);color:var(--ink-2)}
+.steps li:last-child{border-right:0}
+.steps .no{display:inline-grid;place-items:center;width:24px;height:24px;border:1.5px solid var(--grey-400);font:600 12px/1 var(--f-text);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.steps li.is-done{color:var(--ink)} .steps li.is-done .no{background:var(--electric);border-color:var(--electric);color:var(--white)}
+.steps li[aria-current=step]{background:var(--sky);box-shadow:inset 0 -2px var(--electric);color:var(--ink);font-weight:600}
+.steps li[aria-current=step] .no{border-color:var(--electric);color:var(--electric)}
+.sec-h{display:flex;align-items:baseline;gap:12px;margin:32px 0 12px}
+.sec-h h2,.sec-h h3{font:600 15px/24px var(--f-text);color:var(--ink)}
+.sec-h .sp{flex:1}
+.card{background:var(--white);border:1px solid var(--line)}
+.card-h{display:flex;align-items:center;gap:12px;min-height:48px;padding:0 8px 0 16px;border-bottom:1px solid var(--line)}
+.card-h h3{font:600 15px/24px var(--f-text);color:var(--ink);white-space:nowrap}
+.card-b{padding:16px}
+.card-f{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 8px 0 16px;border-top:1px solid var(--line);color:var(--ink-3);font-size:12px}
+.card-f .sp{flex:1}
+.states{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;padding:24px 32px 32px}
+.state{background:var(--white);border:1px solid var(--line);min-height:248px;display:flex;flex-direction:column}
+.state .wg-state{flex:1}
+.state-h{display:flex;align-items:center;gap:8px;height:40px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--canvas)}
+.state-h .eyebrow{color:var(--ink-2)}
+.who{display:flex;flex-direction:column;min-width:0}
+.ctx .pip{flex:none}
+.bar-l{display:block;height:12px;margin:10px 0;background:linear-gradient(90deg,var(--grey-100),var(--grey-200),var(--grey-100));background-size:200% 100%;animation:mb-shimmer 1.4s linear infinite}
+.vsep{width:1px;align-self:stretch;background:var(--line)}
+.dl-leader{display:flex;align-items:baseline;gap:8px;line-height:24px}
+.dl-leader .dl{flex:1;border-bottom:1px dotted var(--grey-400);transform:translateY(-4px)}
+.dl-leader .v{font-variant-numeric:tabular-nums;font-weight:500;white-space:nowrap}
+
+.page{padding-top:24px}
+.mp{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:0;border:1px solid var(--line);background:var(--white);margin-top:16px}
+.mp-main{min-width:0;display:flex;flex-direction:column}
+.mp .bands{border:0;border-bottom:1px solid var(--line)}
+.mp .tbl-q th{background:var(--white)}
+.mp .tbl-q td{height:56px}
+.mp .arrow{color:var(--ink-3);margin:0 2px}
+.mp .tg{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;white-space:nowrap}
+.mp .tg--neg{color:var(--neg)} .mp .tg--warn{color:var(--warn)} .mp .tg--info{color:var(--electric)}
+.mp tr.q-sum td{height:44px;background:var(--canvas);color:var(--ink-2)}
+.mp tr.q-tot td{height:44px;font-weight:600;border-bottom:0}
+.mp tr.q-tot td.n span{display:inline-block;padding-top:6px;border-top:1px solid var(--midnight)}
+.mp .panel{border-left:1px solid var(--line-2)}
+.mp .panel-body{padding-bottom:16px}
+.used{list-style:none}
+.used li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.used li.is-conf{box-shadow:inset 3px 0 var(--warn);padding-left:10px}
+.used .l2{white-space:normal}
+.setbar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--canvas);border-bottom:1px solid var(--line);color:var(--ink-2)}
+.setbar b{color:var(--ink);font-weight:600}
+.setbar .sp{flex:1}
+.dims{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.dim{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--line)}
+.dim-h{padding:12px 16px 8px}
+.dim-h .eyebrow{display:block;margin-bottom:4px}
+.dim-b{padding:0 16px 12px;flex:1}
+.dim-b .ev li{font-size:12px;line-height:20px}
+.dim-f{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);flex-wrap:wrap}
+.dim.is-merge{box-shadow:inset 0 2px var(--electric)}
+.mp .keybar{gap:16px;white-space:nowrap;padding:0 16px}
+.mp .keybar .keys{margin-right:-8px}
+.effect{display:flex;align-items:center;gap:16px;margin-top:16px;padding:12px 16px}
+.effect .sp{flex:1}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></symbol>
+<symbol id="i-down" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></symbol>
+<symbol id="i-right" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></symbol>
+<symbol id="i-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3.5 10.5 8 6 12.5"/></symbol>
+<symbol id="i-layers" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2 14 5 8 8 2 5Z"/><path d="M2 8.2l6 3 6-3"/><path d="M2 11.2l6 3 6-3"/></symbol>
+<symbol id="i-grid" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/></symbol>
+<symbol id="i-lock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="7" width="9" height="6.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h12M2 11h12"/><rect x="9" y="3" width="2.5" height="4" fill="#fff"/><rect x="4.5" y="9" width="2.5" height="4" fill="#fff"/></symbol>
+<symbol id="i-x" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></symbol>
+<symbol id="i-bill" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 2h5.5L12 4.5V14H4Z"/><path d="M6 7.5h4M6 10.5h3"/></symbol>
+<symbol id="i-eye" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></symbol>
+<symbol id="i-eye-off" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/><path d="M2.5 13.5 13.5 2.5"/></symbol>
+<symbol id="i-undo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 3.5 2.5 6.5l3 3"/><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7"/></symbol>
+<symbol id="i-plug" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2v3.5M10 2v3.5M4 5.5h8v2a4 4 0 0 1-8 0Z"/><path d="M8 11.5V14"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></symbol>
+<symbol id="i-flag" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3.5 14V2.5h8l-1.5 3 1.5 3h-8"/></symbol>
+<symbol id="i-ask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 3h11v8H7l-3 2.5V11H2.5Z"/></symbol>
+<symbol id="i-book" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 2.5h7.5L13 5v8.5H3Z"/><path d="M5.5 6.5h5M5.5 9h5M5.5 11.5h3"/></symbol>
+<symbol id="i-pause" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3.5v9M10 3.5v9"/></symbol>
+<symbol id="i-shield" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 1.8 13 3.6v4c0 3-2.2 5.3-5 6.6-2.8-1.3-5-3.6-5-6.6v-4Z"/></symbol>
+<symbol id="i-alert" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2 14.5 13.5h-13Z"/><path d="M8 6.5v3.5M8 11.4v.1"/></symbol>
+</defs></svg>
+<a class="skip" href="#main">Skip to content</a><svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-upload" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 11V2.5M4.5 6 8 2.5 11.5 6"/><path d="M2.5 10.5v3h11v-3"/></symbol>
+<symbol id="i-link" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6.5 9.5l3-3"/><path d="M7 4.5 8.5 3a2.5 2.5 0 0 1 3.5 3.5L10.5 8M9 11.5 7.5 13A2.5 2.5 0 0 1 4 9.5L5.5 8"/></symbol>
+<symbol id="i-retry" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 3v3.5H9.5"/><path d="M12.6 6.5A5 5 0 1 0 13 9"/></symbol>
+<symbol id="i-file" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 1.5h5.5L12.5 4.5V14.5H4Z"/><path d="M9.5 1.5v3h3"/></symbol>
+<symbol id="i-send" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 8 14 2.5 10.5 14 8 9Z"/><path d="M8 9 14 2.5"/></symbol>
+<symbol id="i-download" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.5V11M4.5 7.5 8 11l3.5-3.5"/><path d="M2.5 10.5v3h11v-3"/></symbol>
+<symbol id="i-sign" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 13.5h12"/><path d="M3.5 11 10.5 4l2 2-7 7H3.5Z"/></symbol>
+<symbol id="i-swap" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5.5h10M10 2.5l3 3-3 3"/><path d="M13 10.5H3M6 7.5l-3 3 3 3"/></symbol>
+<symbol id="i-merge" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2.5v3a3 3 0 0 0 3 3h5M4 13.5v-3a3 3 0 0 1 3-3"/><path d="M10 6l2.5 2.5L10 11"/></symbol>
+</defs></svg><header class="sheet-top on-dark"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"><span class="eyebrow" style="color:var(--slate)">MeritBooks<span class="sl">//</span>Design System v2</span><nav aria-label="Design system pages"><a href="index.html">Index</a><a href="O-control-tower.html">Tower</a><a href="O-client-migration.html">Client</a><a href="O-connect-source.html">Connect</a><a href="O-preflight.html">Preflight</a><a href="O-mapping.html" aria-current="page">Mapping</a><a href="O-tieout-certificate.html">Tie-out &amp; certificate</a><a href="O-buy-in.html">Buy-in</a><a href="S18-integrations-hub.html">S18 Hub</a></nav></header><main class="sheet" id="main"><div class="board-h"><div><div class="eyebrow">O15 + O16<span class="sl">//</span>08-ONBOARDING §7</div><h1 class="t-title" style="margin-top:8px">Map by the dollar, once for every client</h1><p>Heritage’s 223 QuickBooks accounts map onto the Merit standard chart. Ready, Check and Decide are the same bands the bank feed uses. The Decide band is ordered by balance, and every proposal names the rule that made it. Rules approved on AIM and Heartland arrive pre-filled here; where those clients disagree, Heritage sees the conflict.</p></div><span class="pg"><span class="tag">Sample data</span> O15</span></div><div class="frame"><div data-live class="app app--frame density-cockpit app--mini" data-context="client"><aside class="rail" aria-label="Primary"><div class="rail-logo"><img src="assets/merit-icon.png" alt="Merit" width="22" height="20"></div><nav class="rail-nav"><a class="rail-icon" href="#" aria-label="Client home"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-grid"/></svg></a><a class="rail-icon" href="#" aria-label="Migration" aria-current="page"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-layers"/></svg></a><a class="rail-icon" href="#" aria-label="Requests"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-ask"/></svg></a><a class="rail-icon" href="#" aria-label="Documents"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-file"/></svg></a><a class="rail-icon" href="#" aria-label="Sources &amp; feeds"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-plug"/></svg></a><a class="rail-icon" href="#" aria-label="Reports"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-book"/></svg></a></nav><div class="rail-foot" style="padding:16px 0;display:grid;place-items:center"><span class="avatar">DL</span></div></aside><header class="bar"><button class="ctx" type="button" aria-haspopup="dialog" aria-expanded="false"><i class="pip pip--soft" aria-hidden="true"></i><span class="ctx-name">Heritage Interiors</span><span class="ctx-meta tnum">C-101 · Migrating</span><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-down"/></svg><span class="kbd">⌘J</span></button><span class="crumbs"><b>Migration · Map</b></span><button class="cmdk" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-search"/></svg><span>Jump to account, job, customer…</span><kbd class="kbd">⌘K</kbd></button><span class="sync"><i aria-hidden="true"></i>RFMS synced 7:02 AM</span></header><div class="main"><div class="ctxline">Mon Oct 19<span class="sl">//</span>Heritage Interiors<span class="sl">//</span>Map · day 3<span class="sl">//</span><b>38 to decide · 92,410.00</b><span class="sl">//</span>223 QuickBooks accounts<span class="sp"></span><span class="tag" style="margin-right:12px">Sample data</span></div><div class="page"><div class="page-head"><div><div class="eyebrow">Migration<span class="sl">//</span>Map<span class="sl">//</span>Heritage Interiors</div><h1 class="t-title" style="margin-top:8px">Chart mapping</h1></div><div class="btn-row"><span class="prov">QuickBooks pull Oct 16 · 223 accounts · 21 monthly TBs</span><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-download"/></svg>Export mapping</button></div></div><div class="mp"><div class="mp-main"><div class="bands" role="tablist" aria-label="Confidence bands"><button class="band-tab" role="tab" type="button" aria-selected="true"><span class="eyebrow">Decide</span><span class="v">38</span><span class="t-cap">under 70 or a warning · 92,410.00</span></button><button class="band-tab" role="tab" type="button" aria-selected="false"><span class="eyebrow">Check</span><span class="v">23</span><span class="t-cap">70–89 · 41,806.20</span></button><button class="band-tab" role="tab" type="button" aria-selected="false"><span class="eyebrow">Ready</span><span class="v">162</span><span class="t-cap">90+ · preselected · 2,318,440.00</span></button></div><div class="setbar"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-layers"/></svg><span>Mapping onto <b>Merit standard v3</b> · 412 rules · used on 6 clients · 2 conflicts</span><span class="sp"></span><div class="seg" role="group" aria-label="View"><button type="button" aria-pressed="true">By QuickBooks account</button><button type="button" aria-pressed="false">By MeritBooks account</button></div></div><div class="bulk"><b>4 need the controller</b><span class="t-cap">3 account requests, 1 equity reclass</span><span class="sp"></span><button class="btn" type="button">Send 4 to Priya</button><button class="btn btn--primary" type="button" aria-disabled="true">Accept all Ready · 162</button></div><div style="flex:1"><table class="tbl tbl-q tbl-q--flush" aria-label="Accounts to decide, largest balance first"><colgroup><col style="width:248px"><col><col style="width:128px"><col style="width:196px"><col style="width:132px"></colgroup><thead><tr><th>QuickBooks account</th><th>MeritBooks account</th><th>Confidence</th><th>Why</th><th class="n"><button class="th-sort" type="button" style="min-height:32px">Balance Sep 30 <svg class="ico" width="12" height="12" aria-hidden="true"><use href="#i-down"/></svg></button></th></tr></thead><tbody><tr class="q-row" tabindex="0"><td><span class="l1"><span class="code">1499</span>Due from Swan Creek</span><span class="l2">Asset</span></td><td><span class="l1">1450 Due from related parties</span><span class="l2">counterparty Swan Creek</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 61"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span><b>61</b></span></td><td><span class="l1" style="font-weight:400;font-size:12px">AI proposal · capped at 89</span><span class="l2"><span class="tg tg--warn"><svg class="ico" width="12" height="12" aria-hidden="true"><use href="#i-swap"/></svg>Swan Creek says 22,100.00</span></span></td><td class="n"><span class="l1">24,600.00</span><span class="l2">31,800.00 in 21 mo</span></td></tr><tr class="q-row" tabindex="0"><td><span class="l1"><span class="code">1205</span>Inventory – samples</span><span class="l2">Asset</span></td><td><span class="l1 ink-2">No good target</span><span class="l2">request 1320 Showroom samples</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="no proposal"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><b>—</b></span></td><td><span class="l1" style="font-weight:400;font-size:12px">Nothing in Merit standard v3</span><span class="l2"><span class="tg tg--info"><svg class="ico" width="12" height="12" aria-hidden="true"><use href="#i-plus"/></svg>Request account</span></span></td><td class="n"><span class="l1">18,412.50</span><span class="l2">6,120.00 in 21 mo</span></td></tr><tr class="q-row is-attn" tabindex="0"><td><span class="l1"><span class="code">2310</span>Sales tax payable – Polk Co</span><span class="l2">Liability</span></td><td><span class="l1">6810 Taxes &amp; licenses</span><span class="l2">proposed from the name</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 48"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i></span><b>48</b></span></td><td><span class="l1" style="font-weight:400;font-size:12px">Name contains “tax”</span><span class="l2"><span class="tg tg--neg"><svg class="ico" width="12" height="12" aria-hidden="true"><use href="#i-alert"/></svg>Liability → expense</span></span></td><td class="n"><span class="l1">12,906.44</span><span class="l2">88,124.00 in 21 mo</span></td></tr><tr class="q-row is-cursor" tabindex="0"><td><span class="l1"><span class="code">6125</span>Truck fuel – installers</span><span class="l2">Expense</span></td><td><span class="l1">6120 Vehicle fuel</span><span class="l2">&nbsp;</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 66"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span><b>66</b></span></td><td><span class="l1" style="font-weight:400;font-size:12px">Merit standard v3</span><span class="l2"><span class="tg tg--warn"><svg class="ico" width="12" height="12" aria-hidden="true"><use href="#i-swap"/></svg>Conflict · 2 clients differ</span></span></td><td class="n"><span class="l1">9,880.00</span><span class="l2">21,406.30 in 21 mo</span></td></tr><tr class="q-row" tabindex="0"><td><span class="l1"><span class="code">3900</span>Opening Balance Equity</span><span class="l2">Equity</span></td><td><span class="l1">3200 Retained earnings</span><span class="l2">reclass, controller approves</span></td><td><span class="conf"><span class="meter" role="img" aria-label="Confidence 70"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span><b>70</b></span></td><td><span class="l1" style="font-weight:400;font-size:12px">Preflight PF-06</span><span class="l2"><span class="tg tg--info"><svg class="ico" width="12" height="12" aria-hidden="true"><use href="#i-plus"/></svg>Controller</span></span></td><td class="n"><span class="l1">7,250.00</span><span class="l2">0.00 in 21 mo</span></td></tr><tr class="q-row" tabindex="0"><td><span class="l1"><span class="code">6990</span>Ask My Accountant</span><span class="l2">Expense</span></td><td><span class="l1">9999 Suspense</span><span class="l2">items go to review</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 52"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i></span><b>52</b></span></td><td><span class="l1" style="font-weight:400;font-size:12px">Preflight PF-05</span><span class="l2">&nbsp;</span></td><td class="n"><span class="l1">3,212.18</span><span class="l2">4,183.00 in 21 mo</span></td></tr><tr class="q-row" tabindex="0"><td><span class="l1"><span class="code">4900</span>Builder rebates</span><span class="l2">Revenue</span></td><td><span class="l1">4950 Discounts &amp; rebates</span><span class="l2">&nbsp;</span></td><td><span class="conf conf--lo"><span class="meter" role="img" aria-label="Confidence 57"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span><b>57</b></span></td><td><span class="l1" style="font-weight:400;font-size:12px">Name heuristic · contained</span><span class="l2">&nbsp;</span></td><td class="n"><span class="l1">2,640.00</span><span class="l2">19,062.20 in 21 mo</span></td></tr><tr class="q-sum"><td colspan="4">31 more in Decide, each under 2,640.00 · same order</td><td class="n">13,508.88</td></tr><tr class="q-tot"><td colspan="4">38 accounts to decide</td><td class="n"><span>92,410.00</span></td></tr></tbody></table></div><div class="keybar"><span class="keys"><span class="kbd">J</span><span class="kbd">K</span></span> move<span class="keys"><span class="kbd">A</span></span> accept<span class="keys"><span class="kbd">E</span></span> change<span class="keys"><span class="kbd">R</span></span> request account<span class="keys"><span class="kbd">?</span></span> why<span class="sp"></span><span>AI alone never lands in Ready</span></div></div><aside class="panel" aria-label="Why this mapping"><div class="panel-head"><div class="eyebrow">Row 4 of 38</div><div class="t-head" style="margin-top:4px">Truck fuel – installers</div></div><div class="panel-body"><div class="panel-sec"><article class="note note--panel">
+<div class="note-kind">Shared mapping · Merit standard v3</div>
+<div class="note-title">6125 Truck fuel – installers → 6120 Vehicle fuel</div>
+<p>The rule exists, but two clients set it up differently, so it can’t land in Ready on its own. Heritage only needs one answer.</p>
+<ul class="used" style="margin-top:8px">
+<li><span class="who"><span class="l1">AIM Kitchen &amp; Bath</span><span class="l2">6120 Vehicle fuel · Luis Ortiz, Oct 1</span></span><span class="t-cap">approved</span></li>
+<li class="is-conf"><span class="who"><span class="l1">Heartland Heating &amp; Cooling</span><span class="l2">6120 Vehicle fuel + department Service · Sam Kovac, Oct 16</span></span><span class="tg tg--warn">differs</span></li>
+<li><span class="who"><span class="l1">Merit Fund III</span><span class="l2">no fuel account</span></span><span class="t-cap">—</span></li></ul>
+<ul class="ev"><li><span>Moves into 6120 this year</span><span class="dl"></span><span class="v">9,880.00</span></li>
+<li><span>Moves into 6120 across 21 months</span><span class="dl"></span><span class="v">21,406.30</span></li></ul>
+<div class="basis"><span>Confidence <b>66</b></span><span>Type <b>expense → expense</b></span><span>No balances sent to AI</span></div>
+</article></div><div class="panel-sec"><div class="panel-sec-h"><h3>Your answer for Heritage</h3></div><div style="display:grid;gap:0"><label class="radio"><input type="radio" name="fu" checked><i></i>6120 Vehicle fuel, no department</label><label class="radio"><input type="radio" name="fu"><i></i>6120 Vehicle fuel + department, like Heartland</label><label class="radio"><input type="radio" name="fu"><i></i>Another account…</label></div><p class="t-cap" style="margin-top:8px">Settling the rule for every client is Jordan Smith’s call. Your answer here only maps Heritage.</p></div></div><div class="panel-foot"><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-ask"/></svg>Ask Jordan to settle</button><span class="sp"></span><button class="btn btn--primary" type="button">Accept <span class="kbd">A</span></button></div></aside></div><div class="sec-h"><h2>Departments and jobs found in the data</h2><span class="t-cap">from QuickBooks classes, RFMS stores and orders, and account-name families · nothing to configure</span></div><div class="dims"><article class="dim is-merge"><div class="dim-h"><span class="eyebrow">Department · proposed</span><span class="t-head">Commercial</span><p class="t-cap" style="margin-top:2px">QuickBooks class “Commercial”</p></div><div class="dim-b"><ul class="ev" style="margin-top:4px"><li><span>Transactions</span><span class="dl"></span><span class="v">1,840</span></li><li><span>Activity, 21 months</span><span class="dl"></span><span class="v">2,412,800.00</span></li><li><span>Accounts touched</span><span class="dl"></span><span class="v">41</span></li></ul><p class="t-cap" style="margin-top:8px;color:var(--electric)">Matches the tenant’s Commercial department (Heartland, AIM)</p></div><div class="dim-f"><button class="btn btn--primary" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-merge"/></svg>Merge into Commercial</button></div></article><article class="dim"><div class="dim-h"><span class="eyebrow">Department · proposed</span><span class="t-head">Residential retail</span><p class="t-cap" style="margin-top:2px">QuickBooks class “Retail” + RFMS store “Des Moines showroom”</p></div><div class="dim-b"><ul class="ev" style="margin-top:4px"><li><span>Transactions</span><span class="dl"></span><span class="v">3,912</span></li><li><span>Activity, 21 months</span><span class="dl"></span><span class="v">1,906,400.00</span></li><li><span>Accounts touched</span><span class="dl"></span><span class="v">37</span></li></ul></div><div class="dim-f"><button class="btn" type="button">Accept</button><button class="btn btn--quiet" type="button">Rename</button></div></article><article class="dim"><div class="dim-h"><span class="eyebrow">Department · proposed</span><span class="t-head">Builder &amp; multifamily</span><p class="t-cap" style="margin-top:2px">Account family “Sales – Builder”, “COGS – Builder”</p></div><div class="dim-b"><ul class="ev" style="margin-top:4px"><li><span>Accounts in the family</span><span class="dl"></span><span class="v">4</span></li><li><span>Activity, 21 months</span><span class="dl"></span><span class="v">1,284,300.00</span></li><li><span>Transactions</span><span class="dl"></span><span class="v">612</span></li></ul></div><div class="dim-f"><button class="btn" type="button">Accept</button><button class="btn btn--quiet" type="button">Rename</button></div></article><article class="dim"><div class="dim-h"><span class="eyebrow">Jobs · proposed</span><span class="t-head">214 open jobs</span><p class="t-cap" style="margin-top:2px">QuickBooks sub-customers ↔ RFMS orders by order #</p></div><div class="dim-b"><ul class="ev" style="margin-top:4px"><li><span>Linked by order #</span><span class="dl"></span><span class="v">206</span></li><li><span>To review side by side</span><span class="dl"></span><span class="v">8</span></li><li><span>Revenue to date, open jobs</span><span class="dl"></span><span class="v">1,118,240.00</span></li></ul></div><div class="dim-f"><button class="btn" type="button">Review 8</button><button class="btn btn--quiet" type="button">Accept 206</button></div></article></div><div class="effect inline-notice inline-notice--info"><span class="who"><span class="l1">Accepting the three departments re-runs the mapping.</span><span class="l2" style="white-space:normal">The four “Sales – X / COGS – X” families become one account plus a department. 6 accounts leave Decide and 9 move from Check to Ready. History lines get the department where QuickBooks had the class; the rest are tagged pre-department.</span></span><span class="sp"></span><button class="btn" type="button">Preview the change</button></div></div></div></div></div><div class="frame-cap"><span>O15.1 · Decide band, cursor on a shared-rule conflict. The row amounts plus the 31 more equal the band total.</span><span>1440 × variable · sample data</span></div><div class="anno"><div><b>Ordered by dollars</b><p>Largest cutover balance first, with 21-month activity under it. The band header, the rows and the 31-more line all sum to 92,410.00.</p></div><div><b>The rule is the reason</b><p>Merit standard rule, QuickBooks crosswalk, name heuristic, preflight, or AI proposal capped at 89. No balances are ever sent to the model.</p></div><div><b>Type guard</b><p>A liability proposed onto an expense is red and can’t be accepted without a typed reason, which prints on the certificate.</p></div><div><b>Dimensions are found, not typed</b><p>Classes, RFMS stores and account families become department proposals with evidence; one merges into the tenant’s existing Commercial department.</p></div></div></main><div class="toast-region" aria-live="polite"><div class="toast" id="toast" hidden><span class="toast-mark" aria-hidden="true"></span><span data-msg>Approved</span><button class="btn btn--quiet" type="button" data-undo>Undo</button></div></div><script>
+(function(){
+  /* privacy toggle — per frame; ⇧H toggles the first frame */
+  function setPriv(appEl,on){appEl.classList.toggle('is-private',on);
+    appEl.querySelectorAll('[data-privacy]').forEach(function(b){b.setAttribute('aria-pressed',on?'true':'false');
+      b.querySelector('span').textContent=on?'Show figures':'Hide figures';
+      b.querySelector('use').setAttribute('href',on?'#i-eye-off':'#i-eye');});}
+  document.querySelectorAll('[data-privacy]').forEach(function(b){b.addEventListener('click',function(){var a=b.closest('.app');setPriv(a,!a.classList.contains('is-private'));});});
+  document.addEventListener('keydown',function(e){if(e.shiftKey&&(e.key==='H'||e.key==='h')&&!/input|textarea|select/i.test(e.target.tagName)){var a=document.querySelector('.app[data-live]');if(a)setPriv(a,!a.classList.contains('is-private'));}});
+  /* decisions: the button's verb is repeated by the toast and the done line */
+  var toast=document.getElementById('toast'),tt;
+  function say(msg,undo){if(!toast)return;toast.querySelector('[data-msg]').textContent=msg;toast.hidden=false;clearTimeout(tt);tt=setTimeout(function(){toast.hidden=true},5000);toast._undo=undo;}
+  if(toast){toast.querySelector('[data-undo]').addEventListener('click',function(){if(toast._undo)toast._undo();toast.hidden=true;});}
+  document.querySelectorAll('[data-done]').forEach(function(btn){btn.addEventListener('click',function(){
+    var item=btn.closest('[data-dec]'),wgEl=btn.closest('.wg'),cnt=wgEl.querySelector('.wg-count');
+    var line=item.querySelector('[data-doneline]');
+    item.classList.add('is-resolved');line.querySelector('[data-what]').textContent=btn.getAttribute('data-done');
+    var n=parseInt(cnt.textContent,10)-1;cnt.textContent=n;
+    var all=wgEl.querySelector('[data-alldone]');if(n===0&&all){all.hidden=false;var mt=wgEl.querySelector('.wg-meta');if(mt){mt.dataset.was=mt.textContent;mt.textContent='All done';}}
+    say(btn.getAttribute('data-done'),function(){item.classList.remove('is-resolved');cnt.textContent=parseInt(cnt.textContent,10)+1;if(all)all.hidden=true;});
+    line.querySelector('[data-undo-line]').onclick=function(){item.classList.remove('is-resolved');cnt.textContent=parseInt(cnt.textContent,10)+1;if(all)all.hidden=true;};
+  });});
+  /* drill rows: Enter or click */
+  document.querySelectorAll('tr[data-drill]').forEach(function(r){r.addEventListener('keydown',function(e){if(e.key==='Enter'){say('Opening '+r.getAttribute('data-drill'));}});r.addEventListener('click',function(e){if(!e.target.closest('a,button'))say('Opening '+r.getAttribute('data-drill'));});});
+  /* seg buttons */
+  document.querySelectorAll('.seg').forEach(function(g){g.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;g.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed','false')});b.setAttribute('aria-pressed','true');});});
+  /* tabs */
+  document.querySelectorAll('[role=tablist]').forEach(function(g){g.addEventListener('click',function(e){var b=e.target.closest('[role=tab]');if(!b)return;g.querySelectorAll('[role=tab]').forEach(function(x){x.setAttribute('aria-selected','false')});b.setAttribute('aria-selected','true');});});
+})();
+</script></body></html>

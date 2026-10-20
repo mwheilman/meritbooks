@@ -4,6 +4,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requireManageUsers } from '@/lib/team/guard';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { createAdminSupabase } from '@/lib/supabase/server';
+import { allOrgLocations, isOrgEmployee } from '@/lib/team/org-locations';
 import { loadEmployeeNames } from '@/lib/portfolio/board';
 import {
   loadOnboardingOwners,
@@ -47,8 +50,12 @@ function coerceStatus(v: unknown): OnboardingStatus {
 export async function GET(_req: NextRequest) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+  // R0b — per-company onboarding owners + status render on the portfolio plane; same
+  // read gate as the board. (PUT stays admin-gated via requireManageUsers.)
+  const guard = await requirePermission(userId, 'reports', 'view');
+  if (!guard.ok) return guard.response;
 
   // Companies + their onboarding status. Degrade-safe on the (new) status column.
   let available = true;
@@ -139,10 +146,22 @@ export async function PUT(req: NextRequest) {
   }
   const { locationId, assigneeEmployeeId, status } = parsed.data;
 
+  // core.practice_assignments / core.employees are SELECT-only for members (migration
+  // 154): ownership writes run as the service role, authorized by requireManageUsers
+  // above and pinned to the session org. The service role bypasses RLS, so the
+  // client-supplied company and assignee are confirmed to be THIS org's first.
+  if (!(await allOrgLocations(supabase, orgId!, [locationId]))) {
+    return NextResponse.json({ error: 'Company not found', code: 'NOT_FOUND' }, { status: 404 });
+  }
+  if (assigneeEmployeeId && !(await isOrgEmployee(supabase, orgId!, assigneeEmployeeId))) {
+    return NextResponse.json({ error: 'Assignee not found', code: 'NOT_FOUND' }, { status: 404 });
+  }
+  const admin = createAdminSupabase();
+
   // 1. Owner set/clear.
   if (assigneeEmployeeId !== undefined) {
     if (assigneeEmployeeId === null) {
-      const { error } = await supabase
+      const { error } = await admin
         .schema('core')
         .from('practice_assignments')
         .delete()
@@ -156,7 +175,7 @@ export async function PUT(req: NextRequest) {
         );
       }
     } else {
-      const { error } = await supabase
+      const { error } = await admin
         .schema('core')
         .from('practice_assignments')
         .upsert(
@@ -175,7 +194,7 @@ export async function PUT(req: NextRequest) {
           { status: 200 },
         );
       }
-      await ensurePreparerCapability(supabase, orgId!, assigneeEmployeeId);
+      await ensurePreparerCapability(admin, orgId!, assigneeEmployeeId);
       // Assigning an owner nudges a not_started company into in_progress (unless the
       // caller is explicitly setting a status below).
       if (status === undefined) await markOnboardingInProgress(supabase, orgId!, [locationId]);

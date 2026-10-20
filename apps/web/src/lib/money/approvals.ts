@@ -21,8 +21,8 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { hasPermission, type UserRole } from '@/lib/rbac/permissions';
-import { normalizeMembershipRole } from '@/lib/rbac/role-normalize';
+import { createAdminSupabase } from '@/lib/supabase/server';
+import { effectiveAnyPermissionStrict, type EffectiveCellRef } from '@/lib/rbac/resolve-permissions';
 
 export type ApprovalKind = 'AR_REFUND' | 'AP_DISBURSEMENT' | 'AP_BATCH' | 'PAYROLL_RUN';
 export type ApprovalStatus =
@@ -76,8 +76,21 @@ function toApproval(r: ApprovalRow): Approval {
   };
 }
 
+/**
+ * Service-role writer for the approval record + its audit trail. Migration 154 makes
+ * public.approvals and public.approval_steps SELECT-only for members (a member could
+ * otherwise UPDATE approvals SET status='APPROVED' straight through PostgREST and skip
+ * canApprove + separation of duties). Every write below is therefore issued as the
+ * service role regardless of which client the caller handed in, is pinned to the
+ * caller's `orgId` with an explicit org_id filter, and only happens AFTER this module's
+ * own gates (assertTransition, SoD, canApprove) — callers own route-level authz
+ * (requireMoneyMovement / requirePermission). Reads stay on the caller's client.
+ */
+function svc(): SupabaseClient {
+  return createAdminSupabase();
+}
+
 async function logStep(
-  adminDb: SupabaseClient,
   orgId: string,
   approvalId: string,
   action: string,
@@ -86,7 +99,7 @@ async function logStep(
   after: ApprovalStatus | null,
   opts?: { providerCorrelationId?: string | null; note?: string },
 ): Promise<void> {
-  await adminDb.from('approval_steps').insert({
+  await svc().from('approval_steps').insert({
     org_id: orgId,
     approval_id: approvalId,
     action,
@@ -100,12 +113,25 @@ async function logStep(
 
 /** The money surfaces on which "may approve at all" is decided. A role that may
  * approve on ANY of these has money-movement approval authority. */
-function roleMayApproveMoney(role: UserRole): boolean {
-  return (
-    hasPermission(role, 'checks', 'approve') ||
-    hasPermission(role, 'bills', 'approve') ||
-    hasPermission(role, 'payroll', 'approve')
-  );
+export const MONEY_APPROVAL_CELLS: readonly EffectiveCellRef[] = [
+  { featureId: 'checks', action: 'approve' },
+  { featureId: 'bills', action: 'approve' },
+  { featureId: 'payroll', action: 'approve' },
+];
+
+/**
+ * R0 (IA-SPEC §7, 05-RBAC C3) — money-approval authority from the EFFECTIVE permission,
+ * not the frozen system matrix. `rawRole` is the caller's membership/employee role string
+ * (a system role OR a tenant custom-role key). The org's role edits (migration 130
+ * overrides) and custom roles are honored:
+ *   - a tenant that revokes checks/bills/payroll:approve from a role → that role is denied;
+ *   - a custom role granted approve on any of those cells → allowed;
+ *   - an unknown role / missing custom role / unreadable overrides → denied (strict).
+ * Interim: disappears when canApprove() calls authorize(…,'approve',{amount,preparedBy})
+ * (R-11). Separation of duties is NOT decided here — see approve().
+ */
+async function roleMayApproveMoney(db: SupabaseClient, orgId: string, rawRole: string): Promise<boolean> {
+  return effectiveAnyPermissionStrict(db, orgId, rawRole, MONEY_APPROVAL_CELLS);
 }
 
 /**
@@ -130,9 +156,8 @@ async function canApproveViaEmployeesFallback(
     .eq('is_active', true)
     .maybeSingle();
   if (error || !data?.role) return false; // no active role in this org -> fail closed
-  const role = normalizeMembershipRole(data.role as string);
-  if (!role) return false; // unrecognized role -> fail closed
-  return roleMayApproveMoney(role);
+  // Unrecognized (neither system nor this org's custom role) -> fail closed inside.
+  return roleMayApproveMoney(adminDb, orgId, data.role as string);
 }
 
 /**
@@ -140,9 +165,10 @@ async function canApproveViaEmployeesFallback(
  *
  * Resolution order (per the suite identity/access contract):
  *   1. CANONICAL: core.users (by clerk_user_id) -> core.memberships
- *      (by user_id, org_id, status='active') -> normalize the membership role
- *      onto a Books UserRole -> gate via hasPermission on the money surfaces.
- *      'owner'/'org_admin'/'admin' normalize to company_admin (full approver).
+ *      (by user_id, org_id, status='active') -> resolve the membership role (system
+ *      role, normalized; or this org's custom role) -> gate on the EFFECTIVE
+ *      permission (system default merged with the org's overrides) on the money
+ *      surfaces. 'owner'/'org_admin'/'admin' normalize to company_admin.
  *      A membership that exists but whose role is unrecognized fails CLOSED — we
  *      do NOT fall through to a possibly-more-permissive source once the
  *      authoritative membership has spoken.
@@ -176,10 +202,10 @@ export async function canApprove(adminDb: SupabaseClient, orgId: string, clerkUs
       if (memErr) return false; // fail closed on lookup error
 
       if (membership?.role) {
-        // Authoritative: honor the membership decision, do NOT fall back.
-        const role = normalizeMembershipRole(membership.role as string);
-        if (!role) return false; // membership present but role unrecognized -> fail closed
-        if (!roleMayApproveMoney(role)) return false;
+        // Authoritative: honor the membership decision, do NOT fall back. The RAW role
+        // (system or custom key) is resolved against the org's EFFECTIVE permissions;
+        // an unrecognized role fails closed inside roleMayApproveMoney.
+        if (!(await roleMayApproveMoney(adminDb, orgId, membership.role as string))) return false;
         // H1 guard (security audit, 2026-08-01): a membership is minted ACTIVE at
         // login and is NOT yet synced when an employee is deactivated/downgraded, so
         // a stale active membership could keep approval authority a deactivated
@@ -212,7 +238,7 @@ export async function createApproval(
   orgId: string,
   input: { kind: ApprovalKind; subjectTable: string; subjectId: string; amountCents?: number | null; preparedBy: string; metadata?: Record<string, unknown> },
 ): Promise<Approval> {
-  const { data, error } = await adminDb
+  const { data, error } = await svc()
     .from('approvals')
     .insert({
       org_id: orgId,
@@ -228,7 +254,7 @@ export async function createApproval(
     .single();
   if (error) throw new Error(error.message);
   const approval = toApproval(data as ApprovalRow);
-  await logStep(adminDb, orgId, approval.id, 'PREPARED', input.preparedBy, null, 'DRAFT');
+  await logStep(orgId, approval.id, 'PREPARED', input.preparedBy, null, 'DRAFT');
   return approval;
 }
 
@@ -247,9 +273,9 @@ function assertTransition(from: ApprovalStatus, to: ApprovalStatus): void {
 export async function submitForApproval(adminDb: SupabaseClient, orgId: string, approvalId: string, actor: string): Promise<Approval> {
   const a = await getApproval(adminDb, orgId, approvalId);
   assertTransition(a.status, 'PENDING_APPROVAL');
-  const { error } = await adminDb.from('approvals').update({ status: 'PENDING_APPROVAL' }).eq('org_id', orgId).eq('id', approvalId);
+  const { error } = await svc().from('approvals').update({ status: 'PENDING_APPROVAL' }).eq('org_id', orgId).eq('id', approvalId);
   if (error) throw new Error(error.message);
-  await logStep(adminDb, orgId, approvalId, 'SUBMITTED', actor, a.status, 'PENDING_APPROVAL');
+  await logStep(orgId, approvalId, 'SUBMITTED', actor, a.status, 'PENDING_APPROVAL');
   return { ...a, status: 'PENDING_APPROVAL' };
 }
 
@@ -266,22 +292,22 @@ export async function approve(adminDb: SupabaseClient, orgId: string, approvalId
   if (approverId === a.preparedBy) throw new SeparationOfDutiesError();
   if (!(await canApprove(adminDb, orgId, approverId))) throw new NotAuthorizedToApproveError();
 
-  const { error } = await adminDb
+  const { error } = await svc()
     .from('approvals')
     .update({ status: 'APPROVED', approved_by: approverId })
     .eq('org_id', orgId)
     .eq('id', approvalId);
   if (error) throw new Error(error.message); // DB CHECK also guards preparer != approver
-  await logStep(adminDb, orgId, approvalId, 'APPROVED', approverId, a.status, 'APPROVED');
+  await logStep(orgId, approvalId, 'APPROVED', approverId, a.status, 'APPROVED');
   return { ...a, status: 'APPROVED', approvedBy: approverId };
 }
 
 export async function reject(adminDb: SupabaseClient, orgId: string, approvalId: string, actor: string, reason: string): Promise<Approval> {
   const a = await getApproval(adminDb, orgId, approvalId);
   assertTransition(a.status, 'REJECTED');
-  const { error } = await adminDb.from('approvals').update({ status: 'REJECTED', reject_reason: reason }).eq('org_id', orgId).eq('id', approvalId);
+  const { error } = await svc().from('approvals').update({ status: 'REJECTED', reject_reason: reason }).eq('org_id', orgId).eq('id', approvalId);
   if (error) throw new Error(error.message);
-  await logStep(adminDb, orgId, approvalId, 'REJECTED', actor, a.status, 'REJECTED', { note: reason });
+  await logStep(orgId, approvalId, 'REJECTED', actor, a.status, 'REJECTED', { note: reason });
   return { ...a, status: 'REJECTED', rejectReason: reason };
 }
 
@@ -289,13 +315,13 @@ export async function reject(adminDb: SupabaseClient, orgId: string, approvalId:
 export async function markReleased(adminDb: SupabaseClient, orgId: string, approvalId: string, actor: string, providerCorrelationId: string): Promise<Approval> {
   const a = await getApproval(adminDb, orgId, approvalId);
   assertTransition(a.status, 'RELEASED');
-  const { error } = await adminDb
+  const { error } = await svc()
     .from('approvals')
     .update({ status: 'RELEASED', released_by: actor, provider_correlation_id: providerCorrelationId })
     .eq('org_id', orgId)
     .eq('id', approvalId);
   if (error) throw new Error(error.message);
-  await logStep(adminDb, orgId, approvalId, 'RELEASED', actor, a.status, 'RELEASED', { providerCorrelationId });
+  await logStep(orgId, approvalId, 'RELEASED', actor, a.status, 'RELEASED', { providerCorrelationId });
   return { ...a, status: 'RELEASED', releasedBy: actor, providerCorrelationId };
 }
 
@@ -330,7 +356,7 @@ export async function claimApprovalForRelease(
   approvalId: string,
   actor: string,
 ): Promise<ReleaseClaimResult> {
-  const { data, error } = await db
+  const { data, error } = await svc()
     .from('approvals')
     .update({ status: 'RELEASED', released_by: actor })
     .eq('org_id', orgId)
@@ -355,13 +381,13 @@ export async function finalizeReleaseClaim(
   actor: string,
   providerCorrelationId: string,
 ): Promise<void> {
-  const { error } = await db
+  const { error } = await svc()
     .from('approvals')
     .update({ provider_correlation_id: providerCorrelationId })
     .eq('org_id', orgId)
     .eq('id', approvalId);
   if (error) throw new Error(error.message);
-  await logStep(db, orgId, approvalId, 'RELEASED', actor, 'APPROVED', 'RELEASED', { providerCorrelationId });
+  await logStep(orgId, approvalId, 'RELEASED', actor, 'APPROVED', 'RELEASED', { providerCorrelationId });
 }
 
 /**
@@ -375,7 +401,7 @@ export async function revertReleaseClaim(
   orgId: string,
   approvalId: string,
 ): Promise<void> {
-  await db
+  await svc()
     .from('approvals')
     .update({ status: 'APPROVED', released_by: null, provider_correlation_id: null })
     .eq('org_id', orgId)
@@ -387,17 +413,17 @@ export async function revertReleaseClaim(
 export async function markSettled(adminDb: SupabaseClient, orgId: string, approvalId: string, actor: string): Promise<Approval> {
   const a = await getApproval(adminDb, orgId, approvalId);
   assertTransition(a.status, 'SETTLED');
-  const { error } = await adminDb.from('approvals').update({ status: 'SETTLED' }).eq('org_id', orgId).eq('id', approvalId);
+  const { error } = await svc().from('approvals').update({ status: 'SETTLED' }).eq('org_id', orgId).eq('id', approvalId);
   if (error) throw new Error(error.message);
-  await logStep(adminDb, orgId, approvalId, 'SETTLED', actor, a.status, 'SETTLED');
+  await logStep(orgId, approvalId, 'SETTLED', actor, a.status, 'SETTLED');
   return { ...a, status: 'SETTLED' };
 }
 
 export async function markReturned(adminDb: SupabaseClient, orgId: string, approvalId: string, actor: string, note?: string): Promise<Approval> {
   const a = await getApproval(adminDb, orgId, approvalId);
   assertTransition(a.status, 'RETURNED');
-  const { error } = await adminDb.from('approvals').update({ status: 'RETURNED' }).eq('org_id', orgId).eq('id', approvalId);
+  const { error } = await svc().from('approvals').update({ status: 'RETURNED' }).eq('org_id', orgId).eq('id', approvalId);
   if (error) throw new Error(error.message);
-  await logStep(adminDb, orgId, approvalId, 'RETURNED', actor, a.status, 'RETURNED', { note });
+  await logStep(orgId, approvalId, 'RETURNED', actor, a.status, 'RETURNED', { note });
   return { ...a, status: 'RETURNED' };
 }

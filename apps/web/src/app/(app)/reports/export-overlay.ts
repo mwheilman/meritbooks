@@ -1,4 +1,5 @@
 import type { BasisOverlay } from './use-basis-overlay';
+import { pctOfBase } from '@/lib/reports/percent';
 
 /**
  * Apply a reporting-basis overlay to the RAW report payload an export re-fetches, so the
@@ -45,7 +46,6 @@ function applyPnl(data: EPnlData, overlay: BasisOverlay): EPnlData {
   });
   const s = data.summary;
   const revenueCents = s.revenueCents + dRev;
-  const rb = Math.abs(revenueCents) || 1;
   const grossProfitCents = s.grossProfitCents + dRev - dCogs;
   const netIncomeCents = s.netIncomeCents + dRev - dCogs - dOpex - dOther;
   const summary: EPnlSummary = {
@@ -57,8 +57,9 @@ function applyPnl(data: EPnlData, overlay: BasisOverlay): EPnlData {
     grossProfitCents,
     ebitdaCents: s.ebitdaCents + dRev - dCogs - dOpex,
     netIncomeCents,
-    grossMarginPct: Math.round((grossProfitCents / rb) * 10000) / 100,
-    netMarginPct: Math.round((netIncomeCents / rb) * 10000) / 100,
+    // A zero revenue base has no margin (was ÷ 1 cent → 5,000,000%).
+    grossMarginPct: pctOfBase(grossProfitCents, revenueCents, 2) ?? 0,
+    netMarginPct: pctOfBase(netIncomeCents, revenueCents, 2) ?? 0,
   };
   return { ...data, sections, summary };
 }

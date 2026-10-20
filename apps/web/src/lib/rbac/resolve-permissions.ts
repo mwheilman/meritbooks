@@ -19,7 +19,8 @@
  * ── Layering ────────────────────────────────────────────────────────────────────
  *   PURE (no I/O, unit-tested): systemDefaultCell(), mergeCell(), buildEffectiveMatrix()
  *   DB   (thin, fail-closed):    resolveRoleKind(), fetchOverrides(),
- *                                effectivePermission(), effectiveMatrix()
+ *                                effectivePermission(), effectiveAnyPermissionStrict(),
+ *                                effectiveMatrix()
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -219,6 +220,78 @@ export async function effectivePermission(
     const overrides = await fetchOverrides(db, orgId, kind.roleKey);
     const def = systemDefaultCell(kind.baseSystemRole, featureId, action);
     return mergeCell(def, overrides[cellKey(featureId, action)]);
+  } catch {
+    return false; // fail closed
+  }
+}
+
+/**
+ * STRICT override fetch for money-grade decisions: identical to fetchOverrides() except
+ * a read error returns NULL instead of an empty map. The caller MUST deny on null.
+ *
+ * Why a separate variant: fetchOverrides() degrades to the system default on error so a
+ * transient DB issue can never lock a user out of an ordinary screen. For money approval
+ * that degrade is unsafe in the other direction — a tenant that REVOKED approve from a
+ * role would silently get the role's default grant back while the overrides read is
+ * failing. Money approval therefore fails closed on an unreadable override set.
+ */
+async function fetchOverridesStrict(
+  db: SupabaseClient,
+  orgId: string,
+  roleKey: string,
+): Promise<Record<string, boolean> | null> {
+  try {
+    const { data, error } = await db
+      .schema('core')
+      .from('role_permission_overrides')
+      .select('feature, action, allowed')
+      .eq('org_id', orgId)
+      .eq('role_key', roleKey);
+    if (error) return null;
+    const map: Record<string, boolean> = {};
+    for (const row of (data ?? []) as Array<{ feature: string; action: string; allowed: boolean }>) {
+      if (!isValidCell(row.feature, row.action)) continue; // drop bogus cells
+      map[cellKey(row.feature, row.action)] = row.allowed === true;
+    }
+    return map;
+  } catch {
+    return null;
+  }
+}
+
+export interface EffectiveCellRef {
+  featureId: string;
+  action: FeatureAction;
+}
+
+/**
+ * Does `rawRole` hold ANY of `cells` in `orgId` after merging the system default with the
+ * org's overrides? Resolves the role and reads its overrides ONCE for all cells.
+ *
+ * Used by money-movement approval (lib/money/approvals.ts → canApprove), which asks "may
+ * this caller approve on checks OR bills OR payroll". Unlike effectivePermission() this is
+ * FAIL-CLOSED ON EVERY ERROR, including an unreadable override set (see
+ * fetchOverridesStrict). Unknown role / missing custom role / no valid cell → false.
+ */
+export async function effectiveAnyPermissionStrict(
+  db: SupabaseClient,
+  orgId: string,
+  rawRole: string | null | undefined,
+  cells: readonly EffectiveCellRef[],
+): Promise<boolean> {
+  try {
+    const valid = cells.filter((c) => isValidCell(c.featureId, c.action));
+    if (valid.length === 0) return false;
+    const kind = await resolveRoleKind(db, orgId, rawRole);
+    if (!kind) return false;
+    const overrides = await fetchOverridesStrict(db, orgId, kind.roleKey);
+    if (!overrides) return false; // overrides unreadable → a revoke may be hidden → deny
+    return valid.some((c) =>
+      mergeCell(
+        systemDefaultCell(kind.baseSystemRole, c.featureId, c.action),
+        overrides[cellKey(c.featureId, c.action)],
+      ),
+    );
   } catch {
     return false; // fail closed
   }

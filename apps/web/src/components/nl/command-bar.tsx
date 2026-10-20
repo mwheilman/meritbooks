@@ -19,6 +19,7 @@ import { Command, Loader2, Search, X, Sparkles, CornerDownLeft, Star, Trash2, Ba
 import { ResultPanel } from './result-panel';
 import type { NlRouteResult } from './intent';
 import { ANALYTICAL_EXAMPLES } from '@/lib/nl/analytical-examples';
+import { OPEN_COMMAND_BAR_EVENT, isCommandBarChord, type OpenCommandBarDetail } from './command-bar-events';
 
 const SUGGESTIONS: string[] = [
   'Accrue $4,200 of rent for July',
@@ -71,8 +72,7 @@ export function CommandBar() {
   // Global open shortcut: ⌘K / Ctrl-K anywhere; "/" only when not typing in a field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const meta = e.metaKey || e.ctrlKey;
-      if (meta && (e.key === 'k' || e.key === 'K')) {
+      if (isCommandBarChord(e)) {
         e.preventDefault();
         setOpen((v) => {
           if (!v) triggerFocusRef.current = document.activeElement;
@@ -93,6 +93,17 @@ export function CommandBar() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, openBar]);
+
+  // Programmatic open (sidebar "CPA Desk" button and other triggers).
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<OpenCommandBarDetail>).detail;
+      if (detail?.prompt) setPrompt(detail.prompt);
+      openBar();
+    };
+    window.addEventListener(OPEN_COMMAND_BAR_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_COMMAND_BAR_EVENT, onOpen);
+  }, [openBar]);
 
   // Focus the input on open.
   useEffect(() => {

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Check, Camera, Mail, Upload, Inbox, AlertCircle, Loader2, Search, Bell, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatusBadge, ConfidenceBar, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
+import { ListPager } from '@/components/ui/list-pager';
 import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { ReceiptPeek } from './receipt-peek';
@@ -67,10 +68,16 @@ export function ReceiptQueue() {
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [isCategorizing, setIsCategorizing] = useState(false);
 
+  // Server-side paging (the API returns 50/page). A filter change resets to
+  // page 1; previously the list silently stopped at the first 50 rows.
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [activeTab, debouncedSearch, locationId]);
+
   const params: Record<string, string> = {};
   if (activeTab !== 'all') params.status = activeTab;
   if (debouncedSearch) params.search = debouncedSearch;
   if (locationId) params.location_id = locationId;
+  if (page > 1) params.page = String(page);
 
   const { data, isLoading, error, refetch } = useQuery<ReceiptResponse>(
     '/api/receipts',
@@ -134,6 +141,11 @@ export function ReceiptQueue() {
   }, [locationId, refetch]);
 
   const receipts = data?.data ?? [];
+  const pagination = data?.pagination ?? null;
+  // If the current page emptied out (e.g. rows approved away), step back.
+  useEffect(() => {
+    if (pagination && pagination.total > 0 && page > pagination.total_pages) setPage(pagination.total_pages);
+  }, [pagination, page]);
   const counts = data?.counts ?? null;
 
   return (
@@ -284,6 +296,16 @@ export function ReceiptQueue() {
               })}
             </tbody>
           </table>
+          {pagination && (
+            <ListPager
+              page={pagination.page}
+              perPage={pagination.per_page}
+              total={pagination.total}
+              noun="receipts"
+              onPageChange={setPage}
+              isLoading={isLoading}
+            />
+          )}
         </div>
       )}
 

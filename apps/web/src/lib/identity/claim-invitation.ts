@@ -37,6 +37,7 @@ import {
 } from '@/lib/team/invitations';
 import { isMissingScopeColumn, parseAdminScope } from '@/lib/team/admin-scope';
 import { normalizeMembershipRole } from '@/lib/rbac/role-normalize';
+import { filterOrgLocationIds } from '@/lib/team/org-locations';
 import type { UserRole } from '@/lib/rbac/permissions';
 
 export interface ClaimedEmployee {
@@ -60,19 +61,21 @@ const EMPLOYEE_COLS =
  * employee seat. Returns the created employee, or null when there is no claimable
  * invitation (or the feature isn't migrated yet).
  *
- * @param rls   the request-scoped (RLS) client — used to write core.employees +
- *              public.employee_locations, exactly like the auto-admin path in /api/me.
- * @param admin the service-role client — used to read/mark the invitation
- *              (core.membership_invitations is service_role-write only).
+ * @param admin the service-role client — reads/marks the invitation AND writes the
+ *              seat (core.employees, public.employee_locations,
+ *              core.practice_assignments are SELECT-only for members since migration
+ *              154). The authorization for those writes is THIS function's rule: a
+ *              pending, unexpired invitation in `orgId` (the session-resolved org)
+ *              addressed to the caller's verified `primaryEmail`. Every row is pinned
+ *              to `orgId`; location grants are filtered to `orgId`'s companies.
  */
 export async function claimInvitationOnLogin(params: {
-  rls: SupabaseClient;
   admin: SupabaseClient;
   orgId: string;
   clerkUserId: string;
   primaryEmail: string;
 }): Promise<ClaimedEmployee | null> {
-  const { rls, admin, orgId, clerkUserId, primaryEmail } = params;
+  const { admin, orgId, clerkUserId, primaryEmail } = params;
 
   try {
     // 1. Find a pending, non-expired invitation for this org + verified email.
@@ -148,7 +151,7 @@ export async function claimInvitationOnLogin(params: {
     // Degrade-safe: if core.employees.admin_scope isn't migrated yet, retry without
     // it — the seat is still created, the scope simply isn't stored until migration.
     const insertEmployee = (withScope: boolean) =>
-      rls
+      admin
         .schema('core')
         .from('employees')
         .insert(withScope ? { ...empBase, admin_scope: invitedScope } : empBase)
@@ -168,9 +171,14 @@ export async function claimInvitationOnLogin(params: {
     }
 
     // 3. Apply per-company grants (only for scoped roles; "all"/"portcos" see all).
-    const locationIds = Array.isArray(row.location_ids) ? row.location_ids : [];
+    //    Service-role write, so the ids are re-checked against THIS org's companies.
+    const locationIds = await filterOrgLocationIds(
+      admin,
+      orgId,
+      Array.isArray(row.location_ids) ? row.location_ids : [],
+    );
     if (locationIds.length > 0 && !isAllCompaniesScope(role as UserRole)) {
-      const { error: locErr } = await rls.from('employee_locations').insert(
+      const { error: locErr } = await admin.from('employee_locations').insert(
         locationIds.map((location_id) => ({
           employee_id: created.id as string,
           location_id,
@@ -202,7 +210,7 @@ export async function claimInvitationOnLogin(params: {
         ? []
         : obIds.filter((id) => locationIds.includes(id));
       if (scopedOb.length > 0) {
-        await rls
+        await admin
           .schema('core')
           .from('practice_assignments')
           .upsert(
@@ -214,7 +222,7 @@ export async function claimInvitationOnLogin(params: {
             })),
             { onConflict: 'org_id,location_id,function' },
           );
-        await rls
+        await admin
           .schema('core')
           .from('locations')
           .update({ onboarding_status: 'in_progress' })

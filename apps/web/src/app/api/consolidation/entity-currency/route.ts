@@ -32,10 +32,14 @@ type UpsertBody = z.infer<typeof upsertSchema>;
 export async function GET() {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) {
     return NextResponse.json({ error: 'No organization in session', code: 'NO_ORG' }, { status: 400 });
   }
+  // R0b — entity functional currencies feed the consolidated statements; reading
+  // them is a financial-reports read (the POST carries settings_acct:edit). Fails closed (403).
+  const guard = await requirePermission(userId, 'reports', 'view');
+  if (!guard.ok) return guard.response;
 
   // Reporting (home) currency = the group's default; entities with a NULL functional
   // currency are treated as already booked in it.

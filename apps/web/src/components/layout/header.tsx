@@ -9,6 +9,7 @@ import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { ALL_COMPANIES } from '@/lib/company-scope';
 import { PlaneSwitcher } from '@/components/layout/plane-switcher';
 import { SearchPalette } from '@/components/layout/search-palette';
+import { isSearchChord } from '@/components/nl/command-bar-events';
 import { NotificationsBell } from '@/components/layout/notifications-bell';
 
 interface CompanyOption {
@@ -34,13 +35,12 @@ export function Header() {
     companies.find((c) => c.id === activeCompanyId) ?? companies[0];
   const { plane } = usePlane();
 
-  // Global shortcut: ⌘/ (primary, matches the button hint) and ⌘K (both open the
-  // search palette). Ignore when a modifier-free keystroke lands in an input so we
-  // never hijack typing; the palette itself owns Esc-to-close.
+  // Global shortcut: ⌘/ opens the search palette (matches the button hint).
+  // ⌘K is owned solely by the CPA Desk command bar — binding it here too opened
+  // two overlays at once. The palette itself owns Esc-to-close.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      const meta = e.metaKey || e.ctrlKey;
-      if (meta && (e.key === '/' || e.key.toLowerCase() === 'k')) {
+      if (isSearchChord(e)) {
         e.preventDefault();
         setSearchOpen((o) => !o);
       }
@@ -112,7 +112,7 @@ export function Header() {
 
       {/* Right side */}
       <div className="flex items-center gap-3">
-        {/* Search — opens the global command palette (⌘/ or ⌘K) */}
+        {/* Search — opens the global search palette (⌘/) */}
         <button
           onClick={() => setSearchOpen(true)}
           className="flex items-center gap-2 rounded-lg border border-slate-800 bg-surface-900 px-3 py-1.5 text-sm text-slate-500 hover:border-slate-700 transition-colors w-64"

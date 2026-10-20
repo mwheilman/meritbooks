@@ -13,6 +13,12 @@
  * function / the locations.onboarding_status column aren't present yet, every helper
  * silently no-ops (or reports unavailable) — nothing here can 500 a Team or Entities
  * surface.
+ *
+ * WRITE CLIENT (migration 154): core.practice_assignments and core.employees are
+ * SELECT-only for members, so the WRITING helpers (setEmployeeOnboardingCompanies,
+ * ensurePreparerCapability) must be handed the service-role client. Callers own the
+ * authorization (requireManageUsers) and must pass the session-resolved orgId; every
+ * query here is pinned to it with an explicit org_id filter.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';

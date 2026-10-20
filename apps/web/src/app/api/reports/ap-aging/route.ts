@@ -2,11 +2,15 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { getOrgToday } from '@/lib/dates/org-today';
+import { agingBucketFor } from '@/lib/ar/overdue';
 
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase } = ctx;
+  const { supabase, orgId } = ctx;
+  // Buckets from due_date vs the ORG's today (the view's bucket uses UTC CURRENT_DATE).
+  const today = await getOrgToday(supabase, orgId);
   const { searchParams } = new URL(request.url);
   const locationIds = searchParams.get('location_ids');
   const locationId = searchParams.get('location_id');
@@ -29,8 +33,8 @@ export async function GET(request: Request) {
     '90+': { count: 0, totalCents: 0 },
   };
   for (const row of data ?? []) {
-    const b = row.aging_bucket as string;
-    if (buckets[b]) { buckets[b].count++; buckets[b].totalCents += Number(row.balance_cents ?? 0); }
+    const b = agingBucketFor(row.due_date as string | null, today);
+    buckets[b].count++; buckets[b].totalCents += Number(row.balance_cents ?? 0);
   }
 
   return NextResponse.json({
@@ -38,7 +42,7 @@ export async function GET(request: Request) {
       vendorName: r.vendor_name, billNumber: r.bill_number, billDate: r.bill_date,
       dueDate: r.due_date, totalCents: Number(r.total_cents ?? 0),
       paidCents: Number(r.amount_paid_cents ?? 0), balanceCents: Number(r.balance_cents ?? 0),
-      agingBucket: r.aging_bucket, locationName: r.location_name,
+      agingBucket: agingBucketFor(r.due_date as string | null, today), locationName: r.location_name,
     })),
     buckets,
     totalOutstanding: Object.values(buckets).reduce((s, b) => s + b.totalCents, 0),

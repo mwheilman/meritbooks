@@ -22,6 +22,8 @@ import { fetchAll } from '@/lib/supabase/fetch-all';
 import {
   consolidate,
   entityNetIncomeCents,
+  UNCLOSED_EARNINGS_ACCOUNT_NUMBER,
+  UNCLOSED_EARNINGS_ACCOUNT_NAME,
   type AccountType,
   type ConsolidationMethod,
   type EntityAccountBalance,
@@ -362,6 +364,7 @@ export async function loadConsolidated(
     location_id: string;
     debit_cents: number | string;
     credit_cents: number | string;
+    counterparty_location_id: string | null;
     accounts: {
       account_number: string;
       name: string;
@@ -377,7 +380,7 @@ export async function loadConsolidated(
       supabase
         .from('gl_entry_lines')
         .select(
-          `gl_entry_id, account_id, location_id, debit_cents, credit_cents,
+          `id, gl_entry_id, account_id, location_id, debit_cents, credit_cents, counterparty_location_id,
            accounts!inner(account_number, name, account_type, is_eliminating),
            gl_entries!inner(entry_date)`,
         )
@@ -392,14 +395,37 @@ export async function loadConsolidated(
     const type = acct.account_type;
     const date = raw.gl_entries?.entry_date;
     if (!date) continue;
-    // P&L accounts only count WITHIN the period; BS accrue cumulatively.
-    const isPnl = !BALANCE_SHEET_TYPES.has(type);
-    if (isPnl && date < startDate) continue;
     const entityId = raw.location_id;
     if (scope && !scope.has(entityId)) continue;
     lineCount += 1;
+    // P&L accounts count WITHIN the period. P&L dated BEFORE the period has not
+    // been closed to retained earnings until the year-end CLOSING entry posts
+    // (which nets it out here automatically), so it folds into one synthetic
+    // equity line — otherwise the balance sheet is off by those earnings.
+    const isPnl = !BALANCE_SHEET_TYPES.has(type);
+    if (isPnl && date < startDate) {
+      const earnings = N(raw.credit_cents) - N(raw.debit_cents);
+      const reKey = `${entityId}:${UNCLOSED_EARNINGS_ACCOUNT_NUMBER}`;
+      const re = balancesByKey.get(reKey);
+      if (re) re.naturalBalanceCents += earnings;
+      else
+        balancesByKey.set(reKey, {
+          entityId,
+          accountNumber: UNCLOSED_EARNINGS_ACCOUNT_NUMBER,
+          accountName: UNCLOSED_EARNINGS_ACCOUNT_NAME,
+          accountType: 'EQUITY',
+          isEliminating: false,
+          role: null,
+          naturalBalanceCents: earnings,
+        });
+      continue;
+    }
     const natural = naturalBalance(type, N(raw.debit_cents), N(raw.credit_cents));
-    const key = `${entityId}:${acct.account_number}`;
+    const role = roleByAccountId.get(raw.account_id) ?? null;
+    // Intercompany positions stay split by counterparty so the engine can tell a
+    // within-group position (eliminate) from one with an outside company (keep).
+    const counterparty = role ? raw.counterparty_location_id ?? null : null;
+    const key = `${entityId}:${acct.account_number}:${counterparty ?? ''}`;
     const existing = balancesByKey.get(key);
     if (existing) {
       existing.naturalBalanceCents += natural;
@@ -410,8 +436,9 @@ export async function loadConsolidated(
         accountName: acct.name,
         accountType: type,
         isEliminating: Boolean(acct.is_eliminating),
-        role: roleByAccountId.get(raw.account_id) ?? null,
+        role,
         naturalBalanceCents: natural,
+        counterpartyEntityId: counterparty,
       });
     }
   }

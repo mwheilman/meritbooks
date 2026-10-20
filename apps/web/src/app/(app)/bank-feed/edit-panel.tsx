@@ -343,7 +343,9 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
           job_id: selectedJob?.id ?? undefined,
           department_id: selectedDept?.id ?? undefined,
           class_id: selectedClass?.id ?? undefined,
-        }),
+          vendor_name: vendorName.trim() || undefined,
+          notes: notes.trim() || undefined,
+        } satisfies ApproveBankTransactionInput),
       });
       const result = await res.json().catch(() => ({}));
       if (res.ok && result?.success) {
@@ -358,7 +360,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
     } finally {
       setIsSaving(false);
     }
-  }, [selectedAccount, transaction, onSave, selectedJob, selectedDept, selectedClass, jobMissing, deptMissing, classMissing, entity]);
+  }, [selectedAccount, transaction, onSave, selectedJob, selectedDept, selectedClass, jobMissing, deptMissing, classMissing, entity, vendorName, notes]);
 
   const isAlreadyPosted = transaction.status === 'POSTED' || transaction.status === 'APPROVED';
   const groupedAccounts = useMemo(

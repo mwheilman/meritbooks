@@ -24,6 +24,7 @@ import {
   fetchArAging,
   fetchApAging,
 } from '@/app/api/reports/board-package/queries';
+import { getOrgToday } from '@/lib/dates/org-today';
 import {
   buildIncomeStatement,
   buildBalanceSheet,
@@ -267,7 +268,7 @@ async function buildSection(
       break;
     }
     case 'BALANCE_SHEET': {
-      const payload = await fetchBalanceSheet(supabase, { asOfDate: period.asOfDate, locationIds });
+      const payload = await fetchBalanceSheet(supabase, { asOfDate: period.asOfDate, locationIds, orgId });
       model = finalize(buildBalanceSheet(payload, meta), entityLabel, period.label, basisLabel);
       break;
     }
@@ -290,12 +291,12 @@ async function buildSection(
       break;
     }
     case 'AR_AGING': {
-      const aging = await fetchArAging(supabase, locationIds);
+      const aging = await fetchArAging(supabase, locationIds, await getOrgToday(supabase, orgId));
       model = buildAgingModel(aging.buckets, aging.totalOutstanding, 'Accounts Receivable Aging', meta);
       break;
     }
     case 'AP_AGING': {
-      const aging = await fetchApAging(supabase, locationIds);
+      const aging = await fetchApAging(supabase, locationIds, await getOrgToday(supabase, orgId));
       model = buildAgingModel(aging.buckets, aging.totalOutstanding, 'Accounts Payable Aging', meta);
       break;
     }

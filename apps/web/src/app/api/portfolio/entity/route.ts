@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiQueryHandler } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { gatherEntitySnapshot } from '@/lib/portfolio/entity';
 
 /**
@@ -28,6 +29,9 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
   if (!ctx.orgId) {
     return NextResponse.json({ error: 'No organization' }, { status: 400 });
   }
+  // R0b — one company's mini P&L + balance-sheet lines is a financial-reports read.
+  const guard = await requirePermission(ctx.userId, 'reports', 'view');
+  if (!guard.ok) return guard.response;
   const now = new Date();
   const year = params.year ?? now.getFullYear();
   const month = params.month ?? now.getMonth() + 1;

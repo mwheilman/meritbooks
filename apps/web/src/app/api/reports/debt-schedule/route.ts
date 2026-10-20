@@ -1,72 +1,52 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
-import { fetchCoreMap } from '@/lib/stitch-core';
+import { fetchDebtRegister } from '@/lib/debt/register';
+import { getOrgToday } from '@/lib/dates/org-today';
+import { daysBetweenIso, isIsoDate } from '@/lib/dates/org-date';
 
+/**
+ * Reports → Debt Schedule. Balances are the OUTSTANDING principal derived from the
+ * amortization schedule as of `as_of_date` (default: today in the org's timezone)
+ * — the same derivation /debt and the board package use (lib/debt/register), so
+ * all three tie. The stored `current_balance_cents` is NOT used (it is stale).
+ */
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase } = ctx;
+  const { supabase, orgId } = ctx;
   const { searchParams } = new URL(request.url);
-  const locationIds = searchParams.get('location_ids'); // comma-separated
+  const locationIds = (searchParams.get('location_ids') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const asOfParam = searchParams.get('as_of_date');
+  const asOfDate = isIsoDate(asOfParam) ? asOfParam : await getOrgToday(supabase, orgId);
 
-  let query = supabase
-    .from('debt_instruments')
-    .select(`
-      id, name, lender, instrument_type, original_amount_cents, current_balance_cents,
-      interest_rate, maturity_date, monthly_payment_cents, payment_type,
-      location_id
-    `)
-    .order('current_balance_cents', { ascending: false });
-
-  if (locationIds) {
-    query = query.in('location_id', locationIds.split(','));
+  let register;
+  try {
+    register = await fetchDebtRegister(supabase, { asOfDate, locationIds });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to load debt' }, { status: 500 });
   }
 
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  const rows = (data ?? []) as Array<Record<string, any>>;
-  const locMap = await fetchCoreMap<{ id: string; name: string; short_code: string }>(
-    supabase, 'locations', 'id, name, short_code', rows.map((r) => r.location_id));
-  const instruments = rows.map((d) => {
-    const loc = d.location_id ? locMap.get(d.location_id) ?? null : null;
-    const now = new Date();
-    const maturity = d.maturity_date ? new Date(d.maturity_date) : null;
-    const monthsRemaining = maturity ? Math.max(0, Math.round((maturity.getTime() - now.getTime()) / (30 * 86400000))) : null;
-    const annualPayment = d.monthly_payment_cents ? Number(d.monthly_payment_cents) * 12 : 0;
-
-    return {
-      id: d.id,
-      name: d.name,
-      lender: d.lender,
-      type: d.instrument_type,
-      originalCents: Number(d.original_amount_cents),
-      balanceCents: Number(d.current_balance_cents),
-      interestRate: Number(d.interest_rate),
-      maturityDate: d.maturity_date,
-      monthsRemaining,
-      monthlyPaymentCents: Number(d.monthly_payment_cents ?? 0),
-      annualPaymentCents: annualPayment,
-      paymentType: d.payment_type,
-      locationName: (loc as { name: string } | null)?.name ?? '',
-      locationCode: (loc as { short_code: string } | null)?.short_code ?? '',
-    };
-  });
-
-  const totalBalance = instruments.reduce((s, d) => s + d.balanceCents, 0);
-  const totalMonthlyPayment = instruments.reduce((s, d) => s + d.monthlyPaymentCents, 0);
-  const weightedRate = totalBalance > 0
-    ? instruments.reduce((s, d) => s + d.interestRate * d.balanceCents, 0) / totalBalance
-    : 0;
+  const instruments = register.instruments.map((d) => ({
+    id: d.id,
+    name: d.name,
+    lender: d.lender,
+    type: d.type,
+    originalCents: d.originalCents,
+    balanceCents: d.balanceCents,
+    interestRate: d.interestRate,
+    maturityDate: d.maturityDate,
+    monthsRemaining: d.maturityDate ? Math.max(0, Math.round(daysBetweenIso(d.maturityDate, asOfDate) / 30)) : null,
+    monthlyPaymentCents: d.monthlyPaymentCents,
+    annualPaymentCents: d.annualPaymentCents,
+    paymentType: d.paymentType,
+    locationName: d.locationName,
+    locationCode: d.locationCode,
+  }));
 
   return NextResponse.json({
     data: instruments,
-    summary: {
-      totalBalanceCents: totalBalance,
-      totalMonthlyPaymentCents: totalMonthlyPayment,
-      instrumentCount: instruments.length,
-      weightedAvgRate: Math.round(weightedRate * 100) / 100,
-    },
+    summary: register.summary,
+    asOfDate,
   });
 }

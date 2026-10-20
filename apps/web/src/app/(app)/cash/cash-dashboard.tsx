@@ -31,7 +31,11 @@ interface CashLocation {
   locationName: string;
   minimumCashCents: number;
   accounts: CashAccount[];
+  /** Canonical book cash (GL). */
   totalCashCents: number;
+  /** Bank-feed balance (reconciliation reference). */
+  bankBalanceCents?: number;
+  unreconciledCents?: number;
   cashStatus: string;
   staleCount: number;
 }
@@ -40,6 +44,9 @@ interface CashResponse {
   locations: CashLocation[];
   summary: {
     totalCashCents: number;
+    bankBalanceCents?: number;
+    unreconciledCents?: number;
+    definition?: string;
     entityCount: number;
     accountCount: number;
     criticalCount: number;
@@ -100,11 +107,16 @@ export function CashDashboard() {
         <div className="card p-4">
           <div className="flex items-center gap-2 mb-1">
             <Wallet size={14} className="text-emerald-400" />
-            <span className="text-xs text-slate-500 uppercase tracking-wider">Total Cash</span>
+            <span className="text-xs text-slate-500 uppercase tracking-wider" title={summary?.definition}>Total Cash (books)</span>
           </div>
           <p className="text-2xl font-mono font-semibold text-white">
             {formatMoney(summary?.totalCashCents ?? 0, { compact: true })}
           </p>
+          {summary?.bankBalanceCents != null && summary.unreconciledCents !== 0 && (
+            <p className="text-[10px] text-amber-400/80 mt-0.5" title="Bank-feed balances differ from the ledger — reconcile in Bank Reconciliation">
+              Bank feed {formatMoney(summary.bankBalanceCents, { compact: true })} · {formatMoney(summary.unreconciledCents ?? 0, { compact: true, showSign: true })} unreconciled
+            </p>
+          )}
           {summary?.asOfDate && (
             <p className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
               <Clock size={9} /> as of {new Date(summary.asOfDate).toLocaleDateString()}
@@ -216,8 +228,11 @@ export function CashDashboard() {
                     </div>
                   )}
 
-                  <span className="text-lg font-mono font-semibold text-white mr-3">
+                  <span className="text-lg font-mono font-semibold text-white mr-3 text-right">
                     {formatMoney(loc.totalCashCents)}
+                    {loc.bankBalanceCents != null && (loc.unreconciledCents ?? 0) !== 0 && (
+                      <span className="block text-[10px] font-normal text-slate-500">bank feed {formatMoney(loc.bankBalanceCents)}</span>
+                    )}
                   </span>
 
                   <span className={clsx('flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium', statusCfg.cls)}>

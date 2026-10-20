@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { requireManageUsers } from '@/lib/team/guard';
 import type { ActorType, Tier } from '@/lib/trust/action-log';
 
 // Raw shape returned from core.action_log.
@@ -56,8 +57,12 @@ function asTier(value: string | null): Tier | null {
 export async function GET() {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+  // R0b — the operations overview (who did what, AI autonomy, actor names) was gated only
+  // in the browser (`canManageUsers`). Enforce the SAME gate server-side. Fails closed.
+  const grant = await requireManageUsers(supabase, userId, orgId);
+  if (grant instanceof NextResponse) return grant;
 
   const sinceIso = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 

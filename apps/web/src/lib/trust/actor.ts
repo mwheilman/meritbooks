@@ -8,8 +8,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * created_by/approved_by/actor were written null because there was no
  * Clerk-text -> uuid mapping.
  *
- * Runs on the request-scoped (RLS) client. Never throws — attribution must not
- * break the underlying action.
+ * Reads on the request-scoped (RLS) client. The insert-if-absent runs as the service
+ * role: migration 154 removed the member self_provision/self_update policies on
+ * core.users (self_update let a signed-in user flip their own is_platform_staff).
+ * The service write is constrained to `{ clerk_user_id }` only — the caller's own
+ * verified Clerk id; it never sets is_platform_staff or any other column, and
+ * ignoreDuplicates makes it a pure insert-if-absent (no UPDATE of an existing row).
+ * Never throws — attribution must not break the underlying action.
  */
 export async function resolveActor(
   supabase: SupabaseClient,
@@ -17,7 +22,8 @@ export async function resolveActor(
 ): Promise<{ coreUserId: string | null; isPlatformStaff: boolean }> {
   try {
     // Ensure the row exists (insert-if-absent; conflict => no-op, no UPDATE needed).
-    await supabase
+    const { createAdminSupabase } = await import('@/lib/supabase/server');
+    await createAdminSupabase()
       .schema('core').from('users')
       .upsert({ clerk_user_id: clerkUserId }, { onConflict: 'clerk_user_id', ignoreDuplicates: true });
 

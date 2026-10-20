@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { fetchAll, FETCH_ALL_IN_CHUNK } from '@/lib/supabase/fetch-all';
 import {
@@ -66,10 +67,14 @@ async function fetchLines(
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) {
     return NextResponse.json({ error: 'No organization in session', code: 'NO_ORG' }, { status: 400 });
   }
+  // R0b — intercompany matching reads every entity's IC balances; it is a consolidation
+  // (financial-reports) surface. Fails closed (403).
+  const guard = await requirePermission(userId, 'reports', 'view');
+  if (!guard.ok) return guard.response;
   const sinceDate = new URL(request.url).searchParams.get('since') || undefined;
 
   // Company names.

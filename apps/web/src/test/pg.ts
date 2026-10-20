@@ -57,9 +57,43 @@ const SUPABASE_STUBS = `
   );
 `;
 
+/**
+ * Hosted Supabase grants anon / authenticated / service_role full table privileges
+ * by default (RLS is what then narrows them). PGlite has no such defaults, so a
+ * privilege test against the bare replay would pass vacuously. Tests that assert
+ * on GRANTs (e.g. identity-write-lock.test.ts) opt in to these to reproduce the
+ * real attack surface. Applied BEFORE the migrations so every table created by a
+ * migration inherits them, exactly like production.
+ */
+export const SUPABASE_DEFAULT_GRANTS = `
+  alter default privileges grant all on tables    to anon, authenticated, service_role;
+  alter default privileges grant all on sequences to anon, authenticated, service_role;
+  alter default privileges grant execute on functions to anon, authenticated, service_role;
+  alter default privileges grant usage on schemas to anon, authenticated, service_role;
+  grant usage on schema public, auth, extensions, storage to anon, authenticated, service_role;
+`;
+
 /** supabase_vault is proprietary to hosted Supabase and has no local equivalent. */
 const stripVaultExtension = (sql: string) =>
   sql.replace(/create\s+extension[^;]*supabase_vault[^;]*;/gi, '');
+
+/** Ordered migration filenames (NNN_name.sql). */
+export function listMigrationFiles(): string[] {
+  return fs
+    .readdirSync(MIGRATIONS_DIR)
+    .filter((f) => /^\d{3}_.*\.sql$/.test(f))
+    .sort();
+}
+
+/** Apply one migration file; throws with the filename on failure. */
+export async function applyMigrationFile(db: PGlite, file: string): Promise<void> {
+  const sql = stripVaultExtension(fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8'));
+  try {
+    await db.exec(sql);
+  } catch (e) {
+    throw new Error(`migration ${file} failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
 
 export interface MigratedDb {
   db: PGlite;
@@ -67,28 +101,34 @@ export interface MigratedDb {
   total: number;
 }
 
+export interface CreateTestDbOptions {
+  /** Reproduce hosted Supabase's default role grants (see SUPABASE_DEFAULT_GRANTS). */
+  supabaseDefaultGrants?: boolean;
+  /**
+   * Stop after the migration whose filename starts with this prefix (e.g. '153'),
+   * so a test can assert the state before a migration and then apply the rest.
+   */
+  through?: string;
+}
+
 /**
  * Fresh database with the full schema applied. Throws on the first migration
  * that fails — a broken migration must fail the test run loudly, not silently
  * leave the schema half-built.
  */
-export async function createTestDb(): Promise<MigratedDb> {
-  const files = fs
-    .readdirSync(MIGRATIONS_DIR)
-    .filter((f) => /^\d{3}_.*\.sql$/.test(f))
-    .sort();
+export async function createTestDb(opts: CreateTestDbOptions = {}): Promise<MigratedDb> {
+  const files = listMigrationFiles();
 
   const db = new PGlite({ extensions: { pg_trgm, pgcrypto, uuid_ossp } });
   await db.exec(SUPABASE_STUBS);
+  if (opts.supabaseDefaultGrants) await db.exec(SUPABASE_DEFAULT_GRANTS);
 
+  let applied = 0;
   for (const f of files) {
-    const sql = stripVaultExtension(fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8'));
-    try {
-      await db.exec(sql);
-    } catch (e) {
-      throw new Error(`migration ${f} failed: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    await applyMigrationFile(db, f);
+    applied++;
+    if (opts.through && f.startsWith(`${opts.through}_`)) break;
   }
 
-  return { db, applied: files.length, total: files.length };
+  return { db, applied, total: files.length };
 }

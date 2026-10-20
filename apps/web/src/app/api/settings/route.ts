@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { createAdminSupabase } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/rbac/require-permission';
 
@@ -79,7 +80,7 @@ const updateSchema = z.object({
 export async function PATCH(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId, userId } = ctx;
+  const { userId } = ctx;
 
   // Authorize — org accounting settings (fiscal-year start, AI auto-approve
   // threshold / max, chase policy) are controls; gate on settings_acct:edit.
@@ -92,8 +93,15 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Validation failed', details: result.error.issues }, { status: 422 });
   }
 
-  // Tenant is the token's org claim; RLS also enforces id = get_org_id().
-  const { error } = await supabase.schema('core').from('organizations').update(result.data).eq('id', orgId ?? '');
+  // core.organizations is SELECT-only for members (migration 154): the write runs as
+  // the service role, pinned to the org requirePermission resolved from the verified
+  // session claim (never a client-supplied id). Only the Zod-whitelisted columns above
+  // can be written — entitlements / billing / clerk binding are not reachable here.
+  const { error } = await createAdminSupabase()
+    .schema('core')
+    .from('organizations')
+    .update(result.data)
+    .eq('id', guard.orgId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ success: true });

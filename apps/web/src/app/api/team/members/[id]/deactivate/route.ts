@@ -19,7 +19,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const grant = await requireManageUsers(supabase, userId, orgId);
   if (grant instanceof NextResponse) return grant;
 
-  const res = await setMemberActive(supabase, orgId!, params.id, false);
+  const res = await setMemberActive(orgId!, params.id, false);
   if (res.ok) {
     // Reconcile the canonical spine: employee deactivated -> membership suspended,
     // so the membership can no longer be more permissive than the employee record.

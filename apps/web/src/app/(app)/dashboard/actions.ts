@@ -2,6 +2,8 @@
 
 import { createAuthedServerSupabase } from '@/lib/supabase/authed';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { fetchBookCash } from '@/lib/cash/book-cash';
+import { getOrgToday } from '@/lib/dates/org-today';
 
 /**
  * Dashboard = the ONE consolidated, cross-company landing on the processing side.
@@ -39,6 +41,7 @@ export interface CompanyBoard {
   draftJEs: number;
   /** Current-month fiscal period status for this company. */
   periodStatus: PeriodStatus;
+  /** CANONICAL book cash (lib/cash/book-cash) as of today in the org's timezone. */
   cashCents: number;
   cashStatus: CashStatus;
   openAPCents: number;
@@ -129,9 +132,9 @@ export async function getWorkboard(): Promise<Workboard> {
   const locations = (locData ?? []) as LocationRow[];
   if (locations.length === 0) return { status: 'empty', companies: [], consolidated: EMPTY_CONSOLIDATED };
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
+  // "Now" is the ORG's calendar date (core.organizations.timezone), not UTC.
+  const today = await getOrgToday(supabase, null);
+  const [year, month] = today.split('-').map(Number);
 
   // Fire every source in parallel. Each degrades to empty on error (see below), so
   // one broken queue never blanks the whole board.
@@ -140,7 +143,7 @@ export async function getWorkboard(): Promise<Workboard> {
     receiptRes,
     billRes,
     invoiceRes,
-    bankAcctRes,
+    bookCash,
     aiRes,
     jeRes,
     periodRes,
@@ -169,12 +172,13 @@ export async function getWorkboard(): Promise<Workboard> {
       .select('location_id, balance_cents')
       .not('status', 'in', '("PAID","VOIDED","DRAFT","WRITTEN_OFF")')
       .limit(ROW_CAP),
-    supabase
-      .from('bank_accounts')
-      .select('location_id, current_balance_cents')
-      .eq('is_active', true)
-      .limit(ROW_CAP),
-    supabase.from('ai_decisions').select('location_id').eq('status', 'PROPOSED').limit(ROW_CAP),
+    // Cash = the CANONICAL book cash (posted GL, bank/cash-role accounts), not
+    // bank-feed balances — the same figure every other surface shows (audit L6).
+    fetchBookCash(supabase, null, { asOfDate: today }).catch(() => null),
+    // Paged: `.limit(ROW_CAP)` alone is silently capped at PostgREST's 1,000 rows.
+    fetchAll(() => supabase.from('ai_decisions').select('id, location_id').eq('status', 'PROPOSED'), {
+      label: 'dashboard proposed ai_decisions',
+    }),
     // Paged: `.limit(ROW_CAP)` alone is silently capped at PostgREST's 1,000 rows.
     fetchAll(() => supabase.from('gl_entries').select('location_id').eq('status', 'DRAFT'), {
       label: 'dashboard draft gl_entries',
@@ -202,10 +206,6 @@ export async function getWorkboard(): Promise<Workboard> {
   const invoiceRows = (invoiceRes.data ?? []) as Array<{
     location_id: string | null;
     balance_cents: number | string | null;
-  }>;
-  const bankAcctRows = (bankAcctRes.data ?? []) as Array<{
-    location_id: string | null;
-    current_balance_cents: number | string | null;
   }>;
 
   const toReview = new Map<string, number>();
@@ -241,12 +241,7 @@ export async function getWorkboard(): Promise<Workboard> {
     }
   }
 
-  const cash = new Map<string, number>();
-  for (const a of bankAcctRows) {
-    if (a.location_id) {
-      cash.set(a.location_id, (cash.get(a.location_id) ?? 0) + num(a.current_balance_cents));
-    }
-  }
+  const cash = new Map<string, number>(Object.entries(bookCash?.byLocation ?? {}));
 
   const exceptions = tally(aiRes.data as Array<{ location_id: string | null }> | null);
   const draftJEs = tally(jeRes.data as Array<{ location_id: string | null }> | null);

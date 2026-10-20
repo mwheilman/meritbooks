@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { apiHandler } from '@/lib/api-handler';
 import { flagTransactionSchema, type FlagTransactionInput } from '@/lib/validations/transactions';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 /**
  * POST /api/bank-feed/flag
@@ -11,11 +12,16 @@ import { flagTransactionSchema, type FlagTransactionInput } from '@/lib/validati
 export const POST = apiHandler(
   flagTransactionSchema,
   async (body: FlagTransactionInput, ctx) => {
-    // Verify the transaction exists and is in a flaggable state
+    const guard = await requirePermission(ctx.userId, 'bank_feed', 'edit');
+    if (!guard.ok) return guard.response;
+    if (!ctx.orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+
+    // Verify the transaction exists (in this org) and is in a flaggable state
     const { data: txn, error: fetchError } = await ctx.supabase
       .from('bank_transactions')
       .select('id, status, description')
       .eq('id', body.transaction_id)
+      .eq('org_id', ctx.orgId)
       .single();
 
     if (fetchError || !txn) {
@@ -46,7 +52,8 @@ export const POST = apiHandler(
         status: 'FLAGGED',
         ai_reasoning: `Flagged by user: ${body.reason}`,
       })
-      .eq('id', body.transaction_id);
+      .eq('id', body.transaction_id)
+      .eq('org_id', ctx.orgId);
 
     if (updateError) {
       return NextResponse.json(

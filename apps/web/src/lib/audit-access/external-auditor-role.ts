@@ -141,8 +141,10 @@ export function isExternalAuditorRole(roleKey: string | null | undefined): boole
 /**
  * Idempotently PROVISION the External Auditor role for an org: upsert the custom-role row
  * and its view-only override cells. Safe to call repeatedly (unique indexes back both
- * upserts). Runs on the caller's RLS-scoped client — the org-isolation policy requires
- * org_id = get_org_id(), so `orgId` must be the caller's own org.
+ * upserts). Since migration 154 both tables are SELECT-only for members, so `db` MUST be
+ * the service-role client and the CALLER is responsible for authorization
+ * (requireManageUsers) — `orgId` must be the session-resolved org, never client input;
+ * every row written is pinned to it.
  *
  * Returns the role key on success; throws on a hard DB error so the caller can surface it.
  */

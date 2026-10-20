@@ -3,6 +3,7 @@ export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { createAdminSupabase } from '@/lib/supabase/server';
 import { requireManageUsers } from '@/lib/team/guard';
 import { EXTERNAL_AUDITOR_ROLE_KEY } from '@/lib/audit-access/external-auditor-role';
 import { logHumanAction } from '@/lib/trust/action-log';
@@ -21,7 +22,10 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
   const grant = await requireManageUsers(supabase, userId, orgId);
   if (grant instanceof NextResponse) return grant;
 
-  const { data, error } = await supabase
+  // core.employees is SELECT-only for members (migration 154) — the revoke runs as the
+  // service role, authorized by requireManageUsers above and pinned to the session org
+  // + the External Auditor role.
+  const { data, error } = await createAdminSupabase()
     .schema('core')
     .from('employees')
     .update({ is_active: false })

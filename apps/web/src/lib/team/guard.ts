@@ -37,6 +37,9 @@ export async function requireManageUsers(
     .select('id, role')
     .eq('clerk_user_id', userId)
     .eq('org_id', orgId)
+    // A deactivated admin keeps no authority (matches requirePermission / page-guard):
+    // the identity writes this gate authorizes now run as the service role.
+    .eq('is_active', true)
     .maybeSingle();
 
   const role = (employee?.role ?? null) as UserRole | null;

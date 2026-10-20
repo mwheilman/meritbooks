@@ -23,6 +23,8 @@ import {
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
 import { PageHeader } from '@/components/ui';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { formatMarginPct } from '@/lib/reports/percent';
 
 // ── Types (mirror /api/portfolio/entity → lib/portfolio/entity.ts) ─────────────
 
@@ -228,13 +230,22 @@ export default function EntitySnapshotPage() {
 
 function Snapshot({ data }: { data: EntitySnapshot }) {
   const { pnl, balanceSheet: bs, close } = data;
+  // Links carry ?location_id= so the target page opens scoped to THIS entity
+  // (ActiveCompanyProvider honors it on hard loads), and a click also switches
+  // the active company synchronously, before navigation (audit 06 §5 bug 11).
+  const { setActiveCompany } = useActiveCompany();
   return (
-    <div className="space-y-5">
+    <div
+      className="space-y-5"
+      onClickCapture={(ev) => {
+        if ((ev.target as HTMLElement).closest?.('a[href*="location_id="]')) setActiveCompany(data.locationId);
+      }}
+    >
       {/* Cross-links */}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <CrossLink href={`/reports?location_id=${data.locationId}`} label="Full reports" />
-        <CrossLink href="/close" label="Close center" />
-        <CrossLink href="/exceptions" label="Exceptions" />
+        <CrossLink href={`/close?location_id=${data.locationId}`} label="Close center" />
+        <CrossLink href={`/exceptions?location_id=${data.locationId}`} label="Exceptions" />
         <CrossLink href={`/cash?location_id=${data.locationId}`} label="Cash" />
       </div>
 
@@ -248,8 +259,8 @@ function Snapshot({ data }: { data: EntitySnapshot }) {
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <PnlStat label="Revenue" delta={pnl.revenue} />
-          <PnlStat label="Gross profit" delta={pnl.grossProfit} hint={`${pnl.grossMarginPct}% margin`} />
-          <PnlStat label="Net income" delta={pnl.netIncome} hint={`${pnl.netMarginPct}% margin`} />
+          <PnlStat label="Gross profit" delta={pnl.grossProfit} hint={`${formatMarginPct(pnl.grossMarginPct, pnl.revenue.currentCents)} margin`} />
+          <PnlStat label="Net income" delta={pnl.netIncome} hint={`${formatMarginPct(pnl.netMarginPct, pnl.revenue.currentCents)} margin`} />
         </div>
         <div className="mt-4 grid grid-cols-3 gap-3 border-t border-slate-800 pt-4 text-xs">
           <MiniLine label="COGS" cents={pnl.cogsCents} />
@@ -329,7 +340,7 @@ function Snapshot({ data }: { data: EntitySnapshot }) {
                   </li>
                 ))}
               </ul>
-              <Link href="/close" className="mt-3 inline-flex items-center gap-1 text-xs text-brand-400 hover:underline">
+              <Link href={`/close?location_id=${data.locationId}`} className="mt-3 inline-flex items-center gap-1 text-xs text-brand-400 hover:underline">
                 Resolve in Close center <ExternalLink size={11} />
               </Link>
             </div>
@@ -365,7 +376,7 @@ function Snapshot({ data }: { data: EntitySnapshot }) {
         <OpenItemsCard
           title="Overdue AR"
           total={data.overdueAr.totalCents}
-          href="/collections"
+          href={`/collections?location_id=${data.locationId}`}
           icon={ArrowDownRight}
           emptyText="No overdue receivables."
           rows={data.overdueAr.items.map((i) => ({
@@ -378,7 +389,7 @@ function Snapshot({ data }: { data: EntitySnapshot }) {
         <OpenItemsCard
           title="Overdue AP"
           total={data.overdueAp.totalCents}
-          href="/bills"
+          href={`/bills?location_id=${data.locationId}`}
           icon={ArrowUpRight}
           emptyText="No overdue payables."
           rows={data.overdueAp.items.map((i) => ({
@@ -419,7 +430,7 @@ function Snapshot({ data }: { data: EntitySnapshot }) {
             </ul>
           )}
           {data.openExceptions.total > 0 && (
-            <Link href="/exceptions" className="mt-3 inline-flex items-center gap-1 text-xs text-brand-400 hover:underline">
+            <Link href={`/exceptions?location_id=${data.locationId}`} className="mt-3 inline-flex items-center gap-1 text-xs text-brand-400 hover:underline">
               Review all <ExternalLink size={11} />
             </Link>
           )}

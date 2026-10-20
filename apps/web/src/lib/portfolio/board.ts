@@ -9,11 +9,11 @@
  * It REUSES existing per-entity engines rather than recomputing anything:
  *   • close status + open exceptions ... `gatherCloseOrchestration`
  *     (lib/close/readiness) — the same signal set the Close Command Center scores.
- *   • cash position ..................... `bank_accounts.current_balance_cents`
- *     grouped by location + `core.locations.minimum_cash_cents` banding — the same
- *     source + banding as /api/cash.
- *   • overdue AR / AP ................... `v_ar_aging` / `v_ap_aging` balances where
- *     `aging_bucket <> 'CURRENT'`.
+ *   • cash position ..................... CANONICAL book cash (lib/cash/book-cash:
+ *     posted GL balance of bank/cash-role accounts, as of today in the org's
+ *     timezone) per location + `core.locations.minimum_cash_cents` banding.
+ *   • overdue AR / AP ................... `v_ar_aging` / `v_ap_aging` open balances
+ *     with due_date < the org's today (lib/ar/overdue).
  *   • ownership assignments ............. `core.practice_assignments` (RESERVED
  *     migration — DEGRADE-SAFE: absent ⇒ everyone unassigned, board still works).
  *
@@ -24,6 +24,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { gatherCloseOrchestration, type BoardPeriodStatus } from '@/lib/close/readiness';
+import { fetchBookCash } from '@/lib/cash/book-cash';
+import { getOrgToday } from '@/lib/dates/org-today';
 
 const num = (v: number | string | null | undefined): number => {
   const n = Number(v);
@@ -180,33 +182,25 @@ export async function loadEmployeeNames(
 
 async function loadCashByLocation(
   supabase: SupabaseClient,
+  orgId: string,
+  asOfDate: string,
 ): Promise<Map<string, number>> {
-  const byLoc = new Map<string, number>();
-  const { data } = await supabase
-    .from('bank_accounts')
-    .select('location_id, current_balance_cents')
-    .eq('is_active', true)
-    .limit(ROW_CAP);
-  for (const r of (data ?? []) as Array<{
-    location_id: string | null;
-    current_balance_cents: number | string | null;
-  }>) {
-    if (!r.location_id) continue;
-    byLoc.set(r.location_id, (byLoc.get(r.location_id) ?? 0) + num(r.current_balance_cents));
-  }
-  return byLoc;
+  const cash = await fetchBookCash(supabase, orgId, { asOfDate });
+  return new Map(Object.entries(cash.byLocation));
 }
 
 /** Sum of balances past due (aging bucket other than CURRENT) per location. */
 async function loadOverdueByLocation(
   supabase: SupabaseClient,
   view: 'v_ar_aging' | 'v_ap_aging',
+  today: string,
 ): Promise<Map<string, number>> {
   const byLoc = new Map<string, number>();
   const { data } = await supabase
     .from(view)
     .select('location_id, balance_cents, aging_bucket')
-    .neq('aging_bucket', 'CURRENT')
+    .lt('due_date', today)
+    .gt('balance_cents', 0)
     .limit(ROW_CAP);
   for (const r of (data ?? []) as Array<{
     location_id: string | null;
@@ -296,13 +290,14 @@ export async function gatherPortfolioBoard(
   const now = new Date();
   const label = new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
+  const today = await getOrgToday(supabase, orgId);
   const [close, cashByLoc, minCashByLoc, overdueAr, overdueAp, assignments, empNames] =
     await Promise.all([
       gatherCloseOrchestration(supabase, orgId, year, month),
-      loadCashByLocation(supabase),
+      loadCashByLocation(supabase, orgId, today),
       loadMinimumCash(supabase),
-      loadOverdueByLocation(supabase, 'v_ar_aging'),
-      loadOverdueByLocation(supabase, 'v_ap_aging'),
+      loadOverdueByLocation(supabase, 'v_ar_aging', today),
+      loadOverdueByLocation(supabase, 'v_ap_aging', today),
       loadAssignments(supabase),
       loadEmployeeNames(supabase),
     ]);

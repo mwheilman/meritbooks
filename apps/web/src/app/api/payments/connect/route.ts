@@ -4,6 +4,7 @@ export const runtime = 'nodejs';
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { createAdminSupabase } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { listConnections, connectProvider } from '@/lib/money/connections';
 import {
@@ -85,10 +86,13 @@ export async function POST(req: Request) {
   if (!org) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   // Entitlement must be set before connectProvider will register the connection.
+  // core.organizations is SELECT-only for members (migration 154) — the entitlement
+  // flip runs as the service role, gated by settings_system:edit above and pinned to
+  // the guard-resolved session org.
   if (org.entitlements['ar_collection'] !== true) {
-    await db.schema('core').from('organizations')
+    await createAdminSupabase().schema('core').from('organizations')
       .update({ entitlements: { ...org.entitlements, ar_collection: true } })
-      .eq('id', org.id);
+      .eq('id', guard.orgId);
   }
 
   // Reuse an existing connected account, or create a new one.

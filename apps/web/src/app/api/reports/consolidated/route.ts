@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { getOrgToday } from '@/lib/dates/org-today';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { applyEliminations, type ConsolAccountInput } from './eliminations';
 import { fetchAll } from '@/lib/supabase/fetch-all';
@@ -32,8 +33,10 @@ export async function GET(request: Request) {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId } = ctx;
   const { searchParams } = new URL(request.url);
-  const startDate = searchParams.get('start_date') ?? new Date().toISOString().slice(0, 8) + '01';
-  const endDate = searchParams.get('end_date') ?? new Date().toISOString().slice(0, 10);
+  // Defaults anchor on today in the ORG's timezone (not server UTC).
+  const orgToday = await getOrgToday(supabase, orgId);
+  const startDate = searchParams.get('start_date') ?? orgToday.slice(0, 8) + '01';
+  const endDate = searchParams.get('end_date') ?? orgToday;
   const eliminateIc = searchParams.get('eliminate_ic') !== 'false'; // default true
 
   // Entities

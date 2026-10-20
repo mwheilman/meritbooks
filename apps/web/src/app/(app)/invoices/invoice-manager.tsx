@@ -142,10 +142,12 @@ function InvoiceList({
       {/* Summary cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Outstanding', value: counts.SENT?.balanceCents ?? 0, icon: FileText, color: 'text-blue-400' },
-          { label: 'Overdue', value: counts.OVERDUE?.balanceCents ?? 0, icon: AlertCircle, color: 'text-red-400' },
-          { label: 'Paid This Month', value: counts.PAID?.totalCents ?? 0, icon: Check, color: 'text-emerald-400' },
-          { label: 'Draft', value: counts.DRAFT?.totalCents ?? 0, icon: Clock, color: 'text-gray-400' },
+          // Outstanding = ALL open AR (sent + partially paid + overdue); Overdue is the
+          // derived past-due subset (server: lib/ar/overdue), so the two always tie.
+          { label: 'Outstanding', key: 'OPEN', value: counts.OPEN?.balanceCents ?? 0, icon: FileText, color: 'text-blue-400' },
+          { label: 'Overdue', key: 'OVERDUE', value: counts.OVERDUE?.balanceCents ?? 0, icon: AlertCircle, color: 'text-red-400' },
+          { label: 'Paid This Month', key: 'PAID', value: counts.PAID?.totalCents ?? 0, icon: Check, color: 'text-emerald-400' },
+          { label: 'Draft', key: 'DRAFT', value: counts.DRAFT?.totalCents ?? 0, icon: Clock, color: 'text-gray-400' },
         ].map((card) => (
           <div key={card.label} className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
@@ -153,7 +155,7 @@ function InvoiceList({
               <card.icon className={`w-4 h-4 ${card.color}`} />
             </div>
             <p className="text-xl font-mono font-semibold text-white">{formatMoney(card.value)}</p>
-            <p className="text-xs text-gray-500 mt-1">{counts[card.label === 'Outstanding' ? 'SENT' : card.label === 'Overdue' ? 'OVERDUE' : card.label === 'Paid This Month' ? 'PAID' : 'DRAFT']?.count ?? 0} invoices</p>
+            <p className="text-xs text-gray-500 mt-1">{counts[card.key]?.count ?? 0} invoices</p>
           </div>
         ))}
       </div>

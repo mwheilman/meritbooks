@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 
@@ -63,6 +64,15 @@ function marginPct(num: number, revenue: number): number | null {
 }
 
 export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
+  if (!ctx.orgId) {
+    return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+  }
+  const orgId = ctx.orgId;
+  // R0b — a per-entity P&L for every company is a financial-reports read (same gate as
+  // the /profitability page guard). Fails closed (403).
+  const guard = await requirePermission(ctx.userId, 'reports', 'view');
+  if (!guard.ok) return guard.response;
+
   const now = new Date();
   const startDate =
     params.start_date ??
@@ -75,6 +85,7 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
     .schema('core')
     .from('locations')
     .select('id, name, short_code')
+    .eq('org_id', orgId)
     .eq('is_active', true)
     .order('name');
   if (locErr) {
@@ -89,6 +100,7 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
       ctx.supabase
         .from('v_income_statement')
         .select('location_id, account_type, amount_cents')
+        .eq('org_id', orgId)
         .gte('entry_date', startDate)
         .lte('entry_date', endDate),
     { orderBy: ['org_id', 'location_id', 'account_number', 'entry_date'], label: 'profitability v_income_statement' },

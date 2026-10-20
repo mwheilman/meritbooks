@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 
 // ── Public API shape ────────────────────────────────────────────────────────
 
@@ -73,8 +74,12 @@ function tallyByLocation(rows: LocatedRow[] | null): Map<string, number> {
 export async function GET() {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+  // R0b — per-company book health (backlog, flags, overdue AP) is close-management
+  // visibility; previously only the browser gated it. Fails closed (403).
+  const guard = await requirePermission(userId, 'close_mgmt', 'view');
+  if (!guard.ok) return guard.response;
 
   const now = Date.now();
   const todayIso = new Date(now).toISOString().slice(0, 10);
@@ -84,6 +89,7 @@ export async function GET() {
     .schema('core')
     .from('locations')
     .select('id, name, short_code')
+    .eq('org_id', orgId)
     .eq('is_active', true)
     .order('name');
   if (locError) return NextResponse.json({ error: locError.message }, { status: 500 });
@@ -94,27 +100,32 @@ export async function GET() {
     supabase
       .from('bank_transactions')
       .select('location_id, created_at')
+      .eq('org_id', orgId)
       .eq('status', 'PENDING')
       .order('created_at', { ascending: true })
       .limit(ROW_CAP),
     supabase
       .from('bank_transactions')
       .select('location_id')
+      .eq('org_id', orgId)
       .eq('status', 'FLAGGED')
       .limit(ROW_CAP),
     supabase
       .from('receipts')
       .select('location_id')
+      .eq('org_id', orgId)
       .eq('status', 'FLAGGED')
       .limit(ROW_CAP),
     supabase
       .from('bills')
       .select('location_id')
+      .eq('org_id', orgId)
       .eq('status', 'ON_HOLD')
       .limit(ROW_CAP),
     supabase
       .from('bills')
       .select('location_id')
+      .eq('org_id', orgId)
       .lt('due_date', todayIso)
       .not('status', 'in', '(PAID,VOIDED)')
       .limit(ROW_CAP),

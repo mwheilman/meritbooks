@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth, currentUser } from '@clerk/nextjs/server';
+import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { ROLE_DEFINITIONS, getVisibleFeatures, getSidebarGrouped, type UserRole } from '@/lib/rbac/permissions';
 import { provisionMembershipOnLogin } from '@/lib/identity/provision-membership';
@@ -74,12 +75,24 @@ export async function GET(_req: NextRequest) {
     //            the seat with its ASSIGNED role (lib/identity/claim-invitation.ts).
     //     Invitation-claim runs BEFORE the auto-admin default below, so an invited
     //     user gets their assigned role rather than falling into company_admin.
+    // core.employees / employee_locations / core.users are SELECT-only for members
+    // (migration 154). The self-provisioning writes below run as the service role and
+    // are each constrained by the rule that authorizes them: claim only an UNCLAIMED
+    // seat in the session org whose email equals the caller's VERIFIED Clerk email;
+    // auto-admin only when the set-up org has zero employees; core.users only the
+    // caller's own row and only profile columns (never is_platform_staff).
+    const admin = createAdminSupabase();
+
     if (!employee) {
       const clerkUser = await currentUser().catch(() => null);
-      const primaryEmail =
-        clerkUser?.emailAddresses?.find((e) => e.id === clerkUser.primaryEmailAddressId)?.emailAddress ??
-        clerkUser?.emailAddresses?.[0]?.emailAddress ??
+      const emailObj =
+        clerkUser?.emailAddresses?.find((e) => e.id === clerkUser.primaryEmailAddressId) ??
+        clerkUser?.emailAddresses?.[0] ??
         null;
+      // Seat claim is keyed on the email, so it must be one Clerk has VERIFIED —
+      // otherwise anyone could sign up with an admin's address and claim their seat.
+      const primaryEmail =
+        emailObj && emailObj.verification?.status === 'verified' ? emailObj.emailAddress : null;
 
       if (primaryEmail) {
         const { data: claimable } = await supabase
@@ -92,22 +105,24 @@ export async function GET(_req: NextRequest) {
 
         const target = claimable?.[0];
         if (target) {
-          const { data: linked } = await supabase
+          const { data: linked } = await admin
             .schema('core').from('employees')
             .update({ clerk_user_id: userId })
             .eq('id', target.id)
             .eq('org_id', org.id)
+            .is('clerk_user_id', null) // never re-link a seat someone already claimed
             .select('id, org_id, clerk_user_id, first_name, last_name, email, role, department_id, is_active, created_at')
             .single();
-          employee = linked ?? target;
+          // Only a successful link counts — a seat claimed concurrently by someone else
+          // (0 rows updated) must not be handed to this caller.
+          employee = linked ?? null;
           // Tie off any matching pending invitation so it clears from the list.
-          await markInvitationsAcceptedByEmail(createAdminSupabase(), org.id, primaryEmail, userId);
+          if (linked) await markInvitationsAcceptedByEmail(admin, org.id, primaryEmail, userId);
         } else {
           // (ii) No pre-added row — honor a pending invitation, if any. Degrade-safe:
           //      returns null when the feature isn't migrated or there is no invite.
           const claimed = await claimInvitationOnLogin({
-            rls: supabase,
-            admin: createAdminSupabase(),
+            admin,
             orgId: org.id,
             clerkUserId: userId,
             primaryEmail,
@@ -119,14 +134,16 @@ export async function GET(_req: NextRequest) {
 
     // 3. Auto-assign admin if setup is complete but no employee record exists
     if (!employee && org.setup_complete) {
-      const { count } = await supabase
+      // Counted on the service client so an RLS read failure can never look like an
+      // empty org and mint a second admin. Fails closed: only an exact 0 qualifies.
+      const { count, error: countErr } = await admin
         .schema('core').from('employees')
         .select('id', { count: 'exact', head: true })
         .eq('org_id', org.id);
 
-      if (count === 0 || count === null) {
+      if (!countErr && count === 0) {
         // First user after setup — auto-create as company_admin
-        const { data: newEmployee, error: createErr } = await supabase
+        const { data: newEmployee, error: createErr } = await admin
           .schema('core').from('employees')
           .insert({
             org_id: org.id,
@@ -146,13 +163,13 @@ export async function GET(_req: NextRequest) {
           employee = newEmployee;
 
           // Assign to ALL locations
-          const { data: locations } = await supabase
+          const { data: locations } = await admin
             .schema('core').from('locations')
             .select('id')
             .eq('org_id', org.id);
 
           if (locations && locations.length > 0 && employee) {
-            await supabase
+            await admin
               .from('employee_locations')
               .insert(
                 locations.map((loc: { id: string }) => ({
@@ -223,8 +240,11 @@ export async function GET(_req: NextRequest) {
 
     // Keep the identity-layer profile (core.users) in sync with the employee
     // record, so attribution/audit shows real names. Self-provision on first
-    // sign-in; update name/email thereafter (RLS: self_provision + self_update).
-    await supabase
+    // sign-in; update name/email thereafter. Service-role write (migration 154 removed
+    // the member self_provision/self_update policies — self_update let a user set
+    // their own is_platform_staff). ONLY the caller's own row (clerk_user_id = the
+    // verified session user) and ONLY profile columns are ever written here.
+    await admin
       .schema('core').from('users')
       .upsert(
         {
@@ -318,18 +338,35 @@ export async function GET(_req: NextRequest) {
   }
 }
 
+const updateProfileSchema = z.object({
+  firstName: z.string().max(100).optional(),
+  lastName: z.string().max(100).optional(),
+  email: z.string().email().max(200).optional(),
+});
+
 export async function PATCH(req: NextRequest) {
   try {
     const ctx = await requireAuthedContext();
     if (ctx instanceof NextResponse) return ctx;
-    const { supabase, userId } = ctx;
+    const { userId, orgId } = ctx;
+    if (!orgId) {
+      return NextResponse.json({ error: 'No organization on session', code: 'NO_ORG' }, { status: 403 });
+    }
 
-    const body = await req.json();
-    const { firstName, lastName, email } = body as {
-      firstName?: string;
-      lastName?: string;
-      email?: string;
-    };
+    let raw: unknown;
+    try {
+      raw = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body', code: 'PARSE_ERROR' }, { status: 400 });
+    }
+    const parsed = updateProfileSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', code: 'VALIDATION_ERROR', details: parsed.error.flatten().fieldErrors },
+        { status: 422 },
+      );
+    }
+    const { firstName, lastName, email } = parsed.data;
 
     const updates: Record<string, string> = {};
     if (firstName) updates.first_name = firstName.trim();
@@ -340,10 +377,15 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
     }
 
-    const { data: employee, error } = await supabase
+    // Self-service profile edit: service-role write (core.employees is SELECT-only for
+    // members, migration 154) restricted to the caller's OWN seat in the session org and
+    // to the whitelisted profile columns above — role / is_active / admin_scope are
+    // never reachable from here.
+    const { data: employee, error } = await createAdminSupabase()
       .schema('core').from('employees')
       .update(updates)
       .eq('clerk_user_id', userId)
+      .eq('org_id', orgId)
       .select('id, first_name, last_name, email, role')
       .single();
 

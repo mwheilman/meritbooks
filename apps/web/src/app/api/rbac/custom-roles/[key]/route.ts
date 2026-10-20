@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { createAdminSupabase } from '@/lib/supabase/server';
 import { requireManageUsers } from '@/lib/team/guard';
 import { ALL_ROLES } from '@/lib/rbac/permissions';
 import { logHumanAction } from '@/lib/trust/action-log';
@@ -66,8 +67,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: { key: str
     );
   }
 
-  // Remove overrides first, then the role. Both are org-scoped (RLS + explicit filter).
-  const { error: ovErr } = await supabase
+  // Remove overrides first, then the role. Both tables are SELECT-only for members
+  // (migration 154), so the deletes run as the service role, pinned to the session org.
+  const admin = createAdminSupabase();
+  const { error: ovErr } = await admin
     .schema('core')
     .from('role_permission_overrides')
     .delete()
@@ -77,7 +80,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { key: str
     return NextResponse.json({ error: ovErr.message, code: 'DELETE_ERROR' }, { status: 500 });
   }
 
-  const { error: delErr } = await supabase
+  const { error: delErr } = await admin
     .schema('core')
     .from('custom_roles')
     .delete()

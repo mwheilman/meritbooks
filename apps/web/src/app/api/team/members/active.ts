@@ -1,17 +1,20 @@
 import { NextResponse } from 'next/server';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAdminSupabase } from '@/lib/supabase/server';
 
 /**
  * Flip a member's is_active flag, scoped to the org. Shared by the
  * deactivate/reactivate routes so the two only differ by a boolean.
+ *
+ * core.employees is SELECT-only for members (migration 154), so this writes as the
+ * service role. CALLERS MUST have passed requireManageUsers first; `orgId` must be
+ * the session-resolved org (never client input) — it pins the row.
  */
 export async function setMemberActive(
-  supabase: SupabaseClient,
   orgId: string,
   memberId: string,
   isActive: boolean
 ): Promise<NextResponse> {
-  const { data, error } = await supabase
+  const { data, error } = await createAdminSupabase()
     .schema('core')
     .from('employees')
     .update({ is_active: isActive })

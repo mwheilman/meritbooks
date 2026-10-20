@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
 import { z } from 'zod';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { getOrgToday } from '@/lib/dates/org-today';
+import { applyEarningsToBalanceSheet, fetchUnclosedEarnings } from '@/lib/reports/bs-earnings';
 
 const bsQuerySchema = z.object({
   location_id: z.string().optional(),
@@ -17,6 +19,8 @@ interface BSLineItem {
   accountName: string;
   groupName: string;
   balanceCents: number;
+  /** Presentation line with no GL account (e.g. "Net income (current year)"). */
+  synthetic?: boolean;
 }
 
 interface BSGroup { name: string; accounts: BSLineItem[]; totalCents: number }
@@ -26,7 +30,8 @@ interface BSSection { type: string; label: string; subTypes: BSSubType[]; totalC
 export const GET = apiQueryHandler(
   bsQuerySchema,
   async (params, ctx) => {
-    const asOfDate = params.as_of_date ?? new Date().toISOString().split('T')[0];
+    // Default as-of = today in the ORG's timezone (not the server's UTC date).
+    const asOfDate = params.as_of_date ?? (await getOrgToday(ctx.supabase, ctx.orgId));
 
     // Resolve location filter
     const locationIds: string[] = [];
@@ -185,7 +190,7 @@ export const GET = apiQueryHandler(
     const totalLiabilities = sections.find((s) => s.type === 'LIABILITY')?.totalCents ?? 0;
     const totalEquity = sections.find((s) => s.type === 'EQUITY')?.totalCents ?? 0;
 
-    return NextResponse.json({
+    const booked = {
       sections,
       summary: {
         totalAssetsCents: totalAssets,
@@ -195,6 +200,22 @@ export const GET = apiQueryHandler(
         isBalanced: totalAssets === totalLiabilities + totalEquity,
         varianceCents: totalAssets - (totalLiabilities + totalEquity),
       },
+    };
+
+    // Equity must carry the earnings not yet closed to retained earnings — prior
+    // years (until the year-end close posts) + current-year net income — or the
+    // statement is off by exactly cumulative net income (audit L5).
+    let presented: typeof booked;
+    try {
+      const earnings = await fetchUnclosedEarnings(ctx.supabase, ctx.orgId, { asOfDate, locationIds });
+      presented = applyEarningsToBalanceSheet(booked, earnings);
+    } catch (e) {
+      console.error('[balance-sheet] earnings roll-in failed:', e);
+      return NextResponse.json({ error: 'Failed to compute current-year earnings', code: 'QUERY_ERROR' }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      ...presented,
       filters: { asOfDate, locationIds: locationIds.length > 0 ? locationIds : ['all'] },
     });
   }

@@ -11,7 +11,7 @@ import {
   Loader2, AlertCircle, Shield, Clock, Inbox, ListTree, Table2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useQuery, useMutation } from '@/hooks';
+import { useQuery, useMutation, addToast } from '@/hooks';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { isSpecificCompany } from '@/lib/company-scope';
 import { PageHeader, EmptyState } from '@/components/ui';
@@ -113,13 +113,34 @@ export default function ChartOfAccountsPage() {
     });
   }, [accounts, search, statusFilter]);
 
+  // Approve/reject — check the response and tell the user either way (a failed
+  // approve used to be silent; audit 06 §5 bug 6).
+  const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
   const handleApproval = useCallback(async (accountId: string, action: 'approve' | 'reject') => {
-    await fetch('/api/accounts', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account_id: accountId, action }),
-    });
-    setRefreshKey((k) => k + 1);
+    setApprovalBusyId(accountId);
+    try {
+      const res = await fetch('/api/accounts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_id: accountId, action }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        account?: { account_number: string; name: string };
+      };
+      if (res.ok && json.success) {
+        const label = json.account ? `${json.account.account_number} · ${json.account.name}` : 'Account';
+        addToast('success', action === 'approve' ? `${label} approved` : `${label} rejected`);
+        setRefreshKey((k) => k + 1);
+      } else {
+        addToast('error', json.error ?? `Could not ${action} account (${res.status})`);
+      }
+    } catch {
+      addToast('error', `Network error — could not ${action} account`);
+    } finally {
+      setApprovalBusyId(null);
+    }
   }, []);
 
   const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'COGS', 'OPEX', 'OTHER'];
@@ -295,11 +316,15 @@ export default function ChartOfAccountsPage() {
                       <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={(e) => { e.stopPropagation(); handleApproval(acct.id, 'approve'); }}
+                          disabled={approvalBusyId === acct.id}
+                          aria-busy={approvalBusyId === acct.id}
                           aria-label={`Approve account ${acct.accountNumber}`}
                           className="p-1 rounded bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
-                        ><Check size={13} /></button>
+                        >{approvalBusyId === acct.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}</button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleApproval(acct.id, 'reject'); }}
+                          disabled={approvalBusyId === acct.id}
+                          aria-busy={approvalBusyId === acct.id}
                           aria-label={`Reject account ${acct.accountNumber}`}
                           className="p-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
                         ><X size={13} /></button>
@@ -352,7 +377,7 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
   const [notes, setNotes] = useState('');
   const [formError, setFormError] = useState('');
 
-  const { mutate, isLoading: submitting } = useMutation<Record<string, unknown>, { success: boolean; message: string }>(
+  const { mutate, isLoading: submitting, error: submitError } = useMutation<Record<string, unknown>, { success: boolean; message: string }>(
     '/api/accounts'
   );
 
@@ -380,6 +405,7 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
     });
 
     if (result?.success) {
+      addToast('success', result.message ?? 'Account requested — pending approval');
       onSuccess();
     } else {
       setFormError('Failed to request account');
@@ -466,7 +492,7 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
         {formError && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
             <AlertCircle size={13} className="text-red-400" />
-            <p className="text-xs text-red-400">{formError}</p>
+            <p className="text-xs text-red-400">{formError}{submitError ? `: ${submitError}` : ''}</p>
           </div>
         )}
 

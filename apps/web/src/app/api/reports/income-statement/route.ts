@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
+import { getOrgToday } from '@/lib/dates/org-today';
+import { monthBoundsIso } from '@/lib/dates/org-date';
 import { z } from 'zod';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 
@@ -32,10 +34,10 @@ interface ISSection {
 export const GET = apiQueryHandler(
   isQuerySchema,
   async (params, ctx) => {
-    const now = new Date();
-    const startDate = params.start_date ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const endDateDefault = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const endDate = params.end_date ?? endDateDefault.toISOString().split('T')[0];
+    // Default period = the current month in the ORG's timezone (not server UTC).
+    const month = monthBoundsIso(await getOrgToday(ctx.supabase, ctx.orgId));
+    const startDate = params.start_date ?? month.start;
+    const endDate = params.end_date ?? month.end;
     const basis = params.basis ?? 'accrual';
 
     // Resolve location filter — accept location_ids (comma-separated) or location_id

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { createAdminSupabase } from '@/lib/supabase/server';
 import { requireManageUsers } from '@/lib/team/guard';
 import { ALL_ROLES } from '@/lib/rbac/permissions';
 import { createCustomRoleSchema, deriveCustomRoleKey } from '@/lib/validations/rbac';
@@ -62,7 +63,9 @@ export async function POST(req: NextRequest) {
     key = `${baseKey}_${n++}`;
   }
 
-  const { data: created, error: insErr } = await supabase
+  // Service-role write (core.custom_roles is SELECT-only for members, migration 154);
+  // authorization is the requireManageUsers gate above, org pinned to the session org.
+  const { data: created, error: insErr } = await createAdminSupabase()
     .schema('core')
     .from('custom_roles')
     .insert({

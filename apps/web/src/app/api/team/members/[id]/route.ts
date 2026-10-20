@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { createAdminSupabase } from '@/lib/supabase/server';
+import { allOrgLocations } from '@/lib/team/org-locations';
 import { requireManageUsers } from '@/lib/team/guard';
 import { updateMemberSchema } from '@/lib/validations/team';
 import { ROLE_DEFINITIONS, type UserRole } from '@/lib/rbac/permissions';
@@ -63,8 +65,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { role, companyIds, onboardingCompanyIds } = parsed.data;
   const effectiveRole = (role ?? target.role) as UserRole;
 
+  // Every company referenced must belong to THIS org: the grant writes below run as the
+  // service role (migration 154), so the tenant check is ours, not RLS's.
+  if (!(await allOrgLocations(supabase, orgId!, [...(companyIds ?? []), ...(onboardingCompanyIds ?? [])]))) {
+    return NextResponse.json(
+      { error: 'One or more companies are not in this organization', code: 'INVALID_COMPANY' },
+      { status: 422 }
+    );
+  }
+
+  // core.employees / employee_locations / practice_assignments are SELECT-only for
+  // members (migration 154): every write below runs as the service role, authorized by
+  // requireManageUsers above and pinned to the session org + the org-verified target.
+  const admin = createAdminSupabase();
+
   if (role !== undefined) {
-    const { error: roleErr } = await supabase
+    const { error: roleErr } = await admin
       .schema('core')
       .from('employees')
       .update({ role })
@@ -85,7 +101,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (companyIds !== undefined) {
     // Replace assignments. "All" scopes carry no per-location rows.
-    const { error: delErr } = await supabase
+    const { error: delErr } = await admin
       .from('employee_locations')
       .delete()
       .eq('employee_id', memberId)
@@ -102,7 +118,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         org_id: orgId!,
         assigned_by: grant.employeeId,
       }));
-      const { error: insErr } = await supabase.from('employee_locations').insert(rows);
+      const { error: insErr } = await admin.from('employee_locations').insert(rows);
       if (insErr) {
         return NextResponse.json({ error: insErr.message, code: 'UPDATE_ERROR' }, { status: 500 });
       }
@@ -115,9 +131,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // admin_scope. DEGRADE-SAFE: a missing table/column no-ops rather than 500s.
   if (onboardingCompanyIds !== undefined) {
     const scoped = onboardingCompanyIds.filter((id) => !companyIds || companyIds.includes(id));
-    await setEmployeeOnboardingCompanies(supabase, orgId!, memberId, scoped);
+    await setEmployeeOnboardingCompanies(admin, orgId!, memberId, scoped);
     if (scoped.length > 0) {
-      await ensurePreparerCapability(supabase, orgId!, memberId);
+      await ensurePreparerCapability(admin, orgId!, memberId);
     }
   }
 

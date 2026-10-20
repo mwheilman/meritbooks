@@ -21,7 +21,7 @@
  *     account number (canon: reference accounts by role) — degrade-safe if unmapped.
  *   • close + exceptions ..... `gatherHardCloseGate` (lib/close/readiness), the same
  *     signal set the Close Command Center scores.
- *   • overdue AR / AP ........ `v_ar_aging` / `v_ap_aging` (aging_bucket <> CURRENT).
+ *   • overdue AR / AP ........ `v_ar_aging` / `v_ap_aging` (due_date < org today — lib/ar/overdue).
  *   • open exceptions ........ `ai_decisions` status='PROPOSED' for the entity.
  *
  * Everything runs through the RLS-scoped client, so tenant isolation is enforced by
@@ -32,9 +32,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   consolidate,
   DEBIT_NORMAL_TYPES,
+  UNCLOSED_EARNINGS_ACCOUNT_NUMBER,
+  UNCLOSED_EARNINGS_ACCOUNT_NAME,
   type AccountType,
   type EntityAccountBalance,
 } from '@/lib/consolidation/consolidate';
+import { fetchBookCash } from '@/lib/cash/book-cash';
+import { agingBucketFor } from '@/lib/ar/overdue';
+import { getOrgToday } from '@/lib/dates/org-today';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { gatherHardCloseGate, type BoardPeriodStatus } from '@/lib/close/readiness';
@@ -218,19 +223,23 @@ async function loadEntityTrialBalance(
       if (!acct || !entry) continue;
       const type = acct.account_type;
       const isPnl = !isBalanceSheet(type);
-      // P&L only counts within the period; BS accrues cumulatively.
-      if (isPnl && entry.entry_date < startDate) continue;
-      const natural = naturalBalance(type, num(raw.debit_cents), num(raw.credit_cents));
-      const key = acct.account_number;
+      // P&L counts within the period; BS accrues cumulatively. P&L BEFORE the
+      // period (not yet closed to retained earnings) folds into one equity line
+      // so the snapshot balance sheet ties (audit L5: "Out of balance by $488").
+      const prePeriodPnl = isPnl && entry.entry_date < startDate;
+      const natural = prePeriodPnl
+        ? num(raw.credit_cents) - num(raw.debit_cents)
+        : naturalBalance(type, num(raw.debit_cents), num(raw.credit_cents));
+      const key = prePeriodPnl ? UNCLOSED_EARNINGS_ACCOUNT_NUMBER : acct.account_number;
       const existing = byAccount.get(key);
       if (existing) {
         existing.naturalBalanceCents += natural;
       } else {
         byAccount.set(key, {
           entityId: locationId,
-          accountNumber: acct.account_number,
-          accountName: acct.name,
-          accountType: type,
+          accountNumber: prePeriodPnl ? UNCLOSED_EARNINGS_ACCOUNT_NUMBER : acct.account_number,
+          accountName: prePeriodPnl ? UNCLOSED_EARNINGS_ACCOUNT_NAME : acct.name,
+          accountType: prePeriodPnl ? 'EQUITY' : type,
           isEliminating: false,
           role: null,
           naturalBalanceCents: natural,
@@ -263,6 +272,7 @@ async function resolveKeyLines(
   orgId: string,
   locationId: string,
   balanceByNumber: Map<string, number>,
+  cashCents: number,
 ): Promise<{ cashCents: number; arCents: number; apCents: number; resolved: { cash: boolean; ar: boolean; ap: boolean } }> {
   // Sum the (unique) resolved account numbers for a set of roles into the TB.
   const sumRoles = async (roles: AccountRoleKey[]): Promise<{ cents: number; hit: boolean }> => {
@@ -280,7 +290,10 @@ async function resolveKeyLines(
     return { cents, hit: numbers.size > 0 };
   };
 
-  const cash = await sumRoles(['OPERATING_BANK', 'CASH_ON_HAND', 'UNDEPOSITED_FUNDS']);
+  // Cash is the CANONICAL book cash (lib/cash/book-cash) — bank-flagged + cash-
+  // role accounts — not just the three role accounts (which missed e.g. Payroll
+  // Checking and diverged from every other "cash" on the app — audit L6).
+  const cash = { cents: cashCents, hit: true };
   const ar = await sumRoles(['AR_CONTROL']);
   const ap = await sumRoles(['AP_CONTROL']);
 
@@ -300,6 +313,7 @@ async function loadOverdue(
   supabase: SupabaseClient,
   locationId: string,
   view: 'v_ar_aging' | 'v_ap_aging',
+  today: string,
 ): Promise<{ totalCents: number; items: OverdueItem[] }> {
   const isAr = view === 'v_ar_aging';
 
@@ -313,7 +327,9 @@ async function loadOverdue(
             .from('v_ar_aging')
             .select('invoice_id, invoice_number, customer_name, balance_cents, aging_bucket, due_date')
             .eq('location_id', locationId)
-            .neq('aging_bucket', 'CURRENT')
+            // Overdue = due before the ORG's today (lib/ar/overdue), not the
+            // view's UTC-dated aging bucket.
+            .lt('due_date', today)
             .gt('balance_cents', 0)
             .order('balance_cents', { ascending: false }),
         { orderBy: 'invoice_id', label: 'portfolio/entity overdue v_ar_aging' },
@@ -324,7 +340,7 @@ async function loadOverdue(
             .from('v_ap_aging')
             .select('bill_id, bill_number, vendor_name, balance_cents, aging_bucket, due_date')
             .eq('location_id', locationId)
-            .neq('aging_bucket', 'CURRENT')
+            .lt('due_date', today)
             .gt('balance_cents', 0)
             .order('balance_cents', { ascending: false }),
         { orderBy: 'bill_id', label: 'portfolio/entity overdue v_ap_aging' },
@@ -336,7 +352,7 @@ async function loadOverdue(
     name: String((isAr ? r.customer_name : r.vendor_name) ?? '—'),
     reference: String((isAr ? r.invoice_number : r.bill_number) ?? '—'),
     amountCents: num(r.balance_cents as number | string | null),
-    bucket: String(r.aging_bucket ?? ''),
+    bucket: agingBucketFor((r.due_date as string | null) ?? null, today),
     dueDate: (r.due_date as string | null) ?? null,
   }));
   const totalCents = items.reduce((s, i) => s + i.amountCents, 0);
@@ -494,6 +510,7 @@ export async function gatherEntitySnapshot(
   const { start, end } = monthRange(year, month);
   const prior = priorMonth(year, month);
   const priorRange = monthRange(prior.year, prior.month);
+  const today = await getOrgToday(supabase, orgId);
 
   const [
     currentTb,
@@ -507,8 +524,8 @@ export async function gatherEntitySnapshot(
     loadEntityTrialBalance(supabase, locationId, start, end),
     loadEntityTrialBalance(supabase, locationId, priorRange.start, priorRange.end),
     loadBankCash(supabase, locationId),
-    loadOverdue(supabase, locationId, 'v_ar_aging'),
-    loadOverdue(supabase, locationId, 'v_ap_aging'),
+    loadOverdue(supabase, locationId, 'v_ar_aging', today),
+    loadOverdue(supabase, locationId, 'v_ap_aging', today),
     loadOpenExceptions(supabase, locationId),
     loadCloseState(supabase, orgId, locationId, year, month),
   ]);
@@ -525,7 +542,8 @@ export async function gatherEntitySnapshot(
   // Key BS lines by role, matched into the current-period consolidated balances.
   const balanceByNumber = new Map<string, number>();
   for (const a of current.accounts) balanceByNumber.set(a.accountNumber, a.consolidatedCents);
-  const keyLines = await resolveKeyLines(supabase, orgId, locationId, balanceByNumber);
+  const bookCash = await fetchBookCash(supabase, orgId, { asOfDate: end, locationIds: [locationId] });
+  const keyLines = await resolveKeyLines(supabase, orgId, locationId, balanceByNumber, bookCash.totalCents);
 
   const pnl: EntityPnl = {
     revenue: deltaOf(ct.revenueCents, pt.revenueCents),

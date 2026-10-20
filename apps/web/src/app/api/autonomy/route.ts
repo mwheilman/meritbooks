@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { createAdminSupabase } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import {
@@ -155,12 +156,15 @@ export async function PUT(request: Request): Promise<NextResponse> {
     );
   }
 
+  // autonomy_settings is SELECT-only for members (migration 154) — a member could
+  // otherwise turn on AUTO for themselves via PostgREST. Service-role write, gated by
+  // settings_system:edit above and pinned to the guard-resolved session org.
   const nowIso = new Date().toISOString();
-  const { error } = await supabase
+  const { error } = await createAdminSupabase()
     .from('autonomy_settings')
     .upsert(
       {
-        org_id: orgId,
+        org_id: guard.orgId,
         feature,
         mode,
         materiality_limit_cents: mode === 'AUTO_UNDER_LIMIT' ? materialityLimitCents : null,
@@ -218,9 +222,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { engaged, reason } = parsed.data;
   const nowIso = new Date().toISOString();
 
-  const { error } = await supabase.from('autonomy_kill_switch').upsert(
+  // autonomy_kill_switch is SELECT-only for members (migration 154): service-role
+  // write, gated by settings_system:edit above, pinned to the session org.
+  const { error } = await createAdminSupabase().from('autonomy_kill_switch').upsert(
     {
-      org_id: orgId,
+      org_id: guard.orgId,
       engaged,
       engaged_by: userId,
       engaged_at: engaged ? nowIso : null,

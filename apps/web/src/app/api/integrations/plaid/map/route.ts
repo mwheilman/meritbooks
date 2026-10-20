@@ -1,10 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { z } from 'zod';
+import { requireAuthedContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { resolveOrgId } from '@/lib/posting/lifecycle';
 import {
   listPendingAccounts,
   mapPendingAccount,
@@ -23,19 +22,19 @@ import { requirePermission } from '@/lib/rbac/require-permission';
  *   { action: 'map', pending_id, location_id, gl_account_id, label }  -> promote
  *   { action: 'ignore', pending_id }                                  -> ignore
  *   On a successful map, a sync is triggered so transactions import immediately.
+ *
+ * ORG RESOLUTION (06 §L.3 L2): the tenant comes from requireAuthedContext() — the same
+ * caller-org resolution as the rest of the app (explicit `org_id` claim OR Clerk's
+ * native `o.id`). An unresolved org fails CLOSED with 400 (it used to 500).
  */
 export async function GET() {
-  const a = await auth().catch(() => null);
-  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
-  // first-org lookup stays only as a transitional fallback when no claim.
-  const claimOrgId =
-    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
-      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
-      : null;
-  const db = createAdminSupabase();
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+  // Read-only: runs AS THE USER (RLS) and every query is explicitly org-scoped.
+  const db = ctx.supabase;
   try {
-    const orgId = await resolveOrgId(db, claimOrgId);
-
     const [pending, entitiesRes, glRes] = await Promise.all([
       listPendingAccounts(db, orgId),
       db.schema('core').from('locations').select('id, name, short_code').eq('org_id', orgId).order('name'),
@@ -68,19 +67,14 @@ const ignoreSchema = z.object({ action: z.literal('ignore'), pending_id: z.strin
 const bodySchema = z.union([mapSchema, ignoreSchema]);
 
 export async function POST(request: Request) {
-  const a = await auth().catch(() => null);
-  const userId = (a as { userId?: string | null } | null)?.userId ?? null;
-  if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  const ctx = await requireAuthedContext();
+  if (ctx instanceof NextResponse) return ctx;
+  const { userId, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
   // Authorize — mapping a linked bank account to an entity + GL cash account (or
   // ignoring it) decides where bank activity posts; accounting configuration.
   const guard = await requirePermission(userId, 'settings_acct', 'edit');
   if (!guard.ok) return guard.response;
-  // Operational org = the VERIFIED `org_id` claim (matches RLS get_org_id());
-  // first-org lookup stays only as a transitional fallback when no claim.
-  const claimOrgId =
-    typeof (a?.sessionClaims as Record<string, unknown> | undefined)?.org_id === 'string'
-      ? ((a!.sessionClaims as Record<string, unknown>).org_id as string)
-      : null;
 
   let raw: unknown;
   try {
@@ -91,10 +85,10 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: 'Validation failed' }, { status: 422 });
 
+  // Promotion + the follow-on sync touch Plaid access tokens → service role, scoped to
+  // the caller's resolved tenant (never a fallback).
   const db = createAdminSupabase();
   try {
-    const orgId = await resolveOrgId(db, claimOrgId);
-
     if (parsed.data.action === 'ignore') {
       await ignorePendingAccount(db, orgId, parsed.data.pending_id);
       return NextResponse.json({ ok: true });

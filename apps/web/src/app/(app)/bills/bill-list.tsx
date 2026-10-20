@@ -5,6 +5,7 @@ import { Inbox, AlertCircle, Search, ShieldAlert, Clock, Briefcase, UserCheck, C
 import { clsx } from 'clsx';
 import { StatusBadge, EmptyState, TableSkeleton, CurrencyTag } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
+import { ListPager } from '@/components/ui/list-pager';
 import { useQuery, useDebounce } from '@/hooks';
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { BillPeek } from './bill-peek';
@@ -84,10 +85,16 @@ export function BillList() {
     window.history.replaceState(null, '', url.toString());
   }, [selectedId]);
 
+  // Server-side paging (the API returns 50/page). A filter change resets to
+  // page 1; previously the list silently stopped at the first 50 rows.
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [activeTab, debouncedSearch, locationId]);
+
   const params: Record<string, string> = {};
   if (activeTab !== 'all') params.status = activeTab;
   if (debouncedSearch) params.search = debouncedSearch;
   if (locationId) params.location_id = locationId;
+  if (page > 1) params.page = String(page);
 
   const { data, isLoading, error, refetch } = useQuery<BillResponse>(
     '/api/bills',
@@ -95,6 +102,11 @@ export function BillList() {
   );
 
   const bills = data?.data ?? [];
+  const pagination = data?.pagination ?? null;
+  // If the current page emptied out (e.g. rows approved away), step back.
+  useEffect(() => {
+    if (pagination && pagination.total > 0 && page > pagination.total_pages) setPage(pagination.total_pages);
+  }, [pagination, page]);
   const counts = data?.counts ?? null;
   const homeCurrency = data?.homeCurrency ?? 'USD';
 
@@ -261,6 +273,16 @@ export function BillList() {
               })}
             </tbody>
           </table>
+          {pagination && (
+            <ListPager
+              page={pagination.page}
+              perPage={pagination.per_page}
+              total={pagination.total}
+              noun="bills"
+              onPageChange={setPage}
+              isLoading={isLoading}
+            />
+          )}
         </div>
       )}
 

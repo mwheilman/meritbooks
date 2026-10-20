@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=1440">
+<title>S21 · Employee receipts · MeritBooks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="system.css">
+<!--BOARD--><style>
+/* Board layout only — not part of the system */
+body{min-width:1440px}
+.sheet-top{display:flex;align-items:center;gap:24px;height:48px;padding:0 48px;background:var(--midnight);color:var(--grey-300)}
+.sheet-top img{height:24px;width:auto}
+.sheet-top nav{margin-left:auto;display:flex;gap:4px}
+.sheet-top nav a{height:32px;display:inline-flex;align-items:center;padding:0 10px;color:var(--grey-300);font-weight:500;white-space:nowrap}
+.sheet-top nav a:hover,.sheet-top nav a[aria-current=page]{background:var(--night-800);color:var(--warm)}
+.sheet{padding:0 48px 96px}
+.board-h{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding:40px 0 16px;border-bottom:1px solid var(--electric)}
+.board-h p{margin-top:8px;color:var(--ink-2);max-width:80ch}
+.board-h .pg{font-variant-numeric:tabular-nums;white-space:nowrap}
+.frame{border:1px solid var(--line-2);border-left:0;border-right:0;overflow:hidden;position:relative;margin:24px -48px 0;background:var(--warm)}
+.frame-cap{display:flex;justify-content:space-between;gap:24px;margin-top:8px;font-size:12px;line-height:16px;color:var(--ink-3)}
+.anno{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:24px}
+.anno div{border-top:1px solid var(--line-2);padding-top:12px}
+.anno b{display:block;font-weight:600;margin-bottom:4px}
+.anno p{color:var(--ink-2)}
+.app--frame .rail{min-height:100%}
+[hidden]{display:none!important}
+.sample{margin-left:16px;color:var(--ink-3);font-size:12px}
+/* Privacy: figures become redaction bars of their own width, so nothing reflows */
+.is-private .pv{color:transparent!important;background:var(--grey-300);box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.is-private .pv *{visibility:hidden}
+.btn--primary .pv{background:transparent}
+.is-private .btn--primary .pv{background:var(--blue-300)}
+
+.sheet-top .eyebrow{white-space:nowrap}
+.board-h .pg{display:flex;align-items:center;gap:12px}
+.pair-h{display:flex;align-items:baseline;gap:16px;margin-top:56px;padding-bottom:12px;border-bottom:1px solid var(--line-2)}
+.pair-h .t-section{color:var(--ink);white-space:nowrap}
+.pair-h p{color:var(--ink-2)}
+.app--frame{min-height:0}
+.app--frame .rail{min-height:0}
+.bar .ctx{flex:none}
+.page-head .t-title{white-space:nowrap}
+.toast-region{bottom:32px}
+.subtabs{display:flex;gap:24px;border-bottom:1px solid var(--line);padding:0 var(--margin);background:var(--warm)}
+.ph-k{display:inline-flex;align-items:center;gap:8px}
+.rail-link.more{color:var(--slate)}
+.rail-link.more::after{content:"";margin-left:auto}
+</style><!--/BOARD-->
+<style>
+/* S21 layout only — the cardholder's phone, 390 wide, 15px base, 44px+ targets */
+body{min-width:1440px}
+.phones{display:grid;grid-template-columns:repeat(3,390px);justify-content:space-between;row-gap:48px;margin-top:32px}
+.phcap{display:flex;align-items:baseline;gap:12px;margin-bottom:12px;min-height:40px}
+.phcap .no{font:700 20px/28px var(--f-display);color:transparent;-webkit-text-stroke:1px var(--electric);flex:none}
+.phcap b{font-weight:600;display:block}
+.phcap .t-cap{display:block}
+.phone{position:relative;width:390px;height:844px;display:flex;flex-direction:column;background:var(--warm);border:1px solid var(--midnight);overflow:hidden;font-size:15px;line-height:24px}
+.ph-status{display:flex;align-items:center;justify-content:space-between;height:44px;padding:0 24px;flex:none;font-weight:600;font-variant-numeric:tabular-nums}
+.ph-status .sig{display:flex;gap:2px;align-items:flex-end}
+.ph-status .sig i{display:block;width:3px;background:var(--ink)}
+.ph-top{display:flex;align-items:center;justify-content:space-between;gap:12px;height:56px;padding:0 20px;flex:none;border-bottom:1px solid var(--line)}
+.ph-top img{height:24px;width:auto}
+.ph-top .who{font-size:12px;line-height:16px;color:var(--ink-2);text-align:right}
+.ph-body{flex:1;min-height:0;overflow:hidden;padding:16px 20px 24px}
+.ph-foot{flex:none;padding:12px 20px 28px;border-top:1px solid var(--line);background:var(--warm)}
+.ph-foot .btn{width:100%;height:52px;font-size:15px}
+.ph-foot .btn+.btn{margin-top:8px}
+.ph-legal{margin-top:8px;font-size:12px;line-height:16px;color:var(--ink-3);text-align:center}
+.ph-h{font:700 20px/28px var(--f-display);color:var(--electric);margin-top:16px}
+.ph-h.ink{color:var(--ink)}
+.ph-p{color:var(--ink-2);margin-top:4px}
+.chg{padding:16px;background:var(--white);border:1px solid var(--line)}
+.chg-top{display:flex;justify-content:space-between;gap:12px;font-size:12px;line-height:16px;color:var(--ink-3)}
+.chg-amt{font:600 28px/32px var(--f-text);font-variant-numeric:tabular-nums;margin-top:8px;color:var(--ink)}
+.chg-m{font-weight:600;margin-top:4px}
+.chg-n{font-size:12px;line-height:16px;color:var(--ink-3)}
+.big{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;height:56px;font-size:15px}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.opts .btn{height:52px;font-size:15px;white-space:normal;line-height:20px}
+.hint{display:flex;gap:12px;margin-top:16px;padding:12px 16px;background:var(--sky);box-shadow:inset 3px 0 var(--electric);font-size:12px;line-height:16px;color:var(--ink-2)}
+.hint b{color:var(--ink);font-weight:600}
+.hint svg{flex:none;color:var(--electric);margin-top:1px}
+/* lock screen + messages */
+.lock{background:var(--midnight);color:var(--warm)}
+.lock .ph-status .sig i{background:var(--warm)}
+.lock-time{text-align:center;font:600 64px/72px var(--f-text);font-variant-numeric:tabular-nums;margin-top:24px;letter-spacing:-.02em}
+.lock-date{text-align:center;color:var(--grey-300)}
+.notif{margin:24px 12px 0;padding:12px 14px;background:var(--night-800);border:1px solid var(--night-700)}
+.notif-top{display:flex;justify-content:space-between;font-size:12px;line-height:16px;color:var(--grey-300)}
+.notif b{display:block;font-weight:600;margin-top:4px;color:var(--warm)}
+.notif p{color:var(--grey-200);margin-top:2px}
+.notif.old{opacity:.8;margin-top:8px}
+.lock-quiet{display:flex;gap:10px;margin:16px 12px 0;padding:10px 14px;font-size:12px;line-height:16px;color:var(--grey-300);border:1px dashed var(--night-600)}
+.lock-quiet svg{flex:none;color:var(--signal)}
+.lock-foot{margin-top:auto;padding:0 24px 32px;display:flex;justify-content:space-between;color:var(--grey-300);font-size:12px}
+/* camera */
+.cam{background:#000;color:var(--warm)}
+.cam .ph-status .sig i{background:var(--warm)}
+.vf{position:relative;flex:1;margin:0;background:radial-gradient(ellipse at 50% 45%,#2A3E57 0,#0A1628 70%)}
+.vf-rcpt{position:absolute;left:84px;top:96px;width:222px;height:400px;background:#F2F0EA;transform:rotate(-3deg);padding:20px 18px;display:flex;flex-direction:column;gap:7px;box-shadow:0 20px 40px rgba(0,0,0,.5)}
+.vf-rcpt i{display:block;height:5px;background:#9AA4B0}
+.vf-rcpt i.s{width:55%}.vf-rcpt i.m{width:75%}.vf-rcpt i.b{height:8px;background:#3D4F65;width:60%}
+.vf-rcpt i.t{margin-top:auto;height:8px;background:#3D4F65}
+.vf-edge{position:absolute;left:76px;top:86px;width:238px;height:420px;transform:rotate(-3deg);border:2px solid var(--signal)}
+.vf-edge::before,.vf-edge::after{content:"";position:absolute;width:18px;height:18px;border:3px solid var(--warm)}
+.vf-edge::before{left:-6px;top:-6px;border-right:0;border-bottom:0}
+.vf-edge::after{right:-6px;bottom:-6px;border-left:0;border-top:0}
+.vf-tip{position:absolute;left:0;right:0;top:20px;text-align:center}
+.vf-tip span{display:inline-block;padding:6px 12px;background:rgba(10,22,40,.8);font-size:12px;line-height:16px;font-weight:600}
+.vf-ctl{flex:none;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:20px 24px 36px;background:#000}
+.shutter{width:72px;height:72px;border-radius:50%;border:4px solid var(--warm);display:grid;place-items:center}
+.shutter i{display:block;width:56px;height:56px;border-radius:50%;background:var(--warm)}
+.vf-ctl .btn{height:44px;color:var(--warm);justify-self:start}
+.vf-ctl .btn:last-child{justify-self:end}
+.vf-ctl .btn--quiet:hover{background:var(--night-800)}
+/* matched */
+.rc-thumb{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;align-items:center;margin-top:16px;padding:8px;background:var(--white);border:1px solid var(--line)}
+.rc-mini{width:72px;height:96px;background:var(--white);border:1px solid var(--line-2);padding:8px;display:flex;flex-direction:column;gap:5px}
+.rc-mini i{display:block;height:3px;background:var(--grey-300)} .rc-mini i.s{width:55%} .rc-mini i.b{background:var(--ink-2);height:4px}
+.mt{list-style:none;margin-top:12px}
+.mt li{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:8px;align-items:center;min-height:32px;border-bottom:1px solid var(--line)}
+.mt svg{color:var(--pos)}
+.mt .v{font-weight:600;font-variant-numeric:tabular-nums}
+.field-m .input{height:48px;font-size:15px}
+.field-m .field-label{font-size:12px}
+/* lists */
+.lst{list-style:none;margin-top:12px;border-top:1px solid var(--electric)}
+.lst li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+.lst .m{font-weight:600}
+.lst .a{font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+.lst .s{font-size:12px;line-height:16px;color:var(--ink-3)}
+.lst .s.warn{color:var(--warn);font-weight:500}
+.lst .s.neg{color:var(--neg);font-weight:500}
+.lst .go{grid-column:1/-1;margin-top:8px}
+.lst .go .btn{height:44px;width:100%;font-size:15px}
+.lst.done li{color:var(--ink-2)}
+.seg-m{display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid var(--line-2);margin-top:16px}
+.seg-m button{height:44px;font-weight:500;color:var(--ink-2);border-right:1px solid var(--line-2)}
+.seg-m button:last-child{border-right:0}
+.seg-m button[aria-pressed=true]{background:var(--midnight);color:var(--warm)}
+.tot{display:flex;justify-content:space-between;margin-top:12px;padding:10px 12px;background:var(--canvas);font-size:12px;line-height:16px;color:var(--ink-2)}
+.tot b{color:var(--ink);font-variant-numeric:tabular-nums}
+.ok-mark{display:grid;place-items:center;width:44px;height:44px;border:1.5px solid var(--pos);color:var(--pos);background:var(--white)}
+.ph-tabs{flex:none;display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);background:var(--white);padding-bottom:20px}
+.ph-tabs a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;height:56px;font-size:12px;line-height:16px;color:var(--ink-2);font-weight:500}
+.ph-tabs a[aria-current=page]{color:var(--electric);box-shadow:inset 0 2px var(--electric)}
+.ph-tabs .cnt{font-variant-numeric:tabular-nums}
+/* explain sheet */
+.ph-scrim{position:absolute;inset:0;background:rgba(10,22,40,.48);display:flex;align-items:flex-end}
+.ph-sheet{width:100%;background:var(--white);border-top:1px solid var(--midnight);padding:16px 20px 28px}
+.ph-sheet h3{font:700 20px/28px var(--f-display);color:var(--ink)}
+.ph-sheet p{color:var(--ink-2);font-size:12px;line-height:16px;margin-top:4px}
+.ph-sheet .radio{min-height:44px;width:100%;border-bottom:1px solid var(--line)}
+.ph-sheet .textarea{font-size:15px;margin-top:8px}
+.ph-sheet .btn{width:100%;height:52px;margin-top:12px;font-size:15px}
+.phones .anno-cell{display:flex;flex-direction:column;justify-content:flex-start;gap:16px;padding-top:52px}
+.phones .anno-cell div{border-top:1px solid var(--line-2);padding-top:12px}
+.phones .anno-cell b{display:block;font-weight:600;margin-bottom:4px}
+.phones .anno-cell p{color:var(--ink-2)}
+</style></head>
+<body>
+<!--SPRITE--><svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></symbol>
+<symbol id="i-down" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></symbol>
+<symbol id="i-right" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></symbol>
+<symbol id="i-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3.5 10.5 8 6 12.5"/></symbol>
+<symbol id="i-layers" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2 14 5 8 8 2 5Z" stroke-linejoin="round"/><path d="M2 8.2l6 3 6-3"/><path d="M2 11.2l6 3 6-3"/></symbol>
+<symbol id="i-grid" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.5" height="4.5"/><rect x="9" y="2.5" width="4.5" height="4.5"/><rect x="2.5" y="9" width="4.5" height="4.5"/><rect x="9" y="9" width="4.5" height="4.5"/></symbol>
+<symbol id="i-lock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="7" width="9" height="6.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></symbol>
+<symbol id="i-x" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke-width="1.75"/></symbol>
+<symbol id="i-eye" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></symbol>
+<symbol id="i-eye-off" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/><path d="M2.5 13.5 13.5 2.5"/></symbol>
+<symbol id="i-history" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9"/><path d="M2.5 2.5v2.5H5"/><path d="M8 5v3.2l2 1.3"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></symbol>
+<symbol id="i-minus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 8h9"/></symbol>
+<symbol id="i-alert" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.2 14.2 13.5H1.8Z" stroke-linejoin="round"/><path d="M8 6.5v3.2M8 11.2v1"/></symbol>
+<symbol id="i-shield" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.8 13.2 3.8v4.1c0 3-2.3 5.2-5.2 6.4C5.1 13.1 2.8 10.9 2.8 7.9V3.8Z" stroke-linejoin="round"/></symbol>
+<symbol id="i-clock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.4"/></symbol>
+<symbol id="i-user" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="2.6"/><path d="M2.8 14c.6-2.8 2.7-4.3 5.2-4.3s4.6 1.5 5.2 4.3"/></symbol>
+<symbol id="i-users" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5.5" r="2.4"/><path d="M1.5 13.5c.5-2.5 2.3-3.8 4.5-3.8s4 1.3 4.5 3.8"/><path d="M10.5 3.4a2.4 2.4 0 0 1 0 4.4M12 9.9c1.3.5 2.2 1.7 2.5 3.6"/></symbol>
+<symbol id="i-user-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="5.5" r="2.6"/><path d="M1.5 14c.6-2.8 2.6-4.3 5-4.3 1.2 0 2.3.3 3.1 1M12.5 9v5M10 11.5h5"/></symbol>
+<symbol id="i-log" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 4h8M5.5 8h8M5.5 12h8"/><path d="M2.5 4h1M2.5 8h1M2.5 12h1"/></symbol>
+<symbol id="i-key" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="10.5" r="2.8"/><path d="M7 8.5 13.5 2M11 4.5l2 2M9.5 6l1.5 1.5"/></symbol>
+<symbol id="i-send" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8 14 2.5 10.5 14 8 9Z" stroke-linejoin="round"/><path d="M8 9l6-6.5"/></symbol>
+<symbol id="i-copy" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8"/><path d="M10.5 5.5v-3h-8v8h3"/></symbol>
+<symbol id="i-cols" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M6.2 2.5v11M9.8 2.5v11"/></symbol>
+<symbol id="i-download" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7"/><path d="M2.5 13.5h11"/></symbol>
+<symbol id="i-home" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 7.5 8 2.5l5.5 5v6h-11Z" stroke-linejoin="round"/><path d="M6.5 13.5v-4h3v4"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 9.5 4 3h8l1.5 6.5v4h-11Z" stroke-linejoin="round"/><path d="M2.5 9.5h3.5l.8 1.5h2.4l.8-1.5h3.5"/></symbol>
+<symbol id="i-building" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2.5" width="10" height="11"/><path d="M6 5.5h1M9 5.5h1M6 8.5h1M9 8.5h1M7 13.5v-2h2v2"/></symbol>
+<symbol id="i-work" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 4.5h2M2.5 8h2M2.5 11.5h2M6.5 4.5h7M6.5 8h7M6.5 11.5h7"/></symbol>
+<symbol id="i-chart" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 13.5h11"/><path d="M4 11V7.5M7 11V4M10 11V6M13 11V9"/></symbol>
+<symbol id="i-plug" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2v3.5M10 2v3.5M4 5.5h8v2a4 4 0 0 1-8 0Z"/><path d="M8 11.5V14"/></symbol>
+<symbol id="i-gear" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6 5 5M11 11l1.4 1.4M3.6 12.4 5 11M11 5l1.4-1.4"/></symbol>
+<symbol id="i-bill" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h5.5L12 4.5V14H4Z" stroke-linejoin="round"/><path d="M6 7.5h4M6 10.5h3"/></symbol>
+<symbol id="i-receipt" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h8v12l-2-1.2L8 14l-2-1.2L4 14Z" stroke-linejoin="round"/><path d="M6 6h4M6 9h4"/></symbol>
+<symbol id="i-doc" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h5.5L12 4.5V14H4Z" stroke-linejoin="round"/></symbol>
+<symbol id="i-ask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3h11v8H7l-3 2.5V11H2.5Z" stroke-linejoin="round"/></symbol>
+<symbol id="i-cash" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="4" width="13" height="8"/><circle cx="8" cy="8" r="1.8"/></symbol>
+<symbol id="i-money" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v12M11 4.5H6.7a1.8 1.8 0 0 0 0 3.6h2.6a1.8 1.8 0 0 1 0 3.6H5"/></symbol>
+<symbol id="i-mail" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3.5" width="12" height="9"/><path d="M2 4l6 5 6-5" stroke-linejoin="round"/></symbol>
+<symbol id="i-info" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.8"/><path d="M8 7.2v4M8 4.8v.6"/></symbol>
+<symbol id="i-undo" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 3.5 2.5 6.5l3 3"/><path d="M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7"/></symbol>
+<symbol id="i-filter" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3.5h11L9.2 8.5v4l-2.4 1.2V8.5Z" stroke-linejoin="round"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3.5" width="11" height="10"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/></symbol>
+<symbol id="i-phone" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="1.8" width="7" height="12.4"/><path d="M7 12h2"/></symbol>
+<symbol id="i-camera" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h3l1.2-2h3.6L11 5h3v8H2Z" stroke-linejoin="round"/><circle cx="8" cy="9" r="2.3"/></symbol>
+<symbol id="i-card" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="3.5" width="13" height="9"/><path d="M1.5 6.5h13M4 10h3"/></symbol>
+<symbol id="i-print" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.5 6V2.5h7V6"/><rect x="2" y="6" width="12" height="5.5"/><path d="M4.5 9.5h7v4h-7Z"/></symbol>
+<symbol id="i-bank" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6 8 2.5 14 6Z" stroke-linejoin="round"/><path d="M3.5 6.5v5M6.5 6.5v5M9.5 6.5v5M12.5 6.5v5M2 13.5h12"/></symbol>
+<symbol id="i-bell" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 11V7a4 4 0 0 1 8 0v4l1.5 1.5h-11Z" stroke-linejoin="round"/><path d="M6.5 14h3"/></symbol>
+<symbol id="i-upload" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10.5v-8M4.5 6 8 2.5 11.5 6"/><path d="M2.5 13.5h11"/></symbol>
+<symbol id="i-void" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.8"/><path d="M3.9 12.1 12.1 3.9"/></symbol>
+<symbol id="i-moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12.5 10A5.5 5.5 0 0 1 6 3.5 5.5 5.5 0 1 0 12.5 10Z" stroke-linejoin="round"/></symbol>
+<symbol id="i-sms" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3h11v8H7l-3 2.5V11H2.5Z" stroke-linejoin="round"/><path d="M5 7h.1M8 7h.1M11 7h.1" stroke-width="2"/></symbol>
+<symbol id="i-branch" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4" cy="3.5" r="1.5"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="6" r="1.5"/><path d="M4 5v6M12 7.5c0 2.5-3 3-8 3.5"/></symbol>
+<symbol id="i-inherit" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2.5v6.5h9"/><path d="M9 6l3 3-3 3"/></symbol>
+<symbol id="i-image" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2.5" width="12" height="11"/><path d="M2 11l3.5-3.5 3 3 2-2 3.5 3.5"/><circle cx="10.5" cy="5.5" r="1"/></symbol>
+<symbol id="i-list" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 4h8M5.5 8h8M5.5 12h8"/><path d="M2.5 4h1M2.5 8h1M2.5 12h1"/></symbol>
+<symbol id="i-flag" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 14V2.5h8l-1.5 3 1.5 3h-8" stroke-linejoin="round"/></symbol>
+<symbol id="i-pause" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3.5v9M10 3.5v9"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h12M2 11h12"/><rect x="9" y="3" width="2.5" height="4" fill="#fff"/><rect x="4.5" y="9" width="2.5" height="4" fill="#fff"/></symbol>
+<symbol id="i-repeat" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 6.5A4.5 4.5 0 0 1 12 5"/><path d="M12.5 2v3.2H9.3"/><path d="M13.5 9.5A4.5 4.5 0 0 1 4 11"/><path d="M3.5 14v-3.2h3.2"/></symbol>
+</defs></svg><!--/SPRITE-->
+<a class="skip" href="#main">Skip to content</a><header class="sheet-top on-dark"><img src="assets/merit-logo-on-dark.png" alt="Merit" width="80" height="24"><span class="eyebrow" style="color:var(--slate)">MeritBooks<span class="sl">//</span>Finance operations</span><nav aria-label="Design system pages"><a href="index.html">Index</a><a href="S20-pay-runs.html">S20 Pay runs</a><a href="S21-employee-receipts.html" aria-current=page>S21 Receipts</a><a href="S22-receipt-chase.html">S22 Chase</a><a href="S23-fpna.html">S23 FP&amp;A</a><a href="S24-debt-lender.html">S24 Debt</a><a href="S26-rev-rec.html">S26 Rev rec</a><a href="S27-settings.html">S27 Settings</a></nav></header><main id="main" class="sheet"><div class="board-h"><div><div class="eyebrow">S21<span class="sl">//</span>IA-SPEC §4.13 · §3.6.6 employee surface · §6.2 receipt chase</div><h1 class="t-title" style="margin-top:8px">Tom’s phone: a receipt in the time it takes to pocket it</h1><p>Tom Becker runs parts and service calls for Clive Power Equipment on Ramp card ••4410. He never sees the books. A text arrives two minutes after the charge, the link opens that one charge with no sign-in, the camera finds the receipt’s edges, and the match is shown back to him before he sends it. 390 wide, 44px targets, 15px text.</p></div><span class="pg"><span class="tag">Sample data</span>390 × 844</span></div><div class="phones"><div><div class="phcap"><span class="no" aria-hidden="true">1</span><span><b>The chase text</b><span class="t-cap">2 minutes after the charge · quiet hours respected</span></span></div><div class="phone lock" role="group" aria-label="Lock screen with the chase text"><div class="ph-status"><span>2:16</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div><div class="lock-time">2:16</div><div class="lock-date">Monday, October 19</div>
+<div class="notif"><div class="notif-top"><span>Messages · Clive Power Equipment</span><span>now</span></div>
+<b>Receipt for O’Reilly Auto Parts, 186.40?</b><p>Your Ramp card ••4410 was charged today at 2:14 PM. Snap the receipt: mbks.co/r/7hQ2</p></div>
+<div class="notif old"><div class="notif-top"><span>Messages · Clive Power Equipment</span><span>Sun 9:00 AM</span></div>
+<b>Still need: Casey’s, 68.12 · Menards, 342.77</b><p>Two receipts from last week. Tap to add them: mbks.co/r/3kT8</p></div>
+<div class="lock-quiet"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-moon"/></svg><span>Reminders wait for 7:00 AM–8:00 PM. One text bundles everything that’s due, so you never get three in a row.</span></div>
+<div class="lock-foot"><span>Swipe to open</span><span>From MeritBooks for Clive</span></div></div></div><div><div class="phcap"><span class="no" aria-hidden="true">2</span><span><b>One charge, no sign-in</b><span class="t-cap">/r/7hQ2 opens straight to it</span></span></div><div class="phone " role="group" aria-label="One charge, opened from the text"><div class="ph-status"><span>2:16</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div><div class="ph-top"><img src="assets/merit-logo-on-light.png" alt="Merit" width="80" height="24"><span class="who">Clive Power Equipment</span></div><div class="ph-body"><p class="ph-p" style="margin-top:0"><b class="ink">Tom</b>, one receipt for today’s charge. No sign-in needed.</p>
+<div style="margin-top:16px"><div class="chg"><div class="chg-top"><span>Mon Oct 19 · 2:14 PM</span><span>Ramp ••4410 · your card</span></div><div class="chg-amt">186.40</div><div class="chg-m">O’Reilly Auto Parts</div></div></div>
+<h2 class="ph-h">Add the receipt</h2>
+<button class="btn btn--primary big" type="button" style="margin-top:12px"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-camera"/></svg>Snap receipt</button>
+<div class="opts"><button class="btn" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-upload"/></svg>Upload</button><button class="btn" type="button">No receipt</button></div>
+<button class="btn btn--quiet big" type="button" style="margin-top:4px;height:48px">This was personal</button>
+<div class="hint"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-info"/></svg><span><b>Clive’s policy:</b> receipts for every charge over 25.00. Parts for a customer job? Add the work order and the cost goes to that job.</span></div></div>
+<div class="ph-foot" style="padding-top:8px"><p class="ph-legal" style="margin-top:0">Secure link for Tom Becker · expires when this charge is matched</p></div></div></div><div><div class="phcap"><span class="no" aria-hidden="true">3</span><span><b>Camera</b><span class="t-cap">edges found before the shutter</span></span></div><div class="phone cam" role="group" aria-label="Camera with the receipt&#x27;s edges found"><div class="ph-status"><span>2:17</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div><div class="vf"><div class="vf-tip"><span>Receipt found · hold still</span></div><div class="vf-rcpt" aria-hidden="true"><i class="b"></i><i class="s"></i><i></i><i class="m"></i><i></i><i class="s"></i><i class="m"></i><i></i><i class="s"></i><i class="m"></i><i></i><i class="t"></i></div><div class="vf-edge" aria-hidden="true"></div></div>
+<div class="vf-ctl"><button class="btn btn--quiet" type="button">Cancel</button><button class="shutter" type="button" aria-label="Take photo"><i></i></button><button class="btn btn--quiet" type="button">Library</button></div></div></div><div><div class="phcap"><span class="no" aria-hidden="true">4</span><span><b>The match, shown back</b><span class="t-cap">what was read · the policy’s question</span></span></div><div class="phone " role="group" aria-label="Matched, with the policy hint"><div class="ph-status"><span>2:17</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div><div class="ph-top"><img src="assets/merit-logo-on-light.png" alt="Merit" width="80" height="24"><span class="who">Clive Power Equipment</span></div><div class="ph-body"><div class="rc-thumb"><div class="rc-mini" aria-hidden="true"><i class="b"></i><i class="s"></i><i></i><i></i><i class="s"></i><i></i><i class="b" style="margin-top:auto"></i></div>
+<div><b>Matches your charge</b><p class="t-cap" style="margin-top:2px">Read from the photo · retake if anything is wrong</p></div></div>
+<ul class="mt" aria-label="What matched"><li><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg><span>O’Reilly Auto Parts</span><span class="v">store #1186</span></li>
+<li><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg><span>Total on the receipt</span><span class="v">186.40</span></li><li><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg><span>Date and time</span><span class="v">Oct 19 · 2:13 PM</span></li></ul>
+<div class="hint"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-info"/></svg><span><b>Looks like parts for a job.</b> 2 hydraulic hoses and fittings. Which work order?</span></div>
+<div class="field field-m" style="margin-top:12px"><label class="field-label" for="wo">Work order</label><input class="input is-focus" id="wo" value="WO-22817 · Polk County Parks mower"><span class="field-help">From ServiceTitan · your open work orders</span></div></div>
+<div class="ph-foot"><button class="btn btn--primary" type="button" data-sendr>Send receipt</button><p class="ph-legal">Dana Lee, Clive’s bookkeeper, sees it next</p></div></div></div><div><div class="phcap"><span class="no" aria-hidden="true">5</span><span><b>Done, and what’s left</b><span class="t-cap">no dead end</span></span></div><div class="phone " role="group" aria-label="Confirmation, with what&#x27;s left"><div class="ph-status"><span>2:18</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div><div class="ph-top"><img src="assets/merit-logo-on-light.png" alt="Merit" width="80" height="24"><span class="who">Clive Power Equipment</span></div><div class="ph-body"><span class="ok-mark"><svg class="ico" width="20" height="20" aria-hidden="true"><use href="#i-check"/></svg></span>
+<h2 class="ph-h ink">Sent. That one’s done.</h2><p class="ph-p">Two receipts from last week are still open. Do them now and you’re caught up.</p>
+<ul class="lst" aria-label="Still open">
+<li><span><span class="m">Casey’s General Store</span><br><span class="s warn">Fri Oct 16 · fuel · next reminder Wed</span></span><span class="a">68.12</span></li>
+<li><span><span class="m">Menards</span><br><span class="s neg">Fri Oct 9 · 10 days · Rob Hartley was told today</span></span><span class="a">342.77</span></li></ul>
+<div class="tot"><span>Still needed from you</span><b>410.89</b></div></div>
+<div class="ph-foot"><button class="btn btn--primary" type="button">Do the next one</button><button class="btn" type="button">Later</button></div></div></div><div><div class="phcap"><span class="no" aria-hidden="true">6</span><span><b>My receipts</b><span class="t-cap">the home, when he opens the app</span></span></div><div class="phone " role="group" aria-label="My receipts list"><div class="ph-status"><span>8:05</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div><div class="ph-top"><img src="assets/merit-logo-on-light.png" alt="Merit" width="80" height="24"><span class="who">Tom Becker · Ramp ••4410</span></div><div class="ph-body"><h1 class="ph-h ink" style="margin-top:0">My receipts</h1>
+<div class="tot" style="margin-top:8px"><span>3 charges need a receipt</span><b>597.29</b></div>
+<ul class="lst" aria-label="Needs a receipt"><li><span><span class="m">O’Reilly Auto Parts</span><br><span class="s">Mon Oct 19 · Parts · texted today</span></span><span class="a">186.40</span></li><li><span><span class="m">Casey’s General Store</span><br><span class="s warn">Fri Oct 16 · Fuel · 2 reminders · next Wed</span></span><span class="a">68.12</span></li><li><span><span class="m">Menards</span><br><span class="s neg">Fri Oct 9 · Shop supplies · 10 days · sent to Rob Hartley</span></span><span class="a">342.77</span></li><li class="go" style="border:0;padding-top:4px"><div class="go"><button class="btn btn--primary" type="button"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-camera"/></svg>Snap the oldest first</button></div></li></ul>
+<p class="eyebrow" style="margin-top:20px">Done this statement</p><ul class="lst done" aria-label="Done" style="border-top-color:var(--line-2)"><li><span><span class="m">Grainger</span><br><span class="s">Wed Oct 14 · Matched Oct 14</span></span><span class="a">94.20</span></li><li><span><span class="m">Napa Auto Parts</span><br><span class="s">Mon Oct 12 · Matched Oct 12</span></span><span class="a">41.85</span></li></ul></div><nav class="ph-tabs" aria-label="Employee"><a href="#" aria-current="page"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-receipt"/></svg><span>My receipts <span class="cnt">· 3</span></span></a><a href="#"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-money"/></svg><span>My expenses</span></a><a href="#"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-ask"/></svg><span>Requests</span></a></nav></div></div><div><div class="phcap"><span class="no" aria-hidden="true">7</span><span><b>My expenses</b><span class="t-cap">mileage, per diem, out of pocket</span></span></div><div class="phone " role="group" aria-label="My expenses"><div class="ph-status"><span>8:06</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div><div class="ph-top"><img src="assets/merit-logo-on-light.png" alt="Merit" width="80" height="24"><span class="who">Tom Becker</span></div><div class="ph-body"><h1 class="ph-h ink" style="margin-top:0">My expenses</h1>
+<div class="seg-m" role="group" aria-label="New expense"><button type="button">Mileage</button><button type="button">Per diem</button><button type="button">Out of pocket</button></div>
+<p class="t-cap" style="margin-top:6px">Mileage at the IRS rate · per diem at GSA rates for the city</p>
+<ul class="lst" aria-label="Expenses"><li><span><span class="m">Mileage · 3 trips to Ankeny</span><br><span class="s">Approved Oct 16 by Rob Hartley</span></span><span class="a">412.38</span><span class="s" style="grid-column:1/-1">Paying Fri Oct 23</span></li><li><span><span class="m">Boot allowance</span><br><span class="s">Submitted Oct 14</span></span><span class="a">150.00</span><span class="s" style="grid-column:1/-1">Waiting on Rob Hartley</span></li><li><span><span class="m">Per diem · Kubota training, Atlanta</span><br><span class="s">Draft · 2 of 3 days entered</span></span><span class="a">138.00</span><span class="s" style="grid-column:1/-1">Finish to submit</span></li></ul>
+<div class="tot"><span>Reimbursed to you in 2026</span><b>1,846.22</b></div></div><nav class="ph-tabs" aria-label="Employee"><a href="#"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-receipt"/></svg><span>My receipts <span class="cnt">· 3</span></span></a><a href="#" aria-current="page"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-money"/></svg><span>My expenses</span></a><a href="#"><svg class="ico" width="16" height="16" aria-hidden="true"><use href="#i-ask"/></svg><span>Requests</span></a></nav></div></div><div><div class="phcap"><span class="no" aria-hidden="true">8</span><span><b>No receipt</b><span class="t-cap">a note stands in, the owner approves</span></span></div><div class="phone " role="group" aria-label="No receipt, explained"><div class="ph-status"><span>8:07</span><span class="sig" aria-hidden="true"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span></div><div class="ph-top"><img src="assets/merit-logo-on-light.png" alt="Merit" width="80" height="24"><span class="who">Clive Power Equipment</span></div><div class="ph-body"><div class="chg"><div class="chg-top"><span>Fri Oct 9 · 11:40 AM</span><span>Ramp ••4410 · your card</span></div><div class="chg-amt">342.77</div><div class="chg-m">Menards</div></div>
+<h2 class="ph-h">Add the receipt</h2></div>
+<div class="ph-scrim"><div class="ph-sheet" role="dialog" aria-modal="true" aria-labelledby="ex-h"><h3 id="ex-h">No receipt for Menards?</h3>
+<p>Tell Dana what it was. A missing-receipt note stands in for the receipt, and Rob Hartley approves it.</p>
+<div role="radiogroup" aria-label="Why" style="margin-top:8px"><label class="radio"><input type="radio" name="ex" checked><i></i>Lost or thrown away</label>
+<label class="radio"><input type="radio" name="ex"><i></i>Store didn’t give one</label><label class="radio"><input type="radio" name="ex"><i></i>It’s in my email · I’ll forward it</label></div>
+<label class="field-label sr" for="ex-t">What was it for?</label><textarea class="textarea" id="ex-t">Shelving and bolts for the new parts room</textarea>
+<button class="btn btn--primary" type="button">Send note to Rob</button></div></div></div></div><div class="anno-cell"><div><b>One charge per link</b><p>The token in the text opens one charge and nothing else. It expires when the charge is matched, so a forwarded text can’t browse anything.</p></div>
+<div><b>The match is shown back</b><p>Merchant, total and time are read from the photo and checked against the card charge. A wrong read is fixed by retaking, not typing.</p></div>
+<div><b>Policy speaks once, plainly</b><p>Clive’s policy is receipts over 25.00. The hint asks the one question policy needs, here the work order, and offers his open ones from ServiceTitan.</p></div>
+<div><b>Ties to S20 and S22</b><p>The 412.38 mileage is the reimbursement Tess batches on S20. The three open charges, 597.29, are Tom’s row on Dana’s chase board, S22.</p></div></div></div></main><div class="toast-region" aria-live="polite"><div class="toast" id="toast" hidden><span class="toast-mark" aria-hidden="true"></span><span data-msg>Approved</span><button class="btn btn--quiet" type="button" data-undo>Undo</button></div></div><script>
+(function(){
+  /* privacy toggle — per frame; ⇧H toggles the first frame */
+  function setPriv(appEl,on){appEl.classList.toggle('is-private',on);
+    appEl.querySelectorAll('[data-privacy]').forEach(function(b){b.setAttribute('aria-pressed',on?'true':'false');
+      b.querySelector('span').textContent=on?'Show figures':'Hide figures';
+      b.querySelector('use').setAttribute('href',on?'#i-eye-off':'#i-eye');});}
+  document.querySelectorAll('[data-privacy]').forEach(function(b){b.addEventListener('click',function(){var a=b.closest('.app');setPriv(a,!a.classList.contains('is-private'));});});
+  document.addEventListener('keydown',function(e){if(e.shiftKey&&(e.key==='H'||e.key==='h')&&!/input|textarea|select/i.test(e.target.tagName)){var a=document.querySelector('.app[data-live]');if(a)setPriv(a,!a.classList.contains('is-private'));}});
+  /* decisions: the button's verb is repeated by the toast and the done line */
+  var toast=document.getElementById('toast'),tt;
+  function say(msg,undo){if(!toast)return;toast.querySelector('[data-msg]').textContent=msg;toast.hidden=false;clearTimeout(tt);tt=setTimeout(function(){toast.hidden=true},5000);toast._undo=undo;}
+  if(toast){toast.querySelector('[data-undo]').addEventListener('click',function(){if(toast._undo)toast._undo();toast.hidden=true;});}
+  document.querySelectorAll('[data-done]').forEach(function(btn){btn.addEventListener('click',function(){
+    var item=btn.closest('[data-dec]'),wgEl=btn.closest('.wg'),cnt=wgEl.querySelector('.wg-count');
+    var line=item.querySelector('[data-doneline]');
+    item.classList.add('is-resolved');line.querySelector('[data-what]').textContent=btn.getAttribute('data-done');
+    var n=parseInt(cnt.textContent,10)-1;cnt.textContent=n;
+    var all=wgEl.querySelector('[data-alldone]');if(n===0&&all){all.hidden=false;var mt=wgEl.querySelector('.wg-meta');if(mt){mt.dataset.was=mt.textContent;mt.textContent='All done';}}
+    say(btn.getAttribute('data-done'),function(){item.classList.remove('is-resolved');cnt.textContent=parseInt(cnt.textContent,10)+1;if(all)all.hidden=true;});
+    line.querySelector('[data-undo-line]').onclick=function(){item.classList.remove('is-resolved');cnt.textContent=parseInt(cnt.textContent,10)+1;if(all)all.hidden=true;};
+  });});
+  /* drill rows: Enter or click */
+  document.querySelectorAll('tr[data-drill]').forEach(function(r){r.addEventListener('keydown',function(e){if(e.key==='Enter'){say('Opening '+r.getAttribute('data-drill'));}});r.addEventListener('click',function(e){if(!e.target.closest('a,button'))say('Opening '+r.getAttribute('data-drill'));});});
+  /* seg buttons */
+  document.querySelectorAll('.seg').forEach(function(g){g.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;g.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed','false')});b.setAttribute('aria-pressed','true');});});
+  /* tabs */
+  document.querySelectorAll('[role=tablist]').forEach(function(g){g.addEventListener('click',function(e){var b=e.target.closest('[role=tab]');if(!b)return;g.querySelectorAll('[role=tab]').forEach(function(x){x.setAttribute('aria-selected','false')});b.setAttribute('aria-selected','true');});});
+})();
+</script><script>
+(function(){document.querySelectorAll('.rail-nav').forEach(function(n){var c=n.querySelector('[aria-current=page]');if(c){n.scrollTop=Math.max(0,c.offsetTop-n.clientHeight/2);}});
+var t=document.getElementById('toast'),tm;document.querySelectorAll('[data-say]').forEach(function(b){b.addEventListener('click',function(){if(!t)return;t.querySelector('[data-msg]').textContent=b.getAttribute('data-say');t.hidden=false;clearTimeout(tm);tm=setTimeout(function(){t.hidden=true},4000);});});})();
+</script></body></html>

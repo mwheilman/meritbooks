@@ -4,6 +4,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { getOrgToday } from '@/lib/dates/org-today';
+import { agingBucketFor } from '@/lib/ar/overdue';
 import {
   buildUnbilledAging,
   type UnbilledContribution,
@@ -125,7 +127,11 @@ export async function GET(request: Request) {
   const locFilter = locationIds ? locationIds.split(',').filter(Boolean) : (locationId && locationId !== 'all' ? [locationId] : []);
   // The unbilled section ages by accrual month relative to an as-of date; default
   // to today (the billed view ages off CURRENT_DATE), overridable via end_date.
-  const asOf = searchParams.get('end_date') || searchParams.get('as_of_date') || new Date().toISOString().slice(0, 10);
+  // Default = today in the ORG's timezone. Billed buckets are re-derived from
+  // due_date against the SAME org "today" (lib/ar/overdue) — the view's
+  // aging_bucket uses the database's UTC CURRENT_DATE (a day ahead in US evenings).
+  const today = await getOrgToday(supabase, orgId);
+  const asOf = searchParams.get('end_date') || searchParams.get('as_of_date') || today;
 
   // Defensive: exclude WRITTEN_OFF (and any settled) rows. A written-off invoice
   // has balance_cents = 0 (paid advanced to total), so `> 0` drops it from the
@@ -147,8 +153,8 @@ export async function GET(request: Request) {
     '90+': { count: 0, totalCents: 0 },
   };
   for (const row of data ?? []) {
-    const b = row.aging_bucket as string;
-    if (buckets[b]) { buckets[b].count++; buckets[b].totalCents += Number(row.balance_cents ?? 0); }
+    const b = agingBucketFor(row.due_date as string | null, today);
+    buckets[b].count++; buckets[b].totalCents += Number(row.balance_cents ?? 0);
   }
 
   // Unbilled receivable (contract asset) — a DISTINCT section, sourced from the GL
@@ -169,7 +175,7 @@ export async function GET(request: Request) {
       customerName: r.customer_name, invoiceNumber: r.invoice_number,
       invoiceDate: r.invoice_date, dueDate: r.due_date,
       totalCents: Number(r.total_cents ?? 0), paidCents: Number(r.amount_paid_cents ?? 0),
-      balanceCents: Number(r.balance_cents ?? 0), agingBucket: r.aging_bucket,
+      balanceCents: Number(r.balance_cents ?? 0), agingBucket: agingBucketFor(r.due_date as string | null, today),
       locationName: r.location_name,
     })),
     buckets,

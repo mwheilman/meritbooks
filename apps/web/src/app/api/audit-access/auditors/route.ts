@@ -3,6 +3,8 @@ export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { createAdminSupabase } from '@/lib/supabase/server';
+import { filterOrgLocationIds } from '@/lib/team/org-locations';
 import { requireManageUsers } from '@/lib/team/guard';
 import { inviteAuditorSchema } from '@/lib/audit-access/validation';
 import {
@@ -99,9 +101,25 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { email, firstName, lastName, companyIds } = parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
 
+  // Every granted company must belong to THIS org — the grant write runs as the
+  // service role (migration 154), so the tenant check is ours, not RLS's.
+  const orgCompanyIds = await filterOrgLocationIds(supabase, orgId!, companyIds);
+  if (orgCompanyIds.length !== new Set(companyIds).size) {
+    return NextResponse.json(
+      { error: 'One or more companies are not in this organization', code: 'INVALID_COMPANY' },
+      { status: 422 },
+    );
+  }
+
+  // Identity/RBAC tables (custom_roles, role_permission_overrides, employees,
+  // employee_locations) are SELECT-only for members (migration 154). Every write below
+  // runs as the service role, authorized by requireManageUsers above and pinned to the
+  // session org.
+  const admin = createAdminSupabase();
+
   // 1. Provision the read-only role (idempotent).
   try {
-    await provisionExternalAuditorRole(supabase, orgId!, userId);
+    await provisionExternalAuditorRole(admin, orgId!, userId);
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Could not provision the auditor role', code: 'PROVISION_FAILED' },
@@ -125,7 +143,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   // 3. Create the unclaimed seat carrying the External Auditor role.
-  const { data: seat, error: seatErr } = await supabase
+  const { data: seat, error: seatErr } = await admin
     .schema('core')
     .from('employees')
     .insert({
@@ -148,13 +166,13 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   // 4. Grant company visibility. Custom roles have no company scope, so the auditor sees
   //    only the companies granted here (selected, or every company in the org).
-  let grantedCompanyIds = companyIds;
+  let grantedCompanyIds = orgCompanyIds;
   if (grantedCompanyIds.length === 0) {
     const { data: locs } = await supabase.schema('core').from('locations').select('id').eq('org_id', orgId!);
     grantedCompanyIds = (locs ?? []).map((l: { id: string }) => l.id);
   }
   if (grantedCompanyIds.length > 0) {
-    const { error: locErr } = await supabase.from('employee_locations').insert(
+    const { error: locErr } = await admin.from('employee_locations').insert(
       grantedCompanyIds.map((location_id) => ({ employee_id: seat.id as string, location_id, org_id: orgId! })),
     );
     if (locErr) console.error('[audit-access] location grant failed:', locErr.message);

@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { fetchBookCash } from '@/lib/cash/book-cash';
+import { getOrgToday } from '@/lib/dates/org-today';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
 import { summarizeObligations, type ObligationItem } from '@/lib/cash/obligations';
 import { fetchAll } from '@/lib/supabase/fetch-all';
@@ -19,7 +21,6 @@ import { fetchAll } from '@/lib/supabase/fetch-all';
  */
 
 const HORIZON_DAYS = 90;
-const CASH_ACCOUNT_TYPES = ['CHECKING', 'SAVINGS'];
 
 const FREQ_MONTHS: Record<string, number> = { MONTHLY: 1, QUARTERLY: 3, SEMIANNUAL: 6, ANNUALLY: 12, ANNUAL: 12 };
 
@@ -28,7 +29,6 @@ interface ScheduleRow {
   instrument_id: string; period: number; period_date: string | null;
   payment_cents: number | string | null; interest_cents: number | string | null; principal_cents: number | string | null;
 }
-interface BankAccountRow { current_balance_cents: number | string | null; account_type: string | null }
 interface TemplateRow {
   id: string; name: string; frequency: string; next_run_date: string | null;
   start_date: string | null; end_date: string | null; template_lines: unknown; location_id: string | null;
@@ -56,23 +56,21 @@ export async function GET(request: Request): Promise<NextResponse> {
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const locationId = new URL(request.url).searchParams.get('location_id');
-  const today = new Date();
-  const anchor = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-  const todayIso = isoDate(anchor);
+  // "Today" = the ORG's calendar date, not the server's UTC date.
+  const todayIso = await getOrgToday(supabase, orgId);
+  const anchor = new Date(`${todayIso}T00:00:00Z`);
   const horizonEnd = new Date(anchor);
   horizonEnd.setUTCDate(horizonEnd.getUTCDate() + HORIZON_DAYS);
   const horizonEndIso = isoDate(horizonEnd);
 
-  // 1. Current operating cash (CHECKING/SAVINGS) — what obligations are measured against.
-  let cashQ = supabase
-    .from('bank_accounts')
-    .select('current_balance_cents, account_type')
-    .eq('is_active', true)
-    .in('account_type', CASH_ACCOUNT_TYPES);
-  if (locationId) cashQ = cashQ.eq('location_id', locationId);
-  const { data: cashData, error: cashErr } = await cashQ;
-  if (cashErr) return NextResponse.json({ error: cashErr.message }, { status: 500 });
-  const currentCashCents = ((cashData ?? []) as BankAccountRow[]).reduce((s, a) => s + Number(a.current_balance_cents ?? 0), 0);
+  // 1. Current cash — the CANONICAL book cash (lib/cash/book-cash), the same
+  //    figure every other surface shows — is what obligations are measured against.
+  let currentCashCents: number;
+  try {
+    currentCashCents = (await fetchBookCash(supabase, orgId, { asOfDate: todayIso, locationIds: locationId ? [locationId] : [] })).totalCents;
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to compute cash' }, { status: 500 });
+  }
 
   const items: ObligationItem[] = [];
 
