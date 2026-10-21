@@ -26,7 +26,11 @@ export function capabilityPhrase(ref: string): string {
   const parsed = parseCapabilityRef(ref);
   if (!parsed) return ref;
   const label = CAPABILITY_BY_KEY.get(parsed.key)?.label ?? parsed.key;
-  return `${ACTION_VERB[parsed.action] ?? parsed.action} ${label.toLowerCase()}`;
+  const verb = ACTION_VERB[parsed.action] ?? parsed.action;
+  const phrase = label.toLowerCase();
+  // Some labels already start with the verb ("Post into a soft-closed period",
+  // "Edit posted records") — don't print it twice.
+  return phrase.startsWith(`${verb} `) ? phrase : `${verb} ${phrase}`;
 }
 
 export function roleLabel(role: string): string {

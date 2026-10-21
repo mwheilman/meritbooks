@@ -88,13 +88,18 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
   const bankAccountId = searchParams.get('bank_account_id');
   const fiscalPeriodId = searchParams.get('fiscal_period_id');
+  // The working company. 'all' / absent = every company the caller can see (RLS-scoped).
+  const locationParam = searchParams.get('location_id');
+  const locationId = locationParam && locationParam !== 'all' ? locationParam : null;
 
   // ── Account list (always) ───────────────────────────────────────────────────
-  const { data: accountsRaw, error: acctErr } = await supabase
+  let acctQuery = supabase
     .from('bank_accounts')
     .select('id, account_name, account_mask, account_type, current_balance_cents, account_id, location_id')
-    .eq('is_active', true)
-    .order('account_name', { ascending: true });
+    .eq('org_id', orgId)
+    .eq('is_active', true);
+  if (locationId) acctQuery = acctQuery.eq('location_id', locationId);
+  const { data: accountsRaw, error: acctErr } = await acctQuery.order('account_name', { ascending: true });
   if (acctErr) {
     console.error('[recon/autopilot] accounts query failed:', acctErr.message);
     return NextResponse.json({ error: 'Failed to load bank accounts' }, { status: 500 });
