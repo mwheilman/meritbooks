@@ -7,7 +7,7 @@ import { PRIORITY_WORDS, creatableKinds, woKindLabel, woVocab } from '@/lib/pm/o
 import type { LookupItem, SkillRow, WoKind } from '@/lib/pm/ops/types';
 import type { JobOption } from '@/lib/pm/ops/scope';
 import { useVocab } from '@/components/shell/ShellContext';
-import { CustomerPicker, type CustomerValue } from '@/components/jobs/CustomerPicker';
+import { CustomerPicker, customerPending, customerPendingMessage, type CustomerValue } from '@/components/jobs/CustomerPicker';
 import { lower } from '@/lib/pm/vocab';
 import { Failure, JobSelect, parseNum } from '../common/bits';
 import { Lookup } from '../common/Lookup';
@@ -69,6 +69,7 @@ export function NewWorkOrderPanel(p: NewWorkOrderPanelProps) {
     if (!summary.trim()) e.summary = 'Say what the work is.';
     if (mode === 'existing' && !jobId) e.job = `Pick the ${lower(v.job)}.`;
     if (mode === 'new' && !jobTypeKey) e.job = `Pick a ${lower(v.job)} type.`;
+    if (mode === 'new' && customerPending(customer)) e.customer = customerPendingMessage(customer);
     if (isRo && !asset) e.asset = 'A repair order needs the unit it is for.';
     if (payer === 'OEM' && !payerCustomer) e.payer = 'Pick the manufacturer.';
     const mins = minutes ? parseNum(minutes) : null;
@@ -91,7 +92,7 @@ export function NewWorkOrderPanel(p: NewWorkOrderPanelProps) {
     if (Object.keys(e).length) return;
     const r = await act<{ workOrderId: string; number: string | null }>('create', 'post', '/api/ops/work-orders', {
       jobId: mode === 'existing' ? jobId : null,
-      newJob: mode === 'new' ? { companyId, jobTypeKey, name: (customer.name.trim() ? `${customer.name.trim()} · ` : '') + summary.trim().slice(0, 80), customerId: customer.id, customerName: customer.id ? null : customer.name.trim() || null } : null,
+      newJob: mode === 'new' ? { companyId, jobTypeKey, name: (customer.name.trim() ? `${customer.name.trim()} · ` : '') + summary.trim().slice(0, 80), customerId: customer.id } : null,
       kind, summary: summary.trim(), priority: Number(priority), assetId: asset?.id ?? null, complaint: complaint.trim() || null,
       requestedStart, requestedEnd, estimatedMinutes: mins, requiredSkills: skills, payerType: payer, payerCustomerId: payer === 'OEM' ? payerCustomer?.id ?? null : null,
       promisedOn: promised || null, isCallback: callback,
@@ -142,7 +143,7 @@ export function NewWorkOrderPanel(p: NewWorkOrderPanelProps) {
                   {typesHere.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
                 </Select>
               </Field>
-              <Field label={v.customer}><CustomerPicker value={customer} onChange={(c) => { setCustomer(c); setAsset(null); }} companyId={companyId || null} /></Field>
+              <Field label={v.customer} error={err.customer}><CustomerPicker value={customer} onChange={(c) => { setCustomer(c); setAsset(null); }} companyId={companyId || null} invalid={!!err.customer} /></Field>
             </>
           )}
 

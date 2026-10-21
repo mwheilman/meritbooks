@@ -17,6 +17,7 @@ import { useAction } from '@/components/job/useAction';
 import { lower } from '@/lib/pm/vocab';
 import { MarkStatus, m, parsePct } from './common';
 import { VendorPicker, type VendorValue } from './VendorPicker';
+import { vendorKindFor } from '@/lib/pm/parties/schemas';
 import { CommitmentDetail } from './CommitmentDetail';
 
 export interface OwnerCoOption { id: string; number: string | null; title: string; stage: string }
@@ -167,6 +168,8 @@ export function CommitmentsTab(p: CommitmentsTabProps) {
 interface DraftLine { cc: string; desc: string; qty: string; unit: number | null; amount: number | null }
 
 function NewCommitmentPanel({ jobId, costCodes, budgetByCode, onClose, onCreated }: { jobId: string; costCodes: CostCodeRow[]; budgetByCode: Record<string, number>; onClose: () => void; onCreated: (id: string) => void }) {
+  // the job's company (its cost codes are the job company's library + job codes)
+  const companyId = costCodes[0]?.location_id ?? null;
   const v = useVocab();
   const { run, busy } = useAction();
   const active = costCodes.filter((c) => c.is_active);
@@ -223,7 +226,7 @@ function NewCommitmentPanel({ jobId, costCodes, budgetByCode, onClose, onCreated
           <Field label="Kind">
             <Seg<CommitmentType> aria-label="Kind" value={type} onChange={setType} items={[{ value: 'SUBCONTRACT', label: 'Subcontract' }, { value: 'PO', label: 'Purchase order' }]} />
           </Field>
-          <Field label="Vendor"><VendorPicker value={vendor} onChange={setVendor} onPick={(o) => setRet(String(Math.round(o.retainagePct * 10000) / 100))} /></Field>
+          <Field label="Vendor"><VendorPicker value={vendor} onChange={setVendor} onPick={(o) => setRet(String(Math.round(o.retainagePct * 10000) / 100))} add={{ kind: vendorKindFor(type), companyId }} /></Field>
           <Field label="What it covers" error={err.title}><Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Plumbing rough and finish" maxLength={200} /></Field>
           <Field label="Retainage %" error={err.ret} help="Held back from the vendor’s bills in Merit Books"><Input inputMode="decimal" value={ret} onChange={(e) => setRet(e.target.value)} style={{ width: 96 }} /></Field>
           <Field label="Scope notes"><Textarea value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={2000} /></Field>
@@ -258,7 +261,7 @@ function NewCommitmentPanel({ jobId, costCodes, budgetByCode, onClose, onCreated
             {err.lines && <span className="field-error">{err.lines}</span>}
             <div><Button icon="plus" onClick={() => setLines([...lines, { cc: lines[lines.length - 1]?.cc ?? '', desc: '', qty: '', unit: null, amount: null }])}>Add line</Button></div>
           </fieldset>
-          {!vendor.id && <InlineNotice title="No vendor yet.">You can save the draft now; it needs a vendor before anyone approves it.</InlineNotice>}
+          {!vendor.id && <InlineNotice title="No vendor yet.">You can save the draft now; it needs a vendor before anyone approves it. A subcontractor or supplier you have not used before can be added from the vendor field: Merit Books will request their W-9 and certificate of insurance.</InlineNotice>}
           <button type="submit" hidden />
         </form>
       </PanelSection>

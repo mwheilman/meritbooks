@@ -14,7 +14,8 @@ import { useShell } from '@/components/shell/ShellContext';
 import { useAction } from '@/components/job/useAction';
 import { MarkStatus, m, p } from './common';
 import type { CommitmentListRow, OwnerCoOption } from './CommitmentsTab';
-import { VendorPicker } from './VendorPicker';
+import { VendorPicker, type VendorAdd } from './VendorPicker';
+import { vendorKindFor } from '@/lib/pm/parties/schemas';
 
 type Section = 'lines' | 'changes' | 'receipts' | 'compliance';
 
@@ -178,7 +179,8 @@ function DraftHeader({ row }: { row: CommitmentListRow }) {
   return (
     <div className="mp-form-2">
       <Field label="Vendor">
-        <VendorField value={vendor} onPick={(id, name, pctDefault) => { setVendor({ id, name }); setRet(String(Math.round(pctDefault * 10000) / 100)); void run('vendor', 'post', url, { op: 'update', vendorId: id, retainagePct: pctDefault }, `Vendor set to ${name}`); }} onChange={(v) => setVendor(v)} />
+        <VendorField value={vendor} onPick={(id, name, pctDefault) => { setVendor({ id, name }); setRet(String(Math.round(pctDefault * 10000) / 100)); void run('vendor', 'post', url, { op: 'update', vendorId: id, retainagePct: pctDefault }, `Vendor set to ${name}`); }} onChange={(v) => setVendor(v)}
+          add={{ kind: vendorKindFor(row.commitment_type), companyId: row.location_id }} />
       </Field>
       <Field label="What it covers">
         <Input value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} onBlur={() => title.trim() && title !== row.title && void run('title', 'post', url, { op: 'update', title: title.trim() }, 'Saved the name')} />
@@ -197,8 +199,8 @@ function DraftHeader({ row }: { row: CommitmentListRow }) {
   );
 }
 
-function VendorField({ value, onChange, onPick }: { value: { id: string | null; name: string }; onChange: (v: { id: string | null; name: string }) => void; onPick: (id: string, name: string, retainagePct: number) => void }) {
-  return <VendorPicker value={value} onChange={onChange} onPick={(o) => onPick(o.id, o.name, o.retainagePct)} />;
+function VendorField({ value, onChange, onPick, add }: { value: { id: string | null; name: string }; onChange: (v: { id: string | null; name: string }) => void; onPick: (id: string, name: string, retainagePct: number) => void; add?: VendorAdd }) {
+  return <VendorPicker value={value} onChange={onChange} onPick={(o) => onPick(o.id, o.name, o.retainagePct)} add={add} />;
 }
 
 /** The payment hold, with what it does in Merit Books. */

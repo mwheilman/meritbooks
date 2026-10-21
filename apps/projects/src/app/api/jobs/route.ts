@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { HttpError } from '@/lib/api-errors';
 import { assertCompany, must, route } from '@/lib/api';
+import { createCustomerId } from '@/lib/pm/parties/create';
 
 const Body = z.object({
   companyId: z.string().uuid(),
@@ -15,23 +16,21 @@ const Body = z.object({
 /** Create a job: core.jobs + pm.projects atomically (pm.create_project mints the number). */
 export const POST = route({ body: Body }, async ({ body, db, tenant }) => {
   assertCompany(tenant, body.companyId);
+  // A new customer name becomes a real core.customers row first (owner ruling 2026-10-21:
+  // one shared master; pm.create_customer returns the existing row on an exact name match).
+  const customerId = body.customerId ?? (body.customerName ? await createCustomerId(db, body.customerName, body.companyId) : null);
   const jobId = must(
     await db.schema('pm').rpc('create_project', {
       p_location: body.companyId,
       p_job_type_key: body.jobTypeKey,
       p_name: body.name,
-      p_customer_id: body.customerId ?? null,
+      p_customer_id: customerId,
       p_contract_cents: body.contractCents && body.contractCents > 0 ? body.contractCents : null,
     }),
     'create job',
   ) as string | null;
   if (!jobId) throw new HttpError(500, 'The job was not created. Try again.', 'CREATE_FAILED');
 
-  // A typed customer that is not in Books yet: keep it as the job's provisional customer name
-  // (identity on create; no core.customers row is invented).
-  if (!body.customerId && body.customerName) {
-    must(await db.schema('pm').rpc('set_job_customer', { p_job: jobId, p_customer_id: null, p_customer_name: body.customerName }), 'set customer name');
-  }
   if (body.startDate) {
     must(await db.schema('pm').from('projects').update({ planned_start: body.startDate }).eq('job_id', jobId).select('job_id'), 'set start');
   }

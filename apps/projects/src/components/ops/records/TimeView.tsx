@@ -3,8 +3,9 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Button, Check, ConfirmDialog, Field, InlineNotice, Input, QueueTable, Select, WidgetState, count, shortDate, type QueueColumn,
+  Button, Check, ConfirmDialog, Field, InlineNotice, Input, QueueTable, Select, Tag, WidgetState, count, money, shortDate, type QueueColumn,
 } from '@meritbooks/merit-ui';
+import { TIME_APPROVAL_NOTE, approveBlock, pinnedRateText, sentToBooks } from '@/lib/pm/labor/time';
 import { shiftDay } from '@/lib/pm/ops/dispatch-math';
 import { mondayOf } from '@/lib/pm/ops/week';
 import { APPROVAL_STATE, PAY_TYPE_WORDS, personName } from '@/lib/pm/ops/labels';
@@ -57,8 +58,19 @@ export function TimeView(p: TimeViewProps) {
   const [who, setWho] = useState<string>('');
   const [day, setDay] = useState<string>('');
   const [delEntry, setDelEntry] = useState<TimeEntryRow | null>(null);
+  const [unEntry, setUnEntry] = useState<TimeEntryRow | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set());
   const shown = weekEntries.filter((t) => (!who || keyOf(t) === who) && (!day || t.work_date === day));
   const drafts = shown.filter((t) => t.approval_state === 'DRAFT');
+  const clerkOf = (id: string) => emp.get(id)?.clerk_user_id ?? null;
+  const canApprove = (t: TimeEntryRow) => approveBlock(t, p.meUserId, clerkOf) === null;
+  const approvable = shown.filter(canApprove);
+  const submittedMine = shown.filter((t) => approveBlock(t, p.meUserId, clerkOf) === 'YOURS').length;
+  const approve = async (ids: string[], key: string) => {
+    if (!ids.length) return;
+    const r = await act<{ approved: number }>(key, 'post', '/api/ops/time/approve', { ids }, (d) => `Approved ${count(d.approved)} ${d.approved === 1 ? 'entry' : 'entries'}`);
+    if (r) setSel(new Set());
+  };
   const total = (rs: TimeEntryRow[]) => rs.reduce((s, t) => s + Number(t.hours), 0);
   const go = (w: string) => (p.fixedJobId ? setWeekStart(w) : router.push(`/time?week=${w}`));
 
@@ -73,11 +85,21 @@ export function TimeView(p: TimeViewProps) {
     } },
     { id: 'h', header: 'Hours', numeric: true, width: 72, cell: (t) => hours(Number(t.hours)) },
     { id: 'pt', header: 'Pay', width: 96, cell: (t) => <span className="l2">{PAY_TYPE_WORDS[t.pay_type]}{t.billable ? '' : ' · not billable'}</span> },
-    { id: 'st', header: 'State', width: 120, cell: (t) => <StatusMark mark={APPROVAL_STATE[t.approval_state]} /> },
-    ...(readOnly ? [] : [{ id: 'a', header: <span className="sr">Actions</span>, width: 170, cell: (t: TimeEntryRow) => (
+    { id: 'rate', header: 'Cost rate', numeric: true, width: 112, cell: (t) => {
+      const r = pinnedRateText(t.cost_rate_cents, (c) => money(c));
+      return r
+        ? <span title="Pinned at approval: pay + burden × the pay type. Overhead is never in job cost."><span className="l1" style={{ fontWeight: 400 }}>{r}</span><span className="l2">{money(Math.round(Number(t.hours) * t.cost_rate_cents!))}</span></span>
+        : <span className="l2">at approval</span>;
+    } },
+    { id: 'st', header: 'State', width: 150, cell: (t) => (
+      <span><StatusMark mark={APPROVAL_STATE[t.approval_state]} />{sentToBooks(t) ? <span className="l2">Sent to Merit Books</span> : null}</span>
+    ) },
+    ...(readOnly ? [] : [{ id: 'a', header: <span className="sr">Actions</span>, width: 200, cell: (t: TimeEntryRow) => (
       <div className="btn-row">
         {t.approval_state === 'DRAFT' && <Button variant="quiet" disabled={busy === `t:${t.id}`} onClick={() => void act(`t:${t.id}`, 'patch', `/api/ops/time/${t.id}`, { state: 'submit' }, 'Submitted')}>Submit</Button>}
+        {t.approval_state === 'SUBMITTED' && canApprove(t) && <Button variant="quiet" disabled={busy === `ap:${t.id}`} onClick={() => void approve([t.id], `ap:${t.id}`)}>Approve</Button>}
         {(t.approval_state === 'SUBMITTED' || t.approval_state === 'REJECTED') && <Button variant="quiet" disabled={busy === `t:${t.id}`} onClick={() => void act(`t:${t.id}`, 'patch', `/api/ops/time/${t.id}`, { state: 'recall' }, 'Back to draft')}>Recall</Button>}
+        {t.approval_state === 'APPROVED' && <Button variant="quiet" onClick={() => setUnEntry(t)}>Unapprove</Button>}
         {t.approval_state !== 'APPROVED' && <Button variant="quiet" iconOnly icon="x" aria-label="Delete entry" onClick={() => setDelEntry(t)} />}
       </div>
     ) }]),
@@ -98,7 +120,11 @@ export function TimeView(p: TimeViewProps) {
         )}
       </div>
 
-      <InlineNotice tone="info" title="Approval comes in a later release.">Enter and submit time here. Approving it, which pins the cost and bill rates and sends labor cost to Merit Books, is not built yet; submitted time waits as submitted.</InlineNotice>
+      {shown.some((t) => t.approval_state === 'SUBMITTED') && (
+        <InlineNotice tone="info" title={approvable.length ? `${count(approvable.length)} ${approvable.length === 1 ? 'entry is' : 'entries are'} ready for you to approve.` : 'Submitted time waits for someone else to approve it.'}>
+          {TIME_APPROVAL_NOTE}{submittedMine ? ` ${count(submittedMine)} submitted ${submittedMine === 1 ? 'entry is' : 'entries are'} yours, so another person approves ${submittedMine === 1 ? 'it' : 'them'}.` : ''}
+        </InlineNotice>
+      )}
 
       {people.length > 0 && (
         <div className="mp-table" style={{ overflowX: 'auto' }}>
@@ -132,17 +158,46 @@ export function TimeView(p: TimeViewProps) {
             : { kind: 'done', title: 'Nothing for that person or day', body: 'Clear the filter to see the whole week.' }} />
         ) : (
           <>
-            {!readOnly && drafts.length > 1 && (
+            {!readOnly && (drafts.length > 1 || approvable.length > 0) && (
               <div className="row" style={{ padding: '8px 16px', borderBottom: '1px solid var(--line)', gap: 12 }}>
-                <span className="t-cap">{count(drafts.length)} drafts, {hours(total(drafts))} hours</span>
-                <Button disabled={busy === 'all'} onClick={() => void (async () => { for (const t of drafts) await act('all', 'patch', `/api/ops/time/${t.id}`, { state: 'submit' }, () => null); })()}>Submit all shown</Button>
+                {drafts.length > 1 && (
+                  <>
+                    <span className="t-cap">{count(drafts.length)} drafts, {hours(total(drafts))} hours</span>
+                    <Button disabled={busy === 'all'} onClick={() => void (async () => { for (const t of drafts) await act('all', 'patch', `/api/ops/time/${t.id}`, { state: 'submit' }, () => null); })()}>Submit all shown</Button>
+                  </>
+                )}
+                {approvable.length > 0 && (
+                  <>
+                    <span className="t-cap">{count(approvable.length)} ready to approve, {hours(total(approvable))} hours</span>
+                    <Button variant="primary" disabled={busy === 'approve-all'} onClick={() => void approve(approvable.map((t) => t.id), 'approve-all')}>Approve all shown</Button>
+                  </>
+                )}
               </div>
             )}
-            <QueueTable aria-label="Time entries" columns={columns} rows={shown} getRowId={(t) => t.id} compact rowState={(t) => ({ done: t.approval_state === 'APPROVED' })} hotkeys={false} />
+            <QueueTable aria-label="Time entries" columns={columns} rows={shown} getRowId={(t) => t.id} compact rowState={(t) => ({ done: t.approval_state === 'APPROVED' })} hotkeys={false}
+              selectable={!readOnly && approvable.length > 0} selected={sel} onSelectedChange={setSel}
+              bulkSummary={(rs) => { const ok = rs.filter(canApprove); return [`${count(rs.length)} selected`, `${count(ok.length)} you can approve`, `${hours(total(ok))} hours`]; }}
+              bulkActions={(rs) => { const ok = rs.filter(canApprove); return <Button variant="primary" disabled={!ok.length || busy === 'approve-sel'} onClick={() => void approve(ok.map((t) => t.id), 'approve-sel')}>Approve {count(ok.length)}</Button>; }} />
           </>
         )}
       </div>
 
+      <ConfirmDialog open={!!unEntry} onClose={() => setUnEntry(null)} title="Unapprove this time" confirmLabel="Unapprove"
+        reason={{ label: 'Why?', placeholder: 'Wrong cost code', minLength: 0 }}
+        onConfirm={async (reason) => {
+          if (!unEntry) return;
+          const r = await act<{ reversalSent: boolean }>('unapprove', 'patch', `/api/ops/time/${unEntry.id}`, { state: 'unapprove', reason: reason?.trim() || null },
+            (d) => (d.reversalSent ? 'Unapproved. Merit Books reverses the labor cost' : 'Unapproved'));
+          if (!r) throw new Error('Not unapproved. The reason is shown on the page.');
+        }}>
+        {unEntry ? (
+          <>
+            {hours(Number(unEntry.hours))} hours on {shortDate(unEntry.work_date, p.today)} go back to submitted and the pinned cost rate is cleared, so they can be corrected and approved again.
+            {sentToBooks(unEntry) ? ' Merit Books is told to reverse the labor cost it booked.' : ''}
+            {unEntry.bill_rate_cents != null ? <> <Tag>Bill rate kept</Tag></> : null}
+          </>
+        ) : null}
+      </ConfirmDialog>
       <ConfirmDialog open={!!delEntry} onClose={() => setDelEntry(null)} tone="danger" title="Delete this time" confirmLabel="Delete"
         onConfirm={async () => { if (!delEntry) return; const r = await act('del', 'delete', `/api/ops/time/${delEntry.id}`, undefined, 'Deleted the entry'); if (!r) throw new Error('Not deleted.'); }}>
         {delEntry ? `${hours(Number(delEntry.hours))} hours on ${shortDate(delEntry.work_date, p.today)}.` : null}

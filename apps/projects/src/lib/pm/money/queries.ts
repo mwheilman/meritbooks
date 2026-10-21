@@ -12,7 +12,8 @@ export const ESTIMATE_COLS =
   'id, location_id, job_id, customer_id, number, version, title, status, retainage_pct, valid_until, notes, total_cents, cost_total_cents, ' +
   'supersedes_id, budget_id, sent_at, accepted_at, accepted_by, declined_at, decline_reason, created_by, created_at, updated_at';
 export const ESTIMATE_LINE_COLS =
-  'id, estimate_id, line_no, cost_code_id, description, qty, uom, unit_cost_cents, unit_price_cents, cost_cents, amount_cents, is_allowance, sort, ext';
+  'id, estimate_id, line_no, cost_code_id, description, qty, uom, unit_cost_cents, unit_price_cents, cost_cents, amount_cents, is_allowance, sort, ext, ' +
+  'labor_rate_card_id, labor_hours';
 export const COMMITMENT_COLS =
   'id, location_id, job_id, vendor_id, commitment_type, number, title, description, status, retainage_pct, payment_hold, hold_reason, version, ' +
   'executed_on, approved_by, approved_at, approval, event_id, last_emitted_hold, suppressed_reason, void_reason, created_by, created_at';

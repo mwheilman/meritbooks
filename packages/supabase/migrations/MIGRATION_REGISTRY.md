@@ -48,7 +48,9 @@ Projects migrations sort after all Books migrations, which is safe: `proj` depen
 | 1106 | `1106_pm_selections.sql` | authored — selections + client approvals, procurement items (designer markup), flooring measures, KPIs |
 | 1107 | `1107_pm_development.sql` | authored — units/lots, entitlements, lender draw schedules/draws (G703), in-balance test, KPIs, `pm.v_kpis` |
 
-> **Apply rule for the `pm` chain:** always apply 1100 → 1107 **in order, as a set** (1100 re-baselines grants and guard placeholders; later files re-grant and replace them). PGlite harness: full chain ×2 idempotent (165 fns, 111 relations); suites 121 + 196 + 250 checks green.
+| 1108 | `1108_pm_parties_and_labor.sql` | authored — `pm.create_customer`/`pm.create_vendor` (shared masters, dedupe), labor settings + rate cards (`v_labor_rates`: cost = pay×(1+burden); estimating = cost×(1+overhead)), `approve_time_entries`/`unapprove_time_entry` (+ JOB_TIME when `books_seam_version ≥ 2`) |
+
+> **Apply rule for the `pm` chain:** always apply 1100 → 1108 **in order, as a set** (1100 re-baselines grants and guard placeholders; later files re-grant and replace them). PGlite harness: full chain ×2 idempotent (165 fns, 111 relations); suites 121 + 196 + 250 checks green.
 
 > `1004` (G7) built after `1005`/`1006` — independent, idempotent. Legacy `proj` is frozen; new work goes to `pm` (1100+).
 >

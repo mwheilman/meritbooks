@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { z } from 'zod';
 import { HttpError } from '@/lib/api-errors';
 import { must, route } from '@/lib/api';
+import { createCustomerId } from '@/lib/pm/parties/create';
 import { loadJob } from '@/lib/pm/guarded';
 import { getProject, getJobOverview } from '@/lib/pm/projects';
 
@@ -26,15 +27,11 @@ export const GET = route({}, async ({ db, params }) => {
 export const PATCH = route({ body: Body }, async ({ db, params, body }) => {
   const job = await loadJob(db, params.jobId!);
   if (body.customerId !== undefined || body.customerName !== undefined) {
-    // core.jobs identity is written only through the org-guarded definer pm.set_job_customer (mig 1101)
-    must(
-      await db.schema('pm').rpc('set_job_customer', {
-        p_job: job.job_id,
-        p_customer_id: body.customerId ?? null,
-        p_customer_name: body.customerId ? null : (body.customerName ?? null),
-      }),
-      'set customer',
-    );
+    // core.jobs identity is written only through the org-guarded definer pm.set_job_customer (mig 1101).
+    // A new name becomes a real customer first (pm.create_customer, 1108); the name-only path of
+    // set_job_customer is left for legacy rows and is never written from here.
+    const customerId = body.customerId ?? (body.customerName ? await createCustomerId(db, body.customerName, job.location_id) : null);
+    must(await db.schema('pm').rpc('set_job_customer', { p_job: job.job_id, p_customer_id: customerId, p_customer_name: null }), 'set customer');
   }
   const dates: Record<string, string | null> = {};
   if (body.plannedStart !== undefined) dates.planned_start = body.plannedStart ?? null;

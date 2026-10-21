@@ -26,6 +26,17 @@ const Fields = {
 
 const Body = z.discriminatedUnion('op', [
   z.object({ op: z.literal('add_line'), ...Fields }),
+  // 1108: hours on a labor rate card; the trigger prices it (unit cost = estimating rate,
+  // cost = hours × cost rate, so the budget never carries overhead)
+  z.object({
+    op: z.literal('add_labor_line'),
+    rateCardId: Uuid,
+    hours: Qty,
+    costCodeId: Uuid.nullish(),
+    description: Text200.optional(),
+    unitPriceCents: PosCents.nullish(),
+    isAllowance: z.boolean().optional(),
+  }),
   z.object({ op: z.literal('update_line'), lineId: Uuid, ...Fields }),
   z.object({ op: z.literal('remove_line'), lineId: Uuid }),
 ]);
@@ -45,10 +56,42 @@ export const POST = route({ body: Body }, async ({ db, params, body }) => {
     return { ok: true };
   }
 
+  if (body.op === 'add_labor_line') {
+    const last = one<{ sort: number; line_no: number }>(
+      await pm(db).from('estimate_lines').select('sort, line_no').eq('estimate_id', est.id).order('sort', { ascending: false }).limit(1).maybeSingle(),
+      'last line',
+    );
+    const line = wrote<{ id: string; cost_cents: number | null; amount_cents: number; unit_cost_cents: number | null }>(
+      await pm(db).from('estimate_lines').insert({
+        estimate_id: est.id, sort: (last?.sort ?? -1) + 1, line_no: (last?.line_no ?? 0) + 1,
+        labor_rate_card_id: body.rateCardId, labor_hours: body.hours, cost_code_id: body.costCodeId ?? null,
+        description: body.description ?? '', unit_price_cents: body.unitPriceCents ?? null, is_allowance: body.isAllowance ?? false,
+      }).select('id, cost_cents, amount_cents, unit_cost_cents').single(),
+      'estimate',
+    );
+    return { lineId: line.id, cost_cents: line.cost_cents, amount_cents: line.amount_cents, unit_cost_cents: line.unit_cost_cents };
+  }
+
   const prev = body.op === 'update_line'
     ? one<EstimateLineRow>(await pm(db).from('estimate_lines').select(ESTIMATE_LINE_COLS).eq('id', body.lineId).eq('estimate_id', est.id).maybeSingle(), 'line')
     : null;
   if (body.op === 'update_line' && !prev) throw new HttpError(404, 'That line was not found on this estimate.', 'NOT_FOUND');
+
+  // A labor line is priced by its rate card: hours, price per hour, cost code, words only.
+  if (body.op === 'update_line' && prev?.labor_rate_card_id) {
+    const patch: Record<string, unknown> = {};
+    if (body.qty !== undefined) {
+      if (body.qty == null) throw new HttpError(422, 'A labor line needs its hours.', 'VALIDATION');
+      patch.labor_hours = body.qty;
+    }
+    if (body.unitPriceCents !== undefined) patch.unit_price_cents = body.unitPriceCents ?? null;
+    if (body.costCodeId !== undefined) patch.cost_code_id = body.costCodeId ?? null;
+    if (body.description !== undefined) patch.description = body.description || '';
+    if (body.isAllowance !== undefined) patch.is_allowance = body.isAllowance;
+    if (!Object.keys(patch).length) throw new HttpError(422, 'A labor line’s cost comes from its rate card. Change the hours or the price per hour.', 'VALIDATION');
+    wrote(await pm(db).from('estimate_lines').update(patch).eq('id', prev.id).select('id'), 'estimate');
+    return { lineId: prev.id };
+  }
 
   const pick = <K extends keyof typeof body>(k: K, fallback: unknown) => (body[k] !== undefined ? body[k] : fallback);
   const qty = pick('qty', prev?.qty != null ? String(prev.qty) : null) as string | null;

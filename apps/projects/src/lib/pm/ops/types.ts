@@ -881,8 +881,16 @@ export interface TimeEntryRow {
   approval_state: ApprovalState;
   approved_at: string | null;
   created_by: string | null;
+  /** Pinned at approval (1108): pay + burden × pay-type factor. Never overhead. */
+  cost_rate_cents: number | null;
+  bill_rate_cents: number | null;
+  approved_by: string | null;
+  /** The JOB_TIME event of the current approval; null when not sent to Merit Books. */
+  event_id: string | null;
 }
-export const TIME_COLS = 'id, job_id, employee_id, user_id, work_date, hours, pay_type, cost_code_id, work_order_id, operation_id, billable, notes, approval_state, approved_at, created_by';
+export const TIME_COLS =
+  'id, job_id, employee_id, user_id, work_date, hours, pay_type, cost_code_id, work_order_id, operation_id, billable, notes, approval_state, approved_at, ' +
+  'created_by, cost_rate_cents, bill_rate_cents, approved_by, event_id';
 
 export type LogKind = 'DAILY' | 'INSPECTION' | 'SAFETY' | 'DELIVERY' | 'VISIT';
 

@@ -82,6 +82,4 @@ export function companyName(scope: Scope, id: string | null | undefined): string
   return scope.tenant.companies.find((c) => c.id === id)?.name ?? '';
 }
 
-export function booksUrl(): string {
-  return (process.env.NEXT_PUBLIC_BOOKS_URL || 'https://meritbooks-web.vercel.app').replace(/\/+$/, '');
-}
+export { booksUrl } from '@/lib/books-url';

@@ -3,8 +3,12 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  Button, Check, ConfirmDialog, Field, Input, InlineNotice, KV, MoneyInput, Select, Tag, WidgetState, money, shortDate,
+  Button, Check, ConfirmDialog, Field, Input, InlineNotice, KV, MoneyInput, Seg, Select, Tag, WidgetState, money, shortDate,
 } from '@meritbooks/merit-ui';
+import type { LaborRateRow } from '@/lib/pm/labor/types';
+import { LABOR_COST_RULE, priceLaborLine } from '@/lib/pm/labor/math';
+import { laborBreakdown, laborTooltip, overheadInLines } from '@/lib/pm/labor/estimate';
+import { extendCents } from '@/lib/pm/money/aia';
 import type { CostCodeRow } from '@/lib/pm/types';
 import type { EstimateLineRow, EstimateRow } from '@/lib/pm/money/types';
 import { estimateLineValues } from '@/lib/pm/money/estimate-lines';
@@ -24,6 +28,8 @@ export interface EstimateTabProps {
   contractCents: number;
   budgetCents: number | null;
   booksPresent: boolean;
+  /** Active labor rate cards of the job's company (pm.v_labor_rates, 1108). */
+  rateCards?: LaborRateRow[];
 }
 
 interface AcceptOut { budgetId: string; contractId: string | null; contractCreated: boolean; progressSent: boolean; totalCents: number; costCents: number }
@@ -44,6 +50,8 @@ export function EstimateTab(p0: EstimateTabProps) {
   const sel = p0.estimates.find((e) => e.id === selId) ?? p0.estimates[0] ?? null;
   const lines = useMemo(() => p0.lines.filter((l) => l.estimate_id === sel?.id), [p0.lines, sel?.id]);
   const totals = estimateTotals(lines);
+  const overhead = overheadInLines(lines);
+  const cards = useMemo(() => (p0.rateCards ?? []).filter((r) => r.is_active && r.estimating_rate_cents != null), [p0.rateCards]);
   const codes = useMemo(() => new Map(p0.costCodes.map((c) => [c.id, c])), [p0.costCodes]);
   const open = p0.estimates.some((e) => e.status === 'DRAFT' || e.status === 'SENT');
   const url = sel ? `/api/estimates/${sel.id}` : '';
@@ -146,6 +154,7 @@ export function EstimateTab(p0: EstimateTabProps) {
               { term: 'Price', value: m(totals.sell) },
               { term: 'Cost', value: m(totals.cost) },
               { term: 'Margin', value: `${m(totals.margin)} · ${p(totals.marginPct)}` },
+              ...(overhead > 0 ? [{ term: 'Overhead recovered', value: `${m(overhead)} in labor` }] : []),
             ]} />
             <KV items={[
               { term: 'Allowances in price', value: m(totals.allowances) },
@@ -169,7 +178,8 @@ export function EstimateTab(p0: EstimateTabProps) {
             </InlineNotice>
           )}
 
-          <LinesTable estimateId={sel.id} lines={lines} codes={codes} costCodes={p0.costCodes} editable={draft} />
+          {overhead > 0 && <p className="t-cap">{LABOR_COST_RULE} The cost above is job cost; the {m(overhead)} overhead in labor bids sits in the margin.</p>}
+          <LinesTable estimateId={sel.id} lines={lines} codes={codes} costCodes={p0.costCodes} editable={draft} cards={cards} />
           {sel.status === 'SENT' && !readOnly && (
             <p className="t-cap">Sent estimates are locked. Revise to change the lines; the customer then gets a new version.</p>
           )}
@@ -261,13 +271,14 @@ function preview(d: Draft) {
   return estimateLineValues({ qty, unitCostCents: qty ? d.unit : null, unitPriceCents: null, markupPct: mk, costCents: qty ? null : d.unit, amountCents: null });
 }
 
-function LinesTable({ estimateId, lines, codes, costCodes, editable }: { estimateId: string; lines: EstimateLineRow[]; codes: Map<string, CostCodeRow>; costCodes: CostCodeRow[]; editable: boolean }) {
+function LinesTable({ estimateId, lines, codes, costCodes, editable, cards }: { estimateId: string; lines: EstimateLineRow[]; codes: Map<string, CostCodeRow>; costCodes: CostCodeRow[]; editable: boolean; cards: LaborRateRow[] }) {
   const { run, busy } = useAction();
   const url = `/api/estimates/${estimateId}/lines`;
   const active = costCodes.filter((c) => c.is_active);
   const [d, setD] = useState<Draft>({ ...EMPTY, cc: active[0]?.id ?? '' });
   const [err, setErr] = useState<string | null>(null);
   const [remove, setRemove] = useState<EstimateLineRow | null>(null);
+  const [mode, setMode] = useState<'cost' | 'labor'>('cost');
   const pv = preview(d);
 
   const add = async () => {
@@ -315,7 +326,13 @@ function LinesTable({ estimateId, lines, codes, costCodes, editable }: { estimat
           )}
         </tbody>
       </table>
-      {editable && (
+      {editable && cards.length > 0 && (
+        <div style={{ padding: '12px 16px 0' }}>
+          <Seg<'cost' | 'labor'> aria-label="Line kind" value={mode} onChange={setMode} items={[{ value: 'cost', label: 'Cost line' }, { value: 'labor', label: 'Labor from a rate card' }]} />
+        </div>
+      )}
+      {editable && mode === 'labor' && cards.length > 0 && <LaborLineForm url={url} cards={cards} costCodes={active} />}
+      {editable && mode === 'cost' && (
         <form className="mp-add" onSubmit={(e) => { e.preventDefault(); void add(); }} aria-label="Add a line">
           <Field label="Cost code">
             <Select value={d.cc} onChange={(e) => setD({ ...d, cc: e.target.value })} style={{ width: 200 }}>
@@ -362,6 +379,9 @@ function LineRow({ line, codes, costCodes, editable, onSave, onRemove }: {
   const [unit, setUnit] = useState<number | null>(lump ? line.cost_cents : line.unit_cost_cents);
   const [markup, setMarkup] = useState(pctInput(mk));
   const cc = line.cost_code_id ? codes.get(line.cost_code_id) : null;
+  const labor = line.labor_rate_card_id ? laborBreakdown(line.ext) : null;
+
+  if (labor) return <LaborLineRow line={line} labor={labor} cc={cc ?? null} costCodes={costCodes} editable={editable} onSave={onSave} onRemove={onRemove} />;
 
   if (!editable) {
     return (
@@ -405,6 +425,127 @@ function LineRow({ line, codes, costCodes, editable, onSave, onRemove }: {
           onBlur={() => { const f = parsePct(markup || '0'); if (f != null && f !== (mk ?? 0)) void onSave({ markupPct: f }, 'Saved the markup'); }} />
       </td>
       <td className="n">{m(line.cost_cents)}</td>
+      <td className="n">{m(line.amount_cents)}</td>
+      <td><Check aria-label="Allowance line" checked={line.is_allowance} onChange={(e) => void onSave({ isAllowance: e.target.checked }, e.target.checked ? 'Marked as an allowance' : 'No longer an allowance')} /></td>
+      <td><Button variant="quiet" iconOnly icon="x" aria-label="Remove line" onClick={onRemove} /></td>
+    </tr>
+  );
+}
+
+/** Add hours from a rate card: unit cost = estimating rate; the budget gets hours × cost rate. */
+function LaborLineForm({ url, cards, costCodes }: { url: string; cards: LaborRateRow[]; costCodes: CostCodeRow[] }) {
+  const { run, busy } = useAction();
+  const labor = costCodes.filter((c) => c.cost_type === 'LABOR');
+  const [cardId, setCardId] = useState(cards[0]?.rate_card_id ?? '');
+  const [hours, setHours] = useState('');
+  const [cc, setCc] = useState(labor[0]?.id ?? costCodes[0]?.id ?? '');
+  const [desc, setDesc] = useState('');
+  const [price, setPrice] = useState<number | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const card = cards.find((c) => c.rate_card_id === cardId) ?? null;
+  const h = hours.trim();
+  const okHours = /^\d{1,10}(\.\d{1,4})?$/.test(h);
+  const pl = card && okHours && card.cost_rate_cents != null && card.estimating_rate_cents != null
+    ? priceLaborLine({ costRateCents: card.cost_rate_cents, estimatingRateCents: card.estimating_rate_cents }, h) : null;
+  const perHour = price ?? card?.bill_rate_cents ?? card?.estimating_rate_cents ?? null;
+  const amount = okHours && perHour != null ? extendCents(h, perHour) : null;
+
+  const add = async () => {
+    if (!card) return setErr('Pick a rate card.');
+    if (!okHours || Number(h) <= 0) return setErr('Hours with up to 4 decimals, like 12.5.');
+    setErr(null);
+    const r = await run('add-labor', 'post', url, { op: 'add_labor_line', rateCardId: card.rate_card_id, hours: h, costCodeId: cc || null, description: desc.trim() || undefined, unitPriceCents: price }, `Added ${h} h of ${card.label}`);
+    if (!r.error) { setHours(''); setDesc(''); setPrice(null); }
+  };
+
+  return (
+    <form className="mp-add" onSubmit={(e) => { e.preventDefault(); void add(); }} aria-label="Add a labor line">
+      <Field label="Rate card">
+        <Select value={cardId} onChange={(e) => { setCardId(e.target.value); setPrice(null); }} style={{ width: 200 }}>
+          {cards.map((c) => <option key={c.rate_card_id} value={c.rate_card_id}>{c.label} · {m(c.estimating_rate_cents)}/h</option>)}
+        </Select>
+      </Field>
+      <Field label="Cost code">
+        <Select value={cc} onChange={(e) => setCc(e.target.value)} style={{ width: 200 }}>
+          <option value="">No cost code</option>
+          {costCodes.map((c) => <option key={c.id} value={c.id}>{c.code} · {c.name}</option>)}
+        </Select>
+      </Field>
+      <Field label="Hours"><Input inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="40" style={{ width: 80 }} /></Field>
+      <Field label="Description"><Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={card?.label ?? 'Labor'} maxLength={200} /></Field>
+      <Field label="Price / h" help={card?.bill_rate_cents != null ? 'Blank = the card’s bill rate' : 'Blank = the estimating rate'}>
+        <MoneyInput valueCents={price} onChangeCents={setPrice} placeholder={perHour != null ? (perHour / 100).toFixed(2) : '0.00'} style={{ width: 112 }} />
+      </Field>
+      <Field label="Bid recovers" error={err ?? undefined}>
+        <span className="tnum" style={{ display: 'inline-block', minWidth: 200, lineHeight: '16px', paddingTop: 4 }} title={card ? `Estimating rate ${m(card.estimating_rate_cents)}/h = job cost ${m(card.cost_rate_cents)}/h + overhead ${m(card.overhead_rate_cents)}/h` : undefined}>
+          {pl ? <>{m(pl.estimatingCents)}<span className="l2">job cost {m(pl.costCents)} + overhead {m(pl.overheadCents)}</span></> : '—'}
+        </span>
+      </Field>
+      <Field label="Price"><span className="tnum" style={{ display: 'inline-block', minWidth: 96, lineHeight: '32px' }}>{amount != null ? m(amount) : '—'}</span></Field>
+      <Button type="submit" icon="plus" disabled={busy === 'add-labor'}>Add labor</Button>
+    </form>
+  );
+}
+
+/** A labor line: hours × the card. Unit cost shows the estimating rate with its overhead part. */
+function LaborLineRow({ line, labor, cc, costCodes, editable, onSave, onRemove }: {
+  line: EstimateLineRow; labor: NonNullable<ReturnType<typeof laborBreakdown>>; cc: CostCodeRow | null; costCodes: CostCodeRow[]; editable: boolean;
+  onSave: (patch: Record<string, unknown>, ok: string) => Promise<unknown>; onRemove: () => void;
+}) {
+  const [desc, setDesc] = useState(line.description);
+  const [qty, setQty] = useState(line.qty != null ? String(line.qty) : '');
+  const [price, setPrice] = useState<number | null>(line.unit_price_cents);
+  const tip = laborTooltip(labor, (c) => money(c));
+  const unitCell = (
+    <span title={tip}>
+      <span className="l1" style={{ fontWeight: 400 }}>{m(labor.estimatingRateCents)}</span>
+      <span className="l2">{m(labor.costRateCents)} + {m(labor.overheadRateCents)} overhead</span>
+    </span>
+  );
+  const costCell = (
+    <span title={tip}>
+      <span className="l1" style={{ fontWeight: 400 }}>{m(line.cost_cents)}</span>
+      <span className="l2">+ {m(labor.overheadCents)} overhead in bid</span>
+    </span>
+  );
+  if (!editable) {
+    return (
+      <tr className="q-row">
+        <td>{cc ? <><span className="code">{cc.code}</span> {cc.name}</> : <span className="l2">No cost code</span>}</td>
+        <td><span className="l1" style={{ fontWeight: 400 }}>{line.description}</span><span className="l2"><Tag>Labor</Tag> {labor.label}</span></td>
+        <td className="n">{line.qty ?? '—'}</td>
+        <td>{line.uom ?? 'HR'}</td>
+        <td className="n">{unitCell}</td>
+        <td className="n"><span className="l2">{m(line.unit_price_cents)}/h</span></td>
+        <td className="n">{costCell}</td>
+        <td className="n">{m(line.amount_cents)}</td>
+        <td>{line.is_allowance ? <Tag>Allowance</Tag> : null}</td>
+      </tr>
+    );
+  }
+  return (
+    <tr className="q-row">
+      <td>
+        <Select aria-label="Cost code" value={line.cost_code_id ?? ''} onChange={(e) => void onSave({ costCodeId: e.target.value || null }, 'Changed the cost code')}>
+          <option value="">No cost code</option>
+          {costCodes.filter((c) => c.is_active || c.id === line.cost_code_id).map((c) => <option key={c.id} value={c.id}>{c.code} · {c.name}</option>)}
+        </Select>
+      </td>
+      <td>
+        <Input aria-label="Description" value={desc} maxLength={200} onChange={(e) => setDesc(e.target.value)} onBlur={() => desc !== line.description && void onSave({ description: desc }, 'Saved the description')} />
+        <span className="l2"><Tag>Labor</Tag> {labor.label}</span>
+      </td>
+      <td className="n">
+        <Input aria-label="Hours" inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)}
+          onBlur={() => { const t = qty.trim(); if (t && t !== String(line.qty ?? '') && /^\d{1,10}(\.\d{1,4})?$/.test(t)) void onSave({ qty: t }, 'Saved the hours'); }} />
+      </td>
+      <td>{line.uom ?? 'HR'}</td>
+      <td className="n">{unitCell}</td>
+      <td className="n">
+        <MoneyInput aria-label="Price per hour" valueCents={price} onChangeCents={setPrice}
+          onBlur={() => { if (price != null && price !== line.unit_price_cents) void onSave({ unitPriceCents: price }, 'Saved the price per hour'); }} />
+      </td>
+      <td className="n">{costCell}</td>
       <td className="n">{m(line.amount_cents)}</td>
       <td><Check aria-label="Allowance line" checked={line.is_allowance} onChange={(e) => void onSave({ isAllowance: e.target.checked }, e.target.checked ? 'Marked as an allowance' : 'No longer an allowance')} /></td>
       <td><Button variant="quiet" iconOnly icon="x" aria-label="Remove line" onClick={onRemove} /></td>

@@ -11,11 +11,15 @@ import { CORE_STATUS_WORDS, stageStatus } from '@/lib/pm/stage';
 import { PageLine } from '@/components/common/PageLine';
 import { SettingsIndex, type AreaLink } from '@/components/settings/SettingsIndex';
 import { CostCodesEditor } from '@/components/settings/CostCodesEditor';
+import { LaborRatesEditor } from '@/components/settings/LaborRatesEditor';
+import { getLaborSettings, listEmployeeCards, listLaborRates } from '@/lib/pm/labor/queries';
+import { listEmployees } from '@/lib/pm/ops/field-queries';
+import { personName } from '@/lib/pm/ops/labels';
 import { stamp } from '@/lib/time';
 
 export const metadata: Metadata = { title: 'Settings' };
 
-const AREA_KEYS = ['industry', 'job-types', 'stages', 'modules', 'vocabulary', 'cost-codes', 'team', 'onboarding'] as const;
+const AREA_KEYS = ['industry', 'job-types', 'stages', 'modules', 'vocabulary', 'cost-codes', 'labor', 'team', 'onboarding'] as const;
 type AreaKey = (typeof AREA_KEYS)[number];
 
 export default async function SettingsPage({ searchParams }: { searchParams: { company?: string; area?: string } }) {
@@ -25,14 +29,18 @@ export default async function SettingsPage({ searchParams }: { searchParams: { c
   const installed = scope.installedCompanies;
   const company = installed.find((c) => c.id === searchParams.company) ?? (scope.company && installed.find((c) => c.id === scope.company!.id)) ?? installed[0]!;
   const area: AreaKey = (AREA_KEYS as readonly string[]).includes(searchParams.area ?? '') ? (searchParams.area as AreaKey) : 'industry';
-  const [pack, jobTypes, machines, modules, vocab, codes] = await Promise.all([
+  const [pack, jobTypes, machines, modules, vocab, codes, rates] = await Promise.all([
     getInstalledPack(db, company.id),
     listJobTypes(db, [company.id]),
     listStageMachines(db, company.id),
     getModules(db, company.id),
     getVocabulary(db, company.id),
     listCostCodes(db, company.id, { includeInactive: true }),
+    listLaborRates(db, company.id).catch(() => []),
   ]);
+  const labor = area === 'labor'
+    ? await Promise.all([getLaborSettings(db, company.id), listEmployeeCards(db, company.id), listEmployees(db)])
+    : null;
   const changeHref = `/onboarding?company=${company.id}&mode=change`;
   const href = (k: AreaKey) => `/settings?company=${company.id}&area=${k}`;
   const renamed = (Object.keys(DEFAULT_VOCAB) as VocabKey[]).filter((k) => vocab[k] !== DEFAULT_VOCAB[k]);
@@ -45,6 +53,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: { c
     { key: 'modules', name: 'Modules', desc: 'Which parts of Merit Projects this company uses', status: `${count(modules.length)} on`, href: href('modules') },
     { key: 'vocabulary', name: 'Vocabulary', desc: 'What this company calls jobs, customers and the rest', status: renamed.length ? `${count(renamed.length)} renamed` : 'Standard terms', href: href('vocabulary') },
     { key: 'cost-codes', name: 'Cost codes', desc: 'The library budgets and costs are coded to', status: `${count(codes.filter((c) => c.is_active).length)} active`, href: href('cost-codes') },
+    { key: 'labor', name: 'Labor rates', desc: 'Pay, burden and overhead: job cost versus estimating rates', status: rates.length ? `${count(rates.filter((r) => r.is_active).length)} rate cards` : 'Not set up', attn: rates.length === 0, href: href('labor') },
   ];
   const workspaceAreas: AreaLink[] = [
     { key: 'team', name: 'Team and roles', desc: 'People, roles and access are managed in Merit Books', status: 'In Merit Books', href: href('team') },
@@ -162,6 +171,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: { c
             )}
 
             {area === 'cost-codes' && <CostCodesEditor companyId={company.id} codes={codes} />}
+
+            {area === 'labor' && labor && (
+              <LaborRatesEditor
+                companyId={company.id}
+                settings={labor[0]}
+                rates={rates}
+                employeeCards={labor[1]}
+                employees={labor[2].map((e) => ({ id: e.id, name: personName(e) }))}
+              />
+            )}
 
             {area === 'team' && (
               <WidgetState

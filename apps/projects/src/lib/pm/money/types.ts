@@ -64,6 +64,9 @@ export interface EstimateLineRow {
   is_allowance: boolean;
   sort: number;
   ext: Record<string, unknown>;
+  /** 1108: a labor line priced from a rate card (qty = hours; the trigger prices it). */
+  labor_rate_card_id?: string | null;
+  labor_hours?: number | null;
 }
 
 /** pm.commitments */

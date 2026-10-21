@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { HttpError } from '@/lib/api-errors';
 import { route } from '@/lib/api';
 import { own, write } from '@/lib/pm/ops/rpc';
+import { laborCall } from '@/lib/pm/labor/rpc';
 import { Day, Text, Uuid } from '@/lib/pm/ops/schemas';
 
 const Body = z.object({
@@ -13,8 +14,13 @@ const Body = z.object({
   operationId: Uuid.nullish(),
   billable: z.boolean().optional(),
   notes: Text(1000).nullish(),
-  /** submit: DRAFT → SUBMITTED; recall: SUBMITTED/REJECTED → DRAFT. Approval is a later release. */
-  state: z.enum(['submit', 'recall']).optional(),
+  /**
+   * submit: DRAFT → SUBMITTED; recall: SUBMITTED/REJECTED → DRAFT; unapprove: APPROVED → SUBMITTED
+   * through pm.unapprove_time_entry (1108), which unpins the cost rate and tells Merit Books to
+   * reverse the labor cost when the approval reached it. Approval itself is POST /api/ops/time/approve.
+   */
+  state: z.enum(['submit', 'recall', 'unapprove']).optional(),
+  reason: Text(500).nullish(),
 });
 
 const MAP: Array<[keyof z.infer<typeof Body>, string]> = [
@@ -24,7 +30,11 @@ const MAP: Array<[keyof z.infer<typeof Body>, string]> = [
 
 export const PATCH = route({ body: Body }, async ({ db, params, body }) => {
   const t = await own<{ id: string; approval_state: string }>(db, 'time_entries', 'id, approval_state', { id: params.entryId! }, 'That time entry was not found.');
-  if (t.approval_state === 'APPROVED' || t.approval_state === 'VOID') throw new HttpError(422, 'Approved time is locked.', 'LOCKED');
+  if (body.state === 'unapprove') {
+    const eventId = await laborCall<string | null>(db, 'unapprove_time_entry', { p_id: t.id, p_reason: body.reason || null });
+    return { ok: true, reversalSent: !!eventId };
+  }
+  if (t.approval_state === 'APPROVED' || t.approval_state === 'VOID') throw new HttpError(422, 'Approved time is locked. Unapprove it to change it.', 'LOCKED');
   const patch: Record<string, unknown> = {};
   for (const [k, col] of MAP) if (body[k] !== undefined) patch[col] = body[k] === '' ? null : body[k];
   if (body.state === 'submit') patch.approval_state = 'SUBMITTED';

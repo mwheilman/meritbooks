@@ -23,7 +23,8 @@ const Body = z.object({
 
 /**
  * Time against a job (and a cost code, work order or shop operation). Entries are DRAFT or
- * SUBMITTED; approval pins rates in a later release (no approval function exists yet).
+ * SUBMITTED; someone other than the preparer approves them (POST /api/ops/time/approve), which
+ * pins the cost rate (pay + burden) and sends the hours to Merit Books.
  */
 export const POST = route({ body: Body }, async ({ db, body, tenant, userId }) => {
   const job = await loadJob(db, body.jobId);

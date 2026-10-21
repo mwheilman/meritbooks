@@ -27,6 +27,7 @@ import { ContractTab } from '@/components/job/ContractTab';
 import { LaterTab } from '@/components/job/LaterTab';
 import { ChangeOrderQueue } from '@/components/co/ChangeOrderQueue';
 import { EstimateTab } from '@/components/money/EstimateTab';
+import { listLaborRates } from '@/lib/pm/labor/queries';
 import { CommitmentsTab } from '@/components/money/CommitmentsTab';
 import { BillingTab } from '@/components/money/BillingTab';
 import { JobCostTab } from '@/components/money/JobCostTab';
@@ -158,9 +159,14 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
       />
     );
   } else if (tab.value === 'estimates') {
-    const [bundle, codes] = await Promise.all([getJobEstimates(db, list.job_id), listCostCodes(db, list.location_id, { jobId: list.job_id, includeInactive: true })]);
+    const [bundle, codes, rates] = await Promise.all([
+      getJobEstimates(db, list.job_id),
+      listCostCodes(db, list.location_id, { jobId: list.job_id, includeInactive: true }),
+      listLaborRates(db, list.location_id, { activeOnly: true }).catch(() => []),
+    ]);
     body = (
       <EstimateTab
+        rateCards={rates}
         jobId={list.job_id}
         estimates={bundle.estimates}
         lines={bundle.lines}

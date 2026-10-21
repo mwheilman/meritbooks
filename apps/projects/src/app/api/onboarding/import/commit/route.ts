@@ -10,7 +10,9 @@
  * `_`-prefixed keys (validate_ext passes those through): _source, _source_ref, _source_row,
  * _source_status, _external_id. Re-running the same file skips rows whose _source_ref exists.
  * Customers are matched to existing core.customers by name (link, don't copy); an unmatched
- * name is kept as text on core.jobs.customer_name. Start date / site address go on pm.projects.
+ * name becomes a real core.customers row through pm.create_customer (1108; one shared master,
+ * deduped by the function on an exact case-insensitive name), so no job carries a provisional
+ * customer name. Start date / site address go on pm.projects.
  */
 import { z } from 'zod';
 import { approveDecision } from '@/lib/ai/decisions';
@@ -72,7 +74,20 @@ export async function POST(req: Request) {
         continue;
       }
       const jobTypeKey = typeKeys.has(r.jobTypeKey) ? r.jobTypeKey : types[0].key;
-      const customerId = r.customer ? byName.get(normName(r.customer)) ?? null : null;
+      const notes: string[] = [];
+      let customerId = r.customer ? byName.get(normName(r.customer)) ?? null : null;
+      if (r.customer && r.customer.trim() && !customerId) {
+        const { data: newId, error: cErr } = await pm.rpc('create_customer', { p_name: r.customer.trim(), p_email: null, p_phone: null, p_location: body.companyId, p_contact_first: null, p_contact_last: null });
+        if (cErr || !newId) {
+          const e = dbError(cErr, 'Adding this customer');
+          if (e.code === 'RPC_MISSING') throw e;
+          notes.push(`customer not added (${e.message})`);
+        } else {
+          customerId = newId as string;
+          byName.set(normName(r.customer), customerId);
+          notes.push('added the customer to your customer list');
+        }
+      }
       const ext: Record<string, unknown> = {
         _source: 'onboarding_import',
         _source_ref: r.sourceRef,
@@ -97,16 +112,11 @@ export async function POST(req: Request) {
         continue;
       }
       refs.set(r.sourceRef, jobId as string);
-      const notes: string[] = [];
       if (r.startDate || r.siteAddress) {
         const { error: upErr } = await pm.from('projects')
           .update({ ...(r.startDate ? { planned_start: r.startDate } : {}), ...(r.siteAddress ? { site_address_line1: r.siteAddress } : {}) })
           .eq('job_id', jobId as string);
         if (upErr) notes.push('start date or address not saved');
-      }
-      if (r.customer && !customerId) {
-        const { error: cErr } = await ctx.db.schema('pm').rpc('set_job_customer', { p_job: jobId as string, p_customer_id: null, p_customer_name: r.customer });
-        notes.push(cErr ? 'customer name not saved' : 'customer not in Books yet; kept the name');
       }
       results.push({ rowNumber: r.rowNumber, name: r.name, status: 'created', jobId: jobId as string, message: notes.length ? notes.join('; ') : null });
     }

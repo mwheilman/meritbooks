@@ -5,11 +5,12 @@ import { getDb, getTenant } from '@/lib/tenant';
 import { aiConfigured } from '@/lib/ai/gateway';
 import { companyJobTypes, loadOnboardingState, teamMembers } from '@/lib/onboarding/load';
 import { OnboardingFlow, type FlowProps } from './_components/flow';
+import { booksUrl } from '@/lib/books-url';
 
 export const dynamic = 'force-dynamic';
 
 function booksBase(): string {
-  return (process.env.NEXT_PUBLIC_BOOKS_URL || 'https://meritbooks-web.vercel.app').replace(/\/+$/, '');
+  return booksUrl();
 }
 
 function Calm({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {

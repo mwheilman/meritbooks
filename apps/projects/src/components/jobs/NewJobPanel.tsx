@@ -6,7 +6,7 @@ import { Button, Field, Input, MoneyInput, Panel, PanelSection, Select, api, toa
 import type { JobTypeRow } from '@/lib/pm/types';
 import { useVocab } from '@/components/shell/ShellContext';
 import { lower } from '@/lib/pm/vocab';
-import { CustomerPicker, type CustomerValue } from './CustomerPicker';
+import { CustomerPicker, customerPending, customerPendingMessage, type CustomerValue } from './CustomerPicker';
 
 export interface NewJobPanelProps {
   companies: ReadonlyArray<{ id: string; name: string }>;
@@ -35,6 +35,7 @@ export function NewJobPanel({ companies, defaultCompanyId, jobTypes, onClose }: 
     const next: Errors = {};
     if (!name.trim()) next.name = `Give the ${lower(v.job)} a name.`;
     if (!jobTypeKey) next.jobTypeKey = 'Pick a job type.';
+    if (customerPending(customer)) next.customerName = customerPendingMessage(customer);
     setErrors(next);
     if (Object.keys(next).length) return;
     setBusy(true);
@@ -43,7 +44,6 @@ export function NewJobPanel({ companies, defaultCompanyId, jobTypes, onClose }: 
       jobTypeKey,
       name: name.trim(),
       customerId: customer.id,
-      customerName: customer.id ? null : customer.name.trim() || null,
       contractCents: contract,
       startDate: start || null,
     });
@@ -107,7 +107,7 @@ export function NewJobPanel({ companies, defaultCompanyId, jobTypes, onClose }: 
             <Input data-autofocus autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ankeny clinic remodel" maxLength={120} />
           </Field>
           <Field label={v.customer} error={errors.customerName}>
-            <CustomerPicker value={customer} onChange={setCustomer} companyId={companyId} />
+            <CustomerPicker value={customer} onChange={(c) => { setCustomer(c); if (c.id) setErrors((e) => ({ ...e, customerName: undefined })); }} companyId={companyId} invalid={!!errors.customerName} />
           </Field>
           <div className="mp-form-2">
             <Field label="Contract value" help="Optional. Sent to Merit Books as the contract." error={errors.contractCents}>
