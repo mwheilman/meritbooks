@@ -4,7 +4,11 @@ const nextConfig = {
   experimental: {
     // exceljs (server-side .xlsx reading for TB / budget / AR-AP imports) must load
     // from node_modules at runtime, not be bundled by webpack (Next 14 option name).
-    serverComponentsExternalPackages: ['exceljs'],
+    // @react-pdf/renderer (invoice/statement/report-pack PDFs) loads its standard
+    // fonts by module path at runtime; bundling it broke font resolution in the
+    // serverless function (/api/cron/tick crash, 2026-10-21). Load it from
+    // node_modules instead.
+    serverComponentsExternalPackages: ['exceljs', '@react-pdf/renderer'],
   },
   typescript: {
     ignoreBuildErrors: false,
