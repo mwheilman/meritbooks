@@ -268,10 +268,12 @@ afterAll(async () => {
 
 describe('R-1 capability registry guard (code == core.capabilities)', () => {
   it('every code capability is mirrored exactly, and nothing else is active', async () => {
+    // Scoped to the modules Books owns: projects.* (module 'projects', mirrored by migration 1110
+    // from packages/projects-access) has its own guard test in that package.
     const r = await db.query<{
       key: string; module: string; domain: string; actions: string[]; label: string; tags: string[];
       risk_tier: string; platform_only: boolean; field_classes: string[]; supports_constraints: string[]; status: string;
-    }>(`select * from core.capabilities where status = 'active' order by key`);
+    }>(`select * from core.capabilities where status = 'active' and module in ('books', 'core', 'platform') order by key`);
     const db_ = Object.fromEntries(r.rows.map((x) => [x.key, x]));
     expect(Object.keys(db_).sort()).toEqual(CAPABILITIES.map((c) => c.key).sort());
     for (const c of CAPABILITIES) {

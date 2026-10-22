@@ -11,6 +11,7 @@ import { complianceMark } from '@/lib/pm/money/status';
 import { PageLine } from '@/components/common/PageLine';
 import { PageCrumbs } from '@/components/shell/ShellContext';
 import { SubcontractorsView, type VendorRowView } from '@/components/money/SubcontractorsView';
+import { guardPage } from '@/components/shell/page-guard';
 
 export async function generateMetadata(): Promise<Metadata> {
   const scope = await pageScope();
@@ -22,6 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function SubcontractorsPage() {
   const scope = await pageScope();
   if (!scope) return null;
+  await guardPage('/subcontractors');
   const db = await requireDb();
   const [vocab, jobs, commitments] = await Promise.all([
     getVocabulary(db, scope.company?.id ?? null, scope.companyIds),

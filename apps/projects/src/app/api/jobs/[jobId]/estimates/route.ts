@@ -15,13 +15,13 @@ const Body = z.object({
 });
 
 /** Every estimate version on the job, with lines. */
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.estimates', action: 'view' }, mask: 'estimate' }, async ({ db, params }) => {
   const job = await loadMoneyJob(db, params.jobId!);
   return getJobEstimates(db, job.job_id);
 });
 
 /** A new DRAFT estimate (number minted EST-{short}-{YYYY}-{NNNN} by the trigger; customer = the job's). */
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.estimates', action: 'create' }, mask: 'estimate', body: Body }, async ({ db, params, body }) => {
   const job = await loadMoneyJob(db, params.jobId!);
   assertModule(job, 'estimates', 'estimates');
   const e = wrote<{ id: string; number: string }>(

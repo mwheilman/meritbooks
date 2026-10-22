@@ -11,10 +11,18 @@ export interface ActivityFeedProps {
   /** location_id → company name (workspace feeds). */
   companyNames?: Readonly<Record<string, string>>;
   flush?: boolean;
+  /** Contract-side amounts in the sentences ("Set the contract to 48,000.00"). Off unless the caller holds contract_value. */
+  showMoney?: boolean;
+}
+
+/** Drop every *_cents key so the sentence reads without the amount. */
+function withoutMoney(a: ActivityRow): ActivityRow {
+  if (!a.meta) return a;
+  return { ...a, meta: Object.fromEntries(Object.entries(a.meta).filter(([k]) => !k.endsWith('_cents'))) };
 }
 
 /** The pm.activity feed: one sentence per row, the job and company when it spans many. */
-export function ActivityFeed({ rows, jobLabels, companyNames, flush }: ActivityFeedProps) {
+export function ActivityFeed({ rows, jobLabels, companyNames, flush, showMoney = false }: ActivityFeedProps) {
   return (
     <ul className={flush ? 'feed feed--flush' : 'feed'}>
       {rows.map((a) => {
@@ -23,7 +31,7 @@ export function ActivityFeed({ rows, jobLabels, companyNames, flush }: ActivityF
           <li key={a.id}>
             <span style={{ minWidth: 0 }}>
               <span className="l1" style={{ fontWeight: 400 }}>
-                {activitySentence(a)} {a.actor_type !== 'HUMAN' ? <Tag tone={a.actor_type === 'AI' ? 'ai' : 'default'}>{a.actor_type === 'AI' ? 'AI' : 'System'}</Tag> : null}
+                {activitySentence(showMoney ? a : withoutMoney(a))} {a.actor_type !== 'HUMAN' ? <Tag tone={a.actor_type === 'AI' ? 'ai' : 'default'}>{a.actor_type === 'AI' ? 'AI' : 'System'}</Tag> : null}
               </span>
               {where ? (
                 a.job_id ? (

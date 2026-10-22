@@ -128,7 +128,7 @@ export async function loadRentalsOut(db: SupabaseClient, companyIds: ReadonlyArr
   ]);
   const unit = new Map(util.map((u) => [u.unit_id, u]));
   const custIds = [...new Set(contracts.map((c) => c.customer_id))];
-  const cust = custIds.length ? rows<{ id: string; name: string; display_name: string | null }>(await db.schema('core').from('customers').select('id, name, display_name').in('id', custIds), 'customers') : [];
+  const cust = custIds.length ? rows<{ id: string; name: string; display_name: string | null }>(await db.schema('pm').from('v_core_customers_masked').select('id, name, display_name').in('id', custIds), 'customers') : [];
   const cn = new Map(cust.map((c) => [c.id, c.display_name || c.name]));
   const now = Date.now();
   const items = contracts.map((c): RentalOutItem => {

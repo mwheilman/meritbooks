@@ -14,6 +14,8 @@ import { ChangeOrderQueue } from '@/components/co/ChangeOrderQueue';
 import { CommitmentQueue } from '@/components/money/CommitmentQueue';
 import { BillingQueue, type BillingQueueRowView } from '@/components/money/BillingQueue';
 import { ReviewKinds, type ReviewKind } from '@/components/money/ReviewKinds';
+import { guardPage } from '@/components/shell/page-guard';
+import { holds } from '@/lib/nav';
 
 export const metadata: Metadata = { title: 'To review' };
 
@@ -26,13 +28,19 @@ const KINDS: ReadonlyArray<ReviewKind> = ['change-orders', 'commitments', 'billi
 export default async function ReviewPage({ searchParams }: { searchParams: { kind?: string } }) {
   const scope = await pageScope();
   if (!scope) return null;
+  const { money: mv, access } = await guardPage('/review');
+  const cid = scope.company?.id ?? null;
+  // Each kind shows only to someone who can act on it and see the money it is made of.
+  const seeCos = holds(access, 'projects.change_orders:view', cid);
+  const seeCommitments = mv.cost && holds(access, 'projects.commitments:view', cid);
+  const seeBilling = mv.contract && holds(access, 'projects.billing:view', cid);
   const db = await requireDb();
   const [cos, vocab, modules, drafts, queue, jobs] = await Promise.all([
-    scopedChangeOrders(db, scope, true),
+    seeCos ? scopedChangeOrders(db, scope, true) : Promise.resolve([]),
     getVocabulary(db, scope.company?.id ?? null, scope.companyIds),
     getModulesFor(db, scope.companyIds, scope.installs),
-    scopedCommitments(db, scope, ['DRAFT']),
-    listBillingQueue(db, scope.companyIds),
+    seeCommitments ? scopedCommitments(db, scope, ['DRAFT']) : Promise.resolve([]),
+    seeBilling ? listBillingQueue(db, scope.companyIds) : Promise.resolve([]),
     scopedJobs(db, scope),
   ]);
   const toView = (q: (typeof queue)[number]): BillingQueueRowView | null => {
@@ -50,7 +58,8 @@ export default async function ReviewPage({ searchParams }: { searchParams: { kin
   const depRejected = deposits.filter((d) => d.band === 'rejected');
 
   const showMoney = modules.includes('commitments') || modules.includes('billing') || drafts.length > 0 || queue.length > 0;
-  const kind: ReviewKind = KINDS.includes(searchParams.kind as ReviewKind) ? (searchParams.kind as ReviewKind) : 'change-orders';
+  const allowed: ReviewKind[] = KINDS.filter((k) => (k === 'change-orders' ? seeCos : k === 'commitments' ? seeCommitments : seeBilling));
+  const kind: ReviewKind = allowed.includes(searchParams.kind as ReviewKind) ? (searchParams.kind as ReviewKind) : allowed[0] ?? 'change-orders';
   const total = cos.reduce((s, r) => s + r.amount_cents, 0);
   const where = scope.company?.name ?? `${count(scope.installedCompanies.length)} companies`;
   const waiting = cos.length + drafts.length + billing.length + depRejected.length;
@@ -59,7 +68,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: { kin
   return (
     <>
       <PageLine
-        facts={[where, { label: `${count(waiting)} waiting`, strong: true }, { label: `${money(total)} pending contract change`, tnum: true }, ...(billing.length ? [{ label: `${sum(billing)} ready to bill`, tnum: true }] : [])]}
+        facts={[where, { label: `${count(waiting)} waiting`, strong: true }, ...(mv.contract && seeCos ? [{ label: `${money(total)} pending contract change`, tnum: true }] : []), ...(billing.length ? [{ label: `${sum(billing)} ready to bill`, tnum: true }] : [])]}
         actions={<span className="t-cap">Nothing joins a contract, a commitment or an invoice until someone other than the preparer approves it</span>}
       />
       <Page>
@@ -68,14 +77,14 @@ export default async function ReviewPage({ searchParams }: { searchParams: { kin
           <ReviewKinds
             value={kind}
             items={[
-              { value: 'change-orders', label: vocab.change_orders, count: count(cos.length), caption: `Potential and requested · ${money(total, { decimals: 0 })}` },
-              { value: 'commitments', label: vocab.commitments, count: count(drafts.length), caption: `Drafts to approve · ${money(drafts.reduce((s, d) => s + d.t.committed, 0), { decimals: 0 })}` },
-              { value: 'billing', label: 'Billing to send', count: count(billing.length), caption: `${blocked ? `${count(blocked)} more need a fix · ` : ''}${sum(billing)}` },
-              { value: 'deposits', label: 'Deposits', count: count(depRejected.length), caption: `${count(deposits.length - depRejected.length)} waiting on Merit Books` },
-            ]}
+              { value: 'change-orders' as const, label: vocab.change_orders, count: count(cos.length), caption: mv.contract ? `Potential and requested · ${money(total, { decimals: 0 })}` : 'Potential and requested' },
+              { value: 'commitments' as const, label: vocab.commitments, count: count(drafts.length), caption: `Drafts to approve · ${money(drafts.reduce((s, d) => s + d.t.committed, 0), { decimals: 0 })}` },
+              { value: 'billing' as const, label: 'Billing to send', count: count(billing.length), caption: `${blocked ? `${count(blocked)} more need a fix · ` : ''}${sum(billing)}` },
+              { value: 'deposits' as const, label: 'Deposits', count: count(depRejected.length), caption: `${count(deposits.length - depRejected.length)} waiting on Merit Books` },
+            ].filter((it) => allowed.includes(it.value))}
           />
         )}
-        {kind === 'change-orders' && <ChangeOrderQueue aria-label={`${vocab.change_orders} waiting for approval`} rows={cos} showJob currentUserId={scope.userId} mode="review" />}
+        {kind === 'change-orders' && seeCos && <ChangeOrderQueue aria-label={`${vocab.change_orders} waiting for approval`} rows={cos} showJob currentUserId={scope.userId} mode="review" />}
         {kind === 'commitments' && <CommitmentQueue rows={drafts} currentUserId={scope.userId} showCompany={scope.companyIds.length > 1} mode="review" />}
         {kind === 'billing' && <BillingQueue rows={billing} currentUserId={scope.userId} booksPresent={scope.tenant.booksPresent} showCompany={scope.companyIds.length > 1} only={['ready', 'rejected']} label="Billing to send" />}
         {kind === 'deposits' && <BillingQueue rows={deposits} currentUserId={scope.userId} booksPresent={scope.tenant.booksPresent} showCompany={scope.companyIds.length > 1} only={['rejected', 'sent']} label="Deposit requests" />}

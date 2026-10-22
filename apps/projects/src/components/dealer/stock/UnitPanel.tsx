@@ -15,7 +15,8 @@ import type { UnitDetail } from '@/lib/pm/dealer/unit-queries';
 import { HISTORY_WORDS, WO_STATUS } from '@/lib/pm/ops/labels';
 import type { LookupItem } from '@/lib/pm/ops/types';
 import { stamp } from '@/lib/time';
-import { useShell } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell } from '@/components/shell/ShellContext';
+import { seesMargin } from '@/components/money/visibility';
 import { DetailState, Failure, StatusMark, parseNum } from '@/components/ops/common/bits';
 import { Lookup } from '@/components/ops/common/Lookup';
 import { useStore, useStoreDetail } from '../common/useStore';
@@ -38,6 +39,8 @@ type Mode = 'none' | 'cost' | 'status' | 'transfer' | 'pdi' | 'register';
 export function UnitPanel(p: UnitPanelProps) {
   const router = useRouter();
   const { readOnly } = useShell();
+  // A unit's cost build-up is financials; its retail and advertised prices are what customers see.
+  const mv = useMoneyVis();
   const { act, busy, version, error } = useStore();
   const { data, error: loadError, isLoading, refetch } = useStoreDetail<UnitDetail>(`/api/dealer/units/${p.id}`, version);
   const [mode, setMode] = useState<Mode>('none');
@@ -77,11 +80,11 @@ export function UnitPanel(p: UnitPanelProps) {
       eyebrow={[u.stock_number ?? 'Unit', u.condition ? CONDITION_WORDS[u.condition] : 'Equipment']}
       title={unitTitle(u)}
       meta={[u.serial_number ? `S/N ${u.serial_number}` : null, u.vin ? `VIN ${u.vin}` : null, p.companyNames[u.location_id]].filter(Boolean).join(' · ')}
-      figure={money(u.dealer_cost_cents)}
+      figure={mv.cost ? money(u.dealer_cost_cents) : undefined}
       onClose={p.onClose}
       foot={readOnly ? undefined : (
         <div className="btn-row" style={{ width: '100%' }}>
-          {canCost && <Button onClick={() => setMode(mode === 'cost' ? 'none' : 'cost')}>Add cost</Button>}
+          {canCost && mv.cost && <Button onClick={() => setMode(mode === 'cost' ? 'none' : 'cost')}>Add cost</Button>}
           {moves.length > 0 && <Button onClick={() => setMode(mode === 'status' ? 'none' : 'status')}>Change status</Button>}
           {canTransfer && <Button variant="quiet" onClick={() => setMode(mode === 'transfer' ? 'none' : 'transfer')}>Transfer</Button>}
           <span className="sp" />
@@ -142,7 +145,7 @@ export function UnitPanel(p: UnitPanelProps) {
         )}
       </PanelSection>
 
-      <PanelSection title="Cost build-up" meta={<span className="tnum b">{money(u.dealer_cost_cents)}</span>}>
+      {mv.cost && <PanelSection title="Cost build-up" meta={<span className="tnum b">{money(u.dealer_cost_cents)}</span>}>
         {lifeCosts.length === 0 ? (
           <p className="t-cap">No cost yet. The manufacturer invoice comes with the receipt; add freight, setup and accessories as they land.</p>
         ) : (
@@ -172,7 +175,7 @@ export function UnitPanel(p: UnitPanelProps) {
           {u.books_cost_cents != null && <span>Merit Books cost basis <b className="tnum">{money(u.books_cost_cents)}</b>{u.books_cost_as_of ? ` as of ${shortDate(u.books_cost_as_of.slice(0, 10), p.today)}` : ''}</span>}
           {olderCosts > 0 && <span>{olderCosts} cost row{olderCosts === 1 ? '' : 's'} from an earlier life of this serial</span>}
         </div>
-      </PanelSection>
+      </PanelSection>}
 
       <PricesSection unit={u} readOnly={readOnly} busy={busy} onSave={(patch, label) => void act('edit', 'post', url, { op: 'update', ...patch }, label)} />
 
@@ -345,6 +348,7 @@ function RegisterForm({ today, busy, onCancel, onSubmit }: { today: string; busy
 }
 
 function PricesSection({ unit, readOnly, busy, onSave }: { unit: UnitDetail['unit']; readOnly: boolean; busy: string | null; onSave: (patch: Record<string, unknown>, label: string) => void }) {
+  const mv = useMoneyVis();
   const [retail, setRetail] = useState<number | null>(unit.retail_price_cents);
   const [adv, setAdv] = useState<number | null>(unit.advertised_price_cents);
   const [stockNo, setStockNo] = useState(unit.stock_number ?? '');
@@ -363,7 +367,7 @@ function PricesSection({ unit, readOnly, busy, onSave }: { unit: UnitDetail['uni
       </PanelSection>
     );
   }
-  const margin = (adv ?? retail) != null && unit.dealer_cost_cents ? (adv ?? retail)! - unit.dealer_cost_cents : null;
+  const margin = seesMargin(mv) && (adv ?? retail) != null && unit.dealer_cost_cents ? (adv ?? retail)! - unit.dealer_cost_cents : null;
   return (
     <PanelSection title="Prices and details" meta={margin != null ? <span className={margin < 0 ? 'tnum neg' : 'tnum'}>{money(margin)} over cost</span> : undefined}>
       <div className="mp-form">

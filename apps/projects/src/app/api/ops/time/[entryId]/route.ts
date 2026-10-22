@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { HttpError } from '@/lib/api-errors';
 import { route } from '@/lib/api';
+import { requireCan } from '@/lib/access/guard';
 import { own, write } from '@/lib/pm/ops/rpc';
 import { laborCall } from '@/lib/pm/labor/rpc';
 import { Day, Text, Uuid } from '@/lib/pm/ops/schemas';
@@ -28,9 +29,10 @@ const MAP: Array<[keyof z.infer<typeof Body>, string]> = [
   ['operationId', 'operation_id'], ['billable', 'billable'], ['notes', 'notes'],
 ];
 
-export const PATCH = route({ body: Body }, async ({ db, params, body }) => {
+export const PATCH = route({ access: { cap: 'projects.time', action: 'edit' }, mask: 'time_entry', body: Body }, async ({ db, params, body, access }) => {
   const t = await own<{ id: string; approval_state: string }>(db, 'time_entries', 'id, approval_state', { id: params.entryId! }, 'That time entry was not found.');
   if (body.state === 'unapprove') {
+    requireCan(access, 'projects.time', 'approve');
     const eventId = await laborCall<string | null>(db, 'unapprove_time_entry', { p_id: t.id, p_reason: body.reason || null });
     return { ok: true, reversalSent: !!eventId };
   }
@@ -44,7 +46,7 @@ export const PATCH = route({ body: Body }, async ({ db, params, body }) => {
   return { ok: true };
 });
 
-export const DELETE = route({}, async ({ db, params }) => {
+export const DELETE = route({ access: { cap: 'projects.time', action: 'edit' }, mask: 'time_entry' }, async ({ db, params }) => {
   const t = await own<{ id: string; approval_state: string }>(db, 'time_entries', 'id, approval_state', { id: params.entryId! }, 'That time entry was not found.');
   if (t.approval_state === 'APPROVED') throw new HttpError(422, 'Approved time cannot be deleted.', 'LOCKED');
   await write(db.schema('pm').from('time_entries').delete().eq('id', t.id).select('id'), 'delete time');

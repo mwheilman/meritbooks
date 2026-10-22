@@ -18,7 +18,7 @@ const Body = z.object({
 });
 
 /** A draft warranty claim on a repair order (the OEM as the AR party Books bills). */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.billing', action: 'create' }, mask: 'warranty_claim', body: Body }, async ({ db, body, tenant }) => {
   const wo = await own<{ id: string; job_id: string; location_id: string; asset_id: string | null }>(db, 'work_orders', 'id, job_id, location_id, asset_id', { id: body.workOrderId }, 'That repair order was not found.');
   assertCompany(tenant, wo.location_id);
   const r = await write<Array<{ id: string }>>(

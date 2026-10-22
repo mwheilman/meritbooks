@@ -34,13 +34,13 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('delete') }),
 ]);
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.selections', action: 'view' }, mask: 'selection' }, async ({ db, params }) => {
   const d = await loadSelectionDetail(db, params.selectionId!);
   if (!d) throw new HttpError(404, 'That selection was not found.', 'NOT_FOUND');
   return d;
 });
 
-export const POST = route({ body: Op }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.selections', action: 'edit' }, ops: { approve: { cap: 'projects.selections', action: 'approve' }, reject: { cap: 'projects.selections', action: 'approve' } }, mask: 'selection', body: Op }, async ({ db, params, body }) => {
   const s = await own<{ id: string; status: string }>(db, 'selections', 'id, status', { id: params.selectionId! }, 'That selection was not found.');
   const pm = db.schema('pm');
   switch (body.op) {

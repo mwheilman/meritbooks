@@ -17,7 +17,7 @@ const Body = z.object({
 });
 
 /** Open a counter ticket (pm.open_parts_ticket: number, stock location, tax estimate from store settings). */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'create' }, mask: 'parts_ticket', body: Body }, async ({ db, body, tenant }) => {
   assertCompany(tenant, body.companyId);
   const id = await dcall<string | null>(db, 'open_parts_ticket', {
     p_location: body.companyId, p_customer: body.customerId ?? null, p_stock_location: body.stockLocationId ?? null,

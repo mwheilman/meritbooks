@@ -20,12 +20,12 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('update'), fields: AssetFields.partial() }),
 ]);
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.jobs', action: 'view' } }, async ({ db, params }) => {
   await own(db, 'assets', 'id', { id: params.assetId! }, 'That equipment was not found.');
   return loadAssetHistory(db, params.assetId!);
 });
 
-export const POST = route({ body: Op }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.jobs', action: 'view' }, ops: { service: { cap: 'projects.documents', action: 'create' }, retire: { cap: 'projects.customers', action: 'edit' }, update: { cap: 'projects.customers', action: 'edit' } }, body: Op }, async ({ db, params, body, tenant }) => {
   const a = await own<{ id: string; location_id: string }>(db, 'assets', 'id, location_id', { id: params.assetId! }, 'That equipment was not found.');
   assertCompany(tenant, a.location_id);
   switch (body.op) {

@@ -7,12 +7,14 @@ import { listOpenTasks } from '@/lib/pm/work';
 import { addDays, todayIso } from '@/lib/time';
 import { PageLine } from '@/components/common/PageLine';
 import { ScheduleBoard } from '@/components/schedule/ScheduleBoard';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Schedule' };
 
 export default async function SchedulePage() {
   const scope = await pageScope();
   if (!scope) return null;
+  await guardPage('/schedule');
   const db = await requireDb();
   const [jobs, tasks] = await Promise.all([scopedJobs(db, scope), listOpenTasks(db)]);
   const today = todayIso();

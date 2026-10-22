@@ -9,7 +9,7 @@ const opts = { httpOnly: true, sameSite: 'lax' as const, secure: process.env.NOD
 
 /** Switch the working context: a company, the whole workspace, or the consolidated roll-up. */
 export const POST = route(
-  { body: z.object({ target: z.string().min(1).max(64) }), allowReadOnly: true },
+  { access: 'none', mask: false, body: z.object({ target: z.string().min(1).max(64) }), allowReadOnly: true },
   async ({ body, tenant }) => {
     if (body.target === 'workspace' || body.target === 'consolidated') {
       const res = NextResponse.json({ ok: true, label: body.target === 'workspace' ? `${tenant.orgName ?? 'the workspace'}` : `${tenant.orgName ?? 'Workspace'}, consolidated` });

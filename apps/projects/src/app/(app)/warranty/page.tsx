@@ -9,6 +9,7 @@ import { StoreOff } from '@/components/dealer/common/StoreOff';
 import { WarrantyView } from '@/components/dealer/warranty/WarrantyView';
 import '@/components/ops/ops.css';
 import '@/components/dealer/dealer.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Warranty' };
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ export const dynamic = 'force-dynamic';
 export default async function WarrantyPage({ searchParams }: { searchParams: { band?: string } }) {
   const o = await dealerScope();
   if (!o) return null;
+  const { money: mv } = await guardPage('/warranty');
   if (!o.dealerIds.length) {
     return (
       <>
@@ -34,7 +36,7 @@ export default async function WarrantyPage({ searchParams }: { searchParams: { b
   const band = WARRANTY_BANDS.find((b) => b.value === searchParams.band)?.value ?? null;
   return (
     <>
-      <PageLine facts={[o.where, { label: `${money(owed, { decimals: 0 })} owed by manufacturers`, strong: true, tnum: true }, ...(atRisk ? [`${count(atRisk)} near the filing deadline`] : [])]} />
+      <PageLine facts={[o.where, mv.contract ? { label: `${money(owed, { decimals: 0 })} owed by manufacturers`, strong: true, tnum: true } : { label: 'Warranty claims', strong: true }, ...(atRisk ? [`${count(atRisk)} near the filing deadline`] : [])]} />
       <Page>
         <PageHead eyebrow={o.where} title="Warranty" actions={<ButtonLink variant="quiet" href="/work-orders?view=claims">Claims by repair order</ButtonLink>} />
         <WarrantyView data={data} booksPresent={o.scope.tenant.booksPresent} today={todayIso()} initialBand={band} />

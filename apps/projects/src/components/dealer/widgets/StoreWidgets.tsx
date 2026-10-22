@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useMoneyVis } from '@/components/shell/ShellContext';
+import { seesMargin } from '@/components/money/visibility';
 import { Pip, Widget, count, money, pct } from '@meritbooks/merit-ui';
 import type { AgingData, DeskData, PartsBelowData, RentalsOutData } from '@/lib/pm/dealer/widget-queries';
 import { useDealerWidget, type DealerWidgetPlacement } from './useDealerWidget';
@@ -13,13 +15,14 @@ import '@/components/ops/ops.css';
 
 export function AgedUnitsWidget({ x, y, w = 4, h = 2, companyId, limit = 4 }: DealerWidgetPlacement & { limit?: number }) {
   const { data, error, reload } = useDealerWidget<AgingData>('aging', companyId);
+  const cost = useMoneyVis().cost;
   if (data && !data.applies) return null;
   return (
     <Widget
       x={x} y={y} w={w} h={h}
       title="Units aging over 180 days"
       count={data ? count(data.aged) : undefined}
-      meta={data && data.aged ? `${money(data.agedCostCents, { decimals: 0 })} at cost · of ${count(data.inStock)} in stock` : data ? `of ${count(data.inStock)} in stock` : undefined}
+      meta={data && data.aged && cost ? `${money(data.agedCostCents, { decimals: 0 })} at cost · of ${count(data.inStock)} in stock` : data ? `of ${count(data.inStock)} in stock` : undefined}
       state={
         error ? { kind: 'error', title: 'Aged units did not load', body: error, onRetry: () => void reload(), retryLabel: 'Try again' }
           : !data ? { kind: 'loading', label: 'Aging the lot…', lines: 3 }
@@ -34,7 +37,7 @@ export function AgedUnitsWidget({ x, y, w = 4, h = 2, companyId, limit = 4 }: De
           <li key={u.unitId}>
             <Link href={`/stock?unit=${u.unitId}`}>
               <span className="d">{count(u.days)} days</span>
-              <span className="txt"><span className="l1">{u.stock ?? 'Unit'} · {u.title}</span><span className="l2">{money(u.costCents)} at cost{u.floored ? ' · floored, curtailments accrue' : ''}</span></span>
+              <span className="txt"><span className="l1">{u.stock ?? 'Unit'} · {u.title}</span><span className="l2">{cost ? `${money(u.costCents)} at cost` : 'In stock'}{u.floored ? ' · floored, curtailments accrue' : ''}</span></span>
               <Pip kind={u.days > 365 ? 'overdue' : 'risk'} />
             </Link>
           </li>
@@ -46,7 +49,9 @@ export function AgedUnitsWidget({ x, y, w = 4, h = 2, companyId, limit = 4 }: De
 
 export function DealsToDeskWidget({ x, y, w = 4, h = 2, companyId, limit = 4 }: DealerWidgetPlacement & { limit?: number }) {
   const { data, error, reload } = useDealerWidget<DeskData>('desk', companyId);
-  if (data && !data.applies) return null;
+  // Deal gross needs both sides of the money: without them the widget is not drawn at all.
+  const gross = seesMargin(useMoneyVis());
+  if (!gross || (data && !data.applies)) return null;
   return (
     <Widget
       x={x} y={y} w={w} h={h}

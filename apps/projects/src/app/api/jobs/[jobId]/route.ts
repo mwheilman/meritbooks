@@ -17,14 +17,14 @@ const Body = z
   })
   .refine((b) => Object.values(b).some((v) => v !== undefined), 'Nothing to change');
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.jobs', action: 'view' }, mask: 'job' }, async ({ db, params }) => {
   const job = await getProject(db, params.jobId!);
   if (!job) throw new HttpError(404, 'That job was not found in this workspace.', 'NOT_FOUND');
   return { job, overview: await getJobOverview(db, params.jobId!) };
 });
 
 /** Edit the job's customer (identity, Core-owned column) and planned dates (pm.projects). */
-export const PATCH = route({ body: Body }, async ({ db, params, body }) => {
+export const PATCH = route({ access: { cap: 'projects.jobs', action: 'edit' }, mask: 'job', body: Body }, async ({ db, params, body }) => {
   const job = await loadJob(db, params.jobId!);
   if (body.customerId !== undefined || body.customerName !== undefined) {
     // core.jobs identity is written only through the org-guarded definer pm.set_job_customer (mig 1101).

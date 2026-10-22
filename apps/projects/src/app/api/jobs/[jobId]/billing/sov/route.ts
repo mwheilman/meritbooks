@@ -31,7 +31,7 @@ const Body = z.discriminatedUnion('op', [
  * ACTIVE lines), activate_sov_version checks the total against the revised contract,
  * revise_sov copies lines with the same lineage so billed-to-date carries over.
  */
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.billing', action: 'edit' }, mask: 'billing', body: Body }, async ({ db, params, body }) => {
   const job = await loadMoneyJob(db, params.jobId!);
   assertMode(job, 'sov');
   const p = pm(db);

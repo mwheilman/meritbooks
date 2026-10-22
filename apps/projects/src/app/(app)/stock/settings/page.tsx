@@ -8,6 +8,7 @@ import { StoreOff } from '@/components/dealer/common/StoreOff';
 import { StoreSettings } from '@/components/dealer/settings/StoreSettings';
 import '@/components/ops/ops.css';
 import '@/components/dealer/dealer.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Store settings' };
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,7 @@ export const dynamic = 'force-dynamic';
 export default async function StoreSettingsPage() {
   const o = await dealerScope();
   if (!o) return null;
+  await guardPage('/stock/settings');
   if (!o.dealerIds.length) {
     return (
       <>

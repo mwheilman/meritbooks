@@ -10,7 +10,8 @@ import { AGREEMENT_STATUS, WO_STATUS } from '@/lib/pm/ops/labels';
 import type { AgreementRow, LookupItem, WorkOrderRow } from '@/lib/pm/ops/types';
 import type { AgreementList } from '@/lib/pm/ops/field-queries';
 import type { JobOption } from '@/lib/pm/ops/scope';
-import { useShell, useVocab } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell, useVocab } from '@/components/shell/ShellContext';
+import { when } from '@/components/money/visibility';
 import { lower } from '@/lib/pm/vocab';
 import { Failure, JobSelect, PctInput, StatusMark, parseNum } from '../common/bits';
 import { Lookup } from '../common/Lookup';
@@ -50,6 +51,8 @@ export function bandOf(a: AgreementRow, today: string): Band {
 
 export function AgreementsView(p: AgreementsViewProps) {
   const { readOnly } = useShell();
+  // The agreement price is what the customer pays: contract-side money.
+  const mv = useMoneyVis();
   const [band, setBand] = useState<Band>('active');
   const [cursor, setCursor] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -76,7 +79,7 @@ export function AgreementsView(p: AgreementsViewProps) {
         return <><span className="l1 tnum">{count(done)} of {count(a.visits_per_term ?? vs.length)} done</span><span className={late ? 'l2 neg b' : 'l2'}>{late ? `${count(late)} overdue` : vs.length ? `${count(vs.length)} generated` : 'None generated'}</span></>;
       },
     },
-    { id: 'price', header: 'Price', numeric: true, width: 140, cell: (a) => <><span className="l1">{money(a.price_cents)}</span><span className="l2">{BILLING[a.billing_frequency]}</span></> },
+    ...when<QueueColumn<AgreementRow>>(mv.contract, { id: 'price', header: 'Price', numeric: true, width: 140, cell: (a) => <><span className="l1">{money(a.price_cents)}</span><span className="l2">{BILLING[a.billing_frequency]}</span></> }),
     { id: 'st', header: 'Status', width: 120, cell: (a) => <StatusMark mark={AGREEMENT_STATUS[a.status]} /> },
   ];
 
@@ -110,7 +113,7 @@ export function AgreementsView(p: AgreementsViewProps) {
             value={band}
             onChange={setBand}
             items={[
-              { value: 'active', label: 'Active', count: count(byBand('active').length), caption: money(byBand('active').reduce((s, a) => s + a.price_cents, 0)) + ' per billing period' },
+              { value: 'active', label: 'Active', count: count(byBand('active').length), caption: mv.contract ? money(byBand('active').reduce((s, a) => s + a.price_cents, 0)) + ' per billing period' : 'In effect' },
               { value: 'renew', label: 'Ending in 60 days', count: count(byBand('renew').length), caption: 'Renew before they lapse' },
               { value: 'draft', label: 'Draft', count: count(byBand('draft').length), caption: 'Not active yet' },
               { value: 'ended', label: 'Ended', count: count(byBand('ended').length), caption: 'Renewed, expired or cancelled' },
@@ -145,6 +148,7 @@ export function AgreementsView(p: AgreementsViewProps) {
 function AgreementPanel({ a, visits, assets, customer, today, onClose }: { a: AgreementRow; visits: Visit[]; assets: Array<{ id: string; label: string }>; customer: string; today: string; onClose: () => void }) {
   const { readOnly } = useShell();
   const v = useVocab();
+  const mv = useMoneyVis();
   const { act, busy, error } = useOps();
   const url = `/api/ops/agreements/${a.id}`;
   const [horizon, setHorizon] = useState('365');
@@ -158,7 +162,7 @@ function AgreementPanel({ a, visits, assets, customer, today, onClose }: { a: Ag
     <Panel
       eyebrow={[a.number ?? 'Agreement', AGREEMENT_STATUS[a.status].word]}
       title={a.plan_name}
-      meta={`${customer} · ${money(a.price_cents)} ${BILLING[a.billing_frequency]}`}
+      meta={mv.contract ? `${customer} · ${money(a.price_cents)} ${BILLING[a.billing_frequency]}` : `${customer} · billed ${BILLING[a.billing_frequency]}`}
       onClose={onClose}
       foot={readOnly ? undefined : (
         <div className="btn-row" style={{ width: '100%' }}>
@@ -187,7 +191,7 @@ function AgreementPanel({ a, visits, assets, customer, today, onClose }: { a: Ag
         <PanelSection title="Renew">
           <form className="mp-form" onSubmit={(e) => { e.preventDefault(); void act('renew', 'post', url, { op: 'renew', priceCents: renewPrice }, `Renewed ${a.number}`).then((r) => { if (r) setRenewing(false); }); }}>
             <p className="t-cap">The next term starts {shortDate(a.ends_on, today)} and runs the same length. Covered equipment carries over.</p>
-            <Field label="New price" help="Blank keeps the current price"><MoneyInput valueCents={renewPrice} onChangeCents={setRenewPrice} placeholder={money(a.price_cents)} /></Field>
+            {mv.contract && <Field label="New price" help="Blank keeps the current price"><MoneyInput valueCents={renewPrice} onChangeCents={setRenewPrice} placeholder={money(a.price_cents)} /></Field>}
             <div className="btn-row"><Button onClick={() => setRenewing(false)}>Back</Button><Button type="submit" variant="primary" disabled={busy === 'renew'}>Renew</Button></div>
           </form>
         </PanelSection>
@@ -257,6 +261,7 @@ function AgreementPanel({ a, visits, assets, customer, today, onClose }: { a: Ag
 
 function NewAgreementPanel({ jobs, today, fixedJobId, onClose, onCreated }: { jobs: JobOption[]; today: string; fixedJobId?: string | null; onClose: () => void; onCreated: (id: string) => void }) {
   const v = useVocab();
+  const mv = useMoneyVis();
   const { act, busy, error } = useOps();
   const [jobId, setJobId] = useState(fixedJobId ?? '');
   const job = jobs.find((j) => j.id === jobId) ?? null;
@@ -317,7 +322,7 @@ function NewAgreementPanel({ jobs, today, fixedJobId, onClose, onCreated }: { jo
             <Field label="Minutes a visit"><Input inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value)} /></Field>
           </div>
           <div className="mp-form-2">
-            <Field label="Price"><MoneyInput valueCents={price} onChangeCents={setPrice} placeholder="0.00" /></Field>
+            {mv.contract && <Field label="Price"><MoneyInput valueCents={price} onChangeCents={setPrice} placeholder="0.00" /></Field>}
             <Field label="Billed"><Select value={billing} onChange={(e) => setBilling(e.target.value as AgreementRow['billing_frequency'])}><option value="ANNUAL">Yearly</option><option value="MONTHLY">Monthly</option><option value="QUARTERLY">Quarterly</option><option value="UPFRONT">Up front</option></Select></Field>
           </div>
           <Field label="Member discount on repairs"><PctInput value={discount} onChange={setDiscount} placeholder="15" /></Field>

@@ -13,7 +13,7 @@ const Query = z.object({ companyId: z.string().uuid(), pn: z.string().max(40).de
  * Counter lookup: the keyed number's matches, each followed through supersession to the number the
  * ticket sells, with on-hand by bin; prefix suggestions when nothing matches exactly.
  */
-export const GET = route({ query: Query }, async ({ db, query, tenant }) => {
+export const GET = route({ access: { cap: 'projects.store', action: 'view' }, mask: 'part', query: Query }, async ({ db, query, tenant }) => {
   assertCompany(tenant, query.companyId);
   return counterSearch(db, query.companyId, query.pn);
 });
@@ -33,7 +33,7 @@ const Body = z.object({
 });
 
 /** Add a part, or update it when the number is already in the catalog (pm.upsert_part; a new part gets its core.items identity). */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'create' }, mask: 'part', body: Body }, async ({ db, body, tenant }) => {
   assertCompany(tenant, body.companyId);
   const id = await dcall<string | null>(db, 'upsert_part', {
     p_location: body.companyId, p_part_number: body.partNumber, p_description: body.description || null,

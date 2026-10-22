@@ -15,7 +15,7 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('delete') }),
 ]);
 
-export const POST = route({ body: Op }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.customers', action: 'edit' }, mask: 'agreement', body: Op }, async ({ db, params, body, tenant }) => {
   const a = await own<{ id: string; location_id: string; status: string }>(db, 'service_agreements', 'id, location_id, status', { id: params.agreementId! }, 'That agreement was not found.');
   assertCompany(tenant, a.location_id);
   const pm = db.schema('pm');

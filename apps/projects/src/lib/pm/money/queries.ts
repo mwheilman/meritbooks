@@ -81,7 +81,7 @@ export interface EstimateBundle {
 }
 
 export async function listEstimates(db: SupabaseClient, f: { jobId?: string; companyIds?: ReadonlyArray<string> }, limit = 500): Promise<EstimateRow[]> {
-  let q = pm(db).from('estimates').select(ESTIMATE_COLS);
+  let q = pm(db).from('v_estimates_masked').select(ESTIMATE_COLS);
   if (f.jobId) q = q.eq('job_id', f.jobId);
   if (f.companyIds?.length) q = q.in('location_id', [...f.companyIds]);
   return rows<EstimateRow>(await q.order('number', { ascending: false }).order('version', { ascending: false }).limit(limit), 'estimates');
@@ -91,7 +91,7 @@ export async function getJobEstimates(db: SupabaseClient, jobId: string): Promis
   const estimates = await listEstimates(db, { jobId });
   if (!estimates.length) return { estimates, lines: [] };
   const lines = rows<EstimateLineRow>(
-    await pm(db).from('estimate_lines').select(ESTIMATE_LINE_COLS).in('estimate_id', estimates.map((e) => e.id)).order('sort').order('line_no'),
+    await pm(db).from('v_estimate_lines_masked').select(ESTIMATE_LINE_COLS).in('estimate_id', estimates.map((e) => e.id)).order('sort').order('line_no'),
     'estimate lines',
   );
   return { estimates, lines };
@@ -133,7 +133,7 @@ export async function listCommitmentStatus(db: SupabaseClient, f: { jobId?: stri
 export async function vendorNames(db: SupabaseClient, vendorIds: ReadonlyArray<string | null>): Promise<Record<string, string>> {
   const list = ids(vendorIds.filter((v): v is string => !!v));
   if (!list.length) return {};
-  const vs = rows<Pick<VendorRow, 'id' | 'name' | 'display_name'>>(await core(db).from('vendors').select('id, name, display_name').in('id', list), 'vendor names');
+  const vs = rows<Pick<VendorRow, 'id' | 'name' | 'display_name'>>(await pm(db).from('v_core_vendors_masked').select('id, name, display_name').in('id', list), 'vendor names');
   return Object.fromEntries(vs.map((v) => [v.id, v.display_name || v.name]));
 }
 
@@ -157,13 +157,13 @@ export async function getJobCommitments(db: SupabaseClient, jobId: string): Prom
 
 export async function searchVendors(db: SupabaseClient, q: string, limit = 8): Promise<VendorRow[]> {
   const term = cleanSearch(q);
-  let query = core(db).from('vendors').select(VENDOR_COLS).eq('is_active', true);
+  let query = pm(db).from('v_core_vendors_masked').select(VENDOR_COLS).eq('is_active', true);
   if (term) query = query.or(`name.ilike.*${term}*,display_name.ilike.*${term}*`);
   return rows<VendorRow>(await query.order('name').limit(limit), 'vendors');
 }
 
 export async function getVendor(db: SupabaseClient, id: string): Promise<VendorRow | null> {
-  return one<VendorRow>(await core(db).from('vendors').select(VENDOR_COLS).eq('id', id).maybeSingle(), 'vendor');
+  return one<VendorRow>(await pm(db).from('v_core_vendors_masked').select(VENDOR_COLS).eq('id', id).maybeSingle(), 'vendor');
 }
 
 export async function listComplianceForVendors(db: SupabaseClient, vendorIds: ReadonlyArray<string>): Promise<ComplianceDocRow[]> {
@@ -200,8 +200,8 @@ export async function getJobBilling(db: SupabaseClient, jobId: string): Promise<
     pm(db).from('v_sov_status').select(SOV_STATUS_COLS).eq('job_id', jobId).eq('sov_status', 'ACTIVE').order('line_no').then((r) => rows<SovStatusRow>(r, 'SOV status')),
     pm(db).from('deposit_requests').select(DEPOSIT_COLS).eq('job_id', jobId).order('created_at', { ascending: false }).then((r) => rows<DepositRow>(r, 'deposits')),
     pm(db).from('allowances').select(ALLOWANCE_COLS).eq('job_id', jobId).order('description').then((r) => rows<AllowanceRow>(r, 'allowances')),
-    pm(db).from('tasks').select('id, title, status, is_milestone, due_on, completed_at, billing_amount_cents, billing_pct').eq('job_id', jobId).eq('is_milestone', true).order('sort').then((r) => rows<MilestoneTaskRow>(r, 'milestones')),
-    pm(db).from('wbs_nodes').select('id, name, kind, pct_complete, billing_amount_cents, billing_pct').eq('job_id', jobId).eq('kind', 'MILESTONE').order('sort').then((r) => rows<MilestoneWbsRow>(r, 'WBS milestones')),
+    pm(db).from('v_tasks_masked').select('id, title, status, is_milestone, due_on, completed_at, billing_amount_cents, billing_pct').eq('job_id', jobId).eq('is_milestone', true).order('sort').then((r) => rows<MilestoneTaskRow>(r, 'milestones')),
+    pm(db).from('v_wbs_nodes_masked').select('id, name, kind, pct_complete, billing_amount_cents, billing_pct').eq('job_id', jobId).eq('kind', 'MILESTONE').order('sort').then((r) => rows<MilestoneWbsRow>(r, 'WBS milestones')),
     pm(db).from('v_job_retainage').select('org_id, job_id, held_cents, released_cents, outstanding_cents').eq('job_id', jobId).maybeSingle().then((r) => one<JobRetainageRow>(r, 'retainage')),
     pm(db).from('v_job_financials').select(FIN_COLS).eq('job_id', jobId).maybeSingle().then((r) => one<JobFinancialsRow>(r, 'job financials')),
   ]);

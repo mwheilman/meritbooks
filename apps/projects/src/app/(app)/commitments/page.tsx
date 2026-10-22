@@ -8,6 +8,7 @@ import { scopedCommitments } from '@/lib/pm/money/scoped';
 import { PageLine } from '@/components/common/PageLine';
 import { PageCrumbs } from '@/components/shell/ShellContext';
 import { CommitmentQueue } from '@/components/money/CommitmentQueue';
+import { guardPage } from '@/components/shell/page-guard';
 
 export async function generateMetadata(): Promise<Metadata> {
   const scope = await pageScope();
@@ -19,6 +20,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function CommitmentsPage() {
   const scope = await pageScope();
   if (!scope) return null;
+  await guardPage('/commitments');
   const db = await requireDb();
   const [vocab, rows] = await Promise.all([getVocabulary(db, scope.company?.id ?? null, scope.companyIds), scopedCommitments(db, scope)]);
   const open = rows.filter((r) => r.status === 'APPROVED' || r.status === 'EXECUTED');

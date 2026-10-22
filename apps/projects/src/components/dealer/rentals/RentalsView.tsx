@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Check, ConfirmDialog, Field, Figure, Input, KV, MoneyInput, Panel, PanelSection, Seg, Select, Textarea, WidgetState, api, count, money, pct,
-  shortDate, useDebounce,
+  Button, Check, ConfirmDialog, Field, Figure, Input, KV, MoneyInput, Panel, PanelSection, Seg, Select, Textarea, WidgetState, api, count, pct, shortDate, useDebounce,
 } from '@meritbooks/merit-ui';
+import { useSellText } from '@/components/money/useMoneyText';
 import { RENTAL_STATUS } from '@/lib/pm/dealer/labels';
 import { chargeWords, parseRange, pickRentalRate, utilization } from '@/lib/pm/dealer/math';
 import type { FleetUnit, RentalBoard } from '@/lib/pm/dealer/store-queries';
@@ -49,6 +49,7 @@ function when(iso: string | null): string {
 
 /** The rental fleet: a reservation calendar, check-out and check-in with meter and condition, cycle and final billing. */
 export function RentalsView(p: RentalsViewProps) {
+  const money = useSellText();
   const { readOnly } = useShell();
   const [view, setView] = useState<View>(p.initialView);
   const [cursor, setCursor] = useState<string | null>(p.focusContractId);
@@ -204,6 +205,7 @@ function usePreview(params: Record<string, string | null | undefined> | null) {
 }
 
 function ChargeLines({ preview, feesLabel }: { preview: Preview | null; feesLabel?: string }) {
+  const money = useSellText();
   if (!preview?.charge) return null;
   const c = preview.charge;
   const total = Number(c.rental_cents) + preview.waiverCents + preview.feesCents;
@@ -265,6 +267,7 @@ function ReservePanel({ fleet, rates, unitId: u0, start: s0, companyId, onClose,
 }
 
 function ContractPanel({ c, unit, customer, billings, onClose }: { c: RentalContractRow; unit: FleetUnit | null; customer: string | null; billings: RentalBoard['billings']; onClose: () => void }) {
+  const money = useSellText();
   const { readOnly } = useShell();
   const { act, busy, error } = useStore();
   const url = `/api/dealer/rentals/${c.id}`;
@@ -371,6 +374,7 @@ function ContractPanel({ c, unit, customer, billings, onClose }: { c: RentalCont
 }
 
 function RatesView({ rates, fleet, companyId }: { rates: RentalRateRow[]; fleet: FleetUnit[]; companyId: string | null }) {
+  const money = useSellText();
   const { readOnly } = useShell();
   const { act, busy, error } = useStore();
   const [scope, setScope] = useState<'default' | 'unit' | 'model' | 'category'>('category');

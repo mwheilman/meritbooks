@@ -18,7 +18,7 @@ const Body = z.object({
 }).refine((b) => (b.qty != null && Number(b.qty) > 0) || (b.amountCents != null && b.amountCents > 0), { message: 'Enter the quantity or the amount received.', path: ['qty'] });
 
 /** pm.record_receipt: goods or work received on a line; re-sends the commitment with received to date. */
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.commitments', action: 'edit' }, mask: 'commitment', body: Body }, async ({ db, params, body }) => {
   const c = await loadCommitment(db, params.commitmentId!);
   const line = one<{ id: string }>(await pm(db).from('commitment_lines').select('id').eq('id', body.lineId).eq('commitment_id', c.id).maybeSingle(), 'line');
   if (!line) throw new HttpError(404, 'That line was not found on this commitment.', 'NOT_FOUND');

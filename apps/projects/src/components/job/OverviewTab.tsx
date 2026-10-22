@@ -6,7 +6,8 @@ import type { JobOverviewRow, ProjectListRow, TaskRow, ActivityRow } from '@/lib
 import { dollars } from '@/lib/pm/money';
 import { taskStatus } from '@/lib/pm/stage';
 import { ActivityFeed } from '@/components/common/ActivityFeed';
-import { useVocab } from '@/components/shell/ShellContext';
+import { useMoneyVis, useVocab } from '@/components/shell/ShellContext';
+import { seesMargin, when } from '@/components/money/visibility';
 import { lower } from '@/lib/pm/vocab';
 import { JobDetails, type JobDetailsProps } from './JobDetails';
 
@@ -22,29 +23,40 @@ export interface OverviewTabProps {
 
 export function OverviewTab({ job, overview: o, tasks, activity, today, details, hasSchedule }: OverviewTabProps) {
   const v = useVocab();
+  const mv = useMoneyVis();
   const base = `/jobs/${job.job_id}`;
   const contract = o?.revised_contract_cents ?? job.contract_revised_cents;
   const est = o?.cost_estimate_cents ?? job.cost_estimate_cents;
   const margin = o?.projected_margin_cents ?? contract - est;
   const mf = ratio(margin, contract);
+  // Money figures follow the caller's grants at this job's company; with none, the same slots
+  // carry hours-and-counts facts instead (spec §2.3: level ≤ 2 sees no dollars).
+  const openTasks = tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED').length;
+  const figures = [
+    ...when(mv.contract,
+      <Figure key="c" dense label="Revised contract" value={dollars(contract)} vs={[`${dollars(o?.original_contract_cents ?? job.original_contract_cents)} original`, `${money(o?.approved_co_cents ?? job.approved_co_cents, { decimals: 0, sign: 'delta' })} approved changes`]} href={`${base}?tab=contract`} linkLabel="Contract" />),
+    ...when(mv.cost,
+      <Figure key="e" dense label="Cost estimate" value={dollars(est)} vs={[o?.budget_revised_cents != null ? `${dollars(o.budget_original_cents)} original budget` : o?.budget_original_cents != null ? 'From the original budget' : 'No budget yet']} href={`${base}?tab=budget`} linkLabel="Budget" />),
+    ...when(seesMargin(mv),
+      <Figure key="m" dense label="Projected margin" value={Number.isFinite(mf) ? pct(mf) : '—'} vs={[`${dollars(margin)} on contract`, contract > 0 ? (margin < 0 ? 'Cost is over contract' : 'Before indirect cost') : 'Set a contract to see margin']} href={`${base}?tab=budget`} linkLabel="Budget by cost code" />),
+    mv.contract
+      ? <Figure key="p" dense label={`Pending ${lower(v.change_orders)}`} value={dollars(o?.pending_co_cents ?? job.pending_co_cents)} vs={[`${count(o?.pending_co_count ?? 0)} open`, 'Not in contract until approved']} href={`${base}?tab=change-orders`} linkLabel={v.change_orders} />
+      : <Figure key="p" dense label={`Pending ${lower(v.change_orders)}`} value={count(o?.pending_co_count ?? 0)} vs={['Open', 'Not in contract until approved']} href={`${base}?tab=change-orders`} linkLabel={v.change_orders} />,
+    ...when(!mv.cost && !mv.contract,
+      <Figure key="t" dense label="Open tasks" value={count(openTasks)} vs={[`${count(o?.tasks_overdue ?? 0)} overdue`, hasSchedule ? 'On the schedule' : 'No schedule on this job']} href={`${base}?tab=schedule`} linkLabel="Schedule" />,
+      <Figure key="s" dense label="Stage" value={job.stage_label ?? job.stage_key} vs={[job.job_type_label]} href={`${base}?tab=activity`} linkLabel="Activity" />),
+  ];
   const upcoming = tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED').sort((a, b) => (a.due_on ?? '9999').localeCompare(b.due_on ?? '9999')).slice(0, 4);
 
   return (
     <div className="dash" style={{ gridAutoFlow: 'row' }}>
-      <Widget primary w={8} h={2} x={1} y={1} title="Key figures" meta="In US dollars" pad>
+      <Widget primary w={8} h={2} x={1} y={1} title="Key figures" meta={mv.cost || mv.contract ? 'In US dollars' : 'Hours and counts'} pad>
         <div className="grid-12" style={{ rowGap: 16 }}>
-          <div style={{ gridColumn: 'span 3' }}>
-            <Figure dense label="Revised contract" value={dollars(contract)} vs={[`${dollars(o?.original_contract_cents ?? job.original_contract_cents)} original`, `${money(o?.approved_co_cents ?? job.approved_co_cents, { decimals: 0, sign: 'delta' })} approved changes`]} href={`${base}?tab=contract`} linkLabel="Contract" />
-          </div>
-          <div style={{ gridColumn: 'span 3' }}>
-            <Figure dense label="Cost estimate" value={dollars(est)} vs={[o?.budget_revised_cents != null ? `${dollars(o.budget_original_cents)} original budget` : o?.budget_original_cents != null ? 'From the original budget' : 'No budget yet']} href={`${base}?tab=budget`} linkLabel="Budget" />
-          </div>
-          <div style={{ gridColumn: 'span 3' }}>
-            <Figure dense label="Projected margin" value={Number.isFinite(mf) ? pct(mf) : '—'} vs={[`${dollars(margin)} on contract`, contract > 0 ? (margin < 0 ? 'Cost is over contract' : 'Before indirect cost') : 'Set a contract to see margin']} href={`${base}?tab=budget`} linkLabel="Budget by cost code" />
-          </div>
-          <div style={{ gridColumn: 'span 3' }}>
-            <Figure dense label={`Pending ${lower(v.change_orders)}`} value={dollars(o?.pending_co_cents ?? job.pending_co_cents)} vs={[`${count(o?.pending_co_count ?? 0)} open`, 'Not in contract until approved']} href={`${base}?tab=change-orders`} linkLabel={v.change_orders} />
-          </div>
+          {figures.map((f, i) => (
+            <div key={i} style={{ gridColumn: `span ${12 / figures.length}` }}>
+              {f}
+            </div>
+          ))}
         </div>
       </Widget>
 
@@ -100,7 +112,7 @@ export function OverviewTab({ job, overview: o, tasks, activity, today, details,
         foot={activity.length ? <Link className="link" href={`${base}?tab=activity`}>All activity</Link> : undefined}
         state={activity.length === 0 ? { kind: 'empty', title: 'Nothing has happened on this job yet' } : undefined}
       >
-        <ActivityFeed rows={activity.slice(0, 5)} />
+        <ActivityFeed rows={activity.slice(0, 5)} showMoney={mv.contract} />
       </Widget>
     </div>
   );

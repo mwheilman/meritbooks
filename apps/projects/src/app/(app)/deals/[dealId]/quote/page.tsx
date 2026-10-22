@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { ButtonLink, Page, money, pct, shortDate } from '@meritbooks/merit-ui';
 import { dealerScope } from '@/lib/pm/dealer/scope';
 import { loadDealWorkspace } from '@/lib/pm/dealer/deal-queries';
@@ -9,6 +9,7 @@ import { todayIso } from '@/lib/time';
 import { PageCrumbs } from '@/components/shell/ShellContext';
 import { PrintButton } from '@/components/dealer/deals/PrintButton';
 import '@/components/dealer/dealer.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: 'Quote' };
@@ -22,6 +23,9 @@ export default async function QuotePage({ params, searchParams }: { params: { de
   if (!UUID.test(params.dealId)) notFound();
   const o = await dealerScope();
   if (!o) return null;
+  const { money: mv } = await guardPage('/deals');
+  // A quote is the customer's prices: contract_value only.
+  if (!mv.contract) redirect(`/deals/${params.dealId}`);
   const w = await loadDealWorkspace(o.db, params.dealId);
   if (!w || !o.companyIds.includes(w.deal.location_id)) notFound();
   const today = todayIso();

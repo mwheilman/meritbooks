@@ -11,7 +11,7 @@ import { IsoDate, Text2000 } from '@/lib/pm/money/schemas';
 import type { BillingLineRow, PayApplicationRow } from '@/lib/pm/money/types';
 
 /** One request: lines, failing preconditions (pm.billing_preconditions) and, for SOV, its G702 row. */
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.billing', action: 'view' }, mask: 'billing' }, async ({ db, params }) => {
   const request = await loadBillingRequest(db, params.requestId!);
   const [lines, preconditions, payApp] = await Promise.all([
     pm(db).from('billing_request_lines').select(BILLING_LINE_COLS).eq('billing_request_id', request.id).order('sort').order('line_no').then((r) => rows<BillingLineRow>(r, 'billing lines')),
@@ -34,7 +34,7 @@ const Body = z.discriminatedUnion('op', [
  * (EMITTED) — or UNISSUED where nothing is sent. Merit Books numbers and posts the invoice.
  * A REJECTED request is fixed and approved again (new event, same source_ref).
  */
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.billing', action: 'edit' }, ops: { approve: { cap: 'projects.billing', action: 'approve' } }, mask: 'billing', body: Body }, async ({ db, params, body }) => {
   const r = await loadBillingRequest(db, params.requestId!);
   if (body.op === 'approve') {
     const eventId = await callRpc<string | null>(db, 'approve_and_emit_billing', { p_request: r.id }, 'billing request');

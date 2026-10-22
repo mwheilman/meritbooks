@@ -13,7 +13,7 @@ const Body = z.object({
 });
 
 /** Set the contract (pm.set_contract; sends JOB_PROGRESS CONTRACT_SET to Books when present). */
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.financials', action: 'edit' }, mask: 'job', body: Body }, async ({ db, params, body }) => {
   const job = await loadJob(db, params.jobId!);
   const id = must(
     await db.schema('pm').rpc('set_contract', {

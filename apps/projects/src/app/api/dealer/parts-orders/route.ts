@@ -11,7 +11,7 @@ import type { SuggestedLine } from '@/lib/pm/dealer/types';
 const Query = z.object({ stockLocationId: z.string().uuid() });
 
 /** Suggested stock order for a stock location: below min after on-order, ordered up to max (pm.suggest_parts_order). */
-export const GET = route({ query: Query }, async ({ db, query, tenant }) => {
+export const GET = route({ access: { cap: 'projects.store', action: 'view' }, mask: ['parts_order', 'part'], query: Query }, async ({ db, query, tenant }) => {
   const sl = await db.schema('pm').from('stock_locations').select('location_id').eq('id', query.stockLocationId).maybeSingle();
   const loc = (sl.data as { location_id: string } | null)?.location_id;
   if (!loc) throw new HttpError(404, 'That stock location was not found.', 'NOT_FOUND');
@@ -31,7 +31,7 @@ const Body = z.object({
 });
 
 /** Start an OEM parts order (pm.create_parts_order), optionally with its lines. */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'create' }, mask: 'parts_order', body: Body }, async ({ db, body, tenant }) => {
   assertCompany(tenant, body.companyId);
   const id = await dcall<string | null>(db, 'create_parts_order', {
     p_location: body.companyId, p_vendor: body.vendorId, p_stock_location: body.stockLocationId ?? null, p_kind: body.kind, p_vendor_ref: body.vendorRef || null,

@@ -25,7 +25,7 @@ const TERM_COLS: Record<string, string> = {
   equityFirst: 'equity_first', loanClosedOn: 'loan_closed_on', maturityOn: 'maturity_on', notes: 'notes',
 };
 
-export const POST = route({ body: Op }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.billing', action: 'edit' }, ops: { activate: { cap: 'projects.billing', action: 'approve' } }, mask: 'draw', body: Op }, async ({ db, params, body }) => {
   const s = await own<{ id: string; job_id: string; status: string }>(db, 'draw_schedules', 'id, job_id, status', { id: params.scheduleId! }, 'That loan budget was not found.');
   const pm = db.schema('pm');
   const draftOnly = () => {

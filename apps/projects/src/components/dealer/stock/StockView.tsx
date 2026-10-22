@@ -7,7 +7,8 @@ import {
 import { CONDITION_WORDS, UNIT_STATUS, agingMark, floorMark, unitTitle } from '@/lib/pm/dealer/labels';
 import { isAged } from '@/lib/pm/dealer/math';
 import type { DealerSettingsRow, StockLocationRow, UnitCondition, UnitInventoryRow, UnitStatus } from '@/lib/pm/dealer/types';
-import { useShell } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell } from '@/components/shell/ShellContext';
+import { when } from '@/components/money/visibility';
 import { StatusMark } from '@/components/ops/common/bits';
 import { PickStoreNote } from '../common/StoreOff';
 import { ReceivePanel } from './ReceivePanel';
@@ -42,6 +43,8 @@ export interface StockViewProps {
 
 export function StockView(p: StockViewProps) {
   const { readOnly } = useShell();
+  // Unit cost and floor-plan payoff are financials.
+  const mv = useMoneyVis();
   const [group, setGroup] = useState<StockGroup>(p.initialGroup);
   const [age, setAge] = useState<AgeFilter>(p.initialAge);
   const [cond, setCond] = useState<UnitCondition | ''>('');
@@ -89,10 +92,10 @@ export function StockView(p: StockViewProps) {
     },
     { id: 'st', header: 'Status', width: 190, cell: (u) => <><StatusMark mark={UNIT_STATUS[u.unit_status]} />{u.deal_number && <span className="l2">Deal {u.deal_number}</span>}</> },
     { id: 'age', header: 'In stock', width: 104, cell: (u) => { const m = agingMark(u.days_in_stock); return m ? <Status kind={m.kind} pip={m.pip}>{m.word}</Status> : <span className="l2">Not received</span>; } },
-    {
+    ...when<QueueColumn<UnitInventoryRow>>(mv.cost, {
       id: 'cost', header: 'Cost', numeric: true, width: 124,
       cell: (u) => <><span className="l1 tnum">{money(u.cost_cents)}</span>{u.books_cost_cents != null && u.books_cost_cents !== u.cost_cents ? <span className="l2 tnum">Books {money(u.books_cost_cents)}</span> : null}</>,
-    },
+    }),
     { id: 'price', header: 'Price', numeric: true, width: 116, cell: (u) => { const pr = u.advertised_price_cents ?? u.retail_price_cents; return pr == null ? '—' : money(pr); } },
     { id: 'floor', header: 'Floor plan', width: 180, cell: (u) => { const f = floorMark(u, p.today); return <Status kind={f.kind} pip={f.pip}>{f.word}</Status>; } },
   ];
@@ -102,9 +105,9 @@ export function StockView(p: StockViewProps) {
   return (
     <div className="stack">
       <div className="dl-strip">
-        <Figure dense label="In stock" value={count(inStock.length)} vs={[`${money(sum(inStock, (u) => u.cost_cents), { decimals: 0 })} at cost`, `${count(p.units.filter((u) => GROUPS.order.includes(u.unit_status)).length)} on order`]} href="/stock?group=stock" linkLabel="In stock" />
-        <Figure dense label="Aged over 180 days" value={count(aged.length)} vs={[`${money(sum(aged, (u) => u.cost_cents), { decimals: 0 })} tied up`, inStock.length ? `${Math.round((aged.length / inStock.length) * 100)}% of stock` : 'no stock yet']} href="/stock?age=180" linkLabel="Aged units" />
-        <Figure dense label="Floored" value={count(floored.length)} vs={[`${money(sum(floored, (u) => u.payoff_cents ?? 0), { decimals: 0 })} payoff`, attention.length ? `${count(attention.length)} need a payoff` : 'none past due']} href="/stock?group=all" linkLabel="Floor plan" />
+        <Figure dense label="In stock" value={count(inStock.length)} vs={[mv.cost ? `${money(sum(inStock, (u) => u.cost_cents), { decimals: 0 })} at cost` : `${count(inStock.length)} units`, `${count(p.units.filter((u) => GROUPS.order.includes(u.unit_status)).length)} on order`]} href="/stock?group=stock" linkLabel="In stock" />
+        <Figure dense label="Aged over 180 days" value={count(aged.length)} vs={[mv.cost ? `${money(sum(aged, (u) => u.cost_cents), { decimals: 0 })} tied up` : 'Over 180 days', inStock.length ? `${Math.round((aged.length / inStock.length) * 100)}% of stock` : 'no stock yet']} href="/stock?age=180" linkLabel="Aged units" />
+        <Figure dense label="Floored" value={count(floored.length)} vs={[mv.cost ? `${money(sum(floored, (u) => u.payoff_cents ?? 0), { decimals: 0 })} payoff` : 'On the floor plan', attention.length ? `${count(attention.length)} need a payoff` : 'none past due']} href="/stock?group=all" linkLabel="Floor plan" />
       </div>
 
       <div className="dl-filters">

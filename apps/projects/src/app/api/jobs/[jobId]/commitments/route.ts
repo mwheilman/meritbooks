@@ -19,13 +19,13 @@ const Body = z.object({
   lines: z.array(CommitmentLineSchema).max(200).default([]),
 });
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.commitments', action: 'view' }, mask: 'commitment' }, async ({ db, params }) => {
   const job = await loadMoneyJob(db, params.jobId!);
   return getJobCommitments(db, job.job_id);
 });
 
 /** A DRAFT purchase order or subcontract with its lines (numbers minted PO-/SC-{short}-{YYYY}-{NNNN}). */
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.commitments', action: 'create' }, mask: 'commitment', body: Body }, async ({ db, params, body }) => {
   const job = await loadMoneyJob(db, params.jobId!);
   assertModule(job, 'commitments', 'commitments');
   const c = wrote<{ id: string; number: string }>(

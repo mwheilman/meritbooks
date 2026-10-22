@@ -20,6 +20,7 @@ import { companyJobTypes } from '@/lib/onboarding/load';
 import { normName } from '@/lib/onboarding/import/values';
 import { RouteError, dbError, json, requireCompany, withOnboarding } from '@/lib/onboarding/route';
 import type { CommitRowResult } from '@/lib/onboarding/types';
+import { denyUnless } from '@/lib/access/route-guard';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -48,6 +49,7 @@ const Body = z.object({
 export async function POST(req: Request) {
   return withOnboarding(req, Body, async (body, ctx) => {
     requireCompany(ctx, body.companyId);
+    const denied = await denyUnless('projects.settings', 'configure', body.companyId); if (denied) return denied;
     const types = await companyJobTypes(ctx.db, body.companyId);
     if (types.length === 0) throw new RouteError(409, 'NO_PACK', 'Set up this company first, then bring your jobs in.');
     const typeKeys = new Set(types.map((t) => t.key));
@@ -55,7 +57,7 @@ export async function POST(req: Request) {
     const pm = ctx.db.schema('pm');
     const [{ data: existing }, { data: customers }] = await Promise.all([
       pm.from('projects').select('job_id, ext').eq('location_id', body.companyId).limit(10_000),
-      ctx.db.schema('core').from('customers').select('id, name, display_name').is('deleted_at', null).limit(10_000),
+      ctx.db.schema('pm').from('v_core_customers_masked').select('id, name, display_name').is('deleted_at', null).limit(10_000),
     ]);
     const refs = new Map<string, string>();
     for (const p of (existing ?? []) as { job_id: string; ext: Record<string, unknown> | null }[]) {

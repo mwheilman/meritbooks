@@ -54,7 +54,7 @@ const Body = z.union([Receive, Order]);
  * manufacturer invoice as its base cost) or record one on order (pm.order_unit; nothing reaches
  * Books until it is received).
  */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'create' }, mask: 'dealer_unit', body: Body }, async ({ db, body, tenant }) => {
   assertCompany(tenant, body.companyId);
   if (body.op === 'order') {
     const id = await dcall<string>(db, 'order_unit', {

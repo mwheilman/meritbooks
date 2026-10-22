@@ -9,7 +9,8 @@ import {
 } from '@meritbooks/merit-ui';
 import type { ChangeOrderRow, ChangeOrderStage } from '@/lib/pm/types';
 import { CO_STAGE_WORDS, coStatus } from '@/lib/pm/stage';
-import { useShell, useVocab } from '@/components/shell/ShellContext';
+import { useCan, useMoneyVis, useShell, useVocab } from '@/components/shell/ShellContext';
+import { when } from '@/components/money/visibility';
 import { useAction } from '@/components/job/useAction';
 import { lower } from '@/lib/pm/vocab';
 
@@ -36,6 +37,8 @@ const OPEN: ReadonlySet<ChangeOrderStage> = new Set(['PCO', 'COR']);
 
 export function ChangeOrderQueue(p: ChangeOrderQueueProps) {
   const v = useVocab();
+  const mv = useMoneyVis();
+  const mayApprove = useCan('projects.change_orders:approve');
   const { readOnly } = useShell();
   const { run, busy } = useAction();
   const [band, setBand] = useState<Band>(p.mode === 'review' ? (p.rows.some((r) => r.stage === 'COR') ? 'COR' : 'PCO') : 'open');
@@ -78,8 +81,8 @@ export function ChangeOrderQueue(p: ChangeOrderQueueProps) {
       ),
     },
     { id: 'stage', header: 'Stage', width: 128, cell: (c) => { const s = coStatus(c.stage); return <Status kind={s.kind} pip={s.pip}>{CO_STAGE_WORDS[c.stage]}</Status>; } },
-    { id: 'amt', header: 'Contract change', numeric: true, width: 136, cell: (c) => money(c.amount_cents) },
-    { id: 'cost', header: 'Cost change', numeric: true, width: 120, cell: (c) => (c.cost_impact_cents == null ? '—' : money(c.cost_impact_cents)) },
+    ...when<QueueColumn<CoRow>>(mv.contract, { id: 'amt', header: 'Contract change', numeric: true, width: 136, cell: (c) => money(c.amount_cents) }),
+    ...when<QueueColumn<CoRow>>(mv.cost, { id: 'cost', header: 'Cost change', numeric: true, width: 120, cell: (c) => (c.cost_impact_cents == null ? '—' : money(c.cost_impact_cents)) }),
     { id: 'days', header: 'Days', numeric: true, width: 64, cell: (c) => (c.schedule_days == null ? '—' : count(c.schedule_days)) },
     { id: 'when', header: 'Created', width: 88, cell: (c) => <span className="l2">{shortDate(c.created_at.slice(0, 10))}</span> },
   ];
@@ -88,7 +91,7 @@ export function ChangeOrderQueue(p: ChangeOrderQueueProps) {
   const groups: QueueGroup<CoRow>[] | undefined =
     p.mode === 'all' && band === 'all'
       ? [
-          { id: 'open', title: 'Open', rows: p.rows.filter((r) => OPEN.has(r.stage)), caption: money(sum(p.rows.filter((r) => OPEN.has(r.stage)))) },
+          { id: 'open', title: 'Open', rows: p.rows.filter((r) => OPEN.has(r.stage)), caption: mv.contract ? money(sum(p.rows.filter((r) => OPEN.has(r.stage)))) : undefined },
           { id: 'closed', title: 'Decided', rows: p.rows.filter((r) => !OPEN.has(r.stage)) },
         ]
       : undefined;
@@ -100,6 +103,7 @@ export function ChangeOrderQueue(p: ChangeOrderQueueProps) {
     closed: p.rows.filter((r) => !OPEN.has(r.stage)),
   };
   const canAct = !readOnly;
+  const canApprove = canAct && mayApprove;
   const showPanel = creating || !!cursor;
 
   return (
@@ -112,8 +116,8 @@ export function ChangeOrderQueue(p: ChangeOrderQueueProps) {
               value={band}
               onChange={setBand}
               items={[
-                { value: 'COR', label: 'Requested', count: count(counts.COR.length), caption: `Sent to the customer · ${money(sum(counts.COR))}` },
-                { value: 'PCO', label: 'Potential', count: count(counts.PCO.length), caption: `Priced, not sent · ${money(sum(counts.PCO))}` },
+                { value: 'COR', label: 'Requested', count: count(counts.COR.length), caption: mv.contract ? `Sent to the customer · ${money(sum(counts.COR))}` : 'Sent to the customer' },
+                { value: 'PCO', label: 'Potential', count: count(counts.PCO.length), caption: mv.contract ? `Priced, not sent · ${money(sum(counts.PCO))}` : 'Not sent yet' },
               ]}
             />
           </div>
@@ -162,7 +166,7 @@ export function ChangeOrderQueue(p: ChangeOrderQueueProps) {
               rowState={(c) => ({ done: c.stage === 'VOID' || c.stage === 'REJECTED', attn: c.stage === 'COR' })}
               openOnClick
               onOpen={(c) => { setCursorId(c.id); setCreating(false); }}
-              actions={canAct ? [{ key: 'a', label: 'approve', run: (rs) => rs.forEach((c) => void approve(c)) }] : []}
+              actions={canApprove ? [{ key: 'a', label: 'approve', run: (rs) => rs.forEach((c) => void approve(c)) }] : []}
             />
           )}
         </div>
@@ -173,13 +177,14 @@ export function ChangeOrderQueue(p: ChangeOrderQueueProps) {
           <Panel
             eyebrow={[cursor.number ?? v.change_order, CO_STAGE_WORDS[cursor.stage]]}
             title={cursor.title}
-            meta={[money(cursor.amount_cents), p.showJob ? cursor.jobLabel : null, cursor.company].filter(Boolean).join(' · ')}
+            meta={[mv.contract ? money(cursor.amount_cents) : null, p.showJob ? cursor.jobLabel : null, cursor.company].filter(Boolean).join(' · ')}
             onClose={() => setCursorId(null)}
             foot={
               canAct ? (
                 <CoActions
                   co={cursor}
                   mine={cursor.created_by === p.currentUserId}
+                  canApprove={mayApprove}
                   busy={busy}
                   onApprove={() => void approve(cursor)}
                   onAdvance={(to, verb) => (to === 'VOID' && cursor.stage === 'APPROVED' ? setVoidCo(cursor) : void advance(cursor, to, verb))}
@@ -190,8 +195,8 @@ export function ChangeOrderQueue(p: ChangeOrderQueueProps) {
             <PanelSection title="Details">
               <KV
                 items={[
-                  { term: 'Contract change', value: money(cursor.amount_cents) },
-                  { term: 'Cost change', value: cursor.cost_impact_cents == null ? '—' : money(cursor.cost_impact_cents) },
+                  ...when(mv.contract, { term: 'Contract change', value: money(cursor.amount_cents) }),
+                  ...when(mv.cost, { term: 'Cost change', value: cursor.cost_impact_cents == null ? '—' : money(cursor.cost_impact_cents) }),
                   { term: 'Schedule', value: cursor.schedule_days == null ? '—' : dayCount(cursor.schedule_days) },
                   { term: 'Created', value: shortDate(cursor.created_at.slice(0, 10)) },
                   ...(cursor.approved_at ? [{ term: 'Approved', value: shortDate(cursor.approved_at.slice(0, 10)) }] : []),
@@ -221,7 +226,7 @@ export function ChangeOrderQueue(p: ChangeOrderQueueProps) {
 
       {visible.length > 0 && (
         <Keybar
-          hints={[{ chord: 'j k', label: 'move' }, ...(canAct ? [{ chord: 'a', label: 'approve' }] : []), ...(p.createForJobId && canAct ? [{ chord: 'c', label: `new ${lower(v.change_order)}` }] : [])]}
+          hints={[{ chord: 'j k', label: 'move' }, ...(canApprove ? [{ chord: 'a', label: 'approve' }] : []), ...(p.createForJobId && canAct ? [{ chord: 'c', label: `new ${lower(v.change_order)}` }] : [])]}
           note="Approving adds it to the contract and sends the new value to Merit Books"
         />
       )}
@@ -238,13 +243,13 @@ export function ChangeOrderQueue(p: ChangeOrderQueueProps) {
           if (r.error) throw new Error(r.error.error);
         }}
       >
-        It is approved, so voiding it takes {voidCo ? money(voidCo.amount_cents) : ''} out of the revised contract and sends the change to Merit Books.
+        It is approved, so voiding it takes {voidCo && mv.contract ? money(voidCo.amount_cents) : 'its amount'} out of the revised contract and sends the change to Merit Books.
       </ConfirmDialog>
     </div>
   );
 }
 
-function CoActions({ co, mine, busy, onApprove, onAdvance }: { co: CoRow; mine: boolean; busy: string | null; onApprove: () => void; onAdvance: (to: ChangeOrderStage, verb: string) => void }) {
+function CoActions({ co, mine, canApprove, busy, onApprove, onAdvance }: { co: CoRow; mine: boolean; canApprove: boolean; busy: string | null; onApprove: () => void; onAdvance: (to: ChangeOrderStage, verb: string) => void }) {
   const working = busy === `a:${co.id}` || busy === `m:${co.id}`;
   return (
     <div className="btn-row" style={{ width: '100%' }}>
@@ -254,7 +259,7 @@ function CoActions({ co, mine, busy, onApprove, onAdvance }: { co: CoRow; mine: 
       {co.stage === 'REJECTED' && <Button disabled={working} onClick={() => onAdvance('PCO', 'Reopened')}>Reopen</Button>}
       {co.stage !== 'VOID' && <Button variant="danger" disabled={working} onClick={() => onAdvance('VOID', 'Voided')}>Void</Button>}
       <span className="sp" />
-      {(co.stage === 'PCO' || co.stage === 'COR') && (
+      {canApprove && (co.stage === 'PCO' || co.stage === 'COR') && (
         <Button variant="primary" chord="a" disabled={working || mine} title={mine ? 'You prepared this change order' : undefined} onClick={onApprove}>
           Approve
         </Button>
@@ -265,6 +270,8 @@ function CoActions({ co, mine, busy, onApprove, onAdvance }: { co: CoRow; mine: 
 
 function NewCoPanel({ jobId, onClose }: { jobId: string; onClose: () => void }) {
   const v = useVocab();
+  // Field roles raise a change without a price (spec §2.1 app rule); the office prices it.
+  const mv = useMoneyVis();
   const { run, busy } = useAction();
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState<number | null>(null);
@@ -279,12 +286,12 @@ function NewCoPanel({ jobId, onClose }: { jobId: string; onClose: () => void }) 
   const submit = async () => {
     const e: Record<string, string> = {};
     if (!title.trim()) e.title = 'Name the change.';
-    if (amount == null) e.amount = 'Enter the contract change (0 if none).';
+    if (mv.contract && amount == null) e.amount = 'Enter the contract change (0 if none).';
     if (days && !/^-?\d+$/.test(days)) e.days = 'Whole days, like 3 or -2.';
     setErr(e);
     if (Object.keys(e).length) return;
     const r = await run<{ number: string }>('create', 'post', `/api/jobs/${jobId}/change-orders`, {
-      title: title.trim(), amountCents: amount, costImpactCents: cost, scheduleDays: days ? Number(days) : null,
+      title: title.trim(), amountCents: mv.contract ? amount : 0, costImpactCents: mv.cost ? cost : null, scheduleDays: days ? Number(days) : null,
       reason: reason.trim() || null, description: desc.trim() || null, stage,
     }, (d) => `Created ${d.number}`);
     if (!r.error) onClose();
@@ -294,7 +301,7 @@ function NewCoPanel({ jobId, onClose }: { jobId: string; onClose: () => void }) 
     <Panel
       eyebrow={['New', v.change_order]}
       title={title.trim() || `Untitled ${lower(v.change_order)}`}
-      meta={amount != null ? `${money(amount)} · the number is assigned when you create it` : 'The number is assigned when you create it'}
+      meta={amount != null && mv.contract ? `${money(amount)} · the number is assigned when you create it` : mv.contract ? 'The number is assigned when you create it' : 'Describe the change; the office prices it'}
       onClose={onClose}
       foot={
         <div className="btn-row" style={{ justifyContent: 'flex-end', width: '100%' }}>
@@ -306,10 +313,12 @@ function NewCoPanel({ jobId, onClose }: { jobId: string; onClose: () => void }) 
       <PanelSection>
         <form className="mp-form" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
           <Field label="What changed" error={err.title}><Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Add two recessed lights in the hallway" maxLength={200} /></Field>
-          <div className="mp-form-2">
-            <Field label="Contract change" help="Negative for a credit" error={err.amount}><MoneyInput valueCents={amount} onChangeCents={setAmount} allowNegative placeholder="0.00" /></Field>
-            <Field label="Cost change" help="Optional; moves the cost estimate"><MoneyInput valueCents={cost} onChangeCents={setCost} allowNegative placeholder="0.00" /></Field>
-          </div>
+          {(mv.contract || mv.cost) && (
+            <div className="mp-form-2">
+              {mv.contract && <Field label="Contract change" help="Negative for a credit" error={err.amount}><MoneyInput valueCents={amount} onChangeCents={setAmount} allowNegative placeholder="0.00" /></Field>}
+              {mv.cost && <Field label="Cost change" help="Optional; moves the cost estimate"><MoneyInput valueCents={cost} onChangeCents={setCost} allowNegative placeholder="0.00" /></Field>}
+            </div>
+          )}
           <div className="mp-form-2">
             <Field label="Schedule days" error={err.days}><Input inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} placeholder="0" /></Field>
             <Field label="Reason"><Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Owner request" maxLength={200} /></Field>

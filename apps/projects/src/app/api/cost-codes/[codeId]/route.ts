@@ -7,7 +7,7 @@ const Body = z
   .refine((b) => b.name !== undefined || b.isActive !== undefined, 'Nothing to change');
 
 /** Rename or (de)activate a tenant cost code. Pack codes change only through the pack. */
-export const PATCH = route({ body: Body }, async ({ db, params, body, tenant }) => {
+export const PATCH = route({ access: { cap: 'projects.settings', action: 'configure' }, mask: false, body: Body }, async ({ db, params, body, tenant }) => {
   const cc = must(await db.schema('pm').from('cost_codes').select('id, location_id, install_id').eq('id', params.codeId!).maybeSingle(), 'cost code') as
     | { id: string; location_id: string; install_id: string | null } | null;
   if (!cc) throw new HttpError(404, 'That cost code was not found.', 'NOT_FOUND');

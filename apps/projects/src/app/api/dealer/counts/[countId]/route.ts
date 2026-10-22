@@ -12,7 +12,7 @@ const Op = z.discriminatedUnion('op', [
 ]);
 
 /** Key counted quantities, then post the variance as stock adjustments (pm.post_parts_count). */
-export const POST = route({ body: Op }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, ops: { post: { cap: 'projects.store', action: 'approve' } }, mask: 'part', body: Op }, async ({ db, params, body, tenant }) => {
   const c = await downs<{ id: string; location_id: string; status: string }>(db, 'parts_counts', 'id, location_id, status', params.countId!, 'That count was not found.');
   assertCompany(tenant, c.location_id);
   if (body.op === 'set') {

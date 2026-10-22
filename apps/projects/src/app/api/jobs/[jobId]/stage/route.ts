@@ -4,7 +4,7 @@ import { guardCopy, guardFixHref } from '@/lib/pm/guards';
 import { loadJob } from '@/lib/pm/guarded';
 
 /** Move a job to the next stage. Failing guards come back as plain sentences; nothing changes. */
-export const POST = route({ body: z.object({ to: z.string().regex(/^[a-z][a-z0-9_]{1,47}$/) }) }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.jobs', action: 'edit' }, mask: 'job', body: z.object({ to: z.string().regex(/^[a-z][a-z0-9_]{1,47}$/) }) }, async ({ db, params, body }) => {
   const job = await loadJob(db, params.jobId!);
   const failing = (must(await db.schema('pm').rpc('transition_stage', { p_job: job.job_id, p_to: body.to }), 'move stage') ?? []) as string[];
   if (failing.length > 0) {

@@ -17,7 +17,7 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('delete') }),
 ]);
 
-export const POST = route({ body: Op }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.jobs', action: 'edit' }, body: Op }, async ({ db, params, body }) => {
   const e = await own<{ id: string; status: string }>(db, 'entitlements', 'id, status', { id: params.entitlementId! }, 'That approval was not found.');
   switch (body.op) {
     case 'status':

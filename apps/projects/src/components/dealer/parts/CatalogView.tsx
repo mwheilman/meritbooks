@@ -6,7 +6,8 @@ import {
 } from '@meritbooks/merit-ui';
 import type { PartOnHandRow, PartRow, StockLocationRow } from '@/lib/pm/dealer/types';
 import type { LookupItem } from '@/lib/pm/ops/types';
-import { useShell } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell } from '@/components/shell/ShellContext';
+import { when } from '@/components/money/visibility';
 import { CustomerPicker, type CustomerValue } from '@/components/jobs/CustomerPicker';
 import { Failure, parseNum } from '@/components/ops/common/bits';
 import { Lookup } from '@/components/ops/common/Lookup';
@@ -38,6 +39,8 @@ export interface CatalogViewProps {
 
 /** The parts catalog with on-hand, bins and min/max per stock location; below-minimum first when asked. */
 export function CatalogView(p: CatalogViewProps) {
+  // Part cost and stock value at cost are financials; counter and list prices are the sell side.
+  const mv = useMoneyVis();
   const { readOnly } = useShell();
   const [filter, setFilter] = useState<Filter>(p.initialFilter);
   const [q, setQ] = useState('');
@@ -85,7 +88,7 @@ export function CatalogView(p: CatalogViewProps) {
     { id: 'mm', header: 'Min', numeric: true, width: 70, cell: (r) => (r.min == null ? '—' : count(r.min)) },
     { id: 'oo', header: 'On order', numeric: true, width: 90, cell: (r) => (r.onOrder ? count(r.onOrder) : '—') },
     { id: 'pr', header: 'Price', numeric: true, width: 100, cell: (r) => (r.part.price_cents == null ? '—' : money(r.part.price_cents)) },
-    { id: 'c', header: 'Cost', numeric: true, width: 100, cell: (r) => (r.part.cost_cents == null ? '—' : money(r.part.cost_cents)) },
+    ...when<QueueColumn<CatalogRow>>(mv.cost, { id: 'c', header: 'Cost', numeric: true, width: 100, cell: (r) => (r.part.cost_cents == null ? '—' : money(r.part.cost_cents)) }),
   ];
 
   return (
@@ -99,7 +102,7 @@ export function CatalogView(p: CatalogViewProps) {
         ]} />
         <div style={{ width: 280 }}><Search aria-label="Find a part" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Number, description, bin" slashToFocus /></div>
         <span className="sp" />
-        <span className="t-cap">{money(value, { decimals: 0 })} on hand at last cost</span>
+        {mv.cost && <span className="t-cap">{money(value, { decimals: 0 })} on hand at last cost</span>}
         {!readOnly && p.companyId && <Button variant="primary" icon="plus" chord="n" bindChord={!creating} onClick={() => { setCreating(true); setCursor(null); }}>Add a part</Button>}
       </div>
       {!readOnly && !p.companyId && <PickStoreNote what="Parts" />}
@@ -128,6 +131,7 @@ export function CatalogView(p: CatalogViewProps) {
 }
 
 function NewPartPanel({ companyId, initialNumber, onClose, onCreated }: { companyId: string; initialNumber: string | null; onClose: () => void; onCreated: (id: string) => void }) {
+  const mv = useMoneyVis();
   const { act, busy, error } = useStore();
   const [pn, setPn] = useState(initialNumber ?? '');
   const [desc, setDesc] = useState('');
@@ -167,7 +171,7 @@ function NewPartPanel({ companyId, initialNumber, onClose, onCreated }: { compan
             <Field label="Category"><Input value={category} onChange={(e) => setCategory(e.target.value)} maxLength={40} placeholder="Filters" /></Field>
           </div>
           <div className="mp-form-2">
-            <Field label="Cost"><MoneyInput valueCents={cost} onChangeCents={setCost} placeholder="0.00" /></Field>
+            {mv.cost && <Field label="Cost"><MoneyInput valueCents={cost} onChangeCents={setCost} placeholder="0.00" /></Field>}
             <Field label="List price"><MoneyInput valueCents={list} onChangeCents={setList} placeholder="0.00" /></Field>
           </div>
           <div className="mp-form-2">
@@ -183,6 +187,7 @@ function NewPartPanel({ companyId, initialNumber, onClose, onCreated }: { compan
 }
 
 function PartPanel({ row, vendors, stockLocations, byId, onClose }: { row: CatalogRow; vendors: Record<string, string>; stockLocations: StockLocationRow[]; byId: Map<string, PartRow>; onClose: () => void }) {
+  const mv = useMoneyVis();
   const { readOnly } = useShell();
   const { act, busy, error } = useStore();
   const part = row.part;
@@ -211,15 +216,15 @@ function PartPanel({ row, vendors, stockLocations, byId, onClose }: { row: Catal
 
       <PanelSection title="Prices">
         {readOnly ? (
-          <p className="ops-facts"><span>Counter <b className="tnum">{part.price_cents == null ? '—' : money(part.price_cents)}</b></span><span>List <b className="tnum">{part.list_price_cents == null ? '—' : money(part.list_price_cents)}</b></span><span>Cost <b className="tnum">{part.cost_cents == null ? '—' : money(part.cost_cents)}</b></span></p>
+          <p className="ops-facts"><span>Counter <b className="tnum">{part.price_cents == null ? '—' : money(part.price_cents)}</b></span><span>List <b className="tnum">{part.list_price_cents == null ? '—' : money(part.list_price_cents)}</b></span>{mv.cost && <span>Cost <b className="tnum">{part.cost_cents == null ? '—' : money(part.cost_cents)}</b></span>}</p>
         ) : (
           <div className="mp-form">
             <div className="mp-form-2">
               <Field label="Counter price"><MoneyInput valueCents={price} onChangeCents={setPrice} onBlur={() => { if (price !== part.price_cents) save({ priceCents: price }, 'Saved the counter price'); }} /></Field>
               <Field label="List price"><MoneyInput valueCents={list} onChangeCents={setList} onBlur={() => { if (list !== part.list_price_cents) save({ listPriceCents: list }, 'Saved the list price'); }} /></Field>
             </div>
-            <Field label="Cost" help="Updates itself from the last stock-order receipt"><MoneyInput valueCents={cost} onChangeCents={setCost} onBlur={() => { if (cost !== part.cost_cents) save({ costCents: cost }, 'Saved the cost'); }} /></Field>
-            {part.price_cents != null && part.cost_cents ? <p className="t-cap">Margin at counter price: {Math.round(((part.price_cents - part.cost_cents) / Math.max(part.price_cents, 1)) * 1000) / 10}%</p> : null}
+            {mv.cost && <Field label="Cost" help="Updates itself from the last stock-order receipt"><MoneyInput valueCents={cost} onChangeCents={setCost} onBlur={() => { if (cost !== part.cost_cents) save({ costCents: cost }, 'Saved the cost'); }} /></Field>}
+            {mv.cost && part.price_cents != null && part.cost_cents ? <p className="t-cap">Margin at counter price: {Math.round(((part.price_cents - part.cost_cents) / Math.max(part.price_cents, 1)) * 1000) / 10}%</p> : null}
           </div>
         )}
       </PanelSection>

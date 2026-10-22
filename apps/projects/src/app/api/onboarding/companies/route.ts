@@ -7,6 +7,7 @@
 import { z } from 'zod';
 import { RouteError, json, withOnboarding } from '@/lib/onboarding/route';
 import { saveRunInputs } from '@/lib/onboarding/runs';
+import { denyUnless } from '@/lib/access/route-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,7 @@ const Body = z.object({ companyIds: z.array(z.string().uuid()).min(1).max(100) }
 
 export async function POST(req: Request) {
   return withOnboarding(req, Body, async (body, ctx) => {
+    const denied = await denyUnless('projects.settings', 'configure'); if (denied) return denied;
     const known = new Set(ctx.tenant.companies.map((c) => c.id));
     const selected = [...new Set(body.companyIds)].filter((id) => known.has(id));
     if (selected.length === 0) throw new RouteError(422, 'NO_COMPANIES', 'Pick at least one company that runs jobs.');

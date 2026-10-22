@@ -10,7 +10,8 @@ import { clockOf, localParts } from '@/lib/pm/ops/dispatch-math';
 import { CLAIM_STATUS, WO_STATUS, claimOutstanding, priorityWord, woBand, woKindLabel, woVocab, type WoBand } from '@/lib/pm/ops/labels';
 import type { AssetRow, AssignmentRow, SkillRow, WarrantyClaimRow, WorkOrderRow } from '@/lib/pm/ops/types';
 import type { JobOption } from '@/lib/pm/ops/scope';
-import { useShell, useVocab } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell, useVocab } from '@/components/shell/ShellContext';
+import { when } from '@/components/money/visibility';
 import { lower } from '@/lib/pm/vocab';
 import { StatusMark } from '../common/bits';
 import { NewWorkOrderPanel } from './NewWorkOrderPanel';
@@ -213,14 +214,17 @@ export function WorkOrderQueue(p: WorkOrderQueueProps) {
 
 function ClaimsTable({ claims, orders, customers, outstanding, onOpen, today }: { claims: WarrantyClaimRow[]; orders: WorkOrderRow[]; customers: Record<string, string>; outstanding: number; onOpen: (woId: string) => void; today: string }) {
   const byWo = new Map(orders.map((o) => [o.id, o]));
+  // Claim amounts are a receivable from the manufacturer: contract-side money.
+  const mv = useMoneyVis();
   const cols: QueueColumn<WarrantyClaimRow>[] = [
     { id: 'n', header: 'Claim', width: 140, cell: (c) => <span className="code">{c.claim_number ?? 'Draft'}</span> },
     { id: 'ro', header: 'Repair order', cell: (c) => { const o = byWo.get(c.work_order_id); return <><span className="l1">{o?.number} {o?.summary}</span><span className="l2">{customers[c.payer_customer_id] ?? 'Manufacturer'}{c.failure_code ? ` · ${c.failure_code}` : ''}</span></>; } },
     { id: 'st', header: 'Status', width: 170, cell: (c) => <Status kind={CLAIM_STATUS[c.status].kind} pip={CLAIM_STATUS[c.status].pip}>{CLAIM_STATUS[c.status].word}</Status> },
-    { id: 'cl', header: 'Claimed', numeric: true, width: 120, cell: (c) => money(c.claimed_cents) },
-    { id: 'ap', header: 'Approved', numeric: true, width: 120, cell: (c) => (c.approved_cents == null ? '—' : money(c.approved_cents)) },
-    { id: 'pd', header: 'Paid', numeric: true, width: 110, cell: (c) => (c.paid_cents ? money(c.paid_cents) : '—') },
-    { id: 'os', header: 'Outstanding', numeric: true, width: 130, cell: (c) => { const x = claimOutstanding(c); return x ? <b>{money(x)}</b> : '—'; } },
+    ...when<QueueColumn<WarrantyClaimRow>>(mv.contract,
+      { id: 'cl', header: 'Claimed', numeric: true, width: 120, cell: (c) => money(c.claimed_cents) },
+      { id: 'ap', header: 'Approved', numeric: true, width: 120, cell: (c) => (c.approved_cents == null ? '—' : money(c.approved_cents)) },
+      { id: 'pd', header: 'Paid', numeric: true, width: 110, cell: (c) => (c.paid_cents ? money(c.paid_cents) : '—') },
+      { id: 'os', header: 'Outstanding', numeric: true, width: 130, cell: (c) => { const x = claimOutstanding(c); return x ? <b>{money(x)}</b> : '—'; } }),
     { id: 'd', header: 'File by', width: 96, cell: (c) => (c.filing_deadline ? <span className={c.status === 'DRAFT' && c.filing_deadline < today ? 'neg b' : undefined}>{shortDate(c.filing_deadline, today)}</span> : '—') },
   ];
   return (
@@ -229,10 +233,10 @@ function ClaimsTable({ claims, orders, customers, outstanding, onOpen, today }: 
         <WidgetState state={{ kind: 'empty', title: 'No warranty claims yet', body: 'Open a repair order with warranty lines and start a claim from its panel. Outstanding amounts show here until the manufacturer pays.' }} />
       ) : (
         <>
-          <div className="row" style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', gap: 16 }}>
+          {mv.contract && <div className="row" style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', gap: 16 }}>
             <span className="t-section">Outstanding</span><span className="tnum b">{money(outstanding)}</span>
             <span className="t-cap">Submitted, returned or approved and not yet paid. Merit Books carries the receivable from the manufacturer.</span>
-          </div>
+          </div>}
           <QueueTable aria-label="Warranty claims" columns={cols} rows={claims} getRowId={(c) => c.id} onOpen={(c) => onOpen(c.work_order_id)} hotkeys={false}
             rowState={(c) => ({ done: c.status === 'PAID' || c.status === 'WRITTEN_OFF', attn: c.status === 'RETURNED' })} />
         </>

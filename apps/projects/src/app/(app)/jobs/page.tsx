@@ -9,6 +9,7 @@ import { lower } from '@/lib/pm/vocab';
 import { cents, sumBy } from '@/lib/pm/money';
 import { PageLine } from '@/components/common/PageLine';
 import { JobsView } from '@/components/jobs/JobsView';
+import { guardPage } from '@/components/shell/page-guard';
 
 export async function generateMetadata(): Promise<Metadata> {
   const scope = await pageScope();
@@ -22,8 +23,10 @@ type SP = { q?: string; stage?: string; type?: string; page?: string; sort?: str
 export default async function JobsPage({ searchParams }: { searchParams: SP }) {
   const scope = await pageScope();
   if (!scope) return null;
+  const { money: mv } = await guardPage('/jobs');
   const db = await requireDb();
-  const sort: ProjectSort = searchParams.sort === 'number' || searchParams.sort === 'contract' ? searchParams.sort : 'updated';
+  // Sorting by contract would order rows by a figure the caller may not see.
+  const sort: ProjectSort = searchParams.sort === 'number' || (searchParams.sort === 'contract' && mv.contract) ? searchParams.sort : 'updated';
   const page = Math.max(1, Number.parseInt(searchParams.page ?? '1', 10) || 1);
   const [list, any, jobTypes, stages, vocab] = await Promise.all([
     listProjects(db, { companyIds: scope.companyIds, q: searchParams.q, stage: searchParams.stage, jobTypeKey: searchParams.type, sort, page, perPage: 50 }),

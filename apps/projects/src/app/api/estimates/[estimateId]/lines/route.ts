@@ -46,7 +46,7 @@ const Body = z.discriminatedUnion('op', [
  * Cost and amount are extended here with the trigger's rounding so the editor's totals are the
  * database's totals.
  */
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.estimates', action: 'edit' }, mask: 'estimate', body: Body }, async ({ db, params, body }) => {
   const est = one<{ id: string; status: string }>(await pm(db).from('estimates').select('id, status').eq('id', params.estimateId!).maybeSingle(), 'estimate');
   if (!est) throw new HttpError(404, 'That estimate was not found in this workspace.', 'NOT_FOUND');
   if (est.status !== 'DRAFT') throw new HttpError(422, 'Lines can change only while the estimate is a draft. Revise it to make changes.', 'PM_ESTIMATE_LOCKED');
@@ -61,19 +61,24 @@ export const POST = route({ body: Body }, async ({ db, params, body }) => {
       await pm(db).from('estimate_lines').select('sort, line_no').eq('estimate_id', est.id).order('sort', { ascending: false }).limit(1).maybeSingle(),
       'last line',
     );
-    const line = wrote<{ id: string; cost_cents: number | null; amount_cents: number; unit_cost_cents: number | null }>(
+    const inserted = wrote<{ id: string }>(
       await pm(db).from('estimate_lines').insert({
         estimate_id: est.id, sort: (last?.sort ?? -1) + 1, line_no: (last?.line_no ?? 0) + 1,
         labor_rate_card_id: body.rateCardId, labor_hours: body.hours, cost_code_id: body.costCodeId ?? null,
         description: body.description ?? '', unit_price_cents: body.unitPriceCents ?? null, is_allowance: body.isAllowance ?? false,
-      }).select('id, cost_cents, amount_cents, unit_cost_cents').single(),
+      }).select('id').single(),
       'estimate',
     );
+    // Cost columns are masked by role (migration 1110): read them back through the masked view.
+    const line = one<{ id: string; cost_cents: number | null; amount_cents: number; unit_cost_cents: number | null }>(
+      await pm(db).from('v_estimate_lines_masked').select('id, cost_cents, amount_cents, unit_cost_cents').eq('id', inserted.id).maybeSingle(),
+      'estimate line',
+    ) ?? { id: inserted.id, cost_cents: null, amount_cents: 0, unit_cost_cents: null };
     return { lineId: line.id, cost_cents: line.cost_cents, amount_cents: line.amount_cents, unit_cost_cents: line.unit_cost_cents };
   }
 
   const prev = body.op === 'update_line'
-    ? one<EstimateLineRow>(await pm(db).from('estimate_lines').select(ESTIMATE_LINE_COLS).eq('id', body.lineId).eq('estimate_id', est.id).maybeSingle(), 'line')
+    ? one<EstimateLineRow>(await pm(db).from('v_estimate_lines_masked').select(ESTIMATE_LINE_COLS).eq('id', body.lineId).eq('estimate_id', est.id).maybeSingle(), 'line')
     : null;
   if (body.op === 'update_line' && !prev) throw new HttpError(404, 'That line was not found on this estimate.', 'NOT_FOUND');
 

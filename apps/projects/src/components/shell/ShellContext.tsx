@@ -1,9 +1,11 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { DEFAULT_VOCAB } from '@/lib/packs';
 import type { Crumb } from '@meritbooks/merit-ui';
 import type { Vocabulary } from '@/lib/pm/vocab';
+import type { MoneyLevel, PersonaGroup, PersonaKey } from '@/lib/access/types';
+import { ALL_MONEY, NO_MONEY, moneyVisFromGrants, type MoneyVis } from '@/components/money/visibility';
 
 export interface ShellCompany {
   id: string;
@@ -12,11 +14,27 @@ export interface ShellCompany {
   installed: boolean;
 }
 
+/** The serialisable slice of Access the browser needs (Sets don't cross the RSC boundary). */
+export interface ShellAccess {
+  persona: PersonaKey;
+  group: PersonaGroup;
+  /** Industry title ("Technician") or the persona name. */
+  title: string;
+  preview: PersonaKey | null;
+  moneyLevel: MoneyLevel;
+  /** Grants for the company in view (the union in a workspace view). */
+  grants: ReadonlyArray<string>;
+}
+
 export interface ShellValue {
   vocab: Vocabulary;
   companies: ReadonlyArray<ShellCompany>;
   activeCompanyId: string | null;
   readOnly: boolean;
+  /** Always set by AppFrame. */
+  access?: ShellAccess | null;
+  /** Always set by AppFrame. A provider that omits it (render tests) draws every figure. */
+  money?: MoneyVis;
   setCrumbs: (c: ReadonlyArray<Crumb> | null) => void;
 }
 
@@ -25,11 +43,14 @@ const Ctx = createContext<ShellValue>({
   companies: [],
   activeCompanyId: null,
   readOnly: false,
+  access: null,
+  money: NO_MONEY,
   setCrumbs: () => {},
 });
 
 export function ShellProvider({ value, children }: { value: ShellValue; children: ReactNode }) {
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  const v = value.money ? value : { ...value, money: ALL_MONEY };
+  return <Ctx.Provider value={v}>{children}</Ctx.Provider>;
 }
 
 export function useShell(): ShellValue {
@@ -38,6 +59,35 @@ export function useShell(): ShellValue {
 
 export function useVocab(): Vocabulary {
   return useContext(Ctx).vocab;
+}
+
+/** Which money this screen may draw (fails closed outside the shell). */
+export function useMoneyVis(): MoneyVis {
+  return useContext(Ctx).money ?? NO_MONEY;
+}
+
+/** True when the caller holds 'projects.x:action' for the company in view. */
+export function useCan(grant: string): boolean {
+  const a = useContext(Ctx).access;
+  // undefined: a provider without access (render tests) · null: outside the shell → no
+  if (a === undefined) return true;
+  return !!a && a.grants.includes(grant);
+}
+
+/**
+ * Narrow money to one company's grants (a job page in a workspace view): children see what the
+ * caller holds at THAT company, never the union.
+ */
+export function MoneyScope({ grants, children }: { grants: ReadonlyArray<string>; children: ReactNode }) {
+  const outer = useContext(Ctx);
+  const level = outer.access?.moneyLevel ?? 1;
+  const key = grants.join(',');
+  const value = useMemo(
+    () => ({ ...outer, money: moneyVisFromGrants(grants, level), access: outer.access ? { ...outer.access, grants } : outer.access }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [outer, key, level],
+  );
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 /** A page names its own breadcrumbs (a job's number and name). Cleared on unmount. */

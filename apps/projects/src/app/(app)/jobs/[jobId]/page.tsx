@@ -42,6 +42,13 @@ import { TimeTab } from '@/components/ops/job-tabs/TimeTab';
 import { getJobBilling, getJobCommitments, getJobEstimates, getJobFinancials, getPrimaryContract, listCostCodeStatus } from '@/lib/pm/money/queries';
 import { billingModesFor } from '@/lib/pm/money/billing-modes';
 import { pm } from '@/lib/pm/db';
+import { guardPage } from '@/components/shell/page-guard';
+import { holds } from '@/lib/nav';
+import type { Grant } from '@/lib/access/types';
+import { moneyVisFor, seesMargin } from '@/components/money/visibility';
+import { MoneyScope } from '@/components/shell/ShellContext';
+import { JobTeamPanel } from '@/components/job/JobTeamPanel';
+import { loadJobTeam } from '@/components/job/team-data';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -64,6 +71,7 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
   if (!UUID.test(params.jobId)) notFound();
   const scope = await pageScope();
   if (!scope) return null;
+  const { access } = await guardPage('/jobs');
   const db = await requireDb();
   const job = await getProject(db, params.jobId);
   if (!job) notFound();
@@ -81,7 +89,30 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
       ? pm(db).from('commitments').select('id', { count: 'exact', head: true }).eq('job_id', list.job_id).eq('status', 'DRAFT').then((r) => r.count ?? 0, () => 0)
       : Promise.resolve(0),
   ]);
-  const tabs = jobTabs(modules, vocab);
+  // Money and module tabs follow the caller's grants AT this job's company (spec §5): absent, not greyed.
+  const mv = moneyVisFor(access, list.location_id);
+  const may = (g: Grant) => holds(access, g, list.location_id);
+  const TAB_GRANT: Partial<Record<string, ReadonlyArray<Grant>>> = {
+    estimates: ['projects.estimates:view'],
+    budget: ['projects.financials:view'],
+    contract: ['projects.contract_value:view'],
+    'change-orders': ['projects.change_orders:view'],
+    commitments: ['projects.commitments:view'],
+    billing: ['projects.billing:view'],
+    'job-cost': ['projects.financials:view'],
+    production: ['projects.production:view'],
+    selections: ['projects.selections:view'],
+    draws: ['projects.billing:view'],
+    time: ['projects.time:view', 'projects.time:create'],
+  };
+  // Money tabs also need the money their figures are made of: commitments are cost, billing and draws contract.
+  const TAB_MONEY: Partial<Record<string, boolean>> = { commitments: mv.cost, billing: mv.contract, draws: mv.contract };
+  const tabs = jobTabs(modules, vocab).filter((t) => {
+    const need = TAB_GRANT[t.value];
+    return (!need || need.some(may)) && TAB_MONEY[t.value] !== false;
+  });
+  const companyGrants = [...(access.byCompany[list.location_id] ?? new Set<string>())];
+  const canTeam = may('projects.team:edit') && !scope.readOnly;
   const opsProps = { jobId: list.job_id, companyId: list.location_id, modules, vocabulary: vocab };
   const tab = pickTab(tabs, searchParams.tab);
   const today = todayIso();
@@ -93,8 +124,13 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
   if (tab.later) {
     body = <LaterTab label={tab.label} what={LATER_WHAT[tab.value] ?? ''} />;
   } else if (tab.value === 'overview') {
-    const [tasks, activity] = await Promise.all([modules.has('schedule') ? listTasks(db, list.job_id) : Promise.resolve([]), listActivity(db, { jobId: list.job_id }, 8)]);
+    const [tasks, activity, team] = await Promise.all([
+      modules.has('schedule') ? listTasks(db, list.job_id) : Promise.resolve([]),
+      listActivity(db, { jobId: list.job_id }, 8),
+      loadJobTeam(db, list.job_id, canTeam ? { clerkUserId: scope.userId, companyId: list.location_id } : null),
+    ]);
     body = (
+      <>
       <OverviewTab
         job={list}
         overview={overview}
@@ -112,6 +148,8 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
           ],
         }}
       />
+      <JobTeamPanel jobId={list.job_id} team={team} canEdit={canTeam} />
+      </>
     );
   } else if (tab.value === 'budget') {
     const [bundle, codes] = await Promise.all([getBudget(db, list.job_id), listCostCodes(db, list.location_id, { jobId: list.job_id, includeInactive: true })]);
@@ -243,7 +281,7 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
     const activity = await listActivity(db, { jobId: list.job_id }, 100);
     body = (
       <div className="mp-table">
-        {activity.length ? <ActivityFeed rows={activity} /> : <p className="t-cap" style={{ padding: 16 }}>Nothing has happened on this job yet.</p>}
+        {activity.length ? <ActivityFeed rows={activity} showMoney={mv.contract} /> : <p className="t-cap" style={{ padding: 16 }}>Nothing has happened on this job yet.</p>}
       </div>
     );
   }
@@ -253,13 +291,19 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
       <PageCrumbs items={[{ label: vocab.jobs, href: '/jobs' }, { label }, ...(tab.value !== 'overview' ? [{ label: tab.label }] : [])]} />
       <PageLine
         facts={[
-          { label: `${cents(list.contract_revised_cents, 0)} revised contract`, tnum: true },
-          { label: `${cents(list.budget_total_cents, 0)} budget`, tnum: true },
-          { label: `${cents(overview?.projected_margin_cents ?? list.contract_revised_cents - list.cost_estimate_cents, 0)} projected margin · ${marginPctText(list)}`, strong: true, tnum: true },
-          `${count(overview?.pending_co_count ?? 0)} pending ${lower(vocab.change_orders)} · ${cents(list.pending_co_cents, 0)}`,
+          ...(mv.contract ? [{ label: `${cents(list.contract_revised_cents, 0)} revised contract`, tnum: true }] : []),
+          ...(mv.cost ? [{ label: `${cents(list.budget_total_cents, 0)} budget`, tnum: true }] : []),
+          ...(seesMargin(mv)
+            ? [{ label: `${cents(overview?.projected_margin_cents ?? list.contract_revised_cents - list.cost_estimate_cents, 0)} projected margin · ${marginPctText(list)}`, strong: true, tnum: true }]
+            : [{ label: list.stage_label ?? list.stage_key, strong: true }]),
+          mv.contract
+            ? `${count(overview?.pending_co_count ?? 0)} pending ${lower(vocab.change_orders)} · ${cents(list.pending_co_cents, 0)}`
+            : `${count(overview?.pending_co_count ?? 0)} pending ${lower(vocab.change_orders)}`,
+          ...(!mv.contract && overview?.tasks_overdue ? [`${count(overview.tasks_overdue)} tasks overdue`] : []),
         ]}
       />
       <Page>
+        <MoneyScope grants={companyGrants}>
         <JobHeader
           jobId={list.job_id}
           companyId={list.location_id}
@@ -284,6 +328,7 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
         <div id="job-panel" role="tabpanel" aria-label={tab.label}>
           {body}
         </div>
+        </MoneyScope>
       </Page>
     </>
   );

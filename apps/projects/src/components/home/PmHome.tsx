@@ -9,7 +9,8 @@ import {
 import type { HomeData, NeedsItem } from '@/lib/pm/home';
 import { dollars, sumBy } from '@/lib/pm/money';
 import { ActivityFeed } from '@/components/common/ActivityFeed';
-import { useVocab } from '@/components/shell/ShellContext';
+import { useMoneyVis, useVocab } from '@/components/shell/ShellContext';
+import { seesMargin } from '@/components/money/visibility';
 import { lower } from '@/lib/pm/vocab';
 import { SeamHealthWidget } from './SeamHealthWidget';
 import { DrawsInFlightWidget, SelectionsDueWidget, ShopLoadWidget, SignalsWidget, TodaysVisitsWidget } from '@/components/ops/widgets';
@@ -31,6 +32,8 @@ export function PmHome({ data, readOnly, modules = [] }: { data: HomeData; readO
   const has = (m: ModuleKey) => modules.includes(m);
   const router = useRouter();
   const v = useVocab();
+  const mv = useMoneyVis();
+  const margin = seesMargin(mv);
   const jobs = lower(v.jobs);
   const groupsDef: Array<{ id: NeedsItem['group']; title: string; caption: string }> = [
     { id: 'blocked', title: 'Blocked moves', caption: 'The next stage is waiting on a check' },
@@ -38,8 +41,10 @@ export function PmHome({ data, readOnly, modules = [] }: { data: HomeData; readO
     { id: 'overdue', title: 'Overdue tasks', caption: 'Past their due date' },
     { id: 'nobudget', title: 'No budget yet', caption: `Open ${jobs} without a budget` },
   ];
+  // "No budget yet" is a cost-side ask: only for people who can build one.
+  const needs = mv.cost ? data.needs : data.needs.filter((n) => n.group !== 'nobudget');
   const groups: QueueGroup<NeedsItem>[] = groupsDef
-    .map((g) => ({ id: g.id, title: g.title, caption: g.caption, rows: data.needs.filter((n) => n.group === g.id) }))
+    .map((g) => ({ id: g.id, title: g.title, caption: g.caption, rows: needs.filter((n) => n.group === g.id) }))
     .filter((g) => g.rows.length > 0);
 
   const columns: QueueColumn<NeedsItem>[] = [
@@ -56,15 +61,17 @@ export function PmHome({ data, readOnly, modules = [] }: { data: HomeData; readO
     ...(data.multiCompany ? [{ id: 'co', header: 'Company', width: 160, cell: (n: NeedsItem) => <span className="l2">{n.company}</span> }] : []),
     {
       id: 'fig',
-      header: 'Amount',
+      header: mv.contract ? 'Amount' : 'Late',
       numeric: true,
       width: 120,
-      cell: (n) => (n.amountCents != null ? money(n.amountCents) : n.days != null ? <span className="neg b">{count(n.days)}d late</span> : '—'),
+      cell: (n) => (n.amountCents != null && mv.contract ? money(n.amountCents) : n.days != null ? <span className="neg b">{count(n.days)}d late</span> : '—'),
     },
     { id: 'fix', header: <span className="sr">Action</span>, width: 152, cell: (n) => <ButtonLink variant="quiet" href={n.href}>{n.fix}</ButtonLink> },
   ];
 
   const empty = data.projects.length === 0;
+  // Over-contract risk is a margin figure; without both sides of it, only lateness counts.
+  const risk = margin ? data.risk : data.risk.filter((r) => r.overdueTasks > 0);
   const pendingCo = sumBy(data.openCos, (c) => c.amount_cents);
   const open = data.projects.filter((p) => !p.stage_is_terminal);
   const openContract = sumBy(open, (p) => p.contract_revised_cents);
@@ -80,10 +87,10 @@ export function PmHome({ data, readOnly, modules = [] }: { data: HomeData; readO
         x={1}
         y={1}
         title="Needs you"
-        count={data.needs.length || undefined}
-        meta={data.needs.length ? groupsDef.map((g) => ({ g, n: data.needs.filter((x) => x.group === g.id).length })).filter((x) => x.n > 0).map((x) => `${x.n} ${x.g.title.toLowerCase()}`).join(' · ') : undefined}
+        count={needs.length || undefined}
+        meta={needs.length ? groupsDef.map((g) => ({ g, n: needs.filter((x) => x.group === g.id).length })).filter((x) => x.n > 0).map((x) => `${x.n} ${x.g.title.toLowerCase()}`).join(' · ') : undefined}
         foot={
-          data.needs.length ? (
+          needs.length ? (
             <>
               <span>
                 Checked the next stage move on {count(data.checkedJobs)} of {count(data.openJobCount)} open {jobs}
@@ -101,7 +108,7 @@ export function PmHome({ data, readOnly, modules = [] }: { data: HomeData; readO
                 body: 'Stages, budget and schedule follow from its job type. It takes about a minute.',
                 action: readOnly ? undefined : <ButtonLink variant="primary" href="/jobs?new=1">New {lower(v.job)}</ButtonLink>,
               }
-            : data.needs.length === 0
+            : needs.length === 0
               ? {
                   kind: 'done',
                   title: 'Nothing needs you',
@@ -132,27 +139,35 @@ export function PmHome({ data, readOnly, modules = [] }: { data: HomeData; readO
         x={9}
         y={1}
         title={`${v.jobs} at risk`}
-        count={data.risk.length || undefined}
-        meta="Over contract or late"
+        count={risk.length || undefined}
+        meta={margin ? 'Over contract or late' : 'Late'}
         state={
           empty
             ? { kind: 'empty', title: `Risk shows once ${jobs} have a contract and a budget` }
-            : data.risk.length === 0
-              ? { kind: 'done', title: `No open ${lower(v.job)} is over contract or late`, body: `${count(open.length)} open ${jobs} checked.` }
+            : risk.length === 0
+              ? { kind: 'done', title: margin ? `No open ${lower(v.job)} is over contract or late` : `No open ${lower(v.job)} is late`, body: `${count(open.length)} open ${jobs} checked.` }
               : undefined
         }
-        foot={data.risk.length > 3 ? <Link className="link" href="/insights/margin">All {count(data.risk.length)} by margin</Link> : undefined}
+        foot={
+          risk.length > 3
+            ? margin
+              ? <Link className="link" href="/insights/margin">All {count(risk.length)} by margin</Link>
+              : <Link className="link" href="/schedule">All {count(risk.length)} on the schedule</Link>
+            : undefined
+        }
       >
         <ul className="agenda">
-          {data.risk.slice(0, 3).map((r) => (
+          {risk.slice(0, 3).map((r) => (
             <li key={r.job.job_id}>
               <Link href={`/jobs/${r.job.job_id}`}>
-                <span className={r.marginCents < 0 ? 'd neg tnum' : 'd tnum'}>{dollars(r.marginCents)}</span>
+                {margin
+                  ? <span className={r.marginCents < 0 ? 'd neg tnum' : 'd tnum'}>{dollars(r.marginCents)}</span>
+                  : <span className="d neg tnum">{count(r.overdueTasks)} late</span>}
                 <span className="txt">
                   <span className="l1">{[r.job.job_number, r.job.name].filter(Boolean).join(' · ')}</span>
-                  <span className="l2">{r.reason}{r.company ? ` · ${r.company}` : ''}</span>
+                  <span className="l2">{margin ? r.reason : `${count(r.overdueTasks)} overdue ${r.overdueTasks === 1 ? 'task' : 'tasks'}`}{r.company ? ` · ${r.company}` : ''}</span>
                 </span>
-                <Pip kind={r.marginCents < 0 ? 'overdue' : 'risk'} />
+                <Pip kind={margin && r.marginCents < 0 ? 'overdue' : 'risk'} />
               </Link>
             </li>
           ))}
@@ -202,9 +217,10 @@ export function PmHome({ data, readOnly, modules = [] }: { data: HomeData; readO
         foot={data.activity.length ? <Link className="link" href="/activity">All activity</Link> : undefined}
         state={data.activity.length === 0 ? { kind: 'empty', title: 'Activity starts with your first change', body: 'Stage moves, approvals and progress sent to Merit Books show up here.' } : undefined}
       >
-        <ActivityFeed rows={data.activity.slice(0, 5)} jobLabels={jobLabels} companyNames={data.multiCompany ? data.companyNames : undefined} />
+        <ActivityFeed rows={data.activity.slice(0, 5)} jobLabels={jobLabels} companyNames={data.multiCompany ? data.companyNames : undefined} showMoney={mv.contract} />
       </Widget>
 
+      {mv.contract && (
       <Widget w={4} h={2} x={9} y={5} title="Open work" pad state={empty ? { kind: 'empty', title: `Figures appear with your first ${lower(v.job)}` } : undefined}>
         <div className="row" style={{ alignItems: 'flex-start', gap: 24 }}>
           <Figure
@@ -225,12 +241,13 @@ export function PmHome({ data, readOnly, modules = [] }: { data: HomeData; readO
           />
         </div>
       </Widget>
+      )}
 
-      <SeamHealthWidget x={1} y={7} w={4} h={2} />
+      {mv.cost && <SeamHealthWidget x={1} y={7} w={4} h={2} />}
       {has('dispatch') && <TodaysVisitsWidget />}
       {has('production') && <ShopLoadWidget />}
       {has('selections') && <SelectionsDueWidget />}
-      {has('lender_draws') && <DrawsInFlightWidget />}
+      {has('lender_draws') && mv.contract && <DrawsInFlightWidget />}
       {OPS_SIGNAL_MODULES.some(has) && <SignalsWidget />}
       {isDealerVocab(v) && (
         <>

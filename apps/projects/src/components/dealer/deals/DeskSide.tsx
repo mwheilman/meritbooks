@@ -44,19 +44,19 @@ function Row({ label, cents, strong, big, muted, rule, preview, negate }: { labe
 }
 
 /** Live totals and gross from pm.dealer_deal_totals, with a preview of unsaved edits. */
-export function TotalsCard({ totals, preview, floorPct, minFront }: { totals: DealTotals; preview: DealTotals | null; floorPct: number; minFront: number }) {
+export function TotalsCard({ totals, preview, floorPct, minFront, showGross = true }: { totals: DealTotals; preview: DealTotals | null; floorPct: number; minFront: number; showGross?: boolean }) {
   const below = belowMarginFloor(totals, { margin_floor_pct: floorPct, min_front_gross_cents: minFront });
   const p = preview;
   return (
     <div className="dl-card">
-      <div className="dl-card-h"><h2 className="t-section">Totals and gross</h2><span className="sp" /><span className="t-cap">Operational</span></div>
-      <div className="dl-gross">
+      <div className="dl-card-h"><h2 className="t-section">{showGross ? 'Totals and gross' : 'Totals'}</h2><span className="sp" /><span className="t-cap">Operational</span></div>
+      {showGross && <div className="dl-gross">
         <div><span className="l">Front gross</span><span className={totals.front_gross_cents < 0 ? 'v neg' : 'v'}>{money(totals.front_gross_cents)}</span><span className="t-cap">{totals.front_gross_pct == null ? 'no sale yet' : `${pct(totals.front_gross_pct)} of sale`}</span></div>
         <div><span className="l">Back gross</span><span className={totals.back_gross_cents < 0 ? 'v neg' : 'v'}>{money(totals.back_gross_cents)}</span><span className="t-cap">F&amp;I and reserve</span></div>
         <div><span className="l">Total gross</span><span className={totals.total_gross_cents < 0 ? 'v neg' : 'v'}>{money(totals.total_gross_cents)}</span><span className="t-cap">{p && p.total_gross_cents !== totals.total_gross_cents ? `${money(p.total_gross_cents)} if saved` : ' '}</span></div>
-      </div>
+      </div>}
       <div className="dl-card-b">
-        {below && totals.sale_price_cents > 0 && (
+        {showGross && below && totals.sale_price_cents > 0 && (
           <p className="dl-note" style={{ marginBottom: 8 }}>Front gross is under the {pct(floorPct)} floor{minFront > 0 ? ` or the ${money(minFront, { decimals: 0 })} minimum` : ''}. Approving it needs a floor override and a reason.</p>
         )}
         <ul className="dl-totals">
@@ -74,7 +74,7 @@ export function TotalsCard({ totals, preview, floorPct, minFront }: { totals: De
           {totals.deposits_cents > 0 && <Row label="Deposits" cents={totals.deposits_cents} negate />}
           <Row label="Balance due (estimate)" cents={totals.balance_due_estimate_cents} big rule preview={p?.balance_due_estimate_cents} />
         </ul>
-        <ul className="dl-totals" style={{ marginTop: 12 }} aria-label="Gross build-up">
+        {showGross && <ul className="dl-totals" style={{ marginTop: 12 }} aria-label="Gross build-up">
           <Row label="Unit and attachment cost" cents={totals.unit_cost_cents} muted negate />
           {totals.over_allowance_cents > 0 && <Row label="Trade over-allowance" cents={totals.over_allowance_cents} muted negate preview={p?.over_allowance_cents} />}
           {totals.fees_cents > 0 && <Row label="Fee cost" cents={totals.fee_cost_cents} muted negate />}
@@ -82,7 +82,7 @@ export function TotalsCard({ totals, preview, floorPct, minFront }: { totals: De
           {totals.fi_cost_cents > 0 && <Row label="F&I cost" cents={totals.fi_cost_cents} muted negate />}
           {totals.finance_reserve_cents > 0 && <Row label="Finance reserve" cents={totals.finance_reserve_cents} muted />}
           {totals.subvention_cents > 0 && <Row label="Subvention" cents={totals.subvention_cents} muted negate />}
-        </ul>
+        </ul>}
       </div>
     </div>
   );

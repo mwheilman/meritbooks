@@ -78,21 +78,21 @@ const UNIT_COLS =
   'floored, floor_status, payoff_cents, payoff_due_on, payoff_scheduled, floor_status_at, floor_note_ref, sot_alert_at, deal_id';
 
 export async function loadDealWorkspace(db: SupabaseClient, dealId: string): Promise<DealWorkspace | null> {
-  const deal = one<DealRow>(await pm(db).from('dealer_deals').select(DEAL_COLS).eq('id', dealId).maybeSingle(), 'deal');
+  const deal = one<DealRow>(await pm(db).from('v_dealer_deals_masked').select(DEAL_COLS).eq('id', dealId).maybeSingle(), 'deal');
   if (!deal) return null;
   const [lines, trades, fi, deposits, quotes, totalsRes, settings, activity] = await Promise.all([
-    rows<DealLineRow>(await pm(db).from('dealer_deal_lines').select(DEAL_LINE_COLS).eq('deal_id', dealId).order('sort').order('line_no'), 'deal lines'),
-    rows<TradeRow>(await pm(db).from('dealer_trades').select(TRADE_COLS).eq('deal_id', dealId).order('created_at'), 'trades'),
-    rows<FiProductRow>(await pm(db).from('dealer_fi_products').select(FI_COLS).eq('deal_id', dealId).order('sort').order('created_at'), 'F&I products'),
+    rows<DealLineRow>(await pm(db).from('v_dealer_deal_lines_masked').select(DEAL_LINE_COLS).eq('deal_id', dealId).order('sort').order('line_no'), 'deal lines'),
+    rows<TradeRow>(await pm(db).from('v_dealer_trades_masked').select(TRADE_COLS).eq('deal_id', dealId).order('created_at'), 'trades'),
+    rows<FiProductRow>(await pm(db).from('v_dealer_fi_products_masked').select(FI_COLS).eq('deal_id', dealId).order('sort').order('created_at'), 'F&I products'),
     rows<DepositRow>(await pm(db).from('dealer_deposits').select(DEPOSIT_COLS).eq('deal_id', dealId).order('created_at'), 'deposits'),
-    rows<QuoteRow>(await pm(db).from('dealer_quotes').select(QUOTE_COLS).eq('deal_id', dealId).order('version', { ascending: false }), 'quotes'),
+    rows<QuoteRow>(await pm(db).from('v_dealer_quotes_masked').select(QUOTE_COLS).eq('deal_id', dealId).order('version', { ascending: false }), 'quotes'),
     pm(db).rpc('dealer_deal_totals', { p_deal: dealId }),
     loadSettings(db, [deal.location_id]),
     rows<ActivityRow>(await pm(db).from('activity').select('id, location_id, job_id, actor_type, actor_id, verb, subject_table, subject_id, summary, meta, created_at').in('subject_table', ['dealer_deals', 'dealer_quotes', 'dealer_deposits']).eq('location_id', deal.location_id).order('created_at', { ascending: false }).limit(200), 'deal timeline'),
   ]);
   if (totalsRes.error) throw new PmQueryError('deal totals', totalsRes.error);
   const unitIds = lines.map((l) => l.asset_id).filter((x): x is string => !!x);
-  const unitRows = unitIds.length ? rows<Omit<DealUnit, 'pdi_open' | 'pdi_done'>>(await pm(db).from('assets').select(UNIT_COLS).in('id', unitIds), 'deal units') : [];
+  const unitRows = unitIds.length ? rows<Omit<DealUnit, 'pdi_open' | 'pdi_done'>>(await pm(db).from('v_assets_masked').select(UNIT_COLS).in('id', unitIds), 'deal units') : [];
   const pdi = unitIds.length ? rows<{ asset_id: string; status: string }>(await pm(db).from('work_orders').select('asset_id, status').in('asset_id', unitIds).eq('kind', 'PDI'), 'PDI orders') : [];
   const units: Record<string, DealUnit> = {};
   for (const u of unitRows) {
@@ -107,7 +107,7 @@ export async function loadDealWorkspace(db: SupabaseClient, dealId: string): Pro
   const marks = markIds.length ? rows<OutboxMarkRow>(await pm(db).from('dealer_outbox').select(OUTBOX_MARK_COLS).in('id', markIds), 'deal acks') : [];
   const markById = new Map(marks.map((m) => [m.id, m]));
   const customer = deal.customer_id
-    ? await db.schema('core').from('customers').select('name, display_name').eq('id', deal.customer_id).maybeSingle().then((r) => { const c = r.data as { name: string; display_name: string | null } | null; return c ? c.display_name || c.name : null; })
+    ? await db.schema('pm').from('v_core_customers_masked').select('name, display_name').eq('id', deal.customer_id).maybeSingle().then((r) => { const c = r.data as { name: string; display_name: string | null } | null; return c ? c.display_name || c.name : null; })
     : null;
   const vendors = await vendorNames(db, [deal.finance_vendor_id, ...trades.map((t) => t.lienholder_vendor_id), ...fi.map((f) => f.provider_vendor_id), ...lines.map((l) => l.oem_vendor_id)]);
   const quoteIds = new Set(quotes.map((q) => q.id));

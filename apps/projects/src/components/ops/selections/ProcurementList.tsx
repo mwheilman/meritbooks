@@ -10,7 +10,8 @@ import { itemTotals, markupText, sellFromMarkup } from '@/lib/pm/ops/selection-m
 import { APPROVAL_METHODS, type ApprovalMethod, type ClientApprovalRow, type ItemStatus, type LookupItem, type ProcurementRow } from '@/lib/pm/ops/types';
 import type { JobOption } from '@/lib/pm/ops/scope';
 import { stamp } from '@/lib/time';
-import { useShell, useVocab } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell, useVocab } from '@/components/shell/ShellContext';
+import { seesMargin, when } from '@/components/money/visibility';
 import { lower } from '@/lib/pm/vocab';
 import { Failure, JobSelect, PctInput, StatusMark, parseNum } from '../common/bits';
 import { Lookup } from '../common/Lookup';
@@ -46,14 +47,17 @@ export function ProcurementList(p: ProcurementListProps) {
   const sell = filtered.reduce((s, r) => s + r.sell_total_cents, 0);
   const cost = filtered.reduce((s, r) => s + r.cost_total_cents, 0);
   const late = p.rows.filter((r) => r.is_overdue).length;
+  // Cost is financials, sell is contract_value, markup and margin need both.
+  const mv = useMoneyVis();
+  const both = seesMargin(mv);
 
   const columns: QueueColumn<ProcurementRow>[] = [
     { id: 'item', header: 'Item', cell: (r) => <><span className="l1">{r.description}</span><span className="l2">{[r.sidemark ? `Sidemark ${r.sidemark}` : null, r.vendor_id ? p.vendors[r.vendor_id] : null, !p.fixedJobId ? jobs.get(r.job_id)?.label : null].filter(Boolean).join(' · ') || ' '}</span></> },
     { id: 'qty', header: 'Qty', numeric: true, width: 80, cell: (r) => `${r.qty} ${r.uom}` },
-    { id: 'cost', header: 'Cost', numeric: true, width: 112, cell: (r) => money(r.cost_total_cents) },
-    { id: 'mk', header: 'Markup', numeric: true, width: 80, cell: (r) => markupText(r.markup_pct) },
-    { id: 'sell', header: 'Sell', numeric: true, width: 112, cell: (r) => money(r.sell_total_cents) },
-    { id: 'mg', header: 'Margin', numeric: true, width: 80, cell: (r) => (r.margin_pct == null ? '—' : pct(r.margin_pct)) },
+    ...when<QueueColumn<ProcurementRow>>(mv.cost, { id: 'cost', header: 'Cost', numeric: true, width: 112, cell: (r) => money(r.cost_total_cents) }),
+    ...when<QueueColumn<ProcurementRow>>(both, { id: 'mk', header: 'Markup', numeric: true, width: 80, cell: (r) => markupText(r.markup_pct) }),
+    ...when<QueueColumn<ProcurementRow>>(mv.contract, { id: 'sell', header: 'Sell', numeric: true, width: 112, cell: (r) => money(r.sell_total_cents) }),
+    ...when<QueueColumn<ProcurementRow>>(both, { id: 'mg', header: 'Margin', numeric: true, width: 80, cell: (r) => (r.margin_pct == null ? '—' : pct(r.margin_pct)) }),
     { id: 'st', header: 'Status', width: 140, cell: (r) => <StatusMark mark={ITEM_STATUS[r.status]} /> },
     { id: 'when', header: 'Next date', width: 120, cell: (r) => {
       if (r.installed_on) return <><span className="l1">{shortDate(r.installed_on, p.today)}</span><span className="l2">installed</span></>;
@@ -70,7 +74,8 @@ export function ProcurementList(p: ProcurementListProps) {
         <div style={{ width: 280 }}><Search aria-label="Find an item" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Item, sidemark, PO or vendor" /></div>
         <Seg<Show> aria-label="Show" value={show} onChange={setShow} items={[{ value: 'open', label: 'Open' }, { value: 'late', label: 'Past expected', count: late }, { value: 'all', label: 'All', count: p.rows.length }]} />
         <span className="sp" />
-        <span className="t-cap">{money(sell)} sell · {money(sell - cost)} margin{sell > 0 ? ` (${pct((sell - cost) / sell)})` : ''}</span>
+        {both ? <span className="t-cap">{money(sell)} sell · {money(sell - cost)} margin{sell > 0 ? ` (${pct((sell - cost) / sell)})` : ''}</span>
+          : mv.contract ? <span className="t-cap">{money(sell)} sell</span> : mv.cost ? <span className="t-cap">{money(cost)} cost</span> : null}
         {!readOnly && <Button variant="primary" icon="plus" onClick={() => { setCreating(true); setCursor(null); }}>New item</Button>}
       </div>
       <div className={creating || cur ? 'ops-split has-panel' : 'ops-split'}>
@@ -102,6 +107,7 @@ function ItemPanel({ item, jobLabel, customerName, vendor, storage, today, onClo
   const url = `/api/ops/items/${item.item_id}`;
   const pathIdx = ITEM_PATH.indexOf(item.status);
   const priced = item.status === 'SPECIFIED' || item.status === 'PROPOSED';
+  const mv = useMoneyVis();
   const storeName = item.storage_location_id ? storage.find((s) => s.id === item.storage_location_id)?.name ?? 'Storage' : null;
   return (
     <Panel eyebrow={['Item', ITEM_STATUS[item.status].word]} title={item.description} meta={[jobLabel, item.sidemark ? `Sidemark ${item.sidemark}` : null].filter(Boolean).join(' · ')} onClose={onClose}>
@@ -114,9 +120,9 @@ function ItemPanel({ item, jobLabel, customerName, vendor, storage, today, onClo
         <div style={{ marginTop: 12 }}>
           <KV items={[
             ...(vendor ? [{ term: 'Vendor', value: vendor }] : []),
-            { term: 'Cost', value: `${money(item.cost_total_cents)}${item.freight_cents ? ` incl. ${money(item.freight_cents)} freight` : ''}` },
-            { term: 'Sell', value: `${money(item.sell_total_cents)}${item.markup_pct != null ? ` · ${markupText(item.markup_pct)} markup` : ''}` },
-            { term: 'Margin', value: `${money(item.margin_cents)}${item.margin_pct != null ? ` · ${pct(item.margin_pct)}` : ''}` },
+            ...when(mv.cost, { term: 'Cost', value: `${money(item.cost_total_cents)}${item.freight_cents ? ` incl. ${money(item.freight_cents)} freight` : ''}` }),
+            ...when(mv.contract, { term: 'Sell', value: `${money(item.sell_total_cents)}${item.markup_pct != null && seesMargin(mv) ? ` · ${markupText(item.markup_pct)} markup` : ''}` }),
+            ...when(seesMargin(mv), { term: 'Margin', value: `${money(item.margin_cents)}${item.margin_pct != null ? ` · ${pct(item.margin_pct)}` : ''}` }),
             ...(item.po_number ? [{ term: 'PO', value: item.po_number }] : []),
             ...(item.expected_on ? [{ term: 'Expected', value: shortDate(item.expected_on, today) }] : []),
             ...(item.received_on ? [{ term: 'Received', value: shortDate(item.received_on, today) }] : []),
@@ -139,7 +145,7 @@ function ItemPanel({ item, jobLabel, customerName, vendor, storage, today, onClo
         </PanelSection>
       )}
 
-      {!readOnly && priced && <PricingForm item={item} busy={busy === 'price'} onSave={(b) => void act('price', 'post', url, { op: 'update', ...b }, 'Saved the pricing')} />}
+      {!readOnly && priced && seesMargin(mv) && <PricingForm item={item} busy={busy === 'price'} onSave={(b) => void act('price', 'post', url, { op: 'update', ...b }, 'Saved the pricing')} />}
 
       {data && data.approvals.length > 0 && (
         <PanelSection title="Client approval on record">
@@ -239,6 +245,8 @@ function PricingForm({ item, busy, onSave }: { item: ProcurementRow; busy: boole
 
 function NewItemPanel({ jobs, fixedJobId, onClose, onCreated }: { jobs: JobOption[]; fixedJobId?: string | null; onClose: () => void; onCreated: (id: string) => void }) {
   const v = useVocab();
+  const mv = useMoneyVis();
+  const prices = seesMargin(mv);
   const { act, busy, error } = useOps();
   const [jobId, setJobId] = useState(fixedJobId ?? '');
   const [desc, setDesc] = useState('');
@@ -281,14 +289,14 @@ function NewItemPanel({ jobs, fixedJobId, onClose, onCreated }: { jobs: JobOptio
             <Field label="Expected"><Input type="date" value={expected} onChange={(e) => setExpected(e.target.value)} /></Field>
           </div>
           <div className="mp-form-2">
-            <Field label="Net cost each"><MoneyInput valueCents={cost} onChangeCents={setCost} placeholder="0.00" /></Field>
-            <Field label="Markup"><PctInput value={markup} onChange={setMarkup} placeholder="35" max={10000} /></Field>
+            {prices && <Field label="Net cost each"><MoneyInput valueCents={cost} onChangeCents={setCost} placeholder="0.00" /></Field>}
+            {prices && <Field label="Markup"><PctInput value={markup} onChange={setMarkup} placeholder="35" max={10000} /></Field>}
           </div>
           <div className="mp-form-2">
-            <Field label="Sell each" help="Blank uses cost and markup"><MoneyInput valueCents={sell} onChangeCents={setSell} /></Field>
-            <Field label="Freight and receiving"><MoneyInput valueCents={freight} onChangeCents={setFreight} placeholder="0.00" /></Field>
+            {prices && <Field label="Sell each" help="Blank uses cost and markup"><MoneyInput valueCents={sell} onChangeCents={setSell} /></Field>}
+            {prices && <Field label="Freight and receiving"><MoneyInput valueCents={freight} onChangeCents={setFreight} placeholder="0.00" /></Field>}
           </div>
-          <p className="t-cap">{money(t.sell)} sell · {money(t.cost)} cost · {money(t.margin)} margin{t.marginPct != null ? ` (${pct(t.marginPct)})` : ''}</p>
+          {prices ? <p className="t-cap">{money(t.sell)} sell · {money(t.cost)} cost · {money(t.margin)} margin{t.marginPct != null ? ` (${pct(t.marginPct)})` : ''}</p> : <p className="t-cap">Purchasing prices it.</p>}
           <Failure text={error} />
           <button type="submit" hidden />
         </form>

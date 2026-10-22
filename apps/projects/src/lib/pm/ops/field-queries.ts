@@ -131,7 +131,7 @@ export async function loadWorkOrderDetail(db: SupabaseClient, woId: string): Pro
   const order = one<WorkOrderRow>(await pm(db).from('work_orders').select(WO_COLS).eq('id', woId).maybeSingle(), 'work order');
   if (!order) return null;
   const [lines, assignments, claims, asset, history] = await Promise.all([
-    rows<WoLineRow>(await pm(db).from('work_order_lines').select(WO_LINE_COLS).eq('work_order_id', woId).order('sort').order('created_at'), 'lines'),
+    rows<WoLineRow>(await pm(db).from('v_work_order_lines_masked').select(WO_LINE_COLS).eq('work_order_id', woId).order('sort').order('created_at'), 'lines'),
     rows<AssignmentRow>(await pm(db).from('dispatch_assignments').select(ASSIGNMENT_COLS).eq('work_order_id', woId).order('created_at'), 'assignments'),
     rows<WarrantyClaimRow>(await pm(db).from('warranty_claims').select(CLAIM_COLS).eq('work_order_id', woId).order('created_at'), 'claims'),
     order.asset_id ? pm(db).from('assets').select(ASSET_COLS).eq('id', order.asset_id).maybeSingle().then((r) => (r.data ?? null) as AssetRow | null) : Promise.resolve(null),

@@ -85,7 +85,7 @@ export interface UnitBundle {
 
 /** Lots / units and entitlement milestones. pm.units has no company column: the caller filters by job. */
 export async function loadUnits(db: SupabaseClient, w: Where, inScope: (jobId: string) => boolean): Promise<UnitBundle> {
-  let uq = pm(db).from('units').select(UNIT_COLS);
+  let uq = pm(db).from('v_units_masked').select(UNIT_COLS);
   if (w.jobId) uq = uq.eq('job_id', w.jobId);
   let eq = pm(db).from('v_entitlement_status').select('location_id, job_id, entitlement_id, unit_id, kind, name, authority, status, target_on, submitted_on, hearing_on, approved_on, expires_on, is_late, expiring_soon');
   if (w.companyIds.length) eq = eq.in('location_id', [...w.companyIds]);

@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  Button, ButtonLink, Check, Field, Input, InlineNotice, Keybar, MoneyInput, Select, WidgetState, api, count, money, useHotkey,
+  Button, ButtonLink, Check, Field, Input, InlineNotice, Keybar, MoneyInput, Select, WidgetState, api, count, useHotkey,
 } from '@meritbooks/merit-ui';
+import { useSellText } from '@/components/money/useMoneyText';
 import { PAYMENT_WORDS, TICKET_STATUS } from '@/lib/pm/dealer/labels';
 import { counterLookup, fillPlan, parseCounterEntry, ticketTotals, type CounterLookup } from '@/lib/pm/dealer/math';
 import type { CounterSearch, TicketDetail } from '@/lib/pm/dealer/parts-queries';
@@ -35,6 +36,7 @@ interface Pending { match: Match; qty: number; onHand: number; bin: string | nul
  * for the rest. Close with the payment method; Merit Books gets the sale and computes the tax.
  */
 export function CounterView(p: CounterViewProps) {
+  const money = useSellText();
   const { readOnly } = useShell();
   const { act, busy, version, error } = useStore();
   const [ticketId, setTicketId] = useState<string | null>(p.focusTicketId);
@@ -296,6 +298,7 @@ function PriceCell({ label, cents, onCommit }: { label: string; cents: number; o
 }
 
 function OpenTickets({ tickets, customers, current, onResume }: { tickets: TicketRow[]; customers: Record<string, string>; current: string | null; onResume: (id: string) => void }) {
+  const money = useSellText();
   const open = tickets.filter((t) => t.status === 'OPEN' && t.id !== current);
   const closed = tickets.filter((t) => t.status === 'CLOSED').slice(0, 5);
   if (!open.length && !closed.length) return null;

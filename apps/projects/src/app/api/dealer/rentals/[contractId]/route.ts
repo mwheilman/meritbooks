@@ -20,7 +20,7 @@ const Op = z.discriminatedUnion('op', [
 ]);
 
 /** Check out (meter, condition), check in (meter, condition, damage, fuel, cleaning), bill, cancel. */
-export const POST = route({ body: Op }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, mask: 'rental', body: Op }, async ({ db, params, body, tenant }) => {
   const c = await downs<{ id: string; location_id: string; meter_out: number | null }>(db, 'rental_contracts', 'id, location_id, meter_out', params.contractId!, 'That rental was not found.');
   assertCompany(tenant, c.location_id);
   switch (body.op) {

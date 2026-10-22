@@ -29,7 +29,7 @@ async function jobFacts(db: SupabaseClient, companyIds: string[]): Promise<Map<s
   for (const id of companyIds) out.set(id, { jobs: 0, unadopted: 0 });
   if (companyIds.length === 0) return out;
   const [{ data: jobs }, { data: projects }] = await Promise.all([
-    db.schema('core').from('jobs').select('id, location_id').in('location_id', companyIds).limit(10_000),
+    db.schema('pm').from('v_core_jobs_masked').select('id, location_id').in('location_id', companyIds).limit(10_000),
     db.schema('pm').from('projects').select('job_id').limit(10_000),
   ]);
   const adopted = new Set(((projects ?? []) as { job_id: string }[]).map((p) => p.job_id));

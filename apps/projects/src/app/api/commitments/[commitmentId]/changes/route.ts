@@ -24,7 +24,7 @@ const Body = z.discriminatedUnion('op', [
 ]);
 
 /** Commitment change orders: draft (member insert), approve_commitment_change (tier + SoD; re-sends), reject_commitment_change. */
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.commitments', action: 'edit' }, ops: { approve: { cap: 'projects.commitments', action: 'approve' }, reject: { cap: 'projects.commitments', action: 'approve' } }, mask: 'commitment', body: Body }, async ({ db, params, body }) => {
   const c = await loadCommitment(db, params.commitmentId!);
   if (body.op === 'create') {
     if (c.status !== 'APPROVED' && c.status !== 'EXECUTED') {

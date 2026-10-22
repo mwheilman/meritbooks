@@ -20,7 +20,7 @@ const Op = z.discriminatedUnion('op', [
 ]);
 
 /** OEM stock order: lines while DRAFT, submit, receive (all open, or per line). */
-export const POST = route({ body: Op }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, mask: 'parts_order', body: Op }, async ({ db, params, body, tenant }) => {
   const o = await downs<{ id: string; location_id: string }>(db, 'parts_orders', 'id, location_id', params.orderId!, 'That parts order was not found.');
   assertCompany(tenant, o.location_id);
   const pm = db.schema('pm');

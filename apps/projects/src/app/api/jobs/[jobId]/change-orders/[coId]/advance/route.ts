@@ -4,7 +4,7 @@ import { must, route } from '@/lib/api';
 import { loadJob } from '@/lib/pm/guarded';
 
 /** PCO ⇄ COR, → REJECTED, → VOID (pm.advance_change_order checks the move). */
-export const POST = route({ body: z.object({ to: z.enum(['PCO', 'COR', 'REJECTED', 'VOID']) }) }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.change_orders', action: 'edit' }, mask: 'change_order', body: z.object({ to: z.enum(['PCO', 'COR', 'REJECTED', 'VOID']) }) }, async ({ db, params, body }) => {
   const job = await loadJob(db, params.jobId!);
   const co = must(await db.schema('pm').from('change_orders').select('id').eq('id', params.coId!).eq('job_id', job.job_id).maybeSingle(), 'change order') as { id: string } | null;
   if (!co) throw new HttpError(404, 'That change order was not found on this job.', 'NOT_FOUND');

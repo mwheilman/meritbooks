@@ -15,7 +15,7 @@ const Body = z.object({
 });
 
 /** New production order (a pm.work_orders row of kind PRODUCTION), in engineering until released. */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.production', action: 'create' }, mask: 'work_order', body: Body }, async ({ db, body, tenant }) => {
   const job = await loadJob(db, body.jobId);
   assertCompany(tenant, job.location_id);
   const id = await call<string | null>(db, 'create_production_order', {

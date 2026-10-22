@@ -30,12 +30,12 @@ export async function listOpenTasks(db: SupabaseClient, limit = 1000): Promise<T
 }
 
 export async function listChangeOrders(db: SupabaseClient, jobId: string): Promise<ChangeOrderRow[]> {
-  return rows<ChangeOrderRow>(await pm(db).from('change_orders').select(CO_COLS).eq('job_id', jobId).order('created_at', { ascending: false }), 'change orders');
+  return rows<ChangeOrderRow>(await pm(db).from('v_change_orders_masked').select(CO_COLS).eq('job_id', jobId).order('created_at', { ascending: false }), 'change orders');
 }
 
 /** Change orders across the org, optionally only open (PCO/COR). */
 export async function listAllChangeOrders(db: SupabaseClient, opts: { openOnly?: boolean; limit?: number } = {}): Promise<ChangeOrderRow[]> {
-  let q = pm(db).from('change_orders').select(CO_COLS);
+  let q = pm(db).from('v_change_orders_masked').select(CO_COLS);
   if (opts.openOnly) q = q.in('stage', ['PCO', 'COR']);
   return rows<ChangeOrderRow>(await q.order('created_at', { ascending: false }).limit(opts.limit ?? 500), 'change orders');
 }

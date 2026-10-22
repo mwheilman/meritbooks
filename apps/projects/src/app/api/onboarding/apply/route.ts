@@ -18,6 +18,7 @@ import { RouteError, dbError, json, requireCompany, withOnboarding } from '@/lib
 import { openRun } from '@/lib/onboarding/runs';
 import { ApplySchema } from '@/lib/onboarding/schemas';
 import type { ApplyResponse, PlanInputs } from '@/lib/onboarding/types';
+import { denyUnless } from '@/lib/access/route-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,7 @@ const SETUP_ROLES: ReadonlySet<string> = new Set(['owner', 'company_admin', 'adm
 export async function POST(req: Request) {
   return withOnboarding(req, ApplySchema, async (body, ctx) => {
     const company = requireCompany(ctx, body.companyId);
+    const denied = await denyUnless('projects.settings', 'configure', body.companyId); if (denied) return denied;
     // Configuring a company's workspace is an admin action (owner / admin / ops lead).
     const me = await getMe(ctx.db, ctx.userId ?? '');
     if (!me.role || !SETUP_ROLES.has(me.role)) {

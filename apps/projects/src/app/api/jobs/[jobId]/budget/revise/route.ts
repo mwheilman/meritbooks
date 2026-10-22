@@ -18,7 +18,7 @@ const Body = z.discriminatedUnion('op', [
  * Merit Books when Books is present and a contract exists; `discard` drops the draft.
  * Projects never touches cost in Books directly.
  */
-export const POST = route({ body: Body }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.financials', action: 'edit' }, mask: 'budget', body: Body }, async ({ db, params, body, tenant }) => {
   const job = await loadJob(db, params.jobId!);
   const pm = db.schema('pm');
 

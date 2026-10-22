@@ -15,7 +15,7 @@ const Body = z.object({
 });
 
 /** pm.punch_items is member-writable (1100 grants); closed_at follows the status. */
-export const PATCH = route({ body: Body }, async ({ db, params, body }) => {
+export const PATCH = route({ access: { cap: 'projects.jobs', action: 'edit' }, body: Body }, async ({ db, params, body }) => {
   await own(db, 'punch_items', 'id', { id: params.itemId! }, 'That item was not found.');
   const patch: Record<string, unknown> = {};
   if (body.status) {
@@ -33,7 +33,7 @@ export const PATCH = route({ body: Body }, async ({ db, params, body }) => {
   return { ok: true };
 });
 
-export const DELETE = route({}, async ({ db, params }) => {
+export const DELETE = route({ access: { cap: 'projects.jobs', action: 'edit' } }, async ({ db, params }) => {
   await own(db, 'punch_items', 'id', { id: params.itemId! }, 'That item was not found.');
   await write(db.schema('pm').from('punch_items').delete().eq('id', params.itemId!).select('id'), 'delete punch item');
   return { ok: true };

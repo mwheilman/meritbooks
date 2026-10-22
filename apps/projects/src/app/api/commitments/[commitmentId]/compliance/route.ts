@@ -29,7 +29,7 @@ const Body = z.discriminatedUnion('op', [
  * Certificates of insurance and lien waivers on a commitment. A required document that is
  * missing, unverified or expired holds payment on the commitment in Merit Books.
  */
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.commitments', action: 'edit' }, ops: { verify: { cap: 'projects.commitments', action: 'approve' } }, mask: 'commitment', body: Body }, async ({ db, params, body }) => {
   const c = await loadCommitment(db, params.commitmentId!);
   if (body.op === 'add') {
     const d = wrote<{ id: string }>(

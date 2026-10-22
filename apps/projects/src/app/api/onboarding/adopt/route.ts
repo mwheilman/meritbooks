@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { companyJobTypes } from '@/lib/onboarding/load';
 import { matchJobType } from '@/lib/onboarding/import/rows';
 import { RouteError, dbError, json, requireCompany, withOnboarding } from '@/lib/onboarding/route';
+import { denyUnless } from '@/lib/access/route-guard';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -25,6 +26,7 @@ interface JobRow { id: string; job_number: string; name: string; archetype: stri
 export async function POST(req: Request) {
   return withOnboarding(req, Body, async (body, ctx) => {
     requireCompany(ctx, body.companyId);
+    const denied = await denyUnless('projects.settings', 'configure', body.companyId); if (denied) return denied;
     const types = await companyJobTypes(ctx.db, body.companyId);
     if (types.length === 0) throw new RouteError(409, 'NO_PACK', 'Set up this company first, then bring its jobs over.');
     if (body.jobTypeKey && !types.some((t) => t.key === body.jobTypeKey)) {
@@ -32,7 +34,7 @@ export async function POST(req: Request) {
     }
 
     const [{ data: jobs, error: jobsErr }, { data: projects }] = await Promise.all([
-      ctx.db.schema('core').from('jobs').select('id, job_number, name, archetype, job_type').eq('location_id', body.companyId).limit(2000),
+      ctx.db.schema('pm').from('v_core_jobs_masked').select('id, job_number, name, archetype, job_type').eq('location_id', body.companyId).limit(2000),
       ctx.db.schema('pm').from('projects').select('job_id').eq('location_id', body.companyId).limit(10_000),
     ]);
     if (jobsErr) throw dbError(jobsErr, 'Reading your Books jobs');

@@ -7,6 +7,7 @@ import { listJobRetainage, listReleases } from '@/lib/pm/money/queries';
 import { PageLine } from '@/components/common/PageLine';
 import { PageCrumbs } from '@/components/shell/ShellContext';
 import { RetainageView, type ReleaseRow, type RetainageJob } from '@/components/money/RetainageView';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Retainage' };
 
@@ -14,6 +15,7 @@ export const metadata: Metadata = { title: 'Retainage' };
 export default async function RetainagePage() {
   const scope = await pageScope();
   if (!scope) return null;
+  await guardPage('/retainage');
   const db = await requireDb();
   const [jobs, ret, rel] = await Promise.all([scopedJobs(db, scope), listJobRetainage(db), listReleases(db, scope.companyIds)]);
   const multi = scope.companyIds.length > 1;

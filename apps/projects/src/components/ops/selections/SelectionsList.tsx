@@ -9,7 +9,8 @@ import { SELECTION_STATUS } from '@/lib/pm/ops/labels';
 import { optionRange, varianceCell } from '@/lib/pm/ops/selection-math';
 import type { SelectionStatusRow } from '@/lib/pm/ops/types';
 import type { JobOption } from '@/lib/pm/ops/scope';
-import { useShell, useVocab } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell, useVocab } from '@/components/shell/ShellContext';
+import { when } from '@/components/money/visibility';
 import { lower } from '@/lib/pm/vocab';
 import { Failure, JobSelect, StatusMark } from '../common/bits';
 import { useOps } from '../common/useOps';
@@ -31,6 +32,8 @@ export interface SelectionsListProps {
 
 export function SelectionsList(p: SelectionsListProps) {
   const v = useVocab();
+  // Allowances, chosen prices and variance are what the customer pays: contract_value.
+  const mv = useMoneyVis();
   const { readOnly } = useShell();
   const [band, setBand] = useState<Band>('waiting');
   const [jobId, setJobId] = useState(p.fixedJobId ?? p.initialJobId ?? '');
@@ -46,7 +49,7 @@ export function SelectionsList(p: SelectionsListProps) {
     return [...m.entries()].map(([id, rs]) => {
       const allowance = rs.filter((r) => r.status !== 'VOID').reduce((s, r) => s + (r.allowance_cents ?? 0), 0);
       const variance = rs.filter((r) => r.status === 'APPROVED').reduce((s, r) => s + (r.variance_cents ?? 0), 0);
-      return { id, title: jobs.get(id)?.label ?? v.job, rows: rs, caption: `${money(allowance)} allowances · ${money(variance)} approved variance` };
+      return { id, title: jobs.get(id)?.label ?? v.job, rows: rs, caption: mv.contract ? `${money(allowance)} allowances · ${money(variance)} approved variance` : undefined };
     });
   }, [rows, jobs, v.job]);
   const cur = p.rows.find((r) => r.selection_id === cursor) ?? null;
@@ -56,9 +59,10 @@ export function SelectionsList(p: SelectionsListProps) {
   const columns: QueueColumn<SelectionStatusRow>[] = [
     { id: 'what', header: 'Decision', cell: (r) => <><span className="l1">{r.title}</span><span className="l2">{r.category}</span></> },
     { id: 'due', header: 'Due', width: 96, cell: (r) => (r.due_on ? <span className={r.is_overdue ? 'neg b' : undefined}>{shortDate(r.due_on, p.today)}</span> : '—') },
-    { id: 'al', header: 'Allowance', numeric: true, width: 120, cell: (r) => (r.allowance_cents == null ? '—' : money(r.allowance_cents)) },
-    { id: 'ch', header: 'Chosen', numeric: true, width: 150, cell: (r) => (r.chosen_total_cents != null ? money(r.chosen_total_cents) : <span className="l2">{r.option_count ? optionRange(r.low_cents, r.high_cents) : 'No options'}</span>) },
-    { id: 'va', header: 'Variance', numeric: true, width: 120, cell: (r) => (r.status === 'APPROVED' ? <span className={r.variance_cents && r.variance_cents > 0 ? 'b' : undefined}>{varianceCell(r.variance_cents)}</span> : '—') },
+    ...when<QueueColumn<SelectionStatusRow>>(mv.contract,
+      { id: 'al', header: 'Allowance', numeric: true, width: 120, cell: (r) => (r.allowance_cents == null ? '—' : money(r.allowance_cents)) },
+      { id: 'ch', header: 'Chosen', numeric: true, width: 150, cell: (r) => (r.chosen_total_cents != null ? money(r.chosen_total_cents) : <span className="l2">{r.option_count ? optionRange(r.low_cents, r.high_cents) : 'No options'}</span>) },
+      { id: 'va', header: 'Variance', numeric: true, width: 120, cell: (r) => (r.status === 'APPROVED' ? <span className={r.variance_cents && r.variance_cents > 0 ? 'b' : undefined}>{varianceCell(r.variance_cents)}</span> : '—') }),
     { id: 'st', header: 'Status', width: 170, cell: (r) => <StatusMark mark={SELECTION_STATUS[r.status]} /> },
   ];
 
@@ -71,7 +75,7 @@ export function SelectionsList(p: SelectionsListProps) {
         <div style={{ flex: 1, maxWidth: 620 }}>
           <Bands<Band> aria-label={`${v.selections} by status`} value={band} onChange={setBand} items={[
             { value: 'waiting', label: 'Waiting on the client', count: count(inBand('waiting').length), caption: overdue ? `${count(overdue)} past due` : 'Open, sent or declined' },
-            { value: 'approved', label: 'Approved', count: count(inBand('approved').length), caption: `${money(inBand('approved').reduce((s, r) => s + (r.variance_cents ?? 0), 0))} variance` },
+            { value: 'approved', label: 'Approved', count: count(inBand('approved').length), caption: mv.contract ? `${money(inBand('approved').reduce((s, r) => s + (r.variance_cents ?? 0), 0))} variance` : 'Decided' },
             { value: 'all', label: 'All', count: count(scoped.length) },
           ]} />
         </div>

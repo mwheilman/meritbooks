@@ -72,7 +72,7 @@ export interface UnitDetail {
 
 /** Everything the unit panel shows: cost build-up, Books' floor word, history, photos. */
 export async function loadUnitDetail(db: SupabaseClient, unitId: string): Promise<UnitDetail | null> {
-  const unit = one<DealerUnitRow>(await pm(db).from('assets').select(DEALER_UNIT_COLS).eq('id', unitId).maybeSingle(), 'unit');
+  const unit = one<DealerUnitRow>(await pm(db).from('v_assets_masked').select(DEALER_UNIT_COLS).eq('id', unitId).maybeSingle(), 'unit');
   if (!unit) return null;
   const [inventory, costs, floor, alerts, history, activity, openWork, deal, photos, customer] = await Promise.all([
     pm(db).from('v_dealer_unit_inventory').select(UNIT_INVENTORY_COLS).eq('unit_id', unitId).maybeSingle().then((r) => (r.data ? numUnit(r.data as unknown as UnitInventoryRow) : null)),
@@ -84,7 +84,7 @@ export async function loadUnitDetail(db: SupabaseClient, unitId: string): Promis
     rows<{ id: string; number: string | null; kind: string; status: string; summary: string }>(await pm(db).from('work_orders').select('id, number, kind, status, summary').eq('asset_id', unitId).not('status', 'in', '(CLOSED,CANCELLED)').order('created_at', { ascending: false }).limit(10), 'open work on the unit'),
     unit.deal_id ? pm(db).from('dealer_deals').select('id, number, stage').eq('id', unit.deal_id).maybeSingle().then((r) => (r.data ?? null) as UnitDetail['deal']) : Promise.resolve(null),
     loadPhotos(db, 'assets', unitId),
-    unit.customer_id ? db.schema('core').from('customers').select('name, display_name').eq('id', unit.customer_id).maybeSingle().then((r) => { const c = r.data as { name: string; display_name: string | null } | null; return c ? c.display_name || c.name : null; }) : Promise.resolve(null),
+    unit.customer_id ? db.schema('pm').from('v_core_customers_masked').select('name, display_name').eq('id', unit.customer_id).maybeSingle().then((r) => { const c = r.data as { name: string; display_name: string | null } | null; return c ? c.display_name || c.name : null; }) : Promise.resolve(null),
   ]);
   const outboxIds = costs.map((c) => c.outbox_id).filter((x): x is string => !!x);
   const marks = outboxIds.length ? rows<OutboxMarkRow>(await pm(db).from('dealer_outbox').select(OUTBOX_MARK_COLS).in('id', outboxIds), 'cost acks') : [];

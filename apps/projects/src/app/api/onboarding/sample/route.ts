@@ -8,6 +8,7 @@
  */
 import { z } from 'zod';
 import { dbError, json, requireCompany, withOnboarding } from '@/lib/onboarding/route';
+import { denyUnless } from '@/lib/access/route-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,7 @@ const Body = z.object({ companyId: z.string().uuid() });
 export async function POST(req: Request) {
   return withOnboarding(req, Body, async (body, ctx) => {
     requireCompany(ctx, body.companyId);
+    const denied = await denyUnless('projects.settings', 'configure', body.companyId); if (denied) return denied;
     const { data, error } = await ctx.db.schema('pm').rpc('load_sample_job', { p_location: body.companyId });
     if (error || !data) throw dbError(error, 'Loading the sample job');
     return json({ jobId: data as string });
@@ -25,6 +27,7 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   return withOnboarding(req, Body, async (body, ctx) => {
     requireCompany(ctx, body.companyId);
+    const denied = await denyUnless('projects.settings', 'configure', body.companyId); if (denied) return denied;
     const { data, error } = await ctx.db.schema('pm').rpc('remove_sample_data', { p_location: body.companyId });
     if (error) throw dbError(error, 'Removing the sample job');
     const r = (data ?? {}) as { removed?: number; cancelled?: number };

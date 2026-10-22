@@ -9,6 +9,7 @@ import { StoreOff } from '@/components/dealer/common/StoreOff';
 import { DealsPipeline } from '@/components/dealer/deals/DealsPipeline';
 import '@/components/ops/ops.css';
 import '@/components/dealer/dealer.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Deals' };
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ export const dynamic = 'force-dynamic';
 export default async function DealsPage({ searchParams }: { searchParams: { stage?: string; new?: string } }) {
   const o = await dealerScope();
   if (!o) return null;
+  const { money: mv } = await guardPage('/deals');
   if (!o.dealerIds.length) {
     return (
       <>
@@ -39,7 +41,7 @@ export default async function DealsPage({ searchParams }: { searchParams: { stag
           o.where,
           { label: `${count(toDesk.length)} to desk`, strong: toDesk.length > 0 },
           `${count(deals.filter((d) => d.stage === 'FUNDED').length)} to deliver`,
-          { label: `${money(delivered30.reduce((s, d) => s + (d.total_gross_cents ?? 0), 0), { decimals: 0 })} gross delivered in 30 days`, tnum: true },
+          ...(mv.cost && mv.contract ? [{ label: `${money(delivered30.reduce((s, d) => s + (d.total_gross_cents ?? 0), 0), { decimals: 0 })} gross delivered in 30 days`, tnum: true }] : []),
         ]}
       />
       <Page>

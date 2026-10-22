@@ -36,14 +36,14 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('deal'), customerId: Uuid.nullish() }),
 ]);
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.store', action: 'view' }, mask: 'dealer_unit' }, async ({ db, params }) => {
   const d = await loadUnitDetail(db, params.unitId!);
   if (!d) throw new HttpError(404, 'That unit was not found.', 'NOT_FOUND');
   return d;
 });
 
 /** Unit actions: add cost, change status, transfer, open PDI, register warranty, edit, start a deal. */
-export const POST = route({ body: Op }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, ops: { cost: { cap: 'projects.financials', action: 'edit' } }, mask: 'dealer_unit', body: Op }, async ({ db, params, body, tenant }) => {
   const u = await downs<{ id: string; location_id: string; serial_number: string | null }>(db, 'assets', 'id, location_id, serial_number', params.unitId!, 'That unit was not found.');
   assertCompany(tenant, u.location_id);
   switch (body.op) {

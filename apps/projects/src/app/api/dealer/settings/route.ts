@@ -30,7 +30,7 @@ const Body = z.object({
 });
 
 /** Store rules for one company (pm.set_dealer_settings; operations manager, owner or admin). */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.settings', action: 'configure' }, mask: 'dealer_settings', body: Body }, async ({ db, body, tenant }) => {
   assertCompany(tenant, body.companyId);
   const s: Record<string, unknown> = {};
   const map: Array<[keyof typeof body, string]> = [

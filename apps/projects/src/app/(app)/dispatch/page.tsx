@@ -9,6 +9,7 @@ import { PageLine } from '@/components/common/PageLine';
 import { DispatchBoard } from '@/components/ops/dispatch/DispatchBoard';
 import { ModuleOff } from '@/components/ops/common/ModuleOff';
 import '@/components/ops/ops.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Dispatch' };
 export const dynamic = 'force-dynamic';
@@ -19,6 +20,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function DispatchPage({ searchParams }: { searchParams: { day?: string; wo?: string } }) {
   const o = await opsScope();
   if (!o) return null;
+  await guardPage('/dispatch');
   const today = todayIso();
   const day = searchParams.day && DAY.test(searchParams.day) ? searchParams.day : today;
   const data = await loadDispatchDay(o.db, { companyIds: o.companyIds }, day);

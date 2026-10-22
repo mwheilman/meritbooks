@@ -30,7 +30,7 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('delete') }),
 ]);
 
-export const POST = route({ body: Op }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.jobs', action: 'edit' }, body: Op }, async ({ db, params, body }) => {
   const m = await own<{ id: string; job_id: string; status: string }>(db, 'measures', 'id, job_id, status', { id: params.measureId! }, 'That measure was not found.');
   const pm = db.schema('pm');
   switch (body.op) {

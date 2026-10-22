@@ -1,6 +1,6 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { cleanSearch, core, one, rows } from './db';
+import { cleanSearch, core, one, pm, rows } from './db';
 import type { CustomerRow } from './types';
 
 export interface Me {
@@ -45,7 +45,7 @@ export function roleLabel(role: string | null | undefined): string {
 /** Customers matching a name (core.customers, identity only). */
 export async function searchCustomers(db: SupabaseClient, q: string, companyId?: string | null, limit = 8): Promise<CustomerRow[]> {
   const term = cleanSearch(q);
-  let query = core(db).from('customers').select('id, name, display_name, location_id').eq('is_active', true).is('deleted_at', null);
+  let query = pm(db).from('v_core_customers_masked').select('id, name, display_name, location_id').eq('is_active', true).is('deleted_at', null);
   if (term) query = query.or(`name.ilike.*${term}*,display_name.ilike.*${term}*`);
   const list = rows<CustomerRow>(await query.order('name').limit(limit * 3), 'customers');
   return list.filter((c) => !companyId || c.location_id == null || c.location_id === companyId).slice(0, limit);

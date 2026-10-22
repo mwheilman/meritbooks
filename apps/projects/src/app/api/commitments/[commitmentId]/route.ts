@@ -32,7 +32,7 @@ const Body = z.discriminatedUnion('op', [
  * approve_commitment (tier + separation of duties) · execute_commitment · close_commitment ·
  * void_commitment · set_commitment_hold. Each approved move sends JOB_COMMITMENT to Merit Books.
  */
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.commitments', action: 'edit' }, ops: { approve: { cap: 'projects.commitments', action: 'approve' }, execute: { cap: 'projects.commitments', action: 'approve' } }, mask: 'commitment', body: Body }, async ({ db, params, body }) => {
   const c = await loadCommitment(db, params.commitmentId!);
   switch (body.op) {
     case 'update': {

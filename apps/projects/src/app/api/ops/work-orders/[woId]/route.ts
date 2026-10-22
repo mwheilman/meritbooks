@@ -73,7 +73,7 @@ const Op = z.discriminatedUnion('op', [
 
 interface WoRef { id: string; job_id: string; location_id: string; kind: string; required_skills: string[] }
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.jobs', action: 'view' }, mask: 'work_order' }, async ({ db, params }) => {
   const d = await loadWorkOrderDetail(db, params.woId!);
   if (!d) throw new HttpError(404, 'That work order was not found.', 'NOT_FOUND');
   const empIds = [...new Set(d.assignments.map((a) => a.employee_id).filter((x): x is string => !!x))];
@@ -84,7 +84,7 @@ export const GET = route({}, async ({ db, params }) => {
   return { ...d, employees: Object.fromEntries(emps.map((e) => [e.id, `${e.first_name} ${e.last_name}`.trim()])), customers: payers };
 });
 
-export const POST = route({ body: Op }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.jobs', action: 'view' }, ops: { schedule: { cap: 'projects.dispatch', action: 'edit' }, close: { cap: 'projects.jobs', action: 'edit' }, cancel: { cap: 'projects.jobs', action: 'edit' }, decide: { cap: 'projects.jobs', action: 'edit' }, add_line: { cap: 'projects.jobs', action: 'edit' }, update_line: { cap: 'projects.jobs', action: 'edit' }, remove_line: { cap: 'projects.jobs', action: 'edit' }, update: { cap: 'projects.jobs', action: 'edit' } }, mask: 'work_order', body: Op }, async ({ db, params, body, tenant }) => {
   const wo = await own<WoRef>(db, 'work_orders', 'id, job_id, location_id, kind, required_skills', { id: params.woId! }, 'That work order was not found.');
   assertCompany(tenant, wo.location_id);
   const pm = db.schema('pm');

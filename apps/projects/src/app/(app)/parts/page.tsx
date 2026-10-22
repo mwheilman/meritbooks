@@ -14,6 +14,7 @@ import { PartsOrdersView } from '@/components/dealer/parts/PartsOrdersView';
 import { CountsView } from '@/components/dealer/parts/CountsView';
 import '@/components/ops/ops.css';
 import '@/components/dealer/dealer.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Parts' };
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function PartsPage({ searchParams }: { searchParams: { tab?: string; ticket?: string; new?: string; below?: string } }) {
   const o = await dealerScope();
   if (!o) return null;
+  await guardPage('/parts');
   if (!o.dealerIds.length) {
     return (
       <>

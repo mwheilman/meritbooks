@@ -28,7 +28,7 @@ const Body = z
   .refine((b) => !b.requestedStart || !b.requestedEnd || b.requestedEnd > b.requestedStart, { message: 'The window ends before it starts', path: ['requestedEnd'] });
 
 /** Create a work order (and, Jobber-style, its job in the same step). pm.create_work_order mints the number. */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.jobs', action: 'edit' }, mask: 'work_order', body: Body }, async ({ db, body, tenant }) => {
   const job = await resolveJob(db, tenant, body.jobId, body.newJob);
   const id = await call<string | null>(db, 'create_work_order', {
     p_job: job.job_id,

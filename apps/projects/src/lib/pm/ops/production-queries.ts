@@ -25,7 +25,7 @@ export async function loadShopLibrary(db: SupabaseClient, w: Where): Promise<Sho
   if (!w.companyIds.length) return { centers: [], routings: [], steps: [] };
   const ids = [...w.companyIds];
   const [centers, routings] = await Promise.all([
-    rows<WorkCenterRow>(await pm(db).from('work_centers').select('id, location_id, code, name, kind, capacity_minutes_per_week, rate_cents, status, sort').in('location_id', ids).order('sort').order('name'), 'work centers'),
+    rows<WorkCenterRow>(await pm(db).from('v_work_centers_masked').select('id, location_id, code, name, kind, capacity_minutes_per_week, rate_cents, status, sort').in('location_id', ids).order('sort').order('name'), 'work centers'),
     rows<RoutingRow>(await pm(db).from('routings').select('id, location_id, code, name, version, is_active').in('location_id', ids).order('code').order('version', { ascending: false }), 'routings'),
   ]);
   const steps = routings.length

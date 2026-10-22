@@ -10,7 +10,7 @@ const Body = AssetFields.extend({ companyId: Uuid }).refine((b) => !!(b.serialNu
 });
 
 /** Add equipment (identity is unique by make + serial; the database refuses a duplicate). */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.customers', action: 'edit' }, body: Body }, async ({ db, body, tenant }) => {
   assertCompany(tenant, body.companyId);
   const r = await write<Array<{ id: string }>>(db.schema('pm').from('assets').insert({ location_id: body.companyId, ...assetColumns(body) }).select('id'), 'add equipment');
   if (!r[0]) throw new HttpError(500, 'The equipment was not saved. Try again.', 'CREATE_FAILED');

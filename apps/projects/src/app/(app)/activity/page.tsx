@@ -6,12 +6,14 @@ import { listActivity } from '@/lib/pm/activity';
 import { scopedJobs } from '@/lib/pm/scoped';
 import { PageLine } from '@/components/common/PageLine';
 import { ActivityFeed } from '@/components/common/ActivityFeed';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Activity' };
 
 export default async function ActivityPage() {
   const scope = await pageScope();
   if (!scope) return null;
+  const { money: mv } = await guardPage('/activity');
   const db = await requireDb();
   const [rows, jobs] = await Promise.all([listActivity(db, { companyIds: scope.companyIds }, 200), scopedJobs(db, scope)]);
   const labels = Object.fromEntries([...jobs.byId.keys()].map((id) => [id, jobs.label(id) ?? '']));
@@ -24,7 +26,7 @@ export default async function ActivityPage() {
         <PageHead eyebrow={where} title="Activity" />
         <div className="mp-table">
           {rows.length ? (
-            <ActivityFeed rows={rows} jobLabels={labels} companyNames={scope.companyIds.length > 1 ? names : undefined} />
+            <ActivityFeed rows={rows} jobLabels={labels} companyNames={scope.companyIds.length > 1 ? names : undefined} showMoney={mv.contract} />
           ) : (
             <WidgetState state={{ kind: 'empty', title: 'Nothing has happened yet', body: 'Creating a job, moving a stage, approving a change order and sending progress to Merit Books all land here.' }} />
           )}

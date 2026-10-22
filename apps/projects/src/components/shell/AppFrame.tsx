@@ -11,7 +11,9 @@ import {
 import type { Vocabulary } from '@/lib/pm/vocab';
 import { CommandPalette } from './CommandPalette';
 import { crumbsFor } from './crumbs';
-import { ShellProvider, useLoadedAt, type ShellCompany } from './ShellContext';
+import { ShellProvider, useLoadedAt, type ShellAccess, type ShellCompany } from './ShellContext';
+import { PreviewBand } from './PreviewBand';
+import type { MoneyVis } from '@/components/money/visibility';
 
 export interface AppFrameProps {
   context: ShellContext;
@@ -26,6 +28,10 @@ export interface AppFrameProps {
   booksUrl: string;
   vocab: Vocabulary;
   readOnly: boolean;
+  /** The caller's persona and grants for the company in view (serialisable). */
+  access: ShellAccess;
+  /** Money the shell's screens may draw, for the company in view. */
+  money: MoneyVis;
   children: ReactNode;
 }
 
@@ -126,8 +132,8 @@ export function AppFrame(p: AppFrameProps) {
 
   const crumbs = pageCrumbs ?? crumbsFor(pathname, p.vocab);
   const shellValue = useMemo(
-    () => ({ vocab: p.vocab, companies: p.companies, activeCompanyId: p.activeCompanyId, readOnly: p.readOnly, setCrumbs: setPageCrumbs }),
-    [p.vocab, p.companies, p.activeCompanyId, p.readOnly],
+    () => ({ vocab: p.vocab, companies: p.companies, activeCompanyId: p.activeCompanyId, readOnly: p.readOnly, access: p.access, money: p.money, setCrumbs: setPageCrumbs }),
+    [p.vocab, p.companies, p.activeCompanyId, p.readOnly, p.access, p.money],
   );
 
   return (
@@ -135,6 +141,7 @@ export function AppFrame(p: AppFrameProps) {
       <AppShell
         context={p.context}
         density={p.density}
+        band={p.access.preview ? <PreviewBand title={p.access.title} /> : undefined}
         rail={
           <Rail
             module="projects"

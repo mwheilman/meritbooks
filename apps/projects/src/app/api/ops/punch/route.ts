@@ -16,7 +16,7 @@ const Body = z.object({
   billable: z.boolean().default(false),
 });
 
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.jobs', action: 'edit' }, body: Body }, async ({ db, body, tenant }) => {
   const job = await loadJob(db, body.jobId);
   assertCompany(tenant, job.location_id);
   const r = await write<Array<{ id: string }>>(

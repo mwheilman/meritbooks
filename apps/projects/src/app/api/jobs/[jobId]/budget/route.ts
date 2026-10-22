@@ -17,14 +17,14 @@ const Body = z.discriminatedUnion('op', [
   z.object({ op: z.literal('approve_original'), budgetId: z.string().uuid() }),
 ]);
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.financials', action: 'view' }, mask: 'budget' }, async ({ db, params }) => {
   const job = await loadJob(db, params.jobId!);
   const [bundle, costCodes] = await Promise.all([getBudget(db, job.job_id), listCostCodes(db, job.location_id, { jobId: job.job_id })]);
   return { ...bundle, costCodes };
 });
 
 /** Budget lines: create the original, add / edit / remove lines on a draft, approve the original. */
-export const POST = route({ body: Body }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.financials', action: 'edit' }, mask: 'budget', body: Body }, async ({ db, params, body, tenant }) => {
   const job = await loadJob(db, params.jobId!);
   const pm = db.schema('pm');
 

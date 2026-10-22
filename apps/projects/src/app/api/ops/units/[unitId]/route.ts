@@ -26,8 +26,8 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('delete') }),
 ]);
 
-export const POST = route({ body: Op }, async ({ db, params, body }) => {
-  const u = await own<{ id: string; status: string; buyer_customer_id: string | null; contract_price_cents: number | null }>(db, 'units', 'id, status, buyer_customer_id, contract_price_cents', { id: params.unitId! }, 'That unit was not found.');
+export const POST = route({ access: { cap: 'projects.jobs', action: 'edit' }, mask: 'dev_unit', body: Op }, async ({ db, params, body }) => {
+  const u = await own<{ id: string; status: string; buyer_customer_id: string | null; contract_price_cents: number | null }>(db, 'v_units_masked', 'id, status, buyer_customer_id, contract_price_cents', { id: params.unitId! }, 'That unit was not found.');
   switch (body.op) {
     case 'status':
       if (body.status === 'UNDER_CONTRACT' && !(body.buyerId ?? u.buyer_customer_id)) throw new HttpError(422, 'A unit under contract needs the buyer.', 'VALIDATION');

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import {
-  Button, Check, ConfirmDialog, Field, Input, KV, MoneyInput, Panel, PanelSection, Select, Tag, Textarea, money, shortDate,
+  Button, Check, ConfirmDialog, Field, Input, KV, MoneyInput, Panel, PanelSection, Select, Tag, Textarea, shortDate,
 } from '@meritbooks/merit-ui';
+import { useMoneyText } from '@/components/money/useMoneyText';
 import { METHOD_WORDS, SELECTION_STATUS } from '@/lib/pm/ops/labels';
 import { lineAmount, markupText, sellFromMarkup, varianceText, varianceTone } from '@/lib/pm/ops/selection-math';
 import { APPROVAL_METHODS, type ApprovalMethod, type SelectionOptionRow } from '@/lib/pm/ops/types';
@@ -24,6 +25,7 @@ export interface SelectionPanelProps {
 }
 
 export function SelectionPanel(p: SelectionPanelProps) {
+  const money = useMoneyText('contract');
   const v = useVocab();
   const { readOnly } = useShell();
   const { act, busy, version, error } = useOps();
@@ -149,6 +151,7 @@ function ApproveForm({ options, customerName, allowance, busy, onCancel, onSubmi
   options: SelectionOptionRow[]; customerName: string | null; allowance: number | null; busy: boolean; onCancel: () => void;
   onSubmit: (b: { optionId: string | null; approverName: string; method: ApprovalMethod; approverEmail: string | null; comment: string | null }) => void;
 }) {
+  const money = useMoneyText('contract');
   const [optionId, setOptionId] = useState(options.length === 1 ? options[0]!.id : options.find((o) => o.is_recommended)?.id ?? '');
   const [name, setName] = useState(customerName ?? '');
   const [method, setMethod] = useState<ApprovalMethod>('IN_PERSON');
@@ -207,6 +210,7 @@ function DeclineForm({ customerName, busy, onCancel, onSubmit }: { customerName:
 }
 
 function AddOptionForm({ busy, onAdd }: { busy: boolean; onAdd: (b: { label: string; vendorSku: string | null; qty: number; uom: string | null; unitCostCents: number | null; markupPct: number | null; unitPriceCents: number | null; freightCents: number; leadTimeDays: number | null; isRecommended: boolean }) => Promise<unknown> }) {
+  const money = useMoneyText('contract');
   const [label, setLabel] = useState('');
   const [sku, setSku] = useState('');
   const [qty, setQty] = useState('1');

@@ -15,12 +15,12 @@ const Body = z
   })
   .refine((b) => !b.startOn || !b.dueOn || b.dueOn >= b.startOn, { message: 'Due date is before the start date', path: ['dueOn'] });
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.jobs', action: 'view' } }, async ({ db, params }) => {
   const job = await loadJob(db, params.jobId!);
   return { tasks: await listTasks(db, job.job_id) };
 });
 
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.jobs', action: 'edit' }, body: Body }, async ({ db, params, body }) => {
   const job = await loadJob(db, params.jobId!);
   const pm = db.schema('pm');
   const last = must(await pm.from('tasks').select('sort').eq('job_id', job.job_id).order('sort', { ascending: false }).limit(1), 'last task') as Array<{ sort: number }>;

@@ -6,13 +6,13 @@ import { listLaborRates } from '@/lib/pm/labor/queries';
 import { laborCall } from '@/lib/pm/labor/rpc';
 import { NewRateCardBody, cardKeyFrom } from '@/lib/pm/labor/schemas';
 
-export const GET = route({ query: z.object({ companyId: z.string().uuid() }) }, async ({ db, query, tenant }) => {
+export const GET = route({ access: { cap: 'projects.labor_rates', action: 'view' }, mask: 'labor_rate', query: z.object({ companyId: z.string().uuid() }) }, async ({ db, query, tenant }) => {
   assertCompany(tenant, query.companyId);
   return { rates: await listLaborRates(db, query.companyId) };
 });
 
 /** Add a labor rate card (pm.save_labor_rate_card). Blank burden / overhead inherit the company default. */
-export const POST = route({ body: NewRateCardBody }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.labor_rates', action: 'edit' }, mask: 'labor_rate', body: NewRateCardBody }, async ({ db, body, tenant }) => {
   assertCompany(tenant, body.companyId);
   const id = await laborCall<string>(db, 'save_labor_rate_card', {
     p_location: body.companyId,

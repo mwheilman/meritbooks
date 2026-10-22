@@ -7,7 +7,7 @@ import {
 } from '@meritbooks/merit-ui';
 import { PROGRESS_BASIS_LABELS } from '@/lib/packs';
 import type { ContractRow, ProgressBasis, ProgressSnapshotRow } from '@/lib/pm/types';
-import { useShell } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell } from '@/components/shell/ShellContext';
 import { useAction } from './useAction';
 
 export interface ContractTabProps {
@@ -38,6 +38,8 @@ export function parsePercent(text: string): number | null {
 
 export function ContractTab(p: ContractTabProps) {
   const { readOnly } = useShell();
+  // Contract-side tab; the snapshots' cost estimate needs financials too.
+  const mv = useMoneyVis();
   const { run, busy } = useAction();
   const prime = p.contracts.find((c) => c.status === 'ACTIVE' && c.kind === 'PRIME') ?? p.contracts.find((c) => c.status === 'ACTIVE') ?? null;
   const [value, setValue] = useState<number | null>(prime?.original_cents ?? null);
@@ -88,8 +90,8 @@ export function ContractTab(p: ContractTabProps) {
             <WidgetState state={{ kind: 'empty', title: 'Nothing sent yet', body: 'Setting the contract, approving a change order or saving a budget revision sends a progress snapshot.' }} />
           ) : (
             <table className="tbl tbl-q tbl-q--compact">
-              <colgroup><col style={{ width: 56 }} /><col style={{ width: 96 }} /><col /><col style={{ width: 128 }} /><col style={{ width: 128 }} /><col style={{ width: 72 }} /><col style={{ width: 120 }} /></colgroup>
-              <thead><tr><th>Ver.</th><th>As of</th><th>Why</th><th className="n">Contract</th><th className="n">Cost estimate</th><th className="n">Done</th><th>Merit Books</th></tr></thead>
+              <colgroup><col style={{ width: 56 }} /><col style={{ width: 96 }} /><col /><col style={{ width: 128 }} />{mv.cost && <col style={{ width: 128 }} />}<col style={{ width: 72 }} /><col style={{ width: 120 }} /></colgroup>
+              <thead><tr><th>Ver.</th><th>As of</th><th>Why</th><th className="n">Contract</th>{mv.cost && <th className="n">Cost estimate</th>}<th className="n">Done</th><th>Merit Books</th></tr></thead>
               <tbody>
                 {p.snapshots.map((s) => (
                   <tr key={s.id} className="q-row">
@@ -97,7 +99,7 @@ export function ContractTab(p: ContractTabProps) {
                     <td>{s.as_of_date}</td>
                     <td>{TRIGGER_WORDS[s.trigger_name] ?? s.trigger_name}</td>
                     <td className="n">{money(s.contract_value_cents)}</td>
-                    <td className="n">{money(s.cost_estimate_cents)}</td>
+                    {mv.cost && <td className="n">{money(s.cost_estimate_cents)}</td>}
                     <td className="n">{s.pct_complete == null ? '—' : pct(s.pct_complete)}</td>
                     <td>{s.emitted ? <Tag tone="pos">Sent</Tag> : <Tag>{s.suppressed_reason === 'SAMPLE' ? 'Sample, not sent' : 'Books off'}</Tag>}</td>
                   </tr>

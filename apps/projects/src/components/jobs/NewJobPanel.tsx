@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Field, Input, MoneyInput, Panel, PanelSection, Select, api, toast, useEscapeKey } from '@meritbooks/merit-ui';
 import type { JobTypeRow } from '@/lib/pm/types';
-import { useVocab } from '@/components/shell/ShellContext';
+import { useMoneyVis, useVocab } from '@/components/shell/ShellContext';
 import { lower } from '@/lib/pm/vocab';
 import { CustomerPicker, customerPending, customerPendingMessage, type CustomerValue } from './CustomerPicker';
 
@@ -20,6 +20,7 @@ type Errors = Partial<Record<'companyId' | 'jobTypeKey' | 'name' | 'customerName
 export function NewJobPanel({ companies, defaultCompanyId, jobTypes, onClose }: NewJobPanelProps) {
   const router = useRouter();
   const v = useVocab();
+  const mv = useMoneyVis();
   const [companyId, setCompanyId] = useState(defaultCompanyId);
   const types = useMemo(() => jobTypes.filter((t) => t.location_id === companyId), [jobTypes, companyId]);
   const [jobTypeKey, setJobTypeKey] = useState(types[0]?.key ?? '');
@@ -44,7 +45,7 @@ export function NewJobPanel({ companies, defaultCompanyId, jobTypes, onClose }: 
       jobTypeKey,
       name: name.trim(),
       customerId: customer.id,
-      contractCents: contract,
+      contractCents: mv.contract ? contract : null,
       startDate: start || null,
     });
     setBusy(false);
@@ -110,9 +111,11 @@ export function NewJobPanel({ companies, defaultCompanyId, jobTypes, onClose }: 
             <CustomerPicker value={customer} onChange={(c) => { setCustomer(c); if (c.id) setErrors((e) => ({ ...e, customerName: undefined })); }} companyId={companyId} invalid={!!errors.customerName} />
           </Field>
           <div className="mp-form-2">
-            <Field label="Contract value" help="Optional. Sent to Merit Books as the contract." error={errors.contractCents}>
-              <MoneyInput valueCents={contract} onChangeCents={setContract} placeholder="0.00" />
-            </Field>
+            {mv.contract && (
+              <Field label="Contract value" help="Optional. Sent to Merit Books as the contract." error={errors.contractCents}>
+                <MoneyInput valueCents={contract} onChangeCents={setContract} placeholder="0.00" />
+              </Field>
+            )}
             <Field label="Start date" error={errors.startDate}>
               <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
             </Field>

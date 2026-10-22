@@ -46,12 +46,12 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('delete') }),
 ]);
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.selections', action: 'view' }, mask: ['procurement', 'selection'] }, async ({ db, params }) => {
   await own(db, 'procurement_items', 'id', { id: params.itemId! }, 'That item was not found.');
   return { approvals: await loadItemApprovals(db, params.itemId!) };
 });
 
-export const POST = route({ body: Op }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.selections', action: 'edit' }, mask: 'procurement', body: Op }, async ({ db, params, body }) => {
   const it = await own<{ id: string; status: string }>(db, 'procurement_items', 'id, status', { id: params.itemId! }, 'That item was not found.');
   const pm = db.schema('pm');
   switch (body.op) {

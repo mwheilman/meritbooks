@@ -14,12 +14,14 @@ import { RouteError, json, requireCompany, withOnboarding } from '@/lib/onboardi
 import { openRun, patchRun } from '@/lib/onboarding/runs';
 import { PlanInputsSchema } from '@/lib/onboarding/schemas';
 import type { PlanInputs } from '@/lib/onboarding/types';
+import { denyUnless } from '@/lib/access/route-guard';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   return withOnboarding(req, PlanInputsSchema, async (body, ctx) => {
     requireCompany(ctx, body.companyId);
+    const denied = await denyUnless('projects.settings', 'configure', body.companyId); if (denied) return denied;
     const inputs: PlanInputs = {
       companyId: body.companyId, packKey: body.packKey, addons: body.addons, params: body.params,
       answers: body.answers, moduleOverrides: body.moduleOverrides, aiDecisionId: body.aiDecisionId ?? null,

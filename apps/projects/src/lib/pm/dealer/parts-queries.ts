@@ -42,7 +42,7 @@ export interface Catalog {
 export async function loadCatalog(db: SupabaseClient, companyIds: ReadonlyArray<string>, q = '', cap = 2000): Promise<Catalog> {
   if (!companyIds.length) return { parts: [], onHand: [], vendors: {}, capped: false };
   const term = cleanSearch(q);
-  let pq = pm(db).from('parts').select(PART_COLS, { count: 'exact' }).in('location_id', [...companyIds]);
+  let pq = pm(db).from('v_parts_masked').select(PART_COLS, { count: 'exact' }).in('location_id', [...companyIds]);
   if (term) pq = pq.or(`part_number.ilike.*${term}*,description.ilike.*${term}*,manufacturer.ilike.*${term}*`);
   const res = await pq.order('part_number').limit(cap);
   const parts = rows<PartRow>(res, 'parts').map(numPart);
@@ -68,7 +68,7 @@ const asCounter = (p: PartRow): CounterPart => ({ id: p.id, part_number: p.part_
 export async function counterSearch(db: SupabaseClient, companyId: string, keyed: string): Promise<CounterSearch> {
   const pn = keyed.trim().toUpperCase();
   if (!pn) return { matches: [], suggestions: [] };
-  const exact = rows<PartRow>(await pm(db).from('parts').select(PART_COLS).eq('location_id', companyId).eq('part_number', pn).limit(10), 'part').map(numPart);
+  const exact = rows<PartRow>(await pm(db).from('v_parts_masked').select(PART_COLS).eq('location_id', companyId).eq('part_number', pn).limit(10), 'part').map(numPart);
   if (!exact.length) {
     const term = cleanSearch(pn);
     const sug = term
@@ -83,7 +83,7 @@ export async function counterSearch(db: SupabaseClient, companyId: string, keyed
   const byId = new Map<string, PartRow>(exact.map((p) => [p.id, p]));
   let frontier = exact.map((p) => p.superseded_by_part_id).filter((x): x is string => !!x && !byId.has(x));
   for (let hop = 0; hop < 25 && frontier.length; hop++) {
-    const next = rows<PartRow>(await pm(db).from('parts').select(PART_COLS).in('id', frontier), 'superseding parts').map(numPart);
+    const next = rows<PartRow>(await pm(db).from('v_parts_masked').select(PART_COLS).in('id', frontier), 'superseding parts').map(numPart);
     for (const p of next) byId.set(p.id, p);
     frontier = next.map((p) => p.superseded_by_part_id).filter((x): x is string => !!x && !byId.has(x));
   }
@@ -112,7 +112,7 @@ export async function loadTicket(db: SupabaseClient, ticketId: string): Promise<
   const t = await pm(db).from('parts_tickets').select(TICKET_COLS).eq('id', ticketId).maybeSingle();
   if (t.error || !t.data) return null;
   const ticket = { ...(t.data as TicketRow), tax_rate_estimate: (t.data as TicketRow).tax_rate_estimate == null ? null : Number((t.data as TicketRow).tax_rate_estimate) };
-  const lines = rows<TicketLineRow>(await pm(db).from('parts_ticket_lines').select(TICKET_LINE_COLS).eq('ticket_id', ticketId).order('sort').order('line_no'), 'ticket lines')
+  const lines = rows<TicketLineRow>(await pm(db).from('v_parts_ticket_lines_masked').select(TICKET_LINE_COLS).eq('ticket_id', ticketId).order('sort').order('line_no'), 'ticket lines')
     .map((l) => ({ ...l, qty_requested: Number(l.qty_requested), qty_filled: Number(l.qty_filled), qty_special_order: Number(l.qty_special_order), unit_price_cents: Number(l.unit_price_cents), unit_cost_cents: l.unit_cost_cents == null ? null : Number(l.unit_cost_cents), core_charge_cents: Number(l.core_charge_cents), amount_cents: Number(l.amount_cents) }));
   const partIds = [...new Set(lines.flatMap((l) => [l.part_id, l.requested_part_id]).filter((x): x is string => !!x))];
   const parts = partIds.length ? rows<{ id: string; part_number: string; manufacturer: string | null }>(await pm(db).from('parts').select('id, part_number, manufacturer').in('id', partIds), 'parts') : [];
@@ -194,7 +194,7 @@ export async function loadPartsOrders(db: SupabaseClient, companyIds: ReadonlyAr
   );
   const ids = orders.map((o) => o.id);
   const lines = ids.length
-    ? rows<PartsOrderLineRow>(await pm(db).from('parts_order_lines').select(PARTS_ORDER_LINE_COLS).in('order_id', ids).order('line_no'), 'order lines').map((l) => ({ ...l, qty_ordered: Number(l.qty_ordered), qty_received: Number(l.qty_received), unit_cost_cents: l.unit_cost_cents == null ? null : Number(l.unit_cost_cents) }))
+    ? rows<PartsOrderLineRow>(await pm(db).from('v_parts_order_lines_masked').select(PARTS_ORDER_LINE_COLS).in('order_id', ids).order('line_no'), 'order lines').map((l) => ({ ...l, qty_ordered: Number(l.qty_ordered), qty_received: Number(l.qty_received), unit_cost_cents: l.unit_cost_cents == null ? null : Number(l.unit_cost_cents) }))
     : [];
   const partIds = [...new Set(lines.map((l) => l.part_id))];
   const [parts, vendors] = await Promise.all([

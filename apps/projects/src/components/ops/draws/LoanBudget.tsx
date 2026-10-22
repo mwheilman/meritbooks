@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Check, Field, Input, MoneyInput, Select, money, shortDate } from '@meritbooks/merit-ui';
+import { Button, Check, Field, Input, MoneyInput, Select, shortDate } from '@meritbooks/merit-ui';
+import { useMoneyText } from '@/components/money/useMoneyText';
 import { CATEGORY_WORDS } from '@/lib/pm/ops/draw-math';
 import { DRAW_CATEGORIES, type DrawBudgetLineRow, type DrawCategory, type DrawLineStatusRow, type DrawScheduleRow } from '@/lib/pm/ops/types';
 import type { DrawRevision } from '@/lib/pm/ops/development-queries';
@@ -14,6 +15,8 @@ import { useOps } from '../common/useOps';
  * (pm.revise_draw_budget_line keeps the audit the lender asks for).
  */
 export function LoanBudget({ schedule, lines, status, revisions, today }: { schedule: DrawScheduleRow; lines: DrawBudgetLineRow[]; status: DrawLineStatusRow[]; revisions: DrawRevision[]; today: string }) {
+  // The loan budget is the job's cost budget: financials (the draws page already needs contract_value).
+  const money = useMoneyText('cost');
   const { readOnly } = useShell();
   const { act, busy, error } = useOps();
   const url = `/api/ops/draw-schedules/${schedule.id}`;

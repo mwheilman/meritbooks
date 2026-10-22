@@ -96,7 +96,7 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('deposit'), amountCents: z.number().int().positive('The deposit must be more than zero').max(1e12), memo: Text(200).nullish() }),
 ]);
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.store', action: 'view' }, mask: 'dealer_deal' }, async ({ db, params }) => {
   const w = await loadDealWorkspace(db, params.dealId!);
   if (!w) throw new HttpError(404, 'That deal was not found.', 'NOT_FOUND');
   return w;
@@ -122,7 +122,7 @@ function fiRow(b: z.infer<typeof Op> & { op: 'add_fi' | 'update_fi' }): Record<s
 }
 
 /** Every desk move: lines, trades, F&I, quotes and the stage machine (QUOTE → … → DELIVERED / UNWOUND / LOST). */
-export const POST = route({ body: Op }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, ops: { approve: { cap: 'projects.store', action: 'approve' }, fund: { cap: 'projects.store', action: 'approve' }, unwind: { cap: 'projects.store', action: 'approve' }, reopen: { cap: 'projects.store', action: 'approve' } }, mask: 'dealer_deal', body: Op }, async ({ db, params, body, tenant }) => {
   const d = await downs<{ id: string; location_id: string; stage: string }>(db, 'dealer_deals', 'id, location_id, stage', params.dealId!, 'That deal was not found.');
   assertCompany(tenant, d.location_id);
   const pm = db.schema('pm');

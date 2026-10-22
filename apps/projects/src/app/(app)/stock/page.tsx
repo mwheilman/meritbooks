@@ -9,6 +9,7 @@ import { StoreOff } from '@/components/dealer/common/StoreOff';
 import { StockView, type AgeFilter, type StockGroup } from '@/components/dealer/stock/StockView';
 import '@/components/ops/ops.css';
 import '@/components/dealer/dealer.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Stock' };
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,7 @@ const AGES: ReadonlyArray<AgeFilter> = ['all', '90', '180', '365'];
 export default async function StockPage({ searchParams }: { searchParams: { unit?: string; new?: string; group?: string; age?: string } }) {
   const o = await dealerScope();
   if (!o) return null;
+  const { money: mv } = await guardPage('/stock');
   if (!o.dealerIds.length) {
     return (
       <>
@@ -47,7 +49,7 @@ export default async function StockPage({ searchParams }: { searchParams: { unit
         facts={[
           o.where,
           { label: `${count(inStock.length)} in stock`, strong: true },
-          { label: `${money(inStock.reduce((s, u) => s + u.cost_cents, 0), { decimals: 0 })} at cost`, tnum: true },
+          ...(mv.cost ? [{ label: `${money(inStock.reduce((s, u) => s + u.cost_cents, 0), { decimals: 0 })} at cost`, tnum: true }] : []),
           ...(aged ? [`${count(aged)} over 180 days`] : []),
           ...(sot ? [{ label: `${count(sot)} sold out of trust`, strong: true }] : []),
         ]}

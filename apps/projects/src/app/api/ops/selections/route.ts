@@ -15,7 +15,7 @@ const Body = z.object({
 });
 
 /** A decision the client owes (OPEN). Options, proposal and approval follow on the selection. */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.selections', action: 'create' }, mask: 'selection', body: Body }, async ({ db, body, tenant }) => {
   const job = await loadJob(db, body.jobId);
   assertCompany(tenant, job.location_id);
   const pm = db.schema('pm');

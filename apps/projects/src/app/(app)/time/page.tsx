@@ -10,6 +10,7 @@ import { PageLine } from '@/components/common/PageLine';
 import { ModuleOff } from '@/components/ops/common/ModuleOff';
 import { TimeView } from '@/components/ops/records/TimeView';
 import '@/components/ops/ops.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Time' };
 export const dynamic = 'force-dynamic';
@@ -19,6 +20,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 export default async function TimePage({ searchParams }: { searchParams: { week?: string } }) {
   const o = await opsScope();
   if (!o) return null;
+  await guardPage('/time');
   const today = todayIso();
   const weekStart = mondayOf(searchParams.week && DAY.test(searchParams.week) ? searchParams.week : today);
   const inScope = (id: string) => o.jobs.byId.has(id);

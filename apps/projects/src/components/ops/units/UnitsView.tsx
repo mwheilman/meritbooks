@@ -2,9 +2,11 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Button, Field, Input, KV, MoneyInput, Panel, PanelSection, QueueTable, Seg, Select, Tag, Textarea, WidgetState, count, money, shortDate, useEscapeKey,
-  type QueueColumn, type QueueGroup,
+  Button, Field, Input, KV, MoneyInput, Panel, PanelSection, QueueTable, Seg, Select, Tag, Textarea, WidgetState, count, shortDate, useEscapeKey, type QueueColumn, type QueueGroup,
 } from '@meritbooks/merit-ui';
+import { useMoneyText } from '@/components/money/useMoneyText';
+import { useMoneyVis } from '@/components/shell/ShellContext';
+import { when } from '@/components/money/visibility';
 import { ENTITLEMENT_KIND_WORDS, ENTITLEMENT_NEXT, ENTITLEMENT_STATUS, UNIT_KIND_WORDS, UNIT_NEXT, UNIT_STATUS } from '@/lib/pm/ops/labels';
 import type { EntitlementKind, EntitlementRow, EntitlementStatus, LookupItem, UnitKind, UnitRow, UnitStatus } from '@/lib/pm/ops/types';
 import type { JobOption } from '@/lib/pm/ops/scope';
@@ -47,6 +49,8 @@ export function UnitsView(p: UnitsViewProps) {
 }
 
 function Units(p: UnitsViewProps) {
+  const money = useMoneyText('contract');
+  const mv = useMoneyVis();
   const v = useVocab();
   const { readOnly } = useShell();
   const [filter, setFilter] = useState<Filter>('all');
@@ -60,7 +64,9 @@ function Units(p: UnitsViewProps) {
     for (const u of rows) m.set(u.job_id, [...(m.get(u.job_id) ?? []), u]);
     return [...m.entries()].map(([id, us]) => ({
       id, title: jobs.get(id)?.label ?? v.job, rows: us,
-      caption: `${count(us.filter((u) => u.status === 'CLOSED').length)} closed · ${money(us.filter((u) => u.status === 'UNDER_CONTRACT').reduce((s, u) => s + (u.contract_price_cents ?? 0), 0))} under contract`,
+      caption: mv.contract
+        ? `${count(us.filter((u) => u.status === 'CLOSED').length)} closed · ${money(us.filter((u) => u.status === 'UNDER_CONTRACT').reduce((s, u) => s + (u.contract_price_cents ?? 0), 0))} under contract`
+        : `${count(us.filter((u) => u.status === 'CLOSED').length)} closed · ${count(us.filter((u) => u.status === 'UNDER_CONTRACT').length)} under contract`,
     }));
   }, [rows, jobs, v.job]);
   const cur = p.units.find((u) => u.id === cursor) ?? null;
@@ -71,9 +77,10 @@ function Units(p: UnitsViewProps) {
     { id: 'n', header: 'Unit', width: 120, cell: (u) => <><span className="l1 b">{u.unit_number}</span><span className="l2">{UNIT_KIND_WORDS[u.unit_kind]}</span></> },
     { id: 'plan', header: 'Plan', cell: (u) => <><span className="l1">{u.plan_name ?? '—'}</span><span className="l2">{[u.phase ? `Phase ${u.phase}` : null, u.sqft ? `${count(Number(u.sqft))} sq ft` : null].filter(Boolean).join(' · ') || ' '}</span></> },
     { id: 'st', header: 'Status', width: 170, cell: (u) => <StatusMark mark={UNIT_STATUS[u.status]} /> },
-    { id: 'lp', header: 'List', numeric: true, width: 120, cell: (u) => (u.list_price_cents == null ? '—' : money(u.list_price_cents, { decimals: 0 })) },
-    { id: 'cp', header: 'Contract', numeric: true, width: 120, cell: (u) => (u.contract_price_cents == null ? '—' : money(u.contract_price_cents, { decimals: 0 })) },
-    { id: 'rp', header: 'Lender release', numeric: true, width: 130, cell: (u) => (u.lender_release_price_cents == null ? '—' : money(u.lender_release_price_cents, { decimals: 0 })) },
+    ...when<QueueColumn<UnitRow>>(mv.contract,
+      { id: 'lp', header: 'List', numeric: true, width: 120, cell: (u) => (u.list_price_cents == null ? '—' : money(u.list_price_cents, { decimals: 0 })) },
+      { id: 'cp', header: 'Contract', numeric: true, width: 120, cell: (u) => (u.contract_price_cents == null ? '—' : money(u.contract_price_cents, { decimals: 0 })) },
+      { id: 'rp', header: 'Lender release', numeric: true, width: 130, cell: (u) => (u.lender_release_price_cents == null ? '—' : money(u.lender_release_price_cents, { decimals: 0 })) }),
     { id: 'buyer', header: 'Buyer', width: 150, cell: (u) => <span className="l2">{u.buyer_customer_id ? p.buyers[u.buyer_customer_id] ?? 'Buyer' : '—'}</span> },
     { id: 'close', header: 'Closing', width: 110, cell: (u) => (u.closed_on ? <><span className="l1">{shortDate(u.closed_on, p.today)}</span><span className="l2">closed</span></> : u.est_close_on ? <><span className={u.status === 'UNDER_CONTRACT' && u.est_close_on < p.today ? 'l1 neg b' : 'l1'}>{shortDate(u.est_close_on, p.today)}</span><span className="l2">estimated</span></> : '—') },
   ];
@@ -88,7 +95,7 @@ function Units(p: UnitsViewProps) {
           { value: 'closed', label: 'Closed', count: p.units.filter((u) => u.status === 'CLOSED').length },
         ]} />
         <span className="sp" />
-        {closing.length > 0 && <span className="t-cap">{count(closing.length)} closing in 30 days · {money(closing.reduce((s, u) => s + (u.contract_price_cents ?? 0), 0), { decimals: 0 })}</span>}
+        {closing.length > 0 && <span className="t-cap">{count(closing.length)} closing in 30 days{mv.contract ? ` · ${money(closing.reduce((s, u) => s + (u.contract_price_cents ?? 0), 0), { decimals: 0 })}` : ''}</span>}
         {!readOnly && <Button variant="primary" icon="plus" onClick={() => { setCreating(true); setCursor(null); }}>Add lots or units</Button>}
       </div>
       <div className={creating || cur ? 'ops-split has-panel' : 'ops-split'}>
@@ -109,6 +116,7 @@ function Units(p: UnitsViewProps) {
 }
 
 function UnitPanel({ unit: u, buyer, jobLabel, today, onClose }: { unit: UnitRow; buyer: string | null; jobLabel: string | null; today: string; onClose: () => void }) {
+  const money = useMoneyText('contract');
   const { readOnly } = useShell();
   const v = useVocab();
   const { act, busy, error } = useOps();

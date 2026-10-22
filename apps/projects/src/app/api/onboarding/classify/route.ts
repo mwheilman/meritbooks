@@ -16,6 +16,7 @@ import { classifyCompany, decisionPayload } from '@/lib/onboarding/classify';
 import { json, requireCompany, withOnboarding } from '@/lib/onboarding/route';
 import { ensureRun, patchRun } from '@/lib/onboarding/runs';
 import type { ClassifyResponse } from '@/lib/onboarding/types';
+import { denyUnless } from '@/lib/access/route-guard';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -32,6 +33,7 @@ const Body = z.object({
 export async function POST(req: Request) {
   return withOnboarding(req, Body, async (body, ctx) => {
     const company = requireCompany(ctx, body.companyId);
+    const denied = await denyUnless('projects.settings', 'configure', body.companyId); if (denied) return denied;
     const description = body.description?.trim() || undefined;
     const input = {
       description,

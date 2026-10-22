@@ -6,6 +6,7 @@ import { pageScope } from '@/lib/scope';
 import { requireDb } from '@/lib/pm/db';
 import { getVocabulary } from '@/lib/pm/config';
 import { PageLine } from '@/components/common/PageLine';
+import { guardPage } from '@/components/shell/page-guard';
 
 export function generateMetadata({ params }: { params: { area: string } }): Metadata {
   return { title: findArea(params.area)?.title ?? 'Not found' };
@@ -17,6 +18,7 @@ export default async function AreaPage({ params }: { params: { area: string } })
   if (!area) notFound();
   const scope = await pageScope();
   if (!scope) return null;
+  await guardPage(`/${params.area}`);
   const vocab = await getVocabulary(await requireDb(), scope.company?.id ?? null, scope.companyIds);
   const title = area.vocab ? vocab[area.vocab] : area.title;
   return (

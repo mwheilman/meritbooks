@@ -8,6 +8,7 @@ import { PageLine } from '@/components/common/PageLine';
 import { ModuleOff } from '@/components/ops/common/ModuleOff';
 import { AssetsView } from '@/components/ops/assets/AssetsView';
 import '@/components/ops/ops.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Equipment' };
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function AssetsPage({ searchParams }: { searchParams: { asset?: string } }) {
   const o = await opsScope();
   if (!o) return null;
+  await guardPage('/assets');
   const assets = await loadAssets(o.db, { companyIds: o.companyIds });
   if (!has(o, 'assets') && assets.length === 0) {
     return (

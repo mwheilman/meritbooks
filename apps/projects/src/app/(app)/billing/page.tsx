@@ -11,6 +11,7 @@ import { billingKindLabel } from '@/lib/pm/money/status';
 import { PageLine } from '@/components/common/PageLine';
 import { PageCrumbs } from '@/components/shell/ShellContext';
 import { BillingQueue, type BillingQueueRowView } from '@/components/money/BillingQueue';
+import { guardPage } from '@/components/shell/page-guard';
 
 export async function generateMetadata(): Promise<Metadata> {
   const scope = await pageScope();
@@ -22,6 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function BillingPage() {
   const scope = await pageScope();
   if (!scope) return null;
+  await guardPage('/billing');
   const db = await requireDb();
   const since = `${addDays(todayIso(), -90)}T00:00:00Z`;
   const [vocab, jobs, queue, settled, deposits] = await Promise.all([

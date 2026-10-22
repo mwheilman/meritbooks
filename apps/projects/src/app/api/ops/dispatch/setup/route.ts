@@ -25,7 +25,7 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('revoke_skill'), employeeId: Uuid, skillId: Uuid }),
 ]);
 
-export const POST = route({ body: Op }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.dispatch', action: 'edit' }, mask: false, body: Op }, async ({ db, body, tenant }) => {
   const pm = db.schema('pm');
   switch (body.op) {
     case 'add_crew':

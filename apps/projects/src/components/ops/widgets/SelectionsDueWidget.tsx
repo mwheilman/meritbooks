@@ -8,11 +8,14 @@ import type { SelectionsDueData } from '@/lib/pm/ops/widget-queries';
 import { useVocab } from '@/components/shell/ShellContext';
 import { lower } from '@/lib/pm/vocab';
 import { todayIso } from '@/lib/time';
+import { useMoneyVis } from '@/components/shell/ShellContext';
 import { useWidget, type WidgetPlacement } from './useWidget';
 import '../ops.css';
 
 /** Selections due in the next two weeks (and any past due), soonest first. */
 export function SelectionsDueWidget({ x, y, w = 4, h = 2, companyId, limit = 5 }: WidgetPlacement & { limit?: number }) {
+  // Allowances and variance are what the client pays: contract_value.
+  const mv = useMoneyVis();
   const v = useVocab();
   const { data, error, reload } = useWidget<SelectionsDueData>('selections', companyId);
   const today = todayIso();
@@ -35,7 +38,7 @@ export function SelectionsDueWidget({ x, y, w = 4, h = 2, companyId, limit = 5 }
       <ul className="agenda ops-agenda" aria-label={title}>
         {data?.items.slice(0, limit).map((s) => {
           const mark = SELECTION_STATUS[s.status];
-          const chosen = s.chosenCents != null && s.allowanceCents != null ? varianceText(variance(s.chosenCents, s.allowanceCents)) : s.allowanceCents != null ? `${money(s.allowanceCents, { decimals: 0 })} allowance` : null;
+          const chosen = !mv.contract ? null : s.chosenCents != null && s.allowanceCents != null ? varianceText(variance(s.chosenCents, s.allowanceCents)) : s.allowanceCents != null ? `${money(s.allowanceCents, { decimals: 0 })} allowance` : null;
           return (
             <li key={s.selectionId}>
               <Link href={`/selections?job=${s.jobId}&selection=${s.selectionId}`}>

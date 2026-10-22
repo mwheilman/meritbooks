@@ -12,7 +12,7 @@ export async function loadCommitment(db: SupabaseClient, id: string): Promise<Co
 }
 
 export async function loadEstimate(db: SupabaseClient, id: string): Promise<EstimateRow> {
-  const e = one<EstimateRow>(await pm(db).from('estimates').select(ESTIMATE_COLS).eq('id', id).maybeSingle(), 'estimate');
+  const e = one<EstimateRow>(await pm(db).from('v_estimates_masked').select(ESTIMATE_COLS).eq('id', id).maybeSingle(), 'estimate');
   if (!e) throw new HttpError(404, 'That estimate was not found in this workspace.', 'NOT_FOUND');
   return e;
 }

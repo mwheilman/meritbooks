@@ -8,7 +8,8 @@ import { PARTS_ORDER_STATUS } from '@/lib/pm/dealer/labels';
 import type { CounterSearch, PartsOrderList } from '@/lib/pm/dealer/parts-queries';
 import type { PartsOrderRow, PartsOrderStatus, StockLocationRow, SuggestedLine } from '@/lib/pm/dealer/types';
 import type { LookupItem } from '@/lib/pm/ops/types';
-import { useShell } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell } from '@/components/shell/ShellContext';
+import { when } from '@/components/money/visibility';
 import { Failure, StatusMark, parseNum } from '@/components/ops/common/bits';
 import { Lookup } from '@/components/ops/common/Lookup';
 import { PickStoreNote } from '../common/StoreOff';
@@ -32,6 +33,8 @@ export interface PartsOrdersViewProps {
 
 /** OEM stock orders: build one from min/max suggestions, submit it, receive it into stock. */
 export function PartsOrdersView(p: PartsOrdersViewProps) {
+  // Stock orders are priced at cost: financials.
+  const mv = useMoneyVis();
   const { readOnly } = useShell();
   const d = p.data;
   const first = BANDS.find((b) => d.orders.some((o) => o.status === b.value))?.value ?? 'DRAFT';
@@ -47,7 +50,7 @@ export function PartsOrdersView(p: PartsOrdersViewProps) {
     { id: 'n', header: 'Order', width: 150, cell: (o) => <><span className="l1 code">{o.number}</span><span className="l2">{o.kind === 'STOCK' ? 'Stock order' : o.kind === 'EMERGENCY' ? 'Emergency' : 'Special orders'}</span></> },
     { id: 'v', header: 'Vendor', cell: (o) => <><span className="l1">{d.vendors[o.vendor_id] ?? 'Vendor'}</span><span className="l2">{o.vendor_ref ?? ' '}</span></> },
     { id: 'l', header: 'Lines', numeric: true, width: 70, cell: (o) => count(d.lines.filter((l) => l.order_id === o.id).length) },
-    { id: 'c', header: 'At cost', numeric: true, width: 120, cell: (o) => money(lineTotal(o.id)) },
+    ...when<QueueColumn<PartsOrderRow>>(mv.cost, { id: 'c', header: 'At cost', numeric: true, width: 120, cell: (o) => money(lineTotal(o.id)) }),
     { id: 'dt', header: 'Submitted', width: 110, cell: (o) => (o.submitted_at ? shortDate(o.submitted_at.slice(0, 10), p.today) : '—') },
     { id: 's', header: 'Status', width: 160, cell: (o) => <StatusMark mark={PARTS_ORDER_STATUS[o.status]} /> },
   ];
@@ -147,6 +150,7 @@ function NewOrderPanel({ companyId, stockLocations, defaultStockLocationId, onCl
 }
 
 function OrderPanel({ order: o, data: d, stockLocations, onClose }: { order: PartsOrderRow; data: PartsOrderList; stockLocations: StockLocationRow[]; onClose: () => void }) {
+  const mv = useMoneyVis();
   const { readOnly } = useShell();
   const { act, busy, error } = useStore();
   const url = `/api/dealer/parts-orders/${o.id}`;
@@ -189,7 +193,7 @@ function OrderPanel({ order: o, data: d, stockLocations, onClose }: { order: Par
       <PanelSection>
         {error && <Failure text={error} />}
         <table className="dl-tbl">
-          <thead><tr><th>Part</th><th className="n">Ordered</th><th className="n">Received</th><th className="n">Cost each</th>{receiving && <th className="n">Receive</th>}{draft && <th />}</tr></thead>
+          <thead><tr><th>Part</th><th className="n">Ordered</th><th className="n">Received</th>{mv.cost && <th className="n">Cost each</th>}{receiving && <th className="n">Receive</th>}{draft && <th />}</tr></thead>
           <tbody>
             {lines.length === 0 && <tr><td colSpan={5} className="t-cap">No lines yet. Add them by part number below.</td></tr>}
             {lines.map((l) => (
@@ -197,7 +201,7 @@ function OrderPanel({ order: o, data: d, stockLocations, onClose }: { order: Par
                 <td><span className="l1 b">{d.parts[l.part_id]?.part_number ?? 'Part'}</span><span className="l2">{d.parts[l.part_id]?.description ?? ''}{l.special_order_id ? ' · special order' : ''}</span></td>
                 <td className="n">{count(l.qty_ordered)}</td>
                 <td className="n"><span className={l.qty_received < l.qty_ordered && o.status !== 'DRAFT' ? 'warn b' : undefined}>{count(l.qty_received)}</span></td>
-                <td className="n">{l.unit_cost_cents == null ? '—' : money(l.unit_cost_cents)}</td>
+                {mv.cost && <td className="n">{l.unit_cost_cents == null ? '—' : money(l.unit_cost_cents)}</td>}
                 {receiving && <td className="n">{l.qty_received < l.qty_ordered ? <Input aria-label={`Receive quantity for ${d.parts[l.part_id]?.part_number ?? 'part'}`} inputMode="decimal" value={recv[l.id] ?? ''} placeholder={String(l.qty_ordered - l.qty_received)} onChange={(e) => setRecv({ ...recv, [l.id]: e.target.value })} style={{ width: 64 }} /> : '✓'}</td>}
                 {draft && <td><Button variant="quiet" iconOnly icon="x" aria-label="Remove the line" disabled={busy === `rm:${l.id}`} onClick={() => void act(`rm:${l.id}`, 'post', url, { op: 'remove_line', lineId: l.id }, 'Removed the line')} /></td>}
               </tr>

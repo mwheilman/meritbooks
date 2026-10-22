@@ -12,7 +12,8 @@ import { APPROVAL_STATE, PAY_TYPE_WORDS, personName } from '@/lib/pm/ops/labels'
 import type { EmployeeRow, PayType, TimeEntryRow } from '@/lib/pm/ops/types';
 import type { CostCodeRow } from '@/lib/pm/types';
 import type { JobOption } from '@/lib/pm/ops/scope';
-import { useShell, useVocab } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell, useVocab } from '@/components/shell/ShellContext';
+import { when } from '@/components/money/visibility';
 import { lower } from '@/lib/pm/vocab';
 import { Failure, JobSelect, StatusMark, parseNum } from '../common/bits';
 import { useOps } from '../common/useOps';
@@ -40,6 +41,8 @@ function hours(n: number): string {
 
 export function TimeView(p: TimeViewProps) {
   const v = useVocab();
+  // A pinned cost rate is one person's pay + burden: labor_rates money (spec §2.1).
+  const mv = useMoneyVis();
   const router = useRouter();
   const { readOnly } = useShell();
   const { act, busy, error } = useOps();
@@ -85,12 +88,12 @@ export function TimeView(p: TimeViewProps) {
     } },
     { id: 'h', header: 'Hours', numeric: true, width: 72, cell: (t) => hours(Number(t.hours)) },
     { id: 'pt', header: 'Pay', width: 96, cell: (t) => <span className="l2">{PAY_TYPE_WORDS[t.pay_type]}{t.billable ? '' : ' · not billable'}</span> },
-    { id: 'rate', header: 'Cost rate', numeric: true, width: 112, cell: (t) => {
+    ...when<QueueColumn<TimeEntryRow>>(mv.rates, { id: 'rate', header: 'Cost rate', numeric: true, width: 112, cell: (t) => {
       const r = pinnedRateText(t.cost_rate_cents, (c) => money(c));
       return r
         ? <span title="Pinned at approval: pay + burden × the pay type. Overhead is never in job cost."><span className="l1" style={{ fontWeight: 400 }}>{r}</span><span className="l2">{money(Math.round(Number(t.hours) * t.cost_rate_cents!))}</span></span>
         : <span className="l2">at approval</span>;
-    } },
+    } }),
     { id: 'st', header: 'State', width: 150, cell: (t) => (
       <span><StatusMark mark={APPROVAL_STATE[t.approval_state]} />{sentToBooks(t) ? <span className="l2">Sent to Merit Books</span> : null}</span>
     ) },

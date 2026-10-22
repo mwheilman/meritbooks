@@ -30,7 +30,7 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('fund'), fundedOn: Day.nullish(), wireRef: Text(120).nullish(), fundedCents: Cents.nullish() }),
 ]);
 
-export const POST = route({ body: Op }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.billing', action: 'edit' }, ops: { approve: { cap: 'projects.billing', action: 'approve' }, fund: { cap: 'projects.billing', action: 'post' } }, mask: 'draw', body: Op }, async ({ db, params, body }) => {
   const d = await own<{ id: string; status: string; package: Record<string, unknown> }>(db, 'draws', 'id, status, package', { id: params.drawId! }, 'That draw was not found.');
   const pm = db.schema('pm');
   const editable = d.status === 'DRAFT' || d.status === 'RETURNED';

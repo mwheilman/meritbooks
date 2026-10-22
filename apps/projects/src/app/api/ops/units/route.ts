@@ -21,7 +21,7 @@ const Body = z.object({
 });
 
 /** Lots / units on a development job (pre-sale states only; sales move through pm.set_unit_status). */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.jobs', action: 'edit' }, mask: 'dev_unit', body: Body }, async ({ db, body, tenant }) => {
   const job = await loadJob(db, body.jobId);
   assertCompany(tenant, job.location_id);
   const base = body.unitNumber;

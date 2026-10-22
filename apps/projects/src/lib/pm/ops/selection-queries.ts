@@ -62,10 +62,10 @@ export interface SelectionDetail {
 }
 
 export async function loadSelectionDetail(db: SupabaseClient, selectionId: string): Promise<SelectionDetail | null> {
-  const selection = one<SelectionRow>(await pm(db).from('selections').select(SELECTION_COLS).eq('id', selectionId).maybeSingle(), 'selection');
+  const selection = one<SelectionRow>(await pm(db).from('v_selections_masked').select(SELECTION_COLS).eq('id', selectionId).maybeSingle(), 'selection');
   if (!selection) return null;
   const [options, approvals, items] = await Promise.all([
-    rows<SelectionOptionRow>(await pm(db).from('selection_options').select(OPTION_COLS).eq('selection_id', selectionId).order('sort').order('created_at'), 'options'),
+    rows<SelectionOptionRow>(await pm(db).from('v_selection_options_masked').select(OPTION_COLS).eq('selection_id', selectionId).order('sort').order('created_at'), 'options'),
     rows<ClientApprovalRow>(await pm(db).from('client_approvals').select(APPROVAL_COLS).eq('subject_table', 'selections').eq('subject_id', selectionId).order('decided_at', { ascending: false }), 'client approvals'),
     rows<{ id: string }>(await pm(db).from('procurement_items').select('id').eq('selection_id', selectionId).neq('status', 'CANCELLED'), 'linked items'),
   ]);

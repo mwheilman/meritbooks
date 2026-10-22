@@ -7,7 +7,7 @@ import { laborCall } from '@/lib/pm/labor/rpc';
 import { EditRateCardBody } from '@/lib/pm/labor/schemas';
 
 /** Edit or (de)activate a rate card. Approved time keeps the rate it was approved at. */
-export const PATCH = route({ body: EditRateCardBody }, async ({ db, params, body, tenant }) => {
+export const PATCH = route({ access: { cap: 'projects.labor_rates', action: 'edit' }, mask: 'labor_rate', body: EditRateCardBody }, async ({ db, params, body, tenant }) => {
   const card = one<{ id: string; location_id: string; key: string }>(
     await pm(db).from('labor_rate_cards').select('id, location_id, key').eq('id', params.cardId!).maybeSingle(), 'rate card');
   if (!card) throw new HttpError(404, 'That rate card was not found.', 'NOT_FOUND');

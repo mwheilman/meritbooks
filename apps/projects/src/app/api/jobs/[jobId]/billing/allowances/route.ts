@@ -14,7 +14,7 @@ const Body = z.discriminatedUnion('op', [
 ]);
 
 /** close_allowance (variance becomes a potential change order) · bill_allowance_overage (after that CO is approved). */
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.billing', action: 'create' }, mask: 'billing', body: Body }, async ({ db, params, body }) => {
   const job = await loadMoneyJob(db, params.jobId!);
   assertMode(job, 'allowance');
   const a = one<{ id: string; job_id: string }>(await pm(db).from('allowances').select('id, job_id').eq('id', body.allowanceId).maybeSingle(), 'allowance');

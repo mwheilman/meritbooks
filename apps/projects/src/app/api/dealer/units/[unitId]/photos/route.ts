@@ -13,7 +13,7 @@ const TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'i
  * (storage policies key on the first folder = org id), a public.documents row records it, and a
  * pm.document_links row ties it to the unit (job_id stays empty for unit photos, 1109 §0.5).
  */
-export const POST = route({}, async ({ req, db, params, tenant, userId }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, mask: false }, async ({ req, db, params, tenant, userId }) => {
   const u = await downs<{ id: string; location_id: string }>(db, 'assets', 'id, location_id', params.unitId!, 'That unit was not found.');
   assertCompany(tenant, u.location_id);
   let form: FormData;

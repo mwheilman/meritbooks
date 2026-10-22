@@ -10,6 +10,7 @@ import { PageLine } from '@/components/common/PageLine';
 import { ModuleOff } from '@/components/ops/common/ModuleOff';
 import { DrawsView } from '@/components/ops/draws/DrawsView';
 import '@/components/ops/ops.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function DrawsPage({ searchParams }: { searchParams: { loan?: string } }) {
   const o = await opsScope();
   if (!o) return null;
+  await guardPage('/draws');
   const data = await loadDraws(o.db, { companyIds: o.companyIds });
   if (!has(o, 'lender_draws') && data.status.length === 0) {
     return (

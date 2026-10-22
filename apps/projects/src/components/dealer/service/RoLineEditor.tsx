@@ -1,7 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Button, Field, Input, MoneyInput, PanelSection, Seg, Select, api, count, money } from '@meritbooks/merit-ui';
+import { Button, Field, Input, MoneyInput, PanelSection, Seg, Select, api, count } from '@meritbooks/merit-ui';
+import { useSellText } from '@/components/money/useMoneyText';
+import { useMoneyVis } from '@/components/shell/ShellContext';
 import { PAY_TYPE_HELP, PAY_TYPE_WORDS, RO_EDITOR_KINDS, RO_KIND_WORDS } from '@/lib/pm/dealer/labels';
 import { counterLookup, paySplit, splitTotal, type PaySplit } from '@/lib/pm/dealer/math';
 import type { CounterSearch } from '@/lib/pm/dealer/parts-queries';
@@ -33,6 +35,7 @@ export interface RoLineEditorProps {
  * the repair order panel for dealer companies.
  */
 export function RoLineEditor({ workOrderId, locked, onChanged }: RoLineEditorProps) {
+  const money = useSellText();
   const url = `/api/dealer/ro/${workOrderId}`;
   const { act, busy, version, error } = useStore();
   const { data, error: loadError, isLoading, refetch } = useStoreDetail<RoData>(url, version);
@@ -95,6 +98,7 @@ export function RoLineEditor({ workOrderId, locked, onChanged }: RoLineEditorPro
 
 /** Customer / warranty / internal / policy by labor, parts, sublet and misc. */
 export function SplitSummary({ split }: { split: PaySplit }) {
+  const money = useSellText();
   const used = RO_PAY_TYPES.filter((t) => split[t].line_count > 0);
   if (!used.length) return null;
   const sum = (k: keyof PaySplit['CUSTOMER']) => used.reduce((s, t) => s + split[t][k], 0);
@@ -122,6 +126,8 @@ export function SplitSummary({ split }: { split: PaySplit }) {
 }
 
 function AddRoLine({ companyId, busy, onAdd }: { companyId: string; busy: boolean; onAdd: (b: Record<string, unknown>) => Promise<{ data: unknown }> }) {
+  const seesCost = useMoneyVis().cost;
+  const money = useSellText();
   const [kind, setKind] = useState<RoLineKind>('LABOR');
   const [pay, setPay] = useState<RoPayType>('CUSTOMER');
   const [op, setOp] = useState('');
@@ -206,7 +212,7 @@ function AddRoLine({ companyId, busy, onAdd }: { companyId: string; busy: boolea
             <Field label="Sublet vendor"><Lookup kind="vendors" value={vendor ? { id: vendor.id, label: vendor.label } : null} onChange={setVendor} placeholder="Optional" /></Field>
           </div>
           <div className="mp-form-2">
-            <Field label="Their cost"><MoneyInput valueCents={cost} onChangeCents={setCost} placeholder="0.00" /></Field>
+            {seesCost && <Field label="Their cost"><MoneyInput valueCents={cost} onChangeCents={setCost} placeholder="0.00" /></Field>}
             <Field label="Price to the customer"><MoneyInput valueCents={price} onChangeCents={setPrice} placeholder="0.00" /></Field>
           </div>
         </>
@@ -227,6 +233,7 @@ function AddRoLine({ companyId, busy, onAdd }: { companyId: string; busy: boolea
 }
 
 function ClaimFromRo({ data, locked, busy, onCreate }: { data: RoData; locked: boolean; busy: boolean; onCreate: (b: Record<string, unknown>) => Promise<unknown> }) {
+  const money = useSellText();
   const [payer, setPayer] = useState<LookupItem | null>(null);
   const [deadline, setDeadline] = useState('');
   const [failure, setFailure] = useState('');

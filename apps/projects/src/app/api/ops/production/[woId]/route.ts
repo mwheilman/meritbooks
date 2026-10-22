@@ -40,13 +40,13 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('update'), quantity: Qty.optional(), promisedOn: Day.nullish(), summary: Need(200, 'Say what the shop is building').optional() }),
 ]);
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.production', action: 'view' }, mask: ['work_order', 'work_center'] }, async ({ db, params }) => {
   const d = await loadProductionDetail(db, params.woId!);
   if (!d) throw new HttpError(404, 'That production order was not found.', 'NOT_FOUND');
   return d;
 });
 
-export const POST = route({ body: Op }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.production', action: 'edit' }, mask: ['work_order', 'work_center'], body: Op }, async ({ db, params, body, tenant }) => {
   const wo = await own<{ id: string; job_id: string; location_id: string; status: string }>(db, 'work_orders', 'id, job_id, location_id, status', { id: params.woId!, kind: 'PRODUCTION' }, 'That production order was not found.');
   assertCompany(tenant, wo.location_id);
   const pm = db.schema('pm');

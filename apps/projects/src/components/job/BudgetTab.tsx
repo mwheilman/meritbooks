@@ -7,7 +7,7 @@ import {
 } from '@meritbooks/merit-ui';
 import { COST_TYPE_LABELS } from '@/lib/packs';
 import type { BudgetLineRow, BudgetRow, CostCodeRow, CostType } from '@/lib/pm/types';
-import { useShell } from '@/components/shell/ShellContext';
+import { useShell, useMoneyVis } from '@/components/shell/ShellContext';
 import { useAction } from './useAction';
 
 export interface BudgetTabProps {
@@ -61,6 +61,8 @@ function statement(lines: ReadonlyArray<BudgetLineRow>, base: ReadonlyArray<Budg
 }
 
 export function BudgetTab(p: BudgetTabProps) {
+  // Cost-side tab (financials); the contract comparison needs contract_value too.
+  const mv = useMoneyVis();
   const { readOnly } = useShell();
   const { run, busy } = useAction();
   const codes = useMemo(() => new Map(p.costCodes.map((c) => [c.id, c])), [p.costCodes]);
@@ -144,7 +146,9 @@ export function BudgetTab(p: BudgetTabProps) {
           columns={columns}
           rows={statement(lines, baseLines, codes)}
           caption={
-            p.contractCents > 0
+            !mv.contract
+              ? 'Totals tie.'
+              : p.contractCents > 0
               ? `Budget is ${Number.isFinite(share) ? pct(share) : '—'} of the revised contract (${money(p.contractCents)}). Totals tie.`
               : 'Set the contract to compare the budget with it. Totals tie.'
           }

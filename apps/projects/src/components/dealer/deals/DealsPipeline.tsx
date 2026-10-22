@@ -7,7 +7,8 @@ import {
 } from '@meritbooks/merit-ui';
 import { DEAL_BANDS, DEAL_NEXT_WORDS, DEAL_STAGE, FINANCE_WORDS, unitTitle } from '@/lib/pm/dealer/labels';
 import type { DealPipelineRow, DealStage, FinanceType, UnitInventoryRow } from '@/lib/pm/dealer/types';
-import { useShell } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell } from '@/components/shell/ShellContext';
+import { seesMargin, when } from '@/components/money/visibility';
 import { CustomerPicker, customerPending, customerPendingMessage, type CustomerValue } from '@/components/jobs/CustomerPicker';
 import { Failure, StatusMark } from '@/components/ops/common/bits';
 import { PickStoreNote } from '../common/StoreOff';
@@ -34,6 +35,9 @@ function Gross({ cents }: { cents: number | null }) {
 export function DealsPipeline(p: DealsPipelineProps) {
   const router = useRouter();
   const { readOnly } = useShell();
+  // Gross is financials + contract; the sale price is contract_value.
+  const mv = useMoneyVis();
+  const g = seesMargin(mv);
   const open = p.deals.filter((d) => d.stage !== 'LOST');
   const firstBusy = (['WRITTEN', 'FUNDED', 'APPROVED', 'QUOTE'] as Band[]).find((b) => open.some((d) => d.stage === b)) ?? 'QUOTE';
   const [band, setBand] = useState<Band>(p.initialBand ?? firstBusy);
@@ -54,10 +58,10 @@ export function DealsPipeline(p: DealsPipelineProps) {
   const columns: QueueColumn<DealPipelineRow>[] = [
     { id: 'n', header: 'Deal', width: 132, cell: (d) => <><span className="l1 code">{d.number}</span><span className="l2">{FINANCE_WORDS[d.finance_type]}{d.is_sample ? ' · sample' : ''}</span></> },
     { id: 'c', header: 'Customer', cell: (d) => <><span className="l1">{d.customer_name ?? 'No customer yet'}</span><span className="l2">{[`${count(d.unit_count ?? 0)} unit${d.unit_count === 1 ? '' : 's'}`, p.multi ? names[d.location_id] : null].filter(Boolean).join(' · ')}</span></> },
-    { id: 'sale', header: 'Sale price', numeric: true, width: 124, cell: (d) => (d.sale_price_cents == null ? '—' : money(d.sale_price_cents)) },
-    { id: 'front', header: 'Front gross', numeric: true, width: 132, cell: (d) => <><span className="l1"><Gross cents={d.front_gross_cents} /></span><span className="l2">{d.front_gross_pct == null ? ' ' : pct(d.front_gross_pct)}</span></> },
-    { id: 'back', header: 'Back gross', numeric: true, width: 116, cell: (d) => <Gross cents={d.back_gross_cents} /> },
-    { id: 'total', header: 'Total gross', numeric: true, width: 124, cell: (d) => <b><Gross cents={d.total_gross_cents} /></b> },
+    ...when<QueueColumn<DealPipelineRow>>(mv.contract, { id: 'sale', header: 'Sale price', numeric: true, width: 124, cell: (d) => (d.sale_price_cents == null ? '—' : money(d.sale_price_cents)) }),
+    ...when<QueueColumn<DealPipelineRow>>(g, { id: 'front', header: 'Front gross', numeric: true, width: 132, cell: (d) => <><span className="l1"><Gross cents={d.front_gross_cents} /></span><span className="l2">{d.front_gross_pct == null ? ' ' : pct(d.front_gross_pct)}</span></> },
+      { id: 'back', header: 'Back gross', numeric: true, width: 116, cell: (d) => <Gross cents={d.back_gross_cents} /> },
+      { id: 'total', header: 'Total gross', numeric: true, width: 124, cell: (d) => <b><Gross cents={d.total_gross_cents} /></b> }),
     { id: 'st', header: 'Stage', width: 190, cell: (d) => <><StatusMark mark={DEAL_STAGE[d.stage]} /><span className="l2">{d.sold_out_of_trust ? 'Sold out of trust' : `${count(Math.max(0, Math.floor((Date.now() - Date.parse(d.stage_entered_at)) / 86_400_000)))} days here · ${DEAL_NEXT_WORDS[d.stage].toLowerCase()}`}</span></> },
   ];
 
@@ -75,7 +79,7 @@ export function DealsPipeline(p: DealsPipelineProps) {
           aria-label="Deals by stage"
           value={band}
           onChange={setBand}
-          items={DEAL_BANDS.map((b) => ({ value: b.value, label: b.label, count: count(inBand(b.value).length), caption: inBand(b.value).length ? `${money(gross(inBand(b.value)), { decimals: 0 })} gross · ${b.caption.toLowerCase()}` : b.caption }))}
+          items={DEAL_BANDS.map((b) => ({ value: b.value, label: b.label, count: count(inBand(b.value).length), caption: inBand(b.value).length && g ? `${money(gross(inBand(b.value)), { decimals: 0 })} gross · ${b.caption.toLowerCase()}` : b.caption }))}
         />
       )}
       <div className={creating ? 'ops-split has-panel' : 'ops-split'}>
@@ -97,7 +101,7 @@ export function DealsPipeline(p: DealsPipelineProps) {
               onCursorChange={(id) => setCursor(id)}
               openOnClick
               onOpen={(d) => router.push(`/deals/${d.deal_id}`)}
-              rowState={(d) => ({ attn: d.sold_out_of_trust || (d.front_gross_cents ?? 0) < 0, done: d.stage === 'DELIVERED' || d.stage === 'LOST' })}
+              rowState={(d) => ({ attn: d.sold_out_of_trust || (g && (d.front_gross_cents ?? 0) < 0), done: d.stage === 'DELIVERED' || d.stage === 'LOST' })}
             />
           )}
         </div>

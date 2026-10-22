@@ -7,6 +7,7 @@ import { listAllProjects } from '@/lib/pm/projects';
 import { cents, marginCents, sumBy } from '@/lib/pm/money';
 import { PageLine } from '@/components/common/PageLine';
 import { JobStatement } from '@/components/insights/JobStatement';
+import { guardPage } from '@/components/shell/page-guard';
 
 const TITLES = { margin: 'Margin by job', backlog: 'Backlog' } as const;
 type Report = keyof typeof TITLES;
@@ -20,6 +21,7 @@ export default async function InsightPage({ params }: { params: { report: string
   const report = params.report as Report;
   const scope = await pageScope();
   if (!scope) return null;
+  await guardPage('/insights');
   const db = await requireDb();
   const { rows, capped } = await listAllProjects(db, scope.companyIds, 2000);
   const open = rows.filter((r) => !r.stage_is_terminal);

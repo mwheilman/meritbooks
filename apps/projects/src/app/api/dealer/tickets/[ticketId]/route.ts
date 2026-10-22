@@ -19,14 +19,14 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('void'), reason: Text(300).nullish() }),
 ]);
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.store', action: 'view' }, mask: 'parts_ticket' }, async ({ db, params }) => {
   const t = await loadTicket(db, params.ticketId!);
   if (!t) throw new HttpError(404, 'That counter ticket was not found.', 'NOT_FOUND');
   return t;
 });
 
 /** Counter ticket lines and the close (pm.close_parts_ticket: stock issues, special orders, DEALER_PARTS_SALE). */
-export const POST = route({ body: Op }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, mask: 'parts_ticket', body: Op }, async ({ db, params, body, tenant }) => {
   const t = await downs<{ id: string; location_id: string; status: string }>(db, 'parts_tickets', 'id, location_id, status', params.ticketId!, 'That counter ticket was not found.');
   assertCompany(tenant, t.location_id);
   const pm = db.schema('pm');

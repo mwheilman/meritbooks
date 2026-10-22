@@ -15,7 +15,7 @@ const Query = z.object({ companyId: z.string().uuid().optional() });
  * (v_dealer_deals_pipeline), Parts below minimum (v_parts_on_hand) and Rentals out (rental_contracts +
  * v_rental_utilization). Read-only, RLS client, the dealer companies of the current view.
  */
-export const GET = route({ query: Query }, async ({ db, params, query, tenant }) => {
+export const GET = route({ access: { cap: 'projects.store', action: 'view' }, mask: ['dealer_unit', 'dealer_deal', 'part', 'rental'], query: Query }, async ({ db, params, query, tenant }) => {
   const key = params.widget as DealerWidgetKey;
   if (!(DEALER_WIDGET_KEYS as ReadonlyArray<string>).includes(key)) throw new HttpError(404, 'There is no such home widget.', 'NOT_FOUND');
   const s = await getScope();

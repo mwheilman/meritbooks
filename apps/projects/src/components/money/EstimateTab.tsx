@@ -14,7 +14,8 @@ import type { EstimateLineRow, EstimateRow } from '@/lib/pm/money/types';
 import { estimateLineValues } from '@/lib/pm/money/estimate-lines';
 import { estimateTotals } from '@/lib/pm/money/summaries';
 import { estimateMark } from '@/lib/pm/money/status';
-import { useShell, useVocab } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell, useVocab } from '@/components/shell/ShellContext';
+import { seesMargin, when } from '@/components/money/visibility';
 import { useAction } from '@/components/job/useAction';
 import { lower } from '@/lib/pm/vocab';
 import { MarkStatus, m, p, parsePct, pctInput } from './common';
@@ -41,6 +42,10 @@ function pickInitial(es: ReadonlyArray<EstimateRow>): string | null {
 
 export function EstimateTab(p0: EstimateTabProps) {
   const v = useVocab();
+  // An estimate is cost + markup = price. Without financials only the price side shows, read-only
+  // (the estimate-line view nulls cost for them anyway); without contract_value, only cost.
+  const mv = useMoneyVis();
+  const seesCost = mv.cost;
   const { readOnly } = useShell();
   const { run, busy } = useAction();
   const [selId, setSelId] = useState<string | null>(pickInitial(p0.estimates));
@@ -103,7 +108,7 @@ export function EstimateTab(p0: EstimateTabProps) {
                     <span className="l1">{e.title}</span>
                     <span className="l2"><span className="code">{e.number}</span> · {mk.word}</span>
                   </button>
-                  <span className="tnum">{money(e.total_cents, { decimals: 0 })}</span>
+                  {mv.contract ? <span className="tnum">{money(e.total_cents, { decimals: 0 })}</span> : <span />}
                 </li>
               );
             })}
@@ -151,13 +156,13 @@ export function EstimateTab(p0: EstimateTabProps) {
 
           <div className="row" style={{ gap: 32, alignItems: 'flex-start' }}>
             <KV items={[
-              { term: 'Price', value: m(totals.sell) },
-              { term: 'Cost', value: m(totals.cost) },
-              { term: 'Margin', value: `${m(totals.margin)} · ${p(totals.marginPct)}` },
-              ...(overhead > 0 ? [{ term: 'Overhead recovered', value: `${m(overhead)} in labor` }] : []),
+              ...when(mv.contract, { term: 'Price', value: m(totals.sell) }),
+              ...when(seesCost, { term: 'Cost', value: m(totals.cost) }),
+              ...when(seesMargin(mv), { term: 'Margin', value: `${m(totals.margin)} · ${p(totals.marginPct)}` }),
+              ...(overhead > 0 && seesMargin(mv) ? [{ term: 'Overhead recovered', value: `${m(overhead)} in labor` }] : []),
             ]} />
             <KV items={[
-              { term: 'Allowances in price', value: m(totals.allowances) },
+              ...when(mv.contract, { term: 'Allowances in price', value: m(totals.allowances) }),
               { term: 'Lines', value: String(lines.length) },
               { term: 'Becomes', value: sel.status === 'ACCEPTED' ? 'Budget and contract' : 'Budget and contract on acceptance' },
             ]} />
@@ -170,7 +175,7 @@ export function EstimateTab(p0: EstimateTabProps) {
           )}
 
           {(sel.status === 'ACCEPTED' || accepted) && (
-            <AcceptedNotice jobId={p0.jobId} estimate={sel} result={accepted?.budgetId === sel.budget_id ? accepted : null} contractCents={p0.contractCents} budgetCents={p0.budgetCents} booksPresent={p0.booksPresent} />
+            <AcceptedNotice cost={seesCost} contract={mv.contract} jobId={p0.jobId} estimate={sel} result={accepted?.budgetId === sel.budget_id ? accepted : null} contractCents={p0.contractCents} budgetCents={p0.budgetCents} booksPresent={p0.booksPresent} />
           )}
           {sel.status === 'DECLINED' && (
             <InlineNotice title={`Declined ${sel.declined_at ? shortDate(sel.declined_at.slice(0, 10)) : ''}.`}>
@@ -178,8 +183,12 @@ export function EstimateTab(p0: EstimateTabProps) {
             </InlineNotice>
           )}
 
-          {overhead > 0 && <p className="t-cap">{LABOR_COST_RULE} The cost above is job cost; the {m(overhead)} overhead in labor bids sits in the margin.</p>}
-          <LinesTable estimateId={sel.id} lines={lines} codes={codes} costCodes={p0.costCodes} editable={draft} cards={cards} />
+          {overhead > 0 && seesMargin(mv) && <p className="t-cap">{LABOR_COST_RULE} The cost above is job cost; the {m(overhead)} overhead in labor bids sits in the margin.</p>}
+          {seesCost && mv.contract ? (
+            <LinesTable estimateId={sel.id} lines={lines} codes={codes} costCodes={p0.costCodes} editable={draft} cards={cards} />
+          ) : (
+            <OneSideTable lines={lines} codes={codes} side={seesCost ? 'cost' : 'price'} />
+          )}
           {sel.status === 'SENT' && !readOnly && (
             <p className="t-cap">Sent estimates are locked. Revise to change the lines; the customer then gets a new version.</p>
           )}
@@ -200,8 +209,8 @@ export function EstimateTab(p0: EstimateTabProps) {
               if (r.data) setAccepted(r.data);
             }}
           >
-            The cost by cost code ({money(totals.cost)}) becomes the original budget.{' '}
-            {p0.contractCents > 0 ? 'The job already has a contract, so it stays as set; change orders move it from here.' : `The contract is set to the price, ${money(totals.sell)}.`}{' '}
+            The cost by cost code{seesCost ? ` (${money(totals.cost)})` : ''} becomes the original budget.{' '}
+            {p0.contractCents > 0 ? 'The job already has a contract, so it stays as set; change orders move it from here.' : mv.contract ? `The contract is set to the price, ${money(totals.sell)}.` : 'The contract is set to the price.'}{' '}
             {p0.booksPresent ? 'Both are sent to Merit Books.' : ''}
           </ConfirmDialog>
           <ConfirmDialog
@@ -230,7 +239,7 @@ export function EstimateTab(p0: EstimateTabProps) {
               setSelId(null);
             }}
           >
-            {lines.length} {lines.length === 1 ? 'line' : 'lines'} and {money(totals.sell)} of pricing are deleted.
+            {lines.length} {lines.length === 1 ? 'line' : 'lines'}{mv.contract ? ` and ${money(totals.sell)} of pricing` : ''} are deleted.
           </ConfirmDialog>
         </>
       )}
@@ -238,18 +247,18 @@ export function EstimateTab(p0: EstimateTabProps) {
   );
 }
 
-function AcceptedNotice({ jobId, estimate, result, contractCents, budgetCents, booksPresent }: { jobId: string; estimate: EstimateRow; result: AcceptOut | null; contractCents: number; budgetCents: number | null; booksPresent: boolean }) {
+function AcceptedNotice({ cost, contract, jobId, estimate, result, contractCents, budgetCents, booksPresent }: { cost: boolean; contract: boolean; jobId: string; estimate: EstimateRow; result: AcceptOut | null; contractCents: number; budgetCents: number | null; booksPresent: boolean }) {
   const when = estimate.accepted_at ? shortDate(estimate.accepted_at.slice(0, 10)) : 'today';
   return (
     <InlineNotice tone="info" title={`Accepted ${when}.`} role="status">
-      <span style={{ display: 'block' }}>
+      {cost && <span style={{ display: 'block' }}>
         Original budget: {money(estimate.cost_total_cents)} by cost code{budgetCents != null && budgetCents !== estimate.cost_total_cents ? ` (the job’s budget is now ${money(budgetCents)} with other lines)` : ''}.{' '}
         <Link className="link" href={`/jobs/${jobId}?tab=budget`}>Open the budget</Link>
-      </span>
-      <span style={{ display: 'block', marginTop: 4 }}>
+      </span>}
+      {contract && <span style={{ display: 'block', marginTop: 4 }}>
         Contract: {result ? (result.contractCreated ? `set to ${money(result.totalCents)}` : 'kept as set') : 'revised contract'} {money(contractCents)}.{' '}
         <Link className="link" href={`/jobs/${jobId}?tab=contract`}>Open the contract</Link>
-      </span>
+      </span>}
       {booksPresent && <span style={{ display: 'block', marginTop: 4 }} className="t-cap">Sent to Merit Books as the contract value and cost estimate.</span>}
     </InlineNotice>
   );
@@ -550,5 +559,40 @@ function LaborLineRow({ line, labor, cc, costCodes, editable, onSave, onRemove }
       <td><Check aria-label="Allowance line" checked={line.is_allowance} onChange={(e) => void onSave({ isAllowance: e.target.checked }, e.target.checked ? 'Marked as an allowance' : 'No longer an allowance')} /></td>
       <td><Button variant="quiet" iconOnly icon="x" aria-label="Remove line" onClick={onRemove} /></td>
     </tr>
+  );
+}
+
+/** Read-only lines for someone who sees only one side of the estimate (price or cost). */
+function OneSideTable({ lines, codes, side }: { lines: EstimateLineRow[]; codes: Map<string, CostCodeRow>; side: 'cost' | 'price' }) {
+  const val = (l: EstimateLineRow) => (side === 'cost' ? l.cost_cents ?? 0 : l.amount_cents);
+  return (
+    <section aria-label="Estimate lines" className="mp-table">
+      <table className="tbl tbl-q tbl-q--compact">
+        <thead>
+          <tr><th>Cost code</th><th>Description</th><th className="n">Qty</th><th>Unit</th><th className="n">{side === 'cost' ? 'Cost' : 'Price'}</th></tr>
+        </thead>
+        <tbody>
+          {lines.map((l) => {
+            const cc = l.cost_code_id ? codes.get(l.cost_code_id) : null;
+            return (
+              <tr key={l.id} className="q-row">
+                <td>{cc ? <><span className="code">{cc.code}</span> {cc.name}</> : <span className="l2">No cost code</span>}</td>
+                <td>{l.description}</td>
+                <td className="n">{l.qty == null ? '—' : String(l.qty)}</td>
+                <td>{l.uom ?? ''}</td>
+                <td className="n">{m(val(l))}</td>
+              </tr>
+            );
+          })}
+          {lines.length > 0 && (
+            <tr className="q-row">
+              <td colSpan={4} className="b">Total</td>
+              <td className="n b">{m(lines.reduce((s, l) => s + val(l), 0))}</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      <p className="t-cap" style={{ padding: '8px 16px' }}>{side === 'price' ? 'Cost and markup are visible to estimators and project managers.' : 'The price side is visible to people who see contract amounts.'}</p>
+    </section>
   );
 }

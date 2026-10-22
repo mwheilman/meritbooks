@@ -23,7 +23,7 @@ const Query = z.object({
  * Rate preview from pm.rental_charge: for a new reservation (unit + window, at the rate that covers
  * the unit) or for the next bill on a contract (its pinned rates, from the last billed point).
  */
-export const GET = route({ query: Query }, async ({ db, query, tenant }) => {
+export const GET = route({ access: { cap: 'projects.store', action: 'view' }, mask: 'rental', query: Query }, async ({ db, query, tenant }) => {
   const pm = db.schema('pm');
   let rate: { day: number | null; week: number | null; month: number | null; waiverPct: number | null; label: string | null } | null = null;
   let start: string | undefined = query.start;
@@ -69,7 +69,7 @@ const Body = z.object({
 }).refine((b) => Date.parse(b.end) > Date.parse(b.start), { message: 'The rental ends before it starts', path: ['end'] });
 
 /** Reserve a fleet unit (pm.reserve_rental pins the covering rate; the database refuses a double booking). */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'create' }, mask: 'rental', body: Body }, async ({ db, body, tenant }) => {
   const u = rows<{ location_id: string }>(await db.schema('pm').from('assets').select('location_id').eq('id', body.unitId), 'unit')[0];
   if (!u) throw new HttpError(404, 'That unit was not found.', 'NOT_FOUND');
   assertCompany(tenant, u.location_id);

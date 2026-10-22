@@ -14,7 +14,8 @@ import { FI_PRODUCT_TYPES, type DealLineRow, type DealLineType, type FiProductTy
 import type { DealWorkspace } from '@/lib/pm/dealer/deal-queries';
 import type { LookupItem } from '@/lib/pm/ops/types';
 import { stamp } from '@/lib/time';
-import { useShell } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell } from '@/components/shell/ShellContext';
+import { seesMargin } from '@/components/money/visibility';
 import { CustomerPicker, type CustomerValue } from '@/components/jobs/CustomerPicker';
 import { PctInput, StatusMark, parseNum } from '@/components/ops/common/bits';
 import { Lookup } from '@/components/ops/common/Lookup';
@@ -42,6 +43,8 @@ export function DealDesk(p: DealDeskProps) {
   const w = data ?? p.initial;
   const d = w.deal;
   const editable = dealEditable(d.stage) && !readOnly;
+  // Deal gross = financials (spec §2.1 store): cost, gross and the desk's gross card need both sides.
+  const gross = seesMargin(useMoneyVis());
   const [drafts, setDrafts] = useState<Drafts>({});
 
   // Preview the totals with unsaved price edits (client parity with pm.dealer_deal_totals).
@@ -80,10 +83,10 @@ export function DealDesk(p: DealDeskProps) {
                 <div style={{ padding: 16 }}><WidgetState state={{ kind: 'empty', title: 'No units on the deal yet', body: 'Add a unit from stock below, then attachments, fees and rebates. Unit cost is pinned from the unit, so gross is live.' }} /></div>
               ) : (
                 <table className="dl-tbl">
-                  <thead><tr><th>Line</th><th className="n">Qty</th><th className="n">Price</th><th className="n">Amount</th><th className="n">Cost</th><th className="n">Gross</th>{editable && <th><span className="sr">Remove</span></th>}</tr></thead>
+                  <thead><tr><th>Line</th><th className="n">Qty</th><th className="n">Price</th><th className="n">Amount</th>{gross && <><th className="n">Cost</th><th className="n">Gross</th></>}{editable && <th><span className="sr">Remove</span></th>}</tr></thead>
                   <tbody>
                     {(['UNIT', 'ATTACHMENT', 'FEE', 'DISCOUNT', 'REBATE', 'INCENTIVE'] as DealLineType[]).flatMap((t) => byType(t).map((l) => (
-                      <LineRow key={l.id} l={l} w={w} today={p.today} editable={editable} busy={busy} draft={drafts[l.id] ?? null}
+                      <LineRow key={l.id} showGross={gross} l={l} w={w} today={p.today} editable={editable} busy={busy} draft={drafts[l.id] ?? null}
                         onDraft={(v) => setDraft(l.id, v)}
                         onSave={(patch, label) => void run('line', { op: 'update_line', lineId: l.id, ...patch }, label, [l.id])}
                         onRemove={() => void run(`rm:${l.id}`, { op: 'remove_line', lineId: l.id }, 'Removed the line', [l.id])} />
@@ -95,8 +98,8 @@ export function DealDesk(p: DealDeskProps) {
             </div>
           </div>
 
-          <Trades w={w} editable={editable} busy={busy} drafts={drafts} setDraft={setDraft} run={run} />
-          <FiCard w={w} editable={editable} busy={busy} run={run} />
+          <Trades showCost={gross} w={w} editable={editable} busy={busy} drafts={drafts} setDraft={setDraft} run={run} />
+          <FiCard showGross={gross} w={w} editable={editable} busy={busy} run={run} />
           <Checklist w={w} readOnly={readOnly} busy={busy} today={p.today} run={run} />
           <Quotes w={w} today={p.today} />
           <Deposits w={w} />
@@ -116,7 +119,7 @@ export function DealDesk(p: DealDeskProps) {
         </div>
 
         <aside className="dl-desk-side" aria-label="Totals and next step">
-          <TotalsCard totals={w.totals} preview={preview} floorPct={w.settings.margin_floor_pct} minFront={w.settings.min_front_gross_cents} />
+          <TotalsCard showGross={gross} totals={w.totals} preview={preview} floorPct={w.settings.margin_floor_pct} minFront={w.settings.min_front_gross_cents} />
           <StageActions w={w} url={url} act={act} busy={busy} failure={failure} readOnly={readOnly} today={p.today} />
           <div className="dl-noprint"><ButtonLink variant="quiet" href={`/deals/${d.id}/quote`} icon="file-text">Printable quote</ButtonLink></div>
         </aside>
@@ -186,7 +189,8 @@ function HeaderCard({ w, editable, busy, onSave }: { w: DealWorkspace; editable:
   );
 }
 
-function LineRow({ l, w, today, editable, busy, draft, onDraft, onSave, onRemove }: {
+function LineRow({ showGross, l, w, today, editable, busy, draft, onDraft, onSave, onRemove }: {
+  showGross: boolean;
   l: DealLineRow; w: DealWorkspace; today: string; editable: boolean; busy: string | null; draft: number | null;
   onDraft: (v: number | null) => void; onSave: (patch: Record<string, unknown>, label: string) => void; onRemove: () => void;
 }) {
@@ -211,8 +215,8 @@ function LineRow({ l, w, today, editable, busy, draft, onDraft, onSave, onRemove
         ) : money(l.unit_price_cents)}
       </td>
       <td className="n">{money(neg ? -l.amount_cents : l.amount_cents)}</td>
-      <td className="n">{hasCost ? money(l.cost_cents) : '—'}</td>
-      <td className="n">{gross == null ? (l.line_type === 'INCENTIVE' ? money(l.amount_cents) : '—') : <span className={gross < 0 ? 'neg' : undefined}>{money(gross)}</span>}</td>
+      {showGross && <td className="n">{hasCost ? money(l.cost_cents) : '—'}</td>}
+      {showGross && <td className="n">{gross == null ? (l.line_type === 'INCENTIVE' ? money(l.amount_cents) : '—') : <span className={gross < 0 ? 'neg' : undefined}>{money(gross)}</span>}</td>}
       {editable && <td><Button variant="quiet" iconOnly icon="x" aria-label={`Remove ${l.description || 'the line'}`} disabled={busy === `rm:${l.id}`} onClick={onRemove} /></td>}
     </tr>
   );
@@ -267,22 +271,22 @@ function AddLine({ stock, busy, onAdd }: { stock: UnitInventoryRow[]; busy: bool
 
 type Run = <T>(key: string, body: unknown, ok: string | ((x: T) => string | null), clear?: string[]) => Promise<{ data: T | null }>;
 
-function Trades({ w, editable, busy, drafts, setDraft, run }: { w: DealWorkspace; editable: boolean; busy: string | null; drafts: Drafts; setDraft: (k: string, v: number | null) => void; run: Run }) {
+function Trades({ showCost, w, editable, busy, drafts, setDraft, run }: { showCost: boolean; w: DealWorkspace; editable: boolean; busy: string | null; drafts: Drafts; setDraft: (k: string, v: number | null) => void; run: Run }) {
   const [adding, setAdding] = useState(false);
   const live = w.trades.filter((t) => t.status !== 'VOID');
   return (
     <div className="dl-card">
-      <div className="dl-card-h"><h2 className="t-section">Trades</h2><span className="sp" />{live.length > 0 && <span className="t-cap">Allowance {money(w.totals.trade_allowance_cents)} · ACV {money(w.totals.trade_acv_cents)}</span>}</div>
+      <div className="dl-card-h"><h2 className="t-section">Trades</h2><span className="sp" />{live.length > 0 && <span className="t-cap">Allowance {money(w.totals.trade_allowance_cents)}{showCost ? ` · ACV ${money(w.totals.trade_acv_cents)}` : ''}</span>}</div>
       <div className="dl-card-b">
         {live.length === 0 && !adding && <p className="t-cap">No trade-in. Add one with its serial, hours, appraisal (ACV) and the allowance you give.</p>}
-        {live.map((t) => <TradeRowView key={t.id} t={t} w={w} editable={editable && t.status === 'APPRAISED'} busy={busy} drafts={drafts} setDraft={setDraft} run={run} />)}
+        {live.map((t) => <TradeRowView key={t.id} showCost={showCost} t={t} w={w} editable={editable && t.status === 'APPRAISED'} busy={busy} drafts={drafts} setDraft={setDraft} run={run} />)}
         {editable && (adding ? <TradeForm busy={busy === 'trade'} onCancel={() => setAdding(false)} onSubmit={async (b) => { const r = await run('trade', { op: 'add_trade', ...b }, 'Added the trade'); if (r.data) setAdding(false); }} /> : <Button icon="plus" onClick={() => setAdding(true)}>Add a trade</Button>)}
       </div>
     </div>
   );
 }
 
-function TradeRowView({ t, w, editable, busy, drafts, setDraft, run }: { t: TradeRow; w: DealWorkspace; editable: boolean; busy: string | null; drafts: Drafts; setDraft: (k: string, v: number | null) => void; run: Run }) {
+function TradeRowView({ showCost, t, w, editable, busy, drafts, setDraft, run }: { showCost: boolean; t: TradeRow; w: DealWorkspace; editable: boolean; busy: string | null; drafts: Drafts; setDraft: (k: string, v: number | null) => void; run: Run }) {
   const acv = drafts[`acv:${t.id}`] ?? t.acv_cents;
   const allow = drafts[`allow:${t.id}`] ?? t.allowance_cents;
   const over = overAllowanceCents({ acv_cents: acv, allowance_cents: allow });
@@ -296,18 +300,18 @@ function TradeRowView({ t, w, editable, busy, drafts, setDraft, run }: { t: Trad
       <div className="dl-kv2" style={{ marginTop: 8 }}>
         {editable ? (
           <>
-            <Field label="ACV (appraisal)"><MoneyInput valueCents={acv} onChangeCents={(v) => setDraft(`acv:${t.id}`, v === t.acv_cents ? null : v)} onBlur={() => { const v = drafts[`acv:${t.id}`]; if (v != null) void run('trade', { op: 'update_trade', tradeId: t.id, acvCents: v }, 'Saved the appraisal', [`acv:${t.id}`]); }} placeholder="Not appraised" /></Field>
+            {showCost && <Field label="ACV (appraisal)"><MoneyInput valueCents={acv} onChangeCents={(v) => setDraft(`acv:${t.id}`, v === t.acv_cents ? null : v)} onBlur={() => { const v = drafts[`acv:${t.id}`]; if (v != null) void run('trade', { op: 'update_trade', tradeId: t.id, acvCents: v }, 'Saved the appraisal', [`acv:${t.id}`]); }} placeholder="Not appraised" /></Field>}
             <Field label="Allowance on the deal"><MoneyInput valueCents={allow} onChangeCents={(v) => setDraft(`allow:${t.id}`, v === t.allowance_cents ? null : v)} onBlur={() => { const v = drafts[`allow:${t.id}`]; if (v != null) void run('trade', { op: 'update_trade', tradeId: t.id, allowanceCents: v }, 'Saved the allowance', [`allow:${t.id}`]); }} placeholder="0.00" /></Field>
           </>
         ) : (
           <>
-            <p><span className="t-cap">ACV</span><br /><span className="tnum">{t.acv_cents == null ? 'Not appraised' : money(t.acv_cents)}</span></p>
+            {showCost && <p><span className="t-cap">ACV</span><br /><span className="tnum">{t.acv_cents == null ? 'Not appraised' : money(t.acv_cents)}</span></p>}
             <p><span className="t-cap">Allowance</span><br /><span className="tnum">{money(t.allowance_cents)}</span></p>
           </>
         )}
       </div>
       <div className="ops-facts" style={{ marginTop: 4 }}>
-        <span>Over-allowance <b className={over > 0 ? 'tnum neg' : 'tnum'}>{money(over)}</b></span>
+        {showCost && <span>Over-allowance <b className={over > 0 ? 'tnum neg' : 'tnum'}>{money(over)}</b></span>}
         {t.payoff_cents > 0 && <span>Payoff <b className="tnum">{money(t.payoff_cents)}</b> to {t.lienholder_vendor_id ? w.vendors[t.lienholder_vendor_id] ?? 'the lienholder' : 'the lienholder'}{t.lien_account_ref ? ` (${t.lien_account_ref})` : ''}</span>}
         {t.received_asset_id && <Link className="link" href={`/stock?unit=${t.received_asset_id}`}>Open the used unit</Link>}
       </div>
@@ -370,7 +374,7 @@ function TradeForm({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: () =
   );
 }
 
-function FiCard({ w, editable, busy, run }: { w: DealWorkspace; editable: boolean; busy: string | null; run: Run }) {
+function FiCard({ showGross, w, editable, busy, run }: { showGross: boolean; w: DealWorkspace; editable: boolean; busy: string | null; run: Run }) {
   const [type, setType] = useState<FiProductType>('EXTENDED_WARRANTY');
   const [desc, setDesc] = useState('');
   const [price, setPrice] = useState<number | null>(null);
@@ -379,19 +383,19 @@ function FiCard({ w, editable, busy, run }: { w: DealWorkspace; editable: boolea
   const [provider, setProvider] = useState<LookupItem | null>(null);
   return (
     <div className="dl-card">
-      <div className="dl-card-h"><h2 className="t-section">F&amp;I products</h2><span className="sp" />{w.fi.length > 0 && <span className="t-cap">Back gross {money(w.totals.back_gross_cents)}</span>}</div>
+      <div className="dl-card-h"><h2 className="t-section">F&amp;I products</h2><span className="sp" />{w.fi.length > 0 && showGross && <span className="t-cap">Back gross {money(w.totals.back_gross_cents)}</span>}</div>
       <div className="dl-card-b flush">
         {w.fi.length === 0 ? <p className="t-cap" style={{ padding: '12px 16px' }}>No products. Extended warranty, maintenance plans and protection add back gross.</p> : (
           <table className="dl-tbl">
-            <thead><tr><th>Product</th><th className="n">Term</th><th className="n">Price</th><th className="n">Cost</th><th className="n">Gross</th>{editable && <th><span className="sr">Remove</span></th>}</tr></thead>
+            <thead><tr><th>Product</th><th className="n">Term</th><th className="n">Price</th>{showGross && <><th className="n">Cost</th><th className="n">Gross</th></>}{editable && <th><span className="sr">Remove</span></th>}</tr></thead>
             <tbody>
               {w.fi.map((f) => (
                 <tr key={f.id}>
                   <td><span className="l1">{f.description || FI_WORDS[f.product_type]}</span><span className="l2">{[FI_WORDS[f.product_type], f.provider_vendor_id ? w.vendors[f.provider_vendor_id] : null, f.contract_number].filter(Boolean).join(' · ')}</span></td>
                   <td className="n">{f.term_months ? `${f.term_months} mo` : '—'}</td>
                   <td className="n">{money(f.price_cents)}</td>
-                  <td className="n">{money(f.cost_cents)}</td>
-                  <td className="n">{money(f.price_cents - f.cost_cents)}</td>
+                  {showGross && <td className="n">{money(f.cost_cents)}</td>}
+                  {showGross && <td className="n">{money(f.price_cents - f.cost_cents)}</td>}
                   {editable && <td><Button variant="quiet" iconOnly icon="x" aria-label={`Remove ${FI_WORDS[f.product_type]}`} disabled={busy === `rmf:${f.id}`} onClick={() => void run(`rmf:${f.id}`, { op: 'remove_fi', fiId: f.id }, 'Removed the product')} /></td>}
                 </tr>
               ))}
@@ -407,7 +411,7 @@ function FiCard({ w, editable, busy, run }: { w: DealWorkspace; editable: boolea
             <Field label="Product"><Select value={type} onChange={(e) => setType(e.target.value as FiProductType)}>{FI_PRODUCT_TYPES.map((t) => <option key={t} value={t}>{FI_WORDS[t]}</option>)}</Select></Field>
             <Field label="Provider"><Lookup kind="vendors" value={provider ? { id: provider.id, label: provider.label } : null} onChange={setProvider} placeholder="Optional" /></Field>
             <Field label="Price"><MoneyInput valueCents={price} onChangeCents={setPrice} placeholder="0.00" /></Field>
-            <Field label="Cost"><MoneyInput valueCents={cost} onChangeCents={setCost} placeholder="0.00" /></Field>
+            {showGross && <Field label="Cost"><MoneyInput valueCents={cost} onChangeCents={setCost} placeholder="0.00" /></Field>}
             <Field label="Months"><Input inputMode="numeric" value={term} onChange={(e) => setTerm(e.target.value)} /></Field>
             <div><Button type="submit" icon="plus" disabled={busy === 'fi' || price == null}>Add</Button></div>
           </form>

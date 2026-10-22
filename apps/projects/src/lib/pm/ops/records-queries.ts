@@ -13,7 +13,7 @@ const pm = (db: SupabaseClient) => db.schema('pm');
  * so RLS bounds the org and the caller filters to the jobs in its view (inScope).
  */
 export async function loadTime(db: SupabaseClient, w: Where, from: string, to: string, inScope: (jobId: string) => boolean): Promise<TimeEntryRow[]> {
-  let q = pm(db).from('time_entries').select(TIME_COLS).gte('work_date', from).lte('work_date', to).neq('approval_state', 'VOID');
+  let q = pm(db).from('v_time_entries_masked').select(TIME_COLS).gte('work_date', from).lte('work_date', to).neq('approval_state', 'VOID');
   if (w.jobId) q = q.eq('job_id', w.jobId);
   return rows<TimeEntryRow>(await q.order('work_date').order('created_at').limit(3000), 'time entries').filter((t) => inScope(t.job_id));
 }

@@ -11,6 +11,7 @@ import { PageCrumbs } from '@/components/shell/ShellContext';
 import { DealDesk } from '@/components/dealer/deals/DealDesk';
 import '@/components/ops/ops.css';
 import '@/components/dealer/dealer.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,7 @@ export default async function DealPage({ params }: { params: { dealId: string } 
   if (!UUID.test(params.dealId)) notFound();
   const o = await dealerScope();
   if (!o) return null;
+  const { money: mv } = await guardPage('/deals');
   const w = await loadDealWorkspace(o.db, params.dealId);
   if (!w || !o.companyIds.includes(w.deal.location_id)) notFound();
   const stock = await loadStock(o.db, [w.deal.location_id]);
@@ -40,7 +42,7 @@ export default async function DealPage({ params }: { params: { dealId: string } 
         facts={[
           where,
           { label: DEAL_STAGE[w.deal.stage].word, strong: true },
-          { label: `${money(w.totals.total_gross_cents)} total gross`, tnum: true },
+          ...(mv.cost && mv.contract ? [{ label: `${money(w.totals.total_gross_cents)} total gross`, tnum: true }] : []),
           ...(w.deal.sot_alert_at ? [{ label: 'Sold out of trust', strong: true }] : []),
         ]}
       />

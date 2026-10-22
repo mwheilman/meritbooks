@@ -27,7 +27,7 @@ const Body = z.discriminatedUnion('mode', [
 ]);
 
 /** Everything the Billing tab shows: requests and lines, the queue view, pay applications, SOV, deposits, allowances, milestones. */
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.billing', action: 'view' }, mask: ['billing', 'job'] }, async ({ db, params }) => {
   const job = await loadMoneyJob(db, params.jobId!);
   return getJobBilling(db, job.job_id);
 });
@@ -36,7 +36,7 @@ export const GET = route({}, async ({ db, params }) => {
  * Draft a billing request with the generator for the mode the job type allows. Every
  * generator writes a DRAFT created by the caller, so someone else approves and sends it.
  */
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.billing', action: 'create' }, mask: 'billing', body: Body }, async ({ db, params, body }) => {
   const job = await loadMoneyJob(db, params.jobId!);
   const subject = 'billing request' as const;
   switch (body.mode) {

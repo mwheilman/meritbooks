@@ -5,7 +5,7 @@ import { Button, ConfirmDialog, Field, Input, Select, WidgetState, count, money,
 import { COUNT_STATUS } from '@/lib/pm/dealer/labels';
 import type { CountList } from '@/lib/pm/dealer/parts-queries';
 import type { StockLocationRow } from '@/lib/pm/dealer/types';
-import { useShell } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell } from '@/components/shell/ShellContext';
 import { Failure, StatusMark, parseNum } from '@/components/ops/common/bits';
 import { useStore } from '../common/useStore';
 
@@ -18,6 +18,8 @@ export interface CountsViewProps {
 
 /** Physical counts: snapshot a stock location, key what is on the shelf bin by bin, post the variance. */
 export function CountsView(p: CountsViewProps) {
+  // Count variance valued at cost is financials.
+  const mv = useMoneyVis();
   const { readOnly } = useShell();
   const { act, busy, error } = useStore();
   const open = p.data.counts.find((c) => c.status === 'OPEN') ?? null;
@@ -55,7 +57,7 @@ export function CountsView(p: CountsViewProps) {
         ) : (
           <div className="mp-table">
             <table className="dl-tbl">
-              <thead><tr><th>Count</th><th>Location</th><th>Status</th><th className="n">Lines</th><th className="n">Lines off</th><th className="n">Net units</th><th className="n">Variance at cost</th></tr></thead>
+              <thead><tr><th>Count</th><th>Location</th><th>Status</th><th className="n">Lines</th><th className="n">Lines off</th><th className="n">Net units</th>{mv.cost && <th className="n">Variance at cost</th>}</tr></thead>
               <tbody>
                 {p.data.counts.map((c) => (
                   <tr key={c.id}>
@@ -65,7 +67,7 @@ export function CountsView(p: CountsViewProps) {
                     <td className="n">{count(c.variance_summary?.lines ?? 0)}</td>
                     <td className="n">{count(c.variance_summary?.variance_lines ?? 0)}</td>
                     <td className="n">{c.variance_summary?.net_variance_qty == null ? '—' : count(Number(c.variance_summary.net_variance_qty))}</td>
-                    <td className="n">{c.variance_summary?.variance_cost_cents == null ? '—' : money(Number(c.variance_summary.variance_cost_cents))}</td>
+                    {mv.cost && <td className="n">{c.variance_summary?.variance_cost_cents == null ? '—' : money(Number(c.variance_summary.variance_cost_cents))}</td>}
                   </tr>
                 ))}
               </tbody>

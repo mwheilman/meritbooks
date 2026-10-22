@@ -22,7 +22,7 @@ const RateBody = z.object({
 }).refine((b) => (b.dayCents ?? 0) + (b.weekCents ?? 0) + (b.monthCents ?? 0) > 0, { message: 'Give a day, week or month rate', path: ['dayCents'] });
 
 /** Add a rental rate (pm.rental_rates; one active rate per scope). */
-export const POST = route({ body: RateBody }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, mask: 'rental', body: RateBody }, async ({ db, body, tenant }) => {
   assertCompany(tenant, body.companyId);
   const r = await dwrite<Array<{ id: string }>>(db.schema('pm').from('rental_rates').insert({
     location_id: body.companyId, asset_id: body.assetId ?? null, model: body.model || null, category: body.category || null, label: body.label || null,

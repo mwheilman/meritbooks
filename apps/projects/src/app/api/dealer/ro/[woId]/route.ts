@@ -52,10 +52,10 @@ const Op = z.discriminatedUnion('op', [
 interface Wo { id: string; job_id: string; location_id: string; number: string | null; kind: string; status: string; payer_customer_id: string | null; asset_id: string | null }
 
 /** The RO line editor's data: lines with labor op, part and pay type, the payer, claims on the RO. */
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.store', action: 'view' }, mask: 'repair_order' }, async ({ db, params }) => {
   const wo = await downs<Wo>(db, 'work_orders', 'id, job_id, location_id, number, kind, status, payer_customer_id, asset_id', params.woId!, 'That repair order was not found.');
   const pm = db.schema('pm');
-  const lines = rows<RoLineRow>(await pm.from('work_order_lines').select(RO_LINE_COLS).eq('work_order_id', wo.id).order('sort').order('created_at'), 'lines')
+  const lines = rows<RoLineRow>(await pm.from('v_work_order_lines_masked').select(RO_LINE_COLS).eq('work_order_id', wo.id).order('sort').order('created_at'), 'lines')
     .map((l) => ({ ...l, qty: Number(l.qty), unit_price_cents: l.unit_price_cents == null ? null : Number(l.unit_price_cents), unit_cost_cents: l.unit_cost_cents == null ? null : Number(l.unit_cost_cents), amount_cents: Number(l.amount_cents), flag_hours: l.flag_hours == null ? null : Number(l.flag_hours), discount_pct: Number(l.discount_pct) }));
   const partIds = [...new Set(lines.map((l) => l.part_id).filter((x): x is string => !!x))];
   const [parts, claims, payer] = await Promise.all([
@@ -73,7 +73,7 @@ export const GET = route({}, async ({ db, params }) => {
 });
 
 /** Add, change and remove RO lines by type and pay type; draft a warranty claim from the warranty lines. */
-export const POST = route({ body: Op }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, mask: 'repair_order', body: Op }, async ({ db, params, body, tenant }) => {
   const wo = await downs<Wo>(db, 'work_orders', 'id, job_id, location_id, number, kind, status, payer_customer_id, asset_id', params.woId!, 'That repair order was not found.');
   assertCompany(tenant, wo.location_id);
   const pm = db.schema('pm');

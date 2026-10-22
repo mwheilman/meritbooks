@@ -16,7 +16,7 @@ const Op = z.discriminatedUnion('op', [
 ]);
 
 /** Shop-floor operation moves (pm.start_operation / complete_operation / skip_operation). */
-export const POST = route({ body: Op }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.jobs', action: 'view' }, ops: { skip: { cap: 'projects.production', action: 'edit' } }, mask: false, body: Op }, async ({ db, params, body }) => {
   switch (body.op) {
     case 'start':
       await call(db, 'start_operation', { p_op: params.opId!, p_employee: body.employeeId ?? null });

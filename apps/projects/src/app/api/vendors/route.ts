@@ -11,7 +11,7 @@ import { NewVendorBody, sameName, vendorRpcArgs } from '@/lib/pm/parties/schemas
  * creates a provisional vendor with w9_status MISSING: Merit Books' compliance chase then
  * requests the W-9 and COI. An exact name match returns the existing vendor.
  */
-export const POST = route({ body: NewVendorBody }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.commitments', action: 'create' }, mask: false, body: NewVendorBody }, async ({ db, body, tenant }) => {
   if (body.companyId) assertCompany(tenant, body.companyId);
   const before = (await searchVendors(db, body.name, 20)).filter((v) => sameName(v.name, body.name));
   const id = must(await db.schema('pm').rpc('create_vendor', vendorRpcArgs(body)), 'add vendor') as string | null;

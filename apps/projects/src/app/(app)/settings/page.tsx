@@ -16,6 +16,13 @@ import { getLaborSettings, listEmployeeCards, listLaborRates } from '@/lib/pm/la
 import { listEmployees } from '@/lib/pm/ops/field-queries';
 import { personName } from '@/lib/pm/ops/labels';
 import { stamp } from '@/lib/time';
+import { guardPage } from '@/components/shell/page-guard';
+import { holds } from '@/lib/nav';
+import { getRealAccess, canPreview } from '@/lib/access';
+import { PERSONAS } from '@/lib/access/types';
+import { PERSONA_LABEL } from '@/lib/access/templates';
+import { TeamArea } from '@/components/settings/TeamArea';
+import { loadTeamDirectory, rolesAt } from '@/components/settings/team-data';
 
 export const metadata: Metadata = { title: 'Settings' };
 
@@ -25,10 +32,15 @@ type AreaKey = (typeof AREA_KEYS)[number];
 export default async function SettingsPage({ searchParams }: { searchParams: { company?: string; area?: string } }) {
   const scope = await pageScope();
   if (!scope) return null;
+  const { access } = await guardPage('/settings');
   const db = await requireDb();
   const installed = scope.installedCompanies;
   const company = installed.find((c) => c.id === searchParams.company) ?? (scope.company && installed.find((c) => c.id === scope.company!.id)) ?? installed[0]!;
-  const area: AreaKey = (AREA_KEYS as readonly string[]).includes(searchParams.area ?? '') ? (searchParams.area as AreaKey) : 'industry';
+  const seesRates = holds(access, 'projects.labor_rates:view', company.id);
+  const configures = holds(access, 'projects.settings:configure', company.id);
+  const requested: AreaKey = (AREA_KEYS as readonly string[]).includes(searchParams.area ?? '') ? (searchParams.area as AreaKey) : 'industry';
+  // Pay rates are labor_rates money: the area is absent without the grant.
+  const area: AreaKey = requested === 'labor' && !seesRates ? 'industry' : requested;
   const [pack, jobTypes, machines, modules, vocab, codes, rates] = await Promise.all([
     getInstalledPack(db, company.id),
     listJobTypes(db, [company.id]),
@@ -36,8 +48,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: { c
     getModules(db, company.id),
     getVocabulary(db, company.id),
     listCostCodes(db, company.id, { includeInactive: true }),
-    listLaborRates(db, company.id).catch(() => []),
+    seesRates ? listLaborRates(db, company.id).catch(() => []) : Promise.resolve([]),
   ]);
+  const [team, real] = area === 'team' ? await Promise.all([loadTeamDirectory(db, scope.userId), getRealAccess()]) : [null, null];
   const labor = area === 'labor'
     ? await Promise.all([getLaborSettings(db, company.id), listEmployeeCards(db, company.id), listEmployees(db)])
     : null;
@@ -53,10 +66,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: { c
     { key: 'modules', name: 'Modules', desc: 'Which parts of Merit Projects this company uses', status: `${count(modules.length)} on`, href: href('modules') },
     { key: 'vocabulary', name: 'Vocabulary', desc: 'What this company calls jobs, customers and the rest', status: renamed.length ? `${count(renamed.length)} renamed` : 'Standard terms', href: href('vocabulary') },
     { key: 'cost-codes', name: 'Cost codes', desc: 'The library budgets and costs are coded to', status: `${count(codes.filter((c) => c.is_active).length)} active`, href: href('cost-codes') },
-    { key: 'labor', name: 'Labor rates', desc: 'Pay, burden and overhead: job cost versus estimating rates', status: rates.length ? `${count(rates.filter((r) => r.is_active).length)} rate cards` : 'Not set up', attn: rates.length === 0, href: href('labor') },
+    ...(seesRates
+      ? [{ key: 'labor', name: 'Labor rates', desc: 'Pay, burden and overhead: job cost versus estimating rates', status: rates.length ? `${count(rates.filter((r) => r.is_active).length)} rate cards` : 'Not set up', attn: rates.length === 0, href: href('labor') }]
+      : []),
   ];
   const workspaceAreas: AreaLink[] = [
-    { key: 'team', name: 'Team and roles', desc: 'People, roles and access are managed in Merit Books', status: 'In Merit Books', href: href('team') },
+    { key: 'team', name: 'Team and roles', desc: 'Who uses Merit Projects here, their role, and Preview as', status: team ? `${count(team.members.filter((m) => rolesAt(m, company.id).length).length)} people` : 'People and roles', href: href('team') },
     { key: 'onboarding', name: 'Company setup', desc: 'Set up the companies that do not run on Merit Projects yet', status: uninstalled.length ? `${count(uninstalled.length)} not set up` : 'All set up', attn: uninstalled.length > 0, href: href('onboarding') },
   ];
   const title = [...companyAreas, ...workspaceAreas].find((a) => a.key === area)!.name;
@@ -79,7 +94,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: { c
             <div className="sec-h">
               <h2 className="t-section" id="area-title">{title}</h2>
               <span className="sp" />
-              {['industry', 'job-types', 'stages', 'modules', 'vocabulary'].includes(area) && !scope.readOnly && <ButtonLink href={changeHref}>Change setup</ButtonLink>}
+              {['industry', 'job-types', 'stages', 'modules', 'vocabulary'].includes(area) && !scope.readOnly && configures && <ButtonLink href={changeHref}>Change setup</ButtonLink>}
             </div>
 
             {area === 'industry' &&
@@ -182,14 +197,23 @@ export default async function SettingsPage({ searchParams }: { searchParams: { c
               />
             )}
 
-            {area === 'team' && (
-              <WidgetState
-                state={{
-                  kind: 'empty',
-                  title: 'Team settings live in Merit Books',
-                  body: 'People, roles and access are shared across the suite, so they are managed in one place. A Merit Projects view of the team, with who runs which job, arrives in the next release.',
-                  action: <ButtonLink href={`${booksUrl()}/settings/team`}>Open team in Merit Books</ButtonLink>,
-                }}
+            {area === 'team' && team && (
+              <TeamArea
+                companyName={company.name}
+                error={team.error}
+                rows={team.members.map((m) => ({
+                  membershipId: m.membershipId, name: m.name, email: m.email, booksRole: m.booksRole, status: m.status, isMe: m.isMe,
+                  titles: [...new Set(rolesAt(m, company.id).map((r) => r.title))],
+                  isAdminSeat: m.isAdminSeat, projectsOnly: m.projectsOnly,
+                }))}
+                preview={
+                  real && canPreview(real.grants)
+                    ? { personas: PERSONAS.map((k) => ({ key: k, label: PERSONA_LABEL[k] })), current: access.preview }
+                    : null
+                }
+                booksTeamUrl={`${booksUrl()}/settings/team`}
+                // Owner-visible only: the REAL grants (never a preview) must configure Projects and edit this company's team.
+                canSetProjectsOnly={!scope.readOnly && !!real && canPreview(real.grants) && holds(real, 'projects.team:edit', company.id)}
               />
             )}
 

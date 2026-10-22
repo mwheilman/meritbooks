@@ -35,7 +35,7 @@ function weatherJson(w: z.infer<typeof Weather> | null | undefined): Record<stri
   return Object.keys(out).length ? out : null;
 }
 
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.documents', action: 'create' }, mask: false, body: Body }, async ({ db, body, tenant }) => {
   const job = await loadJob(db, body.jobId);
   assertCompany(tenant, job.location_id);
   if (!body.body && !body.crewCount && !body.hours && !weatherJson(body.weather)) {

@@ -26,7 +26,7 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('delete') }),
 ]);
 
-export const POST = route({ body: Op }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.billing', action: 'edit' }, mask: 'warranty_claim', body: Op }, async ({ db, params, body }) => {
   const c = await own<{ id: string; status: string }>(db, 'warranty_claims', 'id, status', { id: params.claimId! }, 'That claim was not found.');
   const pm = db.schema('pm');
   switch (body.op) {

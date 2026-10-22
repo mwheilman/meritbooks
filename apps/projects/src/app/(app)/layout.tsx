@@ -3,7 +3,10 @@ import { currentUser } from '@clerk/nextjs/server';
 import { booksUrl, getScope, type Scope } from '@/lib/scope';
 import { requireDb, pm } from '@/lib/pm/db';
 import { getModulesFor, getVocabulary } from '@/lib/pm/config';
-import { getMe, homeDensityFor, roleLabel } from '@/lib/pm/people';
+import { getMe } from '@/lib/pm/people';
+import { getAccess } from '@/lib/access';
+import { moneyVisFor } from '@/components/money/visibility';
+import type { ShellAccess } from '@/components/shell/ShellContext';
 import { railNav, type NavCounts } from '@/lib/nav';
 import { addDays, todayIso, weekLabel } from '@/lib/time';
 import { shortDate } from '@meritbooks/merit-ui';
@@ -49,7 +52,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   const scope = r.scope;
   const db = await requireDb();
-  const [me, modules, vocab, navCounts] = await Promise.all([
+  const [access, me, modules, vocab, navCounts] = await Promise.all([
+    getAccess(),
     getMe(db, scope.userId),
     getModulesFor(db, scope.companyIds, scope.installs),
     getVocabulary(db, scope.company?.id ?? null, scope.companyIds),
@@ -66,12 +70,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const dow = new Date(`${today}T12:00:00Z`).getUTCDay();
   const monday = addDays(today, dow === 0 ? -6 : 1 - dow);
   const installedIds = new Set(scope.installs.map((i) => i.location_id));
+  const companyId = scope.company?.id ?? null;
+  const shellAccess: ShellAccess = {
+    persona: access.persona,
+    group: access.group,
+    title: access.title,
+    preview: access.preview,
+    moneyLevel: access.moneyLevel,
+    grants: [...(companyId ? access.byCompany[companyId] ?? new Set<string>() : access.grants)],
+  };
 
   return (
     <AppFrame
       context={scope.context}
-      density={homeDensityFor(me.role)}
+      density={access.group === 'management' ? 'report' : 'cockpit'}
       nav={railNav({
+        access,
+        companyId,
         context: scope.context,
         vocab,
         modules,
@@ -86,11 +101,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       companies={scope.tenant.companies.map((c) => ({ id: c.id, name: c.name, shortCode: c.shortCode, installed: installedIds.has(c.id) }))}
       activeCompanyId={scope.company?.id ?? null}
       view={scope.view}
-      user={{ name, role: roleLabel(me.role) }}
+      user={{ name, role: access.preview ? `Previewing ${access.title}` : access.title }}
       week={{ label: weekLabel(today), range: `${shortDate(monday)}–${shortDate(addDays(monday, 6))}` }}
       booksUrl={booksUrl()}
       vocab={vocab}
       readOnly={scope.readOnly}
+      access={shellAccess}
+      money={moneyVisFor(access, companyId)}
     >
       {children}
     </AppFrame>

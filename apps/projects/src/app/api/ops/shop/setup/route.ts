@@ -30,7 +30,7 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('remove_step'), stepId: Uuid }),
 ]);
 
-export const POST = route({ body: Op }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.settings', action: 'configure' }, mask: 'work_center', body: Op }, async ({ db, body, tenant }) => {
   const pm = db.schema('pm');
   switch (body.op) {
     case 'add_center':

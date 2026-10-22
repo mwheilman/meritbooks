@@ -18,7 +18,7 @@ const Body = z.object({
 });
 
 /** Change or retire a rental rate. Contracts keep the rate they were reserved at. */
-export const POST = route({ body: Body }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, mask: 'rental', body: Body }, async ({ db, params, body, tenant }) => {
   const r = await downs<{ id: string; location_id: string; day_cents: number | null; week_cents: number | null; month_cents: number | null }>(db, 'rental_rates', 'id, location_id, day_cents, week_cents, month_cents', params.rateId!, 'That rate was not found.');
   assertCompany(tenant, r.location_id);
   const patch: Record<string, unknown> = {};

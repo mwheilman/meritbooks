@@ -7,6 +7,7 @@ import { Day, Need, Text, Uuid } from '@/lib/pm/ops/schemas';
 
 export const POST = route(
   {
+    access: { cap: 'projects.jobs', action: 'edit' },
     body: z.object({
       jobId: Uuid,
       unitId: Uuid.nullish(),

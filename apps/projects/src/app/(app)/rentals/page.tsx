@@ -9,6 +9,7 @@ import { StoreOff } from '@/components/dealer/common/StoreOff';
 import { RentalsView } from '@/components/dealer/rentals/RentalsView';
 import '@/components/ops/ops.css';
 import '@/components/dealer/dealer.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Rentals' };
 export const dynamic = 'force-dynamic';
@@ -19,6 +20,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function RentalsPage({ searchParams }: { searchParams: { contract?: string; view?: string } }) {
   const o = await dealerScope();
   if (!o) return null;
+  await guardPage('/rentals');
   if (!o.dealerIds.length) {
     return (
       <>

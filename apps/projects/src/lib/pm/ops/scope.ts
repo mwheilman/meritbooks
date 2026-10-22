@@ -101,7 +101,7 @@ export async function jobTypesWith(db: SupabaseClient, companyIds: ReadonlyArray
 export async function customerNames(db: SupabaseClient, ids: ReadonlyArray<string | null | undefined>): Promise<Record<string, string>> {
   const list = [...new Set(ids.filter((x): x is string => !!x))];
   if (!list.length) return {};
-  const res = await db.schema('core').from('customers').select('id, name, display_name').in('id', list.slice(0, 500));
+  const res = await db.schema('pm').from('v_core_customers_masked').select('id, name, display_name').in('id', list.slice(0, 500));
   if (res.error) return {};
   return Object.fromEntries(((res.data ?? []) as Array<{ id: string; name: string; display_name: string | null }>).map((c) => [c.id, c.display_name || c.name]));
 }
@@ -110,7 +110,7 @@ export async function customerNames(db: SupabaseClient, ids: ReadonlyArray<strin
 export async function vendorNames(db: SupabaseClient, ids: ReadonlyArray<string | null | undefined>): Promise<Record<string, string>> {
   const list = [...new Set(ids.filter((x): x is string => !!x))];
   if (!list.length) return {};
-  const res = await db.schema('core').from('vendors').select('id, name, display_name').in('id', list.slice(0, 500));
+  const res = await db.schema('pm').from('v_core_vendors_masked').select('id, name, display_name').in('id', list.slice(0, 500));
   if (res.error) return {};
   return Object.fromEntries(((res.data ?? []) as Array<{ id: string; name: string; display_name: string | null }>).map((c) => [c.id, c.display_name || c.name]));
 }

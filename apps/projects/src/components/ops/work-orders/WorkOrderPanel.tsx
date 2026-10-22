@@ -12,7 +12,7 @@ import {
 } from '@/lib/pm/ops/labels';
 import { WO_OUTCOMES, type ClaimStatus, type LineKind, type LookupItem, type WarrantyClaimRow, type WoLineRow, type WoOutcome } from '@/lib/pm/ops/types';
 import type { WorkOrderDetail } from '@/lib/pm/ops/field-queries';
-import { useShell, useVocab } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell, useVocab } from '@/components/shell/ShellContext';
 import { lower } from '@/lib/pm/vocab';
 import { DetailState, Failure, StatusMark, parseNum } from '../common/bits';
 import { Lookup } from '../common/Lookup';
@@ -44,7 +44,11 @@ function when(iso: string | null, tz: string, today: string): string | null {
 export function WorkOrderPanel(p: WorkOrderPanelProps) {
   const v = useVocab();
   const wv = woVocab(v);
-  const { readOnly } = useShell();
+  const { readOnly, access } = useShell();
+  // Line prices are sell prices: contract_value, plus the office's price-book rule (spec §2.2
+  // dispatcher: "price-book sell only"). Warranty claim amounts are a receivable: contract only.
+  const mv = useMoneyVis();
+  const sell = mv.contract || access?.group === 'admin';
   const { act, busy, version, error } = useOps();
   const { data, error: loadError, isLoading, refetch } = useDetail<Detail>(`/api/ops/work-orders/${p.id}`, version);
   const [mode, setMode] = useState<'none' | 'complete' | 'hold'>('none');
@@ -129,6 +133,7 @@ export function WorkOrderPanel(p: WorkOrderPanelProps) {
         <RoLineEditor workOrderId={o.id} locked={readOnly || linesLocked} onChanged={() => void refetch()} />
       ) : (
       <Lines
+        showPrices={sell}
         lines={data.lines}
         locked={readOnly || linesLocked}
         companyId={o.location_id}
@@ -140,7 +145,7 @@ export function WorkOrderPanel(p: WorkOrderPanelProps) {
       />
       )}
 
-      {(isRo || p.dealer || o.payer_type === 'OEM' || data.claims.length > 0) && (
+      {mv.contract && (isRo || p.dealer || o.payer_type === 'OEM' || data.claims.length > 0) && (
         <Claims
           claims={data.claims}
           workOrderId={o.id}
@@ -267,7 +272,8 @@ function ThreeCs({ order, readOnly, isRo, onSave }: { order: Detail['order']; re
 
 interface AddLine { kind: LineKind; priceBookItemId: string | null; description: string | null; qty: number; unitPriceCents: number | null; payType: 'CUSTOMER' | 'WARRANTY' | 'INTERNAL'; optionGroup: string | null; proposed: boolean; flagHours: number | null }
 
-function Lines({ lines, locked, companyId, isRo, busy, onAdd, onRemove, onDecide }: {
+function Lines({ showPrices, lines, locked, companyId, isRo, busy, onAdd, onRemove, onDecide }: {
+  showPrices: boolean;
   lines: WoLineRow[]; locked: boolean; companyId: string; isRo: boolean; busy: string | null;
   onAdd: (b: AddLine) => Promise<unknown>; onRemove: (l: WoLineRow) => void; onDecide: (approve: string[], decline: string[], customerName: string) => Promise<unknown>;
 }) {
@@ -285,12 +291,12 @@ function Lines({ lines, locked, companyId, isRo, busy, onAdd, onRemove, onDecide
   const [customer, setCustomer] = useState('');
 
   return (
-    <PanelSection title={isRo ? 'Lines' : 'Price book lines'} meta={`${money(customerTotal)} customer pay${warrantyTotal ? ` · ${money(warrantyTotal)} warranty` : ''}`}>
+    <PanelSection title={isRo ? 'Lines' : 'Price book lines'} meta={showPrices ? `${money(customerTotal)} customer pay${warrantyTotal ? ` · ${money(warrantyTotal)} warranty` : ''}` : `${sold.length} sold`}>
       {sold.length === 0 && proposed.length === 0 ? (
         <p className="t-cap">No lines yet. Add flat-rate tasks and parts from the price book; prices are pinned when added.</p>
       ) : (
         <table className="ops-mini">
-          <thead><tr><th>Line</th><th className="n">Qty</th><th className="n">Amount</th>{!locked && <th><span className="sr">Remove</span></th>}</tr></thead>
+          <thead><tr><th>Line</th><th className="n">Qty</th>{showPrices && <th className="n">Amount</th>}{!locked && <th><span className="sr">Remove</span></th>}</tr></thead>
           <tbody>
             {sold.map((l) => (
               <tr key={l.id}>
@@ -299,12 +305,12 @@ function Lines({ lines, locked, companyId, isRo, busy, onAdd, onRemove, onDecide
                   <span className="l2">{[LINE_KIND_WORDS[l.kind], l.pay_type !== 'CUSTOMER' ? (l.pay_type === 'WARRANTY' ? 'warranty' : 'internal') : null, l.price_overridden ? 'price changed' : null, l.flag_hours ? `${l.flag_hours} flag hours` : null, l.decided_by_name ? `chosen by ${l.decided_by_name}` : null].filter(Boolean).join(' · ')}</span>
                 </td>
                 <td className="n">{l.qty} {l.uom}</td>
-                <td className="n">{money(l.amount_cents)}</td>
+                {showPrices && <td className="n">{money(l.amount_cents)}</td>}
                 {!locked && <td><Button variant="quiet" iconOnly icon="x" aria-label={`Remove ${l.description}`} disabled={busy === `rm:${l.id}`} onClick={() => onRemove(l)} /></td>}
               </tr>
             ))}
           </tbody>
-          <tfoot><tr><td>Sold total</td><td /><td className="n">{money(sold.reduce((s, l) => s + l.amount_cents, 0))}</td>{!locked && <td />}</tr></tfoot>
+          {showPrices && <tfoot><tr><td>Sold total</td><td /><td className="n">{money(sold.reduce((s, l) => s + l.amount_cents, 0))}</td>{!locked && <td />}</tr></tfoot>}
         </table>
       )}
 
@@ -318,7 +324,7 @@ function Lines({ lines, locked, companyId, isRo, busy, onAdd, onRemove, onDecide
                 <label key={l.id} className="row" style={{ gap: 8, padding: '4px 0', alignItems: 'baseline' }}>
                   <input type="radio" name={`opt-${g}`} value={l.id} checked={pick[g] === l.id} disabled={locked} onChange={() => setPick({ ...pick, [g]: l.id })} />
                   <span style={{ flex: 1 }}>{l.description}</span>
-                  <span className="tnum">{money(l.amount_cents)}</span>
+                  {showPrices && <span className="tnum">{money(l.amount_cents)}</span>}
                 </label>
               ))}
               <label className="row" style={{ gap: 8, padding: '4px 0' }}>
@@ -347,12 +353,12 @@ function Lines({ lines, locked, companyId, isRo, busy, onAdd, onRemove, onDecide
       )}
       {declined.length > 0 && <p className="t-cap" style={{ marginTop: 8 }}>{declined.length} declined option{declined.length === 1 ? '' : 's'}: {declined.map((l) => l.description).join(', ')}</p>}
 
-      {!locked && <AddLineForm companyId={companyId} isRo={isRo} busy={busy === 'line'} onAdd={onAdd} />}
+      {!locked && <AddLineForm companyId={companyId} isRo={isRo} busy={busy === 'line'} onAdd={onAdd} showPrices={showPrices} />}
     </PanelSection>
   );
 }
 
-function AddLineForm({ companyId, isRo, busy, onAdd }: { companyId: string; isRo: boolean; busy: boolean; onAdd: (b: AddLine) => Promise<unknown> }) {
+function AddLineForm({ companyId, isRo, busy, onAdd, showPrices }: { companyId: string; isRo: boolean; busy: boolean; onAdd: (b: AddLine) => Promise<unknown>; showPrices: boolean }) {
   const [item, setItem] = useState<LookupItem | null>(null);
   const [desc, setDesc] = useState('');
   const [kind, setKind] = useState<LineKind>('SERVICE');
@@ -378,7 +384,7 @@ function AddLineForm({ companyId, isRo, busy, onAdd }: { companyId: string; isRo
         <Lookup kind="price_book" companyId={companyId} value={item ? { id: item.id, label: item.label } : null} onChange={(it) => { setItem(it); if (it?.priceCents != null) setPrice(null); }} placeholder="Search tasks and parts by name or code" />
       </Field>
       {item ? (
-        <p className="t-cap">{item.sub} · {money(item.priceCents ?? 0)} per {item.unit ?? 'each'}{item.laborMinutes ? ` · ${durationText(item.laborMinutes)} labor` : ''}</p>
+        <p className="t-cap">{item.sub}{showPrices ? ` · ${money(item.priceCents ?? 0)} per ${item.unit ?? 'each'}` : ''}{item.laborMinutes ? ` · ${durationText(item.laborMinutes)} labor` : ''}</p>
       ) : (
         <Field label="Or describe it"><Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Diagnostic fee" maxLength={300} /></Field>
       )}
@@ -389,7 +395,7 @@ function AddLineForm({ companyId, isRo, busy, onAdd }: { companyId: string; isRo
         <Field label="Quantity"><Input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
       </div>
       <div className="mp-form-2">
-        <Field label={item ? 'Price each (blank keeps the book price)' : 'Price each'}><MoneyInput valueCents={price} onChangeCents={setPrice} allowNegative={kind === 'DISCOUNT'} placeholder={item?.priceCents != null ? money(item.priceCents) : '0.00'} /></Field>
+        {showPrices && <Field label={item ? 'Price each (blank keeps the book price)' : 'Price each'}><MoneyInput valueCents={price} onChangeCents={setPrice} allowNegative={kind === 'DISCOUNT'} placeholder={item?.priceCents != null ? money(item.priceCents) : '0.00'} /></Field>}
         <Field label="Who pays">
           <Select value={payType} onChange={(e) => setPayType(e.target.value as typeof payType)}>
             <option value="CUSTOMER">Customer</option>

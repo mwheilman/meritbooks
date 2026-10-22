@@ -32,7 +32,7 @@ const Body = z
   .refine((b) => !b.firstVisitOn || (b.firstVisitOn >= b.startsOn && b.firstVisitOn < b.endsOn), { message: 'The first visit must fall inside the term', path: ['firstVisitOn'] });
 
 /** A draft agreement (membership). It is activated, billed and renewed through pm functions. */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.customers', action: 'create' }, mask: 'agreement', body: Body }, async ({ db, body, tenant }) => {
   const job = await resolveJob(db, tenant, body.jobId, body.newJob);
   const pm = db.schema('pm');
   const created = await write<Array<{ id: string; number: string | null }>>(

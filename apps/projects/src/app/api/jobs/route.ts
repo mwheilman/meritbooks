@@ -14,7 +14,7 @@ const Body = z.object({
 });
 
 /** Create a job: core.jobs + pm.projects atomically (pm.create_project mints the number). */
-export const POST = route({ body: Body }, async ({ body, db, tenant }) => {
+export const POST = route({ access: { cap: 'projects.jobs', action: 'create' }, mask: 'job', body: Body }, async ({ body, db, tenant }) => {
   assertCompany(tenant, body.companyId);
   // A new customer name becomes a real core.customers row first (owner ruling 2026-10-21:
   // one shared master; pm.create_customer returns the existing row on an exact name match).

@@ -16,13 +16,13 @@ const Body = z.object({
   stage: z.enum(['PCO', 'COR']).default('PCO'),
 });
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.change_orders', action: 'view' }, mask: 'change_order' }, async ({ db, params }) => {
   const job = await loadJob(db, params.jobId!);
   return { changeOrders: await listChangeOrders(db, job.job_id) };
 });
 
 /** Create a potential (PCO) or requested (COR) change order. The number is minted by the database. */
-export const POST = route({ body: Body }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.change_orders', action: 'create' }, mask: 'change_order', body: Body }, async ({ db, params, body }) => {
   const job = await loadJob(db, params.jobId!);
   const co = must(
     await db.schema('pm').from('change_orders').insert({

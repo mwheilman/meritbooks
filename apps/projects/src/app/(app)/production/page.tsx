@@ -8,6 +8,7 @@ import { PageLine } from '@/components/common/PageLine';
 import { ModuleOff } from '@/components/ops/common/ModuleOff';
 import { ProductionView, type ProductionTab } from '@/components/ops/production/ProductionView';
 import '@/components/ops/ops.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Production' };
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function ProductionPage({ searchParams }: { searchParams: { view?: string; wo?: string } }) {
   const o = await opsScope();
   if (!o) return null;
+  await guardPage('/production');
   const data = await loadProduction(o.db, { companyIds: o.companyIds });
   if (!has(o, 'production') && data.orders.length === 0 && data.centers.length === 0) {
     return (

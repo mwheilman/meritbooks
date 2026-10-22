@@ -7,7 +7,7 @@ import { searchCustomers } from '@/lib/pm/people';
 import { getScope } from '@/lib/scope';
 
 /** ⌘K: jobs and customers matching a term, inside the current scope. */
-export const GET = route({ query: z.object({ q: z.string().max(80).default('') }) }, async ({ db, query, tenant }) => {
+export const GET = route({ access: { cap: 'projects.jobs', action: 'view' }, mask: false, query: z.object({ q: z.string().max(80).default('') }) }, async ({ db, query, tenant }) => {
   const s = await getScope();
   const companyIds = s.kind === 'ready' ? s.scope.companyIds : tenant.companies.map((c) => c.id);
   const names = new Map(tenant.companies.map((c) => [c.id, c.name]));

@@ -35,7 +35,7 @@ const Op = z.discriminatedUnion('op', [
 ]);
 
 /** Part actions: bin and min/max per stock location, supersession, prices, special order. */
-export const POST = route({ body: Op }, async ({ db, params, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, mask: 'part', body: Op }, async ({ db, params, body, tenant }) => {
   const p = await downs<{ id: string; location_id: string; manufacturer: string | null }>(db, 'parts', 'id, location_id, manufacturer', params.partId!, 'That part was not found.');
   assertCompany(tenant, p.location_id);
   switch (body.op) {

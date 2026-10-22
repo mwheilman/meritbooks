@@ -10,9 +10,9 @@ import { callRpc, wrote } from '@/lib/pm/money/rpc';
 import { IsoDate, Rate, Text200, Text2000 } from '@/lib/pm/money/schemas';
 import type { EstimateLineRow } from '@/lib/pm/money/types';
 
-export const GET = route({}, async ({ db, params }) => {
+export const GET = route({ access: { cap: 'projects.estimates', action: 'view' }, mask: 'estimate' }, async ({ db, params }) => {
   const estimate = await loadEstimate(db, params.estimateId!);
-  const lines = rows<EstimateLineRow>(await pm(db).from('estimate_lines').select(ESTIMATE_LINE_COLS).eq('estimate_id', estimate.id).order('sort').order('line_no'), 'estimate lines');
+  const lines = rows<EstimateLineRow>(await pm(db).from('v_estimate_lines_masked').select(ESTIMATE_LINE_COLS).eq('estimate_id', estimate.id).order('sort').order('line_no'), 'estimate lines');
   return { estimate, lines };
 });
 
@@ -24,7 +24,7 @@ const Patch = z.object({
 });
 
 /** Edit a DRAFT estimate's header (RLS draft_update; status moves only through the functions). */
-export const PATCH = route({ body: Patch }, async ({ db, params, body }) => {
+export const PATCH = route({ access: { cap: 'projects.estimates', action: 'edit' }, mask: 'estimate', body: Patch }, async ({ db, params, body }) => {
   const e = await loadEstimate(db, params.estimateId!);
   if (e.status !== 'DRAFT') throw new HttpError(422, 'Only a draft estimate can be edited. Revise it to make changes.', 'PM_ESTIMATE_NOT_DRAFT');
   const patch: Record<string, unknown> = {};
@@ -40,7 +40,7 @@ export const PATCH = route({ body: Patch }, async ({ db, params, body }) => {
  * Delete a DRAFT. A revision's draft can be deleted only when the version it replaced was
  * accepted; otherwise the earlier version is superseded and the estimate would have no open version.
  */
-export const DELETE = route({}, async ({ db, params }) => {
+export const DELETE = route({ access: { cap: 'projects.estimates', action: 'edit' }, mask: 'estimate' }, async ({ db, params }) => {
   const e = await loadEstimate(db, params.estimateId!);
   if (e.status !== 'DRAFT') throw new HttpError(422, 'Only a draft estimate can be deleted. Decline it instead.', 'PM_ESTIMATE_NOT_DRAFT');
   if (e.supersedes_id) {
@@ -63,7 +63,7 @@ const Op = z.discriminatedUnion('op', [
 interface AcceptResult { estimate_id: string; budget_id: string; contract_id: string | null; contract_created: boolean; progress_event_id: string | null }
 
 /** send_estimate · accept_estimate (budget + contract) · decline_estimate · revise_estimate. */
-export const POST = route({ body: Op }, async ({ db, params, body }) => {
+export const POST = route({ access: { cap: 'projects.estimates', action: 'edit' }, mask: 'estimate', body: Op }, async ({ db, params, body }) => {
   const e = await loadEstimate(db, params.estimateId!);
   if (body.op === 'send') {
     await callRpc(db, 'send_estimate', { p_estimate: e.id }, 'estimate');

@@ -11,6 +11,7 @@ import { PageLine } from '@/components/common/PageLine';
 import { ModuleOff } from '@/components/ops/common/ModuleOff';
 import { SelectionsView, type SelectionsTabKey } from '@/components/ops/selections/SelectionsView';
 import '@/components/ops/ops.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function SelectionsPage({ searchParams }: { searchParams: { tab?: string; job?: string; selection?: string } }) {
   const o = await opsScope();
   if (!o) return null;
+  const { money: mv } = await guardPage('/selections');
   const b = await loadSelectionBundle(o.db, { companyIds: o.companyIds }, { modules: o.modules, packKeys: Object.values(o.packByCompany), inScope: (id) => o.jobs.byId.has(id) });
   if (b.tabs.length === 0) {
     return (
@@ -51,7 +53,7 @@ export default async function SelectionsPage({ searchParams }: { searchParams: {
           o.where,
           { label: `${count(waiting.length)} waiting on clients`, strong: true },
           ...(overdue ? [`${count(overdue)} past due`] : []),
-          { label: `${money(variance)} approved variance to allowances`, tnum: true },
+          ...(mv.contract ? [{ label: `${money(variance)} approved variance to allowances`, tnum: true }] : []),
         ]}
       />
       <Page>

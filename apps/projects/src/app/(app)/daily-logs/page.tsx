@@ -12,6 +12,7 @@ import { PageLine } from '@/components/common/PageLine';
 import { ModuleOff } from '@/components/ops/common/ModuleOff';
 import { LogsView } from '@/components/ops/records/LogsView';
 import '@/components/ops/ops.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function DailyLogsPage() {
   const o = await opsScope();
   if (!o) return null;
+  await guardPage('/daily-logs');
   const [logs, types] = await Promise.all([loadLogs(o.db, { companyIds: o.companyIds }, (id) => o.jobs.byId.has(id)), jobTypesWith(o.db, o.companyIds, 'daily_logs')]);
   if (!has(o, 'daily_logs') && logs.length === 0) {
     return (

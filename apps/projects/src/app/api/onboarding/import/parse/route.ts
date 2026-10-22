@@ -17,6 +17,7 @@ import { unmappedFields, unmappedHeaders } from '@/lib/onboarding/import/automap
 import { MAX_UPLOAD_BYTES, gridFromUpload, tableFromGrid } from '@/lib/onboarding/import/parse';
 import { RouteError, json, requireCompany, withOnboarding } from '@/lib/onboarding/route';
 import type { AiOutcome, ParseResponse } from '@/lib/onboarding/types';
+import { denyUnless } from '@/lib/access/route-guard';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
     const file = form.get('file');
     const companyId = String(form.get('companyId') ?? '');
     if (companyId) requireCompany(ctx, companyId);
+    const denied = await denyUnless('projects.settings', 'configure', companyId || null); if (denied) return denied;
     if (!file || typeof file === 'string') throw new RouteError(400, 'NO_FILE', 'Drop a CSV or Excel file.');
     if (file.size > MAX_UPLOAD_BYTES) throw new RouteError(413, 'TOO_BIG', 'That file is over 4 MB. Export open jobs only, or split it, and drop it again.');
 

@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { ACTIVE_COMPANY_COOKIE } from '@/lib/tenant';
 import { RouteError, json, requireCompany, withOnboarding } from '@/lib/onboarding/route';
 import { completeCompanyRun, openRun } from '@/lib/onboarding/runs';
+import { denyUnless } from '@/lib/access/route-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,7 @@ const Body = z.object({
 export async function POST(req: Request) {
   return withOnboarding(req, Body, async (body, ctx) => {
     requireCompany(ctx, body.companyId);
+    const denied = await denyUnless('projects.settings', 'configure', body.companyId); if (denied) return denied;
     const { data: inst } = await ctx.db.schema('pm').from('pack_installs').select('location_id')
       .eq('role', 'primary').eq('status', 'ACTIVE');
     const installed = new Set(((inst ?? []) as { location_id: string }[]).map((i) => i.location_id));

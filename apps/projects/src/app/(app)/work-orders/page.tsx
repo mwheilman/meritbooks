@@ -11,6 +11,7 @@ import { PageLine } from '@/components/common/PageLine';
 import { ModuleOff } from '@/components/ops/common/ModuleOff';
 import { WorkOrderQueue } from '@/components/ops/work-orders/WorkOrderQueue';
 import '@/components/ops/ops.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,7 @@ const BANDS: ReadonlyArray<WoBand> = ['new', 'scheduled', 'progress', 'complete'
 export default async function WorkOrdersPage({ searchParams }: { searchParams: { wo?: string; new?: string; band?: string; view?: string } }) {
   const o = await opsScope();
   if (!o) return null;
+  const { money: mv } = await guardPage('/work-orders');
   const wv = woVocab(o.vocab);
   const [list, setup, jobTypes] = await Promise.all([
     loadWorkOrders(o.db, { companyIds: o.companyIds }),
@@ -58,7 +60,7 @@ export default async function WorkOrdersPage({ searchParams }: { searchParams: {
           o.where,
           { label: `${count(open)} open`, strong: true },
           ...(complete ? [`${count(complete)} complete, not closed`] : []),
-          ...(outstanding ? [{ label: `${money(outstanding)} warranty outstanding`, tnum: true }] : []),
+          ...(outstanding && mv.contract ? [{ label: `${money(outstanding)} warranty outstanding`, tnum: true }] : []),
         ]}
       />
       <Page>

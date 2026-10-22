@@ -9,6 +9,7 @@ import { PageLine } from '@/components/common/PageLine';
 import { ModuleOff } from '@/components/ops/common/ModuleOff';
 import { AgreementsView } from '@/components/ops/agreements/AgreementsView';
 import '@/components/ops/ops.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Agreements' };
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,7 @@ export const dynamic = 'force-dynamic';
 export default async function AgreementsPage() {
   const o = await opsScope();
   if (!o) return null;
+  const { money: mv } = await guardPage('/agreements');
   const data = await loadAgreements(o.db, { companyIds: o.companyIds });
   if (!has(o, 'service_agreements') && data.agreements.length === 0) {
     return (
@@ -40,7 +42,7 @@ export default async function AgreementsPage() {
 
   return (
     <>
-      <PageLine facts={[o.where, { label: `${count(active.length)} active`, strong: true }, ...(overdue ? [`${count(overdue)} visits overdue`] : []), { label: `${money(active.reduce((s, a) => s + a.price_cents, 0))} per billing period`, tnum: true }]} />
+      <PageLine facts={[o.where, { label: `${count(active.length)} active`, strong: true }, ...(overdue ? [`${count(overdue)} visits overdue`] : []), ...(mv.contract ? [{ label: `${money(active.reduce((s, a) => s + a.price_cents, 0))} per billing period`, tnum: true }] : [])]} />
       <Page>
         <PageHead eyebrow={o.where} title="Agreements" />
         <AgreementsView agreements={data.agreements} visits={data.visits} coveredAssets={data.coveredAssets} assetLabels={assetLabels} customers={customers} jobs={jobRefs(o)} today={today} />

@@ -10,6 +10,7 @@ import { listEstimates } from '@/lib/pm/money/queries';
 import { PageLine } from '@/components/common/PageLine';
 import { PageCrumbs } from '@/components/shell/ShellContext';
 import { EstimatesList, type EstimateListRow } from '@/components/money/EstimatesList';
+import { guardPage } from '@/components/shell/page-guard';
 
 export async function generateMetadata(): Promise<Metadata> {
   const scope = await pageScope();
@@ -21,6 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function EstimatesPage() {
   const scope = await pageScope();
   if (!scope) return null;
+  const { money: mv } = await guardPage('/estimates');
   const db = await requireDb();
   const [vocab, jobs, list] = await Promise.all([getVocabulary(db, scope.company?.id ?? null, scope.companyIds), scopedJobs(db, scope), listEstimates(db, { companyIds: scope.companyIds }, 2000)]);
   const rows: EstimateListRow[] = list.filter((e) => e.status !== 'SUPERSEDED' && jobs.byId.has(e.job_id)).map((e) => ({
@@ -32,7 +34,7 @@ export default async function EstimatesPage() {
   return (
     <>
       <PageCrumbs items={[{ label: vocab.estimates }]} />
-      <PageLine facts={[where, { label: `${count(out.length)} with customers · ${money(out.reduce((s, r) => s + r.total, 0), { decimals: 0 })}`, strong: true, tnum: true }, `${count(rows.filter((r) => r.status === 'DRAFT').length)} drafts`]} />
+      <PageLine facts={[where, { label: mv.contract ? `${count(out.length)} with customers · ${money(out.reduce((s, r) => s + r.total, 0), { decimals: 0 })}` : `${count(out.length)} with customers`, strong: true, tnum: true }, `${count(rows.filter((r) => r.status === 'DRAFT').length)} drafts`]} />
       <Page>
         <PageHead eyebrow={where} title={vocab.estimates}>
           <p className="t-cap" style={{ marginTop: 4 }}>Start one from its job’s {vocab.estimate} tab; accepting it writes the original budget and the contract.</p>

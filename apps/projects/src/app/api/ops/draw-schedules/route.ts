@@ -11,7 +11,7 @@ const Body = ScheduleTerms.extend({ jobId: Uuid, seedFromBudget: z.boolean().def
 const HARD = new Set(['LABOR', 'MATERIALS', 'SUBCONTRACTOR', 'EQUIPMENT']);
 
 /** A draft loan budget for a job; optionally seeded from the job's effective budget lines. */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.billing', action: 'create' }, mask: 'draw', body: Body }, async ({ db, body, tenant }) => {
   const job = await loadJob(db, body.jobId);
   assertCompany(tenant, job.location_id);
   const pm = db.schema('pm');

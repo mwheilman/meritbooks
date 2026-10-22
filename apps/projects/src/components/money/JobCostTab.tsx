@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { COST_TYPE_LABELS, type CostType } from '@/lib/packs';
 import type { CostCodeStatusRow, JobFinancialsRow } from '@/lib/pm/money/types';
 import { originalMargin, projectedMargin } from '@/lib/pm/money/summaries';
-import { useShell } from '@/components/shell/ShellContext';
+import { useMoneyVis, useShell } from '@/components/shell/ShellContext';
 import { m0, p } from './common';
 
 export interface JobCostTabProps {
@@ -73,6 +73,8 @@ const COLUMNS: StatementColumn[] = [
 ];
 
 export function JobCostTab({ jobId, rows, financials: f, booksPresent }: JobCostTabProps) {
+  // Cost tab (financials); contract, margin and over/under billing also need contract_value.
+  const mv = useMoneyVis();
   const { readOnly } = useShell();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -97,11 +99,11 @@ export function JobCostTab({ jobId, rows, financials: f, booksPresent }: JobCost
       <div className="row row--between" style={{ alignItems: 'flex-start', gap: 24, flexWrap: 'wrap' }}>
         {f ? (
           <div className="row" style={{ alignItems: 'flex-start', gap: 32, flexWrap: 'wrap' }}>
-            <Figure dense label="Contract" value={m0(f.revised_contract_cents)} vs={[`${m0(f.original_contract_cents)} original`, `${money(f.approved_co_cents, { decimals: 0, sign: 'delta' })} change orders`]} href={`/jobs/${jobId}?tab=contract`} linkLabel="Contract" />
+            {mv.contract && <Figure dense label="Contract" value={m0(f.revised_contract_cents)} vs={[`${m0(f.original_contract_cents)} original`, `${money(f.approved_co_cents, { decimals: 0, sign: 'delta' })} change orders`]} href={`/jobs/${jobId}?tab=contract`} linkLabel="Contract" />}
             <Figure dense label="Committed" value={m0(f.committed_cents)} vs={[`of ${m0(f.revised_budget_cents)} budget`, `${m0(f.committed_open_cents)} still open`]} href={`/jobs/${jobId}?tab=commitments`} linkLabel="Commitments" />
             <Figure dense label="Actual cost" value={m0(f.actual_cost_cents)} vs={[`of ${m0(f.projected_final_cost_cents)} projected`, pending ? `${m0(pending)} pending in Merit Books` : `${p(f.pct_complete_cost)} complete on cost`]} href="/job-cost" linkLabel="All jobs" />
-            <Figure dense label="Projected margin" value={`${m0(f.projected_margin_cents)} · ${p(pmg)}`} vs={[om != null ? `vs ${p(om)} sold` : 'No original budget to compare', `${m0(f.cost_to_complete_cents)} cost to complete`]} href={`/jobs/${jobId}?tab=budget`} linkLabel="Budget" />
-            {f.over_under_billing_cents != null && (
+            {mv.contract && <Figure dense label="Projected margin" value={`${m0(f.projected_margin_cents)} · ${p(pmg)}`} vs={[om != null ? `vs ${p(om)} sold` : 'No original budget to compare', `${m0(f.cost_to_complete_cents)} cost to complete`]} href={`/jobs/${jobId}?tab=budget`} linkLabel="Budget" />}
+            {mv.contract && f.over_under_billing_cents != null && (
               <Figure dense label={f.over_under_billing_cents >= 0 ? 'Over billed' : 'Under billed'} value={m0(Math.abs(f.over_under_billing_cents))} vs={[`${m0(f.billed_to_date_cents)} billed vs ${m0(f.earned_revenue_cents ?? 0)} earned`, 'Estimate; Merit Books WIP is the book']} href={`/jobs/${jobId}?tab=billing`} linkLabel="Billing" />
             )}
           </div>

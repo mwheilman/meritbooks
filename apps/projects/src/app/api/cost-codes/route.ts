@@ -12,13 +12,13 @@ const Body = z.object({
   costType: z.enum(['LABOR', 'MATERIALS', 'SUBCONTRACTOR', 'EQUIPMENT', 'OTHER']),
 });
 
-export const GET = route({ query: Query }, async ({ db, query, tenant }) => {
+export const GET = route({ access: { cap: 'projects.jobs', action: 'view' }, mask: false, query: Query }, async ({ db, query, tenant }) => {
   assertCompany(tenant, query.companyId);
   return { costCodes: await listCostCodes(db, query.companyId, { includeInactive: query.inactive === '1' }) };
 });
 
 /** Add a tenant cost code to the company library (pack codes come from the pack). */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.settings', action: 'configure' }, mask: false, body: Body }, async ({ db, body, tenant }) => {
   assertCompany(tenant, body.companyId);
   const last = must(await db.schema('pm').from('cost_codes').select('sort').eq('location_id', body.companyId).is('job_id', null).order('sort', { ascending: false }).limit(1), 'last code') as Array<{ sort: number }>;
   const row = must(

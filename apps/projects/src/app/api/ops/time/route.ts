@@ -26,7 +26,7 @@ const Body = z.object({
  * SUBMITTED; someone other than the preparer approves them (POST /api/ops/time/approve), which
  * pins the cost rate (pay + burden) and sends the hours to Merit Books.
  */
-export const POST = route({ body: Body }, async ({ db, body, tenant, userId }) => {
+export const POST = route({ access: { cap: 'projects.time', action: 'create' }, mask: 'time_entry', body: Body }, async ({ db, body, tenant, userId }) => {
   const job = await loadJob(db, body.jobId);
   assertCompany(tenant, job.location_id);
   const r = await write<Array<{ id: string }>>(

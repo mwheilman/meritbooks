@@ -10,7 +10,8 @@ import type { JobTypeRow, ProjectListRow } from '@/lib/pm/types';
 import { cents, marginCents, marginPctText } from '@/lib/pm/money';
 import { stageStatus } from '@/lib/pm/stage';
 import { stamp } from '@/lib/time';
-import { useShell, useVocab } from '@/components/shell/ShellContext';
+import { useCan, useMoneyVis, useShell, useVocab } from '@/components/shell/ShellContext';
+import { seesMargin, when } from '@/components/money/visibility';
 import { lower } from '@/lib/pm/vocab';
 import { NewJobPanel } from './NewJobPanel';
 
@@ -36,6 +37,7 @@ export function JobsView(p: JobsViewProps) {
   const pathname = usePathname();
   const sp = useSearchParams();
   const v = useVocab();
+  const mv = useMoneyVis();
   const { readOnly } = useShell();
   const [pending, start] = useTransition();
   const [q, setQ] = useState(p.filters.q);
@@ -91,9 +93,9 @@ export function JobsView(p: JobsViewProps) {
           return <Status kind={s.kind} pip={s.pip}>{r.stage_label ?? r.stage_key}</Status>;
         },
       },
-      { id: 'contract', header: 'Revised contract', numeric: true, width: 136, sort: sortToggle('contract'), cell: (r) => cents(r.contract_revised_cents) },
-      { id: 'budget', header: 'Budget', numeric: true, width: 120, cell: (r) => cents(r.budget_total_cents) },
-      {
+      ...when<QueueColumn<ProjectListRow>>(mv.contract, { id: 'contract', header: 'Revised contract', numeric: true, width: 136, sort: sortToggle('contract'), cell: (r) => cents(r.contract_revised_cents) }),
+      ...when<QueueColumn<ProjectListRow>>(mv.cost, { id: 'budget', header: 'Budget', numeric: true, width: 120, cell: (r) => cents(r.budget_total_cents) }),
+      ...when<QueueColumn<ProjectListRow>>(seesMargin(mv), {
         id: 'margin',
         header: 'Margin',
         numeric: true,
@@ -107,16 +109,17 @@ export function JobsView(p: JobsViewProps) {
           ) : (
             <span className="ink-3">—</span>
           ),
-      },
+      }),
       { id: 'pm', header: v.pm === 'Project manager' ? 'PM' : v.pm, width: 120, cell: (r) => <span className="l2">{r.pm_user_id ? p.pmNames[r.pm_user_id] ?? 'Assigned' : 'Unassigned'}</span> },
       { id: 'upd', header: 'Updated', width: 120, cell: (r) => <span className="l2">{stamp(r.updated_at).split(' · ')[0]}</span> },
     ];
     return cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [p.filters.sort, p.multiCompany, p.companyNames, p.pmNames, v]);
+  }, [p.filters.sort, p.multiCompany, p.companyNames, p.pmNames, v, mv]);
 
   const filtered = !!(p.filters.q || p.filters.stage || p.filters.type);
-  const canCreate = !readOnly && !!p.defaultCompanyId;
+  const mayCreate = useCan('projects.jobs:create');
+  const canCreate = !readOnly && !!p.defaultCompanyId && mayCreate;
 
   return (
     <div className={panel ? 'mp-split has-panel' : 'mp-split'}>

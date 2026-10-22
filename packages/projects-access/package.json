@@ -1,0 +1,24 @@
+{
+  "name": "@meritbooks/projects-access",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Merit Projects access vocabulary: the projects.* capabilities, persona role templates and permission sets (code source of truth for migration 1110_pm_access.sql)",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "echo 'No build needed - consumed as TypeScript source'",
+    "type-check": "tsc --noEmit",
+    "generate": "tsx scripts/generate-seed.ts",
+    "generate:check": "tsx scripts/generate-seed.ts --check",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.4",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.8"
+  }
+}

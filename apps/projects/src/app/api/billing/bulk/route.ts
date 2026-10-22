@@ -20,7 +20,7 @@ export interface BulkResult {
  * Approve several billing requests in one go. Each runs on its own (one refusal never
  * blocks the rest) and reports back per row — separation of duties included.
  */
-export const POST = route({ body: Body }, async ({ db, body }) => {
+export const POST = route({ access: { cap: 'projects.billing', action: 'approve' }, mask: 'billing', body: Body }, async ({ db, body }) => {
   const results: BulkResult[] = [];
   for (const id of [...new Set(body.ids)]) {
     try {

@@ -16,7 +16,7 @@ async function own(db: Parameters<typeof loadJob>[0], jobId: string, taskId: str
   if (!t) throw new HttpError(404, 'That task was not found on this job.', 'NOT_FOUND');
 }
 
-export const PATCH = route({ body: Body }, async ({ db, params, body }) => {
+export const PATCH = route({ access: { cap: 'projects.jobs', action: 'edit' }, body: Body }, async ({ db, params, body }) => {
   const job = await loadJob(db, params.jobId!);
   await own(db, job.job_id, params.taskId!);
   const patch: Record<string, unknown> = {};
@@ -32,7 +32,7 @@ export const PATCH = route({ body: Body }, async ({ db, params, body }) => {
   return { ok: true };
 });
 
-export const DELETE = route({}, async ({ db, params }) => {
+export const DELETE = route({ access: { cap: 'projects.jobs', action: 'edit' } }, async ({ db, params }) => {
   const job = await loadJob(db, params.jobId!);
   await own(db, job.job_id, params.taskId!);
   must(await db.schema('pm').from('tasks').delete().eq('id', params.taskId!).select('id'), 'delete task');

@@ -18,7 +18,7 @@ const Body = z.object({
 });
 
 /** Start a deal (pm.create_deal: number, the company's delivery checklist and tax estimate). */
-export const POST = route({ body: Body }, async ({ db, body, tenant }) => {
+export const POST = route({ access: { cap: 'projects.store', action: 'create' }, mask: 'dealer_deal', body: Body }, async ({ db, body, tenant }) => {
   assertCompany(tenant, body.companyId);
   const id = await dcall<string | null>(db, 'create_deal', {
     p_location: body.companyId,

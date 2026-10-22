@@ -2,7 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Bands, Button, Figure, MoneyInput, QueueTable, Search, Status, WidgetState, count, money, shortDate, type QueueColumn } from '@meritbooks/merit-ui';
+import {
+  Bands, Button, Figure, MoneyInput, QueueTable, Search, Status, WidgetState, count, shortDate, type QueueColumn,
+} from '@meritbooks/merit-ui';
+import { useMoneyText } from '@/components/money/useMoneyText';
 import { BOOKS_OUTCOME, WARRANTY_BANDS, deadlineMark, outboxMark } from '@/lib/pm/dealer/labels';
 import type { WarrantyBoard } from '@/lib/pm/dealer/store-queries';
 import type { SettledClaim, WarrantyClaimStatus, WarrantyOutstandingRow } from '@/lib/pm/dealer/types';
@@ -22,6 +25,7 @@ export interface WarrantyViewProps {
 
 /** Claims the manufacturer still owes, filing deadlines, and what Merit Books recorded when the credit came in. */
 export function WarrantyView(p: WarrantyViewProps) {
+  const money = useMoneyText('contract');
   const { readOnly } = useShell();
   const { act, busy, error } = useStore();
   const d = p.data;

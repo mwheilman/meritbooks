@@ -8,6 +8,7 @@ import { marginFade } from '@/lib/pm/money/summaries';
 import { PageLine } from '@/components/common/PageLine';
 import { PageCrumbs } from '@/components/shell/ShellContext';
 import { JobCostView, type JobCostRow } from '@/components/money/JobCostView';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Job cost' };
 
@@ -15,6 +16,7 @@ export const metadata: Metadata = { title: 'Job cost' };
 export default async function JobCostPage() {
   const scope = await pageScope();
   if (!scope) return null;
+  const { money: mv } = await guardPage('/job-cost');
   const db = await requireDb();
   const [jobs, fin] = await Promise.all([scopedJobs(db, scope), listJobFinancials(db, scope.companyIds)]);
   const rows: JobCostRow[] = fin
@@ -26,7 +28,13 @@ export default async function JobCostPage() {
   return (
     <>
       <PageCrumbs items={[{ label: 'Job cost' }]} />
-      <PageLine facts={[where, { label: `${count(fading)} fading more than 2 points`, strong: fading > 0 }, ...(losing ? [{ label: `${count(losing)} projected at a loss`, strong: true }] : []), `${count(rows.length)} open jobs`]} />
+      <PageLine
+        facts={
+          mv.contract
+            ? [where, { label: `${count(fading)} fading more than 2 points`, strong: fading > 0 }, ...(losing ? [{ label: `${count(losing)} projected at a loss`, strong: true }] : []), `${count(rows.length)} open jobs`]
+            : [where, { label: `${count(rows.length)} open jobs`, strong: true }]
+        }
+      />
       <Page>
         <PageHead eyebrow={where} title="Job cost">
           <p className="t-cap" style={{ marginTop: 4 }}>Actual cost comes from Merit Books. Open a job to refresh it and see cost by cost code.</p>

@@ -14,7 +14,7 @@ const Query = z.object({
 });
 
 /** Type-ahead for the ops forms. RLS client only; every result is the caller's org. */
-export const GET = route({ query: Query }, async ({ db, query, tenant }) => {
+export const GET = route({ access: { cap: 'projects.jobs', action: 'view' }, mask: 'price_book', query: Query }, async ({ db, query, tenant }) => {
   const term = cleanSearch(query.q);
   const companies = new Set(tenant.companies.map((c) => c.id));
   const pm = db.schema('pm');
@@ -44,7 +44,7 @@ export const GET = route({ query: Query }, async ({ db, query, tenant }) => {
       companyId: a.location_id, customerId: a.customer_id,
     }));
   } else if (query.kind === 'price_book') {
-    let q = pm.from('price_book_items').select('id, location_id, code, name, unit, price_cents, cost_cents, labor_minutes, is_active').eq('is_active', true);
+    let q = pm.from('v_price_book_items_masked').select('id, location_id, code, name, unit, price_cents, cost_cents, labor_minutes, is_active').eq('is_active', true);
     if (query.companyId) q = q.eq('location_id', query.companyId);
     if (term) q = q.or(`name.ilike.*${term}*,code.ilike.*${term}*`);
     const list = rows<PriceBookRow>(await q.order('code').limit(15), 'price book');
@@ -58,7 +58,7 @@ export const GET = route({ query: Query }, async ({ db, query, tenant }) => {
     const list = await searchCustomers(db, query.q, query.companyId ?? null, 12);
     items = list.map((c) => ({ id: c.id, label: c.display_name || c.name, sub: null, companyId: c.location_id }));
   } else {
-    let q = db.schema('core').from('vendors').select('id, name, display_name').eq('is_active', true);
+    let q = db.schema('pm').from('v_core_vendors_masked').select('id, name, display_name').eq('is_active', true);
     if (term) q = q.or(`name.ilike.*${term}*,display_name.ilike.*${term}*`);
     const list = rows<{ id: string; name: string; display_name: string | null }>(await q.order('name').limit(12), 'vendors');
     items = list.map((v) => ({ id: v.id, label: v.display_name || v.name, sub: null, companyId: null }));

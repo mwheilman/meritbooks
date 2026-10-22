@@ -7,6 +7,7 @@ import { PageLine } from '@/components/common/PageLine';
 import { ModuleOff } from '@/components/ops/common/ModuleOff';
 import { PunchView } from '@/components/ops/records/PunchView';
 import '@/components/ops/ops.css';
+import { guardPage } from '@/components/shell/page-guard';
 
 export const metadata: Metadata = { title: 'Punch list' };
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,7 @@ export const dynamic = 'force-dynamic';
 export default async function PunchListPage() {
   const o = await opsScope();
   if (!o) return null;
+  await guardPage('/punch-list');
   const items = await loadPunch(o.db, { companyIds: o.companyIds }, (id) => o.jobs.byId.has(id));
   if (!has(o, 'punch_warranty') && items.length === 0) {
     return (
