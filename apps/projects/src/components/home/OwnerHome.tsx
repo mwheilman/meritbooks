@@ -10,6 +10,8 @@ import { dollars, marginCents, marginPctText, sumBy } from '@/lib/pm/money';
 import type { ProjectListRow } from '@/lib/pm/types';
 import { useVocab } from '@/components/shell/ShellContext';
 import { lower } from '@/lib/pm/vocab';
+import { isDealerVocab } from '@/lib/pm/ops/labels';
+import { AgedUnitsWidget, DealsToDeskWidget, PartsBelowMinWidget, RentalsOutWidget } from '@/components/dealer/widgets';
 
 const MONEY0 = { decimals: 0 as const };
 
@@ -203,6 +205,14 @@ export function OwnerHome({ data }: { data: HomeData }) {
           ))}
         </ul>
       </Widget>
+      {isDealerVocab(v) && (
+        <>
+          <AgedUnitsWidget w={6} />
+          <DealsToDeskWidget w={6} />
+          <PartsBelowMinWidget w={6} />
+          <RentalsOutWidget w={6} />
+        </>
+      )}
     </Dash>
   );
 }

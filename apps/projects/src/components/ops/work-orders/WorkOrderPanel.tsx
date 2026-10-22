@@ -17,6 +17,7 @@ import { lower } from '@/lib/pm/vocab';
 import { DetailState, Failure, StatusMark, parseNum } from '../common/bits';
 import { Lookup } from '../common/Lookup';
 import { useDetail, useOps } from '../common/useOps';
+import { RoLineEditor } from '@/components/dealer/service/RoLineEditor';
 
 type Detail = WorkOrderDetail & { employees: Record<string, string>; customers: Record<string, string> };
 
@@ -124,6 +125,9 @@ export function WorkOrderPanel(p: WorkOrderPanelProps) {
 
       <ThreeCs order={o} readOnly={readOnly || linesLocked} isRo={isRo} onSave={(patch, label) => void act('edit', 'post', url, { op: 'update', ...patch }, label)} />
 
+      {p.dealer && (isRo || o.kind === 'PDI') ? (
+        <RoLineEditor workOrderId={o.id} locked={readOnly || linesLocked} onChanged={() => void refetch()} />
+      ) : (
       <Lines
         lines={data.lines}
         locked={readOnly || linesLocked}
@@ -134,6 +138,7 @@ export function WorkOrderPanel(p: WorkOrderPanelProps) {
         onRemove={(l) => void act(`rm:${l.id}`, 'post', url, { op: 'remove_line', lineId: l.id }, 'Removed the line')}
         onDecide={(approve, decline, customerName) => act('decide', 'post', url, { op: 'decide', approve, decline, customerName }, `Recorded ${customerName || 'the customer'}’s choice`)}
       />
+      )}
 
       {(isRo || p.dealer || o.payer_type === 'OEM' || data.claims.length > 0) && (
         <Claims

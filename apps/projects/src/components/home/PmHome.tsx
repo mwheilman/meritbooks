@@ -14,6 +14,8 @@ import { lower } from '@/lib/pm/vocab';
 import { SeamHealthWidget } from './SeamHealthWidget';
 import { DrawsInFlightWidget, SelectionsDueWidget, ShopLoadWidget, SignalsWidget, TodaysVisitsWidget } from '@/components/ops/widgets';
 import type { ModuleKey } from '@/lib/packs';
+import { isDealerVocab } from '@/lib/pm/ops/labels';
+import { AgedUnitsWidget, DealsToDeskWidget, PartsBelowMinWidget, RentalsOutWidget } from '@/components/dealer/widgets';
 
 const OPS_SIGNAL_MODULES: ReadonlyArray<ModuleKey> = ['dispatch', 'service_agreements', 'production', 'selections', 'procurement_markup', 'lender_draws'];
 
@@ -229,6 +231,14 @@ export function PmHome({ data, readOnly, modules = [] }: { data: HomeData; readO
       {has('selections') && <SelectionsDueWidget />}
       {has('lender_draws') && <DrawsInFlightWidget />}
       {OPS_SIGNAL_MODULES.some(has) && <SignalsWidget />}
+      {isDealerVocab(v) && (
+        <>
+          <DealsToDeskWidget />
+          <AgedUnitsWidget />
+          <PartsBelowMinWidget />
+          <RentalsOutWidget />
+        </>
+      )}
     </Dash>
   );
 }

@@ -82,6 +82,11 @@ export const METRICS: readonly MetricDef[] = [
   m('ro_days_in_shop', 'Days in shop', 'days', 'down', 'Average days from check-in to ready for pickup on repair orders closed in the period.'),
   m('warranty_claims_outstanding_cents', 'Warranty claims outstanding', 'cents', 'down', 'Submitted manufacturer warranty claims not yet paid or written off.'),
   m('warranty_rejection_rate_pct', 'Warranty rejections', 'pct', 'down', 'Warranty claims rejected or written off ÷ claims decided in the period.'),
+  m('unit_turn_days', 'Unit turn', 'days', 'down', 'Average days from received to delivered on dealer units delivered in the trailing 365 days.'),
+  m('aged_inventory_count_over_180', 'Units over 180 days', 'count', 'down', 'Dealer units in stock, in PDI, on demo or on hold that were received more than 180 days ago.'),
+  m('deal_gross_avg_cents', 'Average deal gross', 'cents', 'up', 'Average front plus back gross (pinned at delivery) on deals delivered in the trailing 90 days and not unwound.'),
+  m('parts_fill_rate_pct', 'Parts fill rate', 'pct', 'up', 'Counter-ticket lines filled in full from stock ÷ all lines, on tickets closed in the trailing 90 days.'),
+  m('rental_utilization_pct', 'Rental utilization', 'pct', 'up', 'Days on rent ÷ days available across the current rental fleet, trailing 90 days.'),
 
   // ---- real estate development
   m('contingency_burn_ratio', 'Contingency burn vs progress', 'ratio', 'down', 'Share of contingency used ÷ share of hard cost complete; above 1.0 means burning faster than building.'),

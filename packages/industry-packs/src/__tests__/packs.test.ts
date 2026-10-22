@@ -55,7 +55,7 @@ describe.each(EXPECTED_KEYS)('pack %s', (key) => {
     expect(m.costCodes.length).toBeGreaterThanOrEqual(15);
     expect(m.costCodes.length).toBeLessThanOrEqual(60);
     expect(m.kpis.length).toBeGreaterThanOrEqual(4);
-    expect(m.kpis.length).toBeLessThanOrEqual(8);
+    expect(m.kpis.length).toBeLessThanOrEqual(10);
     expect(m.questions.length).toBeGreaterThanOrEqual(2);
     expect(m.questions.length).toBeLessThanOrEqual(5);
     expect(m.sampleJob.tasks.length).toBeGreaterThanOrEqual(3);

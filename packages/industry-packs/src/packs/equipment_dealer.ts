@@ -2,16 +2,19 @@ import type { PackManifestInput } from '../types';
 import { cc, mods, pb, st, tr, usd } from './_dsl';
 
 /**
- * Equipment dealer service departments (outdoor power, compact and ag, powersports). The job is the
- * repair order on a serialized unit; lines carry a pay type (customer, OEM warranty, internal).
- * Whole-goods deals and floor plan stay in Books and the dealer system; this pack runs the shop.
+ * Equipment dealers (outdoor power, compact and ag, powersports). Projects runs the whole store:
+ * the unit master (stock, cost, PDI, photos), the sales desk (deals, quotes, trades, F&I, deposits,
+ * delivery), the parts counter and stock orders, the service shop (the job is the repair order on a
+ * serialized unit; lines carry a pay type — customer, OEM warranty, internal, policy), warranty
+ * claims and rentals. Merit Books runs the money: the GL, the floor-plan lender ledger, tax,
+ * invoices and the posting of every dealer event Projects emits.
  */
 export const equipmentDealer: PackManifestInput = {
   key: 'equipment_dealer',
-  version: '1.0.0',
+  version: '1.1.0',
   extends: 'general',
-  name: 'Equipment dealer service',
-  tagline: 'Repair orders on serialized units, PDI, OEM warranty claims and flag-rate tech time.',
+  name: 'Equipment dealer',
+  tagline: 'Unit stock and aging, the sales desk, parts counter, repair orders, OEM warranty and rentals.',
   tile: { label: 'Equipment dealer', examples: 'Outdoor power, compact tractor, ag and powersports dealers' },
   naics: ['423810', '423820', '444230', '444240', '811310', '811411', '441228'],
   keywords: [
@@ -53,6 +56,10 @@ export const equipmentDealer: PackManifestInput = {
     change_orders: 'Additional work authorizations',
     pm: 'Service manager',
     superintendent: 'Shop foreman',
+    subcontractor: 'Sublet vendor',
+    subcontractors: 'Sublet vendors',
+    commitment: 'Parts or sublet PO',
+    commitments: 'Parts and sublet POs',
   },
   modules: mods(
     ['estimates', 'billing', 'time', 'dispatch', 'assets', 'change_orders', 'commitments', 'punch_warranty',
@@ -244,12 +251,15 @@ export const equipmentDealer: PackManifestInput = {
     { object: 'asset', key: 'hour_meter', label: 'Hour meter', type: 'number', promote: true },
     { object: 'asset', key: 'sold_date', label: 'Sold or registered date', type: 'date' },
     { object: 'asset', key: 'warranty_expires', label: 'Warranty expires', type: 'date', promote: true },
+    { object: 'asset', key: 'engine_serial', label: 'Engine serial number', type: 'text' },
+    { object: 'asset', key: 'attachment_serials', label: 'Attachment serials (loader, deck, backhoe)', type: 'text' },
+    { object: 'asset', key: 'key_number', label: 'Key number', type: 'text' },
     { object: 'project', key: 'tag_number', label: 'Tag number', type: 'text', promote: true },
     { object: 'project', key: 'complaint', label: 'Customer complaint', type: 'text' },
     { object: 'project', key: 'promised_date', label: 'Promised date', type: 'date', promote: true },
     { object: 'project', key: 'oem_claim_number', label: 'OEM claim number', type: 'text', promote: true, jobType: 'warranty_repair' },
     { object: 'project', key: 'claim_deadline', label: 'Claim filing deadline', type: 'date', promote: true, jobType: 'warranty_repair' },
-    { object: 'work_order', key: 'pay_type', label: 'Pay type', type: 'enum', promote: true, options: ['customer', 'warranty', 'internal'] },
+    { object: 'work_order', key: 'pay_type', label: 'Pay type', type: 'enum', promote: true, options: ['customer', 'warranty', 'internal', 'policy'] },
     { object: 'work_order', key: 'labor_op', label: 'Labor operation code', type: 'text' },
     { object: 'work_order', key: 'flagged_hours', label: 'Flagged hours', type: 'number', promote: true },
   ],
@@ -273,8 +283,11 @@ export const equipmentDealer: PackManifestInput = {
     { key: 'days_in_shop', label: 'Days in shop', metric: 'ro_days_in_shop', goodDirection: 'down' },
     { key: 'warranty_open', label: 'Warranty claims outstanding', metric: 'warranty_claims_outstanding_cents', goodDirection: 'down' },
     { key: 'warranty_rejected', label: 'Warranty rejections', metric: 'warranty_rejection_rate_pct', goodDirection: 'down' },
-    { key: 'comebacks', label: 'Comebacks', metric: 'callback_rate_pct', goodDirection: 'down' },
-    { key: 'unbilled', label: 'Ready for pickup, not invoiced', metric: 'completed_unbilled_cents', goodDirection: 'down' },
+    { key: 'unit_turn', label: 'Unit turn (received to delivered)', metric: 'unit_turn_days', goodDirection: 'down' },
+    { key: 'aged_units', label: 'Units over 180 days', metric: 'aged_inventory_count_over_180', goodDirection: 'down' },
+    { key: 'deal_gross', label: 'Average deal gross', metric: 'deal_gross_avg_cents', goodDirection: 'up' },
+    { key: 'parts_fill', label: 'Parts fill rate', metric: 'parts_fill_rate_pct', goodDirection: 'up' },
+    { key: 'rental_utilization', label: 'Rental utilization', metric: 'rental_utilization_pct', goodDirection: 'up' },
   ],
   questions: [
     {
@@ -329,6 +342,8 @@ export const equipmentDealer: PackManifestInput = {
       'Repair orders ready for pickup but not invoiced',
       'Special-order parts received with no customer notified',
       'Comebacks within 30 days on the same serial number',
+      'Units in stock more than 180 days, oldest and most expensive first',
+      'Floored units sold or delivered with the floor-plan payoff still open',
     ],
   },
   sampleJob: {

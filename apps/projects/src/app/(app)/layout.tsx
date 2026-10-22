@@ -78,6 +78,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         counts: navCounts,
         booksPresent: scope.tenant.booksPresent,
         companyCount: scope.installedCompanies.length,
+        packKeys: scope.installs
+          .filter((i) => !scope.company || i.location_id === scope.company.id)
+          .map((i) => i.pack_key),
       })}
       orgName={scope.tenant.orgName ?? 'Workspace'}
       companies={scope.tenant.companies.map((c) => ({ id: c.id, name: c.name, shortCode: c.shortCode, installed: installedIds.has(c.id) }))}
