@@ -55,6 +55,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { scopedWriter, writerFor } from '@/lib/db/scoped-writer';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
 import {
@@ -884,7 +885,9 @@ export async function scanRevenueNotRecognized(
     if (prior && (prior.status === 'APPROVED' || prior.status === 'REJECTED')) continue;
 
     if (prior && prior.status === 'PROPOSED') {
-      const { error } = await supabase
+      // prior was read through the caller's client above (RLS: org + client scope); service-role
+      // lifecycle update, org pinned (migration 172).
+      const { error } = await writerFor(supabase)
         .from('ai_decisions')
         .update({
           input_summary: b.title,
@@ -893,7 +896,8 @@ export async function scanRevenueNotRecognized(
           reasoning: b.reason,
           clarifying_question: b.question,
         })
-        .eq('id', prior.id);
+        .eq('id', prior.id)
+        .eq('org_id', orgId);
       if (error) {
         console.warn('[controls/revrec] refresh failed:', error.message);
         summary.errors += 1;
@@ -904,18 +908,27 @@ export async function scanRevenueNotRecognized(
       continue;
     }
 
-    const { error } = await supabase.from('ai_decisions').insert({
-      org_id: orgId,
-      location_id: b.locationId,
-      feature: REVENUE_NOT_RECOGNIZED_FEATURE,
-      input_summary: b.title,
-      proposed_output: proposedOutput,
-      confidence,
-      reasoning: b.reason,
-      clarifying_question: b.question,
-      status: 'PROPOSED',
-      created_by_user: null,
-    });
+    // ai_decisions is SELECT-only for members (migration 172): service-role write for a member
+    // caller (the nightly job's service role writes as itself), org pinned, the exception's
+    // company asserted in the caller's client scope — a refusal is handled like an insert error.
+    let error: { message: string } | null = null;
+    try {
+      const writer = await scopedWriter(supabase, orgId, [b.locationId]);
+      ({ error } = await writer.from('ai_decisions').insert({
+        org_id: orgId,
+        location_id: b.locationId,
+        feature: REVENUE_NOT_RECOGNIZED_FEATURE,
+        input_summary: b.title,
+        proposed_output: proposedOutput,
+        confidence,
+        reasoning: b.reason,
+        clarifying_question: b.question,
+        status: 'PROPOSED',
+        created_by_user: null,
+      }));
+    } catch (e) {
+      error = { message: e instanceof Error ? e.message : String(e) };
+    }
     if (error) {
       console.warn('[controls/revrec] could not queue exception:', error.message);
       summary.errors += 1;
@@ -948,10 +961,13 @@ export async function scanRevenueNotRecognized(
   // ── Expire previously-open gaps that have since been recognized (queue hygiene) ─
   for (const [key, prior] of existing) {
     if (prior.status !== 'PROPOSED' || liveKeys.has(key)) continue;
-    const { error } = await supabase
+    // prior was read through the caller's client above (RLS: org + client scope); service-role
+    // lifecycle update, org pinned (migration 172).
+    const { error } = await writerFor(supabase)
       .from('ai_decisions')
       .update({ status: 'EXPIRED' })
       .eq('id', prior.id)
+      .eq('org_id', orgId)
       .eq('status', 'PROPOSED');
     if (!error) summary.expired += 1;
   }

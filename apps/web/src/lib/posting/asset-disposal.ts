@@ -28,6 +28,7 @@ import { postJournalEntry, type JournalEntryLineInput } from '../services/gl-pos
 import { PostingError } from './account-roles';
 import { resolveCashSide, resolveRole } from './account-roles';
 import type { PaymentRail } from './transaction-types';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -271,6 +272,10 @@ export async function recordAssetDisposal(db: DB, input: DisposeAssetInput): Pro
   if (!input.disposalDate) throw new PostingError('disposalDate is required');
   const asset = await loadAsset(db, input.orgId, input.assetId);
   if (asset.status === 'DISPOSED') throw new PostingError('Asset is already disposed');
+  // fixed_assets is SELECT-only for members (migration 172): asset read above in this org;
+  // the status write goes through the service role, org pinned, its client asserted in
+  // the caller's scope BEFORE anything posts.
+  const writer = await scopedWriter(db, input.orgId, [asset.location_id]);
 
   const math = computeDisposalGainLoss(asset.acquisition_cost_cents, asset.accumulated_depreciation_cents, input.proceedsCents);
   const accts = await resolveDisposalAccounts(db, input, asset, math.outcome === 'GAIN', math.outcome === 'LOSS');
@@ -322,7 +327,7 @@ export async function recordAssetDisposal(db: DB, input: DisposeAssetInput): Pro
 
   // Compare-and-set: only flip an asset that is NOT already disposed. Defensive belt
   // to the JE-level guarantor above; the two together make double-disposal impossible.
-  await db
+  await writer
     .from('fixed_assets')
     .update({
       status: 'DISPOSED',
@@ -332,6 +337,7 @@ export async function recordAssetDisposal(db: DB, input: DisposeAssetInput): Pro
       updated_at: new Date().toISOString(),
     })
     .eq('id', asset.id)
+    .eq('org_id', input.orgId)
     .neq('status', 'DISPOSED');
 
   return {

@@ -9,7 +9,7 @@ import { learnVendorPattern } from '@/lib/services/categorization';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { decideVendor, resolveVendorIdByName, type CurrentVendor } from '@/lib/bank/vendor-resolution';
-import { serviceWriter } from '@/lib/db/scoped-writer';
+import { serviceWriter, assertOrgRefs } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/bank-feed/approve
@@ -65,7 +65,10 @@ export const POST = apiHandler(
           bankTransactionId: txn.id,
           createdBy: null,
         });
-        await ctx.supabase
+        // bank_transactions is SELECT-only for members (migration 172): service-role write after
+        // the permission check, org pinned; the row was read through the member client above
+        // (RLS proved org + client scope).
+        await serviceWriter()
           .from('bank_transactions')
           .update({
             status: 'POSTED',
@@ -74,7 +77,8 @@ export const POST = apiHandler(
             approved_at: new Date().toISOString(),
             gl_entry_id: res.gl_entry_id,
           })
-          .eq('id', body.transaction_id);
+          .eq('id', body.transaction_id)
+          .eq('org_id', orgId);
         if (ctx.orgId) {
           await logHumanAction(ctx.supabase, ctx.userId, ctx.orgId, {
             action: 'bankfeed.approve',
@@ -161,7 +165,7 @@ export const POST = apiHandler(
       return NextResponse.json({ error: jeResult.error }, { status: 400 });
     }
 
-    await ctx.supabase
+    await serviceWriter()
       .from('bank_transactions')
       .update({
         status: 'POSTED',
@@ -174,7 +178,8 @@ export const POST = apiHandler(
         approved_at: new Date().toISOString(),
         gl_entry_id: jeResult.entry_id,
       })
-      .eq('id', body.transaction_id);
+      .eq('id', body.transaction_id)
+      .eq('org_id', orgId);
 
     // Job-tagged categorization → clear the cost now (cash already spent).
     if (body.job_id && jeResult.entry_id) {
@@ -191,7 +196,10 @@ export const POST = apiHandler(
         // gl_entry_lines is SELECT-only for members (migration 171); the line was just
         // posted by this request (org + client scope checked in postJournalEntry).
         await serviceWriter().from('gl_entry_lines').update({ job_id: body.job_id }).eq('id', glLineId).eq('org_id', orgId);
-        await ctx.supabase.from('job_cost_entries').insert({
+        // job_cost_entries is service-role-only for writes (migration 172); the job id comes
+        // from the request body, so verify it belongs to this org (FKs never check the tenant).
+        await assertOrgRefs(orgId, [{ table: 'jobs', ids: [body.job_id], label: 'job' }], { caller: ctx.supabase });
+        await serviceWriter().from('job_cost_entries').insert({
           org_id: orgId,
           job_id: body.job_id,
           gl_entry_line_id: glLineId,

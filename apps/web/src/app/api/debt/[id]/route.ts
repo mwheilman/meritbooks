@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * /api/debt/[id]
@@ -108,6 +109,8 @@ export async function DELETE(_request: Request, { params }: Params): Promise<Nex
   const guard = await requirePermission(userId, 'journal_entries', 'post');
   if (!guard.ok) return guard.response;
 
+  // Read through the member client: RLS proves the loan is in this org and in the
+  // caller's client scope (the service-role delete below relies on it).
   const { data: inst } = await supabase
     .from('debt_instruments')
     .select('id')
@@ -134,7 +137,9 @@ export async function DELETE(_request: Request, { params }: Params): Promise<Nex
     );
   }
 
-  const { error } = await supabase.from('debt_instruments').delete().eq('id', params.id).eq('org_id', orgId);
+  // debt_instruments is SELECT-only for members (migration 172): service-role delete after
+  // the permission check, org pinned.
+  const { error } = await serviceWriter().from('debt_instruments').delete().eq('id', params.id).eq('org_id', orgId);
   if (error) return NextResponse.json({ error: error.message, code: 'DELETE_FAILED' }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

@@ -41,6 +41,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
 import {
@@ -497,30 +498,39 @@ export async function scanBillAnomalies(
     });
     const title = `${KIND_LABEL[a.kind]}: ${vendorName} · ${formatMoney(a.amountAtRiskCents)} at risk`;
 
-    const { error } = await supabase.from('ai_decisions').insert({
-      org_id: orgId,
-      location_id: bill.locationId,
-      feature: BILL_ANOMALY_FEATURE,
-      input_summary: title,
-      proposed_output: {
-        control: 'BILL_ANOMALY',
-        kind: a.kind,
-        kinds: a.kinds,
-        dedup_key: dedupKey,
-        amount_at_risk_cents: a.amountAtRiskCents,
-        bill_total_cents: bill.totalCents,
-        tier,
-        disposition,
-        money_already_out: false, // before-post advisory
-        subjects: { bill_id: bill.id, vendor_id: bill.vendorId, bill_number: bill.billNumber },
-        reason: a.reason,
-      },
-      confidence,
-      reasoning: a.reason,
-      clarifying_question: KIND_QUESTION[a.kind],
-      status: 'PROPOSED',
-      created_by_user: null,
-    });
+    // ai_decisions is SELECT-only for members (migration 172): service-role write for a member
+    // caller (the nightly job's service role writes as itself), org pinned, the exception's
+    // company asserted in the caller's client scope — a refusal is handled like an insert error.
+    let error: { message: string } | null = null;
+    try {
+      const writer = await scopedWriter(supabase, orgId, [bill.locationId]);
+      ({ error } = await writer.from('ai_decisions').insert({
+        org_id: orgId,
+        location_id: bill.locationId,
+        feature: BILL_ANOMALY_FEATURE,
+        input_summary: title,
+        proposed_output: {
+          control: 'BILL_ANOMALY',
+          kind: a.kind,
+          kinds: a.kinds,
+          dedup_key: dedupKey,
+          amount_at_risk_cents: a.amountAtRiskCents,
+          bill_total_cents: bill.totalCents,
+          tier,
+          disposition,
+          money_already_out: false, // before-post advisory
+          subjects: { bill_id: bill.id, vendor_id: bill.vendorId, bill_number: bill.billNumber },
+          reason: a.reason,
+        },
+        confidence,
+        reasoning: a.reason,
+        clarifying_question: KIND_QUESTION[a.kind],
+        status: 'PROPOSED',
+        created_by_user: null,
+      }));
+    } catch (e) {
+      error = { message: e instanceof Error ? e.message : String(e) };
+    }
     if (error) {
       // A concurrent scan may have won the unique index (migration 070) — not an error.
       console.warn('[controls/bill-anomaly] could not queue exception:', error.message);

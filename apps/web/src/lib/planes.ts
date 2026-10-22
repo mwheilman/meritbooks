@@ -1,4 +1,4 @@
-import { Building2, Layers, Landmark, type LucideIcon } from 'lucide-react';
+import type { IconName } from '@meritbooks/merit-ui';
 import type { MeUser } from '@/lib/hooks/use-me';
 
 /**
@@ -12,8 +12,11 @@ import type { MeUser } from '@/lib/hooks/use-me';
  *  - books     : BOOK OF RECORD. The day-to-day accounting for the entities —
  *                bank feed, bills, invoices, GL, reports.
  *
- * A plane is a lens over the navigation, not a separate app. The switcher sets
- * the active plane; the sidebar shows only that plane's sections.
+ * A plane is a lens over the navigation, not a separate app. The ⌘J context
+ * switcher sets the active plane; the rail shows only that plane's groups. In the
+ * merit-ui shell (Redesign R1) the planes map onto the IA-SPEC §3.1 contexts:
+ * books → client books (one client) or the workspace (no client picked);
+ * practice → the tenant workspace; platform → the platform console.
  */
 export type Plane = 'platform' | 'practice' | 'books';
 
@@ -21,7 +24,8 @@ export interface PlaneDef {
   id: Plane;
   label: string;
   tagline: string;
-  icon: LucideIcon;
+  /** merit-ui sprite name for the switcher row. */
+  icon: IconName;
   /** nav group labels (from lib/navigation.ts) that belong to this plane */
   groups: string[];
 }
@@ -29,38 +33,40 @@ export interface PlaneDef {
 export const PLANES: Record<Plane, PlaneDef> = {
   books: {
     id: 'books',
-    label: 'Book of Record',
-    tagline: 'Day-to-day accounting',
-    icon: Landmark,
-    // Operational accounting for ONE company at a time. No team/governance surfaces —
-    // those live in Practice. A supervisor sees a company's jobs/WIP by switching into
-    // that company's Books via the header company picker.
+    label: 'Books',
+    tagline: 'Day-to-day accounting, one client at a time',
+    icon: 'book',
+    // Operational accounting for ONE client at a time. No team/governance surfaces —
+    // those live in Practice. A supervisor sees a client's jobs/WIP by switching into
+    // that client's books with the ⌘J context switcher.
     groups: [
       'Home',
+      'Banking',
       'Payables',
       'Receivables',
-      'Banking & Cash',
+      'Revenue & jobs',
+      'Cash & debt',
       'Accounting',
-      'Jobs & Costing',
       'Dealer', // industry pack — shown only when enabled for the active client
-      'Reporting & Analytics',
+      'Planning & reports',
+      'Controls',
     ],
   },
   practice: {
     id: 'practice',
-    label: 'Practice',
-    tagline: 'Team, oversight & settings',
-    icon: Layers,
+    label: 'Team & settings',
+    tagline: 'Clients, team, access and firm settings',
+    icon: 'users',
     // The supervisor's cockpit: supervise the team & their access, monitor performance,
     // compliance/audit, and the roster of companies they oversee — plus firm settings.
     // Deliberately NO operational accounting (no WIP/jobs/tax) — that's Books.
-    groups: ['Team & Oversight', 'Settings & Admin'],
+    groups: ['Clients', 'Team', 'Oversight', 'Integrations', 'Settings'],
   },
   platform: {
     id: 'platform',
     label: 'Platform',
-    tagline: 'MeritBooks operator',
-    icon: Building2,
+    tagline: 'Operator console',
+    icon: 'grid',
     groups: ['Platform'],
   },
 };

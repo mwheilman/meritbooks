@@ -13,6 +13,7 @@ import { postTransaction, type PostingFacts } from './posting-templates';
 import { resolveRole } from './account-roles';
 import { createSchedule } from './schedule-engine';
 import { reverseGlEntry } from './lifecycle';
+import { assertOrgRefs, isMemberClient, isWriteScopeError, scopedWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -59,11 +60,29 @@ export async function recordAssetAcquisition(
   const { facts } = input;
   if (!facts.category_account_id) return { success: false, error: 'category_account_id (asset account) is required' };
 
+  // fixed_assets is SELECT-only for members (migration 172): BEFORE anything posts, assert the
+  // client in the caller's org + scope and (member caller) that the depreciation accounts from
+  // the request belong to the org; the register row is then written by the service role.
+  let writer: DB;
+  try {
+    writer = await scopedWriter(db, facts.org_id, [facts.location_id]);
+    if (isMemberClient(db)) {
+      await assertOrgRefs(facts.org_id, [{
+        table: 'accounts',
+        ids: [input.depreciation_expense_account_id, input.accumulated_depreciation_account_id],
+        label: 'account',
+      }], { caller: db });
+    }
+  } catch (e) {
+    if (isWriteScopeError(e)) return { success: false, error: e.message };
+    throw e;
+  }
+
   const posted = await postTransaction(db, 'asset_acquisition', facts, { created_by: opts.created_by });
   if (!posted.success) return { success: false, error: posted.error };
 
   const cost = facts.amount_cents + (facts.tax_cents ?? 0);
-  const { data, error } = await db
+  const { data, error } = await writer
     .from('fixed_assets')
     .insert({
       org_id: facts.org_id,

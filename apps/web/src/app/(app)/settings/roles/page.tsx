@@ -22,9 +22,11 @@ export default async function RolesPage() {
   await requirePagePermission('user_permissions', 'view');
   return (
     <>
+      {/* Header on merit-ui (Redesign R1); the role editor below is still on the legacy bridge. */}
       <PageHeader
-        title="Roles & Permissions"
-        description="See exactly what each role can do, tune any permission, and create custom roles. System defaults ship ready to use; every change here is org-scoped and fails closed."
+        eyebrow={['Team & settings', 'Access']}
+        title="Roles & permissions"
+        description="See exactly what each role can do, tune any permission, and create custom roles. System defaults ship ready to use; every change is scoped to your organization and fails closed."
       />
       {/* R-11 dual-run status + enforcement switch (tenant admins only; hidden otherwise). */}
       <DualRunPanel />

@@ -45,6 +45,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
+import { assertOrgRefs, writerFor } from '@/lib/db/scoped-writer';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { deriveConsolidationMethod, ownershipSumCheck } from './normalize';
 import type { OwnershipBasis, ProposedOwner } from './types';
@@ -114,8 +115,19 @@ export async function commitCapTable(
   let tableMissing = false;
   let holdersWritten = 0;
 
+  // core.equity_holders / entity_ownership are SELECT-only for members (migration 172): the
+  // caller authorized (settings_acct:edit) and verified the entity; every company id the write
+  // references (entity + linked owner holdcos from the request) is checked against the org,
+  // then the service role writes with the org pinned. A WriteScopeError propagates.
+  await assertOrgRefs(
+    orgId,
+    [{ schema: 'core', table: 'locations', ids: [input.entityId, ...input.owners.map((o) => o.owner_entity_id)], label: 'company' }],
+    { caller: supabase },
+  );
+  const writer = writerFor(supabase);
+
   // Probe/clear existing rows for this entity. A missing relation is detected here.
-  const del = await supabase
+  const del = await writer
     .schema('core')
     .from('equity_holders')
     .delete()
@@ -145,7 +157,7 @@ export async function commitCapTable(
     // created_by is a UUID column and Clerk ids are strings — never write one (see 018).
     void userId;
 
-    const ins = await supabase.schema('core').from('equity_holders').insert(rows);
+    const ins = await writer.schema('core').from('equity_holders').insert(rows);
     if (ins.error && isMissingRelation(ins.error)) {
       tableMissing = true;
     } else if (ins.error) {
@@ -175,7 +187,7 @@ export async function commitCapTable(
       effective_start: effDate,
       notes: `Set from cap-table onboarding — ${owner.name}`,
     };
-    const up = await supabase
+    const up = await writer
       .from('entity_ownership')
       .upsert(edge, { onConflict: 'org_id,parent_entity_id,child_entity_id,effective_start' });
     if (up.error) {

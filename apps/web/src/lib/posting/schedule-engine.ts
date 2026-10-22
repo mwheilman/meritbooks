@@ -18,6 +18,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from '../services/gl-posting';
 import { PostingError } from './account-roles';
+import { assertOrgRefs, isMemberClient, scopedWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -64,7 +65,17 @@ export async function createSchedule(db: DB, input: CreateScheduleInput): Promis
   const perPeriod = Math.floor(input.totalCents / input.months);
   if (perPeriod <= 0) throw new PostingError('Per-period amount rounds to zero; reduce the term');
 
-  const { data, error } = await db
+  // posting_schedules / posting_schedule_runs are SELECT-only for members (migration 172):
+  // service-role write after the caller's permission check, org pinned, the posting client
+  // asserted in the caller's scope and the referenced accounts / department verified in-org.
+  const writer = await scopedWriter(db, input.orgId, [input.locationId]);
+  if (isMemberClient(db)) {
+    await assertOrgRefs(input.orgId, [
+      { table: 'accounts', ids: [input.debitAccountId, input.creditAccountId], label: 'account' },
+      { schema: 'core', table: 'departments', ids: [input.departmentId], label: 'department' },
+    ], { caller: db });
+  }
+  const { data, error } = await writer
     .from('posting_schedules')
     .insert({
       org_id: input.orgId,
@@ -123,6 +134,14 @@ export async function runDueSchedules(db: DB, orgId: string, asOf: string): Prom
 
   for (const s of schedules) {
     result.schedules_processed++;
+    // Schedule read above in this org; service-role writes with its client scope-asserted.
+    let writer: DB;
+    try {
+      writer = await scopedWriter(db, orgId, [s.location_id]);
+    } catch (e) {
+      result.errors.push({ schedule_id: s.id, period: '-', error: e instanceof Error ? e.message : 'out of scope' });
+      continue;
+    }
     const due = Math.min(periodsElapsed(s.start_date, asOf), s.months);
     const remainder = s.total_cents - s.amount_per_period_cents * (s.months - 1);
 
@@ -161,7 +180,7 @@ export async function runDueSchedules(db: DB, orgId: string, asOf: string): Prom
         break; // don't skip ahead past a failed period (e.g. closed period)
       }
 
-      await db.from('posting_schedule_runs').insert({
+      await writer.from('posting_schedule_runs').insert({
         org_id: orgId,
         schedule_id: s.id,
         period_year: year,
@@ -170,14 +189,15 @@ export async function runDueSchedules(db: DB, orgId: string, asOf: string): Prom
         gl_entry_id: je.entry_id,
       });
       const newPosted = idx + 1;
-      await db
+      await writer
         .from('posting_schedules')
         .update({
           periods_posted: newPosted,
           status: newPosted >= s.months ? 'COMPLETED' : 'ACTIVE',
           updated_at: new Date().toISOString(),
         })
-        .eq('id', s.id);
+        .eq('id', s.id)
+        .eq('org_id', orgId);
       result.periods_posted++;
     }
   }

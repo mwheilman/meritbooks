@@ -16,6 +16,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { assertOrgRefs, scopedWriter } from '@/lib/db/scoped-writer';
 import { runAiGateway } from '@meritbooks/core-ai';
 import { logAction } from '@/lib/trust/action-log';
 import { scoreToTier, getTierPolicy } from '@/lib/trust/score-tier';
@@ -265,9 +266,13 @@ Respond with ONLY this JSON, no markdown:
   const reasoning = String(parsed.reasoning ?? '');
 
   // Decision log.
+  // ai_decisions is SELECT-only for members (migration 172): service-role insert for a member
+  // caller, org pinned, the company asserted in the caller's client scope (a refusal lands in
+  // the catch below — the log is best-effort).
   let decisionId: string | null = null;
   try {
-    const { data } = await supabase.from('ai_decisions').insert({
+    const writer = await scopedWriter(supabase, orgId, [locationId]);
+    const { data } = await writer.from('ai_decisions').insert({
       org_id: orgId, location_id: locationId, feature: CATEGORIZE_FEATURE,
       model_requested: CATEGORIZE_MODEL, model_used: gw.model_used, correlation_id: gw.correlation_id,
       input_summary: `${description} ($${(amountCents / 100).toFixed(2)})`.slice(0, 2000),
@@ -341,8 +346,24 @@ export async function learnVendorPattern(
       .eq('normalized_description', normalized)
       .maybeSingle();
 
+    // vendor_patterns is SELECT-only for members (migration 172): service-role write for a
+    // member caller, org pinned; the pattern's company is asserted in the caller's client scope
+    // and every caller-supplied FK (account / vendor / department / class) verified in-org
+    // (FKs never check the tenant). A refusal lands in the catch below (never throws).
+    const writer = await scopedWriter(supabase, orgId, [locationId ?? null]);
+    await assertOrgRefs(
+      orgId,
+      [
+        { table: 'accounts', ids: [accountId], label: 'account' },
+        { schema: 'core', table: 'vendors', ids: [vendorId], label: 'vendor' },
+        { schema: 'core', table: 'departments', ids: [departmentId], label: 'department' },
+        { table: 'classes', ids: [classId], label: 'class' },
+      ],
+      { caller: supabase },
+    );
+
     if (existing?.id) {
-      await supabase
+      await writer
         .from('vendor_patterns')
         .update({
           account_id: accountId,
@@ -353,9 +374,10 @@ export async function learnVendorPattern(
           match_count: Number(existing.match_count ?? 1) + 1,
           last_matched_at: new Date().toISOString(),
         })
-        .eq('id', existing.id);
+        .eq('id', existing.id)
+        .eq('org_id', orgId);
     } else {
-      await supabase.from('vendor_patterns').insert({
+      await writer.from('vendor_patterns').insert({
         org_id: orgId,
         vendor_id: vendorId ?? null,
         account_id: accountId,

@@ -199,7 +199,9 @@ Do NOT trust older "Session 7 / Bank Feed only", "session 38", or "session 40" s
 
 ## Design System (BINDING)
 
-Primary accent: #10b981 (Tailwind emerald-500). Dark dominant, surface-900 for cards, surface-950 for nested. Typography: Plus Jakarta Sans (UI), JetBrains Mono (numbers/codes). Text: white primary, slate-300 secondary, slate-500 tertiary. Emerald for debits/success, red for credits/danger, amber warning, blue info, indigo AI features.
+**Merit Suite Style Guide v2.3 — `packages/merit-ui` (owner-approved directions A "Annual Report" + B "Operator Cockpit", 2026-10-20/21).** `packages/merit-ui/styles/system.css` is the single source of visual truth (verbatim from the kit; never hand-edit); components use the kit's class names through the typed React wrappers in `packages/merit-ui/src`. Wiring: `packages/merit-ui/README.md` ("Wiring an app"). Boards: `design-studio/v2/` (S*/O-*/R*/F*/V*/W*). Brand: Electric Blue #2563EB (primary), Midnight #0A1628 (shell/ink), Signal Blue #3B82F6 (accent on Midnight only), Warm White #FDFCFA, Steel #3D4F65, Slate #8494A7 (labels on Midnight only), Canvas #F5F3EF, Sky #EBF2FE. Type: Syne (display) + DM Sans (UI and figures, tabular numerals). Square geometry, thin blue rules, `01 // SECTION` labels. No emerald-on-black, no Plus Jakarta Sans, no JetBrains Mono, no welcome banners. Density: `density-cockpit` for work screens (bookkeeper, manager, controller, payroll, clerk, platform), `density-report` for owner/CFO/FD/dept head/auditor.
+
+**Port status:** Books is migrating from the legacy dark/emerald theme (still on most pages) to merit-ui. New or rebuilt screens MUST use merit-ui; never add new legacy-theme UI.
 
 ## Business Rules
 

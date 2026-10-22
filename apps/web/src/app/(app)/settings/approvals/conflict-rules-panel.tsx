@@ -9,7 +9,8 @@
  *                             Platform rules can be made to BLOCK, never turned off;
  *                             tenant rules can be added, turned off/on, and deleted-by-off.
  *   3. Allowed conflicts      open exceptions with reason, safeguard and expiry; removable.
- *   4. Settings               one-person approval (Q1) + journal-entry self-post amount (Q4).
+ *   4. Settings               who can release an approved payment (Q1 + mig 174: off / any
+ *                             amount / up to a limit) + journal-entry self-post amount (Q4).
  *
  * Plain English only — rule codes never appear. All writes go through
  * /api/approvals/conflict-rules* (apiHandler + settings_system:edit); destructive actions
@@ -24,11 +25,14 @@ import { EmptyState, Skeleton } from '@/components/ui';
 import { CAPABILITIES } from '@/lib/rbac/capabilities';
 import { capabilityPhrase } from '@/lib/approvals/step-label';
 import type { ConflictRulesView, ConflictRuleView, AllowedConflictView } from '@/lib/rbac/sod-admin';
+import type { ApproverReleasePolicy } from '@/lib/rbac/sod';
+import { approverReleaseConfirmation } from '@/lib/approvals/approver-release-form';
+import { ApproverReleaseSetting } from './approver-release-setting';
 
 type Pending =
   | { kind: 'disable'; rule: ConflictRuleView }
   | { kind: 'revoke'; item: AllowedConflictView }
-  | { kind: 'sole'; next: boolean }
+  | { kind: 'release'; next: ApproverReleasePolicy }
   | null;
 
 /** Every grantable books/core permission, as "approve bills"-style options. */
@@ -369,32 +373,13 @@ export function ConflictRulesPanel() {
       <section className="rounded-xl border border-white/5 bg-surface-900 p-5">
         <h2 className="text-sm font-semibold text-white">Settings</h2>
         <div className="mt-3 space-y-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="text-xs font-medium text-white">One-person approval</div>
-              <div className="text-2xs text-slate-500">
-                Let the person who approves a payment also release it. The person who prepared it never can.
-                {view.settings.tenantType === 'firm' && ' Not available for firms.'}
-              </div>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={view.settings.soleApproverMode}
-              aria-label="One-person approval"
-              disabled={busy || (view.settings.tenantType === 'firm' && !view.settings.soleApproverMode)}
-              onClick={() => setPending({ kind: 'sole', next: !view.settings.soleApproverMode })}
-              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-40 ${
-                view.settings.soleApproverMode ? 'bg-emerald-500' : 'bg-slate-700'
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-                  view.settings.soleApproverMode ? 'translate-x-5' : 'translate-x-0.5'
-                }`}
-              />
-            </button>
-          </div>
+          <ApproverReleaseSetting
+            value={view.settings.approverRelease}
+            tenantType={view.settings.tenantType}
+            busy={busy}
+            onRequestSave={(next) => setPending({ kind: 'release', next })}
+          />
+          <div className="border-t border-white/5" />
           <form
             className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"
             onSubmit={(e) => {
@@ -446,20 +431,22 @@ export function ConflictRulesPanel() {
               ? 'Turn off this rule?'
               : pending.kind === 'revoke'
                 ? 'Remove this allowed conflict?'
-                : pending.next
-                  ? 'Turn on one-person approval?'
-                  : 'Turn off one-person approval?'
+                : approverReleaseConfirmation(pending.next, formatMoney).title
           }
           body={
             pending.kind === 'disable'
               ? `People will no longer be warned when they get access to both: ${pending.rule.description}`
               : pending.kind === 'revoke'
                 ? `${pending.item.personName} will show as an open conflict in access review until one of the two permissions is removed.`
-                : pending.next
-                  ? 'The person who approves a payment will also be able to release it. This shows as a standing exception in every access review.'
-                  : 'Approved payments will need a different person to release them.'
+                : approverReleaseConfirmation(pending.next, formatMoney).body
           }
-          confirmLabel={pending.kind === 'sole' ? (pending.next ? 'Turn on' : 'Turn off') : pending.kind === 'revoke' ? 'Remove' : 'Turn off'}
+          confirmLabel={
+            pending.kind === 'release'
+              ? approverReleaseConfirmation(pending.next, formatMoney).confirmLabel
+              : pending.kind === 'revoke'
+                ? 'Remove'
+                : 'Turn off'
+          }
           busy={busy}
           onCancel={() => setPending(null)}
           onConfirm={() => {
@@ -468,9 +455,17 @@ export function ConflictRulesPanel() {
             } else if (pending.kind === 'revoke') {
               void run(() => send('/api/approvals/conflict-rules/allowed', 'DELETE', { exceptionId: pending.item.id }), 'Allowed conflict removed.');
             } else {
+              const next = pending.next;
               void run(
-                () => send('/api/approvals/conflict-rules/settings', 'PATCH', { soleApproverMode: pending.next }),
-                pending.next ? 'One-person approval is on.' : 'One-person approval is off.',
+                () =>
+                  send('/api/approvals/conflict-rules/settings', 'PATCH', {
+                    approverRelease: next.choice === 'up_to' ? { choice: 'up_to', maxCents: next.maxCents } : { choice: next.choice },
+                  }),
+                next.choice === 'off'
+                  ? 'A second person now releases every payment.'
+                  : next.choice === 'any'
+                    ? 'Approvers may now release their own payments.'
+                    : `Approvers may now release payments up to ${formatMoney(next.maxCents ?? 0)}.`,
               );
             }
           }}

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { runAiGateway } from '@meritbooks/core-ai';
 import { apiQueryHandler, type ApiContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import {
   assembleBoardPackage,
@@ -187,9 +188,11 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
           const text = (block?.text ?? '').trim();
           if (text) {
             executiveSummary = { text, source: 'ai', model: gw.model_used };
-            // Audit the AI proposal to the decision-log rail (org-scoped, RLS).
+            // Audit the AI proposal to the decision-log rail.
+            // ai_decisions is SELECT-only for members (migration 172): service-role insert, org pinned
+            // to the session org (org-level row, no location_id).
             try {
-              await ctx.supabase.from('ai_decisions').insert({
+              await serviceWriter().from('ai_decisions').insert({
                 org_id: ctx.orgId,
                 feature: EXEC_SUMMARY_FEATURE,
                 model_requested: EXEC_MODEL,

@@ -36,6 +36,7 @@ import type {
 } from './types';
 import { getRecipe } from './registry';
 import { logAction } from '@/lib/trust/action-log';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 
 const AGENT_FEATURE = 'AGENT_ORCHESTRATION';
 
@@ -241,7 +242,10 @@ async function recordStepAudit(
           : s.status === 'REJECTED'
             ? 'REJECTED'
             : 'PROPOSED';
-    const { data } = await ctx.supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert, org pinned
+    // to the run's org, the run's company asserted in the caller's client scope.
+    const writer = await scopedWriter(ctx.supabase, ctx.orgId, [ctx.locationId]);
+    const { data } = await writer
       .from('ai_decisions')
       .insert({
         org_id: ctx.orgId,

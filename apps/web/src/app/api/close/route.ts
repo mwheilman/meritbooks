@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
+import { serviceWriter, loadWritableRow, isWriteScopeError } from '@/lib/db/scoped-writer';
 
 export async function GET(request: Request) {
   // SECURITY: run AS THE USER — org_isolation RLS enforces the tenant on the
@@ -99,7 +100,8 @@ export async function POST(request: Request) {
   // RLS-scoped client so the tenant can't be spoofed by the request body.
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { userId, supabase } = ctx;
+  const { userId, supabase, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   // Authorize — checking off close-checklist items feeds the period close; it is a
   // close-management action.
@@ -114,7 +116,11 @@ export async function POST(request: Request) {
     }
 
     const body = result.data;
-    const { error } = await supabase
+    // close_checklists is SELECT-only for members (migration 172): load the row org-pinned +
+    // client-scope-checked, then a service-role write with the org pinned.
+    const item = await loadWritableRow(supabase, orgId, { table: 'close_checklists', id: body.checklist_id });
+    if (!item) return NextResponse.json({ error: 'Checklist item not found' }, { status: 404 });
+    const { error } = await serviceWriter()
       .from('close_checklists')
       .update({
         is_complete: body.is_complete,
@@ -122,11 +128,13 @@ export async function POST(request: Request) {
         completed_at: body.is_complete ? new Date().toISOString() : null,
         notes: body.notes ?? null,
       })
-      .eq('id', body.checklist_id);
+      .eq('id', body.checklist_id)
+      .eq('org_id', orgId);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (isWriteScopeError(error)) return NextResponse.json({ error: error.message }, { status: 403 });
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Error' }, { status: 500 });
   }
 }

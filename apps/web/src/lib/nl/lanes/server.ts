@@ -11,6 +11,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 import { runAiGateway, type GatewayResponse } from '@meritbooks/core-ai';
 import type { LaneModelCall } from './extract';
 
@@ -86,7 +87,10 @@ export async function logLaneDecision(
   },
 ): Promise<string | null> {
   try {
-    const { data } = await admin
+    // ai_decisions is SELECT-only for members (migration 172): the service role writes as
+    // itself; a member client is escalated only after its org + client-scope check.
+    const writer = await scopedWriter(admin, args.orgId, [args.locationId ?? null]);
+    const { data } = await writer
       .from('ai_decisions')
       .insert({
         org_id: args.orgId,

@@ -5,6 +5,7 @@ import { runAiGateway } from '@meritbooks/core-ai';
 import { formatMoney } from '@meritbooks/shared';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { buildCovenantStatus, type CovenantRow, type CovenantStatus } from '@/lib/covenants/status';
 import { certificateSchema } from '@/lib/covenants/schema';
@@ -168,7 +169,10 @@ export async function POST(request: Request, { params }: Params): Promise<NextRe
   // Log the draft to the AI decision rail (PROPOSED) for human sign-off.
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert, org pinned;
+    // the covenant (and so its client) was read above through the member client (RLS proves
+    // org + client scope).
+    const { data: dec } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: orgId,

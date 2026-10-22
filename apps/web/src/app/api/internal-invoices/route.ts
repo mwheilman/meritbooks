@@ -2,6 +2,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter, assertWriteScope, assertOrgRefs, isWriteScopeError } from '@/lib/db/scoped-writer';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
 
@@ -119,6 +121,12 @@ export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
   const { supabase } = ctx;
+  if (!ctx.orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+
+  // Authorize — drafting an internal invoice is an invoice lifecycle edit (invoices:create),
+  // the same gate internal-invoices/[id] uses for send / reject / void.
+  const guard = await requirePermission(ctx.userId, 'invoices', 'create');
+  if (!guard.ok) return guard.response;
 
   let body: z.infer<typeof createSchema>;
   try {
@@ -140,8 +148,10 @@ export async function POST(request: Request) {
 
   // Resolve org from location and verify both departments belong to this company
   const { data: loc } = await supabase.schema('core').from('locations').select('id, org_id').eq('id', body.location_id).single();
-  if (!loc) return NextResponse.json({ error: 'Company not found', code: 'NOT_FOUND' }, { status: 404 });
-  const orgId = loc.org_id as string;
+  if (!loc || (loc.org_id as string) !== ctx.orgId) {
+    return NextResponse.json({ error: 'Company not found', code: 'NOT_FOUND' }, { status: 404 });
+  }
+  const orgId = ctx.orgId;
 
   const { data: depts } = await supabase
     .schema('core').from('departments')
@@ -155,7 +165,17 @@ export async function POST(request: Request) {
   const totalCents = body.lines.reduce((s, l) => s + l.amount_cents, 0);
   const invoiceNumber = await nextInvoiceNumber(supabase, orgId);
 
-  const { data: invoice, error: invErr } = await supabase
+  // internal_invoices / internal_invoice_lines are moved to the service role (migration 172
+  // sweep): permission checked above, org pinned to the session, client + job verified.
+  try {
+    await assertWriteScope(supabase, orgId, [body.location_id]);
+    await assertOrgRefs(orgId, [{ table: 'jobs', ids: [body.job_id ?? null], label: 'job' }], { caller: supabase });
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    throw e;
+  }
+  const writer = serviceWriter();
+  const { data: invoice, error: invErr } = await writer
     .from('internal_invoices')
     .insert({
       org_id: orgId,
@@ -183,9 +203,9 @@ export async function POST(request: Request) {
     description: l.description,
     amount_cents: l.amount_cents,
   }));
-  const { error: linesErr } = await supabase.from('internal_invoice_lines').insert(lineInserts);
+  const { error: linesErr } = await writer.from('internal_invoice_lines').insert(lineInserts);
   if (linesErr) {
-    await supabase.from('internal_invoices').delete().eq('id', invoice.id);
+    await writer.from('internal_invoices').delete().eq('id', invoice.id).eq('org_id', orgId);
     return NextResponse.json({ error: `Failed to add lines: ${linesErr.message}`, code: 'LINES_ERROR' }, { status: 500 });
   }
 

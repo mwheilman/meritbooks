@@ -1,5 +1,5 @@
 /**
- * Business-table PostgREST write lock (migration 171, wave 2H).
+ * Business-table PostgREST write lock (migration 171, wave 2H; part 2 = migration 172).
  *
  * PostgREST exposes public / core and accepts a member's Clerk token (role=authenticated,
  * org_id=<tenant>). A table with a permissive member write policy + INSERT/UPDATE/DELETE
@@ -19,6 +19,11 @@
  *       locked), and a listed table that is no longer member-writable must be removed;
  *   (c) static scan: no write to a locked table in apps/web/src (or apps/projects/src)
  *       goes through anything but a provable service-role client.
+ * Part 2 (172): negative control at 171 (a member CAN delete audit history and rewrite an
+ * AI decision's evidence), the 172 locks, append-only evidence (audit_log / ai_audit_log /
+ * invoice_events / vendor_compliance_events immutable for EVERY role except FK cascades and
+ * the retention GUC), and the ai_decisions partial lock (Projects' propose / approve path
+ * still works; nothing else does).
  */
 
 import fs from 'node:fs';
@@ -29,6 +34,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import { applyMigrationFile, createTestDb, listMigrationFiles } from './pg';
 
 const LOCK_MIGRATION = '171';
+const LOCK_MIGRATION_2 = '172';
 /** The migration right before 171 (whatever its number) — the negative-control state. */
 const PRE_LOCK = listMigrationFiles().filter((f) => f.slice(0, 3) < LOCK_MIGRATION).pop()!.slice(0, 3);
 
@@ -60,6 +66,103 @@ const BUSINESS_LOCKED_TABLES: ReadonlyArray<readonly [schema: 'public' | 'core',
   ['core', 'provider_connections'],
 ];
 
+/** Tables 172 §1 makes SELECT-only for members. Keep in sync with 172 §1. */
+const BUSINESS_LOCKED_TABLES_172: ReadonlyArray<readonly [schema: 'public' | 'core', table: string]> = [
+  // audit evidence
+  ['public', 'audit_log'],
+  ['public', 'ai_audit_log'],
+  ['public', 'invoice_events'],
+  ['public', 'vendor_compliance_events'],
+  // receivables (seam-owned invoice / deposit tables stay — see MEMBER_WRITABLE)
+  ['public', 'credit_memos'],
+  ['public', 'credit_memo_lines'],
+  ['public', 'recurring_invoice_templates'],
+  // intercompany / ownership
+  ['public', 'intercompany_balances'],
+  ['public', 'intercompany_loans'],
+  ['public', 'intercompany_transactions'],
+  ['public', 'entity_ownership'],
+  ['public', 'equity_holders'],
+  ['core', 'equity_holders'],
+  // banking
+  ['public', 'bank_transactions'],
+  ['public', 'bank_reconciliations'],
+  ['public', 'vendor_patterns'],
+  // debt / leases / assets / schedules
+  ['public', 'debt_instruments'],
+  ['public', 'debt_schedule_lines'],
+  ['public', 'loan_covenants'],
+  ['public', 'covenant_measurements'],
+  ['public', 'leases'],
+  ['public', 'lease_schedule_lines'],
+  ['public', 'fixed_assets'],
+  ['public', 'depreciation_runs'],
+  ['public', 'tax_depreciation_runs'],
+  ['public', 'insurance_amortization_schedules'],
+  ['public', 'insurance_amortization_runs'],
+  ['public', 'posting_schedules'],
+  ['public', 'posting_schedule_runs'],
+  ['public', 'recurring_je_templates'],
+  ['public', 'recurring_je_runs'],
+  ['public', 'recurring_templates'],
+  ['public', 'year_end_closes'],
+  // revenue recognition
+  ['public', 'revenue_recognition_runs'],
+  ['public', 'rev_rec_method_map'],
+  ['public', 'revenue_type_methods'],
+  // job cost / procurement / expenses
+  ['public', 'job_cost_entries'],
+  ['public', 'job_cost_attributions'],
+  ['public', 'retainage_releases'],
+  ['public', 'inventory_items'],
+  ['public', 'inventory_movements'],
+  ['public', 'purchase_orders'],
+  ['public', 'purchase_order_lines'],
+  ['public', 'goods_receipts'],
+  ['public', 'goods_receipt_lines'],
+  ['public', 'bill_po_links'],
+  ['public', 'expense_reports'],
+  ['public', 'expense_report_lines'],
+  ['public', 'receipts'],
+  // tax / basis / FX
+  ['public', 'sales_tax_filings'],
+  ['public', 'sales_tax_rates'],
+  ['public', 'tax_provision'],
+  ['public', 'deferred_tax_items'],
+  ['public', 'tax_year_params'],
+  ['public', 'book_tax_account_tags'],
+  ['public', 'book_tax_line_overrides'],
+  ['public', 'book_tax_m_lines'],
+  ['public', 'reporting_basis_adjustments'],
+  ['public', 'fx_rates'],
+  // chart-of-accounts structure + dimensions + posting-role map
+  ['public', 'account_types'],
+  ['public', 'account_sub_types'],
+  ['public', 'account_groups'],
+  ['public', 'account_roles'],
+  ['public', 'classes'],
+  ['core', 'departments'],
+  ['public', 'location_classes'],
+  ['public', 'location_departments'],
+  ['public', 'location_items'],
+  // payroll config
+  ['public', 'pay_schedules'],
+  ['public', 'payroll_register_mappings'],
+  // close / compliance / policy control evidence
+  ['public', 'close_checklists'],
+  ['public', 'compliance_filings'],
+  ['public', 'compliance_obligations'],
+  ['public', 'vendor_compliance_docs'],
+  ['public', 'company_policies'],
+  ['public', 'expense_policies'],
+];
+
+/** 172 §2: append-only evidence — no UPDATE / DELETE / TRUNCATE for ANY role. */
+const APPEND_ONLY_EVIDENCE = ['audit_log', 'ai_audit_log', 'invoice_events', 'vendor_compliance_events'] as const;
+
+/** Every member-locked table (171 + 172). */
+const ALL_LOCKED_TABLES = [...BUSINESS_LOCKED_TABLES, ...BUSINESS_LOCKED_TABLES_172];
+
 /** 171 §2: member policies were already read-only / service-only; write GRANTs revoked. */
 const GRANT_HARDENED_TABLES: ReadonlyArray<readonly [string, string]> = [
   ['core', 'account_role_keys'],
@@ -75,110 +178,33 @@ const GRANT_HARDENED_TABLES: ReadonlyArray<readonly [string, string]> = [
 
 // ── (b) the ratchet ─────────────────────────────────────────────────────────
 // Every public/core base table a member can still write over PostgREST, with WHY.
-//   A — money / ledger / control: SHOULD be locked; its app write sites have not been
-//       moved to the service role yet (follow-up sweep). Do not add new tables here.
+//   A — money / ledger / control: SHOULD be locked; blocked on another owner's code (the
+//       Projects seam, Merit Projects). Do not add new tables here.
 //   B — user workspace, planning, AI working state, or append-only logs: intentionally
 //       member-writable.
 //   C — ownership / sensitivity unclear (shared with Projects, config, evidence) — needs
 //       an owner decision before it is locked or accepted.
-const A = 'A: money/ledger/control — write sites not yet moved to the service role (follow-up)';
+const A_SEAM =
+  'A (seam-blocked): money table — every write site was moved to the service role EXCEPT the ones in files the Projects-seam ' +
+  'builder owns (lib/invoices/create-invoice.ts, lib/services/billing-consumer.ts, dept-invoice-consumer.ts, ' +
+  'lib/customer-deposits/**); lock it (172 pattern) once the seam lands';
+const A_PROJECTS =
+  'A (partial, 172 §3): Merit Projects still proposes / approves through the member client (apps/projects/src/lib/ai/decisions.ts). ' +
+  'Members may only INSERT a PROPOSED row and move a PROPOSED row to a disposition (evidence immutable, no DELETE); ' +
+  'lock fully once Projects writes through a definer RPC / service path';
 const B = 'B: user workspace / planning / AI working state / append-only — intentionally member-writable';
 const C = 'C: ownership or sensitivity unclear — needs an owner decision';
 
 const MEMBER_WRITABLE: Readonly<Record<string, string>> = {
-  // A — receivables
-  'public.invoices': A,
-  'public.invoice_lines': A,
-  'public.invoice_events': A,
-  'public.credit_memos': A,
-  'public.credit_memo_lines': A,
-  'public.customer_deposits': A,
-  'public.customer_deposit_applications': A,
-  'public.recurring_invoice_templates': A,
-  // A — internal / intercompany
-  'public.internal_invoices': A,
-  'public.internal_invoice_lines': A,
-  'public.intercompany_balances': A,
-  'public.intercompany_loans': A,
-  'public.intercompany_transactions': A,
-  'public.entity_ownership': A,
-  'public.equity_holders': A,
-  'core.equity_holders': A,
-  // A — banking
-  'public.bank_transactions': A,
-  'public.bank_reconciliations': A,
-  'public.vendor_patterns': A, // drives auto-categorization / auto-approve
-  // A — debt / leases / assets / schedules
-  'public.debt_instruments': A,
-  'public.debt_schedule_lines': A,
-  'public.loan_covenants': A,
-  'public.covenant_measurements': A,
-  'public.leases': A,
-  'public.lease_schedule_lines': A,
-  'public.fixed_assets': A,
-  'public.depreciation_runs': A,
-  'public.tax_depreciation_runs': A,
-  'public.insurance_amortization_schedules': A,
-  'public.insurance_amortization_runs': A,
-  'public.posting_schedules': A,
-  'public.posting_schedule_runs': A,
-  'public.recurring_je_templates': A,
-  'public.recurring_je_runs': A,
-  'public.recurring_templates': A,
-  'public.year_end_closes': A,
-  // A — revenue recognition
-  'public.revenue_recognition_runs': A,
-  'public.rev_rec_method_map': A,
-  'public.revenue_type_methods': A,
-  // A — job cost / procurement / expenses
-  'public.job_cost_entries': A,
-  'public.job_cost_attributions': A,
-  'public.retainage_releases': A,
-  'public.inventory_items': A,
-  'public.inventory_movements': A,
-  'public.purchase_orders': A,
-  'public.purchase_order_lines': A,
-  'public.goods_receipts': A,
-  'public.goods_receipt_lines': A,
-  'public.bill_po_links': A,
-  'public.expense_reports': A,
-  'public.expense_report_lines': A,
-  'public.receipts': A,
-  // A — tax / basis / FX
-  'public.sales_tax_filings': A,
-  'public.sales_tax_rates': A,
-  'public.tax_provision': A,
-  'public.deferred_tax_items': A,
-  'public.tax_year_params': A,
-  'public.book_tax_account_tags': A,
-  'public.book_tax_line_overrides': A,
-  'public.book_tax_m_lines': A,
-  'public.reporting_basis_adjustments': A,
-  'public.fx_rates': A,
-  // A — chart of accounts structure + dimensions + posting-role map
-  'public.account_types': A,
-  'public.account_sub_types': A,
-  'public.account_groups': A,
-  'public.account_roles': A,
-  'public.classes': A,
-  'core.departments': A,
-  'public.location_classes': A,
-  'public.location_departments': A,
-  'public.location_items': A,
-  // A — payroll config (payroll_runs / _employees are 2G / migration 170)
-  'public.pay_schedules': A,
-  'public.payroll_register_mappings': A,
-  // A — audit trails / control evidence (a member can rewrite or delete history)
-  'public.audit_log': A,
-  'public.ai_audit_log': A,
-  'public.ai_decisions': A,
-  'public.close_checklists': A,
-  'public.compliance_filings': A,
-  'public.compliance_obligations': A,
-  'public.vendor_compliance_docs': A,
-  'public.vendor_compliance_events': A,
-  'public.company_policies': A,
-  'public.expense_policies': A,
+  // A — receivables / internal billing: blocked on the Projects seam
+  'public.invoices': A_SEAM,
+  'public.invoice_lines': A_SEAM,
+  'public.customer_deposits': A_SEAM,
+  'public.customer_deposit_applications': A_SEAM,
+  'public.internal_invoices': A_SEAM,
+  'public.internal_invoice_lines': A_SEAM,
+  // A — AI decision log: partial lock (Projects writes it)
+  'public.ai_decisions': A_PROJECTS,
   // B
   'public.report_views': B,
   'public.report_packs': B,
@@ -216,6 +242,12 @@ const P_HARD = 'aaaaaaaa-1710-0000-0000-0000000000a1';
 const P_OPEN = 'aaaaaaaa-1710-0000-0000-0000000000a2';
 const P_B = 'bbbbbbbb-1710-0000-0000-0000000000a1';
 const MEMBER = 'user_member_171';
+const AUDIT_A = 'aaaaaaaa-1720-0000-0000-0000000000a1';
+const AUDIT_B = 'bbbbbbbb-1720-0000-0000-0000000000a1';
+const AI_AUDIT_A = 'aaaaaaaa-1720-0000-0000-0000000000b1';
+const DEC_APPROVED = 'aaaaaaaa-1720-0000-0000-0000000000c1';
+const DEC_PROPOSED = 'aaaaaaaa-1720-0000-0000-0000000000c2';
+const VCE_A = 'aaaaaaaa-1720-0000-0000-0000000000d1';
 
 let db: PGlite;
 
@@ -295,12 +327,63 @@ describe('migration 171 — before (negative control: the hole is real)', () => 
   });
 });
 
-describe('migration 171 — after (members are SELECT-only on business tables)', () => {
+describe('migration 172 — before (at 171, negative control: audit history is rewritable)', () => {
   beforeAll(async () => {
-    for (const f of listMigrationFiles().filter((x) => x.slice(0, 3) > PRE_LOCK)) await applyMigrationFile(db, f);
+    const f171 = listMigrationFiles().find((f) => f.startsWith(`${LOCK_MIGRATION}_`))!;
+    await applyMigrationFile(db, f171);
+    // Seed the evidence as the migration runner.
+    await db.query(
+      `insert into public.audit_log (id, org_id, table_name, record_id, action, field_name, old_value, new_value, user_id) values
+         ($1, $3, 'bills', gen_random_uuid(), 'UPDATE', 'status', 'PENDING', 'APPROVED', 'user_x'),
+         ($2, $4, 'bills', gen_random_uuid(), 'UPDATE', 'status', 'PENDING', 'APPROVED', 'user_y')`,
+      [AUDIT_A, AUDIT_B, ORG_A, ORG_B],
+    );
+    await db.query(
+      `insert into public.ai_audit_log (id, org_id, feature, model_version, input_summary, output_summary)
+       values ($1, $2, 'OCR', 'm-1', 'in', 'out')`,
+      [AI_AUDIT_A, ORG_A],
+    );
+    await db.query(
+      `insert into public.ai_decisions (id, org_id, location_id, feature, input_summary, proposed_output, status, disposition_by_user, disposition_at) values
+         ($1, $3, $4, 'JE_COMPOSER', 'post rent', '{"memo":"rent","amount_cents":100}'::jsonb, 'APPROVED', 'user_x', now()),
+         ($2, $3, $4, 'CATEGORIZATION', 'categorize', '{"dedup_key":"k1","account":"6100"}'::jsonb, 'PROPOSED', null, null)`,
+      [DEC_APPROVED, DEC_PROPOSED, ORG_A, LOC_A],
+    );
+    await db.query(
+      `insert into public.vendor_compliance_events (id, org_id, vendor_id, event_type, detail) values ($1, $2, $3, 'DOC_EXPIRED', 'W-9 expired')`,
+      [VCE_A, ORG_A, VENDOR_A],
+    );
   }, 120_000);
 
-  for (const [s, t] of BUSINESS_LOCKED_TABLES) {
+  it('at 171 a member CAN rewrite and delete audit history over PostgREST', async () => {
+    const upd = await asRole('authenticated', () =>
+      db.query(`update public.audit_log set new_value = 'PENDING' where id = $1 returning id`, [AUDIT_A]),
+    );
+    expect(upd.rows).toHaveLength(1);
+    const del = await asRole('authenticated', () => db.query(`delete from public.audit_log where id = $1 returning id`, [AUDIT_A]));
+    expect(del.rows).toHaveLength(1);
+    await db.query(
+      `insert into public.audit_log (id, org_id, table_name, record_id, action, field_name, old_value, new_value, user_id)
+       values ($1, $2, 'bills', gen_random_uuid(), 'UPDATE', 'status', 'PENDING', 'APPROVED', 'user_x')`,
+      [AUDIT_A, ORG_A],
+    );
+  });
+
+  it("at 171 a member CAN rewrite an APPROVED AI decision's evidence and delete it", async () => {
+    const upd = await asRole('authenticated', () =>
+      db.query(`update public.ai_decisions set proposed_output = '{"memo":"forged"}'::jsonb where id = $1 returning id`, [DEC_APPROVED]),
+    );
+    expect(upd.rows).toHaveLength(1);
+    await db.query(`update public.ai_decisions set proposed_output = '{"memo":"rent","amount_cents":100}'::jsonb where id = $1`, [DEC_APPROVED]);
+  });
+});
+
+describe('migration 171 — after (members are SELECT-only on business tables)', () => {
+  beforeAll(async () => {
+    for (const f of listMigrationFiles().filter((x) => x.slice(0, 3) > LOCK_MIGRATION)) await applyMigrationFile(db, f);
+  }, 120_000);
+
+  for (const [s, t] of ALL_LOCKED_TABLES) {
     it(`authenticated + anon cannot INSERT / UPDATE / DELETE / TRUNCATE ${s}.${t}`, async () => {
       for (const role of ['authenticated', 'anon'] as const) {
         const errs = await asRole(role, async () => [
@@ -315,7 +398,7 @@ describe('migration 171 — after (members are SELECT-only on business tables)',
   }
 
   it('catalog: RLS on, no member-facing write policy, no member write GRANT, service_all present', async () => {
-    for (const [s, t] of BUSINESS_LOCKED_TABLES) {
+    for (const [s, t] of ALL_LOCKED_TABLES) {
       const r = await db.query<{ rls: boolean; ins: boolean; upd: boolean; del: boolean; trunc: boolean; anon_ins: boolean }>(
         `select c.relrowsecurity rls,
                 has_table_privilege('authenticated', c.oid, 'INSERT') ins,
@@ -412,6 +495,33 @@ describe('migration 171 — after (members are SELECT-only on business tables)',
     expect((await snap()).rows).toEqual(before);
   });
 
+  it('is idempotent: re-running 172 changes nothing (policies, grants, triggers)', async () => {
+    const snap = async () => ({
+      pol: (await db.query(`select schemaname, tablename, policyname, cmd, permissive, roles::text r, qual, with_check
+                              from pg_policies where schemaname in ('public', 'core') order by 1, 2, 3`)).rows,
+      trg: (await db.query(`select tgrelid::regclass::text t, tgname from pg_trigger
+                             where tgname in ('trg_append_only_evidence', 'trg_append_only_evidence_truncate', 'trg_ai_decisions_member_update')
+                             order by 1, 2`)).rows,
+      grants: (await db.query(`select table_schema, table_name, grantee, privilege_type from information_schema.role_table_grants
+                                where table_schema in ('public', 'core') and grantee in ('anon', 'authenticated') order by 1, 2, 3, 4`)).rows,
+    });
+    const before = await snap();
+    const file = listMigrationFiles().find((f) => f.startsWith(`${LOCK_MIGRATION_2}_`))!;
+    await applyMigrationFile(db, file);
+    expect(await snap()).toEqual(before);
+    expect(before.trg).toHaveLength(9); // 4 evidence tables × 2 + ai_decisions
+  });
+
+  it('163 client-scope RESTRICTIVE policies survive on the 172 tables that carry them', async () => {
+    const r = await db.query<{ tablename: string }>(
+      `select tablename from pg_policies where schemaname = 'public' and policyname = 'client_scope_rls' and permissive = 'RESTRICTIVE'
+         and tablename in ('bank_transactions', 'ai_decisions', 'fixed_assets', 'leases', 'debt_instruments', 'purchase_orders', 'expense_reports')`,
+    );
+    expect(r.rows.map((x) => x.tablename).sort()).toEqual(
+      ['ai_decisions', 'bank_transactions', 'debt_instruments', 'expense_reports', 'fixed_assets', 'leases', 'purchase_orders'],
+    );
+  });
+
   // ── (b) ratchet ──────────────────────────────────────────────────────────
   it('RATCHET: every member-writable public/core table is listed with a reason (new tables default to locked)', async () => {
     const r = await db.query<{ t: string }>(`
@@ -435,7 +545,236 @@ describe('migration 171 — after (members are SELECT-only on business tables)',
   });
 
   it('RATCHET: no locked table is in the member-writable list', () => {
-    for (const [s, t] of BUSINESS_LOCKED_TABLES) expect(MEMBER_WRITABLE[q(s, t)], q(s, t)).toBeUndefined();
+    for (const [s, t] of ALL_LOCKED_TABLES) expect(MEMBER_WRITABLE[q(s, t)], q(s, t)).toBeUndefined();
+  });
+
+  it('RATCHET: no class-A table is left without a named blocker (172 cleared the follow-up list)', () => {
+    const a = Object.entries(MEMBER_WRITABLE).filter(([, why]) => why.startsWith('A')).map(([t]) => t).sort();
+    expect(a).toEqual([
+      'public.ai_decisions',
+      'public.customer_deposit_applications',
+      'public.customer_deposits',
+      'public.internal_invoice_lines',
+      'public.internal_invoices',
+      'public.invoice_lines',
+      'public.invoices',
+    ]);
+  });
+});
+
+// ── 172 §2: append-only evidence ────────────────────────────────────────────
+describe('migration 172 — audit evidence is append-only for every role', () => {
+  it('the audit hole is closed for members: no UPDATE / DELETE on audit_log (permission denied)', async () => {
+    const errs = await asRole('authenticated', async () => [
+      await errorOf(`update public.audit_log set new_value = 'PENDING' where id = $1`, [AUDIT_A]),
+      await errorOf(`delete from public.audit_log where id = $1`, [AUDIT_A]),
+      await errorOf(`insert into public.audit_log (org_id, table_name, record_id, action) values ($1, 'bills', gen_random_uuid(), 'INSERT')`, [ORG_A]),
+    ]);
+    for (const e of errs) expect(e).toMatch(/permission denied/);
+  });
+
+  it('members still read their own tenant audit history (and only it)', async () => {
+    const r = await asRole('authenticated', () =>
+      db.query<{ id: string }>(`select id from public.audit_log where id in ($1, $2)`, [AUDIT_A, AUDIT_B]),
+    );
+    expect(r.rows.map((x) => x.id)).toEqual([AUDIT_A]);
+  });
+
+  it('the service role (the app write path) can INSERT audit rows', async () => {
+    const r = await asRole('service_role', () =>
+      db.query(
+        `insert into public.audit_log (org_id, table_name, record_id, action, user_id) values ($1, 'bills', gen_random_uuid(), 'INSERT', 'svc') returning id`,
+        [ORG_A],
+      ),
+    );
+    expect(r.rows).toHaveLength(1);
+  });
+
+  for (const t of APPEND_ONLY_EVIDENCE) {
+    it(`even the service role cannot UPDATE / DELETE / TRUNCATE public.${t}`, async () => {
+      const errs = await asRole('service_role', async () => [
+        await errorOf(`update public.${t} set org_id = org_id`),
+        await errorOf(`delete from public.${t}`),
+        await errorOf(`truncate public.${t}`),
+      ]);
+      const [upd, del, trunc] = errs;
+      // UPDATE / DELETE only fire the guard when a row exists; seeded tables must refuse.
+      const n = (await db.query<{ n: number }>(`select count(*)::int n from public.${t}`)).rows[0].n;
+      if (n > 0) {
+        expect(upd, `${t} update`).toMatch(/append-only audit evidence/);
+        expect(del, `${t} delete`).toMatch(/append-only audit evidence/);
+      }
+      expect(trunc, `${t} truncate`).toMatch(/append-only audit evidence/);
+    });
+  }
+
+  it('the superuser / migration runner is refused too (the trigger is role-independent)', async () => {
+    expect(await errorOf(`delete from public.audit_log where id = $1`, [AUDIT_A])).toMatch(/append-only audit evidence/);
+    expect(await errorOf(`update public.audit_log set user_id = 'someone_else' where id = $1`, [AUDIT_A])).toMatch(/append-only/);
+  });
+
+  it('a documented retention / reset job can purge inside its own transaction (meritbooks.allow_audit_purge)', async () => {
+    await db.exec('begin');
+    try {
+      await db.exec(`set local meritbooks.allow_audit_purge = 'on'`);
+      const r = await db.query(`delete from public.audit_log where id = $1 returning id`, [AUDIT_B]);
+      expect(r.rows).toHaveLength(1);
+    } finally {
+      await db.exec('rollback');
+    }
+    // the GUC was transaction-local: the row is back and the guard is armed again
+    expect((await db.query(`select 1 from public.audit_log where id = $1`, [AUDIT_B])).rows).toHaveLength(1);
+    expect(await errorOf(`delete from public.audit_log where id = $1`, [AUDIT_B])).toMatch(/append-only/);
+  });
+
+  it('an FK cascade still removes evidence (pg_trigger_depth() > 1): deleting a tenant org', async () => {
+    const ORG_C = 'cccccccc-0000-0000-0000-000000000172';
+    await db.query(`insert into core.organizations (id, name, slug) values ($1, 'Tenant C 172', 'tenant-c-172')`, [ORG_C]);
+    await db.query(
+      `insert into public.audit_log (org_id, table_name, record_id, action) values ($1, 'bills', gen_random_uuid(), 'INSERT')`,
+      [ORG_C],
+    );
+    const e = await errorOf(`delete from core.organizations where id = $1`, [ORG_C]);
+    if (e === null) {
+      expect((await db.query(`select 1 from public.audit_log where org_id = $1`, [ORG_C])).rows).toHaveLength(0);
+    } else {
+      // An org-lifecycle guard elsewhere may refuse hard deletes; it must not be OUR guard.
+      expect(e).not.toMatch(/append-only audit evidence/);
+    }
+  });
+
+  it('ai_audit_log: the human response is stamped ONCE; nothing else may change', async () => {
+    const ok = await asRole('service_role', () =>
+      db.query(
+        `update public.ai_audit_log set human_response = 'APPROVED', human_response_at = now() where id = $1 returning id`,
+        [AI_AUDIT_A],
+      ),
+    );
+    expect(ok.rows).toHaveLength(1);
+    const again = await asRole('service_role', () =>
+      errorOf(`update public.ai_audit_log set human_response = 'REJECTED' where id = $1`, [AI_AUDIT_A]),
+    );
+    expect(again).toMatch(/append-only/);
+    const other = await asRole('service_role', () =>
+      errorOf(`update public.ai_audit_log set output_summary = 'rewritten' where id = $1`, [AI_AUDIT_A]),
+    );
+    expect(other).toMatch(/append-only/);
+  });
+});
+
+// ── 172 §3: ai_decisions partial lock ───────────────────────────────────────
+describe('migration 172 — ai_decisions: members propose / dispose only (Projects path), evidence immutable', () => {
+  it('a member can no longer DELETE or TRUNCATE a decision', async () => {
+    const errs = await asRole('authenticated', async () => [
+      await errorOf(`delete from public.ai_decisions where id = $1`, [DEC_APPROVED]),
+      await errorOf(`truncate public.ai_decisions`),
+    ]);
+    for (const e of errs) expect(e).toMatch(/permission denied/);
+    const anon = await asRole('anon', async () => [
+      await errorOf(`insert into public.ai_decisions (org_id, feature, input_summary, proposed_output) values ($1, 'X', 'x', '{}'::jsonb)`, [ORG_A]),
+      await errorOf(`update public.ai_decisions set status = 'APPROVED'`),
+    ]);
+    for (const e of anon) expect(e).toMatch(/permission denied/);
+  });
+
+  it("a member can no longer rewrite an APPROVED decision's evidence (the 171 hole is closed)", async () => {
+    // RLS USING (status = 'PROPOSED') hides the final row from the member's UPDATE.
+    const r = await asRole('authenticated', () =>
+      db.query(`update public.ai_decisions set proposed_output = '{"memo":"forged"}'::jsonb where id = $1 returning id`, [DEC_APPROVED]),
+    );
+    expect(r.rows).toHaveLength(0);
+    const row = await db.query<{ p: { memo: string } }>(`select proposed_output p from public.ai_decisions where id = $1`, [DEC_APPROVED]);
+    expect(row.rows[0].p.memo).toBe('rent');
+  });
+
+  it('a member cannot forge an APPROVED / posted decision on INSERT, nor one for another tenant', async () => {
+    const errs = await asRole('authenticated', async () => [
+      await errorOf(
+        `insert into public.ai_decisions (org_id, feature, input_summary, proposed_output, status) values ($1, 'X', 'x', '{}'::jsonb, 'APPROVED')`,
+        [ORG_A],
+      ),
+      await errorOf(
+        `insert into public.ai_decisions (org_id, feature, input_summary, proposed_output, disposition_by_user) values ($1, 'X', 'x', '{}'::jsonb, 'me')`,
+        [ORG_A],
+      ),
+      await errorOf(`insert into public.ai_decisions (org_id, feature, input_summary, proposed_output) values ($1, 'X', 'x', '{}'::jsonb)`, [ORG_B]),
+    ]);
+    for (const e of errs) expect(e).toMatch(/row-level security/i);
+  });
+
+  it("a member cannot dispose (approve/reject/expire) a Books-owned decision — only Projects' (security review H-1)", async () => {
+    const r = await asRole('authenticated', () =>
+      db.query(
+        `update public.ai_decisions set status = 'REJECTED', disposition_at = now()
+          where org_id = $1 and feature = 'CATEGORIZATION' and status = 'PROPOSED' returning id`,
+        [ORG_A],
+      ),
+    );
+    expect(r.rows).toHaveLength(0);
+    const ins = await asRole('authenticated', () =>
+      errorOf(`insert into public.ai_decisions (org_id, feature, input_summary, proposed_output) values ($1, 'DUPLICATE_PAYMENT', 'x', '{}'::jsonb)`, [ORG_A]),
+    );
+    expect(ins).toMatch(/row-level security/i);
+  });
+
+  it("Projects' propose path still works: expire the open row by dedup_key, insert a new PROPOSED row", async () => {
+    await db.query(
+      `insert into public.ai_decisions (org_id, location_id, feature, input_summary, proposed_output, status)
+       values ($1, $2, 'PROJECTS_PACK_CONFIGURE', 'configure', '{"dedup_key":"pk1"}'::jsonb, 'PROPOSED')`,
+      [ORG_A, LOC_A],
+    );
+    const res = await asRole('authenticated', async () => {
+      const exp = await db.query(
+        `update public.ai_decisions set status = 'EXPIRED', disposition_at = now(), disposition_note = 'Replaced by a newer proposal'
+          where org_id = $1 and feature = 'PROJECTS_PACK_CONFIGURE' and status = 'PROPOSED' and proposed_output->>'dedup_key' = 'pk1' returning id`,
+        [ORG_A],
+      );
+      const ins = await db.query<{ id: string }>(
+        `insert into public.ai_decisions (org_id, location_id, feature, input_summary, proposed_output, status, created_by_user)
+         values ($1, $2, 'PROJECTS_PACK_CONFIGURE', 'configure', '{"dedup_key":"pk1","pack":"equipment_dealer"}'::jsonb, 'PROPOSED', $3) returning id`,
+        [ORG_A, LOC_A, MEMBER],
+      );
+      return { expired: exp.rows.length, id: ins.rows[0].id };
+    });
+    expect(res.expired).toBe(1);
+    // approve path: the SAME row moves PROPOSED → APPROVED with the disposition fields
+    const appr = await asRole('authenticated', () =>
+      db.query(
+        `update public.ai_decisions set status = 'APPROVED', disposition_by_user = $3, disposition_at = now(), disposition_note = 'ok'
+          where id = $1 and org_id = $2 and status = 'PROPOSED' returning id`,
+        [res.id, ORG_A, MEMBER],
+      ),
+    );
+    expect(appr.rows).toHaveLength(1);
+  });
+
+  it("a member cannot change a PROPOSED decision's evidence (only status + disposition)", async () => {
+    const id = (await db.query<{ id: string }>(
+      `insert into public.ai_decisions (org_id, feature, input_summary, proposed_output) values ($1, 'PROJECTS_IMPORT_MAP', 'x', '{"v":1}'::jsonb) returning id`,
+      [ORG_A],
+    )).rows[0].id;
+    const errs = await asRole('authenticated', async () => [
+      await errorOf(`update public.ai_decisions set proposed_output = '{"v":2}'::jsonb where id = $1`, [id]),
+      await errorOf(`update public.ai_decisions set confidence = 0.99 where id = $1`, [id]),
+      await errorOf(`update public.ai_decisions set posted_gl_entry_id = gen_random_uuid() where id = $1`, [id]),
+      await errorOf(`update public.ai_decisions set org_id = $2, status = 'REJECTED' where id = $1`, [id, ORG_B]),
+    ]);
+    for (const e of errs.slice(0, 3)) expect(e).toMatch(/evidence is immutable|foreign key/);
+    expect(errs[0]).toMatch(/evidence is immutable/);
+    expect(errs[3]).toMatch(/row-level security|evidence is immutable/i);
+  });
+
+  it('the service role (every Books write) may refresh evidence and delete (detector refresh, nl/saved)', async () => {
+    const id = (await db.query<{ id: string }>(
+      `insert into public.ai_decisions (org_id, feature, input_summary, proposed_output) values ($1, 'X', 'x', '{"v":1}'::jsonb) returning id`,
+      [ORG_A],
+    )).rows[0].id;
+    const upd = await asRole('service_role', () =>
+      db.query(`update public.ai_decisions set proposed_output = '{"v":2}'::jsonb, confidence = 0.5 where id = $1 returning id`, [id]),
+    );
+    expect(upd.rows).toHaveLength(1);
+    const del = await asRole('service_role', () => db.query(`delete from public.ai_decisions where id = $1 returning id`, [id]));
+    expect(del.rows).toHaveLength(1);
   });
 });
 
@@ -545,8 +884,15 @@ function scanSource(src: string, rel: string, locked: ReadonlySet<string>): Site
   const sites: Site[] = [];
   {
     const fromRe = /\.from\(([^()]*)\)/g;
+    // same-file string constants naming a table (`const TEMPLATES = 'recurring_je_templates'`)
+    const consts = new Map(
+      [...src.matchAll(/\bconst\s+([A-Z_][A-Z0-9_]*)\s*(?::\s*string\s*)?=\s*['"]([a-z_]+)['"]/g)].map((x) => [x[1], x[2]] as const),
+    );
     for (const m of src.matchAll(fromRe)) {
-      const literals = [...m[1].matchAll(/['"]([a-z_]+)['"]/g)].map((x) => x[1]);
+      const literals = [
+        ...[...m[1].matchAll(/['"]([a-z_]+)['"]/g)].map((x) => x[1]),
+        ...[...m[1].matchAll(/\b([A-Z_][A-Z0-9_]*)\b/g)].map((x) => consts.get(x[1])).filter((x): x is string => !!x),
+      ];
       const hit = literals.find((t) => locked.has(t));
       if (!hit) continue;
       let seg = src.slice(m.index! + m[0].length, m.index! + m[0].length + 1500);
@@ -563,8 +909,11 @@ function scanSource(src: string, rel: string, locked: ReadonlySet<string>): Site
   return sites;
 }
 
-describe('static: no member-client write to a locked table (171 + earlier locks)', () => {
-  const lockedNames = new Set(BUSINESS_LOCKED_TABLES.map(([, t]) => t));
+describe('static: no member-client write to a locked table (171 + 172)', () => {
+  const lockedNames = new Set(ALL_LOCKED_TABLES.map(([, t]) => t));
+  // Books writes ai_decisions only through the service role too (172 §3: Projects is the
+  // one remaining member writer, so it is scanned in apps/web only).
+  const webScanned = new Set([...lockedNames, 'ai_decisions']);
 
   it('the scanner itself flags member-client writes and passes service-role ones (self-test)', () => {
     const src = [
@@ -584,13 +933,16 @@ describe('static: no member-client write to a locked table (171 + earlier locks)
       `w2 = await scopedWriter(db, orgId, [loc]);`,
       `await w2.from('bills').insert(rows);`,
       `await writerFor(db).from('bill_payments').insert(rows);`,
+      `const RUNS = 'recurring_je_runs';`,
+      `await db.from(RUNS).update({ status: 'POSTED' }).eq('id', id);`,
+      `await writerFor(db).from(RUNS).insert(rows);`,
     ].join('\n');
     const flagged = scanSource(src, 'x.ts', lockedNames).map((s) => `${s.line}:${s.table}`);
-    expect(flagged).toEqual(['2:bills', '4:gl_entries', '7:bills', '8:items', '9:bills']);
+    expect(flagged).toEqual(['2:bills', '4:gl_entries', '7:bills', '8:items', '9:bills', '20:recurring_je_runs']);
   });
 
   it('apps/web/src writes locked tables only through the service role', () => {
-    const bad = scanWrites(WEB_SRC, lockedNames).map((s) => `${s.file}:${s.line} ${s.table} via ${s.recv || '?'}`);
+    const bad = scanWrites(WEB_SRC, webScanned).map((s) => `${s.file}:${s.line} ${s.table} via ${s.recv || '?'}`);
     expect(bad, 'route the write through serviceWriter() after the permission check (lib/db/scoped-writer.ts)').toEqual([]);
   });
 
@@ -607,11 +959,12 @@ describe('static: no member-client write to a locked table (171 + earlier locks)
     }
   });
 
-  it('no migration after 171 re-grants member writes or adds a member write policy on a locked table', () => {
+  it('no migration after 171 / 172 re-grants member writes or adds a member write policy on a locked table', () => {
     const later = listMigrationFiles().filter((f) => f.slice(0, 3) > LOCK_MIGRATION && /^\d{3}_/.test(f));
     for (const f of later) {
       const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8').toLowerCase();
-      for (const [s, t] of BUSINESS_LOCKED_TABLES) {
+      const tables = f.slice(0, 3) > LOCK_MIGRATION_2 ? ALL_LOCKED_TABLES : BUSINESS_LOCKED_TABLES;
+      for (const [s, t] of tables) {
         const tbl = `${s}.${t}`;
         const grant = new RegExp(`grant[^;]*(insert|update|delete|all)[^;]*on\\s+(table\\s+)?${tbl.replace('.', '\\.')}\\b[^;]*to[^;]*(authenticated|anon|public)`);
         expect(grant.test(sql), `${f} re-grants writes on ${tbl}`).toBe(false);

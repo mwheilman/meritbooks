@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { isWriteScopeError, loadWritableRow, serviceWriter } from '@/lib/db/scoped-writer';
 import { z } from 'zod';
 
 // ─── GET: recent AI decisions (the explainability log) ────────────────────────
@@ -78,7 +79,16 @@ export async function PATCH(request: Request) {
 
   if (!orgId) return NextResponse.json({ error: 'No organization found' }, { status: 400 });
 
-  const { error } = await supabase
+  // ai_decisions is SELECT-only for members (migration 172): service-role write after the
+  // permission check, org pinned; the row's owning client is asserted in scope first.
+  try {
+    const target = await loadWritableRow(supabase, orgId, { table: 'ai_decisions', id: parsed.data.decision_id });
+    if (!target) return NextResponse.json({ error: 'Decision not found' }, { status: 404 });
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message }, { status: 403 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed' }, { status: 500 });
+  }
+  const { error } = await serviceWriter()
     .from('ai_decisions')
     .update({
       status: 'REJECTED',

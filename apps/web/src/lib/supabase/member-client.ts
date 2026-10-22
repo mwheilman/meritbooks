@@ -22,3 +22,24 @@ export function markMemberClient<T extends object>(client: T): T {
 export function isMemberClient(client: unknown): boolean {
   return typeof client === 'object' && client !== null && MEMBER_CLIENTS.has(client);
 }
+
+/**
+ * SYSTEM tenant clients: session-less, role=authenticated clients minted server-side for ONE
+ * org (the scheduler's createOrgScopedSupabase). They are not a person, so there is no client
+ * scope to apply — but their writes to member-locked tables (171 / 172) must still escalate to
+ * the service role, pinned to exactly that org. The org is recorded at mint time and
+ * lib/db/scoped-writer.ts refuses any write for a different org through such a client.
+ */
+const SYSTEM_ORG_CLIENTS = new WeakMap<object, string>();
+
+/** Record a server-minted client as acting for `orgId` (no user). Returns it. */
+export function markSystemOrgClient<T extends object>(client: T, orgId: string): T {
+  SYSTEM_ORG_CLIENTS.set(client, orgId);
+  return client;
+}
+
+/** The org a system tenant client was minted for, or null for any other client. */
+export function systemOrgOf(client: unknown): string | null {
+  if (typeof client !== 'object' || client === null) return null;
+  return SYSTEM_ORG_CLIENTS.get(client) ?? null;
+}

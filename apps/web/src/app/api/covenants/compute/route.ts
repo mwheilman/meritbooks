@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { buildCovenantStatus, type CovenantRow, type CovenantStatus } from '@/lib/covenants/status';
 import { formatMoney } from '@meritbooks/shared';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/covenants/compute — run the covenant tests and record the results.
@@ -19,7 +20,10 @@ import { formatMoney } from '@meritbooks/shared';
  * A stable dedup_key (`covenant:<id>`) means a re-run UPDATES the open exception
  * rather than duplicating it (migration 070 partial unique index is the DB
  * guarantor). Covenants that clear (band PASS, no projected breach) EXPIRE any
- * open alert. RLS-scoped; degrade-safe (no covenants → nothing happens).
+ * open alert. Reads are RLS-scoped (the member client proves org + client scope for
+ * every covenant / open alert touched); covenant_measurements + ai_decisions are
+ * SELECT-only for members (migration 172), so the writes go through the service role
+ * pinned to the session org. Degrade-safe (no covenants → nothing happens).
  */
 
 const FEATURE = 'COVENANT_DRIFT';
@@ -65,6 +69,9 @@ export async function POST(): Promise<NextResponse> {
   // The generated Database type omits loan_covenants, so `data` is typed
   // GenericStringError[]; restore type-safety against the local CovenantRow.
   const rows = (data ?? []) as unknown as CovenantRow[];
+  // covenant_measurements / ai_decisions are SELECT-only for members (migration 172):
+  // service-role writes, org pinned; every covenant / alert was read via the member client.
+  const writer = serviceWriter();
 
   let measured = 0;
   let alerted = 0;
@@ -82,7 +89,7 @@ export async function POST(): Promise<NextResponse> {
 
     // 1. Snapshot (trend + audit). Non-fatal on failure.
     try {
-      await supabase.from('covenant_measurements').insert({
+      await writer.from('covenant_measurements').insert({
         org_id: orgId,
         covenant_id: row.id,
         period_end: status.periodEnd,
@@ -142,12 +149,13 @@ export async function POST(): Promise<NextResponse> {
           .maybeSingle();
 
         if (existing?.id) {
-          await supabase
+          await writer
             .from('ai_decisions')
             .update({ input_summary: summary.slice(0, 2000), proposed_output: proposed })
-            .eq('id', existing.id);
+            .eq('id', existing.id)
+            .eq('org_id', orgId);
         } else {
-          await supabase.from('ai_decisions').insert({
+          await writer.from('ai_decisions').insert({
             org_id: orgId,
             location_id: row.location_id,
             feature: FEATURE,
@@ -176,10 +184,11 @@ export async function POST(): Promise<NextResponse> {
           .contains('proposed_output', { dedup_key: dedupKey })
           .maybeSingle();
         if (open?.id) {
-          await supabase
+          await writer
             .from('ai_decisions')
             .update({ status: 'EXPIRED', disposition_at: new Date().toISOString(), disposition_note: 'Covenant back in compliance' })
-            .eq('id', open.id);
+            .eq('id', open.id)
+            .eq('org_id', orgId);
           cleared += 1;
         }
       } catch {

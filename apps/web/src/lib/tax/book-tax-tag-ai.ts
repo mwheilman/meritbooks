@@ -19,6 +19,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { writerFor } from '@/lib/db/scoped-writer';
 import { runAiGateway } from '@meritbooks/core-ai';
 import { STANDARD_M_LINES, findMLine, type MLineDef } from './book-tax';
 
@@ -229,7 +230,9 @@ export async function proposeAccountTags(
 /**
  * Persist proposals as PROPOSED rows in public.ai_decisions (feature 'BOOK_TAX_TAG'),
  * idempotent per account via a stable dedup_key. Returns the number of open proposals.
- * RLS-scoped: the caller's client enforces org isolation; org_id is never hand-filtered.
+ * Reads are RLS-scoped through the caller's client. ai_decisions is SELECT-only for members
+ * (migration 172): the writes go through the service role (for a member caller) with org_id
+ * pinned on every insert / update.
  */
 export async function persistTagProposals(
   supabase: SupabaseClient,
@@ -250,6 +253,9 @@ export async function persistTagProposals(
     }
   }
 
+  // ai_decisions is SELECT-only for members (migration 172): org-level rows (no location_id);
+  // open rows were read through the caller's client above.
+  const writer = writerFor(supabase);
   let inserted = 0;
   let refreshed = 0;
   for (const p of proposals) {
@@ -270,13 +276,14 @@ export async function persistTagProposals(
     };
     const existingId = openByKey.get(dedupKey);
     if (existingId) {
-      const { error } = await supabase
+      const { error } = await writer
         .from('ai_decisions')
         .update({ proposed_output: proposedOutput, confidence: p.confidence, reasoning: p.reasoning })
-        .eq('id', existingId);
+        .eq('id', existingId)
+        .eq('org_id', orgId);
       if (!error) refreshed += 1;
     } else {
-      const { error } = await supabase.from('ai_decisions').insert({
+      const { error } = await writer.from('ai_decisions').insert({
         org_id: orgId,
         feature: BOOK_TAX_TAG_FEATURE,
         input_summary: `Book-tax tag for account ${p.accountNumber} · ${p.accountName}`,

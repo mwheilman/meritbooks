@@ -5,6 +5,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { postJournalEntry, type JournalEntryLineInput } from '@/lib/services/gl-posting';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/payroll/import-register/confirm — confirm a PROPOSED payroll register JE.
@@ -170,7 +171,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // ── Mark the originating AI proposal APPROVED (audit trail; non-fatal) ────────
   if (isNonEmptyString(body.decisionId) && UUID_RE.test(body.decisionId)) {
     try {
-      await supabase
+      // ai_decisions is SELECT-only for members (migration 172): service-role lifecycle update
+      // after the payroll:approve check, org pinned.
+      await serviceWriter()
         .from('ai_decisions')
         .update({
           status: 'APPROVED',

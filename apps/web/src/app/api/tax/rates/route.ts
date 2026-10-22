@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { normalizeState } from '@/lib/tax/sales-tax-calc';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * Sales-tax rate admin (GATE 11d). RLS-scoped list/add of the tenant's effective-dated
@@ -87,7 +88,8 @@ const createSchema = z.object({
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, userId, orgId } = ctx;
+  const { userId, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
   const guard = await requirePermission(userId, 'settings_acct', 'edit');
   if (!guard.ok) return guard.response;
 
@@ -108,10 +110,12 @@ export async function POST(request: Request) {
     b.jurisdiction_label?.trim() ||
     [postalCode, city, county ? `${county} County` : null, state].filter(Boolean).join(', ');
 
-  const { data, error } = await supabase
+  // sales_tax_rates is SELECT-only for members (migration 172): service-role insert after the
+  // settings_acct:edit check, org pinned to the session org.
+  const { data, error } = await serviceWriter()
     .from('sales_tax_rates')
     .insert({
-      org_id: orgId ?? '',
+      org_id: orgId,
       country: 'US',
       state,
       county,

@@ -31,6 +31,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from './gl-posting';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -307,7 +308,11 @@ export async function recognizeJob(
     updated_at: new Date().toISOString(),
   }).eq('id', job.id);
 
-  await db.from('revenue_recognition_runs').insert({
+  // revenue_recognition_runs is SELECT-only for members (migration 172): the job's client was
+  // asserted in the caller's org + scope (postJournalEntry above posts to it), then the
+  // service role writes the run row with the org pinned.
+  const runWriter = await scopedWriter(db, orgId, [job.location_id]);
+  await runWriter.from('revenue_recognition_runs').insert({
     org_id: orgId, location_id: job.location_id, job_id: job.id, as_of_date: asOf, method,
     contract_value_cents: Number(job.contract_amount_cents ?? 0),
     cost_estimate_cents: Number(job.estimated_cost_cents ?? 0),

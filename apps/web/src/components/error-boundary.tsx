@@ -17,7 +17,6 @@
  */
 
 import React from 'react';
-import { AlertTriangle, RotateCcw } from 'lucide-react';
 
 interface Props {
   children: React.ReactNode;
@@ -79,28 +78,16 @@ export class ErrorBoundary extends React.Component<Props, State> {
 }
 
 function FallbackCard({ onRetry }: { onRetry: () => void }) {
+  // Kit error state (§7.12): what happened, what to do, retry — never a raw stack.
   return (
-    <div
-      role="alert"
-      aria-live="assertive"
-      className="card p-8 flex flex-col items-center text-center gap-3 border border-red-500/20 bg-red-500/[0.03]"
-    >
-      <div className="h-11 w-11 rounded-xl bg-red-500/10 flex items-center justify-center">
-        <AlertTriangle size={22} className="text-red-400" aria-hidden="true" />
-      </div>
-      <div>
-        <h3 className="text-base font-semibold text-white">This section hit a snag</h3>
-        <p className="mt-1 text-sm text-slate-400 max-w-md">
-          Something on this view stopped responding. The rest of the app is fine — our team has been
-          notified automatically. You can try reloading just this section.
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="mt-1 inline-flex items-center gap-2 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-      >
-        <RotateCcw size={15} aria-hidden="true" />
+    <div role="alert" aria-live="assertive" className="surface wg-state mb-error-card">
+      <span className="tag tag--neg">Not loaded</span>
+      <span className="t-head">This section hit a snag</span>
+      <p>
+        Something on this view stopped responding. The rest of the app is fine — the team has been notified
+        automatically. You can try reloading just this section.
+      </p>
+      <button type="button" onClick={onRetry} className="btn btn--primary">
         Try again
       </button>
     </div>

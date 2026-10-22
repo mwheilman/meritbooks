@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { runAiGateway } from '@meritbooks/core-ai';
 import { apiHandler, type ApiContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import {
   expandParse,
@@ -139,9 +140,11 @@ export const POST = apiHandler(schema, async (body, ctx: ApiContext) => {
     body.entity_label && body.entity_label.trim() ? body.entity_label.trim() : 'All Companies (Consolidated)';
   const locationIds = body.location_ids ?? [];
 
-  // Best-effort audit of the AI proposal (non-fatal), RLS-scoped.
+  // Best-effort audit of the AI proposal (non-fatal).
+  // ai_decisions is SELECT-only for members (migration 172): service-role insert, org pinned
+  // to the session org (org-level row, no location_id).
   try {
-    await ctx.supabase.from('ai_decisions').insert({
+    await serviceWriter().from('ai_decisions').insert({
       org_id: orgId,
       feature: COMPILER_FEATURE,
       model_requested: COMPILER_MODEL,

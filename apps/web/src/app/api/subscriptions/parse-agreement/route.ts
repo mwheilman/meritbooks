@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { parseAgreementDocument, SUBSCRIPTION_EXTRACT_FEATURE } from '@/lib/subscriptions/parse-agreement';
 
 /**
@@ -74,7 +75,9 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert, org pinned
+    // to the session org. NOTE: this route has no requirePermission (no subscriptions key).
+    const { data: dec } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: orgId,

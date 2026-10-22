@@ -24,6 +24,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from '@/lib/services/gl-posting';
 import { resolveRole, PostingError, type AccountRef } from '@/lib/posting/account-roles';
 import { resolveLeaseRole } from './lease-accounts';
+import { scopedWriter, writerFor } from '@/lib/db/scoped-writer';
 import {
   remeasureLease,
   computeTermination,
@@ -272,6 +273,10 @@ export async function confirmRemeasurement(
   const ctx = await loadCarryingContext(db, orgId, leaseId);
   const { lease } = ctx;
   const { result } = preview;
+  // leases / lease_schedule_lines are SELECT-only for members (migration 172): the lease
+  // was read above in this org; writes go through the service role, org pinned, its
+  // client asserted in the caller's scope (before anything posts).
+  const writer = await scopedWriter(db, orgId, [lease.location_id]);
 
   const sourceRef =
     `LEASE_${kind}:${leaseId}:${ctx.effectivePeriod}:` +
@@ -324,7 +329,7 @@ export async function confirmRemeasurement(
     annualDiscountRate: input.annualDiscountRate,
   });
 
-  await db
+  await writer
     .from('leases')
     .update({
       liability_cents: result.revisedLiabilityCents,
@@ -382,8 +387,10 @@ async function rebuildForwardSchedule(db: DB, orgId: string, leaseId: string, in
     startMonthOffset,
   });
 
-  // Delete only the UNPOSTED forward lines, then insert the revised ones.
-  const { error: delErr } = await db
+  // Delete only the UNPOSTED forward lines, then insert the revised ones. The caller
+  // (confirmRemeasurement) loaded the lease in this org and asserted its client scope.
+  const writer = writerFor(db);
+  const { error: delErr } = await writer
     .from('lease_schedule_lines')
     .delete()
     .eq('org_id', orgId)
@@ -404,7 +411,7 @@ async function rebuildForwardSchedule(db: DB, orgId: string, leaseId: string, in
     rou_balance_cents: l.rouBalanceCents,
     lease_expense_cents: l.leaseExpenseCents,
   }));
-  const { error: insErr } = await db.from('lease_schedule_lines').insert(rows);
+  const { error: insErr } = await writer.from('lease_schedule_lines').insert(rows);
   if (insErr) throw new PostingError(`Failed to write revised schedule: ${insErr.message}`);
 }
 
@@ -449,6 +456,8 @@ export async function confirmTermination(
   const ctx = await loadCarryingContext(db, orgId, leaseId);
   const { lease } = ctx;
   const { result } = preview;
+  // Lease read above in this org; service-role writes (migration 172), client scope-asserted.
+  const writer = await scopedWriter(db, orgId, [lease.location_id]);
 
   const sourceRef = `LEASE_TERM:${leaseId}:${ctx.effectivePeriod}:${penaltyCents}`;
   const existing = await findExistingEntry(db, orgId, sourceRef);
@@ -479,8 +488,8 @@ export async function confirmTermination(
     if (!je.success) throw new PostingError(je.error ?? 'Failed to post termination entry');
 
     // Drop the remaining unposted schedule and mark the lease terminated.
-    await db.from('lease_schedule_lines').delete().eq('org_id', orgId).eq('lease_id', leaseId).is('gl_entry_id', null);
-    await db
+    await writer.from('lease_schedule_lines').delete().eq('org_id', orgId).eq('lease_id', leaseId).is('gl_entry_id', null);
+    await writer
       .from('leases')
       .update({ status: 'TERMINATED', rou_asset_cents: 0, liability_cents: 0, updated_at: new Date().toISOString() })
       .eq('org_id', orgId)
@@ -490,8 +499,8 @@ export async function confirmTermination(
   }
 
   // Nothing carrying to write off — just mark terminated.
-  await db.from('lease_schedule_lines').delete().eq('org_id', orgId).eq('lease_id', leaseId).is('gl_entry_id', null);
-  await db
+  await writer.from('lease_schedule_lines').delete().eq('org_id', orgId).eq('lease_id', leaseId).is('gl_entry_id', null);
+  await writer
     .from('leases')
     .update({ status: 'TERMINATED', rou_asset_cents: 0, liability_cents: 0, updated_at: new Date().toISOString() })
     .eq('org_id', orgId)

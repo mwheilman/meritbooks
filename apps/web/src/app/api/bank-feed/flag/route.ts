@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { apiHandler } from '@/lib/api-handler';
 import { flagTransactionSchema, type FlagTransactionInput } from '@/lib/validations/transactions';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/bank-feed/flag
@@ -45,8 +46,12 @@ export const POST = apiHandler(
       );
     }
 
+    // bank_transactions / audit_log are SELECT-only for members (migration 172): service-role
+    // write after the permission check, org pinned; the row was read through the member
+    // client above (RLS proved org + client scope).
+    const writer = serviceWriter();
     // Update status to FLAGGED and append the user's reason to ai_reasoning
-    const { error: updateError } = await ctx.supabase
+    const { error: updateError } = await writer
       .from('bank_transactions')
       .update({
         status: 'FLAGGED',
@@ -63,8 +68,8 @@ export const POST = apiHandler(
     }
 
     // Audit log
-    await ctx.supabase.from('audit_log').insert({
-      org_id: ctx.orgId ?? undefined,
+    await writer.from('audit_log').insert({
+      org_id: ctx.orgId,
       table_name: 'bank_transactions',
       record_id: body.transaction_id,
       action: 'UPDATE',

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { loadWritableRow, serviceWriter } from '@/lib/db/scoped-writer';
 import { recordAssetAcquisition } from '@/lib/posting/provisioning';
 import type { PostingFacts } from '@/lib/posting/posting-templates';
 import type { PaymentRail } from '@/lib/posting/transaction-types';
@@ -162,17 +163,23 @@ export async function POST(request: Request): Promise<NextResponse> {
   // ── Mark the originating AI proposal APPROVED (audit trail; non-fatal) ────────
   if (isNonEmptyString(body.decisionId)) {
     try {
-      await supabase
-        .from('ai_decisions')
-        .update({
-          status: 'APPROVED',
-          disposition_by_user: userId,
-          disposition_at: new Date().toISOString(),
-          disposition_note: `Confirmed into the fixed-asset register (asset ${result.provisioned_id ?? ''})`.trim(),
-          posted_gl_entry_id: result.entry_id ?? null,
-        })
-        .eq('id', body.decisionId)
-        .eq('org_id', orgId);
+      // ai_decisions is SELECT-only for members (migration 172): the decision id comes from
+      // the body, so load it org-pinned (client scope asserted), then stamp the lifecycle
+      // fields through the service role pinned to the session org.
+      const decision = await loadWritableRow(supabase, orgId, { table: 'ai_decisions', id: body.decisionId });
+      if (decision) {
+        await serviceWriter()
+          .from('ai_decisions')
+          .update({
+            status: 'APPROVED',
+            disposition_by_user: userId,
+            disposition_at: new Date().toISOString(),
+            disposition_note: `Confirmed into the fixed-asset register (asset ${result.provisioned_id ?? ''})`.trim(),
+            posted_gl_entry_id: result.entry_id ?? null,
+          })
+          .eq('id', body.decisionId)
+          .eq('org_id', orgId);
+      }
     } catch (e) {
       console.error('[fixed-assets/parse-invoice/confirm] decision update failed (non-fatal):', e instanceof Error ? e.message : e);
     }

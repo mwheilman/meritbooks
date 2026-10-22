@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { runAiGateway } from '@meritbooks/core-ai';
 import { apiQueryHandler, type ApiContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import {
   gatherExplanation,
@@ -114,10 +115,12 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
   const text = extractText(gw.result);
   const narrative = (text ?? '').trim() || fallback();
 
-  // 3. Audit the AI proposal to the existing decision-log rail (org-scoped, RLS).
+  // 3. Audit the AI proposal to the existing decision-log rail.
+  // ai_decisions is SELECT-only for members (migration 172): service-role insert, org pinned
+  // to the session org (org-level row, no location_id; the subject was read via RLS above).
   let decisionId: string | null = null;
   try {
-    const { data } = await ctx.supabase
+    const { data } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: ctx.orgId,

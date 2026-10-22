@@ -273,7 +273,7 @@ export async function takeDeposit(db: DB, input: TakeDepositInput): Promise<Depo
     entry_date: input.depositDate,
     memo: input.memo ?? 'Customer deposit',
     source_module: 'AR',
-    created_by: input.actor,
+    created_by: null, // GL attribution is uuid + nullable (Clerk ids are text) — canon §2
     lines,
   });
   if (!je.success || !je.entry_id) {
@@ -394,7 +394,7 @@ export async function applyDeposit(db: DB, input: ApplyDepositInput): Promise<Ap
     memo: `Apply deposit to ${invoice.invoice_number}`,
     source_module: 'AR',
     source_id: invoice.id,
-    created_by: input.actor,
+    created_by: null, // GL attribution is uuid + nullable (Clerk ids are text) — canon §2
     lines,
   });
   if (!je.success || !je.entry_id) throw new PostingError(je.error ?? 'Failed to post deposit application');
@@ -503,7 +503,7 @@ export async function refundDeposit(db: DB, input: RefundDepositInput): Promise<
     memo: 'Refund customer deposit',
     source_module: 'AR',
     source_id: deposit.journal_entry_id ?? undefined,
-    created_by: input.actor,
+    created_by: null, // GL attribution is uuid + nullable (Clerk ids are text) — canon §2
     lines,
   });
   if (!je.success || !je.entry_id) throw new PostingError(je.error ?? 'Failed to post deposit refund');

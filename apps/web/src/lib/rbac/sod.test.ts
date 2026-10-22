@@ -8,8 +8,12 @@ import { describe, it, expect } from 'vitest';
 import type { AccessSnapshot, AssignmentInput, ResolvedGrant } from './effective-access';
 import type { Action } from './capabilities';
 import {
+  ACTION_SOD_MESSAGE,
+  ACTION_SOD_RULE_KEY,
+  approverReleasePolicyOf,
   assertActionSod,
   checkActionSod,
+  isApproverReleaseLoosening,
   checkAssignmentSod,
   conflictMessage,
   detectConflicts,
@@ -330,5 +334,51 @@ describe('dollar limits (05 §3.4)', () => {
     expect(meetsApproverFloor(snap, 'ap.bills:approve', 2_500_001)).toBe(false);
     expect(meetsApproverFloor(snap, 'pay.batches:approve', null)).toBe(false);
     expect(approvalLimitCheck(snap, 'not.a_cap:approve', 0)).toEqual({ allowed: false, limitCents: null, held: false });
+  });
+});
+
+describe('approver-release limit (mig 174) — off / any / up to $X', () => {
+  const base = { actor: 'u2', action: 'release' as const, preparedBy: 'u1', approvedBy: 'u2' };
+  it('up to $X: at / below allowed, above / unknown refused', () => {
+    const on = { ...base, soleApproverMode: true, soleApproverMaxCents: 500_000 };
+    expect(checkActionSod({ ...on, amountCents: 500_000 })).toBeNull();
+    expect(checkActionSod({ ...on, amountCents: 499_999 })).toBeNull();
+    expect(checkActionSod({ ...on, amountCents: 500_001 })).toBe('APPROVER_OVER_RELEASE_LIMIT');
+    expect(checkActionSod({ ...on, amountCents: -500_001 })).toBe('APPROVER_OVER_RELEASE_LIMIT');
+    expect(checkActionSod({ ...on, amountCents: null })).toBe('APPROVER_OVER_RELEASE_LIMIT');
+    expect(checkActionSod({ ...on })).toBe('APPROVER_OVER_RELEASE_LIMIT');
+    // a second person is never limited
+    expect(checkActionSod({ ...on, actor: 'u3', amountCents: 9_999_999 })).toBeNull();
+  });
+  it('any amount: no limit; off: a stored limit is ignored', () => {
+    expect(checkActionSod({ ...base, soleApproverMode: true, soleApproverMaxCents: null, amountCents: 9_999_999 })).toBeNull();
+    expect(checkActionSod({ ...base, soleApproverMode: false, soleApproverMaxCents: 500_000, amountCents: 1 })).toBe('APPROVER_CANNOT_RELEASE');
+  });
+  it('strict (payroll) refuses the approver whatever the setting; the preparer check comes first', () => {
+    expect(checkActionSod({ ...base, soleApproverMode: true, strictApproverRelease: true, amountCents: 1 })).toBe('PAYROLL_APPROVER_CANNOT_RELEASE');
+    expect(checkActionSod({ ...base, actor: 'u1', soleApproverMode: true, strictApproverRelease: true })).toBe('PREPARER_CANNOT_RELEASE');
+  });
+  it('every new code has plain-English text and maps to the approver rule', () => {
+    for (const code of ['APPROVER_OVER_RELEASE_LIMIT', 'PAYROLL_APPROVER_CANNOT_RELEASE'] as const) {
+      expect(ACTION_SOD_MESSAGE[code]).toMatch(/someone else has to release it/);
+      expect(ACTION_SOD_RULE_KEY[code]).toBe('H6_APPROVER_RELEASER');
+    }
+  });
+  it('loosening: off → on, up to → any, a higher limit; never the reverse', () => {
+    const off = approverReleasePolicyOf(false, null);
+    const any = approverReleasePolicyOf(true, null);
+    const up5 = approverReleasePolicyOf(true, 500_000);
+    const up9 = approverReleasePolicyOf(true, 900_000);
+    expect(off).toEqual({ choice: 'off', maxCents: null });
+    expect(approverReleasePolicyOf(false, 500_000)).toEqual({ choice: 'off', maxCents: null });
+    expect(up5).toEqual({ choice: 'up_to', maxCents: 500_000 });
+    expect(isApproverReleaseLoosening(off, any)).toBe(true);
+    expect(isApproverReleaseLoosening(off, up5)).toBe(true);
+    expect(isApproverReleaseLoosening(up5, up9)).toBe(true);
+    expect(isApproverReleaseLoosening(up5, any)).toBe(true);
+    expect(isApproverReleaseLoosening(up9, up5)).toBe(false);
+    expect(isApproverReleaseLoosening(any, up9)).toBe(false);
+    expect(isApproverReleaseLoosening(any, off)).toBe(false);
+    expect(isApproverReleaseLoosening(up5, off)).toBe(false);
   });
 });

@@ -25,6 +25,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createInvoice } from '@/lib/invoices/create-invoice';
 import { sendInvoiceById } from '@/lib/invoices/send-invoice';
+import { writerFor } from '@/lib/db/scoped-writer';
 
 export type RecurringFrequency =
   | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
@@ -266,7 +267,10 @@ export async function generateDueRecurringInvoices(
     const deactivate = !failed && plan.deactivate;
 
     if (createdThisTemplate.length > 0 || failed) {
-      await supabase
+      // recurring_invoice_templates is SELECT-only for members (migration 172): the template
+      // was read through the caller's client above (RLS proved org + client scope for a
+      // member); the service role advances it, org pinned.
+      await writerFor(supabase)
         .from('recurring_invoice_templates')
         .update({
           next_run_date: nextRunDate,

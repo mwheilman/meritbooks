@@ -7,6 +7,7 @@ import { runAiGateway } from '@meritbooks/core-ai';
 import { formatMoney } from '@meritbooks/shared';
 import { apiQueryHandler, type ApiContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { computeEac, rollupEac, type EacInput, type EacResult, type EacMethod } from '@/lib/jobcost/eac';
 
@@ -216,10 +217,12 @@ async function explainAndFlag(
   }
 
   // Log a PROPOSED exception only for at-risk jobs, so it surfaces in /exceptions.
+  // ai_decisions is SELECT-only for members (migration 172): service-role insert, org pinned
+  // to the session org (org-level row, no location_id; the job was read via RLS).
   let decisionId: string | null = null;
   if (atRisk) {
     try {
-      const { data } = await ctx.supabase
+      const { data } = await serviceWriter()
         .from('ai_decisions')
         .insert({
           org_id: ctx.orgId,

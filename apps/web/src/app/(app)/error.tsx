@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { AlertTriangle } from 'lucide-react';
 
+/** Route-level error (merit-ui error state): what happened, what to do, retry. */
 export default function AppError({
   error,
   reset,
@@ -16,27 +16,19 @@ export default function AppError({
   }, [error]);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[50vh] px-4">
-      <div className="h-12 w-12 rounded-xl bg-red-500/10 flex items-center justify-center mb-4">
-        <AlertTriangle size={24} className="text-red-400" />
-      </div>
-      <h2 className="text-lg font-semibold text-white mb-2">Something went wrong</h2>
-      <p className="text-sm text-slate-400 text-center max-w-md mb-6">
-        {error.message || 'An unexpected error occurred. Our team has been notified.'}
-      </p>
-      <div className="flex items-center gap-3">
-        <button onClick={reset} className="btn-primary btn-sm">
+    <div className="surface wg-state mb-error-card" role="alert">
+      <span className="tag tag--neg">Not loaded</span>
+      <span className="t-head">This page didn&apos;t load</span>
+      <p>{error.message || 'An unexpected error occurred. The team has been notified.'}</p>
+      <div className="btn-row">
+        <button type="button" onClick={reset} className="btn btn--primary">
           Try again
         </button>
-        <a href="/dashboard" className="btn-secondary btn-sm">
-          Go to Dashboard
+        <a href="/dashboard" className="btn">
+          Go to Home
         </a>
       </div>
-      {error.digest && (
-        <p className="mt-4 text-2xs text-slate-600 font-mono">
-          Error ID: {error.digest}
-        </p>
-      )}
+      {error.digest && <p className="t-cap tnum">Error ID: {error.digest}</p>}
     </div>
   );
 }

@@ -15,6 +15,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { emitJobCostEvent, type CostType, type Gate } from './job-cost-events';
+import { assertOrgRefs, loadWritableRow, scopedWriter, writerFor } from '../db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -101,7 +102,21 @@ export async function createAttribution(db: DB, input: CreateAttributionInput) {
 
   const lifecycle = clearsImmediately ? 'CLEARED' : 'PENDING';
 
-  const { data, error } = await db
+  // job_cost_attributions is SELECT-only for members (migration 172): service-role insert
+  // after the caller's permission check, org pinned. The client is asserted in the caller's
+  // org + scope, and every referenced id (callers pass request-body ids) is verified in-org.
+  const writer = await scopedWriter(db, input.orgId, [input.locationId]);
+  await assertOrgRefs(
+    input.orgId,
+    [
+      { schema: 'core', table: 'jobs', ids: [input.jobId], label: 'job' },
+      { schema: 'core', table: 'departments', ids: [input.departmentId], label: 'department' },
+      { table: 'bills', ids: [input.billId], label: 'bill' },
+      { table: 'gl_entries', ids: [input.glEntryId], label: 'journal entry' },
+    ],
+    { caller: db },
+  );
+  const { data, error } = await writer
     .from('job_cost_attributions')
     .insert({
       org_id: input.orgId,
@@ -162,10 +177,13 @@ export async function approveAttribution(db: DB, orgId: string, id: string, appr
   if (a.lifecycle === 'VOIDED') throw new Error('Cannot approve a voided cost');
   if (a.lifecycle === 'CLEARED') return { id, lifecycle: 'CLEARED' as const };
 
-  const { error } = await db
+  // Row read via the caller's client in loadAttribution (RLS proved org + client scope).
+  const writer = writerFor(db);
+  const { error } = await writer
     .from('job_cost_attributions')
     .update({ lifecycle: 'CLEARED', approved_by: approvedBy, approved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('org_id', orgId);
   if (error) throw new Error(`approveAttribution: ${error.message}`);
 
   await emitJobCostEvent(db, {
@@ -181,10 +199,13 @@ export async function approveAttribution(db: DB, orgId: string, id: string, appr
 /** Void an attribution -> VOIDED, and emit VOIDED. */
 export async function voidAttribution(db: DB, orgId: string, id: string, reason: string) {
   const a = await loadAttribution(db, orgId, id);
-  const { error } = await db
+  // Row read via the caller's client in loadAttribution (RLS proved org + client scope).
+  const writer = writerFor(db);
+  const { error } = await writer
     .from('job_cost_attributions')
     .update({ lifecycle: 'VOIDED', void_reason: reason, updated_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('org_id', orgId);
   if (error) throw new Error(`voidAttribution: ${error.message}`);
 
   await emitJobCostEvent(db, {
@@ -199,7 +220,11 @@ export async function voidAttribution(db: DB, orgId: string, id: string, reason:
 
 /** Override the routed approver after the fact (no lifecycle change). */
 export async function overrideApprover(db: DB, orgId: string, id: string, approverType: ApproverType, approverRef: string | null) {
-  const { error } = await db
+  // Not read yet in this request: load it org-pinned + client-scope asserted first.
+  const row = await loadWritableRow(db, orgId, { table: 'job_cost_attributions', id });
+  if (!row) throw new Error('Attribution not found');
+  const writer = writerFor(db);
+  const { error } = await writer
     .from('job_cost_attributions')
     .update({ approver_type: approverType, approver_ref: approverRef, updated_at: new Date().toISOString() })
     .eq('org_id', orgId)

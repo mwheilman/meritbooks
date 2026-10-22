@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import type { PayrollFieldTarget } from '@/lib/payroll/register-csv';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * /api/payroll/register-mappings — saved per-provider column mappings for the
@@ -68,7 +69,7 @@ interface SaveBody {
 export async function POST(request: Request): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId, userId } = ctx;
+  const { orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
 
   const guard = await requirePermission(userId, 'payroll', 'create');
@@ -105,7 +106,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   });
   const headerSignature = typeof body.headerSignature === 'string' ? body.headerSignature.slice(0, 2000) : null;
 
-  const { data, error } = await supabase
+  // payroll_register_mappings is SELECT-only for members (migration 172): service-role write
+  // after the payroll:create check, org pinned (the upsert key includes the session org_id).
+  const { data, error } = await serviceWriter()
     .from('payroll_register_mappings')
     .upsert(
       {
@@ -128,7 +131,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 export async function DELETE(request: Request): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId, userId } = ctx;
+  const { orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
 
   const guard = await requirePermission(userId, 'payroll', 'create');
@@ -138,7 +141,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   if (!id || !UUID_RE.test(id)) {
     return NextResponse.json({ error: 'A valid mapping id is required', code: 'VALIDATION' }, { status: 422 });
   }
-  const { error } = await supabase
+  const { error } = await serviceWriter()
     .from('payroll_register_mappings')
     .delete()
     .eq('org_id', orgId)

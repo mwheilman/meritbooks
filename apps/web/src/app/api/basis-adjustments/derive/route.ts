@@ -14,6 +14,7 @@ import {
 import { deriveTaxAdjustmentsFromM1, type PerAccountTaxDifference } from '@/lib/reports/basis/derive-tax';
 import type { NormalBalance } from '@/lib/reports/basis/apply-adjustments';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { serviceWriter, assertWriteScope, isWriteScopeError } from '@/lib/db/scoped-writer';
 
 /**
  * DERIVE reporting-basis adjustments from the book-to-tax M-1 tags.
@@ -199,16 +200,37 @@ export async function POST(request: Request): Promise<NextResponse> {
   const derived = deriveTaxAdjustmentsFromM1(diffs, equityAccountId);
 
   // ── 5. Replace prior DERIVED rows for this period, then insert ──
+  // reporting_basis_adjustments is SELECT-only for members (migration 172): service-role
+  // write after the permission check, org pinned, target client asserted in scope.
+  const insertLocationId = locationIds.length === 1 ? locationIds[0] : null;
+  try {
+    await assertWriteScope(supabase, orgId, [insertLocationId]);
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    throw e;
+  }
+  const writer = serviceWriter();
   if (replace) {
-    let del = supabase
+    // Select the prior rows through the MEMBER client (RLS proves org + client scope, as the
+    // old member delete did), then delete exactly those ids with the org pinned.
+    let prior = supabase
       .from('reporting_basis_adjustments')
-      .delete()
+      .select('id')
       .eq('basis', 'TAX')
       .eq('source', 'DERIVED')
       .eq('period_year', period_year);
-    del = period_month != null ? del.eq('period_month', period_month) : del.is('period_month', null);
-    const { error: delErr } = await del;
-    if (delErr) return NextResponse.json({ error: delErr.message, code: 'DELETE_ERROR' }, { status: 500 });
+    prior = period_month != null ? prior.eq('period_month', period_month) : prior.is('period_month', null);
+    const { data: priorRows, error: priorErr } = await prior;
+    if (priorErr) return NextResponse.json({ error: priorErr.message, code: 'DELETE_ERROR' }, { status: 500 });
+    const priorIds = ((priorRows ?? []) as Array<{ id: string }>).map((r) => r.id);
+    if (priorIds.length > 0) {
+      const { error: delErr } = await writer
+        .from('reporting_basis_adjustments')
+        .delete()
+        .eq('org_id', orgId)
+        .in('id', priorIds);
+      if (delErr) return NextResponse.json({ error: delErr.message, code: 'DELETE_ERROR' }, { status: 500 });
+    }
   }
 
   const insertRows = derived.adjustments.map((adj) => ({
@@ -217,7 +239,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     custom_label: null,
     period_year,
     period_month: period_month ?? null,
-    location_id: locationIds.length === 1 ? locationIds[0] : null,
+    location_id: insertLocationId,
     account_id: adj.accountId,
     description: adj.description ?? null,
     amount_cents: adj.amountCents,
@@ -226,7 +248,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     created_by: userId,
   }));
 
-  const { error: insErr } = await supabase.from('reporting_basis_adjustments').insert(insertRows);
+  const { error: insErr } = await writer.from('reporting_basis_adjustments').insert(insertRows);
   if (insErr) return NextResponse.json({ error: insErr.message, code: 'INSERT_ERROR' }, { status: 500 });
 
   return NextResponse.json({

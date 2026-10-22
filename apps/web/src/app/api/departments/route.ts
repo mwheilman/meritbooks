@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { serviceWriter, assertWriteScope, loadWritableRow, isWriteScopeError } from '@/lib/db/scoped-writer';
 
 type ChargeMethod = 'inherit' | 'revenue' | 'cost_transfer';
 const CHARGE_METHODS: ChargeMethod[] = ['inherit', 'revenue', 'cost_transfer'];
@@ -138,7 +139,11 @@ export async function POST(req: NextRequest) {
 
     const code = await makeUniqueCode(supabase, orgId, requestedCode || name);
 
-    const { data: created, error } = await supabase
+    // core.departments is SELECT-only for members (migration 172): service-role write, org
+    // pinned, target client asserted in the caller's scope. (No route permission key gates
+    // dimension masters yet — reported for the lead.)
+    await assertWriteScope(supabase, orgId, [locationId]);
+    const { data: created, error } = await serviceWriter()
       .schema('core').from('departments')
       .insert({
         org_id: orgId,
@@ -160,6 +165,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ department: created }, { status: 201 });
   } catch (err) {
+    if (isWriteScopeError(err)) return NextResponse.json({ error: err.message }, { status: 403 });
     console.error('[departments] POST unexpected:', err);
     return NextResponse.json({ error: 'Failed to create department' }, { status: 500 });
   }
@@ -221,7 +227,9 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
     }
 
-    const { data: updated, error } = await supabase
+    // Service-role write (migration 172); `existing` was read through the member client above
+    // (RLS proved org + client scope) and the update never changes location_id.
+    const { data: updated, error } = await serviceWriter()
       .schema('core').from('departments')
       .update(update)
       .eq('org_id', orgId)
@@ -268,7 +276,9 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const { error } = await supabase
+    const dept = await loadWritableRow(supabase, orgId, { schema: 'core', table: 'departments', id });
+    if (!dept) return NextResponse.json({ error: 'Department not found' }, { status: 404 });
+    const { error } = await serviceWriter()
       .schema('core').from('departments')
       .update({ is_active: false })
       .eq('org_id', orgId)
@@ -281,6 +291,7 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    if (isWriteScopeError(err)) return NextResponse.json({ error: err.message }, { status: 403 });
     console.error('[departments] DELETE unexpected:', err);
     return NextResponse.json({ error: 'Failed to deactivate department' }, { status: 500 });
   }

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { classifyDocument, INTAKE_CLASSIFY_FEATURE } from '@/lib/onboarding/intake/classify';
 import { INTAKE_ROUTES } from '@/lib/onboarding/intake/types';
@@ -131,7 +132,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   let decisionId: string | null = null;
   if (aiStatus === 'used') {
     try {
-      const { data: dec } = await supabase
+      // ai_decisions is SELECT-only for members (migration 172): service-role insert, org pinned
+      // to the session (audit evidence). NOTE: this route has no permission gate (reported).
+      const { data: dec } = await serviceWriter()
         .from('ai_decisions')
         .insert({
           org_id: orgId,

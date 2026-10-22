@@ -35,14 +35,20 @@ interface RateRow {
   is_active: boolean | null;
 }
 
-/** Load the tenant's ACTIVE rate rows. Degrade-safe: any error → []. */
-export async function loadActiveRates(supabase: SupabaseClient): Promise<SalesTaxRate[]> {
+/**
+ * Load the tenant's ACTIVE rate rows. Degrade-safe: any error → [].
+ * Pass `orgId` whenever the client may be the service role (event drains, dealer
+ * sales): without it only RLS scopes the read, and the service role bypasses RLS —
+ * another tenant's rate would apply (found by the mig-173 seam tests).
+ */
+export async function loadActiveRates(supabase: SupabaseClient, orgId?: string | null): Promise<SalesTaxRate[]> {
   try {
-    const { data, error } = await supabase
+    let q = supabase
       .from('sales_tax_rates')
       .select('id, state, county, city, jurisdiction_label, combined_rate_pct, effective_date, end_date, is_active')
-      .eq('is_active', true)
-      .limit(5000);
+      .eq('is_active', true);
+    if (orgId) q = q.eq('org_id', orgId);
+    const { data, error } = await q.limit(5000);
     if (error || !data) return [];
     return (data as RateRow[])
       .map((r): SalesTaxRate | null => {
@@ -150,6 +156,7 @@ export async function resolveInvoiceTax(
           .from('customers')
           .select('state, city, zip, tax_exempt')
           .eq('id', args.customerId)
+          .eq('org_id', args.orgId) // service-role callers bypass RLS — pin the tenant
           .maybeSingle();
         const c = cust as { state: string | null; city: string | null; zip: string | null; tax_exempt: boolean | null } | null;
         exempt = c?.tax_exempt === true;
@@ -211,7 +218,7 @@ export async function resolveInvoiceTax(
     // FALLBACK: the ORIGINAL behavior (unchanged) — load the tenant's active rows and
     // resolve most-specific-wins via the pure calc. Guarantees no regression when the
     // provider returns no match (or an external adapter threw).
-    const rates = await loadActiveRates(supabase);
+    const rates = await loadActiveRates(supabase, args.orgId);
     if (rates.length === 0) return ZERO(taxableSubtotal);
 
     const ctx: RateContext = { state, city, county, onDate: args.onDate };

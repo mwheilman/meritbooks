@@ -15,6 +15,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { scopedWriter, writerFor } from '@/lib/db/scoped-writer';
 import { formatMoney } from '@meritbooks/shared';
 import { logAction } from '@/lib/trust/action-log';
 import type { Tier } from '@/lib/trust/score-tier';
@@ -275,7 +276,9 @@ export async function persistDealerFindings(
 
   for (const { id, finding } of plan.refresh) {
     const { tier, disposition } = govern(finding);
-    const { error } = await db
+    // the open row was read through the caller's client above (RLS: org + client scope); service-role
+    // lifecycle update, org pinned (migration 172).
+    const { error } = await writerFor(db)
       .from('ai_decisions')
       .update({
         input_summary: finding.title,
@@ -285,6 +288,7 @@ export async function persistDealerFindings(
         clarifying_question: finding.question,
       })
       .eq('id', id)
+      .eq('org_id', orgId)
       .eq('status', 'PROPOSED');
     if (error) {
       console.warn(`[controls/dealer] ${feature} refresh failed:`, error.message);
@@ -295,18 +299,27 @@ export async function persistDealerFindings(
   for (const finding of plan.insert) {
     const { tier, disposition } = govern(finding);
     const locationId = locationOf.get(finding.dedupKey) ?? null;
-    const { error } = await db.from('ai_decisions').insert({
-      org_id: orgId,
-      location_id: locationId,
-      feature,
-      input_summary: finding.title,
-      proposed_output: proposedOutput(finding, tier, disposition),
-      confidence: DETERMINISTIC_CONFIDENCE,
-      reasoning: finding.reason,
-      clarifying_question: finding.question,
-      status: 'PROPOSED',
-      created_by_user: null,
-    });
+    // ai_decisions is SELECT-only for members (migration 172): service-role write for a member
+    // caller (the nightly job's service role writes as itself), org pinned, the exception's
+    // company asserted in the caller's client scope — a refusal is handled like an insert error.
+    let error: { message: string } | null = null;
+    try {
+      const writer = await scopedWriter(db, orgId, [locationId]);
+      ({ error } = await writer.from('ai_decisions').insert({
+        org_id: orgId,
+        location_id: locationId,
+        feature,
+        input_summary: finding.title,
+        proposed_output: proposedOutput(finding, tier, disposition),
+        confidence: DETERMINISTIC_CONFIDENCE,
+        reasoning: finding.reason,
+        clarifying_question: finding.question,
+        status: 'PROPOSED',
+        created_by_user: null,
+      }));
+    } catch (e) {
+      error = { message: e instanceof Error ? e.message : String(e) };
+    }
     if (error) {
       // A concurrent scan may have won migration 070's unique index — counted, not fatal.
       console.warn(`[controls/dealer] ${feature} could not queue exception:`, error.message);
@@ -343,7 +356,9 @@ export async function persistDealerFindings(
   if (plan.expire.length > 0) {
     const now = new Date().toISOString();
     for (const id of plan.expire) {
-      const { error } = await db
+      // the open row was read through the caller's client above (RLS: org + client scope); service-role
+      // lifecycle update, org pinned (migration 172).
+      const { error } = await writerFor(db)
         .from('ai_decisions')
         .update({
           status: 'EXPIRED',
@@ -351,6 +366,7 @@ export async function persistDealerFindings(
           disposition_note: 'The condition has cleared — closed automatically by the dealer checks.',
         })
         .eq('id', id)
+        .eq('org_id', orgId)
         .eq('status', 'PROPOSED');
       if (error) summary.errors += 1;
       else summary.expired += 1;

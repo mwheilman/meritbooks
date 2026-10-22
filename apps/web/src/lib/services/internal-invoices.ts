@@ -125,7 +125,9 @@ async function ensureAccount(db: DB, orgId: string, spec: AccountSpec): Promise<
       .order('display_order', { ascending: false })
       .limit(1)
       .maybeSingle();
-    const { data: created, error: groupErr } = await db
+    // account_groups is SELECT-only for members (migration 172): writerFor(db) is the service
+    // role for a member caller (the caller authorized the booking); org pinned on the row.
+    const { data: created, error: groupErr } = await writerFor(db)
       .from('account_groups')
       .insert({
         org_id: orgId,

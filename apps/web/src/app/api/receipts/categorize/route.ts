@@ -5,6 +5,8 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { suggestCategory } from '@/lib/services/categorization';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/receipts/categorize
@@ -41,8 +43,12 @@ interface ReceiptRow {
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Coding receipts writes GL coding onto them → receipts:edit (was ungated).
+  const guard = await requirePermission(userId, 'receipts', 'edit');
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try {
@@ -77,6 +83,10 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const receipts = (rows ?? []) as ReceiptRow[];
+  // receipts is SELECT-only for members (migration 172): service-role update after the
+  // receipts:edit check, org pinned. Every receipt was read via the member client above
+  // (RLS proved org + client scope); the update never changes location_id.
+  const writer = serviceWriter();
   let coded = 0;
   let skipped = 0;
   let failed = 0;
@@ -124,7 +134,7 @@ export async function POST(request: Request) {
       categorization: { confidence: s.confidence, reasoning: s.reasoning, source: s.source },
     };
 
-    const { error: upErr } = await supabase
+    const { error: upErr } = await writer
       .from('receipts')
       .update({
         account_id: s.accountId,

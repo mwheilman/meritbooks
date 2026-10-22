@@ -184,7 +184,7 @@ export async function POST(request: Request) {
   }));
   const { error: linesErr } = await supabase.from('credit_memo_lines').insert(lineInserts);
   if (linesErr) {
-    await supabase.from('credit_memos').delete().eq('id', memo.id);
+    await supabase.from('credit_memos').delete().eq('id', memo.id).eq('org_id', orgId);
     return NextResponse.json({ error: linesErr.message }, { status: 500 });
   }
 

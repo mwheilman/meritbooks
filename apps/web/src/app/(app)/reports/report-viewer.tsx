@@ -12,6 +12,8 @@ import {
 import { useQuery } from '@/hooks';
 import { useMe } from '@/lib/hooks/use-me';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { useIndustryPacksState } from '@/lib/hooks/use-industry-packs';
+import { PERIOD_OPTIONS, isPeriodKey, localIsoDate, periodRange, type PeriodKey } from './period-presets';
 import { canConsolidate, isSpecificCompany } from '@/lib/company-scope';
 import { formatMoney } from '@meritbooks/shared';
 import type { Location } from '@meritbooks/shared';
@@ -182,20 +184,9 @@ const CATALOG: ReportCategory[] = [
 // PERIOD PRESETS
 // ═══════════════════════════════════════════════════════════════
 
-function pad(n: number) { return String(n).padStart(2, '0'); }
-function fmt(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
-
-const PERIODS = [
-  { key: 'this_month', label: 'This Month', get: () => { const n = new Date(); return { s: `${n.getFullYear()}-${pad(n.getMonth()+1)}-01`, e: fmt(new Date(n.getFullYear(), n.getMonth()+1, 0)) }; }},
-  { key: 'last_month', label: 'Last Month', get: () => { const n = new Date(); const d = new Date(n.getFullYear(), n.getMonth()-1, 1); return { s: fmt(d), e: fmt(new Date(d.getFullYear(), d.getMonth()+1, 0)) }; }},
-  { key: 'this_qtr', label: 'This Quarter', get: () => { const n = new Date(); const q = Math.floor(n.getMonth()/3)*3; return { s: `${n.getFullYear()}-${pad(q+1)}-01`, e: fmt(new Date(n.getFullYear(), q+3, 0)) }; }},
-  { key: 'last_qtr', label: 'Last Quarter', get: () => { const n = new Date(); let q = Math.floor(n.getMonth()/3)*3-3; let y = n.getFullYear(); if(q<0){q+=12;y--;} return { s: `${y}-${pad(q+1)}-01`, e: fmt(new Date(y, q+3, 0)) }; }},
-  { key: 'ytd', label: 'Year to Date', get: () => ({ s: `${new Date().getFullYear()}-01-01`, e: fmt(new Date()) })},
-  { key: 'ytd_closed', label: 'YTD Through Last Month', get: () => { const n = new Date(); const e = new Date(n.getFullYear(), n.getMonth(), 0); return { s: `${n.getFullYear()}-01-01`, e: fmt(e) }; }},
-  { key: 'last_year', label: 'Last Year', get: () => { const y = new Date().getFullYear()-1; return { s: `${y}-01-01`, e: `${y}-12-31` }; }},
-  { key: 'last_12', label: 'Last 12 Months', get: () => { const n = new Date(); const s = new Date(n.getFullYear()-1, n.getMonth(), n.getDate()+1); return { s: fmt(s), e: fmt(n) }; }},
-  { key: 'custom', label: 'Custom Range', get: () => ({ s: '', e: '' })},
-];
+// Presets live in ./period-presets.ts and are computed from an explicit `today`
+// (server-seeded, then the browser's date after mount) — never `new Date()` in render.
+const PERIODS = PERIOD_OPTIONS;
 
 // ═══════════════════════════════════════════════════════════════
 // COMPARATIVES — derive the comparison window from the SELECTED range
@@ -216,12 +207,27 @@ function variancePct(variance: number, base: number) { return base !== 0 ? `${va
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
 
-export function ReportViewer() {
+export interface ReportViewerProps {
+  /** `?report=` from the server page — the SAME value on the server and the first client render. */
+  initialReport?: string | null;
+  /** The server's date (YYYY-MM-DD). Replaced by the browser's own date after mount. */
+  initialToday: string;
+  /** Dealer Pack on for the active client, read on the server (dealer_pack_settings.enabled). */
+  initialDealer?: { locationId: string | null; enabled: boolean };
+}
+
+export function ReportViewer({ initialReport = null, initialToday, initialDealer }: ReportViewerProps) {
   const [catKey, setCatKey] = useState('financial');
-  const [reportKey, setReportKey] = useState<string | null>(
-    () => (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('report') : null)
-  );
-  const [periodKey, setPeriodKey] = useState('this_month');
+  // Hydration fix: this used to read window.location in the useState initializer, so a
+  // full load of /reports?report=pnl rendered the catalog on the server and the P&L on
+  // the client (React #418 ×N → #423, the whole root re-rendered on the client).
+  const [reportKey, setReportKey] = useState<string | null>(initialReport);
+  const [today, setToday] = useState(initialToday);
+  useEffect(() => {
+    const local = localIsoDate();
+    setToday((t) => (t === local ? t : local));
+  }, []);
+  const [periodKey, setPeriodKey] = useState<PeriodKey>('this_month');
   const [customS, setCustomS] = useState('');
   const [customE, setCustomE] = useState('');
   const [selectedLocs, setSelectedLocs] = useState<string[]>([]);
@@ -298,8 +304,8 @@ export function ReportViewer() {
 
   const { s: sd, e: ed } = useMemo(() => {
     if (periodKey === 'custom') return { s: customS, e: customE };
-    return PERIODS.find((p) => p.key === periodKey)?.get() ?? { s: '', e: '' };
-  }, [periodKey, customS, customE]);
+    return periodRange(periodKey, today);
+  }, [periodKey, customS, customE, today]);
 
   // ── HYDRATE: when a report is selected, recall the user's remembered defaults for
   // it (period preset / comparative / basis) and pre-select them. Degrade-safe: a
@@ -321,7 +327,7 @@ export function ReportViewer() {
         if (cancelled || !j?.value) { setRememberedHint(null); return; }
         const v = j.value;
         if (hydratedFor.current !== reportKey) {
-          if (v.period && PERIODS.some((p) => p.key === v.period)) setPeriodKey(v.period);
+          if (isPeriodKey(v.period)) setPeriodKey(v.period);
           if (v.compare === 'none' || v.compare === 'prior_period' || v.compare === 'prior_year' || v.compare === 'budget') {
             setCompareMode(v.compare);
           }
@@ -360,7 +366,20 @@ export function ReportViewer() {
     return null;
   }, [reportKey]);
 
-  const currentCat = CATALOG.find((c) => c.key === catKey);
+  // Dealer reports only when the Dealer Pack is on for the active client (live smoke
+  // test: the group showed for clients without the pack). First paint uses the server
+  // read; once the client read for the SAME client lands it wins (a toggle in Dealer
+  // Settings invalidates it).
+  const { packs, resolvedFor } = useIndustryPacksState();
+  const dealerOn = resolvedFor && resolvedFor === activeCompanyId
+    ? packs.dealer
+    : !!initialDealer?.enabled && !!initialDealer.locationId && initialDealer.locationId === activeCompanyId;
+  const visibleCatalog = useMemo(() => (dealerOn ? CATALOG : CATALOG.filter((c) => c.key !== 'dealer')), [dealerOn]);
+  useEffect(() => {
+    if (!dealerOn && catKey === 'dealer') { setCatKey('financial'); setReportKey(null); }
+  }, [dealerOn, catKey]);
+
+  const currentCat = visibleCatalog.find((c) => c.key === catKey);
   const locIdsParam = selectedLocs.length > 0 ? selectedLocs.join(',') : '';
 
   // ── SAVED VIEWS ─────────────────────────────────────────────────────────────
@@ -380,7 +399,7 @@ export function ReportViewer() {
     const c = view.config ?? {};
     for (const cat of CATALOG) { if (cat.reports.some((rp) => rp.key === view.report_key)) { setCatKey(cat.key); break; } }
     setReportKey(view.report_key);
-    if (c.periodKey) setPeriodKey(c.periodKey);
+    if (isPeriodKey(c.periodKey)) setPeriodKey(c.periodKey);
     if (typeof c.customS === 'string') setCustomS(c.customS);
     if (typeof c.customE === 'string') setCustomE(c.customE);
     if (Array.isArray(c.selectedIndustries)) setSelectedIndustries(c.selectedIndustries);
@@ -419,7 +438,7 @@ export function ReportViewer() {
   // month passes its month so month-scoped + whole-year adjustments both apply (TAX/CUSTOM).
   // CASH auto-derives on the EXACT statement window: the P&L period for income statements,
   // and inception→as-of for the cumulative Balance Sheet / Trial Balance. ──
-  const overlayYear = (ed || sd || '').slice(0, 4) || String(new Date().getFullYear());
+  const overlayYear = (ed || sd || '').slice(0, 4) || today.slice(0, 4);
   const overlaySingleMonth = sd && ed && sd.slice(0, 7) === ed.slice(0, 7) ? sd.slice(5, 7) : undefined;
   const cumulative = reportKey === 'bs' || reportKey === 'tb';
   const cashStart = cumulative ? '1900-01-01' : sd;
@@ -443,7 +462,7 @@ export function ReportViewer() {
   const askForReport = () => {
     const q = nlQuery.trim();
     if (q.length < 2) return;
-    const hit = matchCatalogReport(q, CATALOG);
+    const hit = matchCatalogReport(q, visibleCatalog);
     if (hit) {
       setCatKey(hit.categoryKey);
       setReportKey(hit.reportKey);
@@ -474,7 +493,7 @@ export function ReportViewer() {
           {nlHint && <p id="report-ask-hint" role="status" className="mt-1.5 px-1 text-[11px] text-slate-500">{nlHint}</p>}
         </div>
         <nav className="space-y-0.5">
-          {CATALOG.map((cat) => {
+          {visibleCatalog.map((cat) => {
             const Icon = cat.icon;
             const active = catKey === cat.key;
             return (
@@ -565,7 +584,7 @@ export function ReportViewer() {
               {reportDef?.needsDates !== false && (
                 <div className="flex items-center gap-1.5">
                   <Calendar size={13} className="text-slate-500" />
-                  <select value={periodKey} onChange={(e) => setPeriodKey(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
+                  <select value={periodKey} onChange={(e) => { if (isPeriodKey(e.target.value)) setPeriodKey(e.target.value); }} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
                     {PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
                   </select>
                   {periodKey === 'custom' && <>

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { apiQueryHandler, apiHandler } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { formatMoney } from '@meritbooks/shared';
 import { buildReadinessReport } from './readiness';
 import { formatThresholdUsd, get1099Thresholds } from '@/lib/tax/1099-thresholds';
@@ -107,7 +108,10 @@ export const POST = apiHandler(flagSchema, async (body, ctx) => {
       ? 'the vendor is not flagged 1099-eligible. Confirm entity type (a corporation is exempt) or mark it eligible and collect a W-9.'
       : `the W-9 is ${row.w9Status.replace('_', ' ')}${row.tinPresent ? '' : ' and no TIN is on file'}. Collect the W-9 before filing to avoid backup withholding / penalties.`);
 
-  const { data: inserted, error: insErr } = await supabase
+  // ai_decisions / vendor_compliance_docs are SELECT-only for members (migration 172):
+  // service-role write after the compliance:manage check, org pinned.
+  const writer = serviceWriter();
+  const { data: inserted, error: insErr } = await writer
     .from('ai_decisions')
     .insert({
       org_id: orgId,
@@ -152,13 +156,16 @@ export const POST = apiHandler(flagSchema, async (body, ctx) => {
       .limit(1)
       .maybeSingle();
     const nowIso = new Date().toISOString();
+    // doc was read through the member client above (RLS proved org); vendor came from the
+    // member-scoped readiness report.
     if (doc?.id) {
-      await supabase
+      await writer
         .from('vendor_compliance_docs')
         .update({ next_chase_at: nowIso, updated_at: nowIso })
-        .eq('id', (doc as { id: string }).id);
+        .eq('id', (doc as { id: string }).id)
+        .eq('org_id', orgId);
     } else {
-      await supabase.from('vendor_compliance_docs').insert({
+      await writer.from('vendor_compliance_docs').insert({
         org_id: orgId,
         vendor_id: row.vendorId,
         doc_type: 'W9',

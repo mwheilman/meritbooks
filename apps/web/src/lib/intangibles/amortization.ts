@@ -24,6 +24,7 @@ import { postJournalEntry } from '../services/gl-posting';
 import { PostingError, resolveRole, type AccountRef } from '../posting/account-roles';
 import { buildDepreciationSchedule, mapBookMethod, type DepreciationCalcMethod } from '../posting/depreciation-methods';
 import { isIntangibleCategory, isNonAmortizing } from './categories';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -186,6 +187,17 @@ export async function runAmortization(
 
     let accumulated = a.accumulated_depreciation_cents;
 
+    // fixed_assets / depreciation_runs are SELECT-only for members (migration 172): the
+    // asset was read above in this org; writes go through the service role, org pinned,
+    // its client asserted in the caller's scope.
+    let writer: DB;
+    try {
+      writer = await scopedWriter(db, orgId, [a.location_id]);
+    } catch (e) {
+      result.errors.push({ asset_id: a.id, period: '-', error: e instanceof Error ? e.message : 'out of scope' });
+      continue;
+    }
+
     for (let idx = alreadyPosted; idx < due; idx++) {
       const { year, month } = addMonths(start, idx);
 
@@ -225,7 +237,7 @@ export async function runAmortization(
         break;
       }
 
-      await db.from('depreciation_runs').insert({
+      await writer.from('depreciation_runs').insert({
         org_id: orgId,
         fixed_asset_id: a.id,
         period_year: year,
@@ -239,7 +251,7 @@ export async function runAmortization(
       result.amount_posted_cents += amount;
 
       const fullyAmortized = accumulated >= base;
-      await db
+      await writer
         .from('fixed_assets')
         .update({
           accumulated_depreciation_cents: accumulated,
@@ -247,7 +259,8 @@ export async function runAmortization(
           status: fullyAmortized ? 'FULLY_DEPRECIATED' : 'ACTIVE',
           updated_at: new Date().toISOString(),
         })
-        .eq('id', a.id);
+        .eq('id', a.id)
+        .eq('org_id', orgId);
 
       if (fullyAmortized) break;
     }
@@ -336,6 +349,15 @@ export async function recordImpairment(
     return { success: false, error: `Impairment (${amountCents}) exceeds net book value (${netBookValue})` };
   }
 
+  // fixed_assets is SELECT-only for members (migration 172): asset read above in this org;
+  // the write goes through the service role with its client asserted in scope.
+  let writer: DB;
+  try {
+    writer = await scopedWriter(db, orgId, [asset.location_id]);
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'You do not have access to that company.' };
+  }
+
   let loss: AccountRef;
   try {
     loss = await resolveImpairmentLoss(db, orgId, asset.location_id);
@@ -361,14 +383,15 @@ export async function recordImpairment(
   if (!je.success) return { success: false, error: je.error ?? 'Impairment post failed' };
 
   const newAccumulated = asset.accumulated_depreciation_cents + amountCents;
-  await db
+  await writer
     .from('fixed_assets')
     .update({
       accumulated_depreciation_cents: newAccumulated,
       status: 'IMPAIRED',
       updated_at: new Date().toISOString(),
     })
-    .eq('id', asset.id);
+    .eq('id', asset.id)
+    .eq('org_id', orgId);
 
   return {
     success: true,

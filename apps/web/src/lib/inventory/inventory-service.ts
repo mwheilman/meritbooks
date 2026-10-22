@@ -23,6 +23,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from '../services/gl-posting';
 import { debitCreditFor } from '../posting/account-direction';
 import { maybeRaiseReorderAlert } from './reorder-detector';
+import { writerFor } from '../db/scoped-writer';
 import {
   resolveRole,
   getAccountRef,
@@ -69,9 +70,15 @@ function stateFromRow(row: ItemRow): ValuationState {
   };
 }
 
-/** Persist a new valuation state back onto the item. */
+/**
+ * Persist a new valuation state back onto the item. Callers loaded the item through the
+ * caller's client first (loadItem — RLS proved org + client scope).
+ */
 async function writeState(db: DB, orgId: string, itemId: string, state: ValuationState): Promise<void> {
-  const { error } = await db
+  // inventory_items / inventory_movements are SELECT-only for members (migration 172):
+  // service-role write after the route's permission check, org pinned.
+  const writer = writerFor(db);
+  const { error } = await writer
     .from('inventory_items')
     .update({
       qty_on_hand: state.qty_on_hand,
@@ -210,7 +217,10 @@ export async function receiveInventory(db: DB, input: ReceiveInput): Promise<Mov
     throw e instanceof ValuationError ? new PostingError(e.message) : e;
   }
 
-  const { data: mv, error } = await db
+  // item read via the caller's client in loadItem (org + client scope proven); the movement
+  // lands on the item's own client.
+  const writer = writerFor(db);
+  const { data: mv, error } = await writer
     .from('inventory_movements')
     .insert({
       org_id: input.orgId,
@@ -301,7 +311,10 @@ export async function proposeMovement(db: DB, input: ProposeMovementInput): Prom
   }
   const ref = resolveMovementRef(link, input.reference ?? null);
 
-  const { data: mv, error } = await db
+  // item read via the caller's client in loadItem (org + client scope proven); linkage
+  // verified through the caller's client in assertLinkExists.
+  const writer = writerFor(db);
+  const { data: mv, error } = await writer
     .from('inventory_movements')
     .insert({
       org_id: input.orgId,
@@ -440,7 +453,9 @@ export async function postProposedMovement(
   if (!je.success || !je.entry_id) throw new PostingError(je.error ?? 'Failed to post inventory entry');
 
   await writeState(db, orgId, mvRow.item_id, result.state);
-  const { error: updErr } = await db
+  // movement + item were read via the caller's client above (org + client scope proven).
+  const writer = writerFor(db);
+  const { error: updErr } = await writer
     .from('inventory_movements')
     .update({
       status: 'POSTED',

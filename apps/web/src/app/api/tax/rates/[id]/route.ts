@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * Edit / retire one sales-tax rate row (GATE 11d). PATCH toggles is_active or updates
@@ -21,7 +22,8 @@ const patchSchema = z.object({
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, userId, orgId } = ctx;
+  const { userId, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
   const guard = await requirePermission(userId, 'settings_acct', 'edit');
   if (!guard.ok) return guard.response;
 
@@ -37,11 +39,13 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (parsed.data.notes !== undefined) patch.notes = parsed.data.notes?.trim() || null;
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'No changes' }, { status: 400 });
 
-  const { error } = await supabase
+  // sales_tax_rates is SELECT-only for members (migration 172): service-role update after the
+  // settings_acct:edit check, org pinned (org-level table — no client scope).
+  const { error } = await serviceWriter()
     .from('sales_tax_rates')
     .update(patch)
     .eq('id', params.id)
-    .eq('org_id', orgId ?? '');
+    .eq('org_id', orgId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
@@ -49,16 +53,17 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, userId, orgId } = ctx;
+  const { userId, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
   const guard = await requirePermission(userId, 'settings_acct', 'edit');
   if (!guard.ok) return guard.response;
 
   // Soft-retire — keep the row so the rate history behind accrued tax is preserved.
-  const { error } = await supabase
+  const { error } = await serviceWriter()
     .from('sales_tax_rates')
     .update({ is_active: false })
     .eq('id', params.id)
-    .eq('org_id', orgId ?? '');
+    .eq('org_id', orgId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

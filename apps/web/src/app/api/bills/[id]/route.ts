@@ -260,8 +260,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
         .eq('org_id', orgId)
         .eq('id', params.id);
       if (error) throw new Error(error.message);
-      // Audit the override (one-time release of this bill's compliance hold).
-      await supabase.from('audit_log').insert({
+      // Audit the override (one-time release of this bill's compliance hold). audit_log is
+      // SELECT-only for members (migration 172): service-role insert, org pinned to the session.
+      await serviceWriter().from('audit_log').insert({
         org_id: orgId,
         table_name: 'bills',
         record_id: params.id,

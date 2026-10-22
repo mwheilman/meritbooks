@@ -31,6 +31,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createHmac } from 'node:crypto';
+import { markSystemOrgClient } from '@/lib/supabase/member-client';
 
 function base64url(input: Buffer | string): string {
   return Buffer.from(input).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -73,8 +74,14 @@ export function createOrgScopedSupabase(orgId: string): SupabaseClient | null {
     secret,
   );
 
-  return createClient(url, anonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  // Registered as a SYSTEM tenant client: reads stay under RLS for this org, and writes to
+  // member-locked tables (171 / 172) escalate through lib/db/scoped-writer.ts pinned to
+  // exactly this org (a scheduled job is not a person, so no client scope applies).
+  return markSystemOrgClient(
+    createClient(url, anonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    }),
+    orgId,
+  );
 }

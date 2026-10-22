@@ -32,6 +32,10 @@ export interface CoaSeedResult {
  * Throws on failure with a descriptive message.
  */
 export async function seedChartOfAccounts(db: DB, orgId: string): Promise<CoaSeedResult> {
+  // account_types / account_sub_types / account_groups are SELECT-only for members (migration
+  // 172): writerFor(db) is the service role for a member caller (callers authorize first);
+  // every row is pinned to orgId.
+  const writer = writerFor(db);
   // 1. Account types — upsert by (org_id, code), then read ids back
   const typeRows = ACCOUNT_TYPE_HIERARCHY.map((t) => ({
     org_id: orgId,
@@ -41,7 +45,7 @@ export async function seedChartOfAccounts(db: DB, orgId: string): Promise<CoaSee
     closes_to_retained_earnings: t.closes_to_retained_earnings,
     display_order: t.display_order,
   }));
-  const { error: typeErr } = await db
+  const { error: typeErr } = await writer
     .from('account_types')
     .upsert(typeRows, { onConflict: 'org_id,code' });
   if (typeErr) throw new Error(`Failed seeding account types: ${typeErr.message}`);
@@ -65,7 +69,7 @@ export async function seedChartOfAccounts(db: DB, orgId: string): Promise<CoaSee
       });
     }
   }
-  const { error: subErr } = await db
+  const { error: subErr } = await writer
     .from('account_sub_types')
     .upsert(subRows, { onConflict: 'org_id,code' });
   if (subErr) throw new Error(`Failed seeding sub-types: ${subErr.message}`);
@@ -90,7 +94,7 @@ export async function seedChartOfAccounts(db: DB, orgId: string): Promise<CoaSee
       }
     }
   }
-  const { error: groupErr } = await db
+  const { error: groupErr } = await writer
     .from('account_groups')
     .upsert(groupRows, { onConflict: 'org_id,name' });
   if (groupErr) throw new Error(`Failed seeding account groups: ${groupErr.message}`);

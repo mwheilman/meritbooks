@@ -10,6 +10,8 @@ import { z } from 'zod';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { suggestCategory, CATEGORIZE_MODEL, type CoaRow } from '@/lib/services/categorization';
 import { scoreToTier, getTierPolicy } from '@/lib/trust/score-tier';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/bank-feed/categorize
@@ -69,6 +71,11 @@ export async function POST(request: Request) {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Coding writes AI suggestions onto bank_transactions — same gate as the other
+  // bank-feed edit paths (flag, [id], nl/categorize).
+  const guard = await requirePermission(ctx.userId, 'bank_feed', 'edit');
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try {
@@ -175,7 +182,10 @@ export async function POST(request: Request) {
     const categorizedAt =
       nextStatus === 'CATEGORIZED' && !txn.categorized_at ? new Date().toISOString() : undefined;
 
-    const { error: upErr } = await supabase
+    // bank_transactions is SELECT-only for members (migration 172): service-role write after
+    // the permission check, org pinned; the row was read through the member client above
+    // (RLS proved org + client scope).
+    const { error: upErr } = await serviceWriter()
       .from('bank_transactions')
       .update({
         ai_account_id: s.accountId,

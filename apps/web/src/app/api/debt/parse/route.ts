@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { parseLoanDocument, DEBT_EXTRACT_FEATURE } from '@/lib/debt/parse-loan';
 import { resolveUploadedFile } from '@/lib/uploads/resolve-upload';
@@ -32,6 +34,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
 
+  const guard = await requirePermission(userId, 'journal_entries', 'post');
+  if (!guard.ok) return guard.response;
+
   const apiKey = getAnthropicApiKey();
   if (!apiKey) {
     return NextResponse.json(
@@ -61,7 +66,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // w.r.t. the register: nothing is written to debt_instruments here.
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert after
+    // the route's checks, org pinned to the session org (org-level row, no client).
+    const { data: dec } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: orgId,

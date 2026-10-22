@@ -1,4 +1,4 @@
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { NextResponse } from 'next/server';
@@ -6,22 +6,13 @@ import { requireAuth } from '@/lib/api-handler';
 import { createAuthedServerSupabase } from '@/lib/supabase/authed';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { resolveFrontDoor } from '@/lib/onboarding/flow';
-import { PageHeader } from '@/components/ui';
-import { CompanyBoardGrid } from './company-board';
-import { ActivityFeed } from './activity-feed';
+import { readInitialCompany } from '@/lib/company-scope-server';
+import { isSpecificCompany } from '@/lib/company-scope';
+import { WorkspaceHome } from './workspace-home';
+import { ClientHome } from './client-home';
+import { HomeSkeleton } from './home-skeleton';
 
-function BoardSkeleton() {
-  return (
-    <div className="space-y-5">
-      <div className="card h-20 animate-pulse" />
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="card h-56 animate-pulse" />
-        ))}
-      </div>
-    </div>
-  );
-}
+export const metadata = { title: 'Home' };
 
 /**
  * First-run redirect (FPB B6): the org's setup owner with a company that isn't live yet
@@ -47,6 +38,19 @@ async function firstRunRedirect(stay: boolean): Promise<string | null> {
   }
 }
 
+/**
+ * HOME (Redesign R1, merit-ui). Two homes behind one route, picked by the ⌘J context:
+ *
+ *   - No client picked → the WORKSPACE home (board S1): your clients ranked by work
+ *     left, the cross-client queues, cash/AR/AP and close progress. Read-only; every
+ *     row and count enters a client.
+ *   - A client picked  → that CLIENT's home (board S2): the four-step books-review loop
+ *     (Review · Reconcile · Check · Close), the open feed in Decide / Check / Ready
+ *     bands with the Decide list, money and the latest activity.
+ *
+ * All figures are live, RLS-scoped reads (dashboard/actions.ts). No banner, no greeting:
+ * the context line, then the primary module top-left.
+ */
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -57,25 +61,14 @@ export default async function DashboardPage({
   // redirect() throws a control-flow signal — keep it outside the try.
   if (target) redirect(target);
 
-  return (
-    <>
-      <PageHeader
-        title="Dashboard"
-        description="Your cross-company work and status board. Consolidated totals up top, then a card per company — select one to pin it and start working."
-      />
+  // The same cookie-backed context the shell shows (validated against the caller's
+  // client scope in readInitialCompany).
+  const company = await readInitialCompany();
+  const clientId = isSpecificCompany(company.id) ? company.id : null;
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <Suspense fallback={<BoardSkeleton />}>
-            <CompanyBoardGrid />
-          </Suspense>
-        </div>
-        <div>
-          <Suspense fallback={<div className="card h-64 animate-pulse" />}>
-            <ActivityFeed />
-          </Suspense>
-        </div>
-      </div>
-    </>
+  return (
+    <Suspense key={clientId ?? 'workspace'} fallback={<HomeSkeleton kind={clientId ? 'client' : 'workspace'} />}>
+      {clientId ? <ClientHome locationId={clientId} /> : <WorkspaceHome />}
+    </Suspense>
   );
 }

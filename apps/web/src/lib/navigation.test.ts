@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { navigation } from './navigation';
 import { PLANES, PLANE_ORDER } from './planes';
+import { ICON_NAMES } from '@meritbooks/merit-ui';
 
 const allItems = navigation.flatMap((g) => g.items);
 const groupLabels = navigation.map((g) => g.label);
@@ -31,9 +32,9 @@ describe('navigation items', () => {
     expect(new Set(hrefs).size).toBe(hrefs.length);
   });
 
-  it('every item carries an icon component', () => {
+  it('every item carries a mini-rail icon (merit-ui sprite name)', () => {
     for (const item of allItems) {
-      expect(item.icon).toBeTruthy();
+      expect(ICON_NAMES as readonly string[]).toContain(item.icon);
     }
   });
 
@@ -41,6 +42,14 @@ describe('navigation items', () => {
     for (const group of navigation) {
       expect(group.items.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('navigation go-to chords', () => {
+  it('every go-to chord is a unique "g <letter>" sequence', () => {
+    const keys = allItems.map((i) => i.keys).filter((k): k is string => !!k);
+    for (const k of keys) expect(k).toMatch(/^g [a-z]$/);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });
 

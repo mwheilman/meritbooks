@@ -26,6 +26,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from '../services/gl-posting';
 import { buildAmortizationSchedule, evenPerPeriodCents } from './schedule';
+import { assertOrgRefs, isMemberClient, scopedWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -62,7 +63,17 @@ export async function createPrepaidSchedule(db: DB, input: CreatePrepaidInput): 
   // Validate the date/term shape up front (throws PrepaidScheduleError otherwise).
   buildAmortizationSchedule({ totalCents: input.totalCents, startDate: input.startDate, months: input.months });
 
-  const { data, error } = await db
+  // posting_schedules / posting_schedule_runs are SELECT-only for members (migration 172):
+  // service-role write after the route's permission check, org pinned, the posting client
+  // asserted in the caller's scope and the referenced accounts / department verified in-org.
+  const writer = await scopedWriter(db, input.orgId, [input.locationId]);
+  if (isMemberClient(db)) {
+    await assertOrgRefs(input.orgId, [
+      { table: 'accounts', ids: [input.expenseAccountId, input.prepaidAssetId], label: 'account' },
+      { schema: 'core', table: 'departments', ids: [input.departmentId], label: 'department' },
+    ], { caller: db });
+  }
+  const { data, error } = await writer
     .from('posting_schedules')
     .insert({
       org_id: input.orgId,
@@ -268,6 +279,15 @@ export async function runPrepaidAmortizations(
 
   for (const s of schedules) {
     result.schedules_processed++;
+    // Schedule read above through the caller's client; service-role writes (migration 172)
+    // pinned to orgId with the posting client asserted in the caller's scope.
+    let writer: DB;
+    try {
+      writer = await scopedWriter(db, orgId, [s.location_id]);
+    } catch (e) {
+      result.errors.push({ schedule_id: s.id, period: '-', error: e instanceof Error ? e.message : 'out of scope' });
+      continue;
+    }
 
     let lines;
     try {
@@ -329,7 +349,7 @@ export async function runPrepaidAmortizations(
         break; // stop catch-up at the first failure (e.g. a closed period)
       }
 
-      const { error: runErr } = await db.from('posting_schedule_runs').insert({
+      const { error: runErr } = await writer.from('posting_schedule_runs').insert({
         org_id: orgId,
         schedule_id: s.id,
         period_year: line.year,
@@ -350,14 +370,15 @@ export async function runPrepaidAmortizations(
 
     if (postedThisSchedule !== s.periods_posted) {
       const completed = postedThisSchedule >= s.months;
-      await db
+      await writer
         .from('posting_schedules')
         .update({
           periods_posted: postedThisSchedule,
           status: completed ? 'COMPLETED' : 'ACTIVE',
           updated_at: new Date().toISOString(),
         })
-        .eq('id', s.id);
+        .eq('id', s.id)
+        .eq('org_id', orgId);
       if (completed) result.completed++;
     }
   }

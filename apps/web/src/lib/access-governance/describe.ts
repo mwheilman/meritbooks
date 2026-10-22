@@ -180,9 +180,39 @@ export function describeLogEntry(e: DescribeInput): string {
     if (verb === 'adopt') return 'MeritBooks suggestions were added to a role.';
     if (verb === 'dismiss') return 'MeritBooks suggestions were skipped.';
   }
+  if (e.event === 'approver_release.change') {
+    const choice = str(e.after?.approver_may_release);
+    const cents = typeof e.after?.up_to_cents === 'number' ? e.after.up_to_cents : null;
+    if (choice === 'off') return 'Approvers can no longer release the payments they approved — a second person releases every payment.';
+    if (choice === 'any') return 'Approvers may now also release the payments they approved, for any amount.';
+    if (choice === 'up_to') return `Approvers may now also release the payments they approved, up to ${cents === null ? 'a limit' : formatMoney(cents)}.`;
+    return 'Who may release approved payments changed.';
+  }
   if (e.event === 'log.export') return 'The access log was exported.';
   if (e.event === 'review.export') return 'An access review report was exported.';
   return e.event;
+}
+
+/**
+ * Where an access-log row came from, in plain English. `backfill` rows are either the
+ * baseline written when the log started, or a MeritBooks correction shipped in a later
+ * system update (e.g. migration 168's money-approval fix — approval_ref 'migration:NNN');
+ * the two used to share the "Start of log" label (live smoke test).
+ */
+const SOURCE_LABEL: Readonly<Record<string, string>> = {
+  ui: 'Screen',
+  api: 'App',
+  backfill: 'Start of log',
+  template_update: 'MeritBooks suggestion',
+  review: 'Access review',
+  request: 'Access request',
+  sweeper: 'End date',
+  system: 'MeritBooks',
+};
+
+export function logSourceLabel(source: string, approvalRef?: string | null): string {
+  if (source === 'backfill' && approvalRef && /^migration:/i.test(approvalRef)) return 'Access correction (system update)';
+  return SOURCE_LABEL[source] ?? source;
 }
 
 /** Filter groups for the access-log event picker. */
@@ -193,4 +223,5 @@ export const LOG_EVENT_GROUPS: ReadonlyArray<{ key: string; label: string; prefi
   { key: 'roles', label: 'Roles & permission sets', prefixes: ['role.', 'permission_set.', 'envelope.', 'template_update.'] },
   { key: 'reviews', label: 'Access reviews', prefixes: ['review.'] },
   { key: 'requests', label: 'Access requests', prefixes: ['request.'] },
+  { key: 'settings', label: 'Security & release settings', prefixes: ['approver_release.', 'security_policy.', 'enforcement_mode.', 'client_scope_mode.', 'mode_change.'] },
 ];

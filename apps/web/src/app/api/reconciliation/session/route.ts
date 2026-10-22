@@ -9,6 +9,7 @@ import { logHumanAction } from '@/lib/trust/action-log';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { canApprove } from '@/lib/money/approvals';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { computeGlCashBalanceCents } from '@/lib/services/reconciliation-gl';
 import {
   reconciliationDifferenceCents,
@@ -443,6 +444,12 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   const body = parsed.data;
 
+  // bank_reconciliations / bank_transactions are SELECT-only for members (migration 172):
+  // service-role writes after reconciliation:reconcile, org pinned. Every header / line /
+  // bank account is read through the member client first (RLS proved org + client scope);
+  // bulk line updates are keyed by that header's id (lines share its bank account).
+  const writer = serviceWriter();
+
   // ── start: create / update a draft header ────────────────────────────────────
   if (body.action === 'start') {
     const { data: ba, error: baErr } = await supabase
@@ -488,7 +495,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     if (existing) {
-      const { data, error } = await supabase
+      const { data, error } = await writer
         .from('bank_reconciliations')
         .update({
           statement_ending_balance_cents: body.statement_ending_balance_cents,
@@ -496,13 +503,14 @@ export async function POST(request: Request): Promise<NextResponse> {
           statement_date: period.end_date,
         })
         .eq('id', existing.id)
+        .eq('org_id', orgId)
         .select('id')
         .single();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ ok: true, reconciliationId: data.id, glBalanceCents });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await writer
       .from('bank_reconciliations')
       .insert({
         org_id: orgId,
@@ -560,18 +568,20 @@ export async function POST(request: Request): Promise<NextResponse> {
       if (t.reconciliation_id != null && t.reconciliation_id !== header.id) {
         return NextResponse.json({ error: 'Line is already part of another reconciliation' }, { status: 409 });
       }
-      const { error } = await supabase
+      const { error } = await writer
         .from('bank_transactions')
         .update(lineClearedUpdate(header.id))
         .eq('id', body.transaction_id)
+        .eq('org_id', orgId)
         .is('reconciled_at', null);
       if (error) return NextResponse.json({ error: 'Failed to clear line' }, { status: 500 });
     } else {
       // Only detach if it currently belongs to THIS draft.
-      const { error } = await supabase
+      const { error } = await writer
         .from('bank_transactions')
         .update(lineUnreconciledUpdate())
         .eq('id', body.transaction_id)
+        .eq('org_id', orgId)
         .eq('reconciliation_id', header.id)
         .is('reconciled_at', null);
       if (error) return NextResponse.json({ error: 'Failed to uncheck line' }, { status: 500 });
@@ -669,19 +679,21 @@ export async function POST(request: Request): Promise<NextResponse> {
       headerUpdate.finalize_override_variance_cents = differenceCents;
     }
 
-    const { error: hdrErr } = await supabase
+    const { error: hdrErr } = await writer
       .from('bank_reconciliations')
       .update(headerUpdate)
       .eq('id', header.id)
+      .eq('org_id', orgId)
       .is('reconciled_at', null); // guard against a concurrent finalize
     if (hdrErr) return NextResponse.json({ error: 'Failed to finalize reconciliation' }, { status: 500 });
 
     // Lock every cleared line by stamping reconciled_at.
     const stamp = lineFinalizedUpdate(header.id, finalizedAt);
-    const { error: lineErr } = await supabase
+    const { error: lineErr } = await writer
       .from('bank_transactions')
       .update({ reconciled_at: stamp.reconciled_at })
       .eq('reconciliation_id', header.id)
+      .eq('org_id', orgId)
       .is('reconciled_at', null);
     if (lineErr) return NextResponse.json({ error: 'Failed to lock reconciled lines' }, { status: 500 });
 
@@ -728,16 +740,18 @@ export async function POST(request: Request): Promise<NextResponse> {
       .eq('reconciliation_id', header.id);
     const clearedCount = (clearedRaw ?? []).length;
 
-    const { error: lineErr } = await supabase
+    const { error: lineErr } = await writer
       .from('bank_transactions')
       .update(lineUnreconciledUpdate())
-      .eq('reconciliation_id', header.id);
+      .eq('reconciliation_id', header.id)
+      .eq('org_id', orgId);
     if (lineErr) return NextResponse.json({ error: 'Failed to detach reconciled lines' }, { status: 500 });
 
-    const { error: hdrErr } = await supabase
+    const { error: hdrErr } = await writer
       .from('bank_reconciliations')
       .update({ is_reconciled: false, reconciled_at: null, reconciled_by: null })
-      .eq('id', header.id);
+      .eq('id', header.id)
+      .eq('org_id', orgId);
     if (hdrErr) return NextResponse.json({ error: 'Failed to reopen reconciliation' }, { status: 500 });
 
     await logHumanAction(supabase, userId, orgId, {

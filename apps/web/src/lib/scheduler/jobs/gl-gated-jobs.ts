@@ -21,6 +21,8 @@ import { buildAmortizationSchedule } from '@/lib/prepaid/schedule';
 import { processBillingEvents, type BillingPayload } from '@/lib/services/billing-consumer';
 import { processDeptInvoiceEvents, type DeptInvoicePayload } from '@/lib/services/dept-invoice-consumer';
 import { processProgressEvents, type ProgressPayload } from '@/lib/services/job-progress';
+import { claimedDepositCents, processDepositRequestEvents, type DepositRequestPayload } from '@/lib/services/deposit-request-consumer';
+import { rejectUnknownProjectsEventTypes } from '@/lib/events/seam';
 import { claimPendingEvents, claimedAmountCents, newClaimToken, releaseEventClaims, type Claim } from '@/lib/events/claim';
 import {
   postingGate,
@@ -176,6 +178,13 @@ export async function runEventsDrainJob(ctx: JobContext): Promise<JobResult> {
       run: (c) => processBillingEvents(admin, orgId, { claimed: c as Claim<BillingPayload> }),
     },
     {
+      label: 'deposit request',
+      key: 'deposit_request',
+      amountOf: (c) => claimedDepositCents(c.rows as Claim<DepositRequestPayload>['rows']),
+      claim: () => claimPendingEvents<DepositRequestPayload>(admin, { eventType: 'JOB_DEPOSIT_REQUEST', orgId, token: newClaimToken('scheduler') }),
+      run: (c) => processDepositRequestEvents(admin, orgId, { claimed: c as Claim<DepositRequestPayload> }),
+    },
+    {
       label: 'internal invoice',
       key: 'dept_invoice',
       amountOf: (c) => claimedAmountCents(c.rows as Claim<DeptInvoicePayload>['rows']),
@@ -200,6 +209,15 @@ export async function runEventsDrainJob(ctx: JobContext): Promise<JobResult> {
   const waiting: string[] = [];
   let processed = 0;
   let claimedTotal = 0;
+
+  // Stop-gap (mig 173): a Projects event type Books neither consumes nor plans to is
+  // rejected with UNSUPPORTED_EVENT_TYPE, so the sender never waits on it forever.
+  try {
+    const unknown = await rejectUnknownProjectsEventTypes(admin, orgId);
+    if (unknown > 0) counts.unsupported_rejected = unknown;
+  } catch (e) {
+    failures.push(`unsupported event types: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
   for (const d of drains) {
     if (ctx.signal.aborted) break;

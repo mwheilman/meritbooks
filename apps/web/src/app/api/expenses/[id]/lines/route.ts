@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { loadReport, recomputeReport } from '@/lib/expenses/expense-reports';
+import { assertOrgRefs, assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
 
 const schema = z.object({
   expense_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -52,8 +53,30 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   const nextLineNumber = lines.reduce((m, l) => Math.max(m, l.line_number), 0) + 1;
   const b = parsed.data;
+  const lineLocationId = b.location_id ?? report.location_id ?? null;
 
-  const { data: inserted, error } = await supabase
+  // expense_report_lines is SELECT-only for members (migration 172): service-role write after
+  // the receipts:edit check, org pinned. The parent report was read via the member client
+  // (loadReport); the line's client + every body FK are verified in this org first.
+  try {
+    await assertWriteScope(supabase, orgId, [lineLocationId]);
+    await assertOrgRefs(
+      orgId,
+      [
+        { table: 'accounts', ids: [b.account_id], label: 'account' },
+        { schema: 'core', table: 'departments', ids: [b.department_id], label: 'department' },
+        { table: 'classes', ids: [b.class_id], label: 'class' },
+        { schema: 'core', table: 'jobs', ids: [b.job_id], label: 'job' },
+      ],
+      { caller: supabase },
+    );
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message }, { status: 403 });
+    throw e;
+  }
+
+  const writer = serviceWriter();
+  const { data: inserted, error } = await writer
     .from('expense_report_lines')
     .insert({
       org_id: orgId,
@@ -65,7 +88,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       account_id: b.account_id ?? null,
       department_id: b.department_id ?? null,
       class_id: b.class_id ?? null,
-      location_id: b.location_id ?? report.location_id ?? null,
+      location_id: lineLocationId,
       amount_cents: b.amount_cents,
       payment_source: b.payment_source ?? 'OUT_OF_POCKET',
       has_receipt: b.has_receipt ?? false,

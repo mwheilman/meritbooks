@@ -5,6 +5,7 @@ import { requireAuthedContext, apiHandler, type ApiContext } from '@/lib/api-han
 import { buildCovenantStatus, type CovenantRow } from '@/lib/covenants/status';
 import { createCovenantSchema, type CreateCovenantInput } from '@/lib/covenants/schema';
 import { linkSourceDocument } from '@/lib/documents/store-source';
+import { assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * /api/covenants
@@ -79,7 +80,15 @@ export const POST = apiHandler(
   async (body: CreateCovenantInput, ctx: ApiContext): Promise<NextResponse> => {
     if (!ctx.orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
 
-    const { data, error } = await ctx.supabase
+    // loan_covenants is SELECT-only for members (migration 172): service-role insert, org
+    // pinned to the session org, the covenant's client asserted in the caller's scope.
+    try {
+      await assertWriteScope(ctx.supabase, ctx.orgId, [body.location_id]);
+    } catch (e) {
+      if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+      throw e;
+    }
+    const { data, error } = await serviceWriter()
       .from('loan_covenants')
       .insert({
         org_id: ctx.orgId,

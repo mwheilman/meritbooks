@@ -2,78 +2,38 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { clsx } from 'clsx';
-import { formatMoney } from '@meritbooks/shared';
 import {
-  Loader2,
-  AlertCircle,
-  RefreshCw,
-  CheckCircle2,
-  ChevronRight,
-  ShieldCheck,
-  Ban,
-  CalendarClock,
-  Sparkles,
-  FileText,
-  Clock,
-  BellOff,
-  Undo2,
-  ArrowUpDown,
-  type LucideIcon,
-} from 'lucide-react';
-import type {
-  InboxItem,
-  InboxGroupKey,
-  InboxSeverity,
-  InboxResponse,
-} from './inbox-types';
+  Button,
+  Icon,
+  InlineNotice,
+  Keyhints,
+  Pip,
+  QueueTable,
+  Seg,
+  money,
+  type PipKind,
+  type QueueColumn,
+} from '@meritbooks/merit-ui';
+import type { InboxItem, InboxGroupKey, InboxSeverity, InboxResponse } from './inbox-types';
 import { SEVERITY_RANK } from './inbox-types';
-import { useListKeynav } from './use-list-keynav';
 import { SNOOZE_PRESETS, canSnooze, type UseInboxSnooze } from './use-inbox-snooze';
 
 // ── Presentation ────────────────────────────────────────────────────────────────
 
-const GROUP_META: Record<
-  InboxGroupKey,
-  { title: string; hint: string; icon: LucideIcon; accent: string }
-> = {
-  APPROVALS: {
-    title: 'Approvals',
-    hint: 'Money movement + expense reports waiting on you',
-    icon: ShieldCheck,
-    accent: 'text-emerald-400',
-  },
-  POLICY_BLOCKS: {
-    title: 'Policy blocks',
-    hint: 'Held by AP or expense policy — resolve to release',
-    icon: Ban,
-    accent: 'text-red-400',
-  },
-  ALERTS: {
-    title: 'Alerts',
-    hint: 'Time-sensitive obligations — overdue or due soon',
-    icon: CalendarClock,
-    accent: 'text-amber-400',
-  },
-  EXCEPTIONS: {
-    title: 'Exceptions',
-    hint: 'AI proposals awaiting a human decision',
-    icon: Sparkles,
-    accent: 'text-indigo-400',
-  },
-  DRAFTS: {
-    title: 'Drafts',
-    hint: 'Unposted entries to review and finish',
-    icon: FileText,
-    accent: 'text-slate-300',
-  },
+const GROUP_TITLE: Record<InboxGroupKey, string> = {
+  APPROVALS: 'Approvals',
+  POLICY_BLOCKS: 'Policy blocks',
+  ALERTS: 'Alerts',
+  EXCEPTIONS: 'Exceptions',
+  DRAFTS: 'Drafts',
 };
 
-const SEVERITY_META: Record<InboxSeverity, { dot: string; label: string }> = {
-  CRITICAL: { dot: 'bg-red-500', label: 'Critical' },
-  HIGH: { dot: 'bg-amber-500', label: 'High' },
-  MEDIUM: { dot: 'bg-sky-500', label: 'Medium' },
-  LOW: { dot: 'bg-slate-500', label: 'Low' },
+// Status is never colour alone (kit §7.4): a pip SHAPE plus the word.
+const SEVERITY_META: Record<InboxSeverity, { pip: PipKind; label: string }> = {
+  CRITICAL: { pip: 'overdue', label: 'Critical' },
+  HIGH: { pip: 'risk', label: 'High' },
+  MEDIUM: { pip: 'open', label: 'Medium' },
+  LOW: { pip: 'track', label: 'Low' },
 };
 
 const SEVERITY_ORDER: InboxSeverity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
@@ -85,113 +45,13 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'oldest', label: 'Oldest first' },
 ];
 
-// ── Row ───────────────────────────────────────────────────────────────────────
-
-function InboxRow({
-  item,
-  active,
-  rowRef,
-  onOpen,
-  snooze,
-}: {
-  item: InboxItem;
-  active: boolean;
-  rowRef: (el: HTMLElement | null) => void;
-  onOpen: () => void;
-  snooze: UseInboxSnooze;
-}) {
-  const sev = SEVERITY_META[item.severity];
-  const overdue = item.dueOrAge.includes('overdue');
-  const [menuOpen, setMenuOpen] = useState(false);
-  const snoozeable = canSnooze(item.severity);
-
-  return (
-    <div
-      ref={rowRef}
-      data-active={active}
-      className={clsx(
-        'group relative flex items-center gap-4 rounded-lg border px-4 py-3 transition',
-        active
-          ? 'border-emerald-500/40 bg-slate-800/50 ring-1 ring-inset ring-emerald-500/20'
-          : 'border-slate-800 bg-surface-900 hover:border-slate-700 hover:bg-slate-800/40',
-      )}
-    >
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex min-w-0 flex-1 items-center gap-4 text-left focus:outline-none"
-      >
-        <span
-          className={clsx('h-2 w-2 flex-none rounded-full', sev.dot)}
-          title={`${sev.label} priority`}
-        />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-white">{item.title}</p>
-          {item.subtitle && (
-            <p className="mt-0.5 truncate text-xs text-slate-500">{item.subtitle}</p>
-          )}
-        </div>
-        <div className="flex-none text-right">
-          {item.amountCents !== null && (
-            <p className="font-mono text-sm text-slate-200">{formatMoney(item.amountCents)}</p>
-          )}
-          <p className={clsx('text-xs', overdue ? 'text-red-400' : 'text-slate-500')}>
-            {item.dueOrAge}
-          </p>
-        </div>
-      </button>
-
-      {/* Snooze — LOCAL, view-only; never available for CRITICAL items. */}
-      {snoozeable && (
-        <div className="relative flex-none">
-          <button
-            type="button"
-            title="Snooze — hide from your view for a while (nothing is changed)"
-            onClick={() => setMenuOpen((o) => !o)}
-            className="rounded-md border border-slate-700 bg-slate-800/40 p-1.5 text-slate-400 opacity-0 transition hover:border-slate-600 hover:text-slate-200 focus:opacity-100 group-hover:opacity-100"
-          >
-            <Clock size={14} />
-          </button>
-          {menuOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-full z-20 mt-1 w-32 overflow-hidden rounded-lg border border-slate-700 bg-surface-900 shadow-xl">
-                <p className="px-3 py-1.5 text-2xs uppercase tracking-wide text-slate-500">
-                  Snooze for
-                </p>
-                {SNOOZE_PRESETS.map((p) => (
-                  <button
-                    key={p.label}
-                    onClick={() => {
-                      snooze.snooze(item.id, p.ms);
-                      setMenuOpen(false);
-                    }}
-                    className="block w-full px-3 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800/60 hover:text-white"
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      <span className="flex flex-none items-center gap-1.5">
-        <span className="rounded-md border border-slate-700 bg-slate-800/40 px-2 py-1 text-xs font-medium text-slate-300 transition group-hover:border-emerald-500/40 group-hover:text-emerald-400">
-          {item.actionLabel}
-        </span>
-        <ChevronRight size={16} className="text-slate-600 transition group-hover:text-slate-400" />
-      </span>
-    </div>
-  );
-}
-
 // ── Screen ─────────────────────────────────────────────────────────────────────
 
 export interface InboxClientProps {
   /** Which groups this tab renders. */
   only: InboxGroupKey[];
+  /** "Approvals" — for the empty state. */
+  tabLabel: string;
   data: InboxResponse | null;
   isLoading: boolean;
   error: string | null;
@@ -199,20 +59,18 @@ export interface InboxClientProps {
   snooze: UseInboxSnooze;
 }
 
-export function InboxClient({ only, data, isLoading, error, refetch, snooze }: InboxClientProps) {
+export function InboxClient({ only, tabLabel, data, isLoading, error, refetch, snooze }: InboxClientProps) {
   const router = useRouter();
   const [sevFilter, setSevFilter] = useState<InboxSeverity | 'all'>('all');
   const [groupFilter, setGroupFilter] = useState<InboxGroupKey | 'all'>('all');
   const [sort, setSort] = useState<SortKey>('urgency');
   const [showSnoozed, setShowSnoozed] = useState(false);
+  const [cursor, setCursor] = useState<string | null>(null);
 
   // Items for this tab, in global rank order (server already ranked data.items).
-  const tabItems = useMemo(
-    () => (data?.items ?? []).filter((i) => only.includes(i.group)),
-    [data, only],
-  );
+  const tabItems = useMemo(() => (data?.items ?? []).filter((i) => only.includes(i.group)), [data, only]);
 
-  // Available filter facets (only show chips that exist in this tab).
+  // Available filter facets (only show what exists in this tab).
   const severitiesPresent = useMemo(() => {
     const set = new Set(tabItems.map((i) => i.severity));
     return SEVERITY_ORDER.filter((s) => set.has(s));
@@ -249,36 +107,116 @@ export function InboxClient({ only, data, isLoading, error, refetch, snooze }: I
     return sorted;
   }, [active, snoozed, showSnoozed, sevFilter, groupFilter, sort]);
 
-  const keynav = useListKeynav({
-    count: visible.length,
-    enabled: !isLoading && !error,
-    onOpen: (i) => {
-      const item = visible[i];
-      if (item) router.push(item.actionHref);
-    },
-  });
+  const columns = useMemo<QueueColumn<InboxItem>[]>(
+    () => [
+      {
+        id: 'priority',
+        header: 'Priority',
+        width: 112,
+        cell: (item) => (
+          <span className="mb-sev">
+            <Pip kind={SEVERITY_META[item.severity].pip} />
+            {SEVERITY_META[item.severity].label}
+          </span>
+        ),
+      },
+      {
+        id: 'item',
+        header: 'Needs you',
+        cell: (item) => (
+          <>
+            <a
+              className="l1 mb-row-link"
+              href={item.actionHref}
+              onClick={(e) => {
+                e.preventDefault();
+                router.push(item.actionHref);
+              }}
+            >
+              {item.title}
+            </a>
+            <span className="l2">{[GROUP_TITLE[item.group], item.subtitle].filter(Boolean).join(' · ')}</span>
+          </>
+        ),
+      },
+      {
+        id: 'due',
+        header: 'Due',
+        width: 132,
+        cell: (item) => <span className={item.dueOrAge.includes('overdue') ? 'neg b' : 'ink-2'}>{item.dueOrAge}</span>,
+      },
+      {
+        id: 'amount',
+        header: 'Amount',
+        numeric: true,
+        width: 128,
+        cell: (item) => (item.amountCents !== null ? money(Math.round(item.amountCents)) : <span className="ink-3">—</span>),
+      },
+      {
+        id: 'act',
+        header: <span className="sr">Actions</span>,
+        width: showSnoozed ? 112 : 232,
+        cell: (item) =>
+          showSnoozed ? (
+            <Button variant="quiet" onClick={() => snooze.unsnooze(item.id)}>
+              Wake
+            </Button>
+          ) : (
+            <span className="mb-row-acts">
+              {canSnooze(item.severity) && (
+                <select
+                  className="select mb-snooze"
+                  aria-label={`Snooze ${item.title} — hides it from your view only; nothing is changed`}
+                  title="Snooze — hide from your view for a while (nothing is changed)"
+                  value=""
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    const p = SNOOZE_PRESETS.find((x) => x.label === e.target.value);
+                    if (p) snooze.snooze(item.id, p.ms);
+                  }}
+                >
+                  <option value="" disabled>
+                    Snooze
+                  </option>
+                  {SNOOZE_PRESETS.map((p) => (
+                    <option key={p.label} value={p.label}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <Button variant="default" iconAfter="right" onClick={() => router.push(item.actionHref)}>
+                {item.actionLabel}
+              </Button>
+            </span>
+          ),
+      },
+    ],
+    [router, snooze, showSnoozed],
+  );
 
   // ── States ───────────────────────────────────────────────────────────────────
 
   if (isLoading && !data) {
     return (
-      <div className="flex items-center justify-center py-24 text-slate-500">
-        <Loader2 className="mr-2 animate-spin" size={18} />
-        Loading your inbox…
+      <div className="surface wg-loading mb-state-block" aria-busy="true">
+        <span className="bar-l" style={{ width: '72%' }} aria-hidden="true" />
+        <span className="bar-l" style={{ width: '58%' }} aria-hidden="true" />
+        <span className="bar-l" style={{ width: '66%' }} aria-hidden="true" />
+        <span className="t-cap" role="status">
+          Loading your inbox…
+        </span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-red-900/40 bg-red-950/20 py-16 text-center">
-        <AlertCircle className="mb-3 text-red-400" size={28} />
-        <p className="text-sm font-medium text-red-300">Could not load this tab</p>
-        <p className="mt-1 max-w-md text-xs text-slate-500">{error}</p>
-        <button onClick={() => refetch()} className="btn-secondary btn-sm mt-4">
-          <RefreshCw size={14} className="mr-1.5" />
-          Retry
-        </button>
+      <div className="surface wg-state mb-state-block" role="alert">
+        <span className="tag tag--neg">Not loaded</span>
+        <span className="t-head">This tab didn’t load</span>
+        <p>{error}</p>
+        <Button onClick={() => void refetch()}>Retry</Button>
       </div>
     );
   }
@@ -286,198 +224,102 @@ export function InboxClient({ only, data, isLoading, error, refetch, snooze }: I
   const nothingInTab = tabItems.length === 0;
 
   return (
-    <div className="space-y-5">
-      {/* Degraded-source note */}
+    <div className="mb-inbox-body">
       {data && data.degraded.length > 0 && (
-        <p className="rounded-lg border border-amber-900/30 bg-amber-950/10 px-3 py-2 text-xs text-amber-400/80">
-          Some sources were unavailable and skipped: {data.degraded.join(', ')}. The rest of your
-          inbox is complete.
-        </p>
+        <InlineNotice tone="warn" title="Some sources were skipped.">
+          {data.degraded.join(', ')} didn’t answer. The rest of your inbox is complete.
+        </InlineNotice>
       )}
 
       {nothingInTab ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-slate-800 bg-surface-900 py-16 text-center">
-          <CheckCircle2 size={22} className="mb-2 text-emerald-400" />
-          <p className="text-sm text-slate-300">Nothing in this tab right now.</p>
-          <p className="mt-1 text-xs text-slate-500">
-            New items will land here, ranked by what&apos;s most urgent. Other tabs may still need
-            you — the counts above show the full picture.
-          </p>
+        <div className="surface wg-state mb-state-block">
+          <span className="wg-done-mark" aria-hidden="true">
+            <Icon name="check" />
+          </span>
+          <span className="t-head">Nothing in {tabLabel} right now</span>
+          <p>New items land here ranked by urgency. The other tabs may still need you — their counts are above.</p>
         </div>
       ) : (
         <>
-          {/* Controls: severity + module filters, sort, snoozed toggle */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Controls: priority + module filters, sort, snoozed toggle */}
+          <div className="mb-toolbar">
             {severitiesPresent.length > 1 && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <FilterChip active={sevFilter === 'all'} onClick={() => setSevFilter('all')}>
-                  All
-                </FilterChip>
-                {severitiesPresent.map((s) => (
-                  <FilterChip key={s} active={sevFilter === s} onClick={() => setSevFilter(s)}>
-                    <span className={clsx('h-1.5 w-1.5 rounded-full', SEVERITY_META[s].dot)} />
-                    {SEVERITY_META[s].label}
-                  </FilterChip>
-                ))}
-              </div>
+              <Seg
+                aria-label="Filter by priority"
+                value={sevFilter}
+                onChange={setSevFilter}
+                items={[
+                  { value: 'all' as const, label: 'All' },
+                  ...severitiesPresent.map((s) => ({ value: s, label: SEVERITY_META[s].label })),
+                ]}
+              />
             )}
-
             {groupsPresent.length > 1 && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-2xs uppercase tracking-wide text-slate-600">Module</span>
-                <FilterChip active={groupFilter === 'all'} onClick={() => setGroupFilter('all')}>
-                  All
-                </FilterChip>
-                {groupsPresent.map((g) => (
-                  <FilterChip key={g} active={groupFilter === g} onClick={() => setGroupFilter(g)}>
-                    {GROUP_META[g].title}
-                  </FilterChip>
-                ))}
-              </div>
+              <Seg
+                aria-label="Filter by kind"
+                value={groupFilter}
+                onChange={setGroupFilter}
+                items={[{ value: 'all' as const, label: 'All kinds' }, ...groupsPresent.map((g) => ({ value: g, label: GROUP_TITLE[g] }))]}
+              />
             )}
-
-            <div className="ml-auto flex items-center gap-2">
-              {snoozed.length > 0 && (
-                <button
-                  onClick={() => setShowSnoozed((s) => !s)}
-                  className={clsx(
-                    'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition',
-                    showSnoozed
-                      ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
-                      : 'border-slate-800 bg-slate-800/30 text-slate-400 hover:text-slate-200',
-                  )}
-                >
-                  <BellOff size={13} />
-                  Snoozed
-                  <span className="rounded bg-slate-700/50 px-1.5 py-0.5 font-mono text-[10px]">
-                    {snoozed.length}
-                  </span>
-                </button>
-              )}
-              <label className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-surface-900 px-2.5 py-1.5 text-xs text-slate-300">
-                <ArrowUpDown size={13} className="text-slate-500" />
-                <select
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value as SortKey)}
-                  className="bg-transparent text-xs text-slate-200 focus:outline-none"
-                >
-                  {SORT_OPTIONS.map((o) => (
-                    <option key={o.key} value={o.key}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            <span className="sp" />
+            {snoozed.length > 0 && (
+              <Button variant={showSnoozed ? 'primary' : 'default'} aria-pressed={showSnoozed} count={snoozed.length} onClick={() => setShowSnoozed((s) => !s)}>
+                Snoozed
+              </Button>
+            )}
+            <label className="mb-inline-field">
+              <span className="t-cap">Sort</span>
+              <select className="select" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort">
+                {SORT_OPTIONS.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           {showSnoozed && (
-            <p className="rounded-lg border border-indigo-900/30 bg-indigo-950/10 px-3 py-2 text-xs text-indigo-300/80">
-              Showing snoozed items. These are hidden from your main view (and still counted in the
-              header bell) until they wake. Wake one to bring it back.
-            </p>
+            <InlineNotice tone="info" title="Showing snoozed items.">
+              They’re hidden from your main view (and still counted on the rail) until they wake. Wake one to bring it back.
+            </InlineNotice>
           )}
 
           {visible.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-slate-800 bg-surface-900 py-12 text-center">
-              <CheckCircle2 size={20} className="mb-2 text-emerald-400" />
-              <p className="text-sm text-slate-300">
-                {showSnoozed ? 'No snoozed items in this tab.' : 'No items match this filter.'}
-              </p>
+            <div className="surface wg-state mb-state-block">
+              <span className="t-head">{showSnoozed ? 'No snoozed items in this tab' : 'No items match this filter'}</span>
+              <p>Clear a filter to see the rest.</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {visible.map((item, i) => {
-                const rp = keynav.rowProps(i);
-                return (
-                  <div key={item.id} className="flex items-center gap-2">
-                    <div className="min-w-0 flex-1">
-                      {showSnoozed ? (
-                        <SnoozedRow item={item} onWake={() => snooze.unsnooze(item.id)} />
-                      ) : (
-                        <InboxRow
-                          item={item}
-                          active={rp['data-active']}
-                          rowRef={rp.ref}
-                          onOpen={() => router.push(item.actionHref)}
-                          snooze={snooze}
-                        />
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="surface mb-queue">
+              <QueueTable
+                aria-label={`${tabLabel}, most urgent first`}
+                columns={columns}
+                rows={visible}
+                getRowId={(i) => i.id}
+                rowState={(i) => ({ attn: i.severity === 'CRITICAL' })}
+                cursorId={cursor}
+                onCursorChange={(id) => setCursor(id)}
+                onOpen={showSnoozed ? undefined : (i) => router.push(i.actionHref)}
+                flush
+              />
             </div>
           )}
 
-          {/* Keyboard + read-only hint */}
           {!showSnoozed && visible.length > 0 && (
-            <p className="flex flex-wrap items-center gap-2 pt-1 text-2xs text-slate-600">
-              <Kbd>j</Kbd>
-              <Kbd>k</Kbd>
-              move
-              <span className="text-slate-700">·</span>
-              <Kbd>↵</Kbd>
-              open
-              <span className="text-slate-700">·</span>
-              This view is read-only — acting on an item opens its own screen.
-            </p>
+            <div className="mb-hints">
+              <Keyhints
+                hints={[
+                  { chord: 'j k', label: 'move' },
+                  { chord: 'enter', label: 'open' },
+                ]}
+              />
+              <span className="t-cap">This view is read-only — acting on an item opens its own screen.</span>
+            </div>
           )}
         </>
       )}
     </div>
-  );
-}
-
-// ── Small building blocks ────────────────────────────────────────────────────────
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={clsx(
-        'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
-        active
-          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-          : 'border-slate-800 bg-slate-800/30 text-slate-400 hover:text-slate-200',
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function SnoozedRow({ item, onWake }: { item: InboxItem; onWake: () => void }) {
-  return (
-    <div className="flex items-center gap-4 rounded-lg border border-slate-800 bg-surface-900/60 px-4 py-3">
-      <BellOff size={14} className="flex-none text-indigo-400/70" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-slate-300">{item.title}</p>
-        {item.subtitle && <p className="mt-0.5 truncate text-xs text-slate-600">{item.subtitle}</p>}
-      </div>
-      <button
-        onClick={onWake}
-        className="inline-flex flex-none items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:border-emerald-500/40 hover:text-emerald-400"
-      >
-        <Undo2 size={13} />
-        Wake
-      </button>
-    </div>
-  );
-}
-
-function Kbd({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd className="rounded border border-slate-700 bg-slate-800/60 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
-      {children}
-    </kbd>
   );
 }

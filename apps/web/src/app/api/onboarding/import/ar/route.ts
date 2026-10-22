@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { createAdminSupabase } from '@/lib/supabase/admin';
+import { serviceWriter, assertWriteScope, isWriteScopeError } from '@/lib/db/scoped-writer';
 import { getImportType } from '@/lib/import/definitions';
 import { coerceValue } from '@/lib/import/csv';
 import { isMigrationProviderId } from '@/lib/integrations/erp/providers';
@@ -231,7 +232,16 @@ async function commitAr(
   }
   let insertedInvoices = 0;
   if (invoiceRows.length > 0) {
-    const { error } = await supabase.from('invoices').insert(invoiceRows);
+    // invoices move to the service role (migration 172 sweep): customers:create checked above,
+    // org pinned, the company asserted in the caller's client scope; customer ids were
+    // resolved through the member client (org-scoped).
+    try {
+      await assertWriteScope(supabase, orgId, [company.id]);
+    } catch (e) {
+      if (isWriteScopeError(e)) return NextResponse.json({ error: e.message }, { status: 403 });
+      throw e;
+    }
+    const { error } = await serviceWriter().from('invoices').insert(invoiceRows);
     if (error) return NextResponse.json({ error: `Could not save opening invoices: ${error.message}` }, { status: 500 });
     insertedInvoices = invoiceRows.length;
   }

@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
-import { assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
+import { assertWriteScope, isWriteScopeError, loadWritableRow, serviceWriter } from '@/lib/db/scoped-writer';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
@@ -309,17 +309,22 @@ export async function POST(request: Request) {
   // it to the posted GL entry (the human-disposition half of the decision log).
   if (body.decision_id) {
     try {
-      await supabase
-        .from('ai_decisions')
-        .update({
-          status: 'APPROVED',
-          disposition_by_user: userId,
-          disposition_at: new Date().toISOString(),
-          posted_gl_entry_id: entry.id,
-        })
-        .eq('org_id', orgId)
-        .eq('id', body.decision_id)
-        .eq('status', 'PROPOSED');
+      // ai_decisions is SELECT-only for members (migration 172): load the decision org-pinned +
+      // client-scope-checked, then a service-role lifecycle update, org pinned.
+      const decision = await loadWritableRow(supabase, orgId, { table: 'ai_decisions', id: body.decision_id });
+      if (decision) {
+        await writer
+          .from('ai_decisions')
+          .update({
+            status: 'APPROVED',
+            disposition_by_user: userId,
+            disposition_at: new Date().toISOString(),
+            posted_gl_entry_id: entry.id,
+          })
+          .eq('org_id', orgId)
+          .eq('id', body.decision_id)
+          .eq('status', 'PROPOSED');
+      }
     } catch (e) {
       console.error('[journal-entries POST] decision disposition failed (non-fatal):', e);
     }

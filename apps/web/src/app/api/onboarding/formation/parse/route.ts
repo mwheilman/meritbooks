@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { parseFormationDocument, FORMATION_EXTRACT_FEATURE } from '@/lib/onboarding/formation/parse-formation';
 import { resolveUploadedFile } from '@/lib/uploads/resolve-upload';
@@ -34,6 +36,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+
+  // Same gate as the sibling save route (onboarding/formation POST): settings_acct:edit.
+  const guard = await requirePermission(userId, 'settings_acct', 'edit');
+  if (!guard.ok) return guard.response;
 
   const apiKey = getAnthropicApiKey();
   if (!apiKey) {
@@ -68,7 +74,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // w.r.t. the legal record: nothing is written to core.company_legal_records here.
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert after the
+    // permission check, org pinned (audit evidence).
+    const { data: dec } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: orgId,

@@ -14,6 +14,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry, type JournalEntryLineInput } from '../services/gl-posting';
 import { PostingError } from './account-roles';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -83,6 +84,17 @@ export async function runDueRecurring(db: DB, orgId: string, asOf: string): Prom
       continue;
     }
 
+    // recurring_templates is SELECT-only for members (migration 172): the template was read
+    // above in this org; the advance goes through the service role, org pinned, its client
+    // asserted in the caller's scope before anything posts.
+    let writer: DB;
+    try {
+      writer = await scopedWriter(db, orgId, [t.location_id]);
+    } catch (e) {
+      result.errors.push({ template_id: t.id, run_date: '-', error: e instanceof Error ? e.message : 'out of scope' });
+      continue;
+    }
+
     let runDate = t.next_run_date ?? t.start_date;
     let lastGenerated: string | null = null;
 
@@ -138,10 +150,11 @@ export async function runDueRecurring(db: DB, orgId: string, asOf: string): Prom
     }
 
     if (lastGenerated) {
-      await db
+      await writer
         .from('recurring_templates')
         .update({ next_run_date: runDate, last_generated_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-        .eq('id', t.id);
+        .eq('id', t.id)
+        .eq('org_id', orgId);
     }
   }
 

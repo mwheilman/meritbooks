@@ -10,6 +10,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { writerFor } from '@/lib/db/scoped-writer';
 import {
   CONVERSION_FEATURE,
   CONVERSION_KIND,
@@ -140,7 +141,10 @@ export async function saveSessionData(
   id: string,
   data: ConversionSessionData,
 ): Promise<void> {
-  const { error } = await supabase
+  // ai_decisions is SELECT-only for members (migration 172): every caller loads the session
+  // through its own client first (loadSession / findOpenConversionSession — RLS: org + client
+  // scope), so the update goes through the service role for a member caller, org pinned.
+  const { error } = await writerFor(supabase)
     .from('ai_decisions')
     .update({ proposed_output: data })
     .eq('org_id', orgId)

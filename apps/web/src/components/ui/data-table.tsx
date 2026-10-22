@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { clsx } from 'clsx';
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import { Icon } from '@meritbooks/merit-ui';
 
 export interface Column<T> {
   key: string;
@@ -22,12 +21,17 @@ interface DataTableProps<T> {
   className?: string;
 }
 
+/**
+ * A sortable list on merit-ui (kit `.tbl.tbl-q`): sticky tracked-caps header, 48px
+ * rows on hairlines, right-aligned tabular figures for right-aligned columns, the
+ * active sort in Electric with its direction. Same props as before.
+ */
 export function DataTable<T extends Record<string, unknown>>({
   columns,
   data,
   keyExtractor,
   onRowClick,
-  emptyMessage = 'No data to display',
+  emptyMessage = 'Nothing here yet.',
   className,
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null);
@@ -55,74 +59,68 @@ export function DataTable<T extends Record<string, unknown>>({
     }
   }
 
+  const cellClass = (col: Column<T>) => (col.align === 'right' ? 'n' : col.align === 'center' ? 'mb-c' : undefined);
+
   return (
-    <div className={clsx('card overflow-hidden', className)}>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-slate-800">
-              {columns.map((col) => (
+    <div className={['surface', 'mb-scroll-x', className].filter(Boolean).join(' ')}>
+      <table className="tbl tbl-q tbl-q--flush">
+        <thead>
+          <tr>
+            {columns.map((col) => {
+              const active = sortKey === col.key;
+              return (
                 <th
                   key={col.key}
-                  className={clsx(
-                    'px-4 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500',
-                    col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
-                    col.sortable && 'cursor-pointer select-none hover:text-slate-300 transition-colors'
-                  )}
+                  className={cellClass(col)}
                   style={col.width ? { width: col.width } : undefined}
-                  onClick={col.sortable ? () => handleSort(col.key) : undefined}
+                  aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
                 >
-                  <span className="inline-flex items-center gap-1">
-                    {col.label}
-                    {col.sortable && sortKey === col.key && (
-                      sortDir === 'asc'
-                        ? <ChevronUp size={12} />
-                        : <ChevronDown size={12} />
-                    )}
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800/50">
-            {sorted.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={columns.length}
-                  className="px-4 py-12 text-center text-sm text-slate-500"
-                >
-                  {emptyMessage}
-                </td>
-              </tr>
-            ) : (
-              sorted.map((row) => (
-                <tr
-                  key={keyExtractor(row)}
-                  className={clsx(
-                    'table-row-hover',
-                    onRowClick && 'cursor-pointer'
+                  {col.sortable ? (
+                    <button type="button" className={active ? 'th-sort' : 'mb-th-btn'} onClick={() => handleSort(col.key)}>
+                      {col.label}
+                      {active && <Icon name={sortDir === 'asc' ? 'up' : 'down'} size={12} />}
+                    </button>
+                  ) : (
+                    col.label
                   )}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
-                >
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={clsx(
-                        'px-4 py-3 text-sm',
-                        col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
-                      )}
-                    >
-                      {col.render
-                        ? col.render(row)
-                        : (row[col.key] as React.ReactNode) ?? '—'}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.length === 0 ? (
+            <tr>
+              <td colSpan={columns.length} className="mb-table-empty">
+                {emptyMessage}
+              </td>
+            </tr>
+          ) : (
+            sorted.map((row) => (
+              <tr
+                key={keyExtractor(row)}
+                className="q-row"
+                style={onRowClick ? { cursor: 'pointer' } : undefined}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (e) => {
+                        if (e.key === 'Enter') onRowClick(row);
+                      }
+                    : undefined
+                }
+                tabIndex={onRowClick ? 0 : undefined}
+              >
+                {columns.map((col) => (
+                  <td key={col.key} className={cellClass(col)}>
+                    {col.render ? col.render(row) : ((row[col.key] as React.ReactNode) ?? '—')}
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }

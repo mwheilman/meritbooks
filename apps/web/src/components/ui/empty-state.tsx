@@ -1,8 +1,8 @@
-import type { LucideIcon } from 'lucide-react';
-import { clsx } from 'clsx';
+import { Icon } from '@meritbooks/merit-ui';
 
 interface EmptyStateProps {
-  icon: LucideIcon;
+  /** Accepted for compatibility; the kit's dashed mark replaces stock icons. */
+  icon?: unknown;
   title: string;
   description: string;
   action?: {
@@ -12,16 +12,20 @@ interface EmptyStateProps {
   className?: string;
 }
 
-export function EmptyState({ icon: Icon, title, description, action, className }: EmptyStateProps) {
+/**
+ * The kit empty state (§7.12): a dashed mark, what's empty, what to do, one verb.
+ * Never "No data".
+ */
+export function EmptyState({ title, description, action, className }: EmptyStateProps) {
   return (
-    <div className={clsx('flex flex-col items-center justify-center py-16 px-4', className)}>
-      <div className="h-12 w-12 rounded-xl bg-slate-800 flex items-center justify-center mb-4">
-        <Icon size={24} className="text-slate-500" />
-      </div>
-      <h3 className="text-sm font-medium text-slate-300 mb-1">{title}</h3>
-      <p className="text-sm text-slate-500 text-center max-w-sm mb-4">{description}</p>
+    <div className={['wg-state', 'mb-empty', className].filter(Boolean).join(' ')}>
+      <span className="wg-empty-mark" aria-hidden="true">
+        <Icon name="plus" />
+      </span>
+      <span className="t-head">{title}</span>
+      <p>{description}</p>
       {action && (
-        <button onClick={action.onClick} className="btn-primary btn-sm">
+        <button type="button" onClick={action.onClick} className="btn btn--primary">
           {action.label}
         </button>
       )}

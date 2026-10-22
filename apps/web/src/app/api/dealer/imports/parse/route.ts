@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { AI_UNAVAILABLE_MESSAGE, getAnthropicApiKey } from '@/lib/ai/gateway';
 import { linkSourceDocument, storeSourceDocument } from '@/lib/documents/store-source';
 import { DEALER_PERMS, openDealerContext } from '@/lib/dealer/service/context';
@@ -179,7 +180,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     // ── Decision log: one PROPOSED row per AI read (AC16) ───────────────────────
     let decisionId: string | null = null;
     try {
-      const { data: dec, error } = await api.supabase
+      // ai_decisions is SELECT-only for members (migration 172): service-role insert after
+      // openDealerContext (permission + client proven through RLS), org pinned.
+      const { data: dec, error } = await serviceWriter()
         .from('ai_decisions')
         .insert({
           org_id: d.orgId,

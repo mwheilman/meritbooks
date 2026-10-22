@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { runAiGateway } from '@meritbooks/core-ai';
 import { formatMoney } from '@meritbooks/shared';
@@ -381,7 +382,7 @@ function modelImpact(body: Body, parsed: ParsedScenario) {
 }
 
 export const POST = apiHandler(schema, async (body: Body, ctx) => {
-  const { userId, orgId, supabase } = ctx;
+  const { userId, orgId } = ctx;
 
   const apiKey = getAnthropicApiKey();
 
@@ -448,11 +449,13 @@ export const POST = apiHandler(schema, async (body: Body, ctx) => {
   const parsed = coerceParsed(obj);
   const result = modelImpact(body, parsed);
 
-  // Audit the AI proposal to the existing decision-log rail (org-scoped, RLS).
+  // Audit the AI proposal to the existing decision-log rail.
+  // ai_decisions is SELECT-only for members (migration 172): service-role insert, org pinned
+  // to the session org (org-level row, no location_id).
   let decisionId: string | null = null;
   if (orgId) {
     try {
-      const { data } = await supabase
+      const { data } = await serviceWriter()
         .from('ai_decisions')
         .insert({
           org_id: orgId,

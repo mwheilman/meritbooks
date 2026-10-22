@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { parseCovenantDocument, COVENANT_EXTRACT_FEATURE } from '@/lib/covenants/parse-document';
 import { storeSourceDocument } from '@/lib/documents/store-source';
@@ -103,7 +104,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Read-only w.r.t. the covenant monitor: nothing is written to loan_covenants here.
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert after
+    // the route's checks, org pinned to the session org (org-level row, no client).
+    const { data: dec } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: orgId,

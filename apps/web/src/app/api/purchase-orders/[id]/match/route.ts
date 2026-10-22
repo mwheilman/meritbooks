@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import {
   runThreeWayMatch,
   toMatchConfidence,
@@ -110,6 +111,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const isException = result.verdict === 'EXCEPTION';
   const nowIso = new Date().toISOString();
 
+  // ai_decisions / bill_po_links / purchase_orders / purchase_order_lines are SELECT-only for
+  // members (migration 172): service-role writes after the bills:create check, org pinned.
+  // The PO, its lines, the bill and any existing exception were all read via the member
+  // client above (RLS proved org + client scope).
+  const writer = serviceWriter();
+
   // On a mismatch, raise (or refresh) a PROPOSED ai_decisions exception so a human
   // reviews it on /exceptions. Confidence = engine certainty that this IS an
   // exception (higher $ at risk / clearer flags → higher). We keep it simple and
@@ -140,7 +147,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     };
 
     if (existing?.id) {
-      await supabase
+      await writer
         .from('ai_decisions')
         .update({
           input_summary: result.summary,
@@ -148,10 +155,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
           confidence: toMatchConfidence(0.9),
           reasoning: result.reasons.join(' '),
         })
-        .eq('id', existing.id);
+        .eq('id', existing.id)
+        .eq('org_id', orgId);
       exceptionDecisionId = existing.id as string;
     } else {
-      const { data: inserted } = await supabase
+      const { data: inserted } = await writer
         .from('ai_decisions')
         .insert({
           org_id: orgId,
@@ -183,7 +191,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     matched_by_user: userId,
     matched_at: nowIso,
   };
-  const { error: linkErr } = await supabase
+  const { error: linkErr } = await writer
     .from('bill_po_links')
     .upsert(linkRow, { onConflict: 'org_id,bill_id,po_id' });
   if (linkErr) {
@@ -197,15 +205,17 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const poLine = poLines.find((p) => p.id === line.poLineId);
     if (!poLine) continue;
     billedValueDelta += line.billedAmountCents;
-    await supabase
+    await writer
       .from('purchase_order_lines')
       .update({ billed_qty: line.billedQty })
-      .eq('id', line.poLineId);
+      .eq('id', line.poLineId)
+      .eq('org_id', orgId);
   }
-  await supabase
+  await writer
     .from('purchase_orders')
     .update({ billed_total_cents: billedValueDelta })
-    .eq('id', poId);
+    .eq('id', poId)
+    .eq('org_id', orgId);
 
   await logHumanAction(supabase, userId, orgId, {
     action: 'three_way_match.run',

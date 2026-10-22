@@ -26,11 +26,12 @@ describe('global shortcut ownership (audit 06 §5 bugs 3/4)', () => {
     expect(isSearchChord(k('/'))).toBe(false);
   });
 
-  it('only the command bar binds ⌘K (no second overlay in the header)', () => {
+  it('only the command bar binds ⌘K (the merit-ui shell opens it, never binds it twice)', () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
-    const header = fs.readFileSync(path.resolve(here, '../layout/header.tsx'), 'utf8');
-    expect(header).not.toMatch(/toLowerCase\(\)\s*===\s*'k'|key\s*===\s*'k'/);
-    const sidebar = fs.readFileSync(path.resolve(here, '../layout/sidebar.tsx'), 'utf8');
-    expect(sidebar).toMatch(/openCommandBar\(\)/);
+    const shell = fs.readFileSync(path.resolve(here, '../layout/books-shell.tsx'), 'utf8');
+    // No hand-rolled ⌘K listener in the shell…
+    expect(shell).not.toMatch(/toLowerCase\(\)\s*===\s*'k'|key\s*===\s*'k'/);
+    // …and the kit's ⌘K trigger is told NOT to register the chord; it just opens the bar.
+    expect(shell).toMatch(/<CmdkTrigger[^>]*onOpen=\{\(\) => openCommandBar\(\)\}[^>]*bindChord=\{false\}/);
   });
 });

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { formatMoney } from '@meritbooks/shared';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import {
   detectSubscriptions,
   type ChargeInput,
@@ -173,7 +174,9 @@ export async function POST(): Promise<NextResponse> {
         .limit(1);
       if (!openDec || openDec.length === 0) {
         const flags = d.creepFlags.map((f) => CREEP_LABEL[f] ?? f).join(', ');
-        await supabase.from('ai_decisions').insert({
+        // ai_decisions is SELECT-only for members (migration 172): service-role insert, org
+        // pinned to the session org. NOTE: this route has no requirePermission (no key).
+        await serviceWriter().from('ai_decisions').insert({
           org_id: orgId,
           feature: SUBSCRIPTION_SCAN_FEATURE,
           input_summary:

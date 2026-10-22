@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { assertOrgRefs, isMemberClient, writerFor } from '@/lib/db/scoped-writer';
 
 /**
  * Invoice lifecycle events (FPB §5). Append-only — every transition writes a row
@@ -25,7 +26,14 @@ export async function recordInvoiceEvent(
   }
 ): Promise<void> {
   try {
-    await supabase.from('invoice_events').insert({
+    // invoice_events is SELECT-only for members (migration 172) and append-only audit evidence:
+    // a member caller (whose route already authorized the action) is escalated to the service
+    // role, with the invoice verified in the org (FKs never check the tenant); a service-role
+    // caller (webhooks, drains) writes as itself. org_id is the caller's session org.
+    if (isMemberClient(supabase)) {
+      await assertOrgRefs(args.orgId, [{ table: 'invoices', ids: [args.invoiceId], label: 'invoice' }], { caller: supabase });
+    }
+    await writerFor(supabase).from('invoice_events').insert({
       org_id: args.orgId,
       invoice_id: args.invoiceId,
       event_type: args.type,

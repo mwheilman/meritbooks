@@ -34,6 +34,8 @@ type Row = Record<string, unknown>;
 
 export interface TenantSodSettings extends SodPolicy {
   soleApproverMode: boolean;
+  /** Mig 174: with soleApproverMode on, the largest payment its approver may also release (cents). null = any amount. */
+  soleApproverMaxCents: number | null;
   jeSelfPostThresholdCents: number;
 }
 
@@ -51,17 +53,22 @@ export async function loadSodRules(admin: SupabaseClient, orgId: string): Promis
 }
 
 export async function loadTenantSodSettings(admin: SupabaseClient, orgId: string): Promise<TenantSodSettings> {
-  const [{ data: org, error }, { data: promos }] = await Promise.all([
-    admin.schema('core').from('organizations')
-      .select('tenant_type, sole_approver_mode, je_self_post_threshold_cents').eq('id', orgId).maybeSingle(),
+  const readOrg = (cols: string) =>
+    admin.schema('core').from('organizations').select(cols).eq('id', orgId).maybeSingle();
+  const [orgRes, { data: promos }] = await Promise.all([
+    readOrg('tenant_type, sole_approver_mode, sole_approver_max_cents, je_self_post_threshold_cents'),
     admin.schema('core').from('sod_rule_settings').select('rule_id, enforcement').eq('org_id', orgId),
   ]);
+  let { data: org, error } = orgRes;
+  // 42703 = undefined_column: migration 174 not applied yet → no threshold (165 behavior).
+  if (error?.code === '42703') ({ data: org, error } = await readOrg('tenant_type, sole_approver_mode, je_self_post_threshold_cents'));
   if (error) throw new Error(`Could not load SoD settings: ${error.message}`);
-  const o = (org ?? {}) as Row;
+  const o = (org ?? {}) as unknown as Row;
   return {
     tenantType: (o.tenant_type === 'firm' ? 'firm' : 'company') as TenantType,
     promotedRuleIds: new Set(((promos ?? []) as Row[]).filter((p) => p.enforcement === 'hard').map((p) => String(p.rule_id))),
     soleApproverMode: o.sole_approver_mode === true,
+    soleApproverMaxCents: o.sole_approver_max_cents == null ? null : Number(o.sole_approver_max_cents),
     // Q4 default $25,000 when the column is absent (pre-165 DB): fail toward enforcing.
     jeSelfPostThresholdCents: o.je_self_post_threshold_cents == null ? 2_500_000 : Number(o.je_self_post_threshold_cents),
   };

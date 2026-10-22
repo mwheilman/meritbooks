@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { parseLeaseDocument, LEASE_EXTRACT_FEATURE } from '@/lib/leases/parse-lease';
 import { storeSourceDocument } from '@/lib/documents/store-source';
@@ -90,7 +91,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Log the proposal to the AI decision rail (PROPOSED) — writes nothing to the ledger.
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert after
+    // the route's checks, org pinned to the session org (org-level row, no client).
+    const { data: dec } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: orgId,

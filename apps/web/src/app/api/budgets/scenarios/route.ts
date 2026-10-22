@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
 import { z } from 'zod';
 import {
   buildThreeCase,
@@ -157,7 +158,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No organization on session', code: 'NO_ORG' }, { status: 403 });
   }
 
-  const { data: inserted, error } = await supabase
+  // ai_decisions is SELECT-only for members (migration 172): service-role write, org pinned
+  // to the session org; the client (location_id) is asserted in the caller's scope first.
+  try {
+    await assertWriteScope(supabase, orgId, [body.location_id]);
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    throw e;
+  }
+  const { data: inserted, error } = await serviceWriter()
     .from('ai_decisions')
     .insert({
       org_id: orgId,

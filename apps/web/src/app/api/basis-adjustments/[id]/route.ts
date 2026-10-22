@@ -4,6 +4,25 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { z } from 'zod';
+import { serviceWriter, loadWritableRow, isWriteScopeError } from '@/lib/db/scoped-writer';
+
+/**
+ * reporting_basis_adjustments is SELECT-only for members (migration 172): the row is loaded
+ * org-pinned + client-scope-checked, then written by the service role, org pinned.
+ */
+async function loadAdjustment(
+  supabase: Parameters<typeof loadWritableRow>[0],
+  orgId: string,
+  id: string,
+): Promise<NextResponse | null> {
+  try {
+    const row = await loadWritableRow(supabase, orgId, { table: 'reporting_basis_adjustments', id });
+    return row ? null : NextResponse.json({ error: 'Adjustment not found', code: 'NOT_FOUND' }, { status: 404 });
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    throw e;
+  }
+}
 
 /**
  * Edit / delete a single reporting-basis adjustment. RLS scopes both to the caller's org;
@@ -52,10 +71,13 @@ export async function PATCH(
   if (parsed.data.adjustment_type !== undefined) update.adjustment_type = parsed.data.adjustment_type;
   if (parsed.data.custom_label !== undefined) update.custom_label = parsed.data.custom_label;
 
-  const { error } = await supabase
+  const denied = await loadAdjustment(supabase, orgId, params.id);
+  if (denied) return denied;
+  const { error } = await serviceWriter()
     .from('reporting_basis_adjustments')
     .update(update)
-    .eq('id', params.id);
+    .eq('id', params.id)
+    .eq('org_id', orgId);
   if (error) return NextResponse.json({ error: error.message, code: 'UPDATE_ERROR' }, { status: 500 });
   return NextResponse.json({ data: { ok: true } });
 }
@@ -72,10 +94,13 @@ export async function DELETE(
   const guard = await requirePermission(userId, 'journal_entries', 'create');
   if (!guard.ok) return guard.response;
 
-  const { error } = await supabase
+  const denied = await loadAdjustment(supabase, orgId, params.id);
+  if (denied) return denied;
+  const { error } = await serviceWriter()
     .from('reporting_basis_adjustments')
     .delete()
-    .eq('id', params.id);
+    .eq('id', params.id)
+    .eq('org_id', orgId);
   if (error) return NextResponse.json({ error: error.message, code: 'DELETE_ERROR' }, { status: 500 });
   return NextResponse.json({ data: { ok: true } });
 }

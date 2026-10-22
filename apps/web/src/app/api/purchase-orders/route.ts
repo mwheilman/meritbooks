@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { assertOrgRefs, assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * AP Purchase Orders (GATE 11b, migration 080) — general (non-job) vendor
@@ -144,7 +145,29 @@ export async function POST(request: Request) {
   const totalCents = subtotalCents + body.tax_cents;
   const poNumber = await mintPoNumber(supabase as unknown as SupabaseClient, orgId, orderDate);
 
-  const { data: po, error: poErr } = await supabase
+  // purchase_orders / purchase_order_lines are SELECT-only for members (migration 172):
+  // service-role writes after the bills:create check, org pinned. The PO's client and every
+  // body FK (vendor, accounts, items, departments, jobs) are verified in this org first.
+  try {
+    await assertWriteScope(supabase, orgId, [body.location_id]);
+    await assertOrgRefs(
+      orgId,
+      [
+        { schema: 'core', table: 'vendors', ids: [body.vendor_id], label: 'vendor' },
+        { table: 'accounts', ids: body.lines.map((l) => l.account_id), label: 'account' },
+        { schema: 'core', table: 'items', ids: body.lines.map((l) => l.item_id), label: 'item' },
+        { schema: 'core', table: 'departments', ids: body.lines.map((l) => l.department_id), label: 'department' },
+        { schema: 'core', table: 'jobs', ids: body.lines.map((l) => l.job_id), label: 'job' },
+      ],
+      { caller: supabase },
+    );
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    throw e;
+  }
+  const writer = serviceWriter();
+
+  const { data: po, error: poErr } = await writer
     .from('purchase_orders')
     .insert({
       org_id: orgId,
@@ -182,9 +205,9 @@ export async function POST(request: Request) {
     received_qty: 0,
     billed_qty: 0,
   }));
-  const { error: lineErr } = await supabase.from('purchase_order_lines').insert(lineRows);
+  const { error: lineErr } = await writer.from('purchase_order_lines').insert(lineRows);
   if (lineErr) {
-    await supabase.from('purchase_orders').delete().eq('id', po.id);
+    await writer.from('purchase_orders').delete().eq('id', po.id).eq('org_id', orgId);
     return NextResponse.json({ error: lineErr.message, code: 'PO_LINES_FAILED' }, { status: 500 });
   }
 

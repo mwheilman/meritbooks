@@ -49,6 +49,33 @@ Accepted in full, with these adjustments:
 
 Books-side order: stop-gap → A1–A3 (billing correct) → deposits + commitments → A4–A8 → `JOB_TIME`.
 
+### Status of the Books side (migration 173, 2026-10-21 — built, not yet applied)
+
+Stop-gap, A1–A3 and `JOB_DEPOSIT_REQUEST` are built (`lib/services/billing-consumer.ts`, `lib/services/deposit-request-consumer.ts`,
+`lib/events/seam.ts`). Ack columns Books writes on the event row: `status`, `invoice_id`, `invoice_number`, `gl_entry_id`,
+`processed_at`, and on rejection `error = '<CODE>: <message>'` + `error_code` (new column); extra ids in `ack_meta` (new column;
+`deposit_id` for a deposit request). GL entries carry `source_ref = 'job_billing:<payload.source_ref>'` /
+`'job_deposit:<payload.source_ref>'`. 173 sets `entitlements.books_seam_version = 2` for Projects orgs (and keeps it set when
+Projects is switched on later).
+
+### Open questions for Projects
+
+1. **Final billing marker.** Books applies collected deposits at the job's final invoice. Today it infers "final" the way
+   `pm.guard_final_billed` does (gross billed ≥ `core.jobs.contract_amount_cents`, pinned by `JOB_PROGRESS`). Please add an
+   additive `is_final: true` to the final `JOB_BILLING` (Books already honours it).
+2. **`lines[].cost_code_id`** is a `pm.cost_codes` id; Books' `invoice_lines.cost_code_id` references `job_cost_codes`, so Books
+   does not store it on the invoice line (it stays in the event payload). Agree a mapping if Books should report billing by cost code.
+3. **Negative STANDARD lines** are rejected (`INVALID_AMOUNT`) — a reduction is a credit memo in Books. Confirm Projects never emits them.
+4. **Sales tax.** Books computes tax on STANDARD lines from the customer's jurisdiction, so the invoice total can exceed Projects'
+   `net_cents`. Show Books' invoice total (read it from Books) rather than `net_cents` as the amount due.
+5. **Rejection codes.** `error_code` values: `UNSUPPORTED_SCHEMA_VERSION`, `UNSUPPORTED_EVENT_TYPE`, `UNSUPPORTED_BILLING_SUBTYPE`,
+   `UNSUPPORTED_LINE_TYPE`, `MISSING_SOURCE_REF`, `NO_BILLABLE_LINES`, `INVALID_AMOUNT`, `RETAINAGE_TIE`, `GROSS_TIE`,
+   `COMPANY_NOT_FOUND`, `NO_CUSTOMER`, `NO_FISCAL_PERIOD`, `PERIOD_CLOSED`, `ACCOUNT_UNRESOLVED`, `PARTIAL_INVOICE`,
+   `INVOICE_FAILED`, `GL_POST_FAILED`, `DEPOSIT_FAILED`, `CONSUMER_ERROR`. Projects may read `error_code` directly.
+6. **Event types.** `JOB_COMMITMENT`, `JOB_TIME`, `JOB_MATERIAL`, `JOB_PAYABLE_REQUEST` stay `pending` until Books builds them; any
+   other unknown type from Projects is rejected `UNSUPPORTED_EVENT_TYPE`. `JOB_PROGRESS` v2 is still accepted by the existing
+   consumer (A6 not yet built) — not version-gated in this slice.
+
 ## 3. Dealers — Projects replacing the dealer system (c-Systems etc.)
 
 Owner direction: **Merit Projects should replace c-Systems** (the dealer management system) for dealer clients.

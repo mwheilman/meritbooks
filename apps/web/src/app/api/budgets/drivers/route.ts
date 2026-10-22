@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { assertWriteScope, serviceWriter } from '@/lib/db/scoped-writer';
 import { z } from 'zod';
 import {
   expandDrivers,
@@ -125,23 +126,31 @@ export async function POST(request: Request) {
 
   // Persist the driver MODEL for audit + reload (best-effort; the plan-of-record
   // is the budgets cells above, so a log failure must not fail the save).
-  await supabase.from('ai_decisions').insert({
-    org_id: orgId,
-    location_id: body.location_id,
-    feature: 'BUDGET_DRIVER_MODEL',
-    input_summary: `Driver-based budget · FY${body.fiscal_year} · ${body.drivers.length} drivers · ${expansion.lines.length} accounts`,
-    proposed_output: {
-      fiscal_year: body.fiscal_year,
+  // ai_decisions is SELECT-only for members (migration 172): service-role write, org pinned
+  // to the session org; the client (location_id) is asserted in the caller's scope first.
+  // Best-effort like before: a log failure (incl. a scope refusal) does not fail the save.
+  try {
+    await assertWriteScope(supabase, orgId, [body.location_id]);
+    await serviceWriter().from('ai_decisions').insert({
+      org_id: orgId,
       location_id: body.location_id,
-      department_id: body.department_id ?? null,
-      drivers: body.drivers,
-      totalRevenueCents: expansion.totalRevenueCents,
-    },
-    status: 'APPROVED',
-    disposition_by_user: userId,
-    disposition_at: new Date().toISOString(),
-    created_by_user: userId,
-  });
+      feature: 'BUDGET_DRIVER_MODEL',
+      input_summary: `Driver-based budget · FY${body.fiscal_year} · ${body.drivers.length} drivers · ${expansion.lines.length} accounts`,
+      proposed_output: {
+        fiscal_year: body.fiscal_year,
+        location_id: body.location_id,
+        department_id: body.department_id ?? null,
+        drivers: body.drivers,
+        totalRevenueCents: expansion.totalRevenueCents,
+      },
+      status: 'APPROVED',
+      disposition_by_user: userId,
+      disposition_at: new Date().toISOString(),
+      created_by_user: userId,
+    });
+  } catch {
+    // best-effort audit/reload log — the budgets cells above are the plan of record
+  }
 
   return NextResponse.json({
     saved: inserts.length,

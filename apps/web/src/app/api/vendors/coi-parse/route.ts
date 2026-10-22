@@ -6,6 +6,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { parseCoiDocument, COI_EXTRACT_FEATURE } from '@/lib/vendors/coi-parse';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * Vendor COI (Certificate of Insurance) DROP-AND-PARSE intake.
@@ -89,7 +90,9 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert after the
+    // compliance:manage check, org pinned to the session org.
+    const { data: dec } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: orgId,
@@ -179,6 +182,10 @@ export async function PUT(request: Request): Promise<NextResponse> {
     .single();
   if (vErr || !existing) return NextResponse.json({ error: 'Vendor not found', code: 'NO_VENDOR' }, { status: 404 });
 
+  // vendor_compliance_docs / ai_decisions are SELECT-only for members (migration 172):
+  // service-role writes after the compliance:manage check, org pinned. The vendor (and each
+  // existing doc) was read via the member client in this org first.
+  const writer = serviceWriter();
   // Upsert one VALID compliance doc per coverage line (keyed on vendor + doc_type).
   let recorded = 0;
   const now = new Date().toISOString();
@@ -198,10 +205,10 @@ export async function PUT(request: Request): Promise<NextResponse> {
       .limit(1)
       .maybeSingle();
     if (existingDoc?.id) {
-      const { error } = await supabase.from('vendor_compliance_docs').update(row).eq('id', existingDoc.id);
+      const { error } = await writer.from('vendor_compliance_docs').update(row).eq('id', existingDoc.id).eq('org_id', orgId);
       if (!error) recorded += 1;
     } else {
-      const { error } = await supabase
+      const { error } = await writer
         .from('vendor_compliance_docs')
         .insert({ org_id: orgId, vendor_id: b.vendor_id, doc_type: d.doc_type, ...row });
       if (!error) recorded += 1;
@@ -210,7 +217,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
 
   if (b.decision_id) {
     try {
-      await supabase
+      await writer
         .from('ai_decisions')
         .update({
           status: 'APPROVED',

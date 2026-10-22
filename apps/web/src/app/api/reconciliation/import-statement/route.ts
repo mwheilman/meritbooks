@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { computeGlCashBalanceCents } from '@/lib/services/reconciliation-gl';
@@ -197,21 +198,27 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
+  // bank_reconciliations / bank_transactions / ai_decisions are SELECT-only for members
+  // (migration 172): service-role writes after the permission check, org pinned. The bank
+  // account, period, existing header and book lines were all read through the member client
+  // (RLS proved org + client scope).
+  const writer = serviceWriter();
   let reconciliationId: string;
   if (existing) {
     // Only overwrite the target balance when we actually parsed a closing balance.
     const update: Record<string, unknown> = { gl_balance_cents: glBalanceCents, statement_date: period.end_date };
     if (anchored) update.statement_ending_balance_cents = closingCents;
-    const { data, error } = await supabase
+    const { data, error } = await writer
       .from('bank_reconciliations')
       .update(update)
       .eq('id', existing.id)
+      .eq('org_id', orgId)
       .select('id')
       .single();
     if (error) return NextResponse.json({ error: error.message, code: 'ANCHOR_FAILED' }, { status: 500 });
     reconciliationId = (data as { id: string }).id;
   } else {
-    const { data, error } = await supabase
+    const { data, error } = await writer
       .from('bank_reconciliations')
       .insert({
         org_id: orgId,
@@ -267,10 +274,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   // ── Apply the auto-clears (fully reversible "cleared, not locked" state) ─────
   let autoClearedCount = 0;
   for (const pair of plan.autoCleared) {
-    const { data, error } = await supabase
+    const { data, error } = await writer
       .from('bank_transactions')
       .update({ reconciliation_id: reconciliationId, match_confidence: pair.confidence })
       .eq('id', pair.bookLineId)
+      .eq('org_id', orgId)
       .is('reconciliation_id', null)
       .is('reconciled_at', null)
       .select('id')
@@ -281,7 +289,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   // ── Persist the parsed lines + disposition to the AI decision rail ───────────
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    const { data: dec } = await writer
       .from('ai_decisions')
       .insert({
         org_id: orgId,

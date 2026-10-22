@@ -5,6 +5,7 @@ import { createServerSupabase } from '@/lib/supabase/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /** Depreciation methods the enum accepts (migration 001 + 079). The book methods
  *  post to the GL; MACRS_* drive the parallel tax track. */
@@ -184,13 +185,13 @@ export async function PATCH(request: Request) {
   const supabase = await createServerSupabase();
   const { data: asset, error: readErr } = await supabase
     .from('fixed_assets')
-    .select('id, status, accumulated_depreciation_cents')
+    .select('id, org_id, status, accumulated_depreciation_cents')
     .eq('id', id)
     .maybeSingle();
   if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 });
   if (!asset) return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
 
-  const row = asset as { id: string; status: string; accumulated_depreciation_cents: number };
+  const row = asset as { id: string; org_id: string; status: string; accumulated_depreciation_cents: number };
   if (row.status === 'DISPOSED') {
     return NextResponse.json({ error: 'Cannot modify a disposed asset' }, { status: 422 });
   }
@@ -202,7 +203,9 @@ export async function PATCH(request: Request) {
   }
 
   update.updated_at = new Date().toISOString();
-  const { error: updErr } = await supabase.from('fixed_assets').update(update).eq('id', id);
+  // fixed_assets is SELECT-only for members (migration 172): the asset was read above through
+  // the member client (RLS proves org + client scope); service-role update pinned to its org.
+  const { error: updErr } = await serviceWriter().from('fixed_assets').update(update).eq('id', id).eq('org_id', row.org_id);
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
 
   return NextResponse.json({ ok: true, id, updated: update });

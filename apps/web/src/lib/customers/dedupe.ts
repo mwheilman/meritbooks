@@ -24,6 +24,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { writerFor } from '@/lib/db/scoped-writer';
 import { vendorSimilarity, normalizeText } from '@/lib/services/reconciliation-match';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
 import { logAction } from '@/lib/trust/action-log';
@@ -417,7 +418,10 @@ export async function scanCustomerDuplicates(
       `Possible duplicate customer: "${pair.a.name}" ≈ "${pair.b.name}"` +
       (atRisk > 0 ? ` · ${formatMoney(atRisk)} AR fragmented` : '');
 
-    const { error } = await supabase.from('ai_decisions').insert({
+    // ai_decisions is SELECT-only for members (migration 172): service-role write for a member
+    // caller (the nightly job's service role writes as itself), org pinned, org-level row
+    // (no location_id).
+    const { error } = await writerFor(supabase).from('ai_decisions').insert({
       org_id: orgId,
       feature: CUSTOMER_DEDUPE_FEATURE,
       input_summary: title.slice(0, 2000),

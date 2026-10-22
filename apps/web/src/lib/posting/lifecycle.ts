@@ -346,7 +346,13 @@ export async function recordCustomerPayment(db: DB, input: RecordCustomerPayment
     if (inv) {
       const newPaid = Number(inv.amount_paid_cents) + app.amount_cents;
       const status = newPaid >= Number(inv.total_cents) ? 'PAID' : 'PARTIALLY_PAID';
-      await db.from('invoices').update({ amount_paid_cents: newPaid, status }).eq('id', app.invoice_id);
+      // invoices moves to the service role with the 172 sweep: the invoice was read above
+      // through the caller's client in this org (RLS proves org + client scope); org pinned.
+      await writer
+        .from('invoices')
+        .update({ amount_paid_cents: newPaid, status })
+        .eq('id', app.invoice_id)
+        .eq('org_id', input.orgId);
     }
   }
 

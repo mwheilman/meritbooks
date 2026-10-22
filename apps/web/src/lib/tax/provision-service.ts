@@ -23,6 +23,7 @@ import {
   type ProvisionResult,
 } from './provision';
 import { resolveProvisionAccounts } from './provision-accounts';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -249,7 +250,10 @@ export async function proposeProvision(
   const r = computation.result;
   const period = periodLabel(input.startDate, input.endDate);
 
-  const { data: row, error } = await db
+  // tax_provision / deferred_tax_items are SELECT-only for members (migration 172): service-
+  // role write after the route's permission check, org pinned, the entity asserted in scope.
+  const writer = await scopedWriter(db, orgId, [input.locationId]);
+  const { data: row, error } = await writer
     .from('tax_provision')
     .upsert(
       {
@@ -283,7 +287,7 @@ export async function proposeProvision(
   }
 
   // Replace the deferred-item detail for this provision.
-  await db.from('deferred_tax_items').delete().eq('provision_id', row.id);
+  await writer.from('deferred_tax_items').delete().eq('provision_id', row.id).eq('org_id', orgId);
   if (computation.deferredItems.length > 0) {
     const rows = computation.deferredItems.map((it) => ({
       org_id: orgId,
@@ -295,7 +299,7 @@ export async function proposeProvision(
       deferred_tax_cents: it.deferredTaxCents,
       category: it.category,
     }));
-    const { error: itemErr } = await db.from('deferred_tax_items').insert(rows);
+    const { error: itemErr } = await writer.from('deferred_tax_items').insert(rows);
     if (itemErr) throw new Error(`Failed to save deferred detail: ${itemErr.message}`);
   }
 
@@ -388,10 +392,17 @@ export async function postProvision(
     throw new Error('This provision is zero — there is nothing to post.');
   }
 
+  // Provision read above in this org; the status stamp goes through the service role
+  // (migration 172), org pinned, its entity asserted in the caller's scope before posting.
+  const writer = await scopedWriter(db, orgId, [prov.location_id]);
   const sourceRef = `TAXPROV:${provisionId}`;
   const existing = await findExistingEntry(db, orgId, sourceRef);
   if (existing) {
-    await db.from('tax_provision').update({ status: 'POSTED', gl_entry_id: existing.id, source_ref: sourceRef, posted_at: new Date().toISOString() }).eq('id', provisionId);
+    await writer
+      .from('tax_provision')
+      .update({ status: 'POSTED', gl_entry_id: existing.id, source_ref: sourceRef, posted_at: new Date().toISOString() })
+      .eq('id', provisionId)
+      .eq('org_id', orgId);
     return { provisionId, glEntryId: existing.id, entryNumber: existing.entry_number, sourceRef, alreadyPosted: true };
   }
 
@@ -444,10 +455,11 @@ export async function postProvision(
   });
   if (!je.success || !je.entry_id) throw new Error(je.error ?? 'Failed to post provision journal entry');
 
-  await db
+  await writer
     .from('tax_provision')
     .update({ status: 'POSTED', gl_entry_id: je.entry_id, source_ref: sourceRef, posted_at: new Date().toISOString() })
-    .eq('id', provisionId);
+    .eq('id', provisionId)
+    .eq('org_id', orgId);
 
   return { provisionId, glEntryId: je.entry_id, entryNumber: je.entry_number ?? null, sourceRef, alreadyPosted: false };
 }

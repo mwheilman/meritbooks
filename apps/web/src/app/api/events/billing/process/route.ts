@@ -40,7 +40,7 @@ export async function GET(req: Request) {
   // caller (scope 'all') may peek across tenants.
   let query = supabase
     .schema('core').from('events')
-    .select('event_id, org_id, status, invoice_id, error, occurred_on, created_at, payload')
+    .select('event_id, org_id, status, invoice_id, invoice_number, gl_entry_id, error, error_code, ack_meta, occurred_on, created_at, payload')
     .eq('event_type', 'JOB_BILLING');
   if (authz.orgId) query = query.eq('org_id', authz.orgId);
   const { data } = await query

@@ -216,6 +216,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     auditRows.push({ org_id: orgId, table_name: 'gl_entries', record_id: je.id, action: 'UPDATE', field_name: '_override_reason', old_value: je.status, new_value: reason, user_id: userId });
   }
 
-  if (auditRows.length) await supabase.from('audit_log').insert(auditRows);
+  // audit_log is SELECT-only for members (migration 172): service-role insert after the
+  // permission check; every row's org_id is the session org (built above).
+  if (auditRows.length) await serviceWriter().from('audit_log').insert(auditRows);
   return NextResponse.json({ ok: true, id: resultEntryId, reposted: !isDraft });
 }

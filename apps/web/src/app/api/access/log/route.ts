@@ -5,7 +5,7 @@ import { apiQueryHandler } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/admin';
 import { accessLogQuerySchema } from '@/lib/validations/access-governance';
 import { actorHolds, resolveGovActor, locationNames, memberNames, requestIp, userNames } from '@/lib/access-governance/server';
-import { describeLogEntry, LOG_EVENT_GROUPS } from '@/lib/access-governance/describe';
+import { describeLogEntry, LOG_EVENT_GROUPS, logSourceLabel } from '@/lib/access-governance/describe';
 import { toCsv } from '@/lib/access-governance/csv';
 import type { AccessLogEntry, LogSource, LogSubjectType } from '@/lib/access-governance/types';
 
@@ -167,7 +167,7 @@ export const GET = apiQueryHandler(accessLogQuerySchema, async (q, ctx) => {
         e.locationNames.join('; '),
         e.allClients ? 'yes' : 'no',
         e.reason,
-        e.source,
+        logSourceLabel(e.source, e.approvalRef),
         e.approvalRef,
         e.before ? JSON.stringify(e.before) : '',
         e.after ? JSON.stringify(e.after) : '',

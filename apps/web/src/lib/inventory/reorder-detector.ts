@@ -20,6 +20,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
 import {
@@ -154,29 +155,38 @@ async function queueReorderException(
     amountCents: c.shortfallValueCents,
   });
 
-  const { error } = await db.from('ai_decisions').insert({
-    org_id: orgId,
-    location_id: c.locationId,
-    feature: REORDER_FEATURE,
-    input_summary: c.title,
-    proposed_output: {
-      control: 'INVENTORY_REORDER',
-      kind: c.stockout ? 'stockout' : 'low_stock',
-      dedup_key: c.dedupKey,
-      qty_on_hand: c.qtyOnHand,
-      reorder_point: c.reorderPoint,
-      shortfall_value_cents: c.shortfallValueCents,
-      tier,
-      disposition,
-      subjects: { inventory_item_id: c.itemId },
-      reason: c.reason,
-    },
-    confidence,
-    reasoning: c.reason,
-    clarifying_question: 'Raise a purchase order to replenish this item, or adjust its reorder point?',
-    status: 'PROPOSED',
-    created_by_user: null,
-  });
+  // ai_decisions is SELECT-only for members (migration 172): service-role write for a member
+  // caller (the nightly job's service role writes as itself), org pinned, the exception's
+  // company asserted in the caller's client scope — a refusal is handled like an insert error.
+  let error: { message: string } | null = null;
+  try {
+    const writer = await scopedWriter(db, orgId, [c.locationId]);
+    ({ error } = await writer.from('ai_decisions').insert({
+      org_id: orgId,
+      location_id: c.locationId,
+      feature: REORDER_FEATURE,
+      input_summary: c.title,
+      proposed_output: {
+        control: 'INVENTORY_REORDER',
+        kind: c.stockout ? 'stockout' : 'low_stock',
+        dedup_key: c.dedupKey,
+        qty_on_hand: c.qtyOnHand,
+        reorder_point: c.reorderPoint,
+        shortfall_value_cents: c.shortfallValueCents,
+        tier,
+        disposition,
+        subjects: { inventory_item_id: c.itemId },
+        reason: c.reason,
+      },
+      confidence,
+      reasoning: c.reason,
+      clarifying_question: 'Raise a purchase order to replenish this item, or adjust its reorder point?',
+      status: 'PROPOSED',
+      created_by_user: null,
+    }));
+  } catch (e) {
+    error = { message: e instanceof Error ? e.message : String(e) };
+  }
   if (error) {
     console.warn('[inventory/reorder] could not queue exception:', error.message);
     return null;

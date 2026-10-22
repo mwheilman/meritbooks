@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { createAdminSupabase } from '@/lib/supabase/admin';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { logAction } from '@/lib/trust/action-log';
 import { hasModule } from '@/lib/services/entitlements';
 import { shouldRepointJobs } from '@/lib/customers/merge-rules';
@@ -159,7 +160,11 @@ export async function POST(req: NextRequest) {
   // ── Re-point Books-owned AR artifacts (fail fast; do NOT retire dup on error) ─
   const repoint = { invoices: 0, payments: 0, creditMemos: 0, recurringTemplates: 0 };
 
-  const inv = await supabase
+  // invoices / credit_memos / recurring_invoice_templates are SELECT-only for members
+  // (migration 172): both customer masters were read through the caller's RLS client above
+  // (org-pinned), customers:edit authorized the merge; service-role re-point, org pinned.
+  const writer = serviceWriter();
+  const inv = await writer
     .from('invoices')
     .update({ customer_id: survivorId, updated_at: new Date().toISOString() })
     .eq('org_id', orgId)
@@ -185,7 +190,7 @@ export async function POST(req: NextRequest) {
 
   // credit_memos + recurring_invoice_templates: best-effort (tables may be sparse),
   // but a hard error still aborts before retiring the duplicate.
-  const cm = await supabase
+  const cm = await writer
     .from('credit_memos')
     .update({ customer_id: survivorId, updated_at: new Date().toISOString() })
     .eq('org_id', orgId)
@@ -196,7 +201,7 @@ export async function POST(req: NextRequest) {
   }
   repoint.creditMemos = cm.data?.length ?? 0;
 
-  const rt = await supabase
+  const rt = await writer
     .from('recurring_invoice_templates')
     .update({ customer_id: survivorId, updated_at: new Date().toISOString() })
     .eq('org_id', orgId)

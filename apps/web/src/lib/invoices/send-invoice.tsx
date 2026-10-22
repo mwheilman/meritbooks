@@ -18,6 +18,7 @@ import { loadInvoiceDocById } from '@/lib/invoices/invoice-doc';
 import { InvoicePdf } from '@/lib/invoices/invoice-pdf';
 import { buildInvoiceEmail } from '@/lib/invoices/invoice-email';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
+import { writerFor } from '@/lib/db/scoped-writer';
 import { resolveEmailProvider, resolveFromAddress, EmailSendError } from '@/lib/email/provider';
 import { renderToBuffer } from '@react-pdf/renderer';
 
@@ -108,7 +109,9 @@ export async function sendInvoiceById(
   });
 
   if (doc.status === 'DRAFT') {
-    await supabase.from('invoices').update({ status: 'SENT' }).eq('id', doc.id);
+    // invoices moves to the service role (migration-172 sweep): the invoice was read through the
+    // caller's client above (loadInvoiceDocById — RLS proved org + client scope), org pinned.
+    await writerFor(supabase).from('invoices').update({ status: 'SENT' }).eq('id', doc.id).eq('org_id', orgId);
   }
 
   return { ok: true, status: 200, to, message_id: sent.id, provider: sent.provider, pay_url: payUrl };

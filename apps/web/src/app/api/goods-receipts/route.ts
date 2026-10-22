@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * Record a GOODS RECEIPT against a purchase order (the "received" leg of the 3-way
@@ -87,7 +88,12 @@ export async function POST(request: Request) {
   }
 
   const receivedDate = body.received_date ?? new Date().toISOString().slice(0, 10);
-  const { data: receipt, error: rErr } = await supabase
+  // goods_receipts / goods_receipt_lines / purchase_orders / purchase_order_lines are
+  // SELECT-only for members (migration 172): service-role writes after the bills:create
+  // check, org pinned. The PO + its lines were read via the member client above (RLS proved
+  // org + client scope), and every po_line_id was validated against that read.
+  const writer = serviceWriter();
+  const { data: receipt, error: rErr } = await writer
     .from('goods_receipts')
     .insert({
       org_id: orgId,
@@ -113,9 +119,9 @@ export async function POST(request: Request) {
       quantity_received: rl.quantity_received,
     }));
   if (grLineRows.length > 0) {
-    const { error: glErr } = await supabase.from('goods_receipt_lines').insert(grLineRows);
+    const { error: glErr } = await writer.from('goods_receipt_lines').insert(grLineRows);
     if (glErr) {
-      await supabase.from('goods_receipts').delete().eq('id', receipt.id);
+      await writer.from('goods_receipts').delete().eq('id', receipt.id).eq('org_id', orgId);
       return NextResponse.json({ error: glErr.message, code: 'RECEIPT_LINES_FAILED' }, { status: 500 });
     }
   }
@@ -127,10 +133,11 @@ export async function POST(request: Request) {
     const cur = lineById.get(rl.po_line_id)!;
     const newReceived = cur.received + rl.quantity_received;
     receivedValueDeltaCents += Math.round(rl.quantity_received * cur.unitCost);
-    await supabase
+    await writer
       .from('purchase_order_lines')
       .update({ received_qty: newReceived })
-      .eq('id', rl.po_line_id);
+      .eq('id', rl.po_line_id)
+      .eq('org_id', orgId);
     cur.received = newReceived;
   }
 
@@ -147,10 +154,11 @@ export async function POST(request: Request) {
     .maybeSingle();
   const newReceivedTotal = Number(poNow?.received_total_cents ?? 0) + receivedValueDeltaCents;
 
-  await supabase
+  await writer
     .from('purchase_orders')
     .update({ status: nextStatus, received_total_cents: newReceivedTotal })
-    .eq('id', po.id);
+    .eq('id', po.id)
+    .eq('org_id', orgId);
 
   await logHumanAction(supabase, userId, orgId, {
     action: 'goods_receipt.create',

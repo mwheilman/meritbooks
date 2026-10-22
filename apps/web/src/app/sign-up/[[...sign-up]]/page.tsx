@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { SignUp } from '@clerk/nextjs';
+import { Lockup } from '@meritbooks/merit-ui';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { previewInvitationByToken, isWellFormedInviteToken, type InvitationPreview } from '@/lib/team/invitations';
 
@@ -42,9 +43,9 @@ export default async function SignUpPage({
     <div className="min-h-screen flex items-center justify-center bg-surface-950 px-4 py-10">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-6">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/meritbooks-logo-dark.svg" alt="MeritBooks" className="h-9 w-auto" />
-          <p className="text-sm text-slate-400 mt-3">AI-native accounting platform</p>
+          {/* The product lockup file (kit rule 10), full colour on the light page. */}
+          <Lockup module="books" variant="full-color" height={32} />
+          <p className="text-sm text-slate-400 mt-3">The book of record for every client</p>
         </div>
 
         {valid && (

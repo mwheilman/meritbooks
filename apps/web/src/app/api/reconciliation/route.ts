@@ -4,6 +4,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { computeGlCashBalanceCents } from '@/lib/services/reconciliation-gl';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * GET /api/reconciliation
@@ -197,7 +198,10 @@ export async function POST(request: Request) {
     // deliberate finalize/lock event (POST /api/reconciliation/session
     // { action: 'finalize' }) after the per-line check-off ties to $0 — no longer
     // auto-set at insert. is_reconciled stays false here.
-    const { data, error } = await supabase
+    // bank_reconciliations is SELECT-only for members (migration 172): service-role insert after
+    // reconciliation:reconcile, org pinned; the bank account + period were read through the
+    // member client above (RLS proved org + client scope).
+    const { data, error } = await serviceWriter()
       .from('bank_reconciliations')
       .insert({
         org_id: orgId,

@@ -25,6 +25,9 @@
  * service role — after the org / client-scope checks. Any other client (the service role
  * held by a drain / webhook / cron, a test fake) writes as itself, exactly as before; an
  * unknown member-scoped client is therefore refused by RLS, never silently upgraded.
+ * The one other escalating client is the scheduler's SYSTEM tenant client
+ * (createOrgScopedSupabase → markSystemOrgClient, migration 172): escalated with the org
+ * pin only, and refused for any org other than the one it was minted for.
  * Route code that knows it holds the member client calls `serviceWriter()` directly after
  * its own checks.
  *
@@ -35,9 +38,24 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminSupabase } from '@/lib/supabase/admin';
-import { isMemberClient } from '@/lib/supabase/member-client';
+import { isMemberClient, systemOrgOf } from '@/lib/supabase/member-client';
 
 export { isMemberClient };
+
+/**
+ * Does a write from this client escalate to the service role? A known member client (after
+ * the org / client-scope checks) or a SYSTEM tenant client (the scheduler's org-scoped
+ * client, migration 172 — pinned to the one org it was minted for, no client scope).
+ */
+function escalates(caller: SupabaseClient): boolean {
+  return isMemberClient(caller) || systemOrgOf(caller) !== null;
+}
+
+/** A system tenant client may only ever write its own org. */
+function assertSystemOrg(caller: SupabaseClient, orgId: string): void {
+  const sys = systemOrgOf(caller);
+  if (sys !== null && sys !== orgId) throw new WriteScopeError('This background job cannot write another organization.');
+}
 import {
   decideClientScope,
   loadClientScope,
@@ -70,7 +88,7 @@ export function serviceWriter(override?: SupabaseClient | null): SupabaseClient 
  */
 export function writerFor(caller: SupabaseClient, override?: SupabaseClient | null): SupabaseClient {
   if (override) return override;
-  return isMemberClient(caller) ? createAdminSupabase() : caller;
+  return escalates(caller) ? createAdminSupabase() : caller;
 }
 
 export interface WriteScopeOptions {
@@ -114,6 +132,7 @@ export async function assertWriteScope(
   opts: WriteScopeOptions = {},
 ): Promise<void> {
   if (!orgId) throw new WriteScopeError('This write has no organization.');
+  assertSystemOrg(caller, orgId);
   const owning = uniq(locationIds);
   const all = uniq([...owning, ...(opts.orgOnlyLocationIds ?? [])]);
   if (all.length === 0) return;
@@ -140,7 +159,8 @@ export async function assertWriteScope(
   }
 
   // 2. Client scope on owning clients (163 semantics; off/shadow allow, enforce refuses).
-  if (owning.length === 0) return;
+  //    A system tenant client is not a person: the org pin above is its whole scope.
+  if (owning.length === 0 || systemOrgOf(caller) !== null) return;
   const state = await callerScope(caller);
   if (state.mode === 'off' || state.allClients) return;
   const outOfScope = owning.filter((id) => !decideClientScope(state, id).inScope);
@@ -161,7 +181,7 @@ export async function scopedWriter(
   locationIds: ReadonlyArray<string | null | undefined>,
   opts: WriteScopeOptions = {},
 ): Promise<SupabaseClient> {
-  if (isMemberClient(caller)) await assertWriteScope(caller, orgId, locationIds, opts);
+  if (escalates(caller)) await assertWriteScope(caller, orgId, locationIds, opts);
   return writerFor(caller, opts.writer);
 }
 
@@ -187,6 +207,7 @@ export async function assertOrgRefs(
   } = {},
 ): Promise<void> {
   if (!orgId) throw new WriteScopeError('This write has no organization.');
+  if (opts.caller) assertSystemOrg(opts.caller, orgId);
   for (const ref of refs) {
     const ids = uniq(ref.ids);
     if (ids.length === 0) continue;
@@ -214,6 +235,7 @@ export async function loadWritableRow<T extends Record<string, unknown>>(
   ref: { schema?: 'public' | 'core'; table: string; id: string; select?: string; locationColumn?: string | null },
   opts: WriteScopeOptions = {},
 ): Promise<T | null> {
+  assertSystemOrg(caller, orgId);
   const w = writerFor(caller, opts.writer);
   const locCol = ref.locationColumn === undefined ? 'location_id' : ref.locationColumn;
   const cols = ref.select ?? (locCol ? `id, ${locCol}` : 'id');
@@ -222,7 +244,7 @@ export async function loadWritableRow<T extends Record<string, unknown>>(
   if (error) throw new Error(`Could not load ${ref.table}: ${error.message}`);
   if (!data) return null;
   const row = data as unknown as T;
-  if (locCol && isMemberClient(caller)) {
+  if (locCol && escalates(caller)) {
     const loc = row[locCol];
     await assertWriteScope(caller, orgId, [typeof loc === 'string' ? loc : null], opts);
   }

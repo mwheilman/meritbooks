@@ -275,6 +275,9 @@ beforeAll(async () => {
     await insertRow('public.bill_lines', { org_id: org, bill_id: bill });
     await insertRow('public.invoices', { org_id: org, location_id: loc });
     await insertRow('public.bank_transactions', { org_id: org, location_id: loc });
+    // a still member-writable client-owned table (class B, AI working state) for the write probes:
+    // bank_transactions is SELECT-only for members since migration 172.
+    await insertRow('public.agent_runs', { org_id: org, location_id: loc, recipe: 'probe', title: 'probe' });
   }
   // an org-level (no client) vendor pattern stays visible to everyone in the tenant
   await insertRow('public.vendor_patterns', { org_id: ORG_A, location_id: null });
@@ -353,13 +356,15 @@ describe('enforce: client scope is honoured by the database', () => {
     expect(await visibleClients('bk1', 'core.client_set_members')).toEqual([C1]);
   });
 
+  // Write probes run on public.agent_runs (still member-writable, client-owned): the money
+  // tables these used to probe (bank_transactions …) are SELECT-only for members since 171/172.
   it('writes are scope-checked: bk1 can update C1 but not C2, and cannot move a row out of scope', async () => {
     const upd = async (who: Who, loc: string) =>
-      as(who, async () => (await db.query(`update public.bank_transactions set location_id = location_id where location_id = $1`, [loc])).affectedRows ?? 0);
+      as(who, async () => (await db.query(`update public.agent_runs set location_id = location_id where location_id = $1`, [loc])).affectedRows ?? 0);
     expect(await upd('bk1', C1)).toBe(1);
     expect(await upd('bk1', C2)).toBe(0); // invisible → nothing to update
     const moved = await errorOf(() =>
-      as('bk1', () => db.query(`update public.bank_transactions set location_id = $2 where location_id = $1`, [C1, C2])),
+      as('bk1', () => db.query(`update public.agent_runs set location_id = $2 where location_id = $1`, [C1, C2])),
     );
     expect(moved).toMatch(/row-level security/i);
   });
@@ -369,16 +374,16 @@ describe('enforce: client scope is honoured by the database', () => {
       errorOf(() =>
         as('bk1', () =>
           db.query(
-            `insert into public.bank_transactions (org_id, bank_account_id, location_id, transaction_date, description, amount_cents)
-             values ($1, gen_random_uuid(), $2, current_date, 'probe', 100)`,
+            `insert into public.agent_runs (org_id, location_id, recipe, title)
+             values ($1, $2, 'probe-insert', 'probe')`,
             [ORG_A, loc],
           ),
         ),
       );
     expect(await ins(C2)).toMatch(/row-level security/i);
-    const c1 = await ins(C1); // may fail later on the FK to a random bank account — never on RLS
+    const c1 = await ins(C1);
     expect(c1 === null || !/row-level security/i.test(c1)).toBe(true);
-    await db.query(`delete from public.bank_transactions where description = 'probe'`);
+    await db.query(`delete from public.agent_runs where recipe = 'probe-insert'`);
   });
 
   it('clients are created only through the server (migration 167 / M4): even an all-clients controller cannot insert core.locations directly', async () => {

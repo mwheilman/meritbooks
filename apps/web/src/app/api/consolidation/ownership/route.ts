@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler, requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter, assertOrgRefs, isWriteScopeError } from '@/lib/db/scoped-writer';
 
 /**
  * Ownership / consolidation-structure editor API (GATE 11a, migration 076).
@@ -96,9 +97,22 @@ export const POST = apiHandler(upsertSchema, async (body: UpsertBody, ctx) => {
     created_by: null,
   };
 
+  // entity_ownership is SELECT-only for members (migration 172): service-role write after the
+  // permission check, org pinned; both entities must belong to this org (FKs never check the tenant).
+  try {
+    await assertOrgRefs(
+      ctx.orgId,
+      [{ schema: 'core', table: 'locations', ids: [body.parent_entity_id, body.child_entity_id], label: 'entity' }],
+      { caller: ctx.supabase },
+    );
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    throw e;
+  }
+  const writer = serviceWriter();
   const query = body.id
-    ? ctx.supabase.from('entity_ownership').update(row).eq('id', body.id).eq('org_id', ctx.orgId).select('id').single()
-    : ctx.supabase
+    ? writer.from('entity_ownership').update(row).eq('id', body.id).eq('org_id', ctx.orgId).select('id').single()
+    : writer
         .from('entity_ownership')
         .upsert(row, { onConflict: 'org_id,parent_entity_id,child_entity_id,effective_start' })
         .select('id')
@@ -116,7 +130,7 @@ export const POST = apiHandler(upsertSchema, async (body: UpsertBody, ctx) => {
 export async function DELETE(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId, userId } = ctx;
+  const { orgId, userId } = ctx;
   if (!orgId) {
     return NextResponse.json({ error: 'No organization in session', code: 'NO_ORG' }, { status: 400 });
   }
@@ -126,7 +140,8 @@ export async function DELETE(request: Request) {
   if (!id) {
     return NextResponse.json({ error: 'id is required', code: 'MISSING_ID' }, { status: 400 });
   }
-  const { error } = await supabase.from('entity_ownership').delete().eq('id', id).eq('org_id', orgId);
+  // Service-role delete (migration 172), org pinned. Org-level config (no client column).
+  const { error } = await serviceWriter().from('entity_ownership').delete().eq('id', id).eq('org_id', orgId);
   if (error) {
     return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
   }

@@ -19,6 +19,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry, voidJournalEntry, type JournalEntryLineInput } from './gl-posting';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { isWriteScopeError, scopedWriter, writerFor } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -192,6 +193,16 @@ export async function runYearEndClose(
     return { success: false, error: `No temporary-account activity to close for FY${year}.` };
   }
 
+  // year_end_closes is SELECT-only for members (migration 172): assert the client in the
+  // caller's org + scope BEFORE posting, then the service role writes the record, org pinned.
+  let closeWriter: DB;
+  try {
+    closeWriter = await scopedWriter(db, orgId, [locationId]);
+  } catch (e) {
+    if (isWriteScopeError(e)) return { success: false, error: e.message };
+    throw e;
+  }
+
   const je = await postJournalEntry(db, {
     org_id: orgId,
     location_id: locationId,
@@ -207,7 +218,7 @@ export async function runYearEndClose(
     return { success: false, error: je.error ?? 'Failed to post the closing entry.' };
   }
 
-  const { data: rec, error: recErr } = await db
+  const { data: rec, error: recErr } = await closeWriter
     .from('year_end_closes')
     .insert({
       org_id: orgId,
@@ -254,7 +265,9 @@ export async function reverseYearEndClose(
     if (!v.success) return { success: false, error: v.error ?? 'Failed to void the closing entry.' };
   }
 
-  const { error: upErr } = await db
+  // Service-role write (migration 172): the record was read through the caller's client above
+  // (RLS proved org + client scope for a member); org pinned.
+  const { error: upErr } = await writerFor(db)
     .from('year_end_closes')
     .update({ status: 'REVERSED', reversed_at: new Date().toISOString(), reversed_by_user: actor, reverse_reason: reason })
     .eq('id', closeId)

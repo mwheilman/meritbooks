@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { parsePrepaidDocument, PREPAID_EXTRACT_FEATURE } from '@/lib/prepaid/extract';
 import { resolvePrepaidAssetAccount } from '@/lib/prepaid/prepaid-asset';
@@ -28,6 +30,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+
+  const guard = await requirePermission(userId, 'journal_entries', 'create');
+  if (!guard.ok) return guard.response;
 
   const apiKey = getAnthropicApiKey();
   if (!apiKey) {
@@ -73,7 +78,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Log the proposal to the AI decision rail (PROPOSED) — read-only w.r.t. schedules.
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert after
+    // the route's checks, org pinned to the session org (org-level row, no client).
+    const { data: dec } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: orgId,

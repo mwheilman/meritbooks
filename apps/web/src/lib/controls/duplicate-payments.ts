@@ -32,6 +32,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
 import {
@@ -628,28 +629,37 @@ export async function scanDuplicatePayments(
       amountCents: c.amountAtRiskCents,
     });
 
-    const { error } = await supabase.from('ai_decisions').insert({
-      org_id: orgId,
-      location_id: c.locationId,
-      feature: DUP_FEATURE,
-      input_summary: c.title,
-      proposed_output: {
-        control: 'EC-1',
-        kind: c.kind,
-        dedup_key: c.dedupKey,
-        amount_at_risk_cents: c.amountAtRiskCents,
-        tier,
-        disposition,
-        money_already_out: c.moneyAlreadyOut,
-        subjects: c.subjects,
-        reason: c.reason,
-      },
-      confidence,
-      reasoning: c.reason,
-      clarifying_question: c.clarifyingQuestion,
-      status: 'PROPOSED',
-      created_by_user: null,
-    });
+    // ai_decisions is SELECT-only for members (migration 172): service-role write for a member
+    // caller (the nightly job's service role writes as itself), org pinned, the exception's
+    // company asserted in the caller's client scope — a refusal is handled like an insert error.
+    let error: { message: string } | null = null;
+    try {
+      const writer = await scopedWriter(supabase, orgId, [c.locationId]);
+      ({ error } = await writer.from('ai_decisions').insert({
+        org_id: orgId,
+        location_id: c.locationId,
+        feature: DUP_FEATURE,
+        input_summary: c.title,
+        proposed_output: {
+          control: 'EC-1',
+          kind: c.kind,
+          dedup_key: c.dedupKey,
+          amount_at_risk_cents: c.amountAtRiskCents,
+          tier,
+          disposition,
+          money_already_out: c.moneyAlreadyOut,
+          subjects: c.subjects,
+          reason: c.reason,
+        },
+        confidence,
+        reasoning: c.reason,
+        clarifying_question: c.clarifyingQuestion,
+        status: 'PROPOSED',
+        created_by_user: null,
+      }));
+    } catch (e) {
+      error = { message: e instanceof Error ? e.message : String(e) };
+    }
     if (error) {
       console.warn('[controls/dup] could not queue exception:', error.message);
       summary.errors += 1;

@@ -7,7 +7,7 @@
 export type LogSource = 'ui' | 'api' | 'backfill' | 'template_update' | 'review' | 'request' | 'sweeper' | 'system';
 export type LogSubjectType =
   | 'assignment' | 'role' | 'permission_set' | 'client_policy' | 'access_review' | 'access_review_item'
-  | 'access_request' | 'template_update' | 'export' | 'session' | 'field';
+  | 'access_request' | 'template_update' | 'export' | 'session' | 'field' | 'tenant_setting';
 
 /** core.access_change_log row as the API returns it (names stitched in). */
 export interface AccessLogEntry {

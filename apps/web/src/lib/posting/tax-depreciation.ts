@@ -29,6 +29,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { PostingError } from './account-roles';
+import { scopedWriter, writerFor } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -292,6 +293,7 @@ export function taxDepreciationForYear(schedule: TaxDepreciationSchedule, taxYea
 
 interface TaxAssetRow {
   id: string;
+  location_id: string | null;
   name: string;
   acquisition_date: string;
   acquisition_cost_cents: number;
@@ -346,7 +348,9 @@ export async function ensureTaxYearParams(db: DB, orgId: string, taxYear: number
   if (!prior) return null;
 
   const p = prior as TaxYearParams & { tax_year: number };
-  await db.from('tax_year_params').insert({
+  // tax_year_params is SELECT-only for members (migration 172): org-level carry-forward
+  // through the service role after the caller's permission check, org pinned.
+  await writerFor(db).from('tax_year_params').insert({
     org_id: orgId,
     tax_year: taxYear,
     section_179_max_cents: p.section_179_max_cents,
@@ -372,7 +376,7 @@ function regularMethodFor(taxMethod: string): TaxRegularMethod {
 export async function runTaxDepreciation(db: DB, orgId: string, asOf: string): Promise<TaxDepreciationRunResult> {
   const { data, error } = await db
     .from('fixed_assets')
-    .select('id, name, acquisition_date, acquisition_cost_cents, salvage_value_cents, tax_method, tax_recovery_years, tax_convention, tax_life_months, section_179_cents, bonus_pct, tax_accumulated_depreciation_cents, tax_last_depreciation_date, status')
+    .select('id, location_id, name, acquisition_date, acquisition_cost_cents, salvage_value_cents, tax_method, tax_recovery_years, tax_convention, tax_life_months, section_179_cents, bonus_pct, tax_accumulated_depreciation_cents, tax_last_depreciation_date, status')
     .eq('org_id', orgId)
     .in('status', ['ACTIVE', 'FULLY_DEPRECIATED']);
   if (error) throw new PostingError(error.message);
@@ -451,6 +455,17 @@ export async function runTaxDepreciation(db: DB, orgId: string, asOf: string): P
     let accumulated = a.tax_accumulated_depreciation_cents;
     let lastDate = a.tax_last_depreciation_date;
 
+    // fixed_assets / tax_depreciation_runs are SELECT-only for members (migration 172): the
+    // asset was read above in this org; writes go through the service role, org pinned,
+    // its client asserted in the caller's scope.
+    let writer: DB;
+    try {
+      writer = await scopedWriter(db, orgId, [a.location_id]);
+    } catch (e) {
+      result.skipped.push({ asset_id: a.id, reason: e instanceof Error ? e.message : 'out of scope' });
+      continue;
+    }
+
     for (const yr of schedule.years) {
       if (yr.year > throughYear) break;
       if (yr.totalCents <= 0) continue;
@@ -464,7 +479,7 @@ export async function runTaxDepreciation(db: DB, orgId: string, asOf: string): P
         .maybeSingle();
       if (existing) continue;
 
-      await db.from('tax_depreciation_runs').insert({
+      await writer.from('tax_depreciation_runs').insert({
         org_id: orgId,
         fixed_asset_id: a.id,
         period_year: yr.year,
@@ -479,14 +494,15 @@ export async function runTaxDepreciation(db: DB, orgId: string, asOf: string): P
       result.years_logged++;
     }
 
-    await db
+    await writer
       .from('fixed_assets')
       .update({
         tax_accumulated_depreciation_cents: accumulated,
         tax_last_depreciation_date: lastDate,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', a.id);
+      .eq('id', a.id)
+      .eq('org_id', orgId);
   }
 
   return result;

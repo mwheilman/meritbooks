@@ -321,6 +321,8 @@ export type ActionSodCode =
   | 'PREPARER_CANNOT_APPROVE'
   | 'PREPARER_CANNOT_RELEASE'
   | 'APPROVER_CANNOT_RELEASE'
+  | 'APPROVER_OVER_RELEASE_LIMIT'
+  | 'PAYROLL_APPROVER_CANNOT_RELEASE'
   | 'PREPARER_CANNOT_POST'
   | 'PREPARER_CANNOT_SIGN_OFF'
   | 'RECENT_BANK_DETAIL_CHANGE';
@@ -330,6 +332,8 @@ export const ACTION_SOD_RULE_KEY: Record<ActionSodCode, string> = {
   PREPARER_CANNOT_APPROVE: 'H6_PREPARER_APPROVER',
   PREPARER_CANNOT_RELEASE: 'H6_PREPARER_RELEASER',
   APPROVER_CANNOT_RELEASE: 'H6_APPROVER_RELEASER',
+  APPROVER_OVER_RELEASE_LIMIT: 'H6_APPROVER_RELEASER',
+  PAYROLL_APPROVER_CANNOT_RELEASE: 'H6_APPROVER_RELEASER',
   PREPARER_CANNOT_POST: 'H6_JE_SELF_POST',
   PREPARER_CANNOT_SIGN_OFF: 'S9',
   RECENT_BANK_DETAIL_CHANGE: 'H6_BANK_CHANGE_RELEASE',
@@ -339,6 +343,9 @@ export const ACTION_SOD_MESSAGE: Record<ActionSodCode, string> = {
   PREPARER_CANNOT_APPROVE: 'You prepared this, so someone else has to approve it.',
   PREPARER_CANNOT_RELEASE: 'You prepared this payment, so someone else has to release it.',
   APPROVER_CANNOT_RELEASE: 'You approved this payment, so someone else has to release it.',
+  APPROVER_OVER_RELEASE_LIMIT:
+    'You approved this payment and it is over the amount an approver may also release, so someone else has to release it.',
+  PAYROLL_APPROVER_CANNOT_RELEASE: 'You approved this payroll, so someone else has to release it. Payroll always needs a second person.',
   PREPARER_CANNOT_POST: 'You prepared this journal entry and it is at or above the self-post amount, so someone else has to post it.',
   PREPARER_CANNOT_SIGN_OFF: 'You prepared this reconciliation, so someone else has to sign it off.',
   RECENT_BANK_DETAIL_CHANGE: "You changed or approved this vendor's bank details in the last 10 days, so someone else has to release payments to it.",
@@ -363,8 +370,19 @@ export interface ActionSodInput {
   approvedBy?: string | null;
   /** Q1: approver may also release. Never lets the preparer act. */
   soleApproverMode?: boolean;
-  /** For action 'post' on manual JEs: amount + tenant threshold (Q4). Omit to always enforce. */
-  amountCents?: number;
+  /**
+   * Mig 174: with soleApproverMode on, the largest payment (cents) its approver may also
+   * release. null / undefined = any amount. When set, a release without `amountCents`
+   * fails closed (treated as over the limit).
+   */
+  soleApproverMaxCents?: number | null;
+  /** Payroll (and any caller that wants it): the approver never releases, whatever the tenant setting. */
+  strictApproverRelease?: boolean;
+  /**
+   * For action 'post' on manual JEs: amount + tenant threshold (Q4). Omit to always enforce.
+   * For action 'release': the payment amount, checked against soleApproverMaxCents.
+   */
+  amountCents?: number | null;
   jeSelfPostThresholdCents?: number;
   /** System-generated entries (bank coding, depreciation, rev rec runs) are exempt from the JE rule. */
   systemGenerated?: boolean;
@@ -387,14 +405,15 @@ export function checkActionSod(input: ActionSodInput): ActionSodCode | null {
       return isPreparer ? 'PREPARER_CANNOT_SIGN_OFF' : null;
     case 'post': {
       if (!isPreparer || input.systemGenerated) return null;
-      if (input.amountCents !== undefined && input.jeSelfPostThresholdCents !== undefined) {
+      if (input.amountCents != null && input.jeSelfPostThresholdCents !== undefined) {
         return Math.abs(input.amountCents) >= input.jeSelfPostThresholdCents ? 'PREPARER_CANNOT_POST' : null;
       }
       return 'PREPARER_CANNOT_POST';
     }
     case 'release': {
       if (isPreparer) return 'PREPARER_CANNOT_RELEASE';
-      if (input.approvedBy && input.approvedBy === actor && !input.soleApproverMode) return 'APPROVER_CANNOT_RELEASE';
+      const approverReleasing = checkApproverRelease(input);
+      if (approverReleasing) return approverReleasing;
       const now = (input.now ?? new Date()).getTime();
       const recent = (input.bankDetailChanges ?? []).some(
         (c) => c.userId === actor && now - new Date(c.at).getTime() < TEN_DAYS_MS,
@@ -402,6 +421,48 @@ export function checkActionSod(input: ActionSodInput): ActionSodCode | null {
       return recent ? 'RECENT_BANK_DETAIL_CHANGE' : null;
     }
   }
+}
+
+/** H6 approver-as-releaser (mig 174): off / any amount / up to the tenant's limit; payroll never. */
+function checkApproverRelease(input: ActionSodInput): ActionSodCode | null {
+  if (!input.approvedBy || input.approvedBy !== input.actor) return null;
+  if (input.strictApproverRelease) return 'PAYROLL_APPROVER_CANNOT_RELEASE';
+  if (!input.soleApproverMode) return 'APPROVER_CANNOT_RELEASE';
+  const max = input.soleApproverMaxCents;
+  if (max == null) return null;
+  if (input.amountCents == null || !Number.isFinite(input.amountCents)) return 'APPROVER_OVER_RELEASE_LIMIT';
+  return Math.abs(input.amountCents) > max ? 'APPROVER_OVER_RELEASE_LIMIT' : null;
+}
+
+// ── Approver-release policy (mig 174) ───────────────────────────────────────────
+
+/** The tenant's three choices for "may the approver also release the payment?". */
+export type ApproverReleaseChoice = 'off' | 'any' | 'up_to';
+
+export interface ApproverReleasePolicy {
+  choice: ApproverReleaseChoice;
+  /** Set only for 'up_to' (bigint cents, > 0). */
+  maxCents: number | null;
+}
+
+/** Stored columns (sole_approver_mode, sole_approver_max_cents) → the choice. Mirrors core.approver_release_choice. */
+export function approverReleasePolicyOf(soleApproverMode: boolean, soleApproverMaxCents: number | null | undefined): ApproverReleasePolicy {
+  if (!soleApproverMode) return { choice: 'off', maxCents: null };
+  if (soleApproverMaxCents == null) return { choice: 'any', maxCents: null };
+  return { choice: 'up_to', maxCents: soleApproverMaxCents };
+}
+
+/**
+ * true when going from → to lets the approver release MORE than before (off → on,
+ * up-to → any, a higher limit). Mirrors core.approver_release_is_loosening — the DB
+ * re-derives it and refuses a loosening the app didn't clear against the session policy.
+ */
+export function isApproverReleaseLoosening(from: ApproverReleasePolicy, to: ApproverReleasePolicy): boolean {
+  if (to.choice === 'off') return false;
+  if (from.choice === 'off') return true;
+  if (from.choice === 'any') return false;
+  if (to.choice === 'any') return true;
+  return (to.maxCents ?? 0) > (from.maxCents ?? 0);
 }
 
 /** Throws SodViolationError on a hard transaction-level SoD violation (05 §4.1 H6). */

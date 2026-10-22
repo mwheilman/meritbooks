@@ -12,6 +12,7 @@ import { evaluateTieout, type TieoutRow } from '../engine/summary';
 import { ROLE_SPEC, NEW_DEALER_ROLES, type DealerRole } from '../roles';
 import { DEPT_ROLES, defaultSettings, type DealerSettings, type DeptRole } from '../types';
 import type { DealerCtx } from './context';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { DealerError, dbFail } from './errors';
 import { loadRoleMap } from './posting';
 
@@ -97,6 +98,9 @@ export async function mapRoles(d: DealerCtx, mappings: RoleMappingInput[]): Prom
         .in('id', ids)
     : { data: [], error: null };
   if (error) dbFail('Account lookup failed', error);
+  // account_roles is SELECT-only for members (migration 172): d.admin IS the service role
+  // (openDealerContext ran the permission + RLS client check); every write is org pinned.
+  const writer = serviceWriter(d.admin);
   const byId = new Map(
     ((accts ?? []) as { id: string; account_type: string; account_number: string; is_active: boolean; company_location_id: string | null }[]).map((a) => [a.id, a]),
   );
@@ -104,7 +108,7 @@ export async function mapRoles(d: DealerCtx, mappings: RoleMappingInput[]): Prom
     const spec = ROLE_SPEC[m.roleKey];
     if (!spec) throw new DealerError('VALIDATION', `Unknown role ${m.roleKey}`);
     if (!m.accountId) {
-      const { error: delErr } = await d.admin
+      const { error: delErr } = await writer
         .from('account_roles')
         .delete()
         .eq('org_id', d.orgId)
@@ -131,8 +135,8 @@ export async function mapRoles(d: DealerCtx, mappings: RoleMappingInput[]): Prom
       .maybeSingle();
     if (exErr) dbFail('Role mapping lookup failed', exErr);
     const write = existing
-      ? d.admin.from('account_roles').update({ account_id: m.accountId }).eq('id', (existing as { id: string }).id)
-      : d.admin.from('account_roles').insert({ org_id: d.orgId, role_key: m.roleKey, account_id: m.accountId, location_id: d.locationId });
+      ? writer.from('account_roles').update({ account_id: m.accountId }).eq('id', (existing as { id: string }).id).eq('org_id', d.orgId)
+      : writer.from('account_roles').insert({ org_id: d.orgId, role_key: m.roleKey, account_id: m.accountId, location_id: d.locationId });
     const { error: wErr } = await write;
     if (wErr) dbFail('Saving role mapping failed', wErr);
   }

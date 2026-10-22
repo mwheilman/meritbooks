@@ -139,7 +139,9 @@ async function logEvent(
 ): Promise<void> {
   // Audit logging must never break the financial transaction it accompanies.
   try {
-    await db.from('vendor_compliance_events').insert({
+    // vendor_compliance_events is SELECT-only for members (migration 172): append-only audit
+    // evidence, service-role insert after the caller's permission check, org pinned.
+    await writerFor(db).from('vendor_compliance_events').insert({
       org_id: orgId,
       vendor_id: vendorId,
       event_type: eventType,
@@ -301,7 +303,9 @@ export async function runComplianceMaintenance(db: DB, orgId: string): Promise<{
     .lt('expiration_date', today);
   let expired = 0;
   for (const d of toExpire ?? []) {
-    await db.from('vendor_compliance_docs').update({ status: 'EXPIRED', updated_at: now.toISOString() }).eq('id', d.id);
+    // vendor_compliance_docs is SELECT-only for members (migration 172): the doc was read via
+    // the caller's client above; service-role write, org pinned.
+    await writerFor(db).from('vendor_compliance_docs').update({ status: 'EXPIRED', updated_at: now.toISOString() }).eq('id', d.id).eq('org_id', orgId);
     await logEvent(db, orgId, d.vendor_id as string, 'DOC_EXPIRED',
       `${DOC_LABEL[d.doc_type as string] ?? d.doc_type} expired ${d.expiration_date}`, { docId: d.id as string });
     expired++;
@@ -334,12 +338,12 @@ export async function runComplianceMaintenance(db: DB, orgId: string): Promise<{
     const next = new Date(now);
     next.setDate(next.getDate() + intervalDays);
 
-    await db.from('vendor_compliance_docs').update({
+    await writerFor(db).from('vendor_compliance_docs').update({
       last_chase_at: now.toISOString(),
       next_chase_at: next.toISOString(),
       chase_reminder_count: Number(d.chase_reminder_count ?? 0) + 1,
       updated_at: now.toISOString(),
-    }).eq('id', d.id);
+    }).eq('id', d.id).eq('org_id', orgId);
 
     await logEvent(db, orgId, d.vendor_id as string, 'CHASE_SCHEDULED',
       `${DOC_LABEL[d.doc_type as string] ?? d.doc_type} chase #${Number(d.chase_reminder_count ?? 0) + 1} (every ${intervalDays} days)`,

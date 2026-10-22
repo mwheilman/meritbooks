@@ -23,6 +23,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from '../services/gl-posting';
 import { PostingError } from './account-roles';
 import { buildDepreciationSchedule, mapBookMethod, isUnitsMethod, unitsProductionTarget } from './depreciation-methods';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -83,6 +84,17 @@ export async function runDepreciation(db: DB, orgId: string, asOf: string): Prom
   for (const a of assets) {
     result.assets_processed++;
 
+    // fixed_assets / depreciation_runs are SELECT-only for members (migration 172): the
+    // asset was read above in this org; writes go through the service role, org pinned,
+    // its client asserted in the caller's scope.
+    let writer: DB;
+    try {
+      writer = await scopedWriter(db, orgId, [a.location_id]);
+    } catch (e) {
+      result.errors.push({ asset_id: a.id, period: '-', error: e instanceof Error ? e.message : 'out of scope' });
+      continue;
+    }
+
     // ── Units-of-production: usage-based, driven off the units meter, not time.
     //    The correct accumulated balance is a pure function of cumulative units
     //    used; charge (target − already-accumulated) once for the asOf period.
@@ -140,7 +152,7 @@ export async function runDepreciation(db: DB, orgId: string, asOf: string): Prom
         result.errors.push({ asset_id: a.id, period: `${uYear}-${uMonth}`, error: jeU.error ?? 'post failed' });
         continue;
       }
-      await db.from('depreciation_runs').insert({
+      await writer.from('depreciation_runs').insert({
         org_id: orgId,
         fixed_asset_id: a.id,
         period_year: uYear,
@@ -149,7 +161,7 @@ export async function runDepreciation(db: DB, orgId: string, asOf: string): Prom
         gl_entry_id: jeU.entry_id,
       });
       const fullyU = target >= baseU;
-      await db
+      await writer
         .from('fixed_assets')
         .update({
           accumulated_depreciation_cents: target,
@@ -157,7 +169,8 @@ export async function runDepreciation(db: DB, orgId: string, asOf: string): Prom
           status: fullyU ? 'FULLY_DEPRECIATED' : 'ACTIVE',
           updated_at: new Date().toISOString(),
         })
-        .eq('id', a.id);
+        .eq('id', a.id)
+        .eq('org_id', orgId);
       result.periods_posted++;
       continue;
     }
@@ -239,7 +252,7 @@ export async function runDepreciation(db: DB, orgId: string, asOf: string): Prom
         break;
       }
 
-      await db.from('depreciation_runs').insert({
+      await writer.from('depreciation_runs').insert({
         org_id: orgId,
         fixed_asset_id: a.id,
         period_year: year,
@@ -250,7 +263,7 @@ export async function runDepreciation(db: DB, orgId: string, asOf: string): Prom
 
       accumulated += amount;
       const fullyDepreciated = accumulated >= base;
-      await db
+      await writer
         .from('fixed_assets')
         .update({
           accumulated_depreciation_cents: accumulated,
@@ -258,7 +271,8 @@ export async function runDepreciation(db: DB, orgId: string, asOf: string): Prom
           status: fullyDepreciated ? 'FULLY_DEPRECIATED' : 'ACTIVE',
           updated_at: new Date().toISOString(),
         })
-        .eq('id', a.id);
+        .eq('id', a.id)
+        .eq('org_id', orgId);
       result.periods_posted++;
       if (fullyDepreciated) break;
     }

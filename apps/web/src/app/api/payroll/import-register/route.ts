@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
 import {
   parsePayrollRegister,
@@ -147,7 +148,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // ── Log the proposal to the AI decision rail (PROPOSED) for traceability ─────
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert after the
+    // permission check, org pinned to the session org.
+    const { data: dec } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: orgId,

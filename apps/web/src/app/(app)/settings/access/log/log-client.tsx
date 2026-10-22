@@ -6,7 +6,7 @@ import { clsx } from 'clsx';
 import { api } from '@/lib/api-client';
 import { EmptyState, TableSkeleton } from '@/components/ui';
 import { NoAccessState } from '@/components/access/no-access-state';
-import { LOG_EVENT_GROUPS } from '@/lib/access-governance/describe';
+import { LOG_EVENT_GROUPS, logSourceLabel } from '@/lib/access-governance/describe';
 import type { AccessLogEntry } from '@/lib/access-governance/types';
 
 interface Directory {
@@ -25,16 +25,6 @@ interface Filters {
 
 const EMPTY: Filters = { member: '', client: '', group: '', from: '', to: '', q: '' };
 
-const SOURCE_LABEL: Record<string, string> = {
-  ui: 'Screen',
-  api: 'App',
-  backfill: 'Start of log',
-  template_update: 'MeritBooks suggestion',
-  review: 'Access review',
-  request: 'Access request',
-  sweeper: 'End date',
-  system: 'MeritBooks',
-};
 
 function tone(event: string): string {
   if (/\.(revoke|expire|end|delete|suspend|deny)$/.test(event)) return 'bg-red-500/10 text-red-400';
@@ -264,7 +254,7 @@ export function AccessLogClient() {
                       <span className="mt-0.5 block text-xs text-slate-500">
                         {e.actorName ?? (e.actorContext.startsWith('system') ? 'MeritBooks (automatic)' : 'Unknown')}
                         {' · '}
-                        {SOURCE_LABEL[e.source] ?? e.source}
+                        {logSourceLabel(e.source, e.approvalRef)}
                         {e.reason ? ` · “${e.reason}”` : ''}
                       </span>
                     </span>

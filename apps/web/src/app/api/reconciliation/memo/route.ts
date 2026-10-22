@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { runAiGateway } from '@meritbooks/core-ai';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { fetchCoreMap } from '@/lib/stitch-core';
@@ -314,7 +315,9 @@ export async function GET(request: Request): Promise<NextResponse> {
   // Audit the AI proposal to the decision-log rail (org-scoped, RLS).
   let decisionId: string | null = null;
   try {
-    const { data } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert, org pinned
+    // to the session (audit evidence). NOTE: this GET has no permission gate (reported).
+    const { data } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: orgId,

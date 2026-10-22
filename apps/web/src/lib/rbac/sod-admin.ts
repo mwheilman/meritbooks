@@ -9,7 +9,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { capabilityPhrase } from '@/lib/approvals/step-label';
 import { parseCapabilityRef } from '@/lib/rbac/capabilities';
-import { effectiveEnforcement, tenantMayDisable, tenantMayPromote, type SodEnforcement, type TenantType } from '@/lib/rbac/sod';
+import {
+  approverReleasePolicyOf,
+  effectiveEnforcement,
+  isApproverReleaseLoosening,
+  tenantMayDisable,
+  tenantMayPromote,
+  type ApproverReleasePolicy,
+  type SodEnforcement,
+  type TenantType,
+} from '@/lib/rbac/sod';
 import { loadSodExceptions, loadSodRules, loadTenantSodSettings } from '@/lib/rbac/sod-store';
 
 type Row = Record<string, unknown>;
@@ -44,7 +53,13 @@ export interface AllowedConflictView {
 export interface ConflictRulesView {
   rules: ConflictRuleView[];
   allowedConflicts: AllowedConflictView[];
-  settings: { tenantType: TenantType; soleApproverMode: boolean; jeSelfPostThresholdCents: number };
+  settings: {
+    tenantType: TenantType;
+    soleApproverMode: boolean;
+    /** Mig 174: may the approver also release — off / any amount / up to a limit. */
+    approverRelease: ApproverReleasePolicy;
+    jeSelfPostThresholdCents: number;
+  };
 }
 
 function personName(u: Row | undefined): string {
@@ -122,6 +137,7 @@ export async function loadConflictRulesView(admin: SupabaseClient, orgId: string
     settings: {
       tenantType: settings.tenantType,
       soleApproverMode: settings.soleApproverMode,
+      approverRelease: approverReleasePolicyOf(settings.soleApproverMode, settings.soleApproverMaxCents),
       jeSelfPostThresholdCents: settings.jeSelfPostThresholdCents,
     },
   };
@@ -215,16 +231,81 @@ export async function updateRule(
 export async function updateSodSettings(
   admin: SupabaseClient,
   orgId: string,
-  patch: { soleApproverMode?: boolean; jeSelfPostThresholdCents?: number },
+  patch: { jeSelfPostThresholdCents?: number },
 ): Promise<void> {
+  if (patch.jeSelfPostThresholdCents === undefined) return;
+  const { error } = await admin
+    .schema('core')
+    .from('organizations')
+    .update({ je_self_post_threshold_cents: patch.jeSelfPostThresholdCents })
+    .eq('id', orgId);
+  if (error) throw new ConflictRuleError(error.message, 500);
+}
+
+// ── Approver-release policy (mig 174) ───────────────────────────────────────────
+
+export interface ApproverReleaseChangePlan {
+  current: ApproverReleasePolicy;
+  next: ApproverReleasePolicy;
+  unchanged: boolean;
+  /** Relaxes the rule → the session must meet the tenant's CURRENT security policy first. */
+  loosening: boolean;
+}
+
+/** Normalize the requested policy and compare it with the stored one. Pure apart from the read. */
+export async function planApproverReleaseChange(
+  admin: SupabaseClient,
+  orgId: string,
+  requested: ApproverReleasePolicy,
+): Promise<ApproverReleaseChangePlan> {
   const settings = await loadTenantSodSettings(admin, orgId);
-  if (patch.soleApproverMode === true && settings.tenantType === 'firm') {
+  const current = approverReleasePolicyOf(settings.soleApproverMode, settings.soleApproverMaxCents);
+  const next: ApproverReleasePolicy = requested.choice === 'up_to'
+    ? { choice: 'up_to', maxCents: requested.maxCents }
+    : { choice: requested.choice, maxCents: null };
+  if (next.choice !== 'off' && settings.tenantType === 'firm') {
     throw new ConflictRuleError('One-person approval isn’t available for firms.', 403);
   }
-  const update: Row = {};
-  if (patch.soleApproverMode !== undefined) update.sole_approver_mode = patch.soleApproverMode;
-  if (patch.jeSelfPostThresholdCents !== undefined) update.je_self_post_threshold_cents = patch.jeSelfPostThresholdCents;
-  if (Object.keys(update).length === 0) return;
-  const { error } = await admin.schema('core').from('organizations').update(update).eq('id', orgId);
-  if (error) throw new ConflictRuleError(error.message, 500);
+  if (next.choice === 'up_to' && (next.maxCents == null || next.maxCents <= 0)) {
+    throw new ConflictRuleError('Enter an amount greater than $0.', 422);
+  }
+  const unchanged = current.choice === next.choice && current.maxCents === next.maxCents;
+  return { current, next, unchanged, loosening: !unchanged && isApproverReleaseLoosening(current, next) };
+}
+
+/**
+ * Apply through core.set_approver_release_policy (service role only): the DB re-checks
+ * tenant admin, firm, and — re-deriving loosening itself — refuses a loosening unless
+ * `sessionPolicyMet` is attested. The change is written to core.access_change_log by
+ * the organizations trigger (mig 174 §4).
+ */
+export async function applyApproverReleaseChange(
+  admin: SupabaseClient,
+  orgId: string,
+  next: ApproverReleasePolicy,
+  opts: { actorUserId: string; sessionPolicyMet: boolean; reason?: string | null; ip?: string | null },
+): Promise<void> {
+  const { error } = await admin.schema('core').rpc('set_approver_release_policy', {
+    p_org: orgId,
+    p_choice: next.choice,
+    p_max_cents: next.choice === 'up_to' ? next.maxCents : null,
+    p_actor: opts.actorUserId,
+    p_session_policy_met: opts.sessionPolicyMet,
+    p_reason: opts.reason ?? null,
+    p_ip: opts.ip ?? null,
+  });
+  if (!error) return;
+  if (error.code === '42883' || error.code === 'PGRST202') {
+    throw new ConflictRuleError('This setting isn’t available yet (migration 174).', 503);
+  }
+  if (error.code === '42501') throw new ConflictRuleError(error.message, 403);
+  if (error.code === '23514') throw new ConflictRuleError(error.message, 422);
+  throw new ConflictRuleError(error.message, 500);
+}
+
+/** Plain-English one-liner for logs / toasts. */
+export function describeApproverRelease(p: ApproverReleasePolicy, money: (cents: number) => string): string {
+  if (p.choice === 'off') return 'The approver of a payment can never release it';
+  if (p.choice === 'any') return 'The approver may also release payments of any amount';
+  return `The approver may also release payments up to ${money(p.maxCents ?? 0)}`;
 }

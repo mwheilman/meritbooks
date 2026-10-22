@@ -28,7 +28,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry, voidJournalEntry, type JournalEntryLineInput } from './gl-posting';
 import { resolveRole, getAccountRef, PostingError } from '@/lib/posting/account-roles';
 import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
-import { writerFor } from '@/lib/db/scoped-writer';
+import { scopedWriter, writerFor } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -212,8 +212,12 @@ export async function postIntercompany(
     }
 
     // ---- Create parent row (no entries yet) ----
+    // intercompany_transactions is SELECT-only for members (migration 172): both parties are
+    // asserted in the caller's org + client scope (both entries post to them anyway), then
+    // the service role writes with the org pinned. A scope refusal surfaces as an error result.
+    const icWriter = await scopedWriter(db, orgId, [fromLocationId, toLocationId]);
     const icNumber = await nextIcNumber(db, orgId);
-    const { data: ic, error: icErr } = await db
+    const { data: ic, error: icErr } = await icWriter
       .from('intercompany_transactions')
       .insert({
         org_id: orgId,
@@ -249,7 +253,7 @@ export async function postIntercompany(
       lines: fromLines,
     });
     if (!fromRes.success) {
-      await db.from('intercompany_transactions').delete().eq('id', ic.id);
+      await icWriter.from('intercompany_transactions').delete().eq('id', ic.id).eq('org_id', orgId);
       return { success: false, error: `From-entity entry failed: ${fromRes.error}` };
     }
 
@@ -268,15 +272,16 @@ export async function postIntercompany(
     if (!toRes.success) {
       // Compensate: void the from entry, drop the parent.
       await voidJournalEntry(db, orgId, fromRes.entry_id as string, null, `Auto-reversed: paired intercompany entry failed (${toRes.error})`);
-      await db.from('intercompany_transactions').delete().eq('id', ic.id);
+      await icWriter.from('intercompany_transactions').delete().eq('id', ic.id).eq('org_id', orgId);
       return { success: false, error: `To-entity entry failed: ${toRes.error}` };
     }
 
     // ---- Link both entries onto the parent ----
-    await db
+    await icWriter
       .from('intercompany_transactions')
       .update({ from_entry_id: fromRes.entry_id, to_entry_id: toRes.entry_id })
-      .eq('id', ic.id);
+      .eq('id', ic.id)
+      .eq('org_id', orgId);
 
     return {
       success: true,
@@ -317,7 +322,9 @@ export async function voidIntercompany(
     }
   }
 
-  const { error: updErr } = await db
+  // Service-role write (migration 172): the row was read through the caller's client above
+  // (RLS proved org + client scope for a member); org pinned.
+  const { error: updErr } = await writerFor(db)
     .from('intercompany_transactions')
     .update({ status: 'VOIDED', voided_at: new Date().toISOString(), voided_by: null, void_reason: reason })
     .eq('id', icId)

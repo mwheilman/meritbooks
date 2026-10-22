@@ -72,3 +72,20 @@ describe('request / review / suggestion validation', () => {
     expect(templateUpdateDecideSchema.safeParse({ updateId: id }).success).toBe(false);
   });
 });
+
+describe('access log — source labels + approver-release events (live smoke test, mig 174)', () => {
+  it('a migration correction is not labelled "Start of log"', async () => {
+    const { logSourceLabel } = await import('./describe');
+    expect(logSourceLabel('backfill', 'migration:168')).toBe('Access correction (system update)');
+    expect(logSourceLabel('backfill', null)).toBe('Start of log');
+    expect(logSourceLabel('ui', 'migration:168')).toBe('Screen');
+    expect(logSourceLabel('mystery', null)).toBe('mystery');
+  });
+  it('describes approver-release changes in plain English', () => {
+    const d = (after: Record<string, unknown>) =>
+      describeLogEntry({ event: 'approver_release.change', before: null, after, affectedNames: [] });
+    expect(d({ approver_may_release: 'off' })).toMatch(/second person releases every payment/);
+    expect(d({ approver_may_release: 'any' })).toMatch(/for any amount/);
+    expect(d({ approver_may_release: 'up_to', up_to_cents: 500000 })).toMatch(/up to \$5,000\.00/);
+  });
+});

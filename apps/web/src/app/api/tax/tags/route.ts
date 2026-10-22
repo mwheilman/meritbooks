@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { assertOrgRefs, isWriteScopeError, loadWritableRow, serviceWriter } from '@/lib/db/scoped-writer';
 import { z } from 'zod';
 import { STANDARD_M_LINES, findMLine } from '@/lib/tax/book-tax';
 
@@ -17,7 +18,9 @@ import { STANDARD_M_LINES, findMLine } from '@/lib/tax/book-tax';
  *      proposal, the matching PROPOSED ai_decisions row is dispositioned APPROVED.
  * DELETE /api/tax/tags?account_id=… — clear an account's tag.
  *
- * Reads run through the RLS-scoped client (org isolation by the DB). Writes are gated on
+ * Reads run through the RLS-scoped client (org isolation by the DB). book_tax_account_tags
+ * and ai_decisions are SELECT-only for members (migration 172): writes go through the
+ * service role with org_id pinned and every body-supplied FK verified in-org. Writes are gated on
  * journal_entries:create — the same guard the control family uses (a dedicated `tax`
  * permission is the follow-up, mirroring the `payments` permission task). Nothing here
  * posts to the ledger or moves money; a tag is a reporting dimension.
@@ -125,7 +128,22 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unknown M-line code', code: 'BAD_CODE' }, { status: 422 });
   }
 
-  const { error: upsertErr } = await supabase
+  // book_tax_account_tags / ai_decisions are SELECT-only for members (migration 172):
+  // service-role write after the permission check, org pinned. The body's account_id and
+  // ai_decision_id are FKs (which never check the tenant) — verify both are in this org.
+  try {
+    await assertOrgRefs(orgId, [{ table: 'accounts', ids: [account_id], label: 'account' }], { caller: supabase });
+    if (ai_decision_id) {
+      const decision = await loadWritableRow(supabase, orgId, { table: 'ai_decisions', id: ai_decision_id });
+      if (!decision) return NextResponse.json({ error: 'AI proposal not found', code: 'NOT_FOUND' }, { status: 404 });
+    }
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed', code: 'UPSERT_ERROR' }, { status: 500 });
+  }
+  const writer = serviceWriter();
+
+  const { error: upsertErr } = await writer
     .from('book_tax_account_tags')
     .upsert(
       {
@@ -147,10 +165,11 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   // Confirming an AI proposal dispositions its decision row APPROVED (audit trail).
   if (ai_decision_id) {
-    await supabase
+    await writer
       .from('ai_decisions')
       .update({ status: 'APPROVED', disposition_by_user: userId, disposition_at: new Date().toISOString() })
       .eq('id', ai_decision_id)
+      .eq('org_id', orgId)
       .eq('feature', 'BOOK_TAX_TAG');
   }
 
@@ -160,7 +179,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 export async function DELETE(request: Request): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId, userId } = ctx;
+  const { orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization found', code: 'NO_ORG' }, { status: 400 });
 
   const guard = await requirePermission(userId, 'journal_entries', 'create');
@@ -170,7 +189,12 @@ export async function DELETE(request: Request): Promise<NextResponse> {
   if (!accountId) {
     return NextResponse.json({ error: 'account_id is required', code: 'MISSING_PARAM' }, { status: 400 });
   }
-  const { error } = await supabase.from('book_tax_account_tags').delete().eq('account_id', accountId);
+  // Service-role delete (migration 172), pinned to the session org.
+  const { error } = await serviceWriter()
+    .from('book_tax_account_tags')
+    .delete()
+    .eq('org_id', orgId)
+    .eq('account_id', accountId);
   if (error) return NextResponse.json({ error: error.message, code: 'DELETE_ERROR' }, { status: 500 });
   return NextResponse.json({ data: { ok: true } });
 }

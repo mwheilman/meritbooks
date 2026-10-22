@@ -4,13 +4,18 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { buildCovenantStatus, type CovenantRow } from '@/lib/covenants/status';
 import { updateCovenantSchema } from '@/lib/covenants/schema';
+import { assertWriteScope, isWriteScopeError, loadWritableRow, serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * /api/covenants/[id]
  *
  * GET    — one covenant with its current computed status.
- * PATCH  — edit a covenant definition (partial). RLS scopes the update to the org.
+ * PATCH  — edit a covenant definition (partial).
  * DELETE — remove a covenant (measurements cascade).
+ *
+ * loan_covenants is SELECT-only for members (migration 172): both writes load the row
+ * org-pinned with its client asserted in the caller's scope, then write through the
+ * service role pinned to the session org.
  *
  * Dynamic-param routes can't use the apiHandler wrapper (it only forwards the
  * request), so these validate the body with the shared Zod schema by hand.
@@ -74,7 +79,22 @@ export async function PATCH(request: Request, { params }: Params): Promise<NextR
   if (b.maturity_date !== undefined) patch.maturity_date = b.maturity_date ?? null;
   if (b.notes !== undefined) patch.notes = b.notes ?? null;
 
-  const { error } = await ctx.supabase.from('loan_covenants').update(patch).eq('id', params.id);
+  if (!ctx.orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+  try {
+    const row = await loadWritableRow(ctx.supabase, ctx.orgId, { table: 'loan_covenants', id: params.id });
+    if (!row) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
+    // Moving the covenant to another client: that client must be in scope too.
+    if (b.location_id) await assertWriteScope(ctx.supabase, ctx.orgId, [b.location_id]);
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Lookup failed', code: 'INTERNAL_ERROR' }, { status: 500 });
+  }
+
+  const { error } = await serviceWriter()
+    .from('loan_covenants')
+    .update(patch)
+    .eq('id', params.id)
+    .eq('org_id', ctx.orgId);
   if (error) return NextResponse.json({ error: error.message, code: 'UPDATE_FAILED' }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
@@ -83,7 +103,20 @@ export async function DELETE(_request: Request, { params }: Params): Promise<Nex
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
 
-  const { error } = await ctx.supabase.from('loan_covenants').delete().eq('id', params.id);
+  if (!ctx.orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+  try {
+    const row = await loadWritableRow(ctx.supabase, ctx.orgId, { table: 'loan_covenants', id: params.id });
+    if (!row) return NextResponse.json({ ok: true }); // nothing visible to delete (same as before)
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Lookup failed', code: 'INTERNAL_ERROR' }, { status: 500 });
+  }
+
+  const { error } = await serviceWriter()
+    .from('loan_covenants')
+    .delete()
+    .eq('id', params.id)
+    .eq('org_id', ctx.orgId);
   if (error) return NextResponse.json({ error: error.message, code: 'DELETE_FAILED' }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { apiQueryHandler, apiHandler } from '@/lib/api-handler';
 import { z } from 'zod';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 const jobListSchema = z.object({
   status: z.enum(['all', 'ACTIVE', 'BID', 'COMPLETE', 'CLOSED', 'ON_HOLD', 'CANCELLED']).optional(),
@@ -347,7 +348,9 @@ export const POST = apiHandler(
       );
     }
 
-    await ctx.supabase.from('audit_log').insert({
+    // audit_log is SELECT-only for members (migration 172): service-role insert, org pinned to
+    // the session org; it records the job the member just created through their RLS client.
+    await serviceWriter().from('audit_log').insert({
       org_id: orgId, table_name: 'jobs', record_id: job!.id,
       action: 'INSERT', user_id: ctx.userId,
       new_value: JSON.stringify({

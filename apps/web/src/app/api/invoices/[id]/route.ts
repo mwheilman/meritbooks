@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter, assertOrgRefs, isWriteScopeError } from '@/lib/db/scoped-writer';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { getHomeCurrency, normalizeCurrency } from '@/lib/currency';
 
@@ -242,6 +243,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     .eq('org_id', orgId).eq('id', params.id).single();
   if (invErr || !inv) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
 
+  // invoices / invoice_lines / audit_log go through the service role (migration 172 sweep):
+  // invoices:approve checked above, `inv` was read through the member client (RLS proved
+  // org + client scope), every write is org-pinned.
+  const writer = serviceWriter();
   const isDraft = inv.status === 'DRAFT';
   const financialChange = Array.isArray(body.lines);
 
@@ -280,8 +285,15 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     const retainageCents = Number(inv.retainage_cents ?? 0);
     const newTotal = newSubtotal + taxCents - retainageCents;
 
-    await supabase.from('invoice_lines').delete().eq('invoice_id', inv.id);
-    const { error: lineErr } = await supabase.from('invoice_lines').insert(lines);
+    // Line accounts come from the request body: they must belong to this org.
+    try {
+      await assertOrgRefs(orgId, [{ table: 'accounts', ids: lines.map((l) => l.account_id), label: 'account' }], { caller: supabase });
+    } catch (e) {
+      if (isWriteScopeError(e)) return NextResponse.json({ error: e.message }, { status: 403 });
+      throw e;
+    }
+    await writer.from('invoice_lines').delete().eq('invoice_id', inv.id).eq('org_id', orgId);
+    const { error: lineErr } = await writer.from('invoice_lines').insert(lines);
     if (lineErr) return NextResponse.json({ error: `Lines: ${lineErr.message}` }, { status: 500 });
 
     diffs.push({ field: 'subtotal_cents', oldVal: inv.subtotal_cents, newVal: newSubtotal });
@@ -343,7 +355,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 
   if (Object.keys(updates).length > 0) {
-    const { error: upErr } = await supabase.from('invoices').update(updates).eq('id', inv.id).eq('org_id', orgId);
+    const { error: upErr } = await writer.from('invoices').update(updates).eq('id', inv.id).eq('org_id', orgId);
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
   }
 
@@ -359,7 +371,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       field_name: '_override_reason', old_value: inv.status as string, new_value: body.override.reason, user_id: userId,
     });
   }
-  if (auditRows.length > 0) await supabase.from('audit_log').insert(auditRows);
+  if (auditRows.length > 0) await writer.from('audit_log').insert(auditRows);
 
   return NextResponse.json({ ok: true, id: inv.id, changedFields: diffs.map((d) => d.field), overridden: !!body.override });
 }

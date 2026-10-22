@@ -6,6 +6,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logAction } from '@/lib/trust/action-log';
 import { parseRuleset, expensePolicyRulesetSchema } from '@/lib/expenses/policy-schema';
+import { assertOrgRefs, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * GET  /api/expenses/policy — list every policy version + the ACTIVE one.
@@ -97,9 +98,23 @@ export async function POST(request: Request) {
 
   const activate = parsed.data.activate === true;
 
+  // expense_policies is SELECT-only for members (migration 172): service-role write after the
+  // receipts:approve check, org pinned. The body's source decision must be in this org.
+  try {
+    await assertOrgRefs(
+      orgId,
+      [{ table: 'ai_decisions', ids: [parsed.data.source_decision_id], label: 'source decision' }],
+      { caller: supabase },
+    );
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message }, { status: 403 });
+    throw e;
+  }
+  const writer = serviceWriter();
+
   // If activating, archive the current ACTIVE first (partial unique index guards it).
   if (activate) {
-    const { error: archErr } = await supabase
+    const { error: archErr } = await writer
       .from('expense_policies')
       .update({ status: 'ARCHIVED' })
       .eq('org_id', orgId)
@@ -108,7 +123,7 @@ export async function POST(request: Request) {
   }
 
   const nowIso = new Date().toISOString();
-  const { data: created, error } = await supabase
+  const { data: created, error } = await writer
     .from('expense_policies')
     .insert({
       org_id: orgId,

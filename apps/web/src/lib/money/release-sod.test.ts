@@ -13,14 +13,27 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => svc.db }));
 import { claimApprovalForRelease, markReleased } from './approvals';
 import { SodViolationError } from '@/lib/rbac/sod';
 
-function world(opts: { sole: boolean; prepared: string; approved: string | null }): FakeDb {
+function world(opts: {
+  sole: boolean; prepared: string; approved: string | null;
+  maxCents?: number | null; amountCents?: number | null; kind?: string;
+}): FakeDb {
   return fakeSupabase((c) => {
-    if (c.table === 'organizations') return { data: { tenant_type: 'company', sole_approver_mode: opts.sole, je_self_post_threshold_cents: null }, error: null };
-    if (c.table === 'sod_rule_settings') return { data: [], error: null };
-    if (c.table === 'approvals' && c.op === 'select') {
+    if (c.table === 'organizations') {
       return {
         data: {
-          id: 'a1', org_id: 'org1', kind: 'AP_DISBURSEMENT', subject_table: 'bills', subject_id: 'b1', amount_cents: 100,
+          tenant_type: 'company', sole_approver_mode: opts.sole, sole_approver_max_cents: opts.maxCents ?? null,
+          je_self_post_threshold_cents: null,
+        },
+        error: null,
+      };
+    }
+    if (c.table === 'sod_rule_settings') return { data: [], error: null };
+    if (c.table === 'approvals' && c.op === 'select') {
+      const kind = opts.kind ?? 'AP_DISBURSEMENT';
+      return {
+        data: {
+          id: 'a1', org_id: 'org1', kind, subject_table: kind === 'PAYROLL_RUN' ? 'payroll_runs' : 'bills', subject_id: 'b1',
+          amount_cents: opts.amountCents === undefined ? 100 : opts.amountCents,
           status: 'APPROVED', prepared_by: opts.prepared, approved_by: opts.approved, released_by: null,
           provider_correlation_id: null, reject_reason: null,
         },
@@ -66,6 +79,50 @@ describe('claimApprovalForRelease — SoD before the claim', () => {
     expect(await claimApprovalForRelease(w.client, 'org1', 'a1', 'appr')).toBe('CLAIMED');
     const err = await claimApprovalForRelease(w.client, 'org1', 'a1', 'prep').catch((e: unknown) => e);
     expect((err as SodViolationError).code).toBe('PREPARER_CANNOT_RELEASE');
+  });
+});
+
+describe('claimApprovalForRelease — approver-release limit (mig 174)', () => {
+  const claimAs = (actor: string, sod: { amount?: number | null; max?: number | null; kind?: string; sole?: boolean }) => {
+    w = world({ sole: sod.sole ?? true, prepared: 'prep', approved: 'appr', maxCents: sod.max, amountCents: sod.amount, kind: sod.kind });
+    svc.db = w.client;
+    return claimApprovalForRelease(w.client, 'org1', 'a1', actor).catch((e: unknown) => e);
+  };
+
+  it('On, up to $5,000: the approver releases at and below the limit', async () => {
+    expect(await claimAs('appr', { amount: 500_000, max: 500_000 })).toBe('CLAIMED');
+    expect(await claimAs('appr', { amount: 499_999, max: 500_000 })).toBe('CLAIMED');
+  });
+
+  it('above the limit the approver is refused before anything is claimed; a second person may release', async () => {
+    const err = await claimAs('appr', { amount: 500_001, max: 500_000 });
+    expect((err as SodViolationError).code).toBe('APPROVER_OVER_RELEASE_LIMIT');
+    expect(updates()).toEqual([]);
+    expect(await claimAs('rel', { amount: 500_001, max: 500_000 })).toBe('CLAIMED');
+  });
+
+  it('the amount comes from the approval row: a missing amount fails closed when a limit is set', async () => {
+    const err = await claimAs('appr', { amount: null, max: 500_000 });
+    expect((err as SodViolationError).code).toBe('APPROVER_OVER_RELEASE_LIMIT');
+    expect(await claimAs('appr', { amount: null, max: null })).toBe('CLAIMED'); // any amount
+  });
+
+  it('payroll keeps approver ≠ releaser whatever the setting', async () => {
+    const err = await claimAs('appr', { amount: 100, max: null, kind: 'PAYROLL_RUN' });
+    expect((err as SodViolationError).code).toBe('PAYROLL_APPROVER_CANNOT_RELEASE');
+    expect(updates()).toEqual([]);
+  });
+
+  it('Off: the limit is ignored and the approver is refused', async () => {
+    const err = await claimAs('appr', { amount: 1, max: 500_000, sole: false });
+    expect((err as SodViolationError).code).toBe('APPROVER_CANNOT_RELEASE');
+  });
+
+  it('markReleased applies the same limit to the approval amount', async () => {
+    w = world({ sole: true, prepared: 'prep', approved: 'appr', maxCents: 50, amountCents: 100 });
+    svc.db = w.client;
+    const err = await markReleased(w.client, 'org1', 'a1', 'appr', 'corr-1').catch((e: unknown) => e);
+    expect((err as SodViolationError).code).toBe('APPROVER_OVER_RELEASE_LIMIT');
   });
 });
 

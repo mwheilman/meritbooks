@@ -38,6 +38,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { scopedWriter, writerFor } from '@/lib/db/scoped-writer';
 import { logAction, logHumanAction } from '@/lib/trust/action-log';
 import { recordCustomerPayment } from '@/lib/posting/lifecycle';
 import { PostingError } from '@/lib/posting/account-roles';
@@ -537,42 +538,51 @@ export async function scanCashApplication(
       match.kind === 'single' ? invoiceNumberById.get(match.invoiceIds[0]) ?? '1 invoice' : `${match.invoiceIds.length} invoices`
     } · ${match.customerName}`;
 
-    const { error } = await supabase.from('ai_decisions').insert({
-      org_id: orgId,
-      location_id: deposit.locationId,
-      feature: CASHAPP_FEATURE,
-      input_summary: title,
-      proposed_output: {
-        control: 'CASH_APP',
-        kind: match.kind,
-        dedup_key: dedupKey,
-        bank_transaction_id: deposit.id,
-        customer_id: match.customerId,
-        invoice_ids: match.invoiceIds,
-        deposit_amount_cents: deposit.amountCents,
-        applied_amount_cents: match.matchedBalanceCents,
-        tier,
-        disposition,
-        breakdown: {
-          amount: match.score.amountScore,
-          customer: match.score.customerScore,
-          date: match.score.dateScore,
-        },
-        // Explicit safety marker: this proposal moves NO money on its own.
-        action: 'PROPOSE_ONLY',
-        subjects: {
+    // ai_decisions is SELECT-only for members (migration 172): service-role write for a member
+    // caller (the nightly job's service role writes as itself), org pinned, the exception's
+    // company asserted in the caller's client scope — a refusal is handled like an insert error.
+    let error: { message: string } | null = null;
+    try {
+      const writer = await scopedWriter(supabase, orgId, [deposit.locationId]);
+      ({ error } = await writer.from('ai_decisions').insert({
+        org_id: orgId,
+        location_id: deposit.locationId,
+        feature: CASHAPP_FEATURE,
+        input_summary: title,
+        proposed_output: {
+          control: 'CASH_APP',
+          kind: match.kind,
+          dedup_key: dedupKey,
           bank_transaction_id: deposit.id,
-          invoice_ids: match.invoiceIds,
           customer_id: match.customerId,
+          invoice_ids: match.invoiceIds,
+          deposit_amount_cents: deposit.amountCents,
+          applied_amount_cents: match.matchedBalanceCents,
+          tier,
+          disposition,
+          breakdown: {
+            amount: match.score.amountScore,
+            customer: match.score.customerScore,
+            date: match.score.dateScore,
+          },
+          // Explicit safety marker: this proposal moves NO money on its own.
+          action: 'PROPOSE_ONLY',
+          subjects: {
+            bank_transaction_id: deposit.id,
+            invoice_ids: match.invoiceIds,
+            customer_id: match.customerId,
+          },
+          reason,
         },
-        reason,
-      },
-      confidence,
-      reasoning: reason,
-      clarifying_question: CLARIFYING_QUESTION,
-      status: 'PROPOSED',
-      created_by_user: null,
-    });
+        confidence,
+        reasoning: reason,
+        clarifying_question: CLARIFYING_QUESTION,
+        status: 'PROPOSED',
+        created_by_user: null,
+      }));
+    } catch (e) {
+      error = { message: e instanceof Error ? e.message : String(e) };
+    }
     if (error) {
       console.warn('[controls/cashapp] could not queue proposal:', error.message);
       summary.errors += 1;
@@ -845,9 +855,14 @@ export async function applyCashApplicationProposal(
     .maybeSingle();
   const cashAccountId = (ba as { account_id: string } | null)?.account_id ?? undefined;
 
+  // ai_decisions / bank_transactions are SELECT-only for members (migration 172): the
+  // proposal and the deposit were read through the caller's client above (RLS: org + client
+  // scope), so their lifecycle writes go through the service role, org pinned on every one.
+  const writer = writerFor(db);
+
   // 6. Double-post guard: atomically CLAIM the proposal before posting.
   const nowIso = new Date().toISOString();
-  const { data: claimed, error: claimErr } = await db
+  const { data: claimed, error: claimErr } = await writer
     .from('ai_decisions')
     .update({ status: 'APPROVED', disposition_by_user: input.userId, disposition_at: nowIso })
     .eq('id', input.proposalId)
@@ -875,7 +890,7 @@ export async function applyCashApplicationProposal(
     });
   } catch (e) {
     // Roll the claim back so the human can fix the picks and retry.
-    await db
+    await writer
       .from('ai_decisions')
       .update({ status: 'PROPOSED', disposition_by_user: null, disposition_at: null })
       .eq('id', input.proposalId)
@@ -884,12 +899,12 @@ export async function applyCashApplicationProposal(
   }
 
   // 8. Mark the deposit posted (it IS the cash side now) and finalize the proposal.
-  await db
+  await writer
     .from('bank_transactions')
     .update({ status: 'POSTED', gl_entry_id: result.gl_entry_id })
     .eq('id', bankTxnId)
     .eq('org_id', input.orgId);
-  await db
+  await writer
     .from('ai_decisions')
     .update({
       posted_gl_entry_id: result.gl_entry_id,

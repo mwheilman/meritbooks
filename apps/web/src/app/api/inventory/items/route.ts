@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { assertOrgRefs, assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * Inventory items (GATE 11c). GET lists items with on-hand + valuation rollups and
@@ -117,7 +118,22 @@ export async function POST(request: Request) {
   }
   const body = parsed.data;
 
-  const { data, error } = await supabase
+  // inventory_items is SELECT-only for members (migration 172): service-role insert after the
+  // fixed_assets:create check, org pinned; the client + GL accounts are verified in this org.
+  try {
+    await assertWriteScope(supabase, orgId, [body.location_id]);
+    await assertOrgRefs(
+      orgId,
+      [{ table: 'accounts', ids: [body.asset_account_id, body.cogs_account_id], label: 'account' }],
+      { caller: supabase },
+    );
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    throw e;
+  }
+
+  const writer = serviceWriter();
+  const { data, error } = await writer
     .from('inventory_items')
     .insert({
       org_id: orgId,

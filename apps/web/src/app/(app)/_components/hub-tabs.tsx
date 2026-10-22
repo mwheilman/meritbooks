@@ -8,21 +8,15 @@
  *
  * Rendering the same strip on the hub landing AND on each child page turns a set of
  * standalone registers into one coherent tabbed shell without moving any route or
- * touching navigation.ts. Reuses the consolidation/reconciliation pill look.
+ * touching navigation.ts. Drawn as the kit's 40px underline tabs (merit-ui `.tabs`).
  */
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { clsx } from 'clsx';
-import {
-  Package, FileText, Receipt, ShieldCheck, Sparkles, Calculator,
-  Scale, Landmark, MapPin, FileCheck, LayoutGrid,
-} from 'lucide-react';
 
 interface HubTabDef {
   href: string;
   label: string;
-  icon: typeof Package;
   /** Extra pathnames that should light this tab (e.g. redirected standalones). */
   aliases?: string[];
 }
@@ -31,28 +25,27 @@ const SECTIONS: Record<'assets' | 'tax', { hub: string; tabs: HubTabDef[] }> = {
   assets: {
     hub: '/assets',
     tabs: [
-      { href: '/assets', label: 'Overview', icon: LayoutGrid },
-      { href: '/fixed-assets', label: 'Fixed Assets', icon: Package },
-      { href: '/leases', label: 'Leases', icon: FileText },
-      { href: '/prepaids', label: 'Prepaids', icon: Receipt },
-      { href: '/insurance', label: 'Insurance', icon: ShieldCheck },
-      { href: '/intangibles', label: 'Intangibles', icon: Sparkles },
-      { href: '/tax-depreciation', label: 'Tax Depreciation', icon: Calculator },
+      { href: '/assets', label: 'Overview' },
+      { href: '/fixed-assets', label: 'Fixed assets' },
+      { href: '/leases', label: 'Leases' },
+      { href: '/prepaids', label: 'Prepaids' },
+      { href: '/insurance', label: 'Insurance' },
+      { href: '/intangibles', label: 'Intangibles' },
+      { href: '/tax-depreciation', label: 'Tax depreciation' },
     ],
   },
   tax: {
     hub: '/tax',
     tabs: [
-      { href: '/tax', label: 'Overview', icon: LayoutGrid },
-      { href: '/book-to-tax', label: 'Book-to-Tax M-1', icon: Scale },
-      { href: '/tax-provision', label: 'Tax Provision', icon: Landmark },
+      { href: '/tax', label: 'Overview' },
+      { href: '/book-to-tax', label: 'Book-to-Tax M-1' },
+      { href: '/tax-provision', label: 'Tax provision' },
       {
         href: '/tax/sales-tax',
-        label: 'Sales Tax',
-        icon: MapPin,
+        label: 'Sales tax',
         aliases: ['/sales-tax-return', '/sales-tax-calendar'],
       },
-      { href: '/tax-package', label: 'Tax Return Package', icon: FileCheck },
+      { href: '/tax-package', label: 'Tax return package' },
     ],
   },
 };
@@ -71,25 +64,21 @@ export function HubTabs({ section }: { section: 'assets' | 'tax' }) {
   };
 
   return (
-    <div className="mb-6 -mt-1 flex flex-wrap items-center gap-1 rounded-lg border border-slate-800 bg-surface-900 p-1">
+    <nav className="tabs mb-hub-tabs" aria-label="Sections">
       {tabs.map((t) => {
         const active = isActive(t);
-        const Icon = t.icon;
         return (
           <Link
             key={t.href}
             href={t.href}
             aria-current={active ? 'page' : undefined}
-            className={clsx(
-              'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-              active ? 'bg-brand-500 text-white' : 'text-slate-400 hover:text-slate-200',
-            )}
+            // Link tabs: books.css gives [aria-current=page] the kit's selected treatment.
+            className="tab"
           >
-            <Icon size={14} />
             {t.label}
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }

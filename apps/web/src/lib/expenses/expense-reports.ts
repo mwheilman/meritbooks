@@ -24,6 +24,7 @@ import { resolveApAccount } from '../services/bill-ap';
 import { evaluateLinesWithRuleset, type PolicyLineInput } from './policy';
 import { loadActivePolicyRuleset } from './policy-active';
 import { DEFAULT_RULESET, type ExpensePolicyRuleset } from './policy-schema';
+import { loadWritableRow, scopedWriter, writerFor } from '../db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -230,10 +231,14 @@ export async function recomputeReport(
   const policy = evaluateLinesWithRuleset(policyInput, ruleset);
   const byLine = new Map(policy.lines.map((r) => [r.lineId, r]));
 
+  // expense_reports / expense_report_lines are SELECT-only for members (migration 172):
+  // service-role write after the caller's permission check, org pinned. The report + lines
+  // were just read through the caller's client in loadReport (RLS proved org + client scope).
+  const writer = writerFor(db);
   for (const l of lines) {
     const r = byLine.get(l.id);
     const flags = r?.flags ?? [];
-    await db
+    await writer
       .from('expense_report_lines')
       .update({ policy_flag: flags.length > 0, policy_reasons: flags })
       .eq('id', l.id)
@@ -241,7 +246,7 @@ export async function recomputeReport(
   }
 
   const totals = computeReportTotals(lines);
-  await db
+  await writer
     .from('expense_reports')
     .update({
       total_cents: totals.totalCents,
@@ -296,7 +301,12 @@ export async function buildReportFromReceipts(
   const headerLocation =
     (receipts.find((r) => r.location_id)?.location_id as string | undefined) ?? null;
 
-  const { data: report, error: repErr } = await db
+  // Every client the report + its lines land on: asserted in the caller's org + scope.
+  const writer = await scopedWriter(db, orgId, [
+    headerLocation,
+    ...receipts.map((r) => (r.location_id as string | null) ?? null),
+  ]);
+  const { data: report, error: repErr } = await writer
     .from('expense_reports')
     .insert({
       org_id: orgId,
@@ -327,7 +337,7 @@ export async function buildReportFromReceipts(
       receipt_id: r.id as string,
       has_receipt: Boolean(r.image_url),
     }));
-    const { error: lineErr } = await db.from('expense_report_lines').insert(lineRows);
+    const { error: lineErr } = await writer.from('expense_report_lines').insert(lineRows);
     if (lineErr) throw new Error(lineErr.message);
   }
 
@@ -394,7 +404,9 @@ export async function submitReport(
     throw new Error('An override reason is required to submit past a policy block.');
   }
 
-  const { error } = await db
+  // report read via the caller's client in loadReport (org + client scope proven).
+  const writer = writerFor(db);
+  const { error } = await writer
     .from('expense_reports')
     .update({
       status: 'SUBMITTED',
@@ -437,7 +449,9 @@ export async function approveReport(
     throw new Error('Segregation of duties: the approver cannot be the submitter of the expense report');
   }
 
-  const { error } = await db
+  // report read via the caller's client in loadReport (org + client scope proven).
+  const writer = writerFor(db);
+  const { error } = await writer
     .from('expense_reports')
     .update({ status: 'APPROVED', approved_by: approvedBy, approved_at: new Date().toISOString() })
     .eq('id', reportId)
@@ -458,7 +472,9 @@ export async function rejectReport(
   if (report.status !== 'SUBMITTED') {
     throw new Error(`Only a submitted report can be rejected (current: ${report.status})`);
   }
-  const { error } = await db
+  // report read via the caller's client in loadReport (org + client scope proven).
+  const writer = writerFor(db);
+  const { error } = await writer
     .from('expense_reports')
     .update({
       status: 'REJECTED',
@@ -485,6 +501,8 @@ export async function reimburseReport(
   reimbursedBy: string
 ): Promise<{ id: string; status: ExpenseReportStatus; gl_entry_id: string | null; reimbursed_cents: number }> {
   const { report, lines } = await loadReport(db, orgId, reportId);
+  // report read via the caller's client above (org + client scope proven).
+  const writer = writerFor(db);
 
   if (report.status === 'REIMBURSED') {
     return { id: reportId, status: 'REIMBURSED', gl_entry_id: report.gl_entry_id, reimbursed_cents: report.reimbursable_cents };
@@ -494,7 +512,7 @@ export async function reimburseReport(
   }
   if (report.gl_entry_id) {
     // Already posted — flip status idempotently without double-posting.
-    await db.from('expense_reports').update({ status: 'REIMBURSED', reimbursed_at: new Date().toISOString() }).eq('id', reportId).eq('org_id', orgId);
+    await writer.from('expense_reports').update({ status: 'REIMBURSED', reimbursed_at: new Date().toISOString() }).eq('id', reportId).eq('org_id', orgId);
     return { id: reportId, status: 'REIMBURSED', gl_entry_id: report.gl_entry_id, reimbursed_cents: report.reimbursable_cents };
   }
 
@@ -502,7 +520,7 @@ export async function reimburseReport(
 
   // Nothing out-of-pocket to reimburse (all corporate card) — no JE; just close it.
   if (totals.reimbursableCents === 0) {
-    const { error } = await db
+    const { error } = await writer
       .from('expense_reports')
       .update({ status: 'REIMBURSED', reimbursed_at: new Date().toISOString() })
       .eq('id', reportId)
@@ -536,7 +554,7 @@ export async function reimburseReport(
     throw new Error(je.error ?? 'Failed to post the expense reimbursement to the general ledger');
   }
 
-  const { error } = await db
+  const { error } = await writer
     .from('expense_reports')
     .update({
       status: 'REIMBURSED',
@@ -580,7 +598,11 @@ export async function matchCardCharge(
     throw new Error('Matched transaction is not on a corporate-card account');
   }
 
-  const { error } = await db
+  // The line is loaded org-pinned (and client-scope asserted for a member caller) first.
+  const line = await loadWritableRow(db, orgId, { table: 'expense_report_lines', id: lineId });
+  if (!line) throw new Error('Expense line not found');
+  const writer = writerFor(db);
+  const { error } = await writer
     .from('expense_report_lines')
     .update({ bank_transaction_id: bankTransactionId, payment_source: 'CORPORATE_CARD' })
     .eq('id', lineId)

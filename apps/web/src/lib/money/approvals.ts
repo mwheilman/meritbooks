@@ -397,17 +397,29 @@ export async function reject(adminDb: SupabaseClient, orgId: string, approvalId:
 }
 
 /**
- * H6 at release (05 §4.1): the preparer never releases; the approver releases only in
- * the tenant's sole-approver mode; and nobody releases a payment to a payee whose bank
- * details THEY changed (or approved) in the last 10 days (H6_BANK_CHANGE_RELEASE).
+ * H6 at release (05 §4.1): the preparer never releases; the approver releases only when
+ * the tenant allows it (any amount, or up to the tenant's limit — mig 174) and never for
+ * payroll; and nobody releases a payment to a payee whose bank details THEY changed (or
+ * approved) in the last 10 days (H6_BANK_CHANGE_RELEASE).
  * Throws SodViolationError (routes map it to 409 with its message). The DB trigger
- * approvals_release_sod_guard (migration 165) re-checks the first two.
+ * approvals_release_sod_guard (migrations 165 / 174) re-checks the first two.
+ *
+ * `parties.amountCents` is the approval's amount; when the tenant has a limit and the
+ * amount is unknown the approver is refused (fail closed). `parties.kind` PAYROLL_RUN
+ * makes the approver ≠ releaser rule strict whatever the tenant setting.
  */
+export interface ReleaseParties {
+  preparedBy: string | null;
+  approvedBy: string | null;
+  amountCents?: number | null;
+  kind?: ApprovalKind | null;
+}
+
 export async function assertReleaseSod(
   adminDb: SupabaseClient,
   orgId: string,
   actor: string,
-  parties: { preparedBy: string | null; approvedBy: string | null },
+  parties: ReleaseParties,
   bankDetailChanges: ReadonlyArray<{ userId: string; at: string }> = [],
 ): Promise<void> {
   const settings = await loadTenantSodSettings(adminDb, orgId);
@@ -417,6 +429,9 @@ export async function assertReleaseSod(
     preparedBy: parties.preparedBy,
     approvedBy: parties.approvedBy,
     soleApproverMode: settings.soleApproverMode,
+    soleApproverMaxCents: settings.soleApproverMaxCents,
+    strictApproverRelease: parties.kind === 'PAYROLL_RUN',
+    amountCents: parties.amountCents ?? null,
     bankDetailChanges,
   });
 }
@@ -468,7 +483,8 @@ export async function loadPayeeBankDetailChanges(
 export async function markReleased(adminDb: SupabaseClient, orgId: string, approvalId: string, actor: string, providerCorrelationId: string): Promise<Approval> {
   const a = await getApproval(adminDb, orgId, approvalId);
   assertTransition(a.status, 'RELEASED');
-  await assertReleaseSod(svc(), orgId, actor, { preparedBy: a.preparedBy, approvedBy: a.approvedBy },
+  await assertReleaseSod(svc(), orgId, actor,
+    { preparedBy: a.preparedBy, approvedBy: a.approvedBy, amountCents: a.amountCents, kind: a.kind },
     await loadPayeeBankDetailChanges(orgId, a));
   const { error } = await svc()
     .from('approvals')
@@ -525,18 +541,23 @@ export async function claimApprovalForRelease(
   // trigger failure mid-claim. The approval row is read (service role) for the payee.
   const { data: row, error: readErr } = await svc()
     .from('approvals')
-    .select('kind, subject_table, subject_id, prepared_by, approved_by')
+    .select('kind, subject_table, subject_id, prepared_by, approved_by, amount_cents')
     .eq('org_id', orgId)
     .eq('id', approvalId)
     .maybeSingle();
   if (readErr) throw new Error(readErr.message);
   const r = (row ?? null) as {
     kind: ApprovalKind; subject_table: string; subject_id: string; prepared_by: string | null; approved_by: string | null;
+    amount_cents: number | string | null;
   } | null;
   if (!r) return 'ALREADY_CLAIMED'; // nothing to claim in this org
-  const parties = {
+  const parties: ReleaseParties = {
     preparedBy: sod.preparedBy !== undefined ? sod.preparedBy : r.prepared_by ?? null,
     approvedBy: sod.approvedBy !== undefined ? sod.approvedBy : r.approved_by ?? null,
+    // The amount always comes from the approval row (frozen once approved, mig 170) —
+    // never from the caller — so the approver-release limit can't be talked around.
+    amountCents: r.amount_cents == null ? null : Number(r.amount_cents),
+    kind: r.kind,
   };
   const bankChanges = await loadPayeeBankDetailChanges(
     orgId, { kind: r.kind, subjectTable: r.subject_table, subjectId: r.subject_id }, sod.vendorId,

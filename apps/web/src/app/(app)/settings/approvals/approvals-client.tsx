@@ -62,7 +62,14 @@ const DOC_TYPE_LABEL: Record<WorkflowDocType, string> = {
 };
 
 // Roles that make sense as approvers (exclude the external business user).
-const APPROVER_ROLES: UserRole[] = ALL_ROLES.filter((r) => r !== 'business_user');
+/**
+ * Every role the workflow engine routes to EXCEPT Business User (3rd Party), on purpose:
+ * it is a read-only, outside role with no approve permission, and role steps route by
+ * rank (lib/approvals/workflow.ts ROLE_RANK — business_user is the lowest), so a step
+ * set to it could be approved by ANY member of the company. Explained in the UI below.
+ */
+const EXCLUDED_APPROVER_ROLE: UserRole = 'business_user';
+const APPROVER_ROLES: UserRole[] = ALL_ROLES.filter((r) => r !== EXCLUDED_APPROVER_ROLE);
 
 /** Every approval-type permission (approve / post / release) as a plain-English option. */
 const APPROVAL_PERMISSIONS: Array<{ value: string; label: string }> = CAPABILITIES.filter(
@@ -337,6 +344,13 @@ export function ApprovalWorkflowsClient() {
                       ))}
                     </optgroup>
                   </select>
+                  {st.approverMode === 'role' && (
+                    <span className="mt-1 block text-2xs text-slate-500">
+                      {ROLE_DEFINITIONS[EXCLUDED_APPROVER_ROLE].label} isn’t listed: it’s a read-only outside role, and a
+                      step set to it could be approved by anyone in the company. Higher roles can always approve a lower
+                      role’s step.
+                    </span>
+                  )}
                 </label>
                 {st.approverMode === 'permission' && (
                   <label className="block">

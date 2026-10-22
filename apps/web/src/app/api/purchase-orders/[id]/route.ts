@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
+import { isWriteScopeError, loadWritableRow, serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * A single purchase order with its lines, goods receipts, and bill links + match
@@ -107,10 +108,20 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: 'Validation failed', code: 'VALIDATION_ERROR' }, { status: 422 });
   }
 
-  const { data: updated, error } = await supabase
+  // purchase_orders is SELECT-only for members (migration 172): service-role update after the
+  // bills:create check, org pinned; the PO is loaded org-pinned + client-scope asserted first.
+  try {
+    const target = await loadWritableRow(supabase, orgId, { table: 'purchase_orders', id: params.id });
+    if (!target) return NextResponse.json({ error: 'Purchase order not found', code: 'NOT_FOUND' }, { status: 404 });
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    throw e;
+  }
+  const { data: updated, error } = await serviceWriter()
     .from('purchase_orders')
     .update({ status: parsed.data.status })
     .eq('id', params.id)
+    .eq('org_id', orgId)
     .select('id, po_number, status')
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message, code: 'PO_UPDATE_FAILED' }, { status: 500 });

@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { recomputeReport } from '@/lib/expenses/expense-reports';
+import { assertOrgRefs, assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
 
 const patchSchema = z.object({
   expense_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -70,7 +71,29 @@ export async function PATCH(request: Request, { params }: { params: { lineId: st
   const editable = await editableReportId(supabase, orgId, params.lineId);
   if (!editable.ok) return NextResponse.json({ error: editable.error }, { status: editable.status });
 
-  const { error } = await supabase
+  // expense_report_lines is SELECT-only for members (migration 172): service-role write after
+  // the receipts:edit check, org pinned. The line was read via the member client in
+  // editableReportId (RLS proved org + client scope); a new client / body FKs are verified here.
+  const b = parsed.data;
+  try {
+    if (b.location_id) await assertWriteScope(supabase, orgId, [b.location_id]);
+    await assertOrgRefs(
+      orgId,
+      [
+        { table: 'accounts', ids: [b.account_id], label: 'account' },
+        { schema: 'core', table: 'departments', ids: [b.department_id], label: 'department' },
+        { table: 'classes', ids: [b.class_id], label: 'class' },
+        { schema: 'core', table: 'jobs', ids: [b.job_id], label: 'job' },
+      ],
+      { caller: supabase },
+    );
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message }, { status: 403 });
+    throw e;
+  }
+
+  const writer = serviceWriter();
+  const { error } = await writer
     .from('expense_report_lines')
     .update({ ...parsed.data })
     .eq('id', params.lineId)
@@ -93,7 +116,8 @@ export async function DELETE(_req: Request, { params }: { params: { lineId: stri
   const editable = await editableReportId(supabase, orgId, params.lineId);
   if (!editable.ok) return NextResponse.json({ error: editable.error }, { status: editable.status });
 
-  const { error } = await supabase.from('expense_report_lines').delete().eq('id', params.lineId).eq('org_id', orgId);
+  // Line read via the member client in editableReportId (RLS proved org + client scope).
+  const { error } = await serviceWriter().from('expense_report_lines').delete().eq('id', params.lineId).eq('org_id', orgId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   await recomputeReport(supabase, orgId, editable.reportId);

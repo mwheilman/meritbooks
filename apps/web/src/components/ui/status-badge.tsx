@@ -1,4 +1,4 @@
-import { clsx } from 'clsx';
+import { Pip, type PipKind, type TagTone } from '@meritbooks/merit-ui';
 
 type BadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
@@ -66,39 +66,37 @@ interface StatusBadgeProps {
   className?: string;
 }
 
+// Kit status grammar (§7.4): a pip SHAPE + the word, washed by meaning — never colour alone.
+const TONE: Record<BadgeVariant, TagTone> = {
+  success: 'pos',
+  warning: 'warn',
+  danger: 'neg',
+  info: 'ai',
+  neutral: 'default',
+};
+const PIP: Record<BadgeVariant, PipKind> = {
+  success: 'ready',
+  warning: 'risk',
+  danger: 'overdue',
+  info: 'open',
+  neutral: 'closed',
+};
+
+/** A status word as a kit tag (20px, square) with its pip. Same props as before. */
 export function StatusBadge({ status, variant, size = 'sm', dot = true, className }: StatusBadgeProps) {
   const v = variant ?? variantMap[status] ?? 'neutral';
 
   const label = status
     .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+    .toLowerCase()
+    .replace(/^\w/, (c) => c.toUpperCase());
 
+  const tone = TONE[v];
   return (
     <span
-      className={clsx(
-        'inline-flex items-center gap-1 rounded-full font-medium',
-        size === 'sm' && 'px-2 py-0.5 text-2xs',
-        size === 'md' && 'px-2.5 py-1 text-xs',
-        v === 'success' && 'bg-emerald-500/10 text-emerald-400',
-        v === 'warning' && 'bg-amber-500/10 text-amber-400',
-        v === 'danger' && 'bg-red-500/10 text-red-400',
-        v === 'info' && 'bg-blue-500/10 text-blue-400',
-        v === 'neutral' && 'bg-slate-500/10 text-slate-400',
-        className
-      )}
+      className={['tag', tone !== 'default' && `tag--${tone}`, size === 'md' && 'mb-tag--md', className].filter(Boolean).join(' ')}
     >
-      {dot && (
-        <span
-          className={clsx(
-            'w-1.5 h-1.5 rounded-full',
-            v === 'success' && 'bg-emerald-400',
-            v === 'warning' && 'bg-amber-400',
-            v === 'danger' && 'bg-red-400',
-            v === 'info' && 'bg-blue-400',
-            v === 'neutral' && 'bg-slate-400'
-          )}
-        />
-      )}
+      {dot && <Pip kind={PIP[v]} />}
       {label}
     </span>
   );

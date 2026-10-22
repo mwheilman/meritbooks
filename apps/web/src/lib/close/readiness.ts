@@ -25,6 +25,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { assertOrgRefs, scopedWriter } from '@/lib/db/scoped-writer';
 import { gatherReconciliationCloseStatus } from '@/lib/services/reconciliation-close-gate';
 import { getLearnedPreference } from '@/lib/learning/preferences';
 import { scanUncategorizedLeakage } from '@/lib/controls/uncategorized-leakage';
@@ -501,6 +502,12 @@ export async function setManualCloseTask(supabase: SupabaseClient, args: SetManu
     .eq('task_name', args.taskKey)
     .maybeSingle();
 
+  // close_checklists is SELECT-only for members (migration 172): the client is asserted in the
+  // caller's org + scope and the period verified against the org (it comes from the request),
+  // then the service role writes with the org pinned. A WriteScopeError propagates (fail closed).
+  await assertOrgRefs(args.orgId, [{ table: 'fiscal_periods', ids: [args.fiscalPeriodId], label: 'fiscal period' }], { caller: supabase });
+  const writer = await scopedWriter(supabase, args.orgId, [args.locationId]);
+
   const completion = {
     is_complete: args.isComplete,
     completed_by: args.isComplete ? args.actorCoreUserId : null,
@@ -508,7 +515,11 @@ export async function setManualCloseTask(supabase: SupabaseClient, args: SetManu
   };
 
   if (existing) {
-    const { error } = await supabase.from('close_checklists').update(completion).eq('id', (existing as { id: string }).id);
+    const { error } = await writer
+      .from('close_checklists')
+      .update(completion)
+      .eq('id', (existing as { id: string }).id)
+      .eq('org_id', args.orgId);
     if (error) {
       console.error('[close/readiness] manual task update failed:', error.message);
       return false;
@@ -516,7 +527,7 @@ export async function setManualCloseTask(supabase: SupabaseClient, args: SetManu
     return true;
   }
 
-  const { error } = await supabase.from('close_checklists').insert({
+  const { error } = await writer.from('close_checklists').insert({
     org_id: args.orgId,
     fiscal_period_id: args.fiscalPeriodId,
     location_id: args.locationId,

@@ -14,6 +14,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logAction } from '@/lib/trust/action-log';
+import { writerFor } from '@/lib/db/scoped-writer';
 import { getTierPolicy, type TierPolicy } from '@/lib/trust/score-tier';
 import { getVendorComplianceOverview, type VendorComplianceOverview } from '@/lib/services/vendor-compliance';
 import { assessVendorRisk, type RiskAssessment } from '@/lib/compliance/risk';
@@ -104,7 +105,9 @@ export async function assessAndEscalate(
     if (alreadyQueued.has(row.vendorId)) continue;
 
     const issueText = row.issues.map((i) => `${i.label} ${i.state}`).join(', ') || 'compliance issue';
-    const { error } = await supabase.from('ai_decisions').insert({
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert for a
+    // member caller, org pinned (org-level exception row, no location_id).
+    const { error } = await writerFor(supabase).from('ai_decisions').insert({
       org_id: orgId,
       feature: RISK_FEATURE,
       input_summary: `${row.vendorName} on payment hold — ${issueText}`,

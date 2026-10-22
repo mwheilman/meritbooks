@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * In-page section tabs for consolidated parent screens (Banking & Cash, Accounting).
- * Reuses the existing consolidation/reconciliation in-page tab look (pill row, brand
- * accent for the active tab) so merged screens feel authored, not bolted together.
+ * In-page section tabs for consolidated parent screens (Banking & Cash, Accounting),
+ * drawn as the kit's 40px underline tabs (merit-ui `.tabs`): the selected tab in
+ * Midnight 600 over an Electric rule. Arrow keys move between tabs.
  *
  * The active tab is mirrored into the `?tab=` query param so retired standalone routes
  * can redirect straight into their new tab home (e.g. /covenants → /debt?tab=covenants).
@@ -11,13 +11,13 @@
  * inside a <Suspense> boundary (Next 14 requirement for useSearchParams).
  */
 
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { clsx } from 'clsx';
 
 export interface SectionTab {
   id: string;
   label: string;
+  /** Accepted for compatibility; kit tabs are text-only. */
   icon?: ReactNode;
 }
 
@@ -32,27 +32,36 @@ export function SectionTabs({
   onChange: (id: string) => void;
   className?: string;
 }) {
+  const refs = useRef(new Map<string, HTMLButtonElement>());
+  const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+    const i = tabs.findIndex((t) => t.id === active);
+    let next: SectionTab | undefined;
+    if (e.key === 'ArrowRight') next = tabs[(i + 1) % tabs.length];
+    else if (e.key === 'ArrowLeft') next = tabs[(i - 1 + tabs.length) % tabs.length];
+    else if (e.key === 'Home') next = tabs[0];
+    else if (e.key === 'End') next = tabs[tabs.length - 1];
+    if (!next) return;
+    e.preventDefault();
+    onChange(next.id);
+    refs.current.get(next.id)?.focus();
+  };
   return (
-    <div
-      className={clsx(
-        'inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-surface-900 p-1',
-        className,
-      )}
-      role="tablist"
-    >
+    <div className={['tabs', 'mb-section-tabs', className].filter(Boolean).join(' ')} role="tablist">
       {tabs.map((t) => (
         <button
           key={t.id}
+          ref={(el) => {
+            if (el) refs.current.set(t.id, el);
+            else refs.current.delete(t.id);
+          }}
           type="button"
           role="tab"
+          className="tab"
           aria-selected={active === t.id}
+          tabIndex={active === t.id ? 0 : -1}
           onClick={() => onChange(t.id)}
-          className={clsx(
-            'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-            active === t.id ? 'bg-brand-500 text-white' : 'text-slate-400 hover:text-slate-200',
-          )}
+          onKeyDown={onKeyDown}
         >
-          {t.icon}
           {t.label}
         </button>
       ))}

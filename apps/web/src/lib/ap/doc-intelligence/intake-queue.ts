@@ -18,6 +18,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { formatMoney } from '@meritbooks/shared';
 import { logAction } from '@/lib/trust/action-log';
+import { scopedWriter, writerFor } from '@/lib/db/scoped-writer';
 import type { CreateBillInput } from '@/lib/validations/transactions';
 import { resolveDocProvider, type ResolveDocProviderOptions } from './resolve';
 import type { DocProviderDeps, ExtractedBill } from './types';
@@ -249,7 +250,10 @@ export async function createDocIntakeDraft(
 
   const confidence = clamp01(extracted.totalConfidence);
 
-  const { data: inserted, error } = await supabase
+  // ai_decisions is SELECT-only for members (migration 172): service-role insert (for a member
+  // caller), org pinned to the caller's org, the draft's company asserted in client scope.
+  const writer = await scopedWriter(supabase, args.orgId, [args.locationId]);
+  const { data: inserted, error } = await writer
     .from('ai_decisions')
     .insert({
       org_id: args.orgId,
@@ -413,7 +417,10 @@ export async function createInboundIntakeDraft(
 
   const confidence = clamp01(bill.totalConfidence);
 
-  const { data: inserted, error } = await supabase
+  // Service-role insert for a member caller (migration 172); the inbound webhook already
+  // holds the service role (writes as itself). Org pinned to args.orgId.
+  const writer = await scopedWriter(supabase, args.orgId, [args.locationId || null]);
+  const { data: inserted, error } = await writer
     .from('ai_decisions')
     .insert({
       org_id: args.orgId,
@@ -560,7 +567,9 @@ export async function disposeDocIntakeDraft(
     ? { ...draft.proposal, postedBillId: disposition.billId }
     : draft.proposal;
 
-  const { error } = await supabase
+  // The draft was just read through the caller's client (RLS proved org + client scope for a
+  // member); lifecycle update via the service role (migration 172), org pinned below.
+  const { error } = await writerFor(supabase)
     .from('ai_decisions')
     .update({
       status: newStatus,

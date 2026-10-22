@@ -16,6 +16,7 @@ import {
 import { autoMap } from '@/lib/import/csv';
 import { CONVERSION_SOURCE_FIELDS } from '@/lib/onboarding/conversion';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { resolveUploadedFile, INTAKE_READABLE_TYPES, mediaTypeFromName } from '@/lib/uploads/resolve-upload';
 import { GL_DETAIL_NOT_TB_CODE } from '@/lib/onboarding/tb-import/spreadsheet-tb';
 
@@ -288,7 +289,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Read-only w.r.t. the ledger and conversion sessions — nothing is posted here.
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert after the
+    // permission check, org pinned (audit evidence).
+    const { data: dec } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: orgId,

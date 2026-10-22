@@ -16,6 +16,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from './gl-posting';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
+import { writerFor } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -103,7 +104,10 @@ export async function releaseRetainage(db: DB, input: ReleaseRetainageInput): Pr
       return { success: false, error: je.error ?? 'Failed to post the retainage release to the general ledger.' };
     }
 
-    const { data: rel, error: relErr } = await db
+    // retainage_releases is SELECT-only for members (migration 172): service-role insert
+    // after the route's permission check, org pinned. The bill was read via the caller's
+    // client above (RLS proved org + client scope).
+    const { data: rel, error: relErr } = await writerFor(db)
       .from('retainage_releases')
       .insert({
         org_id: orgId,

@@ -61,7 +61,7 @@ import { getTierPolicy, scoreToTier } from '@/lib/trust/score-tier';
 import { resolveDispositionDetailed } from '@/lib/autonomy/disposition';
 import { resolveApprover } from '@/lib/services/cost-approval';
 import { createApproval, submitForApproval, type ApprovalStatus } from '@/lib/money/approvals';
-import { isWriteScopeError, scopedWriter } from '@/lib/db/scoped-writer';
+import { isWriteScopeError, scopedWriter, writerFor } from '@/lib/db/scoped-writer';
 
 /** The M10 autonomy feature governing the bill-creation proposal in this loop. */
 const BILL_FEATURE = 'BILL_PARSE';
@@ -337,7 +337,9 @@ async function createPendingBillFromProposal(
   // Link the bill to the PO with the informational match verdict (the existing
   // /api/purchase-orders/[id]/match route owns the authoritative billed_qty meters
   // and any 3-way-match EXCEPTION rail — we do not touch those here).
-  await ctx.supabase
+  // bill_po_links is SELECT-only for members (migration 172): same scoped service-role
+  // writer as the bill (org pinned; the PO was read through the member client).
+  await writer
     .from('bill_po_links')
     .upsert(
       {
@@ -535,7 +537,10 @@ export const procureToPayRecipe: AgentRecipe = {
           })),
         };
         let decisionId: string | null = null;
-        const { data: inserted } = await ctx.supabase
+        // ai_decisions is SELECT-only for members (migration 172): service-role insert, org
+        // pinned to the run's org, the PO's company asserted in the caller's client scope.
+        const decisionWriter = await scopedWriter(ctx.supabase, ctx.orgId, [(state.locationId as string | null) ?? null]);
+        const { data: inserted } = await decisionWriter
           .from('ai_decisions')
           .insert({
             org_id: ctx.orgId,
@@ -586,7 +591,7 @@ export const procureToPayRecipe: AgentRecipe = {
             };
           }
           if (decisionId) {
-            await ctx.supabase.from('ai_decisions').update({ status: 'APPLIED' }).eq('id', decisionId);
+            await decisionWriter.from('ai_decisions').update({ status: 'APPLIED' }).eq('id', decisionId).eq('org_id', ctx.orgId);
           }
           return {
             status: 'DONE',
@@ -626,7 +631,9 @@ export const procureToPayRecipe: AgentRecipe = {
         }
         const decisionId = (state.codingDecisionId as string | null) ?? null;
         if (decisionId) {
-          await ctx.supabase.from('ai_decisions').update({ status: 'APPLIED' }).eq('id', decisionId);
+          // This run's own proposal row (its company = the PO's, scope-asserted when the
+          // bill was created above); service-role lifecycle update, org pinned (migration 172).
+          await writerFor(ctx.supabase).from('ai_decisions').update({ status: 'APPLIED' }).eq('id', decisionId).eq('org_id', ctx.orgId);
         }
         const vendorName = (state.vendorName as string | null) ?? 'vendor';
         return {

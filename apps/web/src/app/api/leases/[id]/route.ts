@@ -2,12 +2,15 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * /api/leases/[id]
  *
  * GET    — one lease with its full amortization schedule (RLS-scoped).
- * DELETE — remove a lease (schedule lines cascade). Guarded: refuses once any
+ * DELETE — remove a lease (schedule lines cascade). Gated on `journal_entries:post`
+ *          (the same gate as every other lease mutation). Guarded: refuses once any
  *          period has posted to the GL, since those entries can't be silently orphaned.
  */
 
@@ -49,7 +52,13 @@ export async function GET(_request: Request, { params }: Params): Promise<NextRe
 export async function DELETE(_request: Request, { params }: Params): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
+  if (!ctx.orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
 
+  const guard = await requirePermission(ctx.userId, 'journal_entries', 'post');
+  if (!guard.ok) return guard.response;
+
+  // Read through the member client: RLS proves the lease is in this org and in the
+  // caller's client scope (the service-role delete below relies on it).
   const { data: lease } = await ctx.supabase
     .from('leases')
     .select('id, periods_posted')
@@ -63,7 +72,9 @@ export async function DELETE(_request: Request, { params }: Params): Promise<Nex
     );
   }
 
-  const { error } = await ctx.supabase.from('leases').delete().eq('id', params.id);
+  // leases is SELECT-only for members (migration 172): service-role delete after the
+  // permission check, org pinned.
+  const { error } = await serviceWriter().from('leases').delete().eq('id', params.id).eq('org_id', ctx.orgId);
   if (error) return NextResponse.json({ error: error.message, code: 'DELETE_FAILED' }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

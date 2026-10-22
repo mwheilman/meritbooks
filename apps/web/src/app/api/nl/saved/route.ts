@@ -3,16 +3,18 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiHandler, apiQueryHandler } from '@/lib/api-handler';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * Saved / pinned NL questions — GET (list mine) · POST (save) · DELETE (unpin).
  *
  * Persistence rides the EXISTING `ai_decisions` rail (migration 039) with a
  * dedicated discriminator `feature = 'NL_SAVED_QUESTION'` — no new table, no
- * migration. `ai_decisions` is org-isolated by RLS (`org_id = get_org_id()`) and
- * grants select/insert/delete to authenticated, so a saved question can never
- * leak across tenants. We additionally scope to `created_by_user` so a user sees
- * only their own pinned list. status is 'PROPOSED' (nothing is posted; these are
+ * migration. `ai_decisions` is org-isolated by RLS (`org_id = get_org_id()`) for
+ * reads and is SELECT-only for members (migration 172): the insert/delete go through
+ * the service role with `org_id` pinned to the session org, so a saved question can
+ * never leak across tenants. We additionally scope to `created_by_user` so a user
+ * sees (and can unpin) only their own pinned list. status is 'PROPOSED' (nothing is posted; these are
  * bookmarks, not proposals to act on).
  *
  * SAFETY: a saved question is just STORED TEXT. Re-running it goes back through
@@ -76,7 +78,9 @@ export const POST = apiHandler(saveSchema, async (body, ctx) => {
   const prompt = body.prompt.trim();
   const label = (body.label ?? prompt).trim().slice(0, 120);
   try {
-    const { data, error } = await ctx.supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert, org pinned
+    // to the session org (org-level bookmark row, no location_id).
+    const { data, error } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: ctx.orgId,
@@ -107,10 +111,13 @@ export const DELETE = apiQueryHandler(deleteSchema, async (params, ctx) => {
     return NextResponse.json({ error: 'No organization in session', code: 'NO_ORG' }, { status: 400 });
   }
   try {
-    const { error } = await ctx.supabase
+    // Service-role delete (migration 172), pinned to the session org + this user's own
+    // NL_SAVED_QUESTION bookmark — it can never reach another tenant's / user's row.
+    const { error } = await serviceWriter()
       .from('ai_decisions')
       .delete()
       .eq('id', params.id)
+      .eq('org_id', ctx.orgId)
       .eq('feature', SAVED_FEATURE)
       .eq('created_by_user', ctx.userId);
     if (error) throw new Error(error.message);

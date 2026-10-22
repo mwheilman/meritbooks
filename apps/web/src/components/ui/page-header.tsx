@@ -1,3 +1,4 @@
+import { Eyebrow } from '@meritbooks/merit-ui';
 import { HelpButton } from '@/components/help/help-button';
 import { ActiveCompanyIndicator } from './active-company-indicator';
 
@@ -6,39 +7,38 @@ interface PageHeaderProps {
   description?: string;
   actions?: React.ReactNode;
   breadcrumbs?: { label: string; href?: string }[];
+  /** Tracked-caps line over the title ("Settings // Team & access"). Parts join with the blue //. */
+  eyebrow?: string | string[];
 }
 
-export function PageHeader({ title, description, actions, breadcrumbs }: PageHeaderProps) {
+/**
+ * The page head on merit-ui (kit `.page-head`): an optional `02 // Label` eyebrow,
+ * ONE Syne 28 Electric title (the page's only h1), a Steel caption, and the page's
+ * verbs bottom-right (one primary). Breadcrumbs, when a page passes them, become the
+ * eyebrow — the bar already carries the trail. Same props as before, so every page
+ * keeps compiling.
+ */
+export function PageHeader({ title, description, actions, breadcrumbs, eyebrow }: PageHeaderProps) {
+  const eyebrowParts = eyebrow
+    ? Array.isArray(eyebrow)
+      ? eyebrow
+      : [eyebrow]
+    : breadcrumbs && breadcrumbs.length > 0
+      ? breadcrumbs.map((b) => b.label)
+      : null;
   return (
-    <div className="mb-6">
-      {breadcrumbs && breadcrumbs.length > 0 && (
-        <nav className="flex items-center gap-1.5 text-2xs text-slate-500 mb-2">
-          {breadcrumbs.map((crumb, i) => (
-            <span key={i} className="flex items-center gap-1.5">
-              {i > 0 && <span>/</span>}
-              {crumb.href ? (
-                <a href={crumb.href} className="hover:text-slate-300 transition-colors">
-                  {crumb.label}
-                </a>
-              ) : (
-                <span className="text-slate-400">{crumb.label}</span>
-              )}
-            </span>
-          ))}
-        </nav>
-      )}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-white tracking-tight">{title}</h1>
-          {description && (
-            <p className="mt-1 text-sm text-slate-400">{description}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <ActiveCompanyIndicator />
-          {actions}
-          <HelpButton />
-        </div>
+    <div className="page-head mb-page-head">
+      <div className="mb-page-head-main">
+        {eyebrowParts && <Eyebrow>{eyebrowParts}</Eyebrow>}
+        <h1 className="t-title" style={eyebrowParts ? { marginTop: 4 } : undefined}>
+          {title}
+        </h1>
+        {description && <p className="mb-page-desc">{description}</p>}
+      </div>
+      <div className="btn-row mb-page-actions">
+        <ActiveCompanyIndicator />
+        {actions}
+        <HelpButton />
       </div>
     </div>
   );

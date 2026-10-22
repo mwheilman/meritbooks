@@ -6,6 +6,7 @@ import { hasModule } from '@/lib/services/entitlements';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { createAdminSupabase } from '@/lib/supabase/admin';
+import { serviceWriter, assertWriteScope, loadWritableRow, isWriteScopeError } from '@/lib/db/scoped-writer';
 
 const REV_REC_METHODS = [
   { value: 'POINT_OF_SALE', label: 'Point of sale', poc: false,
@@ -105,7 +106,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  const { error } = await supabase.from('rev_rec_method_map').upsert({
+  // rev_rec_method_map is SELECT-only for members (migration 172): service-role write after
+  // settings_acct:edit, org pinned, the company asserted in the caller's client scope.
+  try {
+    await assertWriteScope(supabase, orgId, [body.location_id]);
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message }, { status: 403 });
+    throw e;
+  }
+  const { error } = await serviceWriter().from('rev_rec_method_map').upsert({
     org_id: orgId, location_id: body.location_id, job_type: body.job_type, method: body.method, updated_at: new Date().toISOString(),
   }, { onConflict: 'org_id,location_id,job_type' });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -125,7 +134,15 @@ export async function DELETE(request: Request) {
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
-  const { error } = await supabase.from('rev_rec_method_map').delete().eq('org_id', orgId).eq('id', id);
+  // Service-role delete (migration 172): load the rule org-pinned + client-scope-checked first.
+  try {
+    const rule = await loadWritableRow(supabase, orgId, { table: 'rev_rec_method_map', id });
+    if (!rule) return NextResponse.json({ error: 'Rule not found' }, { status: 404 });
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message }, { status: 403 });
+    throw e;
+  }
+  const { error } = await serviceWriter().from('rev_rec_method_map').delete().eq('org_id', orgId).eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

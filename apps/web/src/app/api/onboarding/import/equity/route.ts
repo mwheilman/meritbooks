@@ -19,6 +19,7 @@ import {
   type ProposedCapTable,
 } from '@/lib/onboarding/equity-import';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter, isWriteScopeError } from '@/lib/db/scoped-writer';
 
 /**
  * /api/onboarding/import/equity — the equity / cap-table onboarding endpoint.
@@ -155,7 +156,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Log the proposal to the AI decision rail (PROPOSED) — nothing written to the cap table.
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert, org pinned
+    // (audit evidence). POST is intentionally ungated (propose-only) — see PUT for the gate.
+    const { data: dec } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: orgId,
@@ -228,12 +231,18 @@ export async function PUT(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'Cap table is not ready to save.', code: 'VALIDATION_ERROR', blockers }, { status: 422 });
   }
 
-  const commit = await commitCapTable(supabase, orgId, userId, {
-    entityId: body.entityId,
-    owners,
-    ownershipBasis,
-    effectiveDate: body.effectiveDate,
-  });
+  let commit: Awaited<ReturnType<typeof commitCapTable>>;
+  try {
+    commit = await commitCapTable(supabase, orgId, userId, {
+      entityId: body.entityId,
+      owners,
+      ownershipBasis,
+      effectiveDate: body.effectiveDate,
+    });
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    throw e;
+  }
 
   // Reconcile per-owner capital to the opening-TB equity (report a variance).
   const openingEquityCents =

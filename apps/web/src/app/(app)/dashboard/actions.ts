@@ -31,6 +31,8 @@ export interface CompanyBoard {
   id: string;
   name: string;
   shortCode: string;
+  /** core.locations.is_tenant_own_books — the tenant's own books (Electric own-books shell). */
+  isOwnBooks: boolean;
   /** Items waiting to be processed: pending bank txns + receipts + bills. */
   toReview: number;
   /** Items a human must look at now: flagged bank/receipts + on-hold bills. */
@@ -69,6 +71,8 @@ export interface Workboard {
   status: CardStatus;
   companies: CompanyBoard[];
   consolidated: WorkboardConsolidated;
+  /** The org-calendar date the board is "as of" (YYYY-MM-DD); '' when unknown. */
+  today: string;
 }
 
 const EMPTY_CONSOLIDATED: WorkboardConsolidated = {
@@ -89,6 +93,7 @@ interface LocationRow {
   name: string;
   short_code: string | null;
   minimum_cash_cents: number | null;
+  is_tenant_own_books: boolean | null;
 }
 
 function tally(rows: Array<{ location_id: string | null }> | null | undefined): Map<string, number> {
@@ -117,20 +122,20 @@ function cashStatusFor(cashCents: number, minCashCents: number | null): CashStat
 
 export async function getWorkboard(): Promise<Workboard> {
   const supabase = await createAuthedServerSupabase();
-  if (!supabase) return { status: 'error', companies: [], consolidated: EMPTY_CONSOLIDATED };
+  if (!supabase) return { status: 'error', companies: [], consolidated: EMPTY_CONSOLIDATED, today: '' };
 
   // Company list (locations live in `core`; the ledger/queue tables in `public`).
   // RLS scopes these to the caller's tenant.
   const { data: locData, error: locErr } = await supabase
     .schema('core')
     .from('locations')
-    .select('id, name, short_code, minimum_cash_cents')
+    .select('id, name, short_code, minimum_cash_cents, is_tenant_own_books')
     .eq('is_active', true)
     .order('name');
 
-  if (locErr) return { status: 'error', companies: [], consolidated: EMPTY_CONSOLIDATED };
+  if (locErr) return { status: 'error', companies: [], consolidated: EMPTY_CONSOLIDATED, today: '' };
   const locations = (locData ?? []) as LocationRow[];
-  if (locations.length === 0) return { status: 'empty', companies: [], consolidated: EMPTY_CONSOLIDATED };
+  if (locations.length === 0) return { status: 'empty', companies: [], consolidated: EMPTY_CONSOLIDATED, today: '' };
 
   // "Now" is the ORG's calendar date (core.organizations.timezone), not UTC.
   const today = await getOrgToday(supabase, null);
@@ -262,6 +267,7 @@ export async function getWorkboard(): Promise<Workboard> {
       id: loc.id,
       name: loc.name,
       shortCode: (loc.short_code || loc.name).slice(0, 4).toUpperCase(),
+      isOwnBooks: loc.is_tenant_own_books === true,
       toReview: rev,
       needsAttention: att,
       openExceptions: exc,
@@ -297,7 +303,7 @@ export async function getWorkboard(): Promise<Workboard> {
     companiesClosed: companies.filter((c) => c.periodStatus === 'HARD_CLOSE').length,
   };
 
-  return { status: 'ok', companies, consolidated };
+  return { status: 'ok', companies, consolidated, today };
 }
 
 export interface RecentActivity {
@@ -311,7 +317,7 @@ export interface RecentActivity {
   user_name: string | null;
 }
 
-export async function getRecentActivity(limit = 20): Promise<RecentActivity[]> {
+export async function getRecentActivity(limit = 20, locationId?: string | null): Promise<RecentActivity[]> {
   const supabase = await createAuthedServerSupabase();
   if (!supabase) return [];
 
@@ -320,11 +326,14 @@ export async function getRecentActivity(limit = 20): Promise<RecentActivity[]> {
   // fails with PGRST200 "no relationship found" — REST embeds don't cross the
   // public→core boundary here. Two-step instead: fetch the transactions, then
   // resolve location names from core.locations by id.
-  const { data: txns } = await supabase
+  let txnQuery = supabase
     .from('bank_transactions')
     .select('id, description, amount_cents, status, created_at, location_id')
     .order('created_at', { ascending: false })
     .limit(limit);
+  // A client home shows only that client's feed (a sub-filter within RLS).
+  if (locationId) txnQuery = txnQuery.eq('location_id', locationId);
+  const { data: txns } = await txnQuery;
 
   const rows = txns ?? [];
   const locIds = [...new Set(rows.map((t) => t.location_id).filter(Boolean))];
@@ -347,4 +356,172 @@ export async function getRecentActivity(limit = 20): Promise<RecentActivity[]> {
     created_at: t.created_at,
     user_name: null,
   }));
+}
+
+// ── Client home (one client's books-review loop) ────────────────────────────────
+
+/** One open bank/card line, for the client home's "Decide" list. */
+export interface ClientQueueItem {
+  id: string;
+  date: string;
+  description: string;
+  amountCents: number;
+  status: 'PENDING' | 'CATEGORIZED' | 'FLAGGED';
+  /** 0–100, or null when the AI hasn't scored it yet. */
+  confidence: number | null;
+}
+
+/** IA-SPEC §6.1 confidence bands over the client's open feed. */
+export interface ConfidenceBand {
+  count: number;
+  amountCents: number;
+}
+
+export interface ClientHome {
+  status: CardStatus;
+  /** The same per-client figures the workspace board shows, for this client only. */
+  board: CompanyBoard | null;
+  bands: { decide: ConfidenceBand; check: ConfidenceBand; ready: ConfidenceBand };
+  /** Decide band, lowest confidence first (FLAGGED and unscored lead). */
+  decide: ClientQueueItem[];
+  /** Org-wide money-movement approvals awaiting sign-off. */
+  pendingApprovals: number;
+  /** The org-calendar date the figures are "as of" (YYYY-MM-DD). */
+  today: string;
+}
+
+const EMPTY_BANDS = { decide: { count: 0, amountCents: 0 }, check: { count: 0, amountCents: 0 }, ready: { count: 0, amountCents: 0 } };
+
+/** Decide < 70 (or flagged, or unscored) · Check 70–89 · Ready 90+ — the bank-feed bands. */
+function bandOf(status: string, confidence: number | null): 'decide' | 'check' | 'ready' {
+  if (status === 'FLAGGED' || confidence === null || confidence < 70) return 'decide';
+  if (confidence < 90) return 'check';
+  return 'ready';
+}
+
+/**
+ * The client home for ONE client: the workboard figures filtered to that client,
+ * plus its open bank/card feed split into the Decide / Check / Ready bands with
+ * the Decide list itself. Every read is RLS-scoped through the caller's client and
+ * sub-filtered by location_id; each source degrades on its own.
+ */
+export async function getClientHome(locationId: string): Promise<ClientHome> {
+  const fail = (today: string): ClientHome => ({ status: 'error', board: null, bands: EMPTY_BANDS, decide: [], pendingApprovals: 0, today });
+  const supabase = await createAuthedServerSupabase();
+  if (!supabase) return fail('');
+
+  const { data: loc, error: locErr } = await supabase
+    .schema('core')
+    .from('locations')
+    .select('id, name, short_code, minimum_cash_cents, is_tenant_own_books')
+    .eq('id', locationId)
+    .maybeSingle();
+  const today = await getOrgToday(supabase, null);
+  if (locErr || !loc) return fail(today);
+  const location = loc as LocationRow;
+  const [year, month] = today.split('-').map(Number);
+
+  const [bankRes, receiptRes, billRes, invoiceRes, bookCash, aiRes, jeRes, periodRes, approvalRes] = await Promise.all([
+    fetchAll(
+      () =>
+        supabase
+          .from('bank_transactions')
+          .select('id, transaction_date, description, amount_cents, status, ai_confidence')
+          .eq('location_id', locationId)
+          .in('status', ['PENDING', 'CATEGORIZED', 'FLAGGED']),
+      { label: 'client home open bank_transactions' },
+    ),
+    supabase.from('receipts').select('id, status').eq('location_id', locationId).in('status', ['PENDING', 'CATEGORIZED', 'FLAGGED']).limit(ROW_CAP),
+    supabase.from('bills').select('status, balance_cents').eq('location_id', locationId).neq('status', 'VOIDED').limit(ROW_CAP),
+    supabase
+      .from('invoices')
+      .select('balance_cents')
+      .eq('location_id', locationId)
+      .not('status', 'in', '("PAID","VOIDED","DRAFT","WRITTEN_OFF")')
+      .limit(ROW_CAP),
+    fetchBookCash(supabase, null, { asOfDate: today, locationIds: [locationId] }).catch(() => null),
+    supabase.from('ai_decisions').select('id', { count: 'exact', head: true }).eq('location_id', locationId).eq('status', 'PROPOSED'),
+    supabase.from('gl_entries').select('id', { count: 'exact', head: true }).eq('location_id', locationId).eq('status', 'DRAFT'),
+    supabase.from('fiscal_periods').select('status').eq('location_id', locationId).eq('period_year', year).eq('period_month', month).maybeSingle(),
+    supabase.from('approvals').select('id', { count: 'exact', head: true }).eq('status', 'PENDING_APPROVAL'),
+  ]);
+
+  type BankRow = { id: string; transaction_date: string; description: string; amount_cents: number | string; status: string; ai_confidence: number | string | null };
+  const bankRows = (bankRes.data ?? []) as BankRow[];
+  const bands = { decide: { count: 0, amountCents: 0 }, check: { count: 0, amountCents: 0 }, ready: { count: 0, amountCents: 0 } };
+  const decide: ClientQueueItem[] = [];
+  let bankReview = 0;
+  let bankAttention = 0;
+  for (const r of bankRows) {
+    const conf = r.ai_confidence === null || r.ai_confidence === undefined ? null : Math.round(Number(r.ai_confidence) * 100);
+    const cents = num(r.amount_cents);
+    const band = bandOf(r.status, conf);
+    bands[band].count += 1;
+    bands[band].amountCents += cents;
+    if (r.status === 'FLAGGED') bankAttention += 1;
+    else bankReview += 1;
+    if (band === 'decide') {
+      decide.push({
+        id: r.id,
+        date: r.transaction_date,
+        description: r.description,
+        amountCents: cents,
+        status: r.status as ClientQueueItem['status'],
+        confidence: conf,
+      });
+    }
+  }
+  // Flagged first, then unscored, then lowest confidence; oldest first within a tie.
+  decide.sort(
+    (a, b) =>
+      Number(b.status === 'FLAGGED') - Number(a.status === 'FLAGGED') ||
+      (a.confidence ?? -1) - (b.confidence ?? -1) ||
+      a.date.localeCompare(b.date),
+  );
+
+  const receiptRows = (receiptRes.data ?? []) as Array<{ status: string }>;
+  const billRows = (billRes.data ?? []) as Array<{ status: string; balance_cents: number | string | null }>;
+  let review = bankReview;
+  let attention = bankAttention;
+  for (const r of receiptRows) {
+    if (r.status === 'FLAGGED') attention += 1;
+    else review += 1;
+  }
+  let openAP = 0;
+  for (const b of billRows) {
+    if (b.status === 'ON_HOLD') attention += 1;
+    else if (b.status === 'PENDING') review += 1;
+    if (b.status !== 'PAID') openAP += num(b.balance_cents);
+  }
+  const openAR = ((invoiceRes.data ?? []) as Array<{ balance_cents: number | string | null }>).reduce((n, i) => n + num(i.balance_cents), 0);
+  const cashCents = num(bookCash?.byLocation?.[locationId]);
+  const exceptions = aiRes.count ?? 0;
+  const drafts = jeRes.count ?? 0;
+  const status = (periodRes.data as { status?: PeriodStatus } | null)?.status;
+
+  const board: CompanyBoard = {
+    id: location.id,
+    name: location.name,
+    shortCode: (location.short_code || location.name).slice(0, 4).toUpperCase(),
+    isOwnBooks: location.is_tenant_own_books === true,
+    toReview: review,
+    needsAttention: attention,
+    openExceptions: exceptions,
+    draftJEs: drafts,
+    periodStatus: status ?? 'NO_PERIOD',
+    cashCents,
+    cashStatus: cashStatusFor(cashCents, location.minimum_cash_cents),
+    openAPCents: openAP,
+    openARCents: openAR,
+    totalOpen: review + attention + exceptions + drafts,
+  };
+
+  return {
+    status: 'ok',
+    board,
+    bands,
+    decide: decide.slice(0, 8),
+    pendingApprovals: approvalRes.count ?? 0,
+    today,
+  };
 }

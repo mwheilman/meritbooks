@@ -6,6 +6,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { logAction, logHumanAction } from '@/lib/trust/action-log';
 import { toMatchConfidence } from '@/lib/services/reconciliation-match';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter, assertOrgRefs, isWriteScopeError } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/reconciliation/autopilot/match
@@ -111,12 +112,18 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const confidence = body.confidence != null ? toMatchConfidence(body.confidence) : null;
 
+  // bank_transactions is SELECT-only for members (migration 172): service-role write after
+  // reconciliation:reconcile, org pinned; the line was read through the member client above
+  // (RLS proved org + client scope).
+  const writer = serviceWriter();
+
   // ── REJECT → flag into the exception queue ───────────────────────────────────
   if (body.action === 'reject') {
-    const { data, error } = await supabase
+    const { data, error } = await writer
       .from('bank_transactions')
       .update({ status: 'FLAGGED' })
       .eq('id', body.transaction_id)
+      .eq('org_id', orgId)
       .neq('status', 'POSTED')
       .select('id')
       .maybeSingle();
@@ -171,6 +178,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     };
     summary = `Matched "${t.description ?? 'bank transaction'}" to bill ${b.bill_number ?? b.id.slice(0, 8)}`;
   } else if (body.candidate_type === 'pattern') {
+    // candidate_id (a vendor) comes from the request body — it must belong to this org.
+    try {
+      await assertOrgRefs(orgId, [{ schema: 'core', table: 'vendors', ids: [body.candidate_id ?? null], label: 'vendor' }], { caller: supabase });
+    } catch (e) {
+      if (isWriteScopeError(e)) return NextResponse.json({ error: e.message }, { status: 403 });
+      throw e;
+    }
     update = {
       match_type: 'VENDOR_PATTERN',
       match_confidence: confidence,
@@ -182,10 +196,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'Cannot accept a "none" candidate — reject or edit instead' }, { status: 400 });
   }
 
-  const { data: updated, error: updErr } = await supabase
+  const { data: updated, error: updErr } = await writer
     .from('bank_transactions')
     .update(update)
     .eq('id', body.transaction_id)
+    .eq('org_id', orgId)
     .neq('status', 'POSTED')
     .select('id')
     .maybeSingle();

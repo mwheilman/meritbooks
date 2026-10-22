@@ -1,18 +1,15 @@
 import { SignIn } from '@clerk/nextjs';
+import { Lockup } from '@meritbooks/merit-ui';
 
 export default function SignInPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-950">
-      <div className="w-full max-w-md">
-        <div className="flex flex-col items-center mb-8">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/brand/meritbooks-logo-dark.svg"
-            alt="MeritBooks"
-            className="h-9 w-auto"
-          />
-          <p className="text-sm text-slate-400 mt-3">
-            AI-native accounting platform
+    <main className="mb-auth">
+      <div className="mb-auth-col">
+        <div className="mb-auth-brand">
+          {/* The product lockup file (kit rule 10), full colour on the light page. */}
+          <Lockup module="books" variant="full-color" height={32} />
+          <p className="eyebrow" style={{ marginTop: 16 }}>
+            Sign in<span className="sl" aria-hidden="true">{'//'}</span>The book of record for every client
           </p>
         </div>
         {/* One front door (FPB-onboarding B6): land on the root router, which sends the
@@ -22,6 +19,6 @@ export default function SignInPage() {
             footer link at our own /sign-up page (invite-aware), not the hosted portal. */}
         <SignIn fallbackRedirectUrl="/" signUpFallbackRedirectUrl="/" signUpUrl="/sign-up" />
       </div>
-    </div>
+    </main>
   );
 }

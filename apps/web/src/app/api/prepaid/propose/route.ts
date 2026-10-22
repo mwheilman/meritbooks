@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { apiHandler, type ApiContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
 import { proposeFromBill } from '@/lib/prepaid/propose';
 import { proposeFromBillSchema, type ProposeFromBillBody } from '@/lib/prepaid/schema';
 
@@ -22,6 +24,9 @@ export const POST = apiHandler(
   async (body: ProposeFromBillBody, ctx: ApiContext): Promise<NextResponse> => {
     if (!ctx.orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
 
+    const guard = await requirePermission(ctx.userId, 'journal_entries', 'create');
+    if (!guard.ok) return guard.response;
+
     const proposal = await proposeFromBill(ctx.supabase, {
       billId: body.bill_id,
       billLineId: body.bill_line_id,
@@ -31,10 +36,19 @@ export const POST = apiHandler(
       return NextResponse.json({ error: 'Bill line not found in your organization', code: 'NOT_FOUND' }, { status: 404 });
     }
 
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert after the
+    // permission check, org pinned, the bill's client asserted in the caller's scope.
+    try {
+      await assertWriteScope(ctx.supabase, ctx.orgId, [proposal.location_id]);
+    } catch (e) {
+      if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+      throw e;
+    }
+
     // Audit the proposal (PROPOSED) — explainability, no ledger/schedule write.
     let decisionId: string | null = null;
     try {
-      const { data: dec } = await ctx.supabase
+      const { data: dec } = await serviceWriter()
         .from('ai_decisions')
         .insert({
           org_id: ctx.orgId,

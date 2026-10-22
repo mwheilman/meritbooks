@@ -124,6 +124,11 @@ export async function POST(req: NextRequest) {
         const guard = await requirePermission(ctx.userId, 'bills', 'create');
         if (!guard.ok) return guard.response;
       }
+      // Same for invoices (moved to the service role with the migration-172 sweep).
+      if (def.key === 'open_ar' && !dryRun) {
+        const guard = await requirePermission(ctx.userId, 'invoices', 'create');
+        if (!guard.ok) return guard.response;
+      }
       return await importSubledger(supabase, def.key, def.fields, body, orgId, location!, errors, dryRun);
     }
     if (def.key === 'trial_balance') {
@@ -391,11 +396,13 @@ async function importSubledger(
     return NextResponse.json({ ok: true, inserted: 0, skipped, errors: [], destination: dest });
   }
 
-  // public.bills is SELECT-only for members (migration 171): the AP import writes it with
-  // the service role (import:run checked; the company was read through the caller's RLS
-  // client, so org + client scope are verified; every row carries org_id / location_id).
+  // public.bills is SELECT-only for members (migration 171) and public.invoices moves to the
+  // service role with the 172 sweep: the import writes both with the service role
+  // (import:run + bills:create / invoices:create checked; the company was read through the
+  // caller's RLS client, so org + client scope are verified; every row carries the session
+  // org_id / location_id, and counterparties were resolved from this org's own rows).
   const { error } = isAr
-    ? await supabase.from('invoices').insert(toInsert)
+    ? await createAdminSupabase().from('invoices').insert(toInsert)
     : await createAdminSupabase().from('bills').insert(toInsert);
   if (error) return NextResponse.json({ ok: false, inserted: 0, skipped, errors: [{ row: 0, message: error.message }] }, { status: 500 });
 

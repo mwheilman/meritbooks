@@ -100,16 +100,16 @@ export function HoverPeekCard({ rect, visible, cardHandlers, onOpen, children }:
 
   // Portal to <body> so a transformed/overflowing ancestor can't re-anchor or
   // clip the fixed-position card.
+  // Portalled to <body>, outside the page — the preview body is the calling page's
+  // own (still bridged) markup, so the card carries the legacy-bridge scope itself.
   return createPortal(
-    <div ref={cardRef} className="fixed z-[60] animate-in fade-in zoom-in-95 duration-100" style={{ left, top, width: CARD_W, maxHeight: 'calc(100vh - 24px)', overflowY: 'auto' }} {...cardHandlers}>
-      <div className="rounded-xl border border-slate-700 bg-surface-900 shadow-2xl overflow-hidden">
-        {children}
-        {onOpen && (
-          <button onClick={onOpen} className="w-full px-3 py-2 border-t border-slate-800 text-xs font-medium text-emerald-400 hover:bg-emerald-500/[0.06] transition-colors text-center">
-            Open full →
-          </button>
-        )}
-      </div>
+    <div ref={cardRef} className="mb-peek" style={{ left, top, width: CARD_W, maxHeight: 'calc(100vh - 24px)', overflowY: 'auto' }} {...cardHandlers}>
+      <div className="legacy-page" style={{ display: 'contents' }}>{children}</div>
+      {onOpen && (
+        <button type="button" onClick={onOpen} className="btn btn--quiet mb-peek-open">
+          Open full
+        </button>
+      )}
     </div>,
     document.body,
   );

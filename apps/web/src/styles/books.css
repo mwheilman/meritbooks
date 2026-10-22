@@ -1,0 +1,170 @@
+/* ==========================================================================
+   Merit Books — app-local layout on the kit tokens (packages/merit-ui).
+   Kit classes do the work (system.css); this file only adds Books' own page
+   layout, written in kit tokens and kit geometry (square, hairlines, 8-pt).
+   No new colours: every value is a var() from system.css.
+   Prefix: .mb-*  (never collides with kit blocks or legacy utilities).
+   NOTE: shared components avoid Tailwind utilities on purpose — inside a
+   bridged page those carry their legacy meaning (see legacy-bridge.css).
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- shell */
+.mb-rail-toggle{display:flex;align-items:center;gap:8px;width:100%;height:32px;margin-top:12px;padding:0 8px;
+  color:var(--grey-300);font-weight:500;border:1px solid var(--night-800);transition:border-color var(--fast) var(--ease),color var(--fast) var(--ease)}
+.mb-rail-toggle:hover{border-color:var(--night-600);color:var(--warm)}
+.mb-rail-toggle .kbd{margin-left:auto}
+.app--mini .rail-foot{padding:12px 0 16px;display:flex;flex-direction:column;align-items:center}
+.app--mini .rail-foot .rail-user{margin-top:0}
+.app--mini .mb-rail-toggle{width:40px;justify-content:center;padding:0}
+.mb-rail-note{margin:16px 16px 0;padding:12px;border:1px solid var(--night-700);background:var(--night-800);color:var(--grey-300)}
+.mb-rail-note .eyebrow{color:var(--slate)}
+.mb-rail-note p{margin:4px 0 12px;font-size:var(--t-12);line-height:var(--lh-12)}
+.mb-rail-note .btn{width:100%}
+.bar .mb-bar-search .kbd{margin-left:4px}
+@media (max-width:1360px){.bar .sync{display:none}}
+@media (max-width:1180px){.bar .mb-bar-search span:not(.kbd){display:none}.bar .cmdk{width:240px}}
+
+/* ---------------------------------------------------------------- page head */
+.mb-page-head{align-items:flex-end}
+.mb-page-head-main{min-width:0;max-width:72ch}
+.mb-page-desc{margin-top:4px;color:var(--ink-2)}
+.mb-page-actions{justify-content:flex-end;flex-wrap:wrap}
+.mb-posts-to{max-width:280px;overflow:hidden;text-overflow:ellipsis}
+.mb-tag--md{height:24px;font-size:var(--t-13)}
+.tabs a.tab[aria-current=page]{color:var(--ink);font-weight:600}
+.tabs a.tab[aria-current=page]::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--electric)}
+.mb-hub-tabs,.mb-section-tabs{margin-bottom:var(--s3);flex-wrap:wrap;row-gap:0}
+
+/* ---------------------------------------------------------------- shared parts */
+.mb-trunc{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mb-c{text-align:center}
+.mb-scroll-x{overflow-x:auto}
+.mb-scroll-x .tbl-q{table-layout:auto}
+.mb-th-btn{display:inline-flex;align-items:center;gap:4px;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit}
+.mb-th-btn:hover{color:var(--electric)}
+.mb-table-empty{height:96px!important;text-align:center;color:var(--ink-3);white-space:normal!important}
+.mb-metric{padding:16px}
+.mb-delta{display:inline-flex;align-items:center;gap:4px}
+.mb-empty{min-height:240px}
+.mb-skel{display:block;height:12px;background:linear-gradient(90deg,var(--grey-100),var(--grey-200),var(--grey-100));background-size:200% 100%;animation:mb-shimmer 1.4s linear infinite}
+@keyframes mb-shimmer{to{background-position:-200% 0}}
+.mb-table-skel-row{display:flex;gap:24px;align-items:center;height:48px;padding:0 16px;border-bottom:1px solid var(--line)}
+.mb-table-skel-head{height:40px;border-bottom-color:var(--line-2)}
+.mb-pager{padding:8px 16px;border-top:1px solid var(--line)}
+.mb-state-block{min-height:200px}
+.mb-error-card{min-height:240px;align-items:flex-start}
+.mb-nlink{color:var(--ink);font-weight:600;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px;transition:text-decoration-color var(--fast),color var(--fast)}
+.mb-nlink:hover,.mb-nlink:focus-visible{color:var(--electric);text-decoration-color:var(--electric)}
+.mb-row-link{color:var(--ink)}
+.mb-row-link:hover{color:var(--electric);text-decoration:underline;text-underline-offset:3px}
+
+/* Side panel over a scrim (help, record drawer). */
+.mb-side-scrim{padding:0;justify-content:flex-end;align-items:stretch}
+.mb-side-panel{width:440px;max-width:100%;height:100%;box-shadow:var(--float);outline:none}
+.mb-drawer-body{padding-top:16px}
+.mb-drawer-state{display:flex;flex-direction:column;gap:16px;padding:24px 0}
+.mb-detail-rows{border:1px solid var(--line)}
+.mb-detail-row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:40px;padding:6px 12px;border-bottom:1px solid var(--line)}
+.mb-detail-row:last-child{border-bottom:0}
+.mb-detail-row>span:last-child{text-align:right;font-weight:500;color:var(--ink)}
+.mb-detail-table{border:1px solid var(--line)}
+.mb-help-fab{position:fixed;right:24px;bottom:24px;z-index:40;background:var(--white);box-shadow:var(--float)}
+
+/* Hover peek card (portalled). */
+.mb-peek{position:fixed;z-index:60;background:var(--white);border:1px solid var(--midnight);box-shadow:var(--float)}
+.mb-peek-open{width:100%;border-top:1px solid var(--line)}
+
+/* Company-scope guard: the "pick a client" page. */
+.mb-guard{max-width:640px;padding:var(--s4) 0}
+.mb-guard-lede{margin:8px 0 var(--s3);max-width:56ch}
+.mb-guard-loading{display:flex;flex-direction:column;gap:12px;max-width:480px;padding:var(--s4) 0}
+.mb-guard-list ul{list-style:none}
+.mb-guard-list-h{display:flex;align-items:center;justify-content:space-between;height:48px;padding:0 8px 0 16px;border-bottom:1px solid var(--line)}
+.mb-guard-row{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;padding:8px 16px;text-align:left;border-bottom:1px solid var(--line);transition:background-color var(--fast)}
+.mb-guard-list li:last-child .mb-guard-row{border-bottom:0}
+.mb-guard-row:hover{background:var(--sky)}
+.mb-guard-row .l1{flex:1}
+.mb-guard-code{background:var(--grey-100);color:var(--ink-2)}
+.mb-guard-go{display:inline-flex;align-items:center;gap:6px;color:var(--electric);font-weight:600;opacity:0;transition:opacity var(--fast)}
+.mb-guard-row:hover .mb-guard-go,.mb-guard-row:focus-visible .mb-guard-go{opacity:1}
+
+/* Fatal (global-error) + auth. */
+.mb-fatal{min-height:100vh;display:grid;place-items:center;padding:var(--s4)}
+.mb-fatal-card{max-width:520px;width:100%;height:auto;align-items:flex-start;padding:var(--s4)}
+.mb-auth{min-height:100vh;display:grid;place-items:center;padding:var(--s4);background:var(--warm)}
+.mb-auth-col{width:100%;max-width:420px}
+.mb-auth-brand{display:flex;flex-direction:column;align-items:flex-start;margin-bottom:var(--s3);padding-bottom:var(--s2);border-bottom:1px solid var(--electric)}
+
+/* ---------------------------------------------------------------- homes */
+.mb-home-dash{margin-top:0}
+.mb-home .mb-home-dash{margin-top:var(--s3)}
+.mb-client-cell{display:flex;align-items:center;gap:12px;min-width:0}
+.mb-period,.mb-sev{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;color:var(--ink-2)}
+.mb-sev{font-weight:500;color:var(--ink)}
+.mb-activity{list-style:none}
+.mb-activity li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:16px;min-height:48px;padding:6px 16px;border-bottom:1px solid var(--line)}
+.mb-activity li:last-child{border-bottom:0}
+.mb-activity .n{font-weight:500}
+.mb-close-meter{display:flex;flex-direction:column;gap:8px}
+.mb-legend{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-top:16px}
+.mb-legend li{display:flex;align-items:center;gap:8px;color:var(--ink-2)}
+.mb-legend b{margin-left:auto;color:var(--ink);font-weight:600}
+.mb-bands-4{grid-template-columns:repeat(4,minmax(0,1fr));border:0;height:100%}
+.mb-bands-4 .band-tab{height:100%;justify-content:flex-start}
+.mb-band{min-width:0}
+a.mb-band:hover{background:var(--sky)}
+.mb-split{display:flex;flex-direction:column;gap:2px;width:100%;margin-top:auto;padding-top:8px;font-size:var(--t-12);line-height:var(--lh-12);color:var(--ink-2)}
+.mb-split>span{display:flex;justify-content:space-between;gap:8px}
+.mb-split b{color:var(--ink);font-weight:600}
+.mb-waiting{list-style:none}
+.mb-waiting a{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px;padding:0 16px;border-bottom:1px solid var(--line);color:var(--ink);transition:background-color var(--fast)}
+.mb-waiting li:last-child a{border-bottom:0}
+.mb-waiting a:hover{background:var(--grey-100)}
+.mb-waiting b{font-weight:600}
+.mb-period-big{display:flex;align-items:center;gap:12px}
+
+/* The four-step books-review loop (board S2): a real sequence, so it is numbered.
+   Outline Syne numerals; the current step fills; a finished step is a spruce check. */
+.mb-loop-h{display:flex;align-items:baseline;gap:16px;margin-bottom:12px;flex-wrap:wrap}
+.mb-loop-h .sp{flex:1}
+.mb-loop{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line-2);background:var(--white)}
+.mb-lstep{display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:12px;align-items:start;padding:16px 16px 14px;border-right:1px solid var(--line);
+  min-width:0;color:var(--ink);transition:background-color var(--fast) var(--ease)}
+.mb-lstep:last-child{border-right:0}
+a.mb-lstep:hover{background:var(--grey-100)}
+.mb-lstep .num{display:grid;place-items:center;width:32px;height:32px;font:700 var(--t-28)/var(--lh-28) var(--f-display);color:transparent;-webkit-text-stroke:1px var(--electric);font-variant-numeric:tabular-nums}
+.mb-lstep[data-state=current]{background:var(--sky);box-shadow:inset 0 -2px var(--electric)}
+.mb-lstep[data-state=current] .num{color:var(--electric);-webkit-text-stroke:0}
+.mb-lstep[data-state=done] .num{border:1.5px solid var(--pos);color:var(--pos);-webkit-text-stroke:0;font:inherit}
+.mb-lstep .nm{display:block;font:600 var(--t-15)/var(--lh-15) var(--f-text);color:var(--ink)}
+.mb-lstep .cnt{display:block;color:var(--ink);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mb-lstep .l2{margin-top:2px}
+.mb-loop--loading .mb-lstep{min-height:88px}
+.mb-bands-in{border:0;border-bottom:1px solid var(--line)}
+.mb-bands-in .band-tab{min-width:0;cursor:default}
+.mb-bands-in .band-tab:hover{background:transparent}
+.mb-bands-in .band-tab[aria-current=true]{background:var(--sky);box-shadow:inset 0 -2px var(--electric)}
+.mb-bands-in .t-cap{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+
+/* ---------------------------------------------------------------- inbox */
+.mb-inbox>*+*{margin-top:var(--s2)}
+.mb-inbox .tabs{margin-top:0}
+.mb-inbox-authority{margin-top:12px}
+.mb-inbox-body>*+*{margin-top:var(--s2)}
+.mb-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.mb-toolbar .sp{flex:1}
+.mb-inline-field{display:inline-flex;align-items:center;gap:8px}
+.mb-inline-field .select{width:auto;min-width:128px}
+.mb-queue{overflow:hidden}
+.mb-row-acts{display:inline-flex;align-items:center;gap:8px;justify-content:flex-end;width:100%}
+.mb-snooze{width:104px;height:32px}
+.mb-hints{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+.mb-resolved .ev{margin-top:4px}
+.mb-resolved .ev li{line-height:20px;color:var(--ink-2)}
+
+@media (max-width:1100px){
+  .mb-loop{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mb-lstep:nth-child(2){border-right:0}
+  .mb-lstep:nth-child(-n+2){border-bottom:1px solid var(--line)}
+  .mb-home-dash .wg{grid-column:span 12}
+}

@@ -25,8 +25,9 @@ import { isWriteScopeError, loadWritableRow, serviceWriter } from '@/lib/db/scop
  * `approval` and `cost` are intentionally NOT resolvable here — they gate real
  * money and belong to their own approval flows. Requesting them returns 400.
  *
- * All writes go through the RLS-scoped client, so the database enforces org
- * isolation; this route never filters org_id by hand.
+ * The subject tables are SELECT-only for members (migrations 171 / 172): each write
+ * loads the row pinned to the session org (loadWritableRow — org + client scope), then
+ * writes through the service role with `org_id` pinned.
  */
 
 const RESOLVABLE_SOURCES = ['bank', 'receipt', 'bill', 'ai_proposal'] as const;
@@ -89,21 +90,43 @@ export async function POST(request: Request): Promise<NextResponse> {
   // silently move a record out of a valid working status.
   let updateError: string | null = null;
 
+  // bank_transactions / receipts / ai_decisions are SELECT-only for members (migration 172):
+  // load the row pinned to the org (asserting its company is in the caller's client scope),
+  // then write with the service role, org pinned. (bills: same pattern in its branch below.)
+  if (source !== 'bill') {
+    try {
+      const target = await loadWritableRow(supabase, guard.orgId, { table: SUBJECT_TABLE[source], id });
+      if (!target) {
+        return badRequest(
+          source === 'bank' ? 'Transaction is not flagged'
+            : source === 'receipt' ? 'Receipt is not flagged'
+            : 'Proposal is no longer pending',
+          'NOT_RESOLVABLE',
+        );
+      }
+    } catch (e) {
+      if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+      throw e;
+    }
+  }
+
   if (source === 'bank') {
-    const { data, error } = await supabase
+    const { data, error } = await serviceWriter()
       .from('bank_transactions')
       .update({ status: 'PENDING' })
       .eq('id', id)
+      .eq('org_id', guard.orgId)
       .eq('status', 'FLAGGED')
       .select('id')
       .maybeSingle();
     if (error) updateError = error.message;
     else if (!data) return badRequest('Transaction is not flagged', 'NOT_RESOLVABLE');
   } else if (source === 'receipt') {
-    const { data, error } = await supabase
+    const { data, error } = await serviceWriter()
       .from('receipts')
       .update({ status: 'PENDING' })
       .eq('id', id)
+      .eq('org_id', guard.orgId)
       .eq('status', 'FLAGGED')
       .select('id')
       .maybeSingle();
@@ -131,7 +154,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     else if (!data) return badRequest('Bill is not on hold', 'NOT_RESOLVABLE');
   } else {
     // ai_proposal
-    const { data, error } = await supabase
+    const { data, error } = await serviceWriter()
       .from('ai_decisions')
       .update({
         status: 'REJECTED',
@@ -139,6 +162,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         disposition_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('org_id', guard.orgId)
       .eq('status', 'PROPOSED')
       .select('id')
       .maybeSingle();

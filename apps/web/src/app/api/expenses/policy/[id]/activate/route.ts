@@ -5,6 +5,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logAction } from '@/lib/trust/action-log';
 import { parseRuleset } from '@/lib/expenses/policy-schema';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/expenses/policy/[id]/activate — make a stored DRAFT/ARCHIVED policy the
@@ -47,15 +48,18 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     );
   }
 
+  // expense_policies is SELECT-only for members (migration 172): service-role write after the
+  // receipts:approve check, org pinned (the target row was read via the member client above).
+  const writer = serviceWriter();
   // Archive the current active version first (partial unique index guards uniqueness).
-  const { error: archErr } = await supabase
+  const { error: archErr } = await writer
     .from('expense_policies')
     .update({ status: 'ARCHIVED' })
     .eq('org_id', orgId)
     .eq('status', 'ACTIVE');
   if (archErr) return NextResponse.json({ error: archErr.message }, { status: 500 });
 
-  const { error: actErr } = await supabase
+  const { error: actErr } = await writer
     .from('expense_policies')
     .update({ status: 'ACTIVE', activated_by_user: userId, activated_at: new Date().toISOString() })
     .eq('org_id', orgId)

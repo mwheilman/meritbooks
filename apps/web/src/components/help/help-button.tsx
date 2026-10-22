@@ -1,30 +1,28 @@
 'use client';
 
 /**
- * HelpButton — a discrete "?" icon that opens a page-specific help panel.
+ * HelpButton — a quiet "?" that opens a page-specific help panel (merit-ui).
  *
- * It reads the current pathname, looks the route up in the help-content
- * registry (`lib/help/help-content.ts`), and shows a slide-over panel that
+ * It reads the current pathname, looks the route up in the help-content registry
+ * (`lib/help/help-content.ts`), and shows a side panel over a Midnight scrim that
  * explains what the current page does, its key features, and any tips.
  *
  * Two entry points:
- *   - `HelpButton` (default)  — inline icon, meant to live in the page header
- *     (mounted once inside the shared PageHeader, so every page that uses it
- *     gets the icon for free). Renders with `data-help-button="inline"`.
- *   - `HelpButtonFloating`     — a fixed, bottom-right variant for pages that do
- *     NOT use PageHeader. It self-suppresses when an inline HelpButton is
- *     already present on the page, so it is safe to mount globally in the app
- *     layout without ever double-rendering the icon.
+ *   - `HelpButton` (default)  — inline icon button for the page head (mounted once
+ *     inside the shared PageHeader). Renders with `data-help-button="inline"`.
+ *   - `HelpButtonFloating`     — a fixed, bottom-right variant for pages that do NOT
+ *     use PageHeader. It self-suppresses when an inline HelpButton is already on the
+ *     page, so it is safe to mount globally without ever double-rendering.
  *
- * Design system: emerald accent, dark surfaces, Esc-to-close, focus returned to
- * the trigger, aria-labelled dialog.
+ * Kit treatment: square buttons, the kit panel (head · scrolling body), the AI-free
+ * "why" list for features, the Sky note for tips; Esc closes, focus is trapped and
+ * returned to the trigger, aria-labelled dialog.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { createPortal } from 'react-dom';
-import { HelpCircle, X, Sparkles, Lightbulb, CheckCircle2 } from 'lucide-react';
-import { clsx } from 'clsx';
+import { Eyebrow, Icon, useFocusTrap } from '@meritbooks/merit-ui';
 import { getHelpContent } from '@/lib/help/help-content';
 
 interface HelpButtonProps {
@@ -33,25 +31,17 @@ interface HelpButtonProps {
 }
 
 /** The trigger + panel. Shared by both the inline and floating variants. */
-function HelpButtonBase({
-  className,
-  variant,
-}: HelpButtonProps & { variant: 'inline' | 'floating' }) {
+function HelpButtonBase({ className, variant }: HelpButtonProps & { variant: 'inline' | 'floating' }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setMounted(true), []);
+  useFocusTrap(panelRef, open && mounted);
 
   const content = getHelpContent(pathname);
-
-  const close = useCallback(() => {
-    setOpen(false);
-    // Return focus to the trigger for keyboard users.
-    triggerRef.current?.focus();
-  }, []);
+  const close = useCallback(() => setOpen(false), []);
 
   // Esc to close + lock body scroll while the panel is open.
   useEffect(() => {
@@ -71,15 +61,9 @@ function HelpButtonBase({
     };
   }, [open, close]);
 
-  // Move focus into the panel when it opens.
-  useEffect(() => {
-    if (open) panelRef.current?.focus();
-  }, [open]);
-
   return (
     <>
       <button
-        ref={triggerRef}
         type="button"
         data-help-button={variant}
         onClick={() => setOpen(true)}
@@ -87,121 +71,72 @@ function HelpButtonBase({
         aria-expanded={open}
         aria-label="Help for this page"
         title="Help for this page"
-        className={clsx(
-          variant === 'inline'
-            ? 'flex h-8 w-8 items-center justify-center rounded-lg border border-slate-800 bg-surface-900 text-slate-400 hover:text-brand-400 hover:border-brand-500/40 transition-colors'
-            : 'fixed bottom-5 right-5 z-40 flex h-11 w-11 items-center justify-center rounded-full border border-slate-700 bg-surface-900 text-slate-300 shadow-lg hover:text-brand-400 hover:border-brand-500/50 transition-colors',
-          className
-        )}
+        className={['btn', 'btn--icon', variant === 'inline' ? 'btn--quiet' : 'mb-help-fab', className].filter(Boolean).join(' ')}
       >
-        <HelpCircle size={variant === 'inline' ? 16 : 20} />
+        <Icon name="ask" />
       </button>
 
       {mounted && open
         ? createPortal(
             <div
-              className="fixed inset-0 z-[100] flex justify-end"
+              className="scrim scrim--fixed mb-side-scrim"
               role="presentation"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) close();
+              }}
             >
-              {/* Backdrop */}
-              <div
-                className="absolute inset-0 bg-black/50 backdrop-blur-[1px] animate-fade-in"
-                onClick={close}
-                aria-hidden="true"
-              />
-
-              {/* Panel */}
               <div
                 ref={panelRef}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="help-panel-title"
                 tabIndex={-1}
-                className="relative h-full w-full max-w-md overflow-y-auto border-l border-slate-800 bg-surface-950 shadow-2xl outline-none animate-slide-in-right"
+                className="panel mb-side-panel"
+                data-hotkeys="off"
               >
-                {/* Header */}
-                <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-800 bg-surface-950/95 px-5 py-4 backdrop-blur">
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-500/10">
-                      <HelpCircle size={16} className="text-brand-400" />
-                    </div>
-                    <div>
-                      <p className="text-2xs font-semibold uppercase tracking-wider text-brand-400">
-                        Help
-                      </p>
-                      <h2
-                        id="help-panel-title"
-                        className="text-base font-semibold text-white tracking-tight"
-                      >
-                        {content.title}
-                      </h2>
-                    </div>
+                <div className="panel-head">
+                  <div className="row row--between">
+                    <Eyebrow as="span">{['Help', content.title]}</Eyebrow>
+                    <button type="button" className="btn btn--quiet btn--icon" onClick={close} aria-label="Close help">
+                      <Icon name="x" />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={close}
-                    aria-label="Close help"
-                    className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] transition-colors"
-                  >
-                    <X size={18} />
-                  </button>
+                  <h2 id="help-panel-title" className="t-section" style={{ marginTop: 8, color: 'var(--ink)' }}>
+                    {content.title}
+                  </h2>
                 </div>
-
-                {/* Body */}
-                <div className="px-5 py-5 space-y-6">
-                  {/* What it does */}
-                  <section>
-                    <p className="text-sm leading-relaxed text-slate-300">
-                      {content.whatItDoes}
-                    </p>
+                <div className="panel-body">
+                  <section className="panel-sec">
+                    <p className="t-body ink-2">{content.whatItDoes}</p>
                   </section>
-
-                  {/* Key features */}
                   {content.keyFeatures.length > 0 && (
-                    <section>
-                      <h3 className="mb-2.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-slate-500">
-                        <Sparkles size={12} className="text-brand-400" />
-                        What you can do here
-                      </h3>
-                      <ul className="space-y-2">
+                    <section className="panel-sec">
+                      <div className="panel-sec-h">
+                        <h3>What you can do here</h3>
+                      </div>
+                      <ul className="why">
                         {content.keyFeatures.map((feature, i) => (
-                          <li key={i} className="flex items-start gap-2.5">
-                            <CheckCircle2
-                              size={15}
-                              className="mt-0.5 shrink-0 text-brand-500"
-                            />
-                            <span className="text-sm leading-snug text-slate-300">
-                              {feature}
-                            </span>
-                          </li>
+                          <li key={i}>{feature}</li>
                         ))}
                       </ul>
                     </section>
                   )}
-
-                  {/* Tips */}
                   {content.tips && content.tips.length > 0 && (
-                    <section className="rounded-xl border border-brand-500/15 bg-brand-500/[0.04] p-4">
-                      <h3 className="mb-2.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-brand-300">
-                        <Lightbulb size={12} className="text-brand-400" />
-                        Tips
-                      </h3>
-                      <ul className="space-y-2">
-                        {content.tips.map((tip, i) => (
-                          <li
-                            key={i}
-                            className="text-sm leading-snug text-slate-400"
-                          >
-                            {tip}
-                          </li>
-                        ))}
-                      </ul>
+                    <section className="panel-sec">
+                      <div className="note note--panel">
+                        <div className="note-kind">Tips</div>
+                        <ul className="why">
+                          {content.tips.map((tip, i) => (
+                            <li key={i}>{tip}</li>
+                          ))}
+                        </ul>
+                      </div>
                     </section>
                   )}
                 </div>
               </div>
             </div>,
-            document.body
+            document.body,
           )
         : null}
     </>
@@ -223,9 +158,7 @@ export function HelpButtonFloating(props: HelpButtonProps) {
 
   // After render/navigation, check whether an inline help button exists.
   useLayoutEffect(() => {
-    const hasInline =
-      typeof document !== 'undefined' &&
-      !!document.querySelector('[data-help-button="inline"]');
+    const hasInline = typeof document !== 'undefined' && !!document.querySelector('[data-help-button="inline"]');
     setSuppressed(hasInline);
   }, [pathname]);
 

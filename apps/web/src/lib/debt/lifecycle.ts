@@ -1,7 +1,8 @@
 /**
  * Debt lifecycle services — variable-rate RESET, REFINANCE, and PAYOFF against the
  * owned ledger. Each has a pure PREVIEW (compute-only, nothing written) and a CONFIRM
- * (persist + post). All run on the RLS-scoped client so org isolation is the DB's job.
+ * (persist + post). Reads run on the caller's client; writes to the debt tables go through
+ * the service role (migration 172) with org_id pinned and the loan's client scope-asserted.
  *
  *  - RESET rebuilds only the REMAINING schedule at a new rate; already-posted periods
  *    are never rewritten. A reset is not itself a ledger event (future accruals carry
@@ -29,6 +30,7 @@ import { fetchAll } from '@/lib/supabase/fetch-all';
 import { postJournalEntry, type JournalEntryLineInput } from '@/lib/services/gl-posting';
 import { PostingError, getAccountRef, resolveRole, type AccountRef } from '@/lib/posting/account-roles';
 import { resolveDebtAccounts } from './accounts';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 import { createDebtInstrument, type CreateDebtResult } from './create';
 import type { CreateDebtInput } from './schema';
 import {
@@ -250,6 +252,10 @@ export async function confirmReset(db: DB, args: ResetArgs): Promise<ResetPrevie
   // lines beyond the new (possibly shorter) schedule. Upsert-first avoids ever leaving
   // the instrument scheduleless.
   const maxNewPeriod = result.newLines.reduce((m, l) => Math.max(m, l.period), resetAt - 1);
+  // debt_schedule_lines / debt_instruments are SELECT-only for members (migration 172):
+  // service-role write after the route's permission check, org pinned, the loan (loaded
+  // above in this org) asserted in the caller's client scope.
+  const writer = await scopedWriter(db, args.orgId, [inst.location_id]);
   const rows = result.newLines.map((l) => ({
     org_id: args.orgId,
     instrument_id: args.instrumentId,
@@ -260,10 +266,10 @@ export async function confirmReset(db: DB, args: ResetArgs): Promise<ResetPrevie
     principal_cents: l.principalCents,
     principal_balance_cents: l.principalBalanceCents,
   }));
-  const { error: upErr } = await db.from('debt_schedule_lines').upsert(rows, { onConflict: 'instrument_id,period' });
+  const { error: upErr } = await writer.from('debt_schedule_lines').upsert(rows, { onConflict: 'instrument_id,period' });
   if (upErr) throw new PostingError(`Failed to write the reset schedule: ${upErr.message}`);
 
-  const { error: delErr } = await db
+  const { error: delErr } = await writer
     .from('debt_schedule_lines')
     .delete()
     .eq('org_id', args.orgId)
@@ -275,7 +281,7 @@ export async function confirmReset(db: DB, args: ResetArgs): Promise<ResetPrevie
   const marker = `[MB:reset p${resetAt} ${Number(inst.interest_rate)}%→${args.newRatePercent}% ${result.mode}${
     args.resetDate ? ` eff ${args.resetDate}` : ''
   }]`;
-  const { error: updErr } = await db
+  const { error: updErr } = await writer
     .from('debt_instruments')
     .update({
       interest_rate: args.newRatePercent,
@@ -445,6 +451,8 @@ export async function confirmRefinance(
     throw new PostingError(`Failed to create the refinanced loan: ${e instanceof Error ? e.message : String(e)}`);
   }
   const newId = created.id;
+  // Old loan loaded above in this org; the new one was scope-checked by createDebtInstrument.
+  const writer = await scopedWriter(db, orgId, [old.location_id, location]);
 
   const sourceRef = `debt:refi:${oldId}:${newId}`;
   const existing = await findEntryByRef(db, orgId, sourceRef);
@@ -473,12 +481,12 @@ export async function confirmRefinance(
   });
   if (!je.success || !je.entry_id) {
     // Roll the new instrument back so a failed post never leaves an orphan loan.
-    await db.from('debt_instruments').delete().eq('org_id', orgId).eq('id', newId);
+    await writer.from('debt_instruments').delete().eq('org_id', orgId).eq('id', newId);
     throw new PostingError(je.error ?? 'Failed to post the refinance entry');
   }
 
   // Close the old instrument and cross-link it to the new one.
-  const { error: closeErr } = await db
+  const { error: closeErr } = await writer
     .from('debt_instruments')
     .update({
       status: 'CLOSED',
@@ -615,13 +623,14 @@ export async function confirmPayoff(db: DB, args: PayoffArgs): Promise<PayoffRes
 
   // Mark PAID_OFF and zero the schedule forward (no further accruals/payments expected).
   const marker = `[MB:payoff ${args.payoffDate ?? new Date().toISOString().slice(0, 10)} bal ${outstanding}]`;
-  await db
+  const writer = await scopedWriter(db, args.orgId, [inst.location_id]);
+  await writer
     .from('debt_instruments')
     .update({ status: 'PAID_OFF', current_balance_cents: 0, notes: appendNote(inst.notes, marker), updated_at: new Date().toISOString() })
     .eq('org_id', args.orgId)
     .eq('id', args.instrumentId);
 
-  await db
+  await writer
     .from('debt_schedule_lines')
     .update({ payment_cents: 0, interest_cents: 0, principal_cents: 0, principal_balance_cents: 0 })
     .eq('org_id', args.orgId)

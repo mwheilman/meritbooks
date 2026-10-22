@@ -31,6 +31,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { writerFor } from '@/lib/db/scoped-writer';
 import { logAction } from '@/lib/trust/action-log';
 import { getTierPolicy, scoreToTier, type Tier, type TierPolicy } from '@/lib/trust/score-tier';
 import {
@@ -613,7 +614,10 @@ export async function scanAnomalousJournalEntries(
       amountCents: assessment.amountAtRiskCents,
     });
 
-    const { error } = await supabase.from('ai_decisions').insert({
+    // ai_decisions is SELECT-only for members (migration 172): service-role write for a member
+    // caller (the nightly job's service role writes as itself), org pinned, org-level row
+    // (no location_id).
+    const { error } = await writerFor(supabase).from('ai_decisions').insert({
       org_id: orgId,
       feature: ANOMALOUS_JE_FEATURE,
       input_summary: assessment.reason,

@@ -111,10 +111,12 @@ export const NAV_HREF_FEATURE: Record<string, string> = {
 };
 
 /**
- * Groups that are ALWAYS shown in full, regardless of permissions. Home (Dashboard +
- * Inbox) is visible to every internal role and is the safe landing spot the page-guard
- * redirects to, so it must never be filtered out (also guarantees the sidebar is never
- * empty). Platform is not listed here — it is already gated to platform staff by the
+ * Groups that are ALWAYS shown, regardless of permissions. Home (Dashboard + Inbox) is
+ * visible to every internal role and is the safe landing spot the page-guard redirects
+ * to, so the group must never be dropped (also guarantees the rail is never empty).
+ * Its UNMAPPED items (Dashboard, Inbox) always show; a MAPPED item placed in Home by
+ * the IA (Close → close_mgmt, Redesign R1) is still permission-filtered like anywhere
+ * else. Platform is not listed here — it is already gated to platform staff by the
  * plane filter (lib/planes.ts) upstream of this helper.
  */
 export const ALWAYS_VISIBLE_GROUPS: readonly string[] = ['Home'];
@@ -148,8 +150,7 @@ export function isNavItemVisible(item: NavItem, opts: NavVisibilityOpts): boolea
 
 /**
  * Filter a list of nav groups by the user's effective view permissions.
- *  - Items in an ALWAYS_VISIBLE group pass through untouched.
- *  - Other groups keep only their visible items.
+ *  - Every group keeps only its visible items (unmapped items always show).
  *  - A group with zero visible items is dropped — UNLESS it is always-visible.
  * Pure and order-preserving.
  */
@@ -159,9 +160,9 @@ export function filterNavByPermissions(
 ): NavGroup[] {
   return groups
     .map((group) => {
-      if (ALWAYS_VISIBLE_GROUPS.includes(group.label)) return group;
+      // Mapped items are filtered everywhere (incl. Home); unmapped ones always pass.
       const items = group.items.filter((item) => isNavItemVisible(item, opts));
-      return { ...group, items };
+      return items.length === group.items.length ? group : { ...group, items };
     })
     .filter(
       (group) =>

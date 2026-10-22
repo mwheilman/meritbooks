@@ -1,54 +1,20 @@
-import {
-  LayoutDashboard,
-  Landmark,
-  CreditCard,
-  Receipt,
-  FileText,
-  BookOpen,
-  Calculator,
-  DollarSign,
-  TrendingUp,
-  BarChart3,
-  Users,
-  Contact,
-  Building2,
-  Network,
-  ArrowLeftRight,
-  Combine,
-  Briefcase,
-  ClipboardCheck,
-  FileCheck,
-  Settings,
-  Shield,
-  Wallet,
-  Upload,
-  CalendarDays,
-  Percent,
-  Sparkles,
-  Wand2,
-  History,
-  Inbox,
-  Activity,
-  Banknote,
-  Search,
-  SlidersHorizontal,
-  Scale,
-  ShieldCheck,
-  ClipboardList,
-  Bot,
-  LayoutGrid,
-  Package,
-  PiggyBank,
-  Tractor,
-  KeyRound,
-  type LucideIcon,
-} from 'lucide-react';
+import type { IconName } from '@meritbooks/merit-ui';
 
+/**
+ * One rail entry. `href` is the live route (route moves are a later slice — every
+ * href here is unchanged from the session-47 IA). `icon` is a merit-ui sprite name,
+ * used only by the collapsed (mini) rail; the full rail is text-only (§6 shell).
+ */
 export interface NavItem {
   label: string;
   href: string;
-  icon: LucideIcon;
+  icon: IconName;
+  /** Open-work count/word shown on the rail (filled in by the shell, never static). */
   badge?: string;
+  /** Go-to chord printed on hover and bound in the merit-ui hotkey registry ("g h"). */
+  keys?: string;
+  /** IA-SPEC §3.6.2: 'M' items sit behind the group's "More" fold until they hold work. */
+  disclosure?: 'C' | 'M';
 }
 
 export interface NavGroup {
@@ -66,163 +32,187 @@ export interface NavGroup {
 export const DEALER_NAV_GROUP = 'Dealer';
 
 /**
- * Consolidated information architecture (session 47 redesign).
+ * The rail, grouped and ordered toward IA-SPEC v2 §3.4–3.6 (Redesign R1).
  *
- * The sidebar was reorganized from ~85 scattered entries across 7 loosely-named
- * groups into a smaller set of workflow-oriented groups that follow how an
- * accountant works a book of record: capture -> payables/receivables -> banking
- * -> ledger/close -> report -> govern -> set up.
+ * Group names and order follow the client-books tree (§3.6.1: Home · Banking ·
+ * Payables · Receivables · Revenue & jobs · Cash & debt · Accounting · Planning &
+ * reports · Controls), the tenant-workspace tree (§3.5: Clients · Team ·
+ * Integrations · Settings) and the platform console (§3.4). Labels are sentence
+ * case and use the glossary (§1.1: "client", never "entities"/"portfolio").
  *
- * Many former top-level entries are now TABS inside a parent page or REDIRECT
- * into one, so they intentionally no longer appear here (their routes stay live):
+ * HREFS ARE UNCHANGED — only grouping, order and labels moved. Many former entries
+ * remain tabs inside a parent page (their routes stay live):
  *   - Inbox absorbs Needs Attention (/exceptions) + Flagged (/flagged).
- *   - Bills hosts Intake, Retainage, AP Policy as tabs.
- *   - Vendor Compliance hosts 1099 Readiness. Expenses hosts Expense Policy.
- *   - Bank Feed hosts Credit Cards + Apply Deposits (cash application);
- *     Reconciliation hosts the AR/GL tie-out.
- *   - Cash Position hosts the 13-Week Forecast; Debt hosts Covenants.
- *   - Journal Entries hosts Recurring; Close merges Status + Year-End.
- *   - Assets & Schedules (/assets) hosts Fixed Assets/Leases/Prepaids/Insurance/
- *     Intangibles/Tax Depreciation. Tax (/tax) hosts Book-to-Tax/Provision/
- *     Sales Tax (return+calendar)/Tax Package. Consolidation hosts Intercompany.
- *   - Budgets hosts Driver Builder + Reforecast. Compliance hosts Controls/SOX.
+ *   - Bills hosts Intake, Retainage, AP policy. Vendor compliance hosts 1099.
+ *   - Bank feed hosts Credit cards + Apply deposits; Reconciliation the AR/GL tie-out.
+ *   - Cash position hosts the 13-week forecast; Debt hosts Covenants.
+ *   - Journal entries hosts Recurring; Close merges Status + Year-end.
+ *   - Assets & schedules and Tax are hubs; Consolidation hosts Intercompany.
+ *
+ * Which plane (books / practice / platform) shows which group is lib/planes.ts.
  */
 export const navigation: NavGroup[] = [
+  // ── Client books (Books plane) ────────────────────────────────────────────────
   {
     label: 'Home',
     items: [
-      { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { label: 'Inbox', href: '/inbox', icon: Inbox },
+      { label: 'Home', href: '/dashboard', icon: 'home', keys: 'g h' },
+      { label: 'Inbox', href: '/inbox', icon: 'flag', keys: 'g i' },
+      { label: 'Close', href: '/close', icon: 'check', keys: 'g c' },
+    ],
+  },
+  {
+    label: 'Banking',
+    items: [
+      { label: 'Bank feed', href: '/bank-feed', icon: 'dollar', keys: 'g b' },
+      { label: 'Reconciliation', href: '/reconciliation', icon: 'check', keys: 'g r' },
     ],
   },
   {
     label: 'Payables',
     items: [
-      { label: 'Bills', href: '/bills', icon: FileText },
-      { label: 'Expenses', href: '/expenses', icon: Wallet },
-      { label: 'Receipts', href: '/receipts', icon: Receipt },
-      { label: 'Purchase Orders', href: '/purchase-orders', icon: ClipboardList },
-      { label: 'Pay Runs', href: '/checks', icon: Banknote },
-      { label: 'Payroll', href: '/payroll', icon: Users },
-      { label: 'Vendors', href: '/vendors', icon: Building2 },
-      { label: 'Vendor Compliance', href: '/vendor-compliance', icon: Shield },
+      { label: 'Bills', href: '/bills', icon: 'bill' },
+      { label: 'Purchase orders', href: '/purchase-orders', icon: 'clipboard' },
+      { label: 'Pay runs', href: '/checks', icon: 'dollar' },
+      { label: 'Expenses', href: '/expenses', icon: 'receipt' },
+      { label: 'Receipts', href: '/receipts', icon: 'camera' },
+      { label: 'Payroll', href: '/payroll', icon: 'users' },
+      { label: 'Vendors', href: '/vendors', icon: 'building' },
+      { label: 'Vendor compliance', href: '/vendor-compliance', icon: 'lock' },
     ],
   },
   {
     label: 'Receivables',
     items: [
-      { label: 'Invoices', href: '/invoices', icon: DollarSign },
-      { label: 'Estimates & Quotes', href: '/estimates', icon: FileText },
-      { label: 'Collections', href: '/collections', icon: Contact },
-      { label: 'Customers', href: '/customers', icon: Contact },
-      { label: 'Customer Deposits', href: '/customer-deposits', icon: PiggyBank },
-      { label: 'Revenue Recognition', href: '/rev-rec', icon: Percent },
+      { label: 'Invoices', href: '/invoices', icon: 'file-text' },
+      { label: 'Estimates', href: '/estimates', icon: 'file-text' },
+      { label: 'Customer deposits', href: '/customer-deposits', icon: 'dollar' },
+      { label: 'Collections', href: '/collections', icon: 'clock' },
+      { label: 'Customers', href: '/customers', icon: 'users' },
     ],
   },
   {
-    label: 'Banking & Cash',
+    label: 'Revenue & jobs',
     items: [
-      { label: 'Bank Feed', href: '/bank-feed', icon: Landmark },
-      { label: 'Reconciliation', href: '/reconciliation', icon: FileCheck },
-      { label: 'Cash Position', href: '/cash', icon: Wallet },
-      { label: 'Debt & Loans', href: '/debt', icon: Landmark },
-      { label: 'Borrowing Base', href: '/borrowing-base', icon: Scale },
-      { label: 'Renewals & Obligations', href: '/obligations', icon: CalendarDays },
-      { label: 'Subscriptions', href: '/subscriptions', icon: CreditCard },
+      { label: 'Revenue recognition', href: '/rev-rec', icon: 'calendar' },
+      { label: 'Jobs', href: '/jobs', icon: 'hammer' },
+      { label: 'WIP schedule', href: '/jobs/wip', icon: 'clipboard' },
+      { label: 'Inventory', href: '/inventory', icon: 'box' },
+    ],
+  },
+  {
+    label: 'Cash & debt',
+    items: [
+      { label: 'Cash position', href: '/cash', icon: 'dollar' },
+      { label: 'Renewals & obligations', href: '/obligations', icon: 'calendar' },
+      { label: 'Debt & loans', href: '/debt', icon: 'building' },
+      { label: 'Borrowing base', href: '/borrowing-base', icon: 'layers' },
+      { label: 'Subscriptions', href: '/subscriptions', icon: 'history', disclosure: 'M' },
     ],
   },
   {
     label: 'Accounting',
     items: [
-      { label: 'Journal Entries', href: '/journal-entries', icon: BookOpen },
-      { label: 'Chart of Accounts', href: '/chart-of-accounts', icon: Calculator },
-      { label: 'Assets & Schedules', href: '/assets', icon: Building2 },
-      { label: 'Internal Invoices', href: '/internal-invoices', icon: ArrowLeftRight },
-      { label: 'Departments', href: '/departments', icon: Network },
-      { label: 'Tax', href: '/tax', icon: Scale },
-      { label: 'Documents', href: '/documents', icon: FileText },
-      { label: 'Fiscal Periods', href: '/periods', icon: CalendarDays },
-      { label: 'Close', href: '/close', icon: ClipboardCheck },
-    ],
-  },
-  {
-    label: 'Jobs & Costing',
-    items: [
-      { label: 'Jobs & Projects', href: '/jobs', icon: Briefcase },
-      { label: 'Job WIP Schedule', href: '/jobs/wip', icon: ClipboardCheck },
-      { label: 'Inventory', href: '/inventory', icon: Package },
+      { label: 'Journal entries', href: '/journal-entries', icon: 'book', keys: 'g j' },
+      { label: 'Chart of accounts', href: '/chart-of-accounts', icon: 'grid' },
+      { label: 'Assets & schedules', href: '/assets', icon: 'box' },
+      { label: 'Internal invoices', href: '/internal-invoices', icon: 'file-text' },
+      { label: 'Tax', href: '/tax', icon: 'file-text' },
+      { label: 'Documents', href: '/documents', icon: 'file-text' },
+      { label: 'Fiscal periods', href: '/periods', icon: 'calendar' },
+      { label: 'Departments', href: '/departments', icon: 'users', disclosure: 'M' },
     ],
   },
   {
     label: DEALER_NAV_GROUP,
     requiresPack: 'dealer',
     items: [
-      { label: 'Dealer Home', href: '/dealer', icon: Tractor },
-      { label: 'Floor Plan', href: '/dealer/floor-plan', icon: Landmark },
-      { label: 'Units', href: '/dealer/units', icon: Package },
-      { label: 'Deals & Trade-ins', href: '/dealer/deals', icon: ArrowLeftRight },
-      { label: 'Lender Statements', href: '/dealer/lender-statements', icon: FileCheck },
-      { label: 'Warranty Claims', href: '/dealer/warranty', icon: ShieldCheck },
-      { label: 'Manufacturer Incentives', href: '/dealer/incentives', icon: Percent },
-      { label: 'Manufacturer Statements', href: '/dealer/oem-statements', icon: FileText },
-      { label: 'Dealer Imports', href: '/dealer/imports', icon: Upload },
-      { label: 'Dealer Reports', href: '/dealer/reports', icon: BarChart3 },
-      { label: 'Dealer Settings', href: '/dealer/settings', icon: Settings },
+      { label: 'Dealer home', href: '/dealer', icon: 'truck' },
+      { label: 'Floor plan', href: '/dealer/floor-plan', icon: 'building' },
+      { label: 'Units', href: '/dealer/units', icon: 'box' },
+      { label: 'Deals & trade-ins', href: '/dealer/deals', icon: 'dollar' },
+      { label: 'Lender statements', href: '/dealer/lender-statements', icon: 'file-text' },
+      { label: 'Warranty claims', href: '/dealer/warranty', icon: 'wrench' },
+      { label: 'Manufacturer incentives', href: '/dealer/incentives', icon: 'dollar', disclosure: 'M' },
+      { label: 'Manufacturer statements', href: '/dealer/oem-statements', icon: 'file-text', disclosure: 'M' },
+      { label: 'Dealer imports', href: '/dealer/imports', icon: 'upload', disclosure: 'M' },
+      { label: 'Dealer reports', href: '/dealer/reports', icon: 'file-text' },
+      { label: 'Dealer settings', href: '/dealer/settings', icon: 'sliders', disclosure: 'M' },
     ],
   },
   {
-    label: 'Reporting & Analytics',
+    label: 'Planning & reports',
     items: [
-      { label: 'Reports', href: '/reports', icon: BarChart3 },
-      { label: 'Basis Adjustments', href: '/reports/basis-adjustments', icon: Scale },
-      { label: 'FP&A Dashboard', href: '/fpna', icon: BarChart3 },
-      { label: 'Budgets', href: '/budgets', icon: TrendingUp },
-      { label: 'Profitability', href: '/profitability', icon: TrendingUp },
-      { label: 'Consolidation', href: '/consolidation', icon: Combine },
-      { label: 'Board Package', href: '/board-package', icon: FileText },
-      { label: 'Search', href: '/search', icon: Search },
-      { label: 'AI Decision Log', href: '/ai-decisions', icon: Sparkles },
-      { label: 'AI Categorizer', href: '/categorize', icon: Wand2 },
-      { label: 'Agents', href: '/agents', icon: Bot },
-    ],
-  },
-  // ── PRACTICE plane — oversight only (team, access, compliance, performance,
-  //    the roster of companies). Deliberately NO operational accounting: to see a
-  //    company's WIP/jobs a supervisor switches into that company's Books.
-  {
-    label: 'Team & Oversight',
-    items: [
-      { label: 'Entities', href: '/portfolio', icon: LayoutGrid },
-      { label: 'Team & Access', href: '/team', icon: Users },
-      { label: 'Compliance & Controls', href: '/compliance', icon: ShieldCheck },
-      { label: 'Audit Trail', href: '/audit', icon: History },
-      { label: 'Audit Requests (PBC)', href: '/pbc', icon: ClipboardList },
+      { label: 'Reports', href: '/reports', icon: 'file-text' },
+      { label: 'Board package', href: '/board-package', icon: 'file-text' },
+      { label: 'Budgets', href: '/budgets', icon: 'sliders' },
+      { label: 'FP&A', href: '/fpna', icon: 'sliders' },
+      { label: 'Consolidation', href: '/consolidation', icon: 'layers' },
+      { label: 'Profitability', href: '/profitability', icon: 'up', disclosure: 'M' },
+      { label: 'Basis adjustments', href: '/reports/basis-adjustments', icon: 'sliders', disclosure: 'M' },
+      { label: 'Search', href: '/search', icon: 'search', disclosure: 'M' },
     ],
   },
   {
-    label: 'Settings & Admin',
+    label: 'Controls',
     items: [
-      { label: 'Get Started', href: '/onboarding', icon: Sparkles },
-      { label: 'Many Companies', href: '/onboarding/portfolio', icon: Building2 },
-      { label: 'Plan & Billing', href: '/settings/billing', icon: CreditCard },
-      { label: 'Payments', href: '/settings/payments', icon: CreditCard },
-      { label: 'Approval Workflows', href: '/settings/approvals', icon: ClipboardCheck },
-      { label: 'Roles & Permissions', href: '/settings/roles', icon: ShieldCheck },
-      { label: 'Access Requests', href: '/settings/access/requests', icon: KeyRound },
-      { label: 'Access Reviews', href: '/settings/access/reviews', icon: ClipboardCheck },
-      { label: 'Access Log', href: '/settings/access/log', icon: History },
-      { label: 'AI Autonomy', href: '/settings/autonomy', icon: SlidersHorizontal },
-      { label: 'Integrations', href: '/integrations/erp', icon: Network },
-      { label: 'Import Data', href: '/import', icon: Upload },
-      { label: 'Historical Conversion', href: '/onboarding/conversion', icon: Upload },
-      { label: 'Operations', href: '/operations', icon: Activity },
-      { label: 'Settings', href: '/settings', icon: Settings },
+      { label: 'AI decision log', href: '/ai-decisions', icon: 'history' },
+      { label: 'AI categorizer', href: '/categorize', icon: 'ask' },
+      { label: 'Agents', href: '/agents', icon: 'ask', disclosure: 'M' },
     ],
   },
+
+  // ── Tenant workspace (Practice plane) — oversight & settings only. No operational
+  //    accounting: to see a client's jobs/WIP a supervisor switches into its books.
+  {
+    label: 'Clients',
+    items: [
+      { label: 'Clients', href: '/portfolio', icon: 'building' },
+      { label: 'Add clients', href: '/onboarding/portfolio', icon: 'plus' },
+      { label: 'Get started', href: '/onboarding', icon: 'plus' },
+    ],
+  },
+  {
+    label: 'Team',
+    items: [
+      { label: 'Team & access', href: '/team', icon: 'users' },
+      { label: 'Roles & permissions', href: '/settings/roles', icon: 'lock' },
+      { label: 'Access requests', href: '/settings/access/requests', icon: 'lock' },
+      { label: 'Access reviews', href: '/settings/access/reviews', icon: 'eye' },
+      { label: 'Access log', href: '/settings/access/log', icon: 'history' },
+    ],
+  },
+  {
+    label: 'Oversight',
+    items: [
+      { label: 'Compliance & controls', href: '/compliance', icon: 'check' },
+      { label: 'Audit trail', href: '/audit', icon: 'history' },
+      { label: 'Audit requests (PBC)', href: '/pbc', icon: 'clipboard' },
+    ],
+  },
+  {
+    label: 'Integrations',
+    items: [
+      { label: 'Integrations', href: '/integrations/erp', icon: 'plug' },
+      { label: 'Import data', href: '/import', icon: 'upload' },
+      { label: 'Historical conversion', href: '/onboarding/conversion', icon: 'upload' },
+    ],
+  },
+  {
+    label: 'Settings',
+    items: [
+      { label: 'Settings', href: '/settings', icon: 'sliders' },
+      { label: 'Plan & billing', href: '/settings/billing', icon: 'dollar' },
+      { label: 'Payments', href: '/settings/payments', icon: 'dollar' },
+      { label: 'Approval workflows', href: '/settings/approvals', icon: 'check' },
+      { label: 'AI autonomy', href: '/settings/autonomy', icon: 'sliders' },
+      { label: 'Operations', href: '/operations', icon: 'wrench' },
+    ],
+  },
+
+  // ── Platform console (platform staff only).
   {
     label: 'Platform',
-    items: [
-      { label: 'Operator Console', href: '/platform', icon: Building2 },
-    ],
+    items: [{ label: 'Operator console', href: '/platform', icon: 'grid' }],
   },
 ];

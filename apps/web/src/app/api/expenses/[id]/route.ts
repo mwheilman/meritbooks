@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { loadReport } from '@/lib/expenses/expense-reports';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { loadActivePolicyRuleset } from '@/lib/expenses/policy-active';
 import { evaluateReport, type EngineLine } from '@/lib/expenses/policy-engine';
@@ -118,7 +119,10 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     return NextResponse.json({ error: 'Only a draft report can be deleted' }, { status: 409 });
   }
 
-  const { error } = await supabase.from('expense_reports').delete().eq('id', params.id).eq('org_id', orgId);
+  // expense_reports is SELECT-only for members (migration 172): service-role delete after the
+  // receipts:edit check, org pinned. The report was just read via the member client (RLS
+  // proved org + client scope).
+  const { error } = await serviceWriter().from('expense_reports').delete().eq('id', params.id).eq('org_id', orgId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ deleted: true });
 }

@@ -18,6 +18,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { loadWritableRow, writerFor } from '@/lib/db/scoped-writer';
 import {
   computeTaxDepreciationSchedule,
   taxDepreciationForYear,
@@ -312,15 +313,19 @@ export async function proposeDepreciationDifference(
     (r) => r.proposed_output?.dedup_key === dedupKey,
   )?.id;
 
+  // ai_decisions is SELECT-only for members (migration 172): service-role write for a member
+  // caller, org pinned (org-level row, no location_id; the open row was read via RLS above).
+  const writer = writerFor(supabase);
   if (openId) {
-    await supabase
+    await writer
       .from('ai_decisions')
       .update({ proposed_output: proposedOutput, confidence: 1, reasoning })
-      .eq('id', openId);
+      .eq('id', openId)
+      .eq('org_id', orgId);
     return { proposed: true, decisionId: openId, code: diff.code, amountCents: diff.amountCents, netDifferenceCents: recon.netDifferenceCents, targetLineFound: Boolean(anchorLineId) };
   }
 
-  const { data: inserted, error } = await supabase
+  const { data: inserted, error } = await writer
     .from('ai_decisions')
     .insert({
       org_id: orgId,
@@ -383,7 +388,18 @@ export async function confirmDepreciationDifference(
     return { ok: false, error: 'No posted book depreciation line in this year to anchor the M-1 override — post book depreciation first.' };
   }
 
-  const { error: upErr } = await supabase.from('book_tax_line_overrides').upsert(
+  // book_tax_line_overrides / ai_decisions are SELECT-only for members (migration 172). The
+  // decision was read through the caller's client above (RLS); the anchor line id rides in its
+  // proposed_output, so load it pinned to the org and assert its company is in the caller's
+  // client scope before the service-role write (FKs never check the tenant).
+  try {
+    const anchor = await loadWritableRow(supabase, orgId, { table: 'gl_entry_lines', id: anchorLineId });
+    if (!anchor) return { ok: false, error: 'The anchor depreciation line is not part of this organization.' };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not verify the anchor depreciation line.' };
+  }
+  const writer = writerFor(supabase);
+  const { error: upErr } = await writer.from('book_tax_line_overrides').upsert(
     {
       org_id: orgId,
       gl_entry_line_id: anchorLineId,
@@ -400,10 +416,11 @@ export async function confirmDepreciationDifference(
   );
   if (upErr) return { ok: false, error: upErr.message };
 
-  await supabase
+  await writer
     .from('ai_decisions')
     .update({ status: 'APPROVED', disposition_by_user: userId, disposition_at: new Date().toISOString() })
     .eq('id', decisionId)
+    .eq('org_id', orgId)
     .eq('feature', BOOK_TAX_DEPR_FEATURE);
 
   return { ok: true };

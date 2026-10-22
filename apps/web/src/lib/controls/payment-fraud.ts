@@ -36,6 +36,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 import { runAiGateway } from '@meritbooks/core-ai';
 import { formatMoney } from '@meritbooks/shared';
 import { logAction } from '@/lib/trust/action-log';
@@ -722,7 +723,11 @@ async function queueException(
     if (existing && (existing as { id: string }).id) return (existing as { id: string }).id;
 
     const critical = verdict.level === 'block';
-    const { data, error } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role write for a member
+    // caller, org pinned, the payment's company asserted in the caller's client scope (a
+    // refusal throws into the catch below, like any other queue failure).
+    const writer = await scopedWriter(supabase, orgId, [payment.locationId]);
+    const { data, error } = await writer
       .from('ai_decisions')
       .insert({
         org_id: orgId,

@@ -23,6 +23,7 @@ import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/ac
 import { createAdminSupabase } from '@/lib/supabase/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { writerFor } from '@/lib/db/scoped-writer';
 import { sampleSessionPostBlock } from '@/lib/onboarding/sample-guard';
 
 /**
@@ -216,7 +217,10 @@ async function markPosted(
   glEntryId: string,
   userId: string | null,
 ): Promise<void> {
-  await supabase
+  // ai_decisions is SELECT-only for members (migration 172): the session row was read through
+  // the member client in this request (loadSession — RLS proved org + client scope) after
+  // journal_entries:post; lifecycle update via the service role, org pinned.
+  await writerFor(supabase)
     .from('ai_decisions')
     .update({
       status: 'APPROVED',

@@ -18,6 +18,7 @@ import { proposeMapping } from '@/lib/onboarding/mapping-ai';
 import { loadTargetAccounts, listSessions, buildSessionView } from '@/lib/onboarding/session';
 import { isIsoDate } from '@/lib/onboarding/conversion';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter, assertWriteScope, isWriteScopeError } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/onboarding/conversion — start a historical-books conversion.
@@ -199,7 +200,15 @@ export async function POST(req: NextRequest) {
     tiedOutAt: null,
   };
 
-  const { data: inserted, error: insErr } = await supabase
+  // ai_decisions is SELECT-only for members (migration 172): service-role insert after the
+  // permission check, org pinned, the company asserted in the caller's client scope.
+  try {
+    await assertWriteScope(supabase, orgId, [company.id]);
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message }, { status: 403 });
+    throw e;
+  }
+  const { data: inserted, error: insErr } = await serviceWriter()
     .from('ai_decisions')
     .insert({
       org_id: orgId,

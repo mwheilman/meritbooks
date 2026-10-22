@@ -3,12 +3,19 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
 import { parseInvoiceWithAI } from '@/lib/services/bill-parser';
+import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId, userId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+  // Parsing a bill is the first step of creating one (bill form drop-zone) — gate it like
+  // the other bill-create paths; it also writes the ai_audit_log row below.
+  const guard = await requirePermission(userId, 'bills', 'create');
+  if (!guard.ok) return guard.response;
 
   // Anthropic key — obtained solely to inject into the Core AI gateway.
   const apiKey = getAnthropicApiKey();
@@ -168,7 +175,9 @@ export async function POST(request: Request) {
   }
 
   // ─── Log to AI audit ──────────────────────────────────────
-  await supabase.from('ai_audit_log').insert({
+  // ai_audit_log is SELECT-only for members (migration 172): service-role insert after the
+  // permission check, org pinned to the session org (audit evidence — insert only).
+  await serviceWriter().from('ai_audit_log').insert({
     org_id: orgId,
     feature: 'BILL_PARSE',
     model_version: parsed.aiModel,

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { normalizeState } from '@/lib/tax/sales-tax-return';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * Mark a sales-tax period FILED / REMITTED (records only — never posts a remittance
@@ -34,7 +35,8 @@ const upsertSchema = z.object({
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, userId, orgId } = ctx;
+  const { userId, orgId } = ctx;
+  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
   const guard = await requirePermission(userId, 'settings_acct', 'edit');
   if (!guard.ok) return guard.response;
 
@@ -49,7 +51,7 @@ export async function POST(request: Request) {
 
   const status = b.status ?? 'FILED';
   const row = {
-    org_id: orgId ?? '',
+    org_id: orgId,
     jurisdiction: state,
     period_key: b.period_key,
     frequency: b.frequency,
@@ -67,7 +69,9 @@ export async function POST(request: Request) {
   };
 
   // Upsert on the natural key (org, jurisdiction, period) so re-marking updates.
-  const { data, error } = await supabase
+  // sales_tax_filings is SELECT-only for members (migration 172): service-role upsert after
+  // the settings_acct:edit check, org pinned (the upsert key includes the session org_id).
+  const { data, error } = await serviceWriter()
     .from('sales_tax_filings')
     .upsert(row, { onConflict: 'org_id,jurisdiction,period_key' })
     .select('id')

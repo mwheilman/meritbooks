@@ -8,6 +8,7 @@ import {
   compileExpensePolicyDocument,
   EXPENSE_POLICY_EXTRACT_FEATURE,
 } from '@/lib/expenses/policy-compile';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * POST /api/expenses/policy/parse — DROP-AND-COMPILE an expense policy document.
@@ -93,7 +94,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // ── Log the proposal to the AI decision rail (PROPOSED) for traceability ──────
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert after the
+    // receipts:approve check, org pinned to the session org.
+    const { data: dec } = await serviceWriter()
       .from('ai_decisions')
       .insert({
         org_id: orgId,

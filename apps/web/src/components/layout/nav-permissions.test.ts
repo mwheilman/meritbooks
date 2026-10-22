@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LayoutDashboard } from 'lucide-react';
-import type { NavGroup } from '@/lib/navigation';
+import type { NavGroup, NavItem } from '@/lib/navigation';
 import {
   NAV_HREF_FEATURE,
   ALWAYS_VISIBLE_GROUPS,
@@ -9,27 +8,27 @@ import {
   filterNavByPermissions,
 } from '@/components/layout/nav-permissions';
 
-// Minimal fixtures — the icon is irrelevant to the pure visibility logic.
+// Minimal fixtures — the icon (a merit-ui sprite name) is irrelevant to the pure visibility logic.
 const groups: NavGroup[] = [
   {
     label: 'Home',
     items: [
-      { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { label: 'Inbox', href: '/inbox', icon: LayoutDashboard },
+      { label: 'Dashboard', href: '/dashboard', icon: 'home' },
+      { label: 'Inbox', href: '/inbox', icon: 'home' },
     ],
   },
   {
     label: 'Payables',
     items: [
-      { label: 'Bills', href: '/bills', icon: LayoutDashboard }, // → bills
-      { label: 'Receipts', href: '/receipts', icon: LayoutDashboard }, // → receipts
-      { label: 'Widget', href: '/some-unmapped-route', icon: LayoutDashboard }, // unmapped
+      { label: 'Bills', href: '/bills', icon: 'home' }, // → bills
+      { label: 'Receipts', href: '/receipts', icon: 'home' }, // → receipts
+      { label: 'Widget', href: '/some-unmapped-route', icon: 'home' }, // unmapped
     ],
   },
   {
     label: 'Reporting & Analytics',
     items: [
-      { label: 'Reports', href: '/reports', icon: LayoutDashboard }, // → reports
+      { label: 'Reports', href: '/reports', icon: 'home' }, // → reports
     ],
   },
 ];
@@ -50,7 +49,7 @@ describe('NAV_HREF_FEATURE / featureForHref', () => {
 });
 
 describe('isNavItemVisible — fail-safe rules', () => {
-  const item = { label: 'Bills', href: '/bills', icon: LayoutDashboard };
+  const item: NavItem = { label: 'Bills', href: '/bills', icon: 'home' };
 
   it('shows a gated item when the role has view', () => {
     expect(
@@ -71,7 +70,7 @@ describe('isNavItemVisible — fail-safe rules', () => {
   });
 
   it('fail-safe: shows an unmapped item even with usable data denying everything', () => {
-    const unmapped = { label: 'Widget', href: '/some-unmapped-route', icon: LayoutDashboard };
+    const unmapped: NavItem = { label: 'Widget', href: '/some-unmapped-route', icon: 'home' };
     expect(
       isNavItemVisible(unmapped, { hasPermissionData: true, canView: () => false }),
     ).toBe(true);
@@ -110,6 +109,23 @@ describe('filterNavByPermissions — group visibility', () => {
     // Only Home survives (Payables' unmapped Widget still shows, so Payables also
     // survives; Reporting is dropped). Assert Home is always present regardless.
     expect(ALWAYS_VISIBLE_GROUPS).toContain('Home');
+  });
+
+  it('still permission-filters a MAPPED item placed in Home (Close → close_mgmt), never dropping the group', () => {
+    const withClose: NavGroup[] = [
+      {
+        label: 'Home',
+        items: [
+          { label: 'Home', href: '/dashboard', icon: 'home' },
+          { label: 'Close', href: '/close', icon: 'check' }, // → close_mgmt
+        ],
+      },
+    ];
+    const denied = filterNavByPermissions(withClose, { hasPermissionData: true, canView: () => false });
+    expect(denied.map((g) => g.label)).toEqual(['Home']);
+    expect(denied[0].items.map((i) => i.href)).toEqual(['/dashboard']);
+    const granted = filterNavByPermissions(withClose, { hasPermissionData: true, canView: (f) => f === 'close_mgmt' });
+    expect(granted[0].items.map((i) => i.href)).toEqual(['/dashboard', '/close']);
   });
 
   it('fail-safe: shows all groups/items when permission data is unusable (loading/error/custom role)', () => {

@@ -22,6 +22,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 import { runAiGateway } from '@meritbooks/core-ai';
 import { predictException, type ExceptionTreatment } from '../posting/exception-predictor';
 
@@ -239,9 +240,12 @@ Respond with ONLY this JSON, no markdown:
   const clarifyingQuestion = parsed.clarifying_question ? String(parsed.clarifying_question) : null;
 
   // Decision log — every AI proposal is recorded before it can be acted on.
+  // ai_decisions is SELECT-only for members (migration 172): service-role insert for a member
+  // caller, org pinned, the company asserted in the caller's client scope (best-effort log).
   let decisionId: string | null = null;
   try {
-    const { data } = await supabase
+    const writer = await scopedWriter(supabase, input.orgId, [input.locationId]);
+    const { data } = await writer
       .from('ai_decisions')
       .insert({
         org_id: input.orgId,

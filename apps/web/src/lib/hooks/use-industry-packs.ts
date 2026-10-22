@@ -44,23 +44,37 @@ async function loadPacks(locationId: string): Promise<IndustryPacks> {
   }
 }
 
-export function useIndustryPacks(): IndustryPacks {
+export interface IndustryPacksState {
+  packs: IndustryPacks;
+  /**
+   * The client the packs were resolved for, or null while loading / in consolidated
+   * view. Lets a page that already knows the answer from the server (a server-read
+   * seed) keep showing it until the client read for the SAME client lands.
+   */
+  resolvedFor: string | null;
+}
+
+export function useIndustryPacksState(): IndustryPacksState {
   const { activeCompanyId, isAll, ready } = useActiveCompany();
-  const [packs, setPacks] = useState<IndustryPacks>(OFF);
+  const [state, setState] = useState<IndustryPacksState>({ packs: OFF, resolvedFor: null });
 
   useEffect(() => {
     if (!ready || isAll || !activeCompanyId) {
-      setPacks(OFF);
+      setState({ packs: OFF, resolvedFor: null });
       return;
     }
     let cancelled = false;
     void loadPacks(activeCompanyId).then((p) => {
-      if (!cancelled) setPacks(p);
+      if (!cancelled) setState({ packs: p, resolvedFor: activeCompanyId });
     });
     return () => {
       cancelled = true;
     };
   }, [activeCompanyId, isAll, ready]);
 
-  return packs;
+  return state;
+}
+
+export function useIndustryPacks(): IndustryPacks {
+  return useIndustryPacksState().packs;
 }

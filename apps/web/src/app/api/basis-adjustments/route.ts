@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter, assertWriteScope, assertOrgRefs, isWriteScopeError } from '@/lib/db/scoped-writer';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { toDebitPositive, type NormalBalance } from '@/lib/reports/basis/apply-adjustments';
@@ -197,7 +198,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'A zero adjustment has no effect.', code: 'ZERO_AMOUNT' }, { status: 422 });
   }
 
-  const { data, error } = await supabase
+  // reporting_basis_adjustments is SELECT-only for members (migration 172): service-role write
+  // after the permission check, org pinned, client + account verified against the org.
+  try {
+    await assertWriteScope(supabase, orgId, [p.location_id ?? null]);
+    await assertOrgRefs(orgId, [{ table: 'accounts', ids: [p.account_id], label: 'account' }], { caller: supabase });
+  } catch (e) {
+    if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+    throw e;
+  }
+  const { data, error } = await serviceWriter()
     .from('reporting_basis_adjustments')
     .insert({
       org_id: orgId,

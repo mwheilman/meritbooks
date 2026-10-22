@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
+import { serviceWriter, assertWriteScope, isWriteScopeError, loadWritableRow } from '@/lib/db/scoped-writer';
 import { dedupeKey, STATEMENT_IMPORT_SOURCE, STATEMENT_EXTRACT_FEATURE } from '@/lib/bank/statement-parse';
 
 /**
@@ -129,9 +130,18 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
   }
 
+  // bank_transactions / ai_decisions are SELECT-only for members (migration 172): service-role
+  // write after the permission check, org pinned, target client asserted in the caller's scope.
+  const writer = serviceWriter();
   let inserted = 0;
   if (toInsert.length > 0) {
-    const { error: insErr, count } = await supabase
+    try {
+      await assertWriteScope(supabase, orgId, [account.location_id]);
+    } catch (e) {
+      if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
+      throw e;
+    }
+    const { error: insErr, count } = await writer
       .from('bank_transactions')
       .insert(toInsert, { count: 'exact' });
     if (insErr) {
@@ -143,12 +153,16 @@ export async function POST(request: Request): Promise<NextResponse> {
   // ── Best-effort: mark the originating proposal CONFIRMED ──────────────────────
   if (decisionId) {
     try {
-      await supabase
-        .from('ai_decisions')
-        .update({ status: 'CONFIRMED' })
-        .eq('id', decisionId)
-        .eq('org_id', orgId)
-        .eq('feature', STATEMENT_EXTRACT_FEATURE);
+      // Existing client-owned row by id: load it org-pinned + scope-checked before the update.
+      const decision = await loadWritableRow(supabase, orgId, { table: 'ai_decisions', id: decisionId });
+      if (decision) {
+        await writer
+          .from('ai_decisions')
+          .update({ status: 'CONFIRMED' })
+          .eq('id', decisionId)
+          .eq('org_id', orgId)
+          .eq('feature', STATEMENT_EXTRACT_FEATURE);
+      }
     } catch (e) {
       console.error('[import-statement/confirm] decision update failed (non-fatal):', e instanceof Error ? e.message : e);
     }

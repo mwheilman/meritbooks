@@ -32,11 +32,24 @@ import {
   type RecurringJeLine,
   type RecurringJeTemplate,
 } from './schedule';
+import { assertOrgRefs, isMemberClient, scopedWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
+// recurring_je_templates / recurring_je_runs are SELECT-only for members (migration 172):
+// every write below goes through the service role (scopedWriter) after the route's
+// permission check, org pinned, the template's client asserted in the caller's scope.
 const TEMPLATES = 'recurring_je_templates';
 const RUNS = 'recurring_je_runs';
+
+/** Line-level FKs (accounts, line clients) must belong to the org — FKs never check the tenant. */
+async function assertLineRefs(db: DB, orgId: string, lines: RecurringJeLine[]): Promise<void> {
+  if (!isMemberClient(db)) return;
+  await assertOrgRefs(orgId, [
+    { table: 'accounts', ids: lines.map((l) => l.account_id), label: 'account' },
+    { schema: 'core', table: 'locations', ids: lines.map((l) => l.location_id), label: 'company' },
+  ], { caller: db });
+}
 
 export type TemplateStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED';
 export type RunStatus = 'PROPOSED' | 'POSTED' | 'SKIPPED';
@@ -130,7 +143,9 @@ export async function createTemplate(db: DB, input: CreateTemplateInput): Promis
     throw new RecurringJeStoreError('End date must be on or after the start date');
   }
 
-  const { data, error } = await db
+  const writer = await scopedWriter(db, input.orgId, [input.locationId]);
+  await assertLineRefs(db, input.orgId, lines);
+  const { data, error } = await writer
     .from(TEMPLATES)
     .insert({
       org_id: input.orgId,
@@ -177,14 +192,28 @@ export async function updateTemplate(db: DB, id: string, patch: UpdateTemplateIn
   if (patch.entryType != null) update.entry_type = patch.entryType;
   if (patch.memo !== undefined) update.memo = patch.memo;
   if (patch.status != null) update.status = patch.status;
+  let newLines: RecurringJeLine[] | null = null;
   if (patch.lines != null) {
     const lines = normalizeLines(patch.lines);
     const balance = validateBalance(lines);
     if (!balance.ok) throw new RecurringJeStoreError(balance.error);
     update.lines = lines;
+    newLines = lines;
   }
 
-  const { error } = await db.from(TEMPLATES).update(update).eq('id', id);
+  // Read through the caller's client (RLS proves org + client scope for a member), then
+  // write through the service role pinned to that row's org.
+  const { data: row, error: readErr } = await db
+    .from(TEMPLATES)
+    .select('id, org_id, location_id')
+    .eq('id', id)
+    .maybeSingle<{ id: string; org_id: string; location_id: string }>();
+  if (readErr) throw new RecurringJeStoreError(`Failed to update template: ${readErr.message}`);
+  if (!row) return; // not visible in this org — nothing to update (same no-op as before)
+  const writer = await scopedWriter(db, row.org_id, [row.location_id]);
+  if (newLines) await assertLineRefs(db, row.org_id, newLines);
+
+  const { error } = await writer.from(TEMPLATES).update(update).eq('id', id).eq('org_id', row.org_id);
   if (error) throw new RecurringJeStoreError(`Failed to update template: ${error.message}`);
 }
 
@@ -338,9 +367,19 @@ export async function generateDue(
 
     const due = nextDuePeriods(asTemplate(t), { asOf, generated });
     const lines = buildEntryLines(t.lines ?? [], { locationId: t.location_id });
+    if (due.length === 0) continue;
+
+    // Template read above in this org; service-role write with its client scope-asserted.
+    let writer: DB;
+    try {
+      writer = await scopedWriter(db, orgId, [t.location_id]);
+    } catch (e) {
+      result.errors.push({ template_id: t.id, period: '-', error: e instanceof Error ? e.message : 'out of scope' });
+      continue;
+    }
 
     for (const p of due) {
-      const { data: inserted, error: insErr } = await db
+      const { data: inserted, error: insErr } = await writer
         .from(RUNS)
         .insert({
           org_id: orgId,
@@ -471,6 +510,15 @@ export async function approveRun(db: DB, orgId: string, runId: string): Promise<
   const t = tmpl as Pick<TemplateRow, 'id' | 'name' | 'location_id' | 'entry_type' | 'memo'> | null;
   if (!t) return { success: false, error: 'Template not found' };
 
+  // Run + template read above through the caller's client; the run / template writes go
+  // through the service role, org pinned, the template's client asserted before posting.
+  let writer: DB;
+  try {
+    writer = await scopedWriter(db, orgId, [t.location_id]);
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'You do not have access to that company.' };
+  }
+
   const period = `${r.period_year}-${String(r.period_month).padStart(2, '0')}`;
   const je = await postJournalEntry(db, {
     org_id: orgId,
@@ -494,10 +542,11 @@ export async function approveRun(db: DB, orgId: string, runId: string): Promise<
 
   if (!je.success) return { success: false, error: je.error ?? 'Post failed' };
 
-  const { error: updErr } = await db
+  const { error: updErr } = await writer
     .from(RUNS)
     .update({ status: 'POSTED', gl_entry_id: je.entry_id, posted_at: new Date().toISOString() })
     .eq('id', r.id)
+    .eq('org_id', orgId)
     .eq('status', 'PROPOSED');
   if (updErr) {
     // The GL entry posted but we couldn't mark the run — surface it; the unique
@@ -525,7 +574,7 @@ export async function approveRun(db: DB, orgId: string, runId: string): Promise<
         const next = nextOccurrence(asTemplate({ ...c, lines: [] }), nextMonthAfter(lastPeriod));
         if (!next) patch.status = 'COMPLETED';
       }
-      await db.from(TEMPLATES).update(patch).eq('id', t.id);
+      await writer.from(TEMPLATES).update(patch).eq('id', t.id).eq('org_id', orgId);
     }
   } catch {
     /* counter is advisory; the run ledger is the source of truth */
@@ -536,13 +585,29 @@ export async function approveRun(db: DB, orgId: string, runId: string): Promise<
 
 /** Reject (skip) a PROPOSED run for a period so it will not be re-proposed. */
 export async function rejectRun(db: DB, runId: string): Promise<{ success: boolean; error?: string }> {
-  const { data: run, error } = await db.from(RUNS).select('id, status').eq('id', runId).maybeSingle();
+  const { data: run, error } = await db.from(RUNS).select('id, status, org_id, template_id').eq('id', runId).maybeSingle();
   if (error) return { success: false, error: error.message };
   if (!run) return { success: false, error: 'Proposed entry not found' };
-  if ((run as { status: RunStatus }).status !== 'PROPOSED') {
+  const rr = run as { status: RunStatus; org_id: string; template_id: string };
+  if (rr.status !== 'PROPOSED') {
     return { success: false, error: 'Only proposed entries can be skipped' };
   }
-  const { error: updErr } = await db.from(RUNS).update({ status: 'SKIPPED' }).eq('id', runId).eq('status', 'PROPOSED');
+  // Run read above through the caller's client; its template's client is asserted in scope
+  // and the service-role write is pinned to the run's org (migration 172).
+  const { data: tmpl } = await db.from(TEMPLATES).select('location_id').eq('id', rr.template_id).maybeSingle();
+  if (!tmpl) return { success: false, error: 'Template not found' };
+  let writer: DB;
+  try {
+    writer = await scopedWriter(db, rr.org_id, [(tmpl as { location_id: string }).location_id]);
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'You do not have access to that company.' };
+  }
+  const { error: updErr } = await writer
+    .from(RUNS)
+    .update({ status: 'SKIPPED' })
+    .eq('id', runId)
+    .eq('org_id', rr.org_id)
+    .eq('status', 'PROPOSED');
   if (updErr) return { success: false, error: updErr.message };
   return { success: true };
 }

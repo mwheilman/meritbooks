@@ -264,8 +264,13 @@ export async function POST(request: Request): Promise<NextResponse> {
   const signedAmount = signedStatementAmountCents(cashEffect, body.amount_cents);
   let txnId: string;
 
+  // bank_transactions is SELECT-only for members (migration 172): service-role write after
+  // journal_entries:post, org pinned. The source line, reconciliation and bank account were
+  // read through the member client above (RLS proved org + client scope), and postJournalEntry
+  // asserted ba.location_id in the caller's scope.
+  const txnWriter = serviceWriter();
   if (sourceLine) {
-    const { data: updated, error: updErr } = await supabase
+    const { data: updated, error: updErr } = await txnWriter
       .from('bank_transactions')
       .update({
         status: 'POSTED',
@@ -276,6 +281,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         reconciled_at: null,
       })
       .eq('id', sourceLine.id)
+      .eq('org_id', orgId)
       .is('gl_entry_id', null) // guard against a concurrent post
       .is('reconciled_at', null)
       .select('id')
@@ -286,7 +292,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
     txnId = (updated as { id: string }).id;
   } else {
-    const { data: txn, error: txnErr } = await supabase
+    const { data: txn, error: txnErr } = await txnWriter
       .from('bank_transactions')
       .insert({
         org_id: orgId,

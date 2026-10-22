@@ -22,6 +22,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from '@/lib/services/gl-posting';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { resolveLeaseRole } from './lease-accounts';
+import { assertOrgRefs, isMemberClient, scopedWriter } from '@/lib/db/scoped-writer';
 import { buildLeaseSchedule, type LeaseSchedule, type LeaseTerms } from './schedule';
 
 type DB = SupabaseClient;
@@ -57,7 +58,10 @@ function periodEndDate(commencement: string, monthOffset: number): string {
 }
 
 /**
- * Create the lease + full schedule (RLS-scoped). The schedule is computed here — the
+ * Create the lease + full schedule. leases / lease_schedule_lines are SELECT-only for
+ * members (migration 172): the writes go through the service role after the route's
+ * permission check, org pinned, the lease's client asserted in the caller's scope. The
+ * schedule is computed here — the
  * source of truth — so persisted balances always tie to the engine.
  */
 export async function persistLeaseWithSchedule(
@@ -75,7 +79,12 @@ export async function persistLeaseWithSchedule(
     paymentTiming: input.paymentTiming,
   });
 
-  const { data: lease, error: leaseErr } = await db
+  // leases is SELECT-only for members (migration 172): service-role write, org pinned.
+  const writer = await scopedWriter(db, orgId, [input.locationId]);
+  if (isMemberClient(db)) {
+    await assertOrgRefs(orgId, [{ table: 'ai_decisions', ids: [input.aiDecisionId], label: 'AI decision' }], { caller: db });
+  }
+  const { data: lease, error: leaseErr } = await writer
     .from('leases')
     .insert({
       org_id: orgId,
@@ -120,10 +129,10 @@ export async function persistLeaseWithSchedule(
     lease_expense_cents: l.leaseExpenseCents,
   }));
 
-  const { error: linesErr } = await db.from('lease_schedule_lines').insert(lineRows);
+  const { error: linesErr } = await writer.from('lease_schedule_lines').insert(lineRows);
   if (linesErr) {
     // Roll back the lease so a failed schedule never leaves a half-created lease.
-    await db.from('leases').delete().eq('id', leaseId);
+    await writer.from('leases').delete().eq('id', leaseId).eq('org_id', orgId);
     throw new PostingError(`Failed to create lease schedule: ${linesErr.message}`);
   }
 
@@ -139,8 +148,8 @@ export async function persistLeaseWithSchedule(
       entryDate: input.commencementDate,
     });
   } catch (e) {
-    await db.from('lease_schedule_lines').delete().eq('lease_id', leaseId);
-    await db.from('leases').delete().eq('id', leaseId);
+    await writer.from('lease_schedule_lines').delete().eq('lease_id', leaseId).eq('org_id', orgId);
+    await writer.from('leases').delete().eq('id', leaseId).eq('org_id', orgId);
     throw e;
   }
 
@@ -311,6 +320,10 @@ export async function recordLeasePeriod(
 
   const locationId = leaseData.location_id;
   const line = lineData;
+  // leases / lease_schedule_lines are SELECT-only for members (migration 172): the lease
+  // was read above in this org; writes go through the service role with its client
+  // asserted in the caller's scope.
+  const writer = await scopedWriter(db, orgId, [locationId]);
 
   // Resolve accounts by ROLE (degrade-safe: PostingError if a role is unmapped/unseeded).
   const rouAsset = await resolveLeaseRole(db, orgId, 'ROU_ASSET', locationId);
@@ -364,10 +377,11 @@ export async function recordLeasePeriod(
 
   // Stamp the line + advance the lease. Guard against a concurrent post by only
   // updating the row while it is still unposted.
-  await db
+  await writer
     .from('lease_schedule_lines')
     .update({ gl_entry_id: je.entry_id, posted_at: new Date().toISOString() })
     .eq('id', line.id)
+    .eq('org_id', orgId)
     .is('gl_entry_id', null);
 
   const newPosted = leaseData.periods_posted + 1;
@@ -379,14 +393,15 @@ export async function recordLeasePeriod(
     .eq('org_id', orgId)
     .eq('lease_id', leaseId)
     .is('gl_entry_id', null);
-  await db
+  await writer
     .from('leases')
     .update({
       periods_posted: newPosted,
       status: (remaining ?? 0) <= 0 ? 'ENDED' : 'ACTIVE',
       updated_at: new Date().toISOString(),
     })
-    .eq('id', leaseId);
+    .eq('id', leaseId)
+    .eq('org_id', orgId);
 
   return {
     posted: true,

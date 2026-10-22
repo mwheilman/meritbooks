@@ -2,68 +2,47 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  Loader2,
-  AlertCircle,
-  Inbox,
-  Landmark,
-  Receipt,
-  FileText,
-  Sparkles,
-  ShieldCheck,
-  Briefcase,
-  CheckCircle2,
-  ArrowUpDown,
-  type LucideIcon,
-} from 'lucide-react';
-import { clsx } from 'clsx';
-import { formatMoney } from '@meritbooks/shared';
+import { Button, Conf, Icon, Keyhints, QueueTable, Seg, Tag, money, type QueueColumn, type TagTone } from '@meritbooks/merit-ui';
 import { addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
-import type {
-  ExceptionItem,
-  ExceptionSource,
-  ExceptionsResponse,
-  Disposition,
-} from './inbox-types';
-import { useListKeynav } from './use-list-keynav';
+import type { ExceptionItem, ExceptionSource, ExceptionsResponse, Disposition } from './inbox-types';
 
 // ── Autonomy disposition presentation ─────────────────────────────────────────
 
 const DISPOSITION_ORDER: Disposition[] = ['AUTO', 'REVIEW', 'ESCALATE', 'BLOCKED'];
 
-const DISPOSITION_META: Record<Disposition, { label: string; badgeClass: string; help: string }> = {
+const DISPOSITION_META: Record<Disposition, { label: string; tone: TagTone; help: string }> = {
   AUTO: {
-    label: 'AUTO-eligible',
-    badgeClass: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-inset ring-emerald-500/20',
+    label: 'Auto-eligible',
+    tone: 'ai',
     help: 'The dial would let the machine apply this — but auto-post is off, so it still needs your approval.',
   },
   REVIEW: {
     label: 'Needs review',
-    badgeClass: 'bg-amber-500/10 text-amber-400 ring-1 ring-inset ring-amber-500/20',
+    tone: 'warn',
     help: 'Routine: a human should review and approve.',
   },
   ESCALATE: {
     label: 'Escalate',
-    badgeClass: 'bg-red-500/10 text-red-400 ring-1 ring-inset ring-red-500/20',
+    tone: 'neg',
     help: 'Urgent: low confidence or high risk — a human must look.',
   },
   BLOCKED: {
     label: 'Blocked',
-    badgeClass: 'bg-slate-500/15 text-slate-300 ring-1 ring-inset ring-slate-500/25',
+    tone: 'solid',
     help: 'The capability is off or the kill switch is engaged — suppressed from the auto lane.',
   },
 };
 
 // ── Source presentation ─────────────────────────────────────────────────────────
 
-const SOURCE_META: Record<ExceptionSource, { label: string; icon: LucideIcon; badgeClass: string }> = {
-  bank: { label: 'Bank feed', icon: Landmark, badgeClass: 'bg-blue-500/10 text-blue-400' },
-  receipt: { label: 'Receipt', icon: Receipt, badgeClass: 'bg-amber-500/10 text-amber-400' },
-  bill: { label: 'Bill on hold', icon: FileText, badgeClass: 'bg-red-500/10 text-red-400' },
-  ai_proposal: { label: 'AI proposal', icon: Sparkles, badgeClass: 'bg-indigo-500/10 text-indigo-400' },
-  approval: { label: 'Approval', icon: ShieldCheck, badgeClass: 'bg-emerald-500/10 text-emerald-400' },
-  cost: { label: 'Job cost', icon: Briefcase, badgeClass: 'bg-slate-500/10 text-slate-300' },
+const SOURCE_LABEL: Record<ExceptionSource, string> = {
+  bank: 'Bank feed',
+  receipt: 'Receipt',
+  bill: 'Bill on hold',
+  ai_proposal: 'AI proposal',
+  approval: 'Approval',
+  cost: 'Job cost',
 };
 
 const SOURCE_ORDER: ExceptionSource[] = ['bank', 'receipt', 'bill', 'ai_proposal', 'approval', 'cost'];
@@ -97,12 +76,6 @@ function relativeTime(iso: string): string {
   return `${Math.round(mo / 12)}y ago`;
 }
 
-function confidenceClass(confidence: number): string {
-  if (confidence >= 0.9) return 'bg-emerald-500/10 text-emerald-400';
-  if (confidence >= 0.7) return 'bg-amber-500/10 text-amber-400';
-  return 'bg-red-500/10 text-red-400';
-}
-
 /** Sources with a SAFE (non-financial) resolve action + the button verb to show. */
 const RESOLVE_LABEL: Partial<Record<ExceptionSource, string>> = {
   bank: 'Resolve',
@@ -111,112 +84,14 @@ const RESOLVE_LABEL: Partial<Record<ExceptionSource, string>> = {
   ai_proposal: 'Dismiss',
 };
 
-// ── Row ───────────────────────────────────────────────────────────────────────
-
-function ExceptionRow({
-  item,
-  active,
-  rowRef,
-  onOpen,
-  onResolve,
-  isResolving,
-}: {
-  item: ExceptionItem;
-  active: boolean;
-  rowRef: (el: HTMLElement | null) => void;
-  onOpen: (href: string) => void;
-  onResolve: (item: ExceptionItem) => void;
-  isResolving: boolean;
-}) {
-  const meta = SOURCE_META[item.source];
-  const Icon = meta.icon;
-  const resolveLabel = RESOLVE_LABEL[item.source];
-
-  return (
-    <div
-      ref={rowRef}
-      data-active={active}
-      className={clsx(
-        'group flex w-full items-center gap-4 px-4 py-3 transition-colors',
-        active ? 'bg-emerald-500/[0.06] ring-1 ring-inset ring-emerald-500/20' : 'hover:bg-slate-800/30',
-      )}
-    >
-      <button
-        type="button"
-        onClick={() => onOpen(item.href)}
-        className="flex min-w-0 flex-1 items-center gap-4 text-left focus:outline-none"
-      >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800/60">
-          <Icon size={16} className="text-slate-400" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-medium text-white">{item.title}</p>
-            <span
-              className={clsx('inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium', meta.badgeClass)}
-            >
-              {meta.label}
-            </span>
-            {item.confidence !== null && (
-              <span
-                className={clsx(
-                  'inline-flex shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium',
-                  confidenceClass(item.confidence),
-                )}
-              >
-                {Math.round(item.confidence * 100)}%
-              </span>
-            )}
-            {item.disposition && (
-              <span
-                title={DISPOSITION_META[item.disposition].help}
-                className={clsx(
-                  'inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
-                  DISPOSITION_META[item.disposition].badgeClass,
-                )}
-              >
-                {DISPOSITION_META[item.disposition].label}
-              </span>
-            )}
-          </div>
-          {item.subtitle && <p className="mt-0.5 truncate text-xs text-slate-500">{item.subtitle}</p>}
-        </div>
-      </button>
-
-      <div className="flex shrink-0 flex-col items-end gap-0.5">
-        {item.amountCents !== null && (
-          <span className="font-mono text-sm text-slate-200">{formatMoney(item.amountCents)}</span>
-        )}
-        <span className="text-[11px] text-slate-500">{relativeTime(item.createdAt)}</span>
-      </div>
-
-      {resolveLabel && (
-        <button
-          type="button"
-          disabled={isResolving}
-          onClick={(e) => {
-            e.stopPropagation();
-            onResolve(item);
-          }}
-          className={clsx(
-            'inline-flex w-20 shrink-0 items-center justify-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
-            'border-slate-700 bg-slate-800/40 text-slate-300 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400',
-            'disabled:cursor-not-allowed disabled:opacity-50',
-          )}
-        >
-          {isResolving ? <Loader2 size={13} className="animate-spin" /> : resolveLabel}
-        </button>
-      )}
-    </div>
-  );
-}
+const keyOf = (item: ExceptionItem) => `${item.source}:${item.id}`;
 
 // ── Queue ─────────────────────────────────────────────────────────────────────
 // The Inbox → Exceptions tab. Data is loaded by the shell (useInboxData) and passed
 // in, so the tab count and this list never diverge. Keeps the SAFE inline-resolve
 // behavior (bank/receipt/bill resolve + ai_proposal dismiss via /api/exceptions/
-// resolve — never money movement) and adds source/disposition/sort filters,
-// j/k/Enter/e keyboard nav, and a session "recently resolved" trail.
+// resolve — never money movement) and the source/disposition/sort filters,
+// J/K/↵/E keys (now through the merit-ui registry) and a session "resolved" trail.
 
 interface ResolvedTrailItem {
   key: string;
@@ -239,6 +114,7 @@ export function ExceptionsQueue({ data, isLoading, error, refetch }: ExceptionsQ
   const [sort, setSort] = useState<SortKey>('urgency');
   const [resolvingKey, setResolvingKey] = useState<string | null>(null);
   const [recentlyResolved, setRecentlyResolved] = useState<ResolvedTrailItem[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
 
   const items = useMemo(() => data?.data ?? [], [data]);
   const counts = data?.counts;
@@ -263,30 +139,26 @@ export function ExceptionsQueue({ data, isLoading, error, refetch }: ExceptionsQ
     const byDisposition = counts?.byDisposition ?? { AUTO: 0, REVIEW: 0, ESCALATE: 0, BLOCKED: 0 };
     const total = DISPOSITION_ORDER.reduce((sum, d) => sum + (byDisposition[d] ?? 0), 0);
     if (total === 0) return [];
-    const list: { key: Disposition | 'all'; label: string; count: number }[] = [
-      { key: 'all', label: 'All AI', count: total },
-    ];
+    const list: { value: Disposition | 'all'; label: string; count: number }[] = [{ value: 'all', label: 'All AI', count: total }];
     for (const d of DISPOSITION_ORDER) {
       const c = byDisposition[d] ?? 0;
-      if (c > 0) list.push({ key: d, label: DISPOSITION_META[d].label, count: c });
+      if (c > 0) list.push({ value: d, label: DISPOSITION_META[d].label, count: c });
     }
     return list;
   }, [counts]);
 
   const chips = useMemo(() => {
     const bySource = counts?.bySource ?? {};
-    const list: { key: ExceptionSource | 'all'; label: string; count: number }[] = [
-      { key: 'all', label: 'All', count: counts?.total ?? 0 },
-    ];
+    const list: { value: ExceptionSource | 'all'; label: string; count: number }[] = [{ value: 'all', label: 'All', count: counts?.total ?? 0 }];
     for (const src of SOURCE_ORDER) {
       const c = bySource[src] ?? 0;
-      if (c > 0) list.push({ key: src, label: SOURCE_META[src].label, count: c });
+      if (c > 0) list.push({ value: src, label: SOURCE_LABEL[src], count: c });
     }
     return list;
   }, [counts]);
 
   async function resolve(item: ExceptionItem) {
-    const key = `${item.source}:${item.id}`;
+    const key = keyOf(item);
     setResolvingKey(key);
     const verb = item.source === 'ai_proposal' ? 'Dismissed' : 'Resolved';
     const result = await api.post<{ ok: boolean }>('/api/exceptions/resolve', {
@@ -294,203 +166,227 @@ export function ExceptionsQueue({ data, isLoading, error, refetch }: ExceptionsQ
       id: item.id,
     });
     if (result.error) {
-      addToast('error', result.error.error || 'Could not resolve item');
+      addToast('error', result.error.error || 'Could not resolve the item. Try again, or open it to act there.');
       setResolvingKey(null);
       return;
     }
-    addToast('success', `${verb} — removed from queue`);
+    // The toast repeats the verb (kit §1.2).
+    addToast('success', `${verb} · ${item.title}`);
     setRecentlyResolved((prev) => [{ key, title: item.title, verb, at: Date.now() }, ...prev].slice(0, 5));
     await refetch();
     setResolvingKey(null);
   }
 
-  const keynav = useListKeynav({
-    count: filtered.length,
-    enabled: !isLoading && !error,
-    onOpen: (i) => {
-      const item = filtered[i];
-      if (item) router.push(item.href);
-    },
-    onAction: (i) => {
-      const item = filtered[i];
-      // "e" resolves only SAFE (non-financial) rows; approvals/cost are never resolvable here.
-      if (item && RESOLVE_LABEL[item.source] && resolvingKey === null) resolve(item);
-    },
-  });
+  const columns = useMemo<QueueColumn<ExceptionItem>[]>(
+    () => [
+      {
+        id: 'source',
+        header: 'Source',
+        width: 132,
+        cell: (item) => <Tag tone={item.source === 'ai_proposal' ? 'ai' : item.source === 'bill' ? 'neg' : 'default'}>{SOURCE_LABEL[item.source]}</Tag>,
+      },
+      {
+        id: 'item',
+        header: 'Needs a human',
+        cell: (item) => (
+          <>
+            <a
+              className="l1 mb-row-link"
+              href={item.href}
+              onClick={(e) => {
+                e.preventDefault();
+                router.push(item.href);
+              }}
+            >
+              {item.title}
+            </a>
+            <span className="l2">{[item.subtitle, relativeTime(item.createdAt)].filter(Boolean).join(' · ')}</span>
+          </>
+        ),
+      },
+      {
+        id: 'conf',
+        header: 'Confidence',
+        width: 112,
+        cell: (item) => (item.confidence !== null ? <Conf score={Math.round(item.confidence * 100)} /> : <span className="ink-3">—</span>),
+      },
+      {
+        id: 'dispo',
+        header: 'AI would',
+        width: 132,
+        cell: (item) =>
+          item.disposition ? (
+            <Tag tone={DISPOSITION_META[item.disposition].tone} title={DISPOSITION_META[item.disposition].help}>
+              {DISPOSITION_META[item.disposition].label}
+            </Tag>
+          ) : (
+            <span className="ink-3">—</span>
+          ),
+      },
+      {
+        id: 'amount',
+        header: 'Amount',
+        numeric: true,
+        width: 120,
+        cell: (item) => (item.amountCents !== null ? money(Math.round(item.amountCents)) : <span className="ink-3">—</span>),
+      },
+      {
+        id: 'act',
+        header: <span className="sr">Actions</span>,
+        width: 112,
+        cell: (item) => {
+          const label = RESOLVE_LABEL[item.source];
+          if (!label) return null;
+          const busy = resolvingKey === keyOf(item);
+          return (
+            <Button
+              disabled={resolvingKey !== null}
+              onClick={(e) => {
+                e.stopPropagation();
+                void resolve(item);
+              }}
+            >
+              {busy ? `${label.replace(/e$/, '')}ing…` : label}
+            </Button>
+          );
+        },
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [router, resolvingKey],
+  );
+
+  if (isLoading && !data) {
+    return (
+      <div className="surface wg-loading mb-state-block" aria-busy="true">
+        <span className="bar-l" style={{ width: '70%' }} aria-hidden="true" />
+        <span className="bar-l" style={{ width: '54%' }} aria-hidden="true" />
+        <span className="bar-l" style={{ width: '62%' }} aria-hidden="true" />
+        <span className="t-cap" role="status">
+          Loading exceptions…
+        </span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="surface wg-state mb-state-block" role="alert">
+        <span className="tag tag--neg">Not loaded</span>
+        <span className="t-head">Exceptions didn’t load</span>
+        <p>{error}</p>
+        <Button onClick={() => void refetch()}>Try again</Button>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-5">
+    <div className="mb-inbox-body">
       {counts && counts.total > 0 && (
-        <p className="text-xs text-slate-500">
-          {counts.total} {counts.total === 1 ? 'item' : 'items'} across your queues need a human.
-          Resolve safe (non-financial) flags inline, or open an item to act on it.
+        <p className="t-cap">
+          {counts.total} {counts.total === 1 ? 'item' : 'items'} across your queues need a human. Resolve safe (non-financial) flags here, or open an
+          item to act on it.
         </p>
       )}
 
-      {/* Recently resolved (session trail) — a quiet confirmation of what you cleared. */}
       {recentlyResolved.length > 0 && (
-        <div className="rounded-lg border border-emerald-900/30 bg-emerald-950/10 px-3 py-2">
-          <div className="mb-1 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-emerald-400/80">
-            <CheckCircle2 size={12} />
-            Resolved recently
-          </div>
-          <div className="flex flex-col gap-0.5">
-            {recentlyResolved.map((r) => (
-              <div key={`${r.key}:${r.at}`} className="flex items-center justify-between text-xs">
-                <span className="truncate text-slate-400">
-                  <span className="text-emerald-400/90">{r.verb}</span> · {r.title}
-                </span>
-                <span className="ml-2 shrink-0 text-2xs text-slate-600">{relativeTime(new Date(r.at).toISOString())}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Source filter chips */}
-      {!isLoading && !error && items.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {chips.map((chip) => (
-            <button
-              key={chip.key}
-              onClick={() => setFilter(chip.key)}
-              className={clsx(
-                'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
-                filter === chip.key
-                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-                  : 'border-slate-800 bg-slate-800/30 text-slate-400 hover:text-slate-200',
-              )}
-            >
-              {chip.label}
-              <span
-                className={clsx(
-                  'rounded px-1.5 py-0.5 font-mono text-[10px]',
-                  filter === chip.key ? 'bg-emerald-500/20' : 'bg-slate-700/50 text-slate-400',
-                )}
-              >
-                {chip.count}
-              </span>
-            </button>
-          ))}
-          <label className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-surface-900 px-2.5 py-1.5 text-xs text-slate-300">
-            <ArrowUpDown size={13} className="text-slate-500" />
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortKey)}
-              className="bg-transparent text-xs text-slate-200 focus:outline-none"
-            >
-              {SORT_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}
-                </option>
+        <div className="inline-notice mb-resolved" role="status">
+          <Icon name="check" className="pos" />
+          <div>
+            <b>Resolved this session</b>
+            <ul className="ev">
+              {recentlyResolved.map((r) => (
+                <li key={`${r.key}:${r.at}`}>
+                  {r.verb} · {r.title}
+                  <span className="dl" />
+                  <span className="v">{relativeTime(new Date(r.at).toISOString())}</span>
+                </li>
               ))}
-            </select>
-          </label>
+            </ul>
+          </div>
         </div>
       )}
 
-      {/* Autonomy disposition filter — what the AI WOULD do vs must route (advisory) */}
-      {!isLoading && !error && dispoChips.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            <Sparkles size={12} className="text-indigo-400" />
-            AI disposition
+      {items.length === 0 ? (
+        <div className="surface wg-state mb-state-block">
+          <span className="wg-done-mark" aria-hidden="true">
+            <Icon name="check" />
           </span>
-          {dispoChips.map((chip) => (
-            <button
-              key={chip.key}
-              onClick={() => setDispoFilter(chip.key)}
-              className={clsx(
-                'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
-                dispoFilter === chip.key
-                  ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300'
-                  : 'border-slate-800 bg-slate-800/30 text-slate-400 hover:text-slate-200',
-              )}
-            >
-              {chip.label}
-              <span
-                className={clsx(
-                  'rounded px-1.5 py-0.5 font-mono text-[10px]',
-                  dispoFilter === chip.key ? 'bg-indigo-500/20' : 'bg-slate-700/50 text-slate-400',
-                )}
-              >
-                {chip.count}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Content states */}
-      {isLoading && !data ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
-        </div>
-      ) : error ? (
-        <div className="card p-10 text-center">
-          <AlertCircle className="mx-auto mb-3 h-8 w-8 text-red-400" />
-          <p className="text-sm text-red-400">{error}</p>
-          <button
-            onClick={() => refetch()}
-            className="mt-4 rounded-lg bg-slate-800 px-3.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
-          >
-            Try again
-          </button>
-        </div>
-      ) : items.length === 0 ? (
-        <div className="card p-16 text-center">
-          <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-emerald-500/70" />
-          <p className="text-sm font-medium text-white">You&apos;re all caught up</p>
-          <p className="mt-1 text-xs text-slate-500">
-            Nothing needs your attention right now. New flags, proposals, and approvals will land
-            here.
-          </p>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="card p-12 text-center">
-          <Inbox className="mx-auto mb-3 h-8 w-8 text-slate-600" />
-          <p className="text-sm text-slate-400">No items in this category.</p>
+          <span className="t-head">You’re all caught up</span>
+          <p>Nothing needs your attention right now. New flags, proposals and approvals land here.</p>
         </div>
       ) : (
         <>
-          <div className="card divide-y divide-slate-800/40 overflow-hidden">
-            {filtered.map((item, i) => {
-              const key = `${item.source}:${item.id}`;
-              const rp = keynav.rowProps(i);
-              return (
-                <ExceptionRow
-                  key={key}
-                  item={item}
-                  active={rp['data-active']}
-                  rowRef={rp.ref}
-                  onOpen={(href) => router.push(href)}
-                  onResolve={resolve}
-                  isResolving={resolvingKey === key}
-                />
-              );
-            })}
+          <div className="mb-toolbar">
+            <Seg aria-label="Filter by source" value={filter} onChange={setFilter} items={chips.map((c) => ({ value: c.value, label: c.label, count: c.count }))} />
+            <span className="sp" />
+            <label className="mb-inline-field">
+              <span className="t-cap">Sort</span>
+              <select className="select" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort">
+                {SORT_OPTIONS.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
-          <p className="flex flex-wrap items-center gap-2 pt-1 text-2xs text-slate-600">
-            <Kbd>j</Kbd>
-            <Kbd>k</Kbd>
-            move
-            <span className="text-slate-700">·</span>
-            <Kbd>↵</Kbd>
-            open
-            <span className="text-slate-700">·</span>
-            <Kbd>e</Kbd>
-            resolve safe flags
-          </p>
+
+          {/* Autonomy disposition — what the AI WOULD do vs must route (advisory). */}
+          {dispoChips.length > 0 && (
+            <div className="mb-toolbar">
+              <span className="eyebrow">AI disposition</span>
+              <Seg
+                aria-label="Filter by AI disposition"
+                value={dispoFilter}
+                onChange={setDispoFilter}
+                items={dispoChips.map((c) => ({ value: c.value, label: c.label, count: c.count }))}
+              />
+            </div>
+          )}
+
+          {filtered.length === 0 ? (
+            <div className="surface wg-state mb-state-block">
+              <span className="t-head">No items in this filter</span>
+              <p>Choose “All” to see every exception.</p>
+            </div>
+          ) : (
+            <div className="surface mb-queue">
+              <QueueTable
+                aria-label="Exceptions needing a human"
+                columns={columns}
+                rows={filtered}
+                getRowId={keyOf}
+                rowState={(i) => ({ attn: i.disposition === 'ESCALATE' })}
+                cursorId={cursor}
+                onCursorChange={(id) => setCursor(id)}
+                onOpen={(i) => router.push(i.href)}
+                // "e" resolves only SAFE (non-financial) rows; approvals/cost are never resolvable here.
+                actions={[
+                  {
+                    key: 'e',
+                    label: 'Resolve a safe flag',
+                    run: (rows) => {
+                      const item = rows[0];
+                      if (item && RESOLVE_LABEL[item.source] && resolvingKey === null) void resolve(item);
+                    },
+                  },
+                ]}
+                flush
+              />
+            </div>
+          )}
+          <div className="mb-hints">
+            <Keyhints
+              hints={[
+                { chord: 'j k', label: 'move' },
+                { chord: 'enter', label: 'open' },
+                { chord: 'e', label: 'resolve a safe flag' },
+              ]}
+            />
+          </div>
         </>
       )}
     </div>
-  );
-}
-
-function Kbd({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd className="rounded border border-slate-700 bg-slate-800/60 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
-      {children}
-    </kbd>
   );
 }

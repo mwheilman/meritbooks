@@ -19,6 +19,7 @@ import { transitionOnSale, assertReleaser } from '../engine/notes';
 import { salesRolesFor } from '../roles';
 import { CARRIED_UNIT_STATUSES, LIVE_NOTE_STATUSES, type TradeValuationPolicy } from '../types';
 import type { DealerCtx } from './context';
+import { serviceWriter } from '@/lib/db/scoped-writer';
 import { DealerError, dbFail } from './errors';
 import { loadRoleMap, postPlan } from './posting';
 import { byKey, coerceMoney, getRow, insertRow, updateRow, type NoteRow, type ProgramRow, type UnitRow } from './rows';
@@ -265,7 +266,9 @@ export async function postSale(d: DealerCtx, saleId: string): Promise<PostSaleRe
     const posted = await postPlan(d, built.plan, { entryDate: sale.sale_date, key: `sale:${sale.id}`, sourceId: invoiceId ?? sale.id });
     glEntryId = posted.glEntryId;
     if (invoiceId) {
-      const { error } = await d.admin.from('invoices').update({ status: 'SENT', gl_entry_id: glEntryId })
+      // invoices: service-role write (migration 172 sweep) — d.admin IS the service role
+      // (openDealerContext, after the permission + RLS client check); org pinned.
+      const { error } = await serviceWriter(d.admin).from('invoices').update({ status: 'SENT', gl_entry_id: glEntryId })
         .eq('org_id', d.orgId).eq('id', invoiceId).eq('status', 'DRAFT');
       if (error) dbFail('Stamping the deal invoice failed', error);
     }
@@ -390,7 +393,7 @@ export async function voidSale(d: DealerCtx, saleId: string, reason: string): Pr
   if (sale.trade_in_id) await updateRow(d, 'trade_ins', sale.trade_in_id, { status: 'VOID' }, 'Trade-in');
   if (sale.invoice_id && sale.posting_mode === 'DEAL') {
     // A deal invoice created by a failed post attempt is still DRAFT (no GL) — void it.
-    const { error } = await d.admin.from('invoices').update({ status: 'VOIDED' })
+    const { error } = await serviceWriter(d.admin).from('invoices').update({ status: 'VOIDED' })
       .eq('org_id', d.orgId).eq('id', sale.invoice_id).eq('status', 'DRAFT').is('gl_entry_id', null);
     if (error) dbFail('Voiding the draft deal invoice failed', error);
   }

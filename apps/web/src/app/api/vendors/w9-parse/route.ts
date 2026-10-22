@@ -97,7 +97,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // audited, never the full number.
   let decisionId: string | null = null;
   try {
-    const { data: dec } = await supabase
+    // ai_decisions is SELECT-only for members (migration 172): service-role insert after the
+    // permission check, org pinned to the session org.
+    const { data: dec } = await createAdminSupabase()
       .from('ai_decisions')
       .insert({
         org_id: orgId,
@@ -214,6 +216,10 @@ export async function PUT(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'Failed to update vendor', detail: upErr.message }, { status: 500 });
   }
 
+  // vendor_compliance_docs / ai_decisions are SELECT-only for members (migration 172):
+  // service-role writes after the vendors:edit check, org pinned (vendor + existing doc were
+  // read via the member client in this org).
+  const writer = createAdminSupabase();
   // Reflect the document on the compliance surface: upsert a VALID W-9 doc row.
   let complianceDocRecorded = false;
   if (b.mark_w9_on_file) {
@@ -225,13 +231,14 @@ export async function PUT(request: Request): Promise<NextResponse> {
       .limit(1)
       .maybeSingle();
     if (existingDoc?.id) {
-      const { error } = await supabase
+      const { error } = await writer
         .from('vendor_compliance_docs')
         .update({ status: 'VALID', issued_date: today, verified_by: null, verified_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-        .eq('id', existingDoc.id);
+        .eq('id', existingDoc.id)
+        .eq('org_id', orgId);
       complianceDocRecorded = !error;
     } else {
-      const { error } = await supabase
+      const { error } = await writer
         .from('vendor_compliance_docs')
         .insert({ org_id: orgId, vendor_id: b.vendor_id, doc_type: 'W9', status: 'VALID', issued_date: today });
       complianceDocRecorded = !error;
@@ -242,7 +249,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
   // REJECTED|EXPIRED — APPROVED is the confirm state). tin_last4 only in the note.
   if (b.decision_id) {
     try {
-      await supabase
+      await writer
         .from('ai_decisions')
         .update({
           status: 'APPROVED',

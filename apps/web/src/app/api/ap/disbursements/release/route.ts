@@ -134,10 +134,14 @@ export async function POST(request: Request) {
     cashAccountId = (ba as { account_id: string } | null)?.account_id ?? undefined;
   }
 
-  // Release SoD settings (05 §4.1 H6 / Q1 sole-approver mode) — loaded once per batch.
+  // Release SoD settings (05 §4.1 H6 / Q1 sole-approver mode + the optional mig-174
+  // limit) — loaded once per batch.
   let soleApproverMode = false;
+  let soleApproverMaxCents: number | null = null;
   try {
-    soleApproverMode = (await loadTenantSodSettings(createAdminSupabase(), orgId)).soleApproverMode;
+    const sod = await loadTenantSodSettings(createAdminSupabase(), orgId);
+    soleApproverMode = sod.soleApproverMode;
+    soleApproverMaxCents = sod.soleApproverMaxCents;
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not load the release rules' }, { status: 500 });
   }
@@ -152,14 +156,17 @@ export async function POST(request: Request) {
   for (const group of batch.groups) {
     for (const item of group.items) {
       // Separation of duties (05 §4.1 H6), BEFORE claiming: the preparer never
-      // releases; the approver releases only in sole-approver mode. A violation is a
-      // clean per-line "blocked" result, never a generic failure.
+      // releases; the approver releases only when the tenant allows it (any amount, or
+      // up to its limit). A violation is a clean per-line "blocked" result, never a
+      // generic failure. The claim below re-checks against the approval's own amount.
       const sodCode = checkActionSod({
         actor: userId,
         action: 'release',
         preparedBy: item.preparedBy,
         approvedBy: item.approvedBy ?? null,
         soleApproverMode,
+        soleApproverMaxCents,
+        amountCents: item.amountCents,
       });
       if (sodCode) {
         blocked.push({ approvalId: item.approvalId, billId: item.billId, reason: ACTION_SOD_MESSAGE[sodCode] });

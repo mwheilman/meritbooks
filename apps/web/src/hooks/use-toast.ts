@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { toast as meritToast } from '@meritbooks/merit-ui';
 
 export interface Toast {
   id: string;
@@ -20,6 +21,13 @@ function emit() {
 }
 
 export function addToast(type: Toast['type'], message: string, duration?: number) {
+  // Rendered by merit-ui's <ToastRegion> (Midnight toast, bottom-centre; mounted by
+  // <ToastContainer/> in the shell). The local list below is kept for API
+  // compatibility (useToast().toasts) but is no longer what paints the screen.
+  const ms0 = duration ?? (type === 'error' ? 8000 : 4000);
+  if (type === 'error') meritToast.error(message, { duration: ms0 });
+  else meritToast(message, { duration: ms0 });
+
   const id = String(++nextId);
   toasts = [...toasts, { id, type, message }];
   emit();
