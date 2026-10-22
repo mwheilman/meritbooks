@@ -165,6 +165,7 @@ export function StockView(p: StockViewProps) {
               getRowId={(u) => u.unit_id}
               cursorId={cursor}
               onCursorChange={(id) => { setCursor(id); setReceiving(false); }}
+              openOnClick
               onOpen={(u) => { setCursor(u.unit_id); setReceiving(false); }}
               rowState={(u) => ({ attn: floorMark(u, p.today).attention || (u.days_in_stock ?? 0) > 180 })}
             />

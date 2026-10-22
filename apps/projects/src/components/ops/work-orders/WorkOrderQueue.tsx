@@ -166,6 +166,7 @@ export function WorkOrderQueue(p: WorkOrderQueueProps) {
                   getRowId={(o) => o.id}
                   cursorId={cursor}
                   onCursorChange={(id) => { setCursor(id); setCreating(false); }}
+                  openOnClick
                   onOpen={(o) => { setCursor(o.id); setCreating(false); }}
                   rowState={(o) => ({ done: o.status === 'CLOSED' || o.status === 'CANCELLED', attn: o.priority <= 1 && o.status === 'NEW' })}
                   actions={readOnly ? [] : [{ key: 'd', label: 'dispatch', run: (rs) => { const o = rs[0]; if (o && (o.status === 'NEW' || o.status === 'ON_HOLD' || o.status === 'SCHEDULED')) router.push(`/dispatch?wo=${o.id}`); } }]}

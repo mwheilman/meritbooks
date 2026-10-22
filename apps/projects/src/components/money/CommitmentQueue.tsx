@@ -120,6 +120,7 @@ export function CommitmentQueue({ rows, currentUserId, showCompany, mode = 'all'
               getRowId={(r) => r.id}
               cursorId={cursorId}
               onCursorChange={(id) => setCursorId(id)}
+              openOnClick
               onOpen={(r) => setCursorId(r.id)}
               rowState={(r) => ({ done: r.status === 'VOID' || r.status === 'CLOSED', attn: (isOpen(r) && r.t.holdEffective) || r.t.overBilled > 0 })}
               actions={readOnly ? [] : [{ key: 'a', label: 'approve', run: (rs) => rs.forEach((r) => void approve(r)) }]}

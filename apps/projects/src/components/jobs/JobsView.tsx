@@ -156,6 +156,7 @@ export function JobsView(p: JobsViewProps) {
               columns={columns}
               rows={p.rows}
               getRowId={(r) => r.job_id}
+              openOnClick
               onOpen={(r) => router.push(`/jobs/${r.job_id}`)}
             />
           ) : (

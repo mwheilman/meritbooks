@@ -69,6 +69,8 @@ export interface QueueTableProps<T> {
 
   /** Enter / double-click. */
   onOpen?: (row: T) => void;
+  /** Open the row on a single click (default: click moves the cursor, double-click/Enter opens). */
+  openOnClick?: boolean;
   /** Single-key verbs (A approve, E edit, F flag …). */
   actions?: ReadonlyArray<QueueAction<T>>;
 
@@ -107,6 +109,7 @@ export function QueueTable<T>({
   cursorId,
   onCursorChange,
   onOpen,
+  openOnClick = false,
   actions = [],
   bulkSummary,
   bulkActions,
@@ -291,8 +294,17 @@ export function QueueTable<T>({
                     }}
                     className={cx('q-row', isSel && 'is-selected', cursor === id && 'is-cursor', st.done && 'is-done', st.attn && 'is-attn')}
                     aria-selected={selectable ? isSel : undefined}
-                    onClick={() => setCursor(id)}
-                    onDoubleClick={() => onOpen?.(r)}
+                    onClick={(e) => {
+                      setCursor(id);
+                      // One click opens the row (users expect it); modifier-clicks and clicks on
+                      // links, buttons or inputs inside the row keep their own behavior.
+                      if (!onOpen || !openOnClick || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                      const t = e.target as HTMLElement;
+                      if (t.closest('a,button,input,select,textarea,label,[role="checkbox"]')) return;
+                      onOpen(r);
+                    }}
+                    onDoubleClick={() => { if (!openOnClick) onOpen?.(r); }}
+                    style={onOpen && openOnClick ? { cursor: 'pointer' } : undefined}
                   >
                     {selectable && (
                       <td onClick={(e) => e.stopPropagation()}>

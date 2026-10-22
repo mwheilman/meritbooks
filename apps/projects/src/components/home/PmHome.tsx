@@ -119,6 +119,7 @@ export function PmHome({ data, readOnly, modules = [] }: { data: HomeData; readO
           groups={groups}
           getRowId={(n) => n.id}
           rowState={(n) => ({ attn: n.group === 'blocked' || n.group === 'overdue' })}
+          openOnClick
           onOpen={(n) => router.push(n.href)}
           flush
           compact

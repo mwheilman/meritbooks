@@ -95,6 +95,7 @@ export function DealsPipeline(p: DealsPipelineProps) {
               getRowId={(d) => d.deal_id}
               cursorId={cursor}
               onCursorChange={(id) => setCursor(id)}
+              openOnClick
               onOpen={(d) => router.push(`/deals/${d.deal_id}`)}
               rowState={(d) => ({ attn: d.sold_out_of_trust || (d.front_gross_cents ?? 0) < 0, done: d.stage === 'DELIVERED' || d.stage === 'LOST' })}
             />

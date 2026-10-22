@@ -160,6 +160,7 @@ export function ChangeOrderQueue(p: ChangeOrderQueueProps) {
               cursorId={cursorId}
               onCursorChange={(id) => { setCursorId(id); setCreating(false); }}
               rowState={(c) => ({ done: c.stage === 'VOID' || c.stage === 'REJECTED', attn: c.stage === 'COR' })}
+              openOnClick
               onOpen={(c) => { setCursorId(c.id); setCreating(false); }}
               actions={canAct ? [{ key: 'a', label: 'approve', run: (rs) => rs.forEach((c) => void approve(c)) }] : []}
             />

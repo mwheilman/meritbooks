@@ -176,6 +176,7 @@ export function BillingQueue({ rows, currentUserId, booksPresent, showCompany, o
               onSelectedChange={setSelected}
               cursorId={cursorId}
               onCursorChange={(id) => setCursorId(id)}
+              openOnClick
               onOpen={(r) => router.push(`/jobs/${r.jobId}?tab=billing&request=${r.id}`)}
               rowState={(r) => ({ done: results[r.id]?.ok === true, attn: r.band === 'rejected' || (results[r.id] != null && !results[r.id]!.ok) })}
               actions={readOnly ? [] : [{ key: 'a', label: 'approve and send', run: (rs) => void approve(rs) }]}

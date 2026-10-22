@@ -126,6 +126,7 @@ export function CommitmentsTab(p: CommitmentsTabProps) {
               getRowId={(c) => c.id}
               cursorId={cursorId}
               onCursorChange={(id) => setCursorId(id)}
+              openOnClick
               onOpen={(c) => { setCursorId(c.id); setCreating(false); }}
               rowState={(c) => ({ done: c.status === 'VOID' || c.status === 'CLOSED', attn: c.t.holdEffective || c.t.overBilled > 0 })}
             />

@@ -189,6 +189,7 @@ export function BillingTab(p0: BillingTabProps) {
                 getRowId={(r) => r.id}
                 cursorId={cursorId}
                 onCursorChange={(id) => setCursorId(id)}
+                openOnClick
                 onOpen={(r) => setCursorId(r.id)}
                 rowState={(r) => ({ done: r.status === 'VOID' || r.status === 'ISSUED' || r.status === 'UNISSUED', attn: r.status === 'REJECTED' || (r.status === 'DRAFT' && r.failing.length > 0) })}
                 actions={readOnly ? [] : [{ key: 'a', label: 'approve and send', run: (rs) => rs.forEach((r) => void approve(r)) }]}
