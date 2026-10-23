@@ -24,6 +24,7 @@ import { postJournalEntry } from '../services/gl-posting';
 import { PostingError } from './account-roles';
 import { buildDepreciationSchedule, mapBookMethod, isUnitsMethod, unitsProductionTarget } from './depreciation-methods';
 import { scopedWriter } from '@/lib/db/scoped-writer';
+import { isNonAmortizing } from '@/lib/intangibles/categories';
 
 type DB = SupabaseClient;
 
@@ -31,6 +32,7 @@ interface AssetRow {
   id: string;
   location_id: string;
   name: string;
+  category: string | null;
   acquisition_date: string;
   acquisition_cost_cents: number;
   salvage_value_cents: number;
@@ -73,7 +75,7 @@ export interface DepreciationRunResult {
 export async function runDepreciation(db: DB, orgId: string, asOf: string): Promise<DepreciationRunResult> {
   const { data, error } = await db
     .from('fixed_assets')
-    .select('id, location_id, name, acquisition_date, acquisition_cost_cents, salvage_value_cents, useful_life_months, depreciation_method, depreciation_expense_account_id, accumulated_depreciation_account_id, accumulated_depreciation_cents, last_depreciation_date, status, total_expected_units, units_used')
+    .select('id, location_id, name, category, acquisition_date, acquisition_cost_cents, salvage_value_cents, useful_life_months, depreciation_method, depreciation_expense_account_id, accumulated_depreciation_account_id, accumulated_depreciation_cents, last_depreciation_date, status, total_expected_units, units_used')
     .eq('org_id', orgId)
     .eq('status', 'ACTIVE');
   if (error) throw new PostingError(error.message);
@@ -83,6 +85,13 @@ export async function runDepreciation(db: DB, orgId: string, asOf: string): Prom
 
   for (const a of assets) {
     result.assets_processed++;
+
+    // Goodwill / indefinite-lived intangibles are impairment-only — never depreciated
+    // (lib/intangibles/amortization.ts owns the amortizing intangibles).
+    if (isNonAmortizing(a.category)) {
+      result.skipped.push({ asset_id: a.id, reason: 'goodwill / indefinite-lived intangible is not depreciated (impairment-only)' });
+      continue;
+    }
 
     // fixed_assets / depreciation_runs are SELECT-only for members (migration 172): the
     // asset was read above in this org; writes go through the service role, org pinned,

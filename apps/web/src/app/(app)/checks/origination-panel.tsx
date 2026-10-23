@@ -100,12 +100,16 @@ export function OriginationPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rail: 'ACH' }),
       });
-      const result = (await res.json()) as { batch?: OrigBatch; error?: string; code?: string };
+      const result = (await res.json()) as { batch?: OrigBatch; held?: Array<{ reason: string }>; error?: string; code?: string };
       if (!res.ok) {
         addToast(result.code === 'NOTHING_TO_ORIGINATE' ? 'info' : 'error', result.error ?? 'Failed to create batch');
         return;
       }
       addToast('success', `Created origination batch: ${result.batch?.itemCount ?? 0} payment(s)`);
+      const heldCount = result.held?.length ?? 0;
+      if (heldCount > 0) {
+        addToast('error', `${heldCount} released payment(s) kept off the rail — vendor on hold: ${result.held?.[0]?.reason ?? ''}`.slice(0, 220));
+      }
       await refetch();
     } catch {
       addToast('error', 'Network error');

@@ -6,7 +6,7 @@ import { requireAuth, requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { fetchCoreMap } from '@/lib/stitch-core';
-import { type TemplateData } from '@/lib/invoices/recurring-invoices';
+import { templateMode, type TemplateData } from '@/lib/invoices/recurring-invoices';
 
 /**
  * A single recurring invoice template: read (RLS-scoped), edit / pause / resume
@@ -23,7 +23,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   const { data: t, error } = await supabase
     .from('recurring_invoice_templates')
-    .select('id, name, frequency, interval_count, start_date, next_run_date, end_date, occurrences_remaining, is_active, auto_send, template_data, last_generated_at, last_invoice_id, customer_id, location_id, created_at')
+    .select('id, name, frequency, interval_count, start_date, next_run_date, end_date, occurrences_remaining, is_active, auto_send, generate_mode, template_data, last_generated_at, last_invoice_id, customer_id, location_id, created_at')
     .eq('id', params.id)
     .eq('org_id', orgId)
     .maybeSingle();
@@ -50,6 +50,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     occurrencesRemaining: t.occurrences_remaining,
     isActive: t.is_active,
     autoSend: t.auto_send,
+    generateMode: templateMode({ generate_mode: t.generate_mode as string | null, auto_send: !!t.auto_send }),
     memo: td.memo ?? null,
     taxCents: td.tax_cents ?? 0,
     terms: td.terms ?? 30,
@@ -82,6 +83,7 @@ const patchSchema = z.object({
   occurrences_remaining: z.number().int().min(0).nullable().optional(),
   is_active: z.boolean().optional(),
   auto_send: z.boolean().optional(),
+  generate_mode: z.enum(['DRAFT', 'POST', 'POST_AND_SEND']).optional(),
   memo: z.string().max(1000).nullable().optional(),
   tax_cents: z.number().int().min(0).optional(),
   terms: z.number().int().min(0).max(365).optional(),
@@ -131,6 +133,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (b.occurrences_remaining !== undefined) update.occurrences_remaining = b.occurrences_remaining;
   if (b.is_active !== undefined) update.is_active = b.is_active;
   if (b.auto_send !== undefined) update.auto_send = b.auto_send;
+  if (b.generate_mode !== undefined) {
+    update.generate_mode = b.generate_mode;
+    update.auto_send = b.generate_mode === 'POST_AND_SEND';
+  }
 
   const { error } = await supabase
     .from('recurring_invoice_templates')

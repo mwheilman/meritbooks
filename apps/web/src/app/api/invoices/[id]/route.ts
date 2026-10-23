@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { displayInvoiceStatus, summarizeDelivery, type DeliveryEvent } from '@/lib/invoices/delivery-state';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { serviceWriter, assertOrgRefs, isWriteScopeError } from '@/lib/db/scoped-writer';
@@ -24,7 +25,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       id, invoice_number, invoice_date, due_date, status, memo,
       subtotal_cents, tax_cents, total_cents, amount_paid_cents, balance_cents,
       currency, fx_rate,
-      is_progress_bill, customer_id, location_id, job_id, gl_entry_id, created_at, public_token
+      is_progress_bill, customer_id, location_id, job_id, gl_entry_id, created_at, public_token, sent_at
     `)
     .eq('org_id', orgId)
     .eq('id', params.id)
@@ -85,24 +86,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .eq('invoice_id', params.id)
     .order('created_at', { ascending: true });
 
-  const events = (eventRows ?? []) as Array<{
-    event_type: string; actor: string | null; meta: Record<string, any> | null; created_at: string;
-  }>;
-  const lastAt = (type: string) =>
-    events.filter((e) => e.event_type === type).map((e) => e.created_at).sort().at(-1) ?? null;
-  const sentEvents = events.filter((e) => e.event_type === 'SENT');
-  const viewEvents = events.filter((e) => e.event_type === 'VIEWED');
-  const lastSent = sentEvents.at(-1) ?? null;
-
-  const delivery = {
-    sentAt: lastAt('SENT'),
-    sentTo: (lastSent?.meta?.to as string | undefined) ?? null,
-    sentCount: sentEvents.length,
-    deliveredAt: lastAt('DELIVERED'),
-    viewCount: viewEvents.length,
-    lastViewedAt: viewEvents.map((e) => e.created_at).sort().at(-1) ?? null,
-    lastReminderAt: lastAt('REMINDER_SENT'),
-  };
+  const events = (eventRows ?? []) as DeliveryEvent[];
+  // Header status and Delivery come from the same facts (lib/invoices/delivery-state.ts).
+  const delivery = summarizeDelivery(events, (inv as { sent_at?: string | null }).sent_at ?? null);
+  const display = displayInvoiceStatus(String(inv.status), delivery);
 
   // Customer payments applied to this invoice (the "cash-application detail" the
   // drawer surfaces, each with its own ledger-grounded Explain). payment_applications
@@ -180,6 +167,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     jobLabel: job ? `${job.job_number} · ${job.name}` : null,
     lines,
     delivery,
+    displayStatus: display.status,
+    displayStatusHint: display.hint,
     payments,
   });
 }

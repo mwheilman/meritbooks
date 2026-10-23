@@ -28,7 +28,8 @@ interface CCRow {
   ai_vendor: { id: string; name: string; display_name: string | null } | null;
   final_account: { id: string; account_number: string; name: string } | null;
   bank_account: { id: string; account_name: string; account_mask: string } | null;
-  receiptStatus: 'MATCHED' | 'MISSING' | 'PENDING';
+  /** From the receipt chase (migration 181): MISSING = no receipt yet, PENDING = the cardholder has been asked. */
+  receiptStatus: 'MATCHED' | 'MISSING' | 'PENDING' | 'NOT_REQUIRED';
   chaseCount: number;
   /** Saved / posted split (FPB-bank-feed-splits). */
   split?: SplitSummary | null;
@@ -62,21 +63,29 @@ function ReceiptBadge({ status, chaseCount }: { status: string; chaseCount: numb
       </span>
     );
   }
-  if (status === 'MISSING') {
+  if (status === 'NOT_REQUIRED') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium bg-slate-500/10 text-slate-400">
+        <Receipt size={10} />
+        Not needed
+      </span>
+    );
+  }
+  if (status === 'PENDING') {
     return (
       <span className={clsx(
         'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium',
-        chaseCount >= 5 ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400',
+        chaseCount >= 4 ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400',
       )}>
         <Bell size={10} />
-        Chase ({chaseCount})
+        Asked {chaseCount}×
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium bg-blue-500/10 text-blue-400">
       <Clock size={10} />
-      Pending
+      No receipt
     </span>
   );
 }

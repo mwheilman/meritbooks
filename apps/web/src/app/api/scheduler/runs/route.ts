@@ -11,13 +11,24 @@ import {
   type ScheduledJobStateView,
 } from '@/lib/scheduler/health';
 
+interface LastRunView {
+  job_key: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  items_processed: number;
+  summary: string | null;
+  error: string | null;
+  trigger: string;
+}
+
 /**
  * GET /api/scheduler/runs — the tenant's scheduler run log + per-job health, for
  * the "Automation health" widget (IA M-12).
  *
  *   ?job_key=controls.nightly  &status=failed  &limit=50 (≤100)  &before=<ISO started_at cursor>
  *
- * Returns { jobs: JobHealthView[], runs: JobRunView[], nextCursor }.
+ * Returns { jobs: (JobHealthView & { lastRun })[], runs: JobRunView[], nextCursor }.
  *
  * AUTHZ: signed-in + settings_system:view, for the caller's VERIFIED org (no
  * first-org fallback). Runs are read through the caller's RLS-scoped client
@@ -61,7 +72,16 @@ export async function GET(request: Request): Promise<NextResponse> {
       .is('location_id', null)
       .or(`org_id.eq.${orgId},org_id.is.null`);
 
-    const [runsRes, statesRes] = await Promise.all([runsQuery, statesQuery]);
+    // The newest run per job (for the Automation screen's "last run" column), RLS-scoped.
+    const latestQuery = ctx.supabase
+      .schema('core')
+      .from('job_runs')
+      .select('job_key, status, started_at, finished_at, items_processed, summary, error, trigger')
+      .eq('org_id', orgId)
+      .order('started_at', { ascending: false })
+      .limit(400);
+
+    const [runsRes, statesRes, latestRes] = await Promise.all([runsQuery, statesQuery, latestQuery]);
     if (runsRes.error) {
       return NextResponse.json({ error: runsRes.error.message, code: 'DB_ERROR' }, { status: 500 });
     }
@@ -72,7 +92,12 @@ export async function GET(request: Request): Promise<NextResponse> {
     const rows = (runsRes.data ?? []) as JobRunView[];
     const hasMore = rows.length > q.limit;
     const runs = hasMore ? rows.slice(0, q.limit) : rows;
-    const jobs = buildJobHealth(orgId, (statesRes.data ?? []) as ScheduledJobStateView[]);
+    const lastByJob = new Map<string, LastRunView>();
+    for (const r of (latestRes.data ?? []) as LastRunView[]) if (!lastByJob.has(r.job_key)) lastByJob.set(r.job_key, r);
+    const jobs = buildJobHealth(orgId, (statesRes.data ?? []) as ScheduledJobStateView[]).map((j) => ({
+      ...j,
+      lastRun: lastByJob.get(j.key) ?? null,
+    }));
     return NextResponse.json({
       jobs,
       runs,

@@ -124,6 +124,8 @@ export interface StartRunInput {
   attempt: number;
   idempotencyKey: string;
   trigger: 'cron' | 'manual';
+  /** Who started it (job_runs.actor). Default 'system:scheduler'; "Run now" records the person. */
+  actor?: string;
 }
 
 export interface FinishRunInput {

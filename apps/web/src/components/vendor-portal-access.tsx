@@ -11,8 +11,12 @@ import { useQuery, addToast } from '@/hooks';
  * vendor's self-service upload link, shows the shareable /portal/vendor/<token>
  * URL, and lists what the vendor has submitted (each PENDING human review — a
  * portal upload never changes compliance state). Gated server-side on the
- * `compliance` permission (POST/PATCH 403 without it); this UI is a thin client
+ * `compliance` permission (GET view, POST/PATCH manage); this UI is a thin client
  * over that route and never trusts itself for authorization.
+ *
+ * The link is a bearer credential: the list shows only its last four characters. The
+ * full link is shown ONCE, right after it is created (copy it then). A W-9 image shows
+ * the vendor's full TIN, so it opens only through a logged reveal with a reason.
  */
 
 type DocKind = 'W9' | 'COI' | 'BANKING';
@@ -24,7 +28,7 @@ const DOC_KINDS: { key: DocKind; label: string }[] = [
 
 interface TokenView {
   id: string;
-  token: string;
+  tokenLast4: string;
   label: string | null;
   status: 'active' | 'revoked' | 'expired';
   requestedDocs: string[];
@@ -37,8 +41,9 @@ interface Submission {
   fileName: string;
   docType: string;
   createdAt: string;
-  reviewStatus: 'PENDING';
+  reviewStatus: 'PENDING' | 'ACCEPTED' | 'REJECTED';
   viewUrl: string | null;
+  requiresReveal: boolean;
 }
 interface PortalResponse {
   tokens: TokenView[];
@@ -57,6 +62,10 @@ export function VendorPortalAccess({ vendorId }: { vendorId: string }) {
 
   const [busy, setBusy] = useState<null | 'mint' | string>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // The full token exists in this browser only between create and leaving the drawer.
+  const [fresh, setFresh] = useState<{ id: string; token: string } | null>(null);
+  const [revealFor, setRevealFor] = useState<string | null>(null);
+  const [revealReason, setRevealReason] = useState('');
   const [expiry, setExpiry] = useState('');
   const [kinds, setKinds] = useState<Record<DocKind, boolean>>({ W9: true, COI: true, BANKING: false });
   const today = new Date().toISOString().slice(0, 10);
@@ -88,7 +97,8 @@ export function VendorPortalAccess({ vendorId }: { vendorId: string }) {
       });
       const body = await res.json().catch(() => ({}));
       if (res.ok && body.token) {
-        addToast('success', 'Upload link created. Share it directly with the vendor.');
+        setFresh({ id: String(body.id), token: String(body.token) });
+        addToast('success', 'Upload link created. Copy it now — for security it is shown only once.');
         refetch();
       } else if (res.status === 403) {
         addToast('error', 'You do not have permission to manage portal access.');
@@ -136,6 +146,33 @@ export function VendorPortalAccess({ vendorId }: { vendorId: string }) {
     }
   };
 
+  const openW9 = async (docId: string) => {
+    if (revealReason.trim().length < 3) {
+      addToast('error', 'Say why you are opening this W-9 (it is logged).');
+      return;
+    }
+    setBusy(docId);
+    try {
+      const res = await fetch('/api/vendor-portal/tokens/document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document_id: docId, reason: revealReason.trim() }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && typeof body.url === 'string') {
+        window.open(body.url, '_blank', 'noopener,noreferrer');
+        setRevealFor(null);
+        setRevealReason('');
+      } else {
+        addToast('error', body.error ?? 'Could not open the W-9.');
+      }
+    } catch {
+      addToast('error', 'Could not reach the server. Try again.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -170,32 +207,41 @@ export function VendorPortalAccess({ vendorId }: { vendorId: string }) {
                   ))}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <input
-                  readOnly
-                  value={urlFor(t.token)}
-                  onFocus={(e) => e.currentTarget.select()}
-                  aria-label="Portal link URL"
-                  className="flex-1 min-w-0 px-2 py-1.5 rounded-md bg-slate-950 border border-slate-700 text-2xs font-mono text-slate-300 focus:outline-none focus:border-emerald-500/50"
-                />
-                <button
-                  onClick={() => copy(t.token)}
-                  title="Copy link"
-                  className="shrink-0 inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-2xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700"
-                >
-                  {copiedId === t.token ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                  {copiedId === t.token ? 'Copied' : 'Copy'}
-                </button>
-                <a
-                  href={urlFor(t.token)}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="Open the portal as the vendor sees it"
-                  className="shrink-0 inline-flex items-center px-2 py-1.5 rounded-md text-2xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700"
-                >
-                  <ExternalLink size={12} />
-                </a>
-              </div>
+              {fresh && fresh.id === t.id ? (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      readOnly
+                      value={urlFor(fresh.token)}
+                      onFocus={(e) => e.currentTarget.select()}
+                      aria-label="Portal link URL"
+                      className="flex-1 min-w-0 px-2 py-1.5 rounded-md bg-slate-950 border border-slate-700 text-2xs font-mono text-slate-300 focus:outline-none focus:border-emerald-500/50"
+                    />
+                    <button
+                      onClick={() => copy(fresh.token)}
+                      title="Copy link"
+                      className="shrink-0 inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-2xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700"
+                    >
+                      {copiedId === fresh.token ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                      {copiedId === fresh.token ? 'Copied' : 'Copy'}
+                    </button>
+                    <a
+                      href={urlFor(fresh.token)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Open the portal as the vendor sees it"
+                      className="shrink-0 inline-flex items-center px-2 py-1.5 rounded-md text-2xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700"
+                    >
+                      <ExternalLink size={12} />
+                    </a>
+                  </div>
+                  <p className="text-2xs text-amber-300">Copy this link now. For security it won’t be shown again — create a new link if you lose it.</p>
+                </div>
+              ) : (
+                <p className="text-2xs text-slate-400">
+                  Link ending <span className="font-mono text-slate-300">…{t.tokenLast4}</span>. The full link was shown once when it was created; create a new one if you need to resend it.
+                </p>
+              )}
               <div className="flex items-center gap-3 text-2xs text-slate-500">
                 {t.expiresAt ? <span className="inline-flex items-center gap-1"><Clock size={10} /> Expires {fmt(t.expiresAt)}</span> : <span>No expiry</span>}
                 <span>·</span>
@@ -239,7 +285,7 @@ export function VendorPortalAccess({ vendorId }: { vendorId: string }) {
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-2xs text-slate-500 uppercase tracking-wider">Expires (optional)</span>
+          <span className="text-2xs text-slate-500 uppercase tracking-wider">Expires (default 45 days)</span>
           <input
             type="date"
             min={today}
@@ -268,7 +314,8 @@ export function VendorPortalAccess({ vendorId }: { vendorId: string }) {
         ) : (
           <div className="rounded-lg bg-slate-800/30 divide-y divide-slate-800/50">
             {submissions.map((sub) => (
-              <div key={sub.id} className="flex items-center justify-between gap-3 px-3 py-2">
+              <div key={sub.id}>
+              <div className="flex items-center justify-between gap-3 px-3 py-2">
                 <span className="inline-flex items-center gap-2 min-w-0 text-sm text-slate-200">
                   <FileText size={13} className="shrink-0 text-slate-500" />
                   <span className="truncate">{sub.fileName}</span>
@@ -281,15 +328,47 @@ export function VendorPortalAccess({ vendorId }: { vendorId: string }) {
                   {sub.viewUrl && (
                     <a
                       href={sub.viewUrl}
-                      target="_blank"
                       rel="noreferrer"
-                      title="View submitted file"
+                      title="Download submitted file"
                       className="inline-flex items-center rounded-md bg-slate-800 px-1.5 py-1 text-slate-300 hover:bg-slate-700"
                     >
                       <ExternalLink size={12} />
                     </a>
                   )}
+                  {sub.requiresReveal && revealFor !== sub.id && (
+                    <button
+                      type="button"
+                      onClick={() => { setRevealFor(sub.id); setRevealReason(''); }}
+                      title="This W-9 shows the full taxpayer ID — opening it is logged"
+                      className="inline-flex items-center rounded-md bg-slate-800 px-1.5 py-1 text-2xs text-slate-300 hover:bg-slate-700"
+                    >
+                      Open W-9
+                    </button>
+                  )}
                 </span>
+              </div>
+              {revealFor === sub.id && (
+                <div className="flex items-center gap-1.5 px-3 pb-2">
+                  <input
+                    value={revealReason}
+                    onChange={(e) => setRevealReason(e.target.value)}
+                    placeholder="Why are you opening it? (logged)"
+                    aria-label="Reason for opening the W-9"
+                    className="flex-1 min-w-0 px-2 py-1 rounded-md bg-slate-950 border border-slate-700 text-2xs text-slate-200 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void openW9(sub.id)}
+                    disabled={busy !== null || revealReason.trim().length < 3}
+                    className="shrink-0 px-2 py-1 rounded-md text-2xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+                  >
+                    {busy === sub.id ? 'Opening…' : 'Open'}
+                  </button>
+                  <button type="button" onClick={() => setRevealFor(null)} className="shrink-0 px-2 py-1 text-2xs text-slate-400 hover:text-slate-200">
+                    Cancel
+                  </button>
+                </div>
+              )}
               </div>
             ))}
           </div>

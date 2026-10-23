@@ -381,9 +381,9 @@ export const HELP_CONTENT: Record<string, HelpContent> = {
   },
 
   '/checks': {
-    title: 'Check Run',
+    title: 'Checks & payments',
     whatItDoes:
-      'Tee up payments from due bills, approve them under separation of duties, then export the bank file and release. Release posts to the GL — it never moves money itself.',
+      'Tee up payments from due bills, have a second person approve them, then export the bank file and release. Releasing posts the payments to the general ledger but never moves money itself.',
     keyFeatures: [
       'Select due bills into a payment batch',
       'Approve then release as separate SoD steps',

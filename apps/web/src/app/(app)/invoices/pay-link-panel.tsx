@@ -11,6 +11,8 @@ interface PayLinkResp {
   methods: string[];
   code: string;
   reason: string | null;
+  cardPassThrough: boolean;
+  cardFeePct: number;
   qr: { viewBox: number; d: string };
   activity: OnlineActivity;
   timeline: Array<{ type: string; at: string; method: string | null; amountCents: number | null }>;
@@ -74,6 +76,11 @@ export function PayLinkPanel({ invoiceId }: { invoiceId: string }) {
             <a className="btn" href={data.url} target="_blank" rel="noreferrer">Open</a>
           </div>
           {!data.payable && data.reason && <p className="t-cap" style={{ marginTop: 8 }}>{data.reason}</p>}
+          {data.payable && data.methods.includes('CARD') && (
+            <p className="t-cap" style={{ marginTop: 8 }}>
+              Card fee {data.cardFeePct}% · {data.cardPassThrough ? 'added to what the customer pays' : 'absorbed by the company'}
+            </p>
+          )}
         </div>
         <svg width={96} height={96} viewBox={`0 0 ${data.qr.viewBox} ${data.qr.viewBox}`} role="img" aria-label="QR code for the pay link" style={{ flex: 'none', border: '1px solid var(--line)' }}>
           <rect width={data.qr.viewBox} height={data.qr.viewBox} fill="var(--white)" />

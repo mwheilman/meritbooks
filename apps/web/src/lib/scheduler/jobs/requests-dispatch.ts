@@ -21,7 +21,18 @@ import { defaultChannels, outboundAppUrl } from '@/lib/notify/channels';
 import { dispatchDueRequests, type EngineDeps } from '@/lib/requests/dispatch';
 import { loadPolicyContext } from '@/lib/requests/policy';
 import { syncVendorComplianceRequests } from '@/lib/requests/vendor-compliance';
+import { DEFAULT_RESOLVERS, type ResolverRegistry } from '@/lib/requests/resolvers';
+import { dunningResolver } from '@/lib/collections/dunning-requests';
 import type { JobContext, JobDefinition, JobResult } from '../types';
+
+/**
+ * The scheduled cycle's resolvers: the engine defaults (W-9 / COI, …) plus the dunning
+ * resolver (a reminder for an invoice that got paid closes itself before it is sent).
+ * Built at call time so resolvers other slices add to DEFAULT_RESOLVERS are kept.
+ */
+export function schedulerResolvers(): ResolverRegistry {
+  return { ...DEFAULT_RESOLVERS, dunning: DEFAULT_RESOLVERS.dunning ?? dunningResolver };
+}
 
 export async function runRequestsDispatchJob(ctx: JobContext, overrides: Partial<EngineDeps> = {}): Promise<JobResult> {
   if (!ctx.orgId) return { status: 'skipped', summary: 'This job runs per tenant.' };
@@ -32,6 +43,7 @@ export async function runRequestsDispatchJob(ctx: JobContext, overrides: Partial
     now: () => ctx.now,
     appUrl: outboundAppUrl(),
     signal: ctx.signal,
+    resolvers: schedulerResolvers(),
     ...overrides,
   };
 

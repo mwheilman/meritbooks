@@ -3,7 +3,7 @@ import { resolveTextSlot, type TextOverrideRow } from './resolve-invoice-text';
 import { resolveInvoiceTemplate, type TemplateSource } from './templates/resolve';
 import { BUILT_IN_TEMPLATE, type InvoiceTemplate } from './templates/types';
 import { allocateLineTax, type DocLineInput } from './templates/columns';
-import { resolvePayLink, type PayLinkState } from './pay-link';
+import { resolvePayLink, unresolvedPayLink, type PayLinkState } from './pay-link';
 
 /**
  * Loads everything needed to render an invoice as a CUSTOMER-FACING document (PDF,
@@ -72,7 +72,7 @@ export function termsLabel(terms: string | null): string | null {
 }
 
 const INVOICE_SELECT = `id, org_id, invoice_number, invoice_date, due_date, status, po_number, terms,
-  customer_message, public_token, payment_methods_allowed, card_surcharge_enabled,
+  customer_message, public_token, payment_methods_allowed, card_surcharge_enabled, ach_surcharge_enabled,
   subtotal_cents, discount_cents, tax_cents,
   retainage_cents, total_cents, amount_paid_cents, balance_cents,
   bill_to, ship_to, customer_id, location_id, job_id, invoice_type, template_id, cc_emails`;
@@ -227,13 +227,12 @@ async function hydrate(
     customer_id: customerId,
     job_id: jobId,
     payment_methods_allowed: (inv.payment_methods_allowed as string[] | null) ?? null,
+    card_surcharge_enabled: (inv.card_surcharge_enabled as boolean | null) ?? null,
+    ach_surcharge_enabled: (inv.ach_surcharge_enabled as boolean | null) ?? null,
   }).catch((e: unknown) => {
     console.error('[invoice-doc] pay-link resolution failed', e);
     // Fail closed: no pay link rather than a link we can't vouch for.
-    return {
-      url: '', payable: false, mode: null, methods: [], code: 'NO_CONNECTION' as const,
-      reason: 'Online payment status could not be checked.',
-    };
+    return unresolvedPayLink(String(inv.public_token ?? ''));
   });
 
   return {

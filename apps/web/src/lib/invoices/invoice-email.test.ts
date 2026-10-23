@@ -30,7 +30,7 @@ const doc = (over: Partial<InvoiceDoc> = {}): InvoiceDoc =>
     ],
     customer: { id: null, name: 'Fabrikam Inc.', email: 'ap@fabrikam.test' },
     entity: { id: null, name: 'Northwind Construction', short_code: 'NWC' },
-    pay: { url: PAY_URL, payable: true, mode: 'live', methods: ['ACH', 'CARD'], reason: null, code: 'OK' },
+    pay: { url: PAY_URL, payable: true, mode: 'live', methods: ['ACH', 'CARD'], reason: null, code: 'OK', cardPassThrough: true, cardFeePct: 3 },
     ...over,
   });
 
@@ -148,7 +148,7 @@ describe('invoice email — overdue framing', () => {
 describe('invoice email — Slice 1B (pay button only when payable, brand, no GL, no banned fonts)', () => {
   it('no Pay button when the invoice cannot be paid online — View invoice + payment instructions instead', () => {
     const d = doc({
-      pay: { url: PAY_URL, payable: false, mode: null, methods: [], reason: 'not set up', code: 'NO_CONNECTION' },
+      pay: { url: PAY_URL, payable: false, mode: null, methods: [], reason: 'not set up', code: 'NO_CONNECTION', cardPassThrough: true, cardFeePct: 3 },
     });
     d.template = { ...d.template, payment_instructions: 'Wire to First Bank, ABA 073000228.' };
     const { html, text, hasPayButton } = buildInvoiceEmail(d);

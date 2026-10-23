@@ -1,4 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
+import { reconcileClientScope } from '@/lib/location-filter';
 
 const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
@@ -38,6 +40,12 @@ const isPublicRoute = createRouteMatcher([
   // trailing slash: '/r/(.*)' does not match '/reports' or '/requests' (staff surfaces).
   '/r/(.*)',
   '/api/r/(.*)',
+  // Merit Workforce receipt magic links (migration 181, FPB-workforce-app §15) — the page a
+  // receipt reminder opens (/w/s/[token]) and its two token-validated APIs (view + upload).
+  // The token resolves by sha256 to ONE card assignment; everything is narrowed to it. The
+  // signed-in Workforce app (/w, /api/w/me) stays OUTSIDE this matcher (Clerk-protected).
+  '/w/s/(.*)',
+  '/api/w/s/(.*)',
   // Scheduler dispatcher (Vercel Cron). A cron request has no Clerk session, so
   // auth.protect() would reject it before the route runs. The route itself is the
   // credential check: Bearer CRON_SECRET, constant-time, FAILS CLOSED (401) when the
@@ -49,6 +57,19 @@ const isPublicRoute = createRouteMatcher([
 export default clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) {
     await auth.protect();
+  }
+  // One client at a time (live check Wave 1, fix 1G-2): on a read API, a `location_ids`
+  // filter that conflicts with the active single client (`location_id`, attached by the
+  // shared fetch hook from the header) is replaced by that client — every report and
+  // list route then parses exactly the client the header shows.
+  if (req.method === 'GET' && req.nextUrl.pathname.startsWith('/api/')) {
+    const sp = req.nextUrl.searchParams;
+    const fixed = reconcileClientScope(sp.get('location_id'), sp.get('location_ids'));
+    if (fixed) {
+      const url = req.nextUrl.clone();
+      url.searchParams.set('location_ids', fixed);
+      return NextResponse.rewrite(url);
+    }
   }
 });
 

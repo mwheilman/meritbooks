@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { recordOnce, recordEvent } from './events';
 import { resolveRequestToken } from './tokens';
 import { vendorPortalPathFor } from './vendor-compliance';
+import { workforcePathFor } from '@/lib/receipts/links';
 import { KIND_LABEL, type RequestKind } from './types';
 import { notifyMembers, tenantAdminMemberships } from '@/lib/notify/in-app';
 
@@ -50,6 +51,11 @@ export async function openRequestLink(admin: SupabaseClient, token: string, now:
 
   if (r.kind === 'w9' || r.kind === 'coi') {
     const to = await vendorPortalPathFor(admin, r.org_id, r.meta ?? {});
+    if (to) return { state: 'redirect', to };
+  }
+  // Wave 2B: a receipt request opens the cardholder's receipts in Merit Workforce.
+  if (r.kind === 'receipt') {
+    const to = await workforcePathFor(admin, r, now, { presentedToken: token }).catch(() => null);
     if (to) return { state: 'redirect', to };
   }
   return {

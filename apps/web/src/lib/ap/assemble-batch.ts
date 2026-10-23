@@ -13,12 +13,27 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DisbursementItemInput, DisbursementMethod } from './disbursement-batch';
 import type { RemittanceDetail } from './disbursement-export';
+import { paymentBlockKey, paymentBlockReasons } from '@/lib/services/vendor-compliance';
+
+/** An approved line excluded because the vendor is held (bank change / compliance). */
+export interface HeldDisbursement {
+  approvalId: string;
+  billId: string;
+  vendorId: string;
+  vendorName: string;
+  invoiceRef: string | null;
+  amountCents: number;
+  /** plain-English reason shown to the payer. */
+  reason: string;
+}
 
 export interface AssembledBatchInput {
   items: DisbursementItemInput[];
   remittance: Map<string, RemittanceDetail>;
   /** approvalIds whose bill could not be resolved (skipped from the batch). */
   unresolved: string[];
+  /** lines excluded by the read-only vendor-hold re-check (only when `holdCheck` is set). */
+  held: HeldDisbursement[];
 }
 
 interface ApprovalRow {
@@ -65,7 +80,15 @@ function today(): string {
  */
 export async function assembleApprovedBatch(
   supabase: SupabaseClient,
-  opts: { approvalIds?: string[] } = {},
+  opts: {
+    approvalIds?: string[];
+    /**
+     * Re-check vendor holds (bank-change call-back pending, compliance hold) READ-ONLY and
+     * exclude held lines into `held`. Set for anything that produces a payment
+     * instruction (the export file) so a hold opened after approval stops the money.
+     */
+    holdCheck?: { orgId: string };
+  } = {},
 ): Promise<AssembledBatchInput> {
   let q = supabase
     .from('approvals')
@@ -79,7 +102,7 @@ export async function assembleApprovedBatch(
   const { data: apprData, error: apprErr } = await q;
   if (apprErr) throw new Error(apprErr.message);
   const approvals = (apprData ?? []) as ApprovalRow[];
-  if (approvals.length === 0) return { items: [], remittance: new Map(), unresolved: [] };
+  if (approvals.length === 0) return { items: [], remittance: new Map(), unresolved: [], held: [] };
 
   const billIds = Array.from(new Set(approvals.map((a) => a.subject_id)));
   const { data: billData, error: billErr } = await supabase
@@ -142,5 +165,46 @@ export async function assembleApprovedBatch(
     });
   }
 
-  return { items, remittance, unresolved };
+  if (!opts.holdCheck || items.length === 0) return { items, remittance, unresolved, held: [] };
+
+  const reasons = await paymentBlockReasons(
+    supabase,
+    opts.holdCheck.orgId,
+    items.map((i) => ({ vendorId: i.vendorId, billId: i.billId, locationId: i.locationId })),
+  );
+  const { kept, held } = splitHeld(items, reasons);
+  return { items: kept, remittance, unresolved, held };
+}
+
+/** Pure: split assembled lines into payable and held (exported for tests). */
+export function splitHeld(
+  items: DisbursementItemInput[],
+  reasons: Map<string, string>,
+): { kept: DisbursementItemInput[]; held: HeldDisbursement[] } {
+  const kept: DisbursementItemInput[] = [];
+  const held: HeldDisbursement[] = [];
+  for (const i of items) {
+    const reason = reasons.get(paymentBlockKey(i.vendorId, i.billId));
+    if (!reason) {
+      kept.push(i);
+      continue;
+    }
+    held.push({
+      approvalId: i.approvalId,
+      billId: i.billId,
+      vendorId: i.vendorId,
+      vendorName: i.vendorName,
+      invoiceRef: i.invoiceRef,
+      amountCents: i.amountCents,
+      reason,
+    });
+  }
+  return { kept, held };
+}
+
+/** One-line summary of held lines for a response header / toast. */
+export function heldSummary(held: ReadonlyArray<HeldDisbursement>): string {
+  if (held.length === 0) return '';
+  const names = Array.from(new Set(held.map((h) => h.vendorName))).slice(0, 5).join(', ');
+  return `${held.length} payment(s) left out because the vendor is on hold: ${names}. See Vendor compliance.`;
 }

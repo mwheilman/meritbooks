@@ -4,6 +4,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { wipColumnTotals } from '@/lib/rev-rec/wip-totals';
 import type { JournalEntryLineInput } from '@/lib/services/gl-posting';
 import type { WipSchedule, WipRunRow } from './wip-run-service';
 import type { WipLine, WipTotals, TieOut } from './wip-engine';
@@ -160,10 +161,11 @@ export function scheduleCsv(v: WipScheduleView): string {
     l.excluded ? 'Excluded from WIP' : l.belowMateriality ? 'Below materiality' : '',
   ]);
   const t = v.totals;
+  const ct = wipColumnTotals(v.lines);
   rows.push([
     'TOTAL', `${t.jobs} jobs`, '', dollars(t.contractCents), dollars(t.eacCents), dollars(t.costToDateCents), '',
     dollars(t.earnedCents), dollars(t.billedCents), dollars(t.retainageCents), dollars(t.underCents), dollars(t.overCents),
-    dollars(t.lossProvisionCents), '', dollars(t.fadeGainCents), dollars(t.targetUnderCents), dollars(t.targetOverCents), dollars(t.targetLossCents), '',
+    dollars(t.lossProvisionCents), dollars(ct.estGrossProfitCents), ct.fadeGainCents == null ? '' : dollars(ct.fadeGainCents), dollars(t.targetUnderCents), dollars(t.targetOverCents), dollars(t.targetLossCents), '',
   ]);
   const meta = [
     [`WIP schedule — ${v.company?.name ?? ''} — ${v.periodKey} (as of ${v.asOf})`],

@@ -6,6 +6,8 @@ import {
   isPortalDocKind,
   generatePortalToken,
   PORTAL_MAX_BYTES,
+  sniffPortalMime,
+  assertSafeUploadBytes,
 } from './tokens';
 
 describe('evaluateTokenState — the public-route gate', () => {
@@ -91,5 +93,29 @@ describe('generatePortalToken', () => {
     expect(a).not.toBe(b);
     expect(a.length).toBeGreaterThanOrEqual(40);
     expect(a).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+});
+
+describe('assertSafeUploadBytes — magic bytes (security review LOW)', () => {
+  const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]);
+  const JPG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10]);
+  const HTML = new TextEncoder().encode('<html><script>alert(1)</script></html>');
+
+  it('sniffs the three accepted types', () => {
+    expect(sniffPortalMime(PDF)).toBe('application/pdf');
+    expect(sniffPortalMime(PNG)).toBe('image/png');
+    expect(sniffPortalMime(JPG)).toBe('image/jpeg');
+    expect(sniffPortalMime(HTML)).toBeNull();
+    expect(sniffPortalMime(new Uint8Array())).toBeNull();
+  });
+  it('returns the sniffed type for a genuine file', () => {
+    expect(assertSafeUploadBytes({ fileName: 'w9.pdf', mimeType: 'application/pdf', size: 8 }, PDF)).toEqual({ ok: true, mimeType: 'application/pdf' });
+    expect(assertSafeUploadBytes({ fileName: 'coi.JPEG', mimeType: '', size: 6 }, JPG)).toEqual({ ok: true, mimeType: 'image/jpeg' });
+  });
+  it('refuses HTML disguised as a PDF, a PNG named .pdf, and a mime that disagrees with the bytes', () => {
+    expect(assertSafeUploadBytes({ fileName: 'w9.pdf', mimeType: 'application/pdf', size: 40 }, HTML).ok).toBe(false);
+    expect(assertSafeUploadBytes({ fileName: 'w9.pdf', mimeType: 'application/pdf', size: 9 }, PNG).ok).toBe(false);
+    expect(assertSafeUploadBytes({ fileName: 'scan.png', mimeType: 'image/jpeg', size: 9 }, PNG).ok).toBe(false);
   });
 });

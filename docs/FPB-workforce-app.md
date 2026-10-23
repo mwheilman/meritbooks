@@ -333,3 +333,97 @@ employee read view (own statements and lines only, security_invoker).
 | W7 | Non-job time in Projects (nullable job vs internal jobs) | Projects workstream decides |
 | W8 | Receipt chase default for a NEW client when the tenant switch is on | Follow the tenant (null) |
 | W9 | Show commission $ on the Home card or only inside the Pay tab (shared devices) | Home shows "View statement" only; amounts behind "Show" like pay |
+
+---
+
+## 15. Slice 2B (Wave 2) build spec: receipt capture, matching and chase (amendment, 2026-10-23)
+
+**Scope.** RC-02…RC-08, RC-11 (FEATURE-GAP-AUDIT §2.1, §3, §6.3 Wave 2B). Migration **181**
+(`181_receipt_capture_and_chase.sql`). Rides the Wave 1D request engine (`core.requests` kind `receipt`,
+`lib/requests/**`) and Wave 2D's inbound email route (`lib/email/inbound-types.ts`). The full Workforce shell (Home,
+Pay, Time, passkeys, push) stays Wave 5B; this slice ships the **Receipts** part of Merit Workforce as a phone-first
+route group `/w` that 5B grows into.
+
+### 15.1 Data (migration 181, all writes service role after the route's checks; members SELECT their org)
+
+| Object | Purpose |
+|---|---|
+| `core.organizations.receipt_chase_enabled` (not null, default **on**) + `_changed_at/_by` | Tenant master switch (§4.9) |
+| `public.company_policies.receipt_chase_enabled` (null = follow tenant) + `_changed_at/_by` | Per-client switch (§4.9) |
+| `public.receipt_policies` (tenant row `location_id` null, client rows override; null column = inherit) | Receipt required over $X (default **75.00**, the IRS substantiation line), memo required (over $Y), grace days before the first ask (default 0), chase window (default 60 days, the no-burst window), reminder days (default **0 / 2 / 5 / 10**), escalate to manager or bookkeeper, bookkeeper (digest + escalation fallback), match tolerances (±5.00, tip up to 25 %, ±3 days), auto-match ≥ 0.90, suggest ≥ 0.70, weekly digest on/off |
+| `public.card_assignments` | Card (card-feed account and/or last 4) → cardholder (team member, employee or outside person) with email/phone/time zone, company, manager for escalation, active dates; per-cardholder **opt-out** that needs a second person's approval |
+| `public.receipt_charge_states` | One row per card charge the chase looked at: needed · requested · matched · not_required · below_threshold · chase_off · no_cardholder · opted_out; links the request and the receipt; chase count |
+| `public.receipts` (+ columns) | `submitted_by_user` (Clerk id; the legacy uuid column stays null), `card_assignment_id`, `document_id`, `memo`, `job_id`, `match_status` unmatched · suggested · matched · not_required, `match_score`, `match_candidate_txn_id`, `match_method` auto · confirmed · manual · request, `extraction_status`, `content_sha256` (dedupe), `inbound_message_id`, `flags[]`; one receipt per charge (partial unique) |
+| `public.workforce_links` | Hashed (sha256) magic links that open one cardholder's receipts in Merit Workforce; no member access |
+
+### 15.2 Behaviour
+
+- **Charge → request.** Every 15 minutes (`receipts.chase_sync`) each outflow on a credit-card feed account, and each
+  outflow on another account whose description carries an assigned card's last 4, inside the chase window, is
+  classified: card payments/autopay and refunds are ignored; amount ≤ threshold → `below_threshold`; no assignment →
+  `no_cardholder` (bookkeeper sees it, "Assign a cardholder"); chase off for the client → `chase_off`; cardholder opted
+  out → `opted_out`; already has a receipt → `matched`; otherwise → `needed`, and once the grace days pass, one
+  `receipt` request to the cardholder (dedupe `receipt:<charge>`), email + in-app (members) + the Settings channel
+  (push/SMS are recorded "not configured"), cadence = first reminder minutes (Settings → Receipt chase) then the
+  reminder days, quiet hours from Settings → Receipt chase in the cardholder's time zone, escalation after the last
+  reminder to the cardholder's manager (or the bookkeeper), owner = the bookkeeper.
+- **Auto-fulfil.** Matching a receipt to the charge (any path) marks the state `matched`, fulfils the request
+  (`fulfilled_via app`), copies the chase count to the receipt; the engine's `receipt` resolver closes any request whose
+  charge got a receipt some other way. "Not required" (with a reason) closes it too.
+- **Switch.** Effective = tenant on AND (client null or on). Turning off (tenant or client) cancels live receipt
+  requests in scope (reason "Receipt chase turned off"), marks their charges `chase_off`, keeps everything visible.
+  Turning on stamps `_changed_at`; the next sync re-asks only charges dated after the switch-on time **or** still inside
+  the chase window, on a fresh cadence (no burst: one request per charge, first ask at the first-reminder offset). Every
+  change writes `audit_log` (old → new + typed reason).
+- **Matching.** Score = vendor 40 % + amount 40 % + date 20 % (the bank-feed rule). Amount: within ±tolerance = full;
+  receipt lower than the charge by up to the tip share = 0.75; else no match. Date: 0 d = 1, then −0.1/day inside the
+  window, outside = no match. Merchant: normalized bigram similarity (card prefixes like `SQ *`, `TST*`, store numbers
+  stripped). ≥ auto-match score with a clear winner (runner-up ≥ 0.10 behind) → matched; ≥ suggest → suggested (one
+  click confirms); else unmatched queue. A tip-only amount fit (or an unread amount) never auto-matches — it is
+  suggested. Candidates are the company's open charges; the cardholder's own win ties. Unmatched receipts are
+  re-tried every 15 minutes for 30 days (cards post 1–3 days after the purchase). A forwarded email's merchant is read
+  from its subject ("Fwd: Your Home Depot receipt" → Home Depot) — the From line is the cardholder.
+- **Extraction.** Images/PDFs go through the Core AI gateway (`RECEIPT_EXTRACT`): merchant, date, total, subtotal, tax,
+  tip, last 4. AI off or failed → deterministic read of the email subject/body/filename ("Total $68.42", dates);
+  else the receipt waits for a person. A receipt attached to a chosen charge is matched regardless; if its total is
+  outside tolerance it is flagged `amount_differs` for the bookkeeper.
+- **Capture paths.** (a) Merit Workforce `/w` (signed in) and `/w/s/<link>` (from the reminder: `/r/<token>` forwards
+  there): "Receipts needed" (merchant, date, amount, ask count), camera or file, memo, job, submit; "Upload a receipt"
+  without a charge (auto-matches). (b) Email: `handleInboundReceiptEmail` (lib/receipts/inbound.ts) for the
+  `receipts-<company>@…` alias: sender → cardholder by email within that company; every image/PDF attachment (or the
+  HTML body of an e-receipt) becomes a receipt; duplicate files are ignored. (c) Desk `/receipts`: drag-drop bulk upload,
+  then the existing AI categorize, then review.
+- **Bookkeeper view** (`/receipts` → Needs a receipt): outstanding charges grouped by cardholder with age, amount, asks
+  sent, last opened, escalated; actions **Remind now** (engine send-now, quiet hours honoured), **Not required**
+  (reason), **Reassign** (another cardholder; the request moves), **Assign a cardholder** for `no_cardholder`. Weekly
+  digest (`receipts.weekly_digest`, Monday) to the bookkeeper: outstanding by person, oldest first.
+- **Magic-link scope.** A link resolves to exactly one card assignment; it lists only that assignment's charges and
+  accepts uploads only against them (or unattached, stamped to that cardholder and company). Expires in 14 days;
+  revoked when the assignment ends.
+
+### 15.3 Acceptance criteria (tests in `lib/receipts/*.test.ts`, `*.pg.test.ts`)
+
+1. Policy: a charge at or under the threshold is `below_threshold` and creates no request; over it with an active
+   cardholder creates exactly one `receipt` request (rerun creates none) to the cardholder's email.
+2. Grace days hold the request until `charge_date + grace`; card payments and refunds never create one.
+3. Matching a receipt (Workforce, email or desk) marks the charge `matched`, fulfils the request, and the chase count
+   is copied to the receipt; the engine's resolver fulfils a request whose charge got a receipt elsewhere.
+4. Escalation: after the last scheduled reminder the request escalates to the cardholder's manager (else bookkeeper).
+5. Switch: tenant off → no new requests anywhere and live ones are cancelled; tenant on + client off → only that client
+   stops; client cannot turn on when the tenant is off; switching back on resumes only in-window charges with one
+   request each; each change writes `audit_log`.
+6. Matching tolerance: ±5.00 / ±3 days matches; a 20 % tip under the charge suggests; 30 % does not; a clear winner
+   auto-matches, a tie only suggests.
+7. Magic link: resolves by sha256 only; lists only its cardholder's charges; an upload against another cardholder's
+   charge is refused (404); expired/revoked links refused.
+8. RLS: members read 181 tables for their org only; members/anon cannot write them; nobody but the service role reads
+   `workforce_links`; client-scope RLS covers every 181 table with `location_id`.
+9. Opt-out needs a different person to approve; an approved opt-out cancels the cardholder's live requests.
+10. 390 px: the Workforce receipt screens have ≥ 44 px targets, no horizontal scroll, visible focus.
+
+### 15.4 Named gaps after 2B
+
+Push/SMS delivery (owner decision D2 / RC-06; adapters say "not configured"); the Workforce Home/Pay/Time shell and
+passkeys (5B); connected-inbox receipt pulls (Amazon/Home Depot/Uber); card lock after N days (issuer API); per-client
+quiet hours (tenant quiet hours apply; `company_policies.receipt_quiet_hours_*` stays unread); receipt → expense-report
+line for out-of-pocket spend (the expense report flow owns reimbursement).

@@ -92,6 +92,15 @@ interface BatchResponse {
   profiles: VendorPaymentProfileView[];
   checkNumbers: Record<string, string>;
   unresolved: string[];
+  /** approved lines left out because the vendor is now on hold (read-only re-check). */
+  held?: HeldLine[];
+}
+interface HeldLine {
+  approvalId: string;
+  vendorName: string;
+  invoiceRef: string | null;
+  amountCents: number;
+  reason: string;
 }
 interface ReleaseResponse {
   released: number;
@@ -109,7 +118,7 @@ function formatDate(d: string | null): string {
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
-export function ChecksClient() {
+export function ChecksClient({ embedded = false }: { embedded?: boolean } = {}) {
   const { userId } = useAuth();
   const [running, setRunning] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -172,9 +181,24 @@ export function ChecksClient() {
 
   return (
     <div className="space-y-6">
+      {embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="t-ui" style={{ maxWidth: '80ch', color: 'var(--ink-2)' }}>
+            Tee up payments from due bills, have a second person approve them, then release. Releasing posts the payments to
+            the general ledger; released check payments then appear under Print checks.
+          </p>
+          <button
+            onClick={runChecks}
+            disabled={running}
+            className="btn btn--primary"
+          >
+            {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Run checks
+          </button>
+        </div>
+      ) : (
       <PageHeader
-        title="Check Run"
-        description="Tee up payments from due bills, approve (separation of duties), then export the bank file and release. Release posts to the GL — it never sends money; you upload the exported file to your bank to move funds."
+        title="Checks & payments"
+        description="Tee up payments from due bills, have a second person approve them, then export the bank file and release. Releasing posts the payments to the general ledger but never sends money: you upload the exported file to your bank to move funds."
         actions={
           <button
             onClick={runChecks}
@@ -185,6 +209,7 @@ export function ChecksClient() {
           </button>
         }
       />
+      )}
 
       {data && rows.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -193,6 +218,8 @@ export function ChecksClient() {
           <Stat label="Total queued" value={formatMoney(totalCents)} />
         </div>
       )}
+
+      {batch && (batch.held?.length ?? 0) > 0 && <HeldPaymentsNotice held={batch.held ?? []} />}
 
       {batch && batch.controls.itemCount > 0 && (
         <DisbursementBatchPanel batch={batch} onReleased={refreshAll} />
@@ -354,6 +381,30 @@ function WorkflowStepper({ current }: { current: number }) {
 }
 
 /**
+ * Approved payments the server left out of the run because the vendor went on hold after
+ * approval (pending bank-change call-back, compliance hold). They are excluded from the
+ * export file and can't be released until the hold clears in Vendor compliance.
+ */
+function HeldPaymentsNotice({ held }: { held: HeldLine[] }) {
+  return (
+    <div role="status" className="rounded-lg border border-amber-900/50 bg-amber-950/30 p-3 space-y-2">
+      <p className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+        <AlertTriangle size={13} /> {held.length} approved payment(s) held — not in this run
+      </p>
+      <ul className="text-2xs text-amber-200/80 space-y-1 list-disc pl-4">
+        {held.slice(0, 10).map((h) => (
+          <li key={h.approvalId}>
+            <span className="font-medium">{h.vendorName}</span>
+            {h.invoiceRef ? ` · ${h.invoiceRef}` : ''} · {formatMoney(h.amountCents)} — {h.reason}
+          </li>
+        ))}
+      </ul>
+      {held.length > 10 && <p className="text-2xs text-amber-200/70">…and {held.length - 10} more.</p>}
+    </div>
+  );
+}
+
+/**
  * Disbursement batch — the APPROVED, ready-to-release payment run. Presents the
  * pay-run as an explicit workflow: capture per-vendor payment method + MASKED bank
  * details, review per-vendor totals (with the duplicate-pay guard), export the
@@ -419,6 +470,7 @@ function DisbursementBatchPanel({
         return;
       }
       const warnings = res.headers.get('X-Export-Warnings');
+      const heldNote = res.headers.get('X-Export-Held');
       const blob = await res.blob();
       const href = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -437,6 +489,7 @@ function DisbursementBatchPanel({
       }).catch(() => {});
       addToast('success', `Exported ${format === 'csv' ? 'bill-pay CSV' : 'ACH file'}`);
       if (warnings) addToast('error', warnings.slice(0, 180));
+      if (heldNote) addToast('error', heldNote.slice(0, 180));
     } catch {
       addToast('error', 'Network error');
     } finally {
@@ -514,8 +567,8 @@ function DisbursementBatchPanel({
           </h2>
           <p className="text-2xs text-slate-500 mt-0.5 max-w-2xl">
             Confirm how each vendor is paid, review the run, then export the bank file (or mark check numbers) and
-            release. Releasing posts to the GL — it never sends money. You upload the file to your bank or mail the
-            checks to move funds.
+            release. Releasing posts the payments to the general ledger but never sends money: you upload the file to
+            your bank or mail the checks to move funds.
           </p>
         </div>
         <div className="flex items-center gap-2">

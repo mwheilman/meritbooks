@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Sparkles,
   Upload,
@@ -20,6 +20,7 @@ import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
 import { BillsTabs } from '../bills-tabs';
+import { InboxAddressCard } from '@/components/inbound-email/inbox-address-card';
 
 // ── Shapes mirrored from lib/ap/doc-intelligence ──────────────
 interface ExtractedLine {
@@ -55,6 +56,15 @@ interface InboundMeta {
   subject: string | null;
   receivedAt: string;
   messageId: string | null;
+  /** Sender display name (inbound email, migration 183+). */
+  fromName?: string | null;
+  /** The company address it was sent to (183+). */
+  toAddress?: string | null;
+  /** The original email kept as a document (183+). */
+  emailDocumentId?: string | null;
+  /** false = the provider could not verify the sender (SPF/DKIM/DMARC). */
+  senderVerified?: boolean | null;
+  senderAuth?: string | null;
 }
 interface DraftProposal {
   extracted: ExtractedBill;
@@ -142,7 +152,20 @@ function SourceBadges({ proposal }: { proposal: DraftProposal }) {
     <div className="mt-2 flex flex-wrap items-center gap-1.5">
       {isEmail && (
         <span className="inline-flex items-center gap-1 rounded-full border border-indigo-800/60 bg-indigo-950/40 px-2 py-0.5 text-[10px] text-indigo-300">
-          <Mail size={10} /> Email
+          <Mail size={10} /> Email{proposal.inbound?.fromName ? ` from ${proposal.inbound.fromName}` : ''}
+        </span>
+      )}
+      {isEmail && proposal.inbound?.senderVerified === false && (
+        <span
+          className="inline-flex items-center gap-1 rounded-full border border-red-800/60 bg-red-950/40 px-2 py-0.5 text-[10px] text-red-300"
+          title={`${proposal.inbound.senderAuth ?? 'The sending mail server did not pass SPF, DKIM or DMARC.'} The From address may be forged — confirm the vendor and the bank details before approving.`}
+        >
+          <AlertTriangle size={10} aria-hidden /> Sender not verified
+        </span>
+      )}
+      {isEmail && proposal.inbound?.toAddress && (
+        <span className="text-[10px] text-slate-500 truncate max-w-[220px]" title={proposal.inbound.toAddress}>
+          to {proposal.inbound.toAddress}
         </span>
       )}
       {pending && (
@@ -174,6 +197,19 @@ export function IntakeQueueClient() {
   const accounts = accountData?.data ?? [];
 
   const selected = useMemo(() => drafts.find((d) => d.id === selectedId) ?? null, [drafts, selectedId]);
+
+  // Deep link from the inbound email log: /bills/intake-queue?draft=<id> opens that draft.
+  const [linkedDraft, setLinkedDraft] = useState<string | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('draft');
+    if (id && /^[0-9a-f-]{36}$/i.test(id)) setLinkedDraft(id);
+  }, []);
+  useEffect(() => {
+    if (!linkedDraft || drafts.length === 0) return;
+    if (drafts.some((d) => d.id === linkedDraft)) setSelectedId(linkedDraft);
+    else addToast('info', 'That draft has already been reviewed or is no longer in the queue.');
+    setLinkedDraft(null);
+  }, [linkedDraft, drafts]);
 
   const locationName = useCallback(
     (id: string) => locations.find((l) => l.id === id)?.name ?? 'Unknown company',
@@ -210,6 +246,11 @@ export function IntakeQueueClient() {
 
       <div className="mb-6">
         <BillsTabs />
+      </div>
+
+      {/* Where emailed bills come from (FPB-ap-intake). */}
+      <div className="mb-6">
+        <InboxAddressCard purpose="ap" variant="compact" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">

@@ -66,13 +66,14 @@ export async function POST(request: Request) {
       subjectTable: 'payment_origination_batches',
       subjectId: batch.id,
       summary: `Created ${provider.name} origination batch: ${batch.itemCount} payment(s), ${(batch.totalCents / 100).toFixed(2)} on ${batch.rail}`,
-      metadata: { provider: provider.name, rail: batch.rail, itemCount: batch.itemCount, totalCents: batch.totalCents },
+      metadata: { provider: provider.name, rail: batch.rail, itemCount: batch.itemCount, totalCents: batch.totalCents, heldCount: batch.held.length },
     }).catch(() => {});
 
-    return NextResponse.json({ batch });
+    const { held, ...created } = batch;
+    return NextResponse.json({ batch: created, held });
   } catch (e) {
     if (e instanceof NothingToOriginateError) {
-      return NextResponse.json({ error: e.message, code: 'NOTHING_TO_ORIGINATE' }, { status: 409 });
+      return NextResponse.json({ error: e.message, code: e.held.length > 0 ? 'VENDOR_HOLD' : 'NOTHING_TO_ORIGINATE', held: e.held }, { status: 409 });
     }
     if (isWriteScopeError(e)) return NextResponse.json({ error: e.message, code: 'FORBIDDEN' }, { status: 403 });
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to create origination batch' }, { status: 500 });

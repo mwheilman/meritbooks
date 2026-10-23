@@ -415,3 +415,70 @@ Every slice: builder → verifier → security (token routes, PII, money hold) �
 | D5 | Auto-accept passing uploads | Off at launch; revisit via M10 dial after 90 days of accept/reject data |
 | D6 | W-9 images to the model (TIN exposure) | Fill-here path default; security decides (a)/(b) for uploads |
 | D7 | Backup withholding as a hold alternative | Phase 2, after CPA review |
+
+## 19. Wave 2A amendment (2026-10-23): the closed loop, as built. Migration `180_vendor_requirements_review.sql`
+
+Scope: VN-01…VN-04 plus VN-10 (bank-change call-back), on the Wave 1D request engine (`lib/requests/**`,
+`FPB-request-engine-notifications`). This section is the slice's binding acceptance contract. Where it simplifies §4/§15,
+the simplification is named; the rest of the brief stays the target.
+
+### 19.1 Build decisions (deltas from §4 / §15)
+
+| # | Decision | Why |
+|---|---|---|
+| A1 | **One flat requirement row per set** (`public.vendor_requirements`), not template + child rows. Columns: `location_id` (null = every company), `vendor_type`, `tax_1099` (any · eligible · not_eligible), `work_type` (tag), `w9_required`, `coi_required`, `min_gl_each_occurrence_cents`, `min_gl_aggregate_cents`, `min_auto_cents`, `wc_required`, `min_wc_each_accident_cents`, `min_umbrella_cents`, `require_additional_insured`, `require_waiver_of_subrogation`, `certificate_holder_name`, `expiry_lead_days` (default 30), `block_payment`, `grace_days`. | Covers every rule the owner named with deterministic checks; the template/child split (§4.2) and `applies_when` predicates stay the v2 target |
+| A2 | **Most specific set wins** for a vendor × company: company match 8 · vendor type 4 · work type 2 · 1099 status 1; ties → newest. A vendor's chase uses the **strictest merge** of the sets for every company that has billed it (mins = max, flags = OR, holder names = any listed). The pay-time hold uses the **bill's company** set only. No set applies → the legacy behaviour (every tracked doc row must be current) is unchanged. | One certificate serves every company it satisfies (VND-05) without letting a lax company's rules lift a strict company's hold |
+| A3 | Vendor classification lives in a Books table `public.vendor_compliance_profiles` (`vendor_type`, `work_type`), **not** a `core.vendors` column. Type `exempt` is never chased unless a set targets `exempt` explicitly. | Avoids a shared-spine core column this wave (§15.2 still routes `vendor_type` through the lead) |
+| A4 | Review state lives on `public.vendor_document_submissions` (received → ai_checked → accepted · rejected · superseded) with `rule_results` (pass/fail/unknown per rule + reason) and `extracted`. Accepted coverage lines land in `public.vendor_coverages` (§15.3) and the existing `vendor_compliance_docs` GL/WC rows, so existing readers keep working. | Closes the "confirm persists only GL and WC" gap (§1) |
+| A5 | **A portal submission stops the chase** (the live request is fulfilled `via magic_link`, "waiting for review"); **Accept** fulfils any request still live and logs; **Reject** opens a new correction request quoting the reason (cool-down bypassed). | The vendor is never nagged while a person reviews; a rejection is chased like a new ask |
+| A6 | **Fill-here W-9 skips AI** (typed, never imaged). The TIN is AES-256-GCM encrypted with server key `TIN_ENCRYPTION_KEY` into `vendor_document_submissions.tin_ciphertext` (a `column_revoke` tin field, 167 registry); with no key the TIN is **not stored** (last 4 only) and the reviewer is told. Accept does **not** write `core.vendors.tin_encrypted` (the 1099 generator reads that column as plain text — a decrypt seam is a lead follow-up). **Uploaded W-9 images are not sent to the model** unless `VENDOR_PORTAL_W9_AI=on` (D6 open). COI images are read by `COI_EXTRACT` (extended: waiver of subrogation). | §6.2 security flag; no TIN in any response body or log |
+| A7 | **VN-10 bank-change call-back:** a banking upload through the portal, or any change to `vendor_payment_profiles.account_mask/routing_mask` (DB trigger), opens a **pending** `public.vendor_bank_change_verifications` row. While one is pending, `enforcePaymentAllowed` **refuses every payment to that vendor — overrides do not lift it**. Verify records who called, when, the person reached, the number used and where it came from (vendor master · prior document · independent lookup); the DB **refuses a verification whose number equals the number that came with the change request**. The verifier may not be the person who made the change. | BEC: the fraudster supplies the call-back number on the forged request |
+| A8 | Automatic chase switch: the existing `core.request_policies.auto_create` (w9 · coi · coi_renewal), **org row or per-company rows** (`location_id`), default off. The preview lists every vendor that would be emailed, why, and every vendor that would not (no email, already asked, cooling down, exempt). Renewal cadence uses the set's `expiry_lead_days`: T-lead, T-lead/2, T-0, then weekly. | One switch, one source of truth with the Requests settings |
+| A9 | Permissions until dedicated keys exist: view `compliance:view`; request / accept / reject / bank-change verify `compliance:manage`; requirement sets and the chase switch `compliance:manage` + `settings_system:edit` for the switch. | Report to lead: `ctl.vendor_compliance:K` and a payments-side key for VN-10 |
+
+### 19.2 What the owner sees
+
+- **Vendor compliance** (merit-ui, cockpit): bands *Compliant · Expiring in 30 days · Missing · On hold* (counts, filter on click),
+  per-company breakdown, filterable list (company, state, type, search) with the requirement strip per vendor, CSV export,
+  side panel with requirements vs what is on file and the **timeline** (requests, sends, link opens, uploads, AI checks,
+  decisions, holds, bank changes). Tabs: Compliance · Review queue (count) · Requirements · Bank changes (count) · 1099 readiness.
+- **Review queue**: the document (inline preview) beside the extracted fields and each rule's result; Accept (one click; AI
+  down → key the coverage lines first) or Reject with a typed reason.
+- **Requirements**: requirement sets per company / vendor type / 1099 status / work type, with hold policy, grace and lead time.
+- **Automatic chase** card: on/off for the firm and per company, with the preview of who would be emailed.
+- **Vendor portal** `/portal/vendor/[token]` (merit-ui, 390-first): what is needed and why, fill-here W-9 with e-signature
+  (TIN masked, entered twice), uploads, the AI read-back of each COI check, the result of a past review (rejection reason),
+  the renewal date, and a call-back notice for banking changes.
+
+### 19.3 Acceptance criteria (each has a test in `src/test/vendor-compliance-loop.test.ts` or `lib/vendor-compliance/*.test.ts`)
+
+1. **Limits:** a COI with GL 500,000 each occurrence against a 1,000,000 minimum fails with the reason
+   "General liability each occurrence $500,000.00 on file; $1,000,000.00 required"; aggregate, auto, WC each accident and
+   umbrella minimums behave the same; an absent line is "missing".
+2. **Endorsements and holder:** additional-insured and waiver-of-subrogation flags fail when required and false/unknown;
+   the certificate holder passes on a normalised match ("Artistry Homes, LLC" ≈ "ARTISTRY HOMES LLC") and fails otherwise.
+3. **Expiry:** a line expiring within `expiry_lead_days` is EXPIRING (not blocking); past expiry it is EXPIRED and blocks,
+   except within `grace_days` (GRACE, not blocking); `block_payment = false` reports issues but never holds.
+4. **Selection:** the most specific set wins; an `exempt` vendor is out of scope; no set → legacy doc-row behaviour.
+5. **Accept lifts the hold:** accepting a passing COI writes `vendor_coverages` + VALID `vendor_compliance_docs`, flips the
+   vendor from on-hold to compliant, fulfils the live `coi` request, writes `DOC_ACCEPTED` and `HOLD_LIFTED`, and
+   `recordBillPayment` then succeeds; before the accept it throws `ComplianceHoldError` naming the failed rule and logs
+   `PAYMENT_BLOCKED`.
+6. **Reject re-requests:** rejecting with a reason marks the submission rejected, logs `DOC_REJECTED`, and opens a new live
+   request whose message quotes the reason.
+7. **AI down:** with no AI key (or the gateway paused) a portal COI upload lands `received` with `ai_status = unavailable`,
+   the vendor is told a person will check it, and the reviewer can accept only after keying the coverage lines.
+8. **Portal token scope:** a token resolves only its own vendor; a revoked or expired token is refused (410) and an unknown
+   one 404; a submission can never name another vendor or org; a kind the token did not request is refused.
+9. **Fill-here W-9:** the TIN is never in the response, the stored row (`w9_form` holds last 4 only) or the log; the
+   ciphertext column is unreadable by members; mismatched TIN entries, a bad TIN, a missing signature or no perjury
+   certification are refused.
+10. **Bank change:** a portal banking upload or a profile account change opens a pending verification; payment is refused
+    while pending (an override does not lift it); verifying with the number from the request is refused by the DB; a
+    verification by the person who made the change is refused; after a valid verification payment succeeds.
+11. **RLS / locks:** members read only their org's 180 rows and cannot insert/update/delete any of them; anon reads nothing;
+    `vendor_compliance_events` stays append-only; the business-write-lock ratchet stays green.
+12. **Chase:** with the switch off nothing is created; on (firm or for the vendor's company) a vendor missing a required
+    W-9 with no doc row at all gets one `w9` request; a COI expiring in 20 days gets a due-anchored renewal; the preview
+    lists exactly the vendors the sync would email.
+13. **No regression:** request-engine, business-write-lock, field-mask and existing vendor-compliance tests stay green.

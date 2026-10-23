@@ -190,6 +190,8 @@ export function RequestsScreen() {
               <span className="ink-2">Snoozed · {relative(r.snoozed_until)}</span>
             ) : r.bounced_at ? (
               <Tag tone="neg">Fix email</Tag>
+            ) : !r.next_send_at && r.sends_count === 0 ? (
+              <Tag tone="warn">Waiting for you · Send now</Tag>
             ) : (
               <span className="ink-2">{relative(r.next_send_at)}</span>
             )

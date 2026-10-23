@@ -377,7 +377,8 @@ export async function parseW9Document(
   try {
     parsed = JSON.parse(jsonStr);
   } catch {
-    console.error('[w9-parse] Failed to parse model JSON:', jsonStr.slice(0, 500));
+    // Never log the model output: a W-9 read carries the full TIN. Length only.
+    console.error('[w9-parse] Failed to parse model JSON (length', jsonStr.length, ')');
     return { ok: false, error: 'Failed to parse AI response as JSON' };
   }
 

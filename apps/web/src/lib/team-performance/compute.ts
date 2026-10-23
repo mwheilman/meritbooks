@@ -471,3 +471,21 @@ export function rollupFilingAdherence(items: FilingEval[]): FilingAdherence {
     onTimePct: determinable > 0 ? Math.round((filedOnTime / determinable) * 10000) / 10000 : null,
   };
 }
+
+/**
+ * The close-adherence window: the trailing `months` fiscal months ENDING with the
+ * current month (live check 1G-5 — the panel listed 2027-01…2027-12, all future periods,
+ * because only a lower bound was applied and the newest rows were taken first).
+ * Returns inclusive yyyy-mm-dd bounds on a period's end_date.
+ */
+export function trailingCloseWindow(todayISO: string, months: number): { start: string; end: string } {
+  const m = /^(\d{4})-(\d{2})/.exec(todayISO);
+  if (!m) throw new Error(`trailingCloseWindow: bad date ${todayISO}`);
+  const y = Number(m[1]);
+  const mo0 = Number(m[2]) - 1;
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const n = Math.max(1, Math.floor(months));
+  const first = new Date(Date.UTC(y, mo0 - (n - 1), 1));
+  const lastOfCurrent = new Date(Date.UTC(y, mo0 + 1, 0));
+  return { start: iso(first), end: iso(lastOfCurrent) };
+}

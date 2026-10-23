@@ -3,6 +3,9 @@ import { requirePagePermission } from '@/lib/rbac/page-guard';
 
 export const dynamic = 'force-dynamic';
 
+// Tab title: "Revenue recognition · Merit Books" (root template).
+export const metadata = { title: 'Revenue recognition' };
+
 /**
  * PAGE-LEVEL RBAC (IA-SPEC §7 R0b, interim; 06 §5 "Access issues"). Server-side guard
  * for this route segment (and any sub-pages): callers without `invoices:view` are redirected

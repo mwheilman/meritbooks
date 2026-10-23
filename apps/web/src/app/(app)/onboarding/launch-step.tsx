@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import type { CompanyOnboarding, OnboardingStatus, OnboardingStepKey } from '@/lib/onboarding/status';
 import { launchSummary, canFinish, type LaunchRow } from '@/lib/onboarding/wizard-progress';
 import { OpeningChoice } from './opening-choice';
+import { InboxAddressCard } from '@/components/inbound-email/inbox-address-card';
 
 const ROW_ICON: Record<LaunchRow['key'], typeof Building2> = {
   companies: Building2, coa: BookOpen, opening: Scale, bank: Landmark, team: Users,
@@ -83,6 +84,9 @@ export function LaunchStep({
 
         {!ready && <OpeningChoice company={company} onChanged={onRefresh} />}
       </div>
+
+      {/* Forward bills to … (FPB-ap-intake): live as soon as email setup is finished. */}
+      {company && <InboxAddressCard purpose="ap" locationId={company.id} variant="compact" />}
 
       <button
         type="button"

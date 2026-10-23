@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { ButtonLink, ContextLine, Eyebrow, InlineNotice, Search, Seg, Tag, money, pct, useDebounce } from '@meritbooks/merit-ui';
 import { PageHeader } from '@/components/ui';
@@ -9,6 +9,7 @@ import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import type { WipLineView, WipScheduleView } from '@/lib/rev-rec/wip-view';
 import type { TieOutSide } from '@/lib/rev-rec/wip-engine';
 import { METHOD_COPY } from '@/lib/rev-rec/policy';
+import { wipColumnTotals } from '@/lib/rev-rec/wip-totals';
 import { PeriodPicker, lastClosedPeriod, periodLabel } from '@/components/rev-rec/period-picker';
 import { WipProposalPanel, WipRunHistory } from '@/components/rev-rec/wip-proposal-panel';
 
@@ -23,6 +24,8 @@ type Filter = 'all' | 'under' | 'over' | 'loss' | 'fade';
 type SortKey = 'job' | 'under' | 'over' | 'fade' | 'pct';
 
 const usd = (c: number) => money(c, { symbol: '$' });
+/** The job column stays put while the money columns scroll horizontally (1G-8). */
+const STICKY: CSSProperties = { position: 'sticky', left: 0, zIndex: 1, background: 'var(--white, #FDFCFA)', boxShadow: '1px 0 0 var(--line, #E3E1DC)' };
 const usd0 = (c: number) => money(c, { symbol: '$', decimals: 0 });
 
 function TieTile({ title, account, side }: { title: string; account: string | null; side: TieOutSide }) {
@@ -91,11 +94,14 @@ export function WipScheduleClient() {
   }, [data, filter, sort, dq]);
 
   const t = data?.totals;
+  // Table totals: every money column, from the rows shown (1G-8).
+  const ct = useMemo(() => wipColumnTotals(lines), [lines]);
+  const filtered = !!data && lines.length !== data.lines.length;
   const prior = data?.priorRun ?? null;
   const exportHref = `/api/rev-rec/wip/export?location_id=${encodeURIComponent(activeCompanyId)}&period=${period}`;
 
-  const sortHeader = (key: SortKey, label: string, numeric = true) => (
-    <th className={numeric ? 'n' : undefined} aria-sort={sort === key ? 'descending' : 'none'}>
+  const sortHeader = (key: SortKey, label: string, numeric = true, style?: CSSProperties) => (
+    <th className={numeric ? 'n' : undefined} aria-sort={sort === key ? 'descending' : 'none'} style={style}>
       <button type="button" className="mb-th-btn" onClick={() => setSort(key)}>{label}{sort === key ? ' ↓' : ''}</button>
     </th>
   );
@@ -207,7 +213,7 @@ export function WipScheduleClient() {
                 <table className="tbl tbl-q" aria-label={`WIP schedule ${periodLabel(period)}`} style={{ minWidth: 1320 }}>
                   <thead>
                     <tr>
-                      {sortHeader('job', 'Job', false)}
+                      {sortHeader('job', 'Job', false, { ...STICKY, zIndex: 2 })}
                       <th className="n">Contract</th>
                       <th className="n">EAC</th>
                       <th className="n">Cost to date</th>
@@ -227,7 +233,7 @@ export function WipScheduleClient() {
                       const note = rowNote(l);
                       return (
                         <tr key={l.jobId} className={`q-row${l.estGrossProfitCents < 0 ? ' is-attn' : ''}`}>
-                          <td style={{ width: 260 }}>
+                          <td style={{ width: 260, ...STICKY }}>
                             <Link className="l1 mb-row-link" href={`/jobs/${l.jobId}`}>{l.jobNumber ?? '—'} · {l.jobName ?? 'Job'}</Link>
                             <span className="l2">{l.methodLabel}{note ? ` · ${note}` : ''}</span>
                           </td>
@@ -249,19 +255,27 @@ export function WipScheduleClient() {
                       );
                     })}
                     <tr className="q-group">
-                      <td><b>Total · {t!.jobs} jobs</b></td>
-                      <td className="n tnum b">{money(t!.contractCents, { decimals: 0 })}</td>
-                      <td className="n tnum b">{money(t!.eacCents, { decimals: 0 })}</td>
-                      <td className="n tnum b">{money(t!.costToDateCents, { decimals: 0 })}</td>
-                      <td />
-                      <td className="n tnum b">{money(t!.earnedCents, { decimals: 0 })}</td>
-                      <td className="n tnum b">{money(t!.billedCents, { decimals: 0 })}</td>
-                      {data.policy.retainagePresentation === 'SEPARATE' && <td className="n tnum b">{money(t!.retainageCents, { decimals: 0 })}</td>}
-                      <td className="n tnum b">{money(t!.underCents, { decimals: 0 })}</td>
-                      <td className="n tnum b">{money(t!.overCents, { decimals: 0 })}</td>
-                      <td className="n tnum b">{money(t!.lossProvisionCents, { decimals: 0 })}</td>
-                      <td />
-                      <td className="n tnum b">{money(t!.fadeGainCents, { decimals: 0, sign: 'delta' })}</td>
+                      <td style={{ ...STICKY, background: 'var(--canvas, #F5F3EF)' }}>
+                        <b>Total · {ct.jobs} {ct.jobs === 1 ? 'job' : 'jobs'}</b>
+                        {filtered && <span className="l2">Shown rows only · {data.lines.length} on the schedule</span>}
+                      </td>
+                      <td className="n tnum b">{money(ct.contractCents, { decimals: 0 })}</td>
+                      <td className="n tnum b">{money(ct.eacCents, { decimals: 0 })}</td>
+                      <td className="n tnum b">{money(ct.costToDateCents, { decimals: 0 })}</td>
+                      <td className="n tnum b" title="Cost to date ÷ EAC across these jobs">{ct.pctComplete == null ? <span className="ink-3">—</span> : pct(ct.pctComplete)}</td>
+                      <td className="n tnum b">{money(ct.earnedCents, { decimals: 0 })}</td>
+                      <td className="n tnum b">{money(ct.billedCents, { decimals: 0 })}</td>
+                      {data.policy.retainagePresentation === 'SEPARATE' && <td className="n tnum b">{money(ct.retainageCents, { decimals: 0 })}</td>}
+                      <td className="n tnum b">{money(ct.underCents, { decimals: 0 })}</td>
+                      <td className="n tnum b">{money(ct.overCents, { decimals: 0 })}</td>
+                      <td className="n tnum b">{money(ct.lossProvisionCents, { decimals: 0 })}</td>
+                      <td className={`n tnum b${ct.estGrossProfitCents < 0 ? ' neg' : ''}`}>{money(ct.estGrossProfitCents, { decimals: 0 })}</td>
+                      <td
+                        className={`n tnum b${(ct.fadeGainCents ?? 0) < 0 ? ' neg' : ''}`}
+                        title={ct.fadeGainCents == null ? 'No prior month to compare with yet' : `${ct.fadeComparedJobs} job${ct.fadeComparedJobs === 1 ? '' : 's'} compared with last month`}
+                      >
+                        {ct.fadeGainCents == null ? <span className="ink-3">—</span> : money(ct.fadeGainCents, { decimals: 0, sign: 'delta' })}
+                      </td>
                     </tr>
                   </tbody>
                 </table>

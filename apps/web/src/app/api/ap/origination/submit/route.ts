@@ -5,7 +5,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { assertSessionMeetsPolicy } from '@/lib/auth/assert-session-policy';
 import { requireMoneyMovement, PAYMENTS_EXECUTE, AP_DISBURSEMENT_RELEASE_FEATURE } from '@/lib/rbac/payments-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
-import { resolveOriginationProvider, submitOriginationBatch } from '@/lib/money/origination';
+import { OriginationHeldError, resolveOriginationProvider, submitOriginationBatch } from '@/lib/money/origination';
 
 /**
  * POST /api/ap/origination/submit — hand a CREATED batch to the active rail.
@@ -67,6 +67,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ batch: outcome.batch, submitted: outcome.submitted });
   } catch (e) {
+    if (e instanceof OriginationHeldError) {
+      return NextResponse.json({ error: e.message, code: 'VENDOR_HOLD', held: e.held }, { status: 409 });
+    }
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Submit failed' }, { status: 500 });
   }
 }

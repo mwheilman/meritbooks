@@ -67,37 +67,56 @@ All times are UTC. Merit's companies are on US Central, 5–6 hours behind, so 0
 
 | Key | When (UTC) | What it does | Posts to the GL? |
 |---|---|---|---|
-| `controls.nightly` | daily 08:10 | Runs the control-exception detectors (duplicate payments, missed accruals, intercompany balance, uncategorized leakage, revenue not recognized, sales-tax nexus, anomalous JEs, cutoff errors, bill anomalies, out-of-policy expenses, cash-application matches) and queues new findings in **Exceptions**. | No. Detect and propose only. |
-| `vendors.compliance_scan` | daily 08:30 | Expires lapsed W-9 and COI documents, advances the chase schedule, and escalates high-risk vendors to Exceptions. Sends no messages yet (`requests.remind` will). | No |
-| `recurring_je.propose` | daily 09:00 | Stages each due recurring journal entry as a **proposal** for a person to approve and post. | No |
-| `reports.packs` | daily 12:00 | Emails each report pack a user scheduled whose next run date has arrived. Ledger reads use the tenant-scoped client. | No |
-| `revrec.monthly` | 1st, 07:00 | Previews revenue recognition through the last day of the prior month. | **Only if** the tenant set the *Scheduled revenue recognition* autonomy dial to auto-under-limit **and** the run total is under the cap. Otherwise it records a proposal ("N jobs would recognize $X") and a person posts it from Revenue recognition. |
-| `prepaid.amortize` | 1st, 07:30 | Finds due prepaid amortization periods. | **Only if** the *Scheduled prepaid amortization* dial allows (same rule). |
-| `events.drain` | hourly at :20 | Checks pending Projects → Books events (job billing, internal invoices, progress). | **Only if** the *Scheduled Projects event drain* dial allows, per event type, against the pending total. Progress events always wait for a person, because their amount isn't known until recognition runs. |
-| `scheduler.prune_runs` | daily 10:00 | Deletes run-log rows older than 90 days. Runs once for the whole platform, not per tenant. | No |
+| `requests.remind` | every 15 min | The request & chase engine: sends due asks (W-9 / COI, questions, documents, approvals, receipts, payment reminders) on their cadence, honouring quiet hours, unsubscribes and send quotas; closes what is already answered (incl. a payment reminder for an invoice that got paid); escalates. | No |
+| `bank.daily_pull` | daily 11:00 | Incremental Plaid sync per connected bank; flags feeds stale for 48 h. | No |
+| `controls.nightly` | daily 08:10 | Runs the control-exception detectors and queues new findings in **Exceptions**. | No. Detect and propose only. |
+| `vendors.compliance_scan` | daily 08:30 | Expires lapsed W-9 / COI documents, advances the chase schedule, escalates high-risk vendors. | No |
+| `vendors.ai_recheck` | hourly :07 | (2A) Re-reads vendor certificates that arrived while AI was paused. Proposes only. | No |
+| `receipts.chase_sync` / `receipts.weekly_digest` | every 15 min / Mon 14:00 | (2B) Receipt chase through the request engine; Monday bookkeeper digest. | No |
+| `recurring_je.propose` | daily 09:00 | Stages each due recurring journal entry as a **proposal**. | No |
+| `ar.recurring` | daily 12:00 | Generates every recurring invoice that has come due, once per template + period (template advance + `source_ref recurring:<template>:<date>`, unique per org). Each is a **DRAFT** for review unless the template is set to *Post* / *Post and email* **and** the *Scheduled recurring invoices* dial allows that template's total. | **Only if** the template mode posts **and** the dial is auto-under-limit within the cap. |
+| `ar.dunning` | daily 14:00 | The dunning ladder (Settings → Automation → Payment reminders): for each open invoice, the next step (courtesy / first / second / third / final notice, days from due) as a `core.requests` row, so the request engine sends it. Stops on payment, promise-to-pay, dispute, excluded customer, minimum balance. Mirrors each send onto the invoice as `REMINDER_SENT`. **Draft** reminders wait in Requests for *Send now*. | No. Sends on its own only when the company policy is *Send* **and** the *Scheduled payment reminders* dial allows that invoice's balance. |
+| `ar.late_fees` | daily 14:30 | Proposes late fees under the late-fee policy (flat or % per month, grace, min / max, lifetime cap, customers) — one per invoice per month (unique), never on a finance-charge invoice, never on a disputed invoice. A person approves (→ one posted finance-charge invoice per company + customer) or rejects (never re-proposed for that month). | No (approval posts, by a person). |
+| `reports.packs` | daily 12:00 | Emails each scheduled report pack that is due. | No |
+| `revrec.monthly` | 1st, 07:00 | Proposes last month's WIP entry per company; posts only when the company is AUTO_POST **and** the *Scheduled revenue recognition* dial allows. | Dial-gated |
+| `prepaid.amortize` | 1st, 07:30 | Due prepaid amortization periods. | Dial-gated (*Scheduled prepaid amortization*) |
+| `close.depreciation` | 1st, 08:00 | Last month's depreciation (fixed assets) and amortization (intangibles), previewed one line per company with the engines' own schedule math. HARD_CLOSE months are excluded and an asset's catch-up stops there. Reports lease periods due (never auto-posted: they carry the cash leg the bank feed also sees). | Dial-gated (*Scheduled depreciation & amortization*), month total ≤ cap. |
+| `insurance.amortize` | 1st, 08:15 | Due prepaid-insurance periods through last month-end. | Dial-gated (*Scheduled insurance amortization*). |
+| `close.period_end` | days 2–10, 13:00 | Opens last month's close checklist (one `close_checklists` row per close-graph task) for every company with an open period, refreshes the AUTO answers from the readiness board, and tells admins "N ready, M blocked". Leaves HARD_CLOSE periods alone. | Never |
+| `ap.pay_run_propose` | Mondays 13:00 | Starts a PAY_RUN agent run: approved bills due in 7 days plus bills whose early-pay discount date (migration 184 `bills.early_pay_discount_*`) falls in that window, ordered by pay-by date, with the savings. Pauses at release; release only prepares approvals and a second person approves and pays (SoD). One live proposal at a time. | Never (no auto mode for money out) |
+| `notifications.digest` | hourly :05 | At 08:00 in each person's time zone (outside their quiet hours), emails a digest of their unread notifications to everyone who chose *daily* (or, Mondays, *weekly*); each item at most once (`emailed_at`). | No |
+| `events.drain` | hourly :20 | Pending Projects → Books events. | Dial-gated per event type |
+| `access.expiry_sweep` | daily 06:00 | Ends expired access grants and stale access requests. | No |
+| `scheduler.prune_runs` | daily 10:00 | Deletes run-log rows older than 90 days (platform). | No |
 
-The three autonomy dials are in the autonomy catalog (`lib/autonomy/catalog.ts`). They default to
-**Propose**, so nothing posts automatically until a tenant admin turns a dial up. The kill switch
-blocks them as well.
+Every dial defaults to **Propose**, so nothing posts or auto-sends until a tenant admin raises it
+(Settings → Autonomy). The kill switch blocks them all. Jobs that only propose still tell the
+tenant's admins in-app ("October depreciation is ready to post: $X across N companies"), and the
+digest folds those notes into email.
 
 ### Registered but not built yet (never run)
 
-Each stub has a `TODO(owner)` in the registry naming what it needs first.
-
 | Key | Owner | Waiting on |
 |---|---|---|
-| `bank.daily_pull` | Bank feed / Plaid | an incremental Plaid sync job (cursor already stored) |
 | `connectors.sync` | Integrations (07 Phase 0) | connector staging/mapping tables and a worker |
-| `requests.remind` | Requests & chase (M-7) | the request engine and an email/SMS sender (client questions, receipt chase, vendor-document chase) |
-| `ap.pay_run_propose` | AP | the pay-run proposal recipe on a schedule |
-| `ar.recurring` | Invoices | a draft/propose mode (today it issues invoices and posts AR) |
-| `ar.dunning` | Collections | drafted dunning plus approve-before-send |
-| `close.period_end` | Close | a preview mode for `/api/period-engine` (today it posts directly) |
 | `lenders.prepare` | Debt & lender reporting (M-14) | lender obligation calendar and pack drafts |
-| `payroll.funding_check` | Payroll | the payroll provider decision |
-| `access.expiry_sweep`, `access.review_campaign` | Access & roles (05) | access assignments with end dates |
-| `notifications.digest` | Notifications (M-13) | notification preferences and a sender |
+| `payroll.funding_check` | Payroll | the payroll provider decision (task #32) |
+| `access.review_campaign` | Access & roles (05) | the quarterly campaign opener |
 | `reports.post_close_bva` | FP&A | post-close trigger and budget-vs-actual push |
+
+## The Automation screen (Settings → Automation, `/settings/automation`)
+
+- **Scheduled jobs** — every job with its state (running / failing / off / waiting for first run /
+  not built), schedule in plain English, last run (outcome, items, by hand or not), next run, an
+  on/off switch per tenant (`PUT /api/scheduler/jobs`, writes the tenant override; `null` = back to
+  the default) and **Run now** (`POST /api/scheduler/run-now`, confirmed). Both need
+  `settings_system:edit`. Run now takes the same single-flight lock as the tick, records a
+  `trigger: 'manual'` run with the person as actor, and does not touch the cron slot bookkeeping.
+  The selected job's run history shows summaries, counts and errors.
+- **Payment reminders** — the dunning ladder per tenant or per company (`dunning_policies`).
+- **Late fees** — the late-fee policy per tenant or per company (`late_fee_policies`) and the
+  approval queue (`GET/POST /api/collections/late-fees`, approve needs `invoices:approve`).
+- `POST /api/collections/dispute` marks / clears an invoice dispute (holds dunning + late fees).
 
 ## Guarantees
 
@@ -172,9 +191,13 @@ Each stub has a `TODO(owner)` in the registry naming what it needs first.
 | Path | Role |
 |---|---|
 | `packages/supabase/migrations/162_scheduler.sql` | `core.scheduled_jobs`, `core.job_runs`, `core.scheduler_try_lock`, RLS and grants |
+| `packages/supabase/migrations/184_automation_policies.sql` | dunning / late-fee policies, late-fee proposals, recurring `generate_mode`, invoice dispute marker, bill early-pay discount |
+| `apps/web/src/lib/scheduler/manual.ts` | Run now + the tenant on/off switch |
+| `apps/web/src/app/(app)/settings/automation/` | the Automation screen |
 | `apps/web/vercel.json` | the Vercel Cron entry (`*/5 * * * *` → `/api/cron/tick`) |
 | `apps/web/src/app/api/cron/tick/route.ts` | the dispatcher (secret-gated) |
-| `apps/web/src/app/api/scheduler/runs/route.ts` | the run-log read API |
+| `apps/web/src/app/api/scheduler/runs/route.ts` | the run-log read API (jobs carry `lastRun`) |
+| `apps/web/src/app/api/scheduler/run-now/route.ts`, `.../scheduler/jobs/route.ts` | Run now, on/off |
 | `apps/web/src/lib/scheduler/` | `cron.ts` (parser), `run.ts` (runner), `store.ts` (DB), `registry.ts`, `posting-gate.ts`, `cron-auth.ts`, `dispatch.ts`, `health.ts`, `jobs/*` |
 | `apps/web/src/lib/reports/compiler/scheduled-delivery.tsx` | pack delivery engine, shared with the legacy `/api/reports/packs/run-scheduled` |
 

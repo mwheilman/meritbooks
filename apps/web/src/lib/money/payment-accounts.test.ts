@@ -59,8 +59,8 @@ describe('per-company collection routing (FPB §17.2)', () => {
     const z = pickCollectionConnection(rows, { locationId: C, mode: 'per_company', environment: 'test' });
     expect(z.connection?.id).toBe('z');
     expect(z.ready).toBe(false);
-    // never-checked accounts are tried (Stripe refuses if it must).
-    expect(pickCollectionConnection([conn({ id: 'n', locationId: A, account: UNKNOWN })], { locationId: A, mode: 'per_company', environment: 'test' }).ready).toBe(true);
+    // never-checked accounts are NOT ready: no pay link until Stripe confirms charges (1G-1).
+    expect(pickCollectionConnection([conn({ id: 'n', locationId: A, account: UNKNOWN })], { locationId: A, mode: 'per_company', environment: 'test' }).ready).toBe(false);
   });
 });
 

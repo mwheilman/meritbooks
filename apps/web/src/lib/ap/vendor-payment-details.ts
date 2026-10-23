@@ -17,6 +17,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { assertOrgRefs, serviceWriter } from '@/lib/db/scoped-writer';
+import { bankAccountFingerprint } from '@/lib/vendors/bank-fingerprint';
 
 export type VendorPaymentMethod = 'ACH' | 'CHECK';
 export type BankAccountType = 'checking' | 'savings';
@@ -159,6 +160,9 @@ export async function upsertVendorPaymentProfile(
     account_type: normalizeAccountType(input.accountType),
     account_mask: accountMask,
     routing_mask: routingMask,
+    // Keyed full-number fingerprint (never the number): the mig-180 trigger opens a
+    // bank-change call-back when it changes, even if the last four stay the same.
+    account_fingerprint: bankAccountFingerprint(input.routingNumber, input.accountNumber),
     bank_name: input.bankName?.trim() || null,
     notes: input.notes?.trim() || null,
     captured_by: input.capturedBy,

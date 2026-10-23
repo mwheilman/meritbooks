@@ -18,6 +18,16 @@
  * stops that template at the failed period (its `next_run_date` is left pointing
  * at the unposted period so the next run retries it) — nothing posts out of order.
  *
+ * Each generated invoice also carries `source_ref = recurring:<template>:<run date>`
+ * (UNIQUE per org, migration 173), so even a crash between creating the invoice and
+ * advancing the template can never produce a second invoice for the same period: the
+ * retry gets DUPLICATE_SOURCE, adopts the existing invoice and moves on.
+ *
+ * MODES (migration 184 `generate_mode`): DRAFT (create for review — no GL, no email),
+ * POST (post AR), POST_AND_SEND (post AR + email). A person's "run now" uses the
+ * template's own mode; the scheduler (`ar.recurring`) passes `decideMode`, which can
+ * only ever make it STRICTER (the autonomy dial turns POST / POST_AND_SEND into DRAFT).
+ *
  * The pure planners (`advanceRecurringDate`, `planRecurringRuns`) carry the
  * cadence + exhaustion math and are unit-tested without a database.
  */
@@ -29,6 +39,27 @@ import { writerFor } from '@/lib/db/scoped-writer';
 
 export type RecurringFrequency =
   | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
+
+/** What a generated invoice becomes (migration 184 recurring_invoice_templates.generate_mode). */
+export type RecurringGenerateMode = 'DRAFT' | 'POST' | 'POST_AND_SEND';
+
+const MODE_RANK: Record<RecurringGenerateMode, number> = { DRAFT: 0, POST: 1, POST_AND_SEND: 2 };
+
+/** The template's own mode: generate_mode, else the legacy auto_send flag. */
+export function templateMode(t: { generate_mode?: string | null; auto_send: boolean }): RecurringGenerateMode {
+  if (t.generate_mode === 'DRAFT' || t.generate_mode === 'POST' || t.generate_mode === 'POST_AND_SEND') return t.generate_mode;
+  return t.auto_send ? 'POST_AND_SEND' : 'POST';
+}
+
+/** The stricter of two modes (a caller can only ever tighten what the template allows). */
+export function stricterMode(a: RecurringGenerateMode, b: RecurringGenerateMode): RecurringGenerateMode {
+  return MODE_RANK[a] <= MODE_RANK[b] ? a : b;
+}
+
+/** The idempotency key a generated invoice carries (invoices.source_ref, unique per org). */
+export function recurringSourceRef(templateId: string, runDate: string): string {
+  return `recurring:${templateId}:${runDate}`;
+}
 
 // ─── Pure date math ───────────────────────────────────────────────────
 
@@ -141,8 +172,23 @@ interface TemplateRow {
   occurrences_remaining: number | null;
   is_active: boolean;
   auto_send: boolean;
+  generate_mode: string | null;
   template_data: TemplateData;
   last_invoice_id: string | null;
+}
+
+/** What `decideMode` is told about a template that has periods due. */
+export interface RecurringDueTemplate {
+  id: string;
+  name: string;
+  location_id: string;
+  customer_id: string;
+  /** The template's own mode (generate_mode / auto_send). */
+  mode: RecurringGenerateMode;
+  /** Invoices this run would create for the template. */
+  runs: number;
+  /** Their total (lines + tax) in cents — what the autonomy cap is compared against. */
+  amountCents: number;
 }
 
 export interface TemplateLine {
@@ -162,13 +208,36 @@ export interface TemplateData {
   is_progress_bill?: boolean;
 }
 
+/** One period's invoice amount (Σ qty × unit price + tax), cents. Pure. */
+export function templateRunAmountCents(d: TemplateData): number {
+  const lines = Array.isArray(d.lines) ? d.lines : [];
+  const sub = lines.reduce((s, l) => s + Math.round((l.quantity ?? 1) * Number(l.unit_price_cents ?? 0)), 0);
+  return sub + Math.max(0, Math.round(Number(d.tax_cents ?? 0)));
+}
+
 export interface RecurringGenerateResult {
   asOf: string;
   templates_processed: number;
   invoices_created: number;
+  /** Of invoices_created, how many were left as DRAFT for review. */
+  invoices_drafted: number;
   invoices_sent: number;
+  /** Periods whose invoice already existed (source_ref) — adopted, not duplicated. */
+  already_generated: number;
   errors: { template_id: string; run_date: string; error: string }[];
-  created: { template_id: string; invoice_id: string; invoice_number: string; run_date: string }[];
+  created: { template_id: string; invoice_id: string; invoice_number: string; run_date: string; mode: RecurringGenerateMode }[];
+}
+
+export interface RecurringGenerateOptions {
+  templateId?: string;
+  /**
+   * Decide the mode for a template's due periods (the scheduler's autonomy gate). The
+   * answer can only tighten the template's own mode (stricterMode). Default: the
+   * template's own mode (a person pressed "run").
+   */
+  decideMode?: (t: RecurringDueTemplate) => Promise<RecurringGenerateMode>;
+  /** Stop between templates when aborted (scheduler timeout). */
+  signal?: AbortSignal;
 }
 
 /**
@@ -180,15 +249,15 @@ export async function generateDueRecurringInvoices(
   supabase: SupabaseClient,
   orgId: string,
   asOf: string = new Date().toISOString().slice(0, 10),
-  opts: { templateId?: string } = {},
+  opts: RecurringGenerateOptions = {},
 ): Promise<RecurringGenerateResult> {
   const result: RecurringGenerateResult = {
-    asOf, templates_processed: 0, invoices_created: 0, invoices_sent: 0, errors: [], created: [],
+    asOf, templates_processed: 0, invoices_created: 0, invoices_drafted: 0, invoices_sent: 0, already_generated: 0, errors: [], created: [],
   };
 
   let query = supabase
     .from('recurring_invoice_templates')
-    .select('id, org_id, location_id, customer_id, name, frequency, interval_count, start_date, next_run_date, end_date, occurrences_remaining, is_active, auto_send, template_data, last_invoice_id')
+    .select('id, org_id, location_id, customer_id, name, frequency, interval_count, start_date, next_run_date, end_date, occurrences_remaining, is_active, auto_send, generate_mode, template_data, last_invoice_id')
     .eq('org_id', orgId)
     .eq('is_active', true)
     .lte('next_run_date', asOf);
@@ -199,6 +268,7 @@ export async function generateDueRecurringInvoices(
   const templates = (data ?? []) as TemplateRow[];
 
   for (const t of templates) {
+    if (opts.signal?.aborted) break;
     result.templates_processed++;
 
     const data073 = (t.template_data ?? {}) as TemplateData;
@@ -211,12 +281,30 @@ export async function generateDueRecurringInvoices(
     const plan = planRecurringRuns(t, asOf);
     if (plan.runDates.length === 0) continue;
 
+    // Mode: the template's own, tightened by the caller (the scheduler's autonomy dial).
+    const own = templateMode(t);
+    let mode: RecurringGenerateMode = own;
+    if (opts.decideMode) {
+      try {
+        mode = stricterMode(own, await opts.decideMode({
+          id: t.id, name: t.name, location_id: t.location_id, customer_id: t.customer_id, mode: own,
+          runs: plan.runDates.length, amountCents: templateRunAmountCents(data073) * plan.runDates.length,
+        }));
+      } catch (e) {
+        // A gate that can't answer degrades SAFE: draft for review.
+        console.warn('[recurring] mode decision failed; drafting for review', t.id, e instanceof Error ? e.message : e);
+        mode = 'DRAFT';
+      }
+    }
+
     const netDays = Number.isFinite(data073.terms) ? Number(data073.terms) : 30;
     let occ = t.occurrences_remaining;
     let runDate = t.next_run_date ?? t.start_date;
     let lastInvoiceId: string | null = t.last_invoice_id;
     let failed = false;
+    let advancedWithoutCreate = false;
     const createdThisTemplate: string[] = [];
+    const postedThisTemplate: string[] = [];
 
     for (const rd of plan.runDates) {
       const outcome = await createInvoice(supabase, {
@@ -231,9 +319,11 @@ export async function generateDueRecurringInvoices(
           memo: data073.memo ?? t.name,
           tax_cents: data073.tax_cents ?? 0,
           is_progress_bill: data073.is_progress_bill ?? false,
-          // A recurring bill is a committed obligation → post it to the GL as real
-          // AR. auto_send then controls whether the customer is emailed.
-          post_to_gl: true,
+          // POST / POST_AND_SEND: a committed obligation → real AR. DRAFT: created for a
+          // person to review, post and send (no GL effect yet).
+          post_to_gl: mode !== 'DRAFT',
+          // One invoice per template + period, ever (unique per org, migration 173).
+          source: { source_ref: recurringSourceRef(t.id, rd) },
           lines: lines.map((l) => ({
             description: l.description,
             account_id: l.account_id,
@@ -242,6 +332,23 @@ export async function generateDueRecurringInvoices(
           })),
         },
       });
+
+      if (!outcome.ok && outcome.code === 'DUPLICATE_SOURCE') {
+        // This period's invoice already exists (an earlier run created it but died
+        // before advancing the template): adopt it, never create a second one.
+        const { data: existing } = await supabase
+          .from('invoices')
+          .select('id')
+          .eq('org_id', orgId)
+          .eq('source_ref', recurringSourceRef(t.id, rd))
+          .maybeSingle();
+        result.already_generated++;
+        lastInvoiceId = (existing as { id?: string } | null)?.id ?? lastInvoiceId;
+        if (occ !== null) occ -= 1;
+        runDate = advanceRecurringDate(rd, t.frequency, t.interval_count);
+        advancedWithoutCreate = true;
+        continue;
+      }
 
       if (!outcome.ok) {
         // Stop this template's catch-up at the failed period; leave next_run_date
@@ -253,8 +360,10 @@ export async function generateDueRecurringInvoices(
       }
 
       result.invoices_created++;
-      result.created.push({ template_id: t.id, invoice_id: outcome.result.invoice_id, invoice_number: outcome.result.invoice_number, run_date: rd });
+      if (mode === 'DRAFT' || !outcome.result.posted) result.invoices_drafted++;
+      result.created.push({ template_id: t.id, invoice_id: outcome.result.invoice_id, invoice_number: outcome.result.invoice_number, run_date: rd, mode });
       createdThisTemplate.push(outcome.result.invoice_id);
+      if (outcome.result.posted) postedThisTemplate.push(outcome.result.invoice_id);
       lastInvoiceId = outcome.result.invoice_id;
       if (occ !== null) occ -= 1;
       runDate = advanceRecurringDate(rd, t.frequency, t.interval_count);
@@ -266,7 +375,7 @@ export async function generateDueRecurringInvoices(
     const occRemaining = failed ? occ : plan.occurrencesRemaining;
     const deactivate = !failed && plan.deactivate;
 
-    if (createdThisTemplate.length > 0 || failed) {
+    if (createdThisTemplate.length > 0 || failed || advancedWithoutCreate) {
       // recurring_invoice_templates is SELECT-only for members (migration 172): the template
       // was read through the caller's client above (RLS proved org + client scope for a
       // member); the service role advances it, org pinned.
@@ -287,8 +396,9 @@ export async function generateDueRecurringInvoices(
     // Auto-send is a per-template autonomy dial (VIII.7 — no global "let it run").
     // Best-effort: a missing email provider or customer email never breaks the
     // generation; the invoice already exists as real AR for review.
-    if (t.auto_send && createdThisTemplate.length > 0) {
-      for (const invId of createdThisTemplate) {
+    // Only posted invoices go out: one left DRAFT (a COA gap) waits for a person.
+    if (mode === 'POST_AND_SEND' && postedThisTemplate.length > 0) {
+      for (const invId of postedThisTemplate) {
         try {
           const sent = await sendInvoiceById(supabase, orgId, invId, 'system');
           if (sent.ok) result.invoices_sent++;

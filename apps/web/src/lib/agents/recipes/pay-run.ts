@@ -38,6 +38,15 @@ interface DueBill {
   billNumber: string | null;
   vendorId: string | null;
   vendorName: string | null;
+  /** Early-pay discount still available (migration 184), else null. */
+  discountBps: number | null;
+  discountDate: string | null;
+}
+
+/** Savings if paid by the discount date (cents, rounded half-up). Pure. */
+export function earlyPaySavingsCents(balanceCents: number, bps: number | null): number {
+  if (!bps || bps <= 0 || balanceCents <= 0) return 0;
+  return Math.floor((balanceCents * bps + 5000) / 10000);
 }
 
 /** ISO yyyy-mm-dd for `today + days` (UTC). */
@@ -65,15 +74,31 @@ async function billsWithOpenApproval(
   );
 }
 
-/** Load payable, due bills for the org (RLS-scoped), newest-due first, with vendor names. */
+type BillRow = {
+  id: string;
+  balance_cents: number | string;
+  due_date: string;
+  bill_number: string | null;
+  vendor_id: string | null;
+  early_pay_discount_bps?: number | null;
+  early_pay_discount_date?: string | null;
+};
+
+/**
+ * Load payable, due bills for the org (RLS-scoped), soonest-due first, with vendor names.
+ * `discountCutoff` also pulls in bills due LATER whose early-pay discount date falls on or
+ * before it (and is not past) — paying them now captures the discount.
+ */
 async function loadDueBills(
   supabase: SupabaseClient,
   cutoff: string,
   locationId: string | null,
+  discountCutoff: string | null = null,
 ): Promise<DueBill[]> {
+  const COLS = 'id, balance_cents, due_date, bill_number, vendor_id, early_pay_discount_bps, early_pay_discount_date';
   let query = supabase
     .from('bills')
-    .select('id, balance_cents, due_date, bill_number, vendor_id')
+    .select(COLS)
     .eq('status', 'APPROVED')
     .gt('balance_cents', 0)
     .lte('due_date', cutoff)
@@ -81,13 +106,23 @@ async function loadDueBills(
   if (locationId) query = query.eq('location_id', locationId);
 
   const { data } = await query;
-  const rows = (data ?? []) as Array<{
-    id: string;
-    balance_cents: number | string;
-    due_date: string;
-    bill_number: string | null;
-    vendor_id: string | null;
-  }>;
+  const rows = (data ?? []) as BillRow[];
+
+  if (discountCutoff) {
+    const today = isoDatePlusDays(0);
+    let dq = supabase
+      .from('bills')
+      .select(COLS)
+      .eq('status', 'APPROVED')
+      .gt('balance_cents', 0)
+      .gt('due_date', cutoff)
+      .gte('early_pay_discount_date', today)
+      .lte('early_pay_discount_date', discountCutoff);
+    if (locationId) dq = dq.eq('location_id', locationId);
+    const { data: disc } = await dq;
+    const seen = new Set(rows.map((r) => r.id));
+    for (const r of (disc ?? []) as BillRow[]) if (!seen.has(r.id)) rows.push(r);
+  }
   if (rows.length === 0) return [];
 
   // Resolve vendor display names (cross-schema, RLS-scoped).
@@ -104,14 +139,20 @@ async function loadDueBills(
     }
   }
 
-  return rows.map((r) => ({
-    id: r.id,
-    balanceCents: Number(r.balance_cents),
-    dueDate: r.due_date,
-    billNumber: r.bill_number,
-    vendorId: r.vendor_id,
-    vendorName: r.vendor_id ? nameById.get(r.vendor_id) ?? null : null,
-  }));
+  const today = isoDatePlusDays(0);
+  return rows.map((r) => {
+    const live = !!r.early_pay_discount_bps && !!r.early_pay_discount_date && r.early_pay_discount_date >= today;
+    return {
+      id: r.id,
+      balanceCents: Number(r.balance_cents),
+      dueDate: r.due_date,
+      billNumber: r.bill_number,
+      vendorId: r.vendor_id,
+      vendorName: r.vendor_id ? nameById.get(r.vendor_id) ?? null : null,
+      discountBps: live ? Number(r.early_pay_discount_bps) : null,
+      discountDate: live ? r.early_pay_discount_date ?? null : null,
+    };
+  });
 }
 
 export const payRunRecipe: AgentRecipe = {
@@ -131,7 +172,11 @@ export const payRunRecipe: AgentRecipe = {
           ? input.locationId.trim()
           : null;
 
-    const state: AgentState = { dueWithinDays, locationId };
+    // Early-pay discounts (migration 184): also propose bills whose discount date falls in
+    // the window, even when they are due later. Default on; `include_discounts: false` off.
+    const includeDiscounts = input.include_discounts !== false && input.includeDiscounts !== false;
+    const scheduled = input.source === 'scheduler';
+    const state: AgentState = { dueWithinDays, locationId, includeDiscounts, scheduled };
     return {
       title: `Pay run · bills due ≤ ${dueWithinDays}d`,
       state,
@@ -148,8 +193,9 @@ export const payRunRecipe: AgentRecipe = {
         const dueWithinDays = Number(state.dueWithinDays ?? 7);
         const locationId = (state.locationId as string | null) ?? null;
         const cutoff = isoDatePlusDays(dueWithinDays);
+        const includeDiscounts = state.includeDiscounts !== false;
 
-        const bills = await loadDueBills(ctx.supabase, cutoff, locationId);
+        const bills = await loadDueBills(ctx.supabase, cutoff, locationId, includeDiscounts ? cutoff : null);
         if (bills.length === 0) {
           return {
             status: 'DONE',
@@ -164,22 +210,30 @@ export const payRunRecipe: AgentRecipe = {
         const alreadyQueued = bills.length - releasable.length;
         const totalCents = releasable.reduce((s, b) => s + b.balanceCents, 0);
 
-        const list = releasable.map((b) => ({
-          billId: b.id,
-          vendor: b.vendorName ?? 'Unknown vendor',
-          billNumber: b.billNumber,
-          amountCents: b.balanceCents,
-          dueDate: b.dueDate,
-        }));
+        // Pay-by date: the discount date when a discount is live, else the due date.
+        const list = releasable
+          .map((b) => ({
+            billId: b.id,
+            vendor: b.vendorName ?? 'Unknown vendor',
+            billNumber: b.billNumber,
+            amountCents: b.balanceCents,
+            dueDate: b.dueDate,
+            payBy: b.discountDate && b.discountDate < b.dueDate ? b.discountDate : b.dueDate,
+            discountDate: b.discountDate,
+            discountSavingsCents: earlyPaySavingsCents(b.balanceCents, b.discountBps),
+          }))
+          .sort((a, b) => (a.payBy < b.payBy ? -1 : a.payBy > b.payBy ? 1 : b.amountCents - a.amountCents));
+        const savingsCents = list.reduce((s, b) => s + b.discountSavingsCents, 0);
+        const discountCount = list.filter((b) => b.discountSavingsCents > 0).length;
 
         return {
           status: 'DONE',
           summary:
             releasable.length === 0
               ? `${bills.length} due bill(s) found, but all already have a disbursement approval in flight — nothing new to release.`
-              : `Assembled ${releasable.length} bill(s) totaling ${formatMoney(totalCents)} due within ${dueWithinDays} day(s)${alreadyQueued > 0 ? ` (${alreadyQueued} already queued, skipped)` : ''}.`,
-          statePatch: { proposedBillIds: releasable.map((b) => b.id), proposedTotalCents: totalCents },
-          output: { count: releasable.length, totalCents, alreadyQueued, bills: list },
+              : `Assembled ${releasable.length} bill(s) totaling ${formatMoney(totalCents)} due within ${dueWithinDays} day(s)${discountCount > 0 ? `, including ${discountCount} with an early-pay discount worth ${formatMoney(savingsCents)}` : ''}${alreadyQueued > 0 ? ` (${alreadyQueued} already queued, skipped)` : ''}.`,
+          statePatch: { proposedBillIds: list.map((b) => b.billId), proposedTotalCents: totalCents, proposedSavingsCents: savingsCents },
+          output: { count: releasable.length, totalCents, alreadyQueued, savingsCents, discountCount, bills: list },
         };
       },
     },

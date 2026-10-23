@@ -10,7 +10,7 @@ import { templateBodySchema } from '@/lib/invoices/templates/schema';
 import { loadInvoiceDocById } from '@/lib/invoices/invoice-doc';
 import { sampleInvoiceDoc, SAMPLE_TOKEN } from '@/lib/invoices/sample-doc';
 import { InvoicePdf } from '@/lib/invoices/invoice-pdf';
-import { resolvePayLink } from '@/lib/invoices/pay-link';
+import { resolveCompanyPayLink } from '@/lib/invoices/pay-link';
 import type { InvoiceTemplate } from '@/lib/invoices/templates/types';
 import { isTenantLogoUrl, LOGO_URL_ERROR } from '@/lib/invoices/templates/logo-url';
 
@@ -54,10 +54,7 @@ export const POST = apiHandler(bodySchema, async (body, ctx) => {
       ? await supabase.schema('core').from('locations').select('name').eq('org_id', orgId).eq('id', body.location_id).maybeSingle()
       : { data: null };
     const sample = sampleInvoiceDoc({}, {}, (loc as { name: string } | null)?.name ?? 'Your Company');
-    const pay = await resolvePayLink(supabase, orgId, {
-      public_token: SAMPLE_TOKEN, status: 'SENT', balance_cents: sample.balance_cents,
-      location_id: body.location_id, customer_id: null, job_id: null, payment_methods_allowed: null,
-    });
+    const pay = await resolveCompanyPayLink(supabase, orgId, body.location_id ?? null, SAMPLE_TOKEN);
     doc = { ...sample, template: draft(sample.template), pay, customer_message: tplBody.default_message ?? sample.customer_message };
   }
 

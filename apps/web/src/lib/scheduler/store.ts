@@ -87,7 +87,7 @@ export class SupabaseSchedulerStore implements SchedulerStore {
         attempt: input.attempt,
         idempotency_key: input.idempotencyKey,
         trigger: input.trigger,
-        actor: 'system:scheduler',
+        actor: input.actor ?? 'system:scheduler',
         status: 'running',
       })
       .select('id')

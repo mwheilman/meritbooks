@@ -57,6 +57,24 @@ describe('rail model — the old sidebar filters', () => {
   });
 });
 
+describe('rail model — Team performance from the Books plane (1G-4)', () => {
+  it('a supervisor working in a client\'s books reaches Team performance', () => {
+    const h = hrefs(visibleNavGroups({ ...base, hasPermissionData: true, canView: ALLOW, plane: 'books', mustSelectCompany: false }));
+    expect(h).toContain('/team?tab=performance');
+    // In the Team & settings plane it is the Performance tab of "Team & access" (/team) —
+    // one nav entry per route (navigation.test: hrefs are unique).
+    expect(hrefs(visibleNavGroups({ ...base, plane: 'practice', mustSelectCompany: false }))).toContain('/team');
+  });
+  it('roles without team:view never see it (filtered by the page\'s feature)', () => {
+    const noTeam = (f: string) => f !== 'team';
+    expect(hrefs(visibleNavGroups({ ...base, hasPermissionData: true, canView: noTeam, plane: 'books', mustSelectCompany: false }))).not.toContain('/team?tab=performance');
+    expect(hrefs(visibleNavGroups({ ...base, hasPermissionData: true, canView: noTeam, plane: 'practice', mustSelectCompany: false }))).not.toContain('/team?tab=performance');
+  });
+  it('not before a client is picked (processing gate unchanged)', () => {
+    expect(hrefs(visibleNavGroups({ ...base, plane: 'books', mustSelectCompany: true }))).not.toContain('/team?tab=performance');
+  });
+});
+
 describe('rail model — merit-ui shape', () => {
   it('folds M items behind More, and carries the live inbox count on Inbox', () => {
     const rail = buildRail({ ...base, plane: 'books', mustSelectCompany: false, context: 'client', counts: { inbox: 12, inboxAlert: true } });

@@ -9,6 +9,7 @@ import { getHomeCurrency, normalizeCurrency } from '@/lib/currency';
 import { resolvePageParams, totalPages } from '@/lib/pagination';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { getOrgToday } from '@/lib/dates/org-today';
+import { resolvePayLinksBatch, type PayLinkState } from '@/lib/invoices/pay-link';
 import { summarizeOnlineActivity, ONLINE_EVENT_TYPES, type OnlineEvent } from '@/lib/invoices/online-activity';
 import { daysPastDue, effectiveInvoiceStatus, invoiceTabOrFilter, isInvoiceOverdue, isOpenInvoiceStatus } from '@/lib/ar/overdue';
 
@@ -57,7 +58,8 @@ export async function GET(request: Request) {
       id, invoice_number, invoice_date, due_date, subtotal_cents, tax_cents,
       retainage_cents, total_cents, amount_paid_cents, balance_cents,
       status, is_progress_bill, application_number, memo, sent_at, created_at,
-      currency, customer_id, location_id, job_id
+      currency, customer_id, location_id, job_id,
+      public_token, payment_methods_allowed, card_surcharge_enabled, ach_surcharge_enabled
     `, { count: 'exact' })
     .order('invoice_date', { ascending: false })
     .range(from, to);
@@ -168,6 +170,28 @@ export async function GET(request: Request) {
     }
   }
 
+  // Can each row's customer actually pay online right now? THE pay-link decision
+  // (lib/invoices/pay-link.ts) — the same one the PDF, email, drawer and pay page use.
+  const payById = await resolvePayLinksBatch(
+    supabase,
+    orgId,
+    rows.map((r) => ({
+      id: r.id as string,
+      public_token: String(r.public_token ?? ''),
+      status: String(r.status ?? ''),
+      balance_cents: Number(r.balance_cents ?? 0),
+      location_id: (r.location_id as string | null) ?? null,
+      customer_id: (r.customer_id as string | null) ?? null,
+      job_id: (r.job_id as string | null) ?? null,
+      payment_methods_allowed: (r.payment_methods_allowed as string[] | null) ?? null,
+      card_surcharge_enabled: (r.card_surcharge_enabled as boolean | null) ?? null,
+      ach_surcharge_enabled: (r.ach_surcharge_enabled as boolean | null) ?? null,
+    })),
+  ).catch((e: unknown) => {
+    console.error('[invoices] pay-link batch failed', e);
+    return new Map<string, PayLinkState>();
+  });
+
   const customerById = new Map((custRes.data ?? []).map((c: Record<string, unknown>) => [c.id as string, c]));
   const locationById = new Map((locRes.data ?? []).map((l: Record<string, unknown>) => [l.id as string, l]));
   const jobById = new Map((jobRes.data ?? []).map((j: Record<string, unknown>) => [j.id as string, j]));
@@ -213,7 +237,14 @@ export async function GET(request: Request) {
       job: job ? { id: job.id, jobNumber: job.job_number, name: job.name } : null,
       online: (() => {
         const a = summarizeOnlineActivity(eventsByInvoice.get(inv.id as string) ?? []);
-        return { status: a.status, label: a.label, views: a.views, paidOnlineAt: a.paidOnlineAt };
+        const pay = payById.get(inv.id as string);
+        return {
+          status: a.status, label: a.label, views: a.views, paidOnlineAt: a.paidOnlineAt,
+          payable: pay ? pay.payable : null,
+          payMethods: pay?.methods ?? [],
+          payReason: pay?.reason ?? null,
+          payCode: pay?.code ?? null,
+        };
       })(),
     };
   });

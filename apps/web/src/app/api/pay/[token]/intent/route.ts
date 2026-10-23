@@ -4,8 +4,7 @@ export const runtime = 'nodejs';
 import { NextResponse } from 'next/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { createDestinationPaymentIntent } from '@/lib/money/providers/stripe';
-import { resolveCollectionAccount } from '@/lib/money/payment-accounts';
-import { loadInvoicePaymentTerms } from '@/lib/money/payment-terms';
+import { resolvePayDecision } from '@/lib/invoices/pay-link';
 import { stripeCanCharge, stripeMode } from '@/lib/money/payments-mode';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
 import { computeFee, resolveMerchantFeeSchedule } from '@/lib/money/fees';
@@ -65,7 +64,8 @@ export async function POST(req: Request, { params }: { params: { token: string }
     payment_methods_allowed: string[] | null; card_surcharge_enabled: boolean | null; ach_surcharge_enabled: boolean | null;
   };
   if (i.balance_cents <= 0) return NextResponse.json({ enabled: false, message: 'This invoice is already paid in full.' });
-  if (i.status === 'VOIDED' || i.status === 'WRITTEN_OFF') {
+  if (i.status === 'VOIDED' || i.status === 'WRITTEN_OFF' || i.status === 'DRAFT') {
+    // A DRAFT was never issued (no A/R posted, terms can still change): never take money on it.
     return NextResponse.json({ enabled: false, message: 'This invoice cannot be paid online. Please contact the sender.' });
   }
 
@@ -76,22 +76,30 @@ export async function POST(req: Request, { params }: { params: { token: string }
     return NextResponse.json({ enabled: false, message: setUpMessage });
   }
 
-  // The method must be one the invoice is actually offered on (full cascade).
-  const terms = await loadInvoicePaymentTerms(supabase, i);
-  if (!terms.online.includes(method)) {
+  // THE payability decision (lib/invoices/pay-link.ts) — the same one the pay page, PDF,
+  // email and drawer show. Anything it says no to is refused here, not just hidden.
+  const decision = await resolvePayDecision(supabase, i.org_id, {
+    public_token: params.token, status: i.status, balance_cents: i.balance_cents,
+    location_id: i.location_id, customer_id: i.customer_id, job_id: i.job_id,
+    payment_methods_allowed: i.payment_methods_allowed,
+    card_surcharge_enabled: i.card_surcharge_enabled, ach_surcharge_enabled: i.ach_surcharge_enabled,
+  });
+  const { state, terms } = decision;
+  if (!state.payable || !decision.connection?.accountHandle) {
+    const message = state.code === 'NOT_READY'
+      ? 'Online payment for this business is paused. Please use the remit-to details on this invoice.'
+      : state.code === 'NO_ONLINE_METHOD'
+        ? 'Online payment is not accepted for this invoice. Please use the remit-to details on this invoice.'
+        : setUpMessage;
+    return NextResponse.json({ enabled: false, message }, { status: state.code === 'NO_ONLINE_METHOD' ? 409 : 200 });
+  }
+  // The method must be one the invoice is actually offered on (cascade ∩ account).
+  if (!state.methods.includes(method)) {
     const label = method === 'CARD' ? 'Card payment' : 'Bank transfer';
     return NextResponse.json({ enabled: false, message: `${label} is not accepted for this invoice.` }, { status: 409 });
   }
-
-  // The issuing company's own account (or the tenant account in single-account mode).
-  const pick = await resolveCollectionAccount(supabase, i.org_id, i.location_id);
-  if (!pick.connection?.accountHandle) {
-    return NextResponse.json({ enabled: false, message: setUpMessage });
-  }
-  if (!pick.ready) {
-    return NextResponse.json({ enabled: false, message: 'Online payment for this business is paused. Please use the remit-to details on this invoice.' });
-  }
-  const conn = pick.connection;
+  const conn = decision.connection;
+  const pick = { source: decision.source };
   const destination = conn.accountHandle as string;
 
   const base = i.balance_cents;
@@ -99,8 +107,10 @@ export async function POST(req: Request, { params }: { params: { token: string }
   // Layer 1 — what MeritBooks charges this merchant for this payment. Read from
   // the merchant's fee schedule (falls back to the platform default), applying
   // the merchant's rate and any cap/floor. Replaces the old hardcoded 1%/3%.
-  const schedule = await resolveMerchantFeeSchedule(supabase, i.org_id);
-  const appFeeCents = computeFee(schedule, method, base);
+  // (resolvePayDecision loaded one too, but falls back to the default for DISPLAY on a query
+  // failure — re-read strictly here so a broken query never misprices a charge.)
+  const strictSchedule = await resolveMerchantFeeSchedule(supabase, i.org_id);
+  const appFeeCents = computeFee(strictSchedule, method, base);
 
   // Layer 2 — does the merchant pass this fee to the customer, or absorb it?
   // Defaults asymmetric by method: card passes through, ACH is absorbed; resolved

@@ -10,10 +10,13 @@
  *              unexpired beyond the request's due date (a renewed certificate), OR a
  *              vendor-portal submission of that type landed after the request was made
  *              ("uploaded — waiting for review"; Wave 2A's review loop corrects/reopens).
+ *   receipt    satisfied when the card charge has a receipt or was marked not required
+ *              (lib/receipts/resolver.ts, Wave 2B).
  *   others     no resolver yet → people mark them fulfilled (or Wave 2 adds one).
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { receiptResolver } from '@/lib/receipts/resolver';
 import type { FulfilledVia, RequestKind, RequestRow } from './types';
 
 export type Resolution = { satisfied: true; via: FulfilledVia; note: string } | { satisfied: false };
@@ -97,4 +100,10 @@ export const vendorDocResolver: BatchResolver = async (db, orgId, requests, now)
 export const DEFAULT_RESOLVERS: ResolverRegistry = {
   w9: vendorDocResolver,
   coi: vendorDocResolver,
+  // Wave 2B: a receipt request closes when its card charge has a receipt (or is marked not required).
+  receipt: receiptResolver,
+  // Wave 2E: a dunning reminder closes once its invoice is paid / disputed / promised.
+  // Lazy import — dunning-requests imports the request service, which imports this file.
+  dunning: async (db, orgId, requests, now) =>
+    (await import('@/lib/collections/dunning-requests')).dunningResolver(db, orgId, requests, now),
 };

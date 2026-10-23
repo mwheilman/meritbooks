@@ -11,6 +11,14 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────
 type Frequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
 
+type GenerateMode = 'DRAFT' | 'POST' | 'POST_AND_SEND';
+
+const GENERATE_MODES: { value: GenerateMode; label: string; short: string; help: string }[] = [
+  { value: 'DRAFT', label: 'Create a draft for me to review', short: 'draft for review', help: 'Each invoice is created as a draft — nothing posts and nothing is emailed until you send it.' },
+  { value: 'POST', label: 'Post it to AR (don\u2019t email)', short: 'post', help: 'Each invoice posts to AR; you send it yourself.' },
+  { value: 'POST_AND_SEND', label: 'Post it and email the customer', short: 'post + email', help: 'Each invoice posts to AR and is emailed to the customer (if email is set up).' },
+];
+
 interface TemplateRow {
   id: string;
   name: string;
@@ -22,6 +30,7 @@ interface TemplateRow {
   occurrencesRemaining: number | null;
   isActive: boolean;
   autoSend: boolean;
+  generateMode?: GenerateMode;
   amountCents: number;
   lineCount: number;
   lastGeneratedAt: string | null;
@@ -209,7 +218,7 @@ export function RecurringPanel() {
                     <div className="text-white font-medium">{t.name}</div>
                     <div className="text-xs text-gray-500">
                       {t.location?.name ?? '—'}
-                      {t.autoSend && <span className="ml-2 px-1.5 py-0.5 text-[10px] bg-indigo-500/20 text-indigo-300 rounded">auto-send</span>}
+                      <span className="ml-2 px-1.5 py-0.5 text-[10px] bg-slate-700/40 text-slate-300 rounded">{GENERATE_MODES.find((m) => m.value === (t.generateMode ?? (t.autoSend ? 'POST_AND_SEND' : 'POST')))?.short}</span>
                     </div>
                   </td>
                   <td className="py-3 pr-4 text-gray-300">{t.customer?.name ?? '—'}</td>
@@ -262,7 +271,7 @@ interface TLine { description: string; account_id: string; quantity: number; uni
 interface TemplateDetail {
   id: string; name: string; frequency: Frequency; intervalCount: number;
   startDate: string; nextRunDate: string | null; endDate: string | null;
-  occurrencesRemaining: number | null; autoSend: boolean; memo: string | null;
+  occurrencesRemaining: number | null; autoSend: boolean; generateMode?: GenerateMode; memo: string | null;
   taxCents: number; terms: number; isProgressBill: boolean;
   lines: { description: string; accountId: string; quantity: number; unitPriceCents: number }[];
   customer: { id: string; name: string } | null;
@@ -282,7 +291,7 @@ function TemplateModal({ templateId, onClose, onSaved }: { templateId?: string; 
   const [endDate, setEndDate] = useState('');
   const [occurrences, setOccurrences] = useState('');
   const [terms, setTerms] = useState(30);
-  const [autoSend, setAutoSend] = useState(false);
+  const [generateMode, setGenerateMode] = useState<GenerateMode>('DRAFT');
   const [memo, setMemo] = useState('');
   const [taxCents, setTaxCents] = useState(0);
   const [lines, setLines] = useState<TLine[]>([{ description: '', account_id: '', quantity: 1, unit_price_cents: 0 }]);
@@ -316,7 +325,7 @@ function TemplateModal({ templateId, onClose, onSaved }: { templateId?: string; 
     setEndDate(detail.endDate ?? '');
     setOccurrences(detail.occurrencesRemaining != null ? String(detail.occurrencesRemaining) : '');
     setTerms(detail.terms);
-    setAutoSend(detail.autoSend);
+    setGenerateMode(detail.generateMode ?? (detail.autoSend ? 'POST_AND_SEND' : 'POST'));
     setMemo(detail.memo ?? '');
     setTaxCents(detail.taxCents);
     setLines(detail.lines.length ? detail.lines.map((l) => ({ description: l.description, account_id: l.accountId, quantity: l.quantity, unit_price_cents: l.unitPriceCents })) : [{ description: '', account_id: '', quantity: 1, unit_price_cents: 0 }]);
@@ -344,7 +353,7 @@ function TemplateModal({ templateId, onClose, onSaved }: { templateId?: string; 
             name, frequency, interval_count: intervalCount,
             end_date: endDate || null,
             occurrences_remaining: occurrences ? parseInt(occurrences, 10) : null,
-            auto_send: autoSend, memo: memo || null, tax_cents: taxCents, terms, lines: linePayload,
+            generate_mode: generateMode, memo: memo || null, tax_cents: taxCents, terms, lines: linePayload,
           }),
         });
       } else {
@@ -354,7 +363,7 @@ function TemplateModal({ templateId, onClose, onSaved }: { templateId?: string; 
             name, location_id: locationId, customer_id: customerId, frequency, interval_count: intervalCount,
             start_date: startDate, end_date: endDate || undefined,
             occurrences: occurrences ? parseInt(occurrences, 10) : undefined,
-            auto_send: autoSend, memo: memo || undefined, tax_cents: taxCents, terms, lines: linePayload,
+            generate_mode: generateMode, memo: memo || undefined, tax_cents: taxCents, terms, lines: linePayload,
           }),
         });
       }
@@ -470,11 +479,13 @@ function TemplateModal({ templateId, onClose, onSaved }: { templateId?: string; 
                 <label className="block text-xs text-gray-400 mb-1">Memo (prints on each invoice)</label>
                 <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Optional" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-600" />
               </div>
-              <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-                <input type="checkbox" checked={autoSend} onChange={(e) => setAutoSend(e.target.checked)} className="accent-emerald-500 w-4 h-4" />
-                Auto-send each generated invoice by email
-              </label>
-              <p className="text-[11px] text-gray-500">If email isn&apos;t configured, invoices are still generated and posted for review.</p>
+              <div>
+                <label htmlFor="recurring-generate-mode" className="block text-xs text-gray-400 mb-1">When an invoice comes due</label>
+                <select id="recurring-generate-mode" value={generateMode} onChange={(e) => setGenerateMode(e.target.value as GenerateMode)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
+                  {GENERATE_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+                <p className="text-[11px] text-gray-500 mt-1">{GENERATE_MODES.find((m) => m.value === generateMode)?.help} The nightly run only posts or emails when Settings → Autonomy → Scheduled recurring invoices allows it; otherwise it drafts.</p>
+              </div>
             </div>
             <div className="border-t border-gray-700/50 pt-2 space-y-2 self-end">
               <div className="flex justify-between text-sm"><span className="text-gray-400">Subtotal</span><span className="font-mono text-white">{formatMoney(subtotal)}</span></div>

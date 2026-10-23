@@ -107,6 +107,8 @@ interface ClosePeriodRow {
 
 interface Close {
   lookbackMonths: number;
+  /** Inclusive period end-date bounds: the trailing months ending this month. */
+  window?: { start: string; end: string };
   targetBusinessDay: number;
   closedCount: number;
   onTimeCount: number;
@@ -236,11 +238,20 @@ function relTime(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString();
 }
 
+/** "Nov 2025" from a yyyy-mm-dd calendar date. */
+function monthStr(iso: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
 function dateStr(iso: string | null | undefined): string {
   if (!iso) return NA;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return NA;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+  // Four-digit year ("Jan 6, 2028", never "Jan 6, 28"). Date-only values are calendar
+  // dates — format in UTC so the day never shifts with the viewer's timezone.
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(iso);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', ...(dateOnly ? { timeZone: 'UTC' } : {}) });
 }
 
 /** Higher-is-better band for a rate (0..1). */
@@ -626,6 +637,7 @@ function CloseAdherence({ close }: { close: Close }) {
         </div>
         <span className="text-2xs text-slate-500">
           Target: hard-close by business day {close.targetBusinessDay} · trailing {close.lookbackMonths} months
+          {close.window ? ` (${monthStr(close.window.start)} – ${monthStr(close.window.end)})` : ''}
         </span>
       </div>
 

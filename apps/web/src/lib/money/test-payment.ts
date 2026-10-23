@@ -21,7 +21,7 @@ import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
 import { assertInvoiceVoidable } from '@/lib/invoices/void-invoice';
 import { voidJournalEntry } from '@/lib/services/gl-posting';
 import { serviceWriter } from '@/lib/db/scoped-writer';
-import { resolveCollectionAccount, writeAudit } from '@/lib/money/payment-accounts';
+import { refreshAccountStatus, resolveCollectionAccount, writeAudit } from '@/lib/money/payment-accounts';
 import { loadInvoicePaymentTerms } from '@/lib/money/payment-terms';
 import { stripeCanCharge } from '@/lib/money/payments-mode';
 import { refundDestinationPaymentIntent } from '@/lib/money/providers/stripe';
@@ -134,9 +134,19 @@ export async function createTestPayment(
   args: { orgId: string; locationId: string; userId: string },
 ): Promise<{ run: TestRun; reused: boolean }> {
   if (!stripeCanCharge()) throw new TestPaymentError('Stripe is not set up on the server yet, so a test payment cannot run.');
-  const pick = await resolveCollectionAccount(adminDb, args.orgId, args.locationId);
+  let pick = await resolveCollectionAccount(adminDb, args.orgId, args.locationId);
   if (!pick.connection || !pick.environment) throw new TestPaymentError('Connect this company to Stripe first.');
-  if (!pick.ready) throw new TestPaymentError('Stripe has paused payments for this company. Finish its Stripe setup first.');
+  if (!pick.ready && pick.connection.account.chargesEnabled === null) {
+    // Never checked: ask Stripe now, so the test's pay link isn't refused for lack of a status.
+    await refreshAccountStatus(adminDb, pick.connection, args.userId).catch(() => undefined);
+    pick = await resolveCollectionAccount(adminDb, args.orgId, args.locationId);
+    if (!pick.connection || !pick.environment) throw new TestPaymentError('Connect this company to Stripe first.');
+  }
+  if (!pick.ready) {
+    throw new TestPaymentError(pick.connection.account.chargesEnabled === false
+      ? 'Stripe has paused payments for this company. Finish its Stripe setup first.'
+      : 'Stripe hasn\'t confirmed this company can take payments yet. Finish its Stripe setup first.');
+  }
 
   // One open test per company: hand back the existing link instead of stacking invoices.
   const { data: open } = await adminDb

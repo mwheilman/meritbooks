@@ -1,210 +1,88 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+// Each attachment is one AI read; give a multi-invoice email room to finish.
+export const maxDuration = 60;
 
 import { NextResponse } from 'next/server';
-import { timingSafeEqual } from 'node:crypto';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { getAnthropicApiKey } from '@/lib/ai/gateway';
-import {
-  resolveTenantByRecipients,
-  resolveDefaultLocationId,
-  ingestInboundAttachment,
-  inboundMessageAlreadySeen,
-  normalizeEmailAddress,
-  type InboundAttachment,
-  type IngestAttachmentOutcome,
-} from '@/lib/ap/inbound-intake';
-import type { DocProviderDeps } from '@/lib/ap/doc-intelligence';
+import { readInboundConfig } from '@/lib/email/inbound-config';
+import { preVerifyInboundHeaders, verifyInboundRequest } from '@/lib/email/inbound-auth';
+import { parseInbound } from '@/lib/email/inbound-adapters';
+import { processInboundEmail } from '@/lib/email/inbound-process';
 
 /**
- * POST /api/webhooks/inbound-email — the AP "monitored mailbox" ingress.
+ * POST /api/webhooks/inbound-email — the payables / receipts email inbox ingress
+ * (FPB-ap-intake). PUBLIC route (middleware matcher `/api/webhooks(.*)`): there is no
+ * user session, so it is authenticated by the PROVIDER instead — and fails closed:
  *
- * A tenant forwards vendor invoices to its per-tenant inbound address; an email
- * provider (SendGrid Inbound Parse, Postmark, Mailgun, Cloudflare Email Worker, …)
- * POSTs the message here as JSON. Provider-agnostic body:
+ *   INBOUND_EMAIL_PROVIDER=postmark (default)  HTTP Basic auth from the webhook URL
+ *                                             (Postmark does not sign webhooks)
+ *   INBOUND_EMAIL_PROVIDER=sendgrid           ECDSA signature (security policy) or Basic auth
+ *   INBOUND_EMAIL_PROVIDER=generic            HMAC-SHA256 signature or the shared secret
  *
- *   {
- *     "from": "vendor@acme.com",              // or "sender"
- *     "to": "ap-acme@inbound.meritbooks.app", // or ["…"] / "recipient"
- *     "subject": "Invoice 1042",
- *     "messageId": "<abc@provider>",          // optional; enables de-dup
- *     "attachments": [
- *       { "filename": "invoice.pdf", "contentType": "application/pdf", "content": "<base64>" }
- *     ]
- *   }
+ * The IP allowlist and header-only credentials are checked BEFORE the body is read;
+ * signature verification then runs on the RAW bytes before any parsing. Then the provider adapter
+ * normalizes the body to an `InboundEmail`, and the orchestrator routes each
+ * recipient to a company address (ap-<company>@… / receipts-<company>@…), dedupes,
+ * applies sender rules and hands it to the purpose handler. Nothing here posts to
+ * the GL: AP mail becomes PROPOSED draft bills for a human to approve.
  *
- * AUTH: a shared secret (INBOUND_EMAIL_SECRET), presented in `x-inbound-email-secret`
- * OR `Authorization: Bearer <secret>`, compared in constant time — the same posture
- * as the event-worker guard. FAILS CLOSED: if the env is unset the endpoint rejects
- * everything (an unauthenticated caller can never post a bill draft into a tenant).
- *
- * DEGRADE-SAFE: each attachment is retained in the documents bucket BEFORE the AI
- * read; if the read fails (AI disabled, unreadable scan), the draft still lands in
- * the AP intake queue as PENDING_PARSE with the original attached. Never a GL post.
+ * Status codes: 401 unauthenticated · 400 unreadable body · 413 too large · 403 no
+ * inbox matches (Postmark stops retrying) · 500 a step failed (the provider retries;
+ * dedupe makes that safe) · 200 otherwise.
  */
 
-function safeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a, 'utf8');
-  const bb = Buffer.from(b, 'utf8');
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
+/** Larger than any provider's inbound message limit (Postmark: 35 MB). */
+const MAX_BODY_BYTES = 40 * 1024 * 1024;
+
+function callerIp(req: Request): string | null {
+  const fwd = req.headers.get('x-forwarded-for');
+  if (fwd) return fwd.split(',')[0]?.trim() || null;
+  return req.headers.get('x-real-ip');
 }
 
-/** Constant-time shared-secret check. Fails closed when the env is unset. */
-function authorizeInbound(req: Request): boolean {
-  const secret = process.env.INBOUND_EMAIL_SECRET;
-  if (!secret || secret.length === 0) return false;
-
-  const header = req.headers.get('x-inbound-email-secret');
-  if (header && safeEqual(header, secret)) return true;
-
-  const authz = req.headers.get('authorization');
-  if (authz && authz.toLowerCase().startsWith('bearer ')) {
-    const presented = authz.slice(7).trim();
-    if (presented && safeEqual(presented, secret)) return true;
+function unauthorized(reason: string, provider: string): NextResponse {
+  if (reason === 'not_configured') {
+    console.warn(`[inbound-email] rejected: ${provider} credential is not configured or too short (fail closed)`);
   }
-  return false;
-}
-
-/** Pull recipient addresses out of the many shapes providers use. */
-function extractRecipients(body: Record<string, unknown>): string[] {
-  const out: string[] = [];
-  const push = (v: unknown) => {
-    if (typeof v === 'string') out.push(...v.split(',').map((s) => s.trim()).filter(Boolean));
-    else if (Array.isArray(v)) v.forEach(push);
-    else if (v && typeof v === 'object' && 'address' in (v as object)) {
-      const a = (v as { address?: unknown }).address;
-      if (typeof a === 'string') out.push(a);
-    }
-  };
-  push(body.to);
-  push(body.To);
-  push(body.recipient);
-  push(body.recipients);
-  const envelope = body.envelope as { to?: unknown } | undefined;
-  if (envelope) push(envelope.to);
-  return out;
-}
-
-function firstString(...vals: unknown[]): string | null {
-  for (const v of vals) if (typeof v === 'string' && v.trim()) return v.trim();
-  return null;
-}
-
-/** Normalize one provider attachment object into our InboundAttachment shape. */
-function normalizeAttachment(raw: unknown): InboundAttachment | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const a = raw as Record<string, unknown>;
-  const base64 = firstString(a.content, a.base64, a.data, a.contentBytes);
-  if (!base64) return null;
-  const fileName = firstString(a.filename, a.fileName, a.name) ?? 'attachment';
-  const mediaType =
-    firstString(a.contentType, a.content_type, a.type, a.mimeType, a.mime_type) ?? 'application/octet-stream';
-  return { fileName, mediaType, base64 };
+  return NextResponse.json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, { status: 401 });
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
-  if (!authorizeInbound(req)) {
-    return NextResponse.json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, { status: 401 });
-  }
+  const cfg = readInboundConfig();
+  const ip = callerIp(req);
 
-  let body: Record<string, unknown>;
+  // IP allowlist + header-only credentials BEFORE reading an unauthenticated body.
+  const pre = preVerifyInboundHeaders({ cfg, headers: req.headers, ip });
+  if (pre) return unauthorized(pre.reason, cfg.provider);
+
+  const declared = Number(req.headers.get('content-length') ?? '0');
+  if (declared > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: 'Message too large', code: 'TOO_LARGE' }, { status: 413 });
+  }
+  let raw: Uint8Array;
   try {
-    body = (await req.json()) as Record<string, unknown>;
+    raw = new Uint8Array(await req.arrayBuffer());
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body', code: 'PARSE_ERROR' }, { status: 400 });
+    return NextResponse.json({ error: 'Unreadable body', code: 'PARSE_ERROR' }, { status: 400 });
+  }
+  if (raw.length > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: 'Message too large', code: 'TOO_LARGE' }, { status: 413 });
   }
 
-  const from = firstString(body.from, body.sender, body.From) ?? 'unknown@sender';
-  const subject = firstString(body.subject, body.Subject);
-  const messageId = firstString(body.messageId, body.message_id, body['Message-Id'], body['message-id']);
-  const recipients = extractRecipients(body);
-  const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
+  const verified = verifyInboundRequest({ cfg, headers: req.headers, rawBody: raw, ip });
+  if (!verified.ok) return unauthorized(verified.reason, cfg.provider);
 
-  const admin = createAdminSupabase();
-
-  // ── Tenant resolution ─────────────────────────────────────
-  const tenant = await resolveTenantByRecipients(admin, recipients);
-  if (!tenant) {
-    // Can't attribute this message to a tenant. A retry won't fix that, so we
-    // ACK (200) to stop provider retries, but log LOUD and store nothing.
-    console.error(
-      '[inbound-email] no tenant matched recipients',
-      recipients.map(normalizeEmailAddress),
-      'from',
-      from,
-    );
-    return NextResponse.json(
-      { received: true, ignored: true, reason: 'No tenant matched the recipient address.' },
-      { status: 200 },
-    );
+  const parsed = await parseInbound(cfg.provider, raw, req.headers.get('content-type') ?? '', new Date(), { trustedAuthservIds: cfg.trustedAuthservIds });
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error, code: 'PARSE_ERROR' }, { status: 400 });
   }
 
-  // ── Idempotency (best-effort) ─────────────────────────────
-  if (await inboundMessageAlreadySeen(admin, tenant.orgId, messageId)) {
-    return NextResponse.json({ received: true, duplicate: true, org_id: tenant.orgId });
+  try {
+    const result = await processInboundEmail(parsed.email, { admin: createAdminSupabase(), cfg });
+    return NextResponse.json(result.body, { status: result.status });
+  } catch (e) {
+    console.error('[inbound-email] unhandled', e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: 'Processing failed', code: 'PROCESSING_FAILED' }, { status: 500 });
   }
-
-  if (rawAttachments.length === 0) {
-    // A body-only email (no invoice attached). Nothing to intake; ACK honestly.
-    return NextResponse.json(
-      { received: true, org_id: tenant.orgId, items: [], skipped: [], reason: 'No attachments.' },
-      { status: 200 },
-    );
-  }
-
-  const locationId = await resolveDefaultLocationId(admin, tenant.orgId);
-  const receivedAt = new Date().toISOString();
-
-  // AI deps only when a key is available; otherwise the intake degrades to
-  // PENDING_PARSE (document retained, read deferred).
-  const apiKey = getAnthropicApiKey();
-  const deps: DocProviderDeps | null = apiKey ? { supabase: admin, anthropicApiKey: apiKey } : null;
-
-  const outcomes: IngestAttachmentOutcome[] = [];
-  for (const raw of rawAttachments) {
-    const attachment = normalizeAttachment(raw);
-    if (!attachment) {
-      outcomes.push({ fileName: 'attachment', ok: false, skipped: true, reason: 'Missing content.' });
-      continue;
-    }
-    try {
-      outcomes.push(
-        await ingestInboundAttachment(admin, {
-          orgId: tenant.orgId,
-          locationId,
-          from,
-          subject,
-          messageId,
-          receivedAt,
-          attachment,
-          deps,
-        }),
-      );
-    } catch (e) {
-      console.error('[inbound-email] ingest threw', attachment.fileName, e);
-      outcomes.push({
-        fileName: attachment.fileName,
-        ok: false,
-        skipped: false,
-        error: e instanceof Error ? e.message : 'ingest_error',
-      });
-    }
-  }
-
-  const items = outcomes.filter((o) => o.ok);
-  const skipped = outcomes.filter((o) => !o.ok);
-
-  return NextResponse.json(
-    {
-      received: true,
-      org_id: tenant.orgId,
-      matched_address: tenant.matchedAddress,
-      location_id: locationId || null,
-      accepted: items.length,
-      items,
-      skipped,
-    },
-    { status: 200 },
-  );
 }

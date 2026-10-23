@@ -1,107 +1,52 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+import { headers } from 'next/headers';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { validatePortalToken, PORTAL_DOC_LABEL, type PortalDocKind } from '@/lib/portal/vendor/tokens';
+import { validatePortalToken } from '@/lib/portal/vendor/tokens';
+import { sharedRateLimiter } from '@/lib/security/rate-limit';
+import { buildPortalView } from '@/lib/vendor-compliance/portal';
+import { W9_CERTIFICATION_TEXT } from '@/lib/vendor-compliance/w9-form';
+import { PublicRequestFrame, PublicRequestNotice } from '@/app/r/[token]/frame';
 import { VendorPortalClient } from './upload-portal';
 
-export const metadata = { title: { absolute: 'Vendor portal' } };
+export const metadata = { title: { absolute: 'Documents requested' }, robots: { index: false, follow: false } };
+
+const PER_TOKEN = { windowMs: 60_000, max: 30 };
+const PER_IP = { windowMs: 60_000, max: 90 };
 
 /**
- * Vendor self-service upload portal — PUBLIC, tokenized, no login. A branded page
- * where a vendor uploads the W-9 / COI / banking details a company requested. The
- * token is validated server-side (service role); an invalid/expired/revoked link
- * renders a clean, non-leaky message. On success the file lands for human review —
- * nothing about the vendor's status changes automatically.
+ * Vendor portal — PUBLIC, tokenized, no login, 390-first (FPB §5.3, §19.2). Shows exactly
+ * what the asking company needs and why, where each item stands (received · checked ·
+ * accepted · rejected with the reason), the fill-here W-9, uploads with the AI read-back,
+ * and the renewal date. The token is validated server-side (service role); org + vendor
+ * come from the token row. A bad, revoked or expired link reveals nothing about the tenant.
  */
 export default async function VendorPortalPage({ params }: { params: { token: string } }) {
+  const h = headers();
+  const ip = (h.get('x-forwarded-for') ?? '').split(',')[0].trim() || h.get('x-real-ip') || 'unknown';
+  const throttle = sharedRateLimiter.checkAll([
+    { key: `vendor-portal:token:${params.token.slice(0, 64)}`, rule: PER_TOKEN },
+    { key: `vendor-portal:ip:${ip}`, rule: PER_IP },
+  ]);
+  if (!throttle.allowed) return <PublicRequestNotice heading="Too many tries" body="Please wait a minute and open the link again." />;
+
   const admin = createAdminSupabase();
   const result = await validatePortalToken(admin, params.token);
-
   if (!result.ok) {
-    const heading =
-      result.state === 'expired'
-        ? 'This link has expired'
-        : result.state === 'revoked'
-          ? 'This link has been revoked'
-          : 'Link not found';
+    const heading = result.state === 'expired' ? 'This link has expired' : result.state === 'revoked' ? 'Nothing more is needed on this link' : 'Link not found';
     return (
-      <Shell>
-        <div style={S.card}>
-          <div style={S.badgeMuted}>Secure document upload</div>
-          <h1 style={S.title}>{heading}</h1>
-          <p style={S.muted}>
-            This upload link is no longer valid. Please contact the company that sent it to request a new one.
-          </p>
-        </div>
-      </Shell>
+      <PublicRequestNotice
+        heading={heading}
+        body={result.state === 'revoked' ? 'Everything asked for on this link has been taken care of, or the link was replaced. If you still need to send something, reply to the email you received.' : 'Please contact the company that sent it, or reply to their email, for a new link.'}
+      />
     );
   }
 
-  const { orgId, vendorId, requestedDocs } = result.token;
-
-  // Resolve display context (never leaks anything the link-holder shouldn't see:
-  // they ARE this vendor). Requesting company name + this vendor's own name.
-  const [{ data: org }, { data: vendor }] = await Promise.all([
-    admin.schema('core').from('organizations').select('name').eq('id', orgId).maybeSingle(),
-    admin.schema('core').from('vendors').select('name, display_name').eq('id', vendorId).maybeSingle(),
-  ]);
-
-  const companyName = (org?.name as string) || 'Your requester';
-  const vendorName = (vendor?.display_name as string) || (vendor?.name as string) || '';
-
+  const view = await buildPortalView(admin, result.token);
   return (
-    <Shell>
-      <VendorPortalClient
-        token={params.token}
-        companyName={companyName}
-        vendorName={vendorName}
-        requestedDocs={requestedDocs as PortalDocKind[]}
-        docLabels={PORTAL_DOC_LABEL}
-      />
-    </Shell>
+    <PublicRequestFrame eyebrow="Documents requested" sender={view.companyName}>
+      <VendorPortalClient token={params.token} view={view} certification={W9_CERTIFICATION_TEXT} />
+    </PublicRequestFrame>
   );
 }
-
-function Shell({ children }: { children: React.ReactNode }) {
-  return (
-    <main style={S.wrap}>
-      <FontHead />
-      <div style={S.inner}>{children}</div>
-      <div style={S.poweredBy}>Secure upload · your documents are encrypted at rest</div>
-    </main>
-  );
-}
-
-function FontHead() {
-  return (
-    <style
-      dangerouslySetInnerHTML={{
-        __html: `
-      @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-      * { box-sizing: border-box; }
-      body { margin: 0; }
-      a:focus-visible, button:focus-visible, [role="button"]:focus-visible { outline: 2px solid #10b981; outline-offset: 2px; border-radius: 6px; }
-      .mb-dropzone:hover { border-color: #10b981; }
-      .mb-linkbtn:hover { color: #0d9488; }
-    `,
-      }}
-    />
-  );
-}
-
-const SANS = "'Plus Jakarta Sans', system-ui, -apple-system, Segoe UI, sans-serif";
-const ACCENT = '#10b981';
-
-const S: Record<string, React.CSSProperties> = {
-  wrap: { minHeight: '100vh', background: '#f1f5f9', padding: '40px 16px', fontFamily: SANS, color: '#0f172a' },
-  inner: { maxWidth: 640, margin: '0 auto' },
-  card: { background: '#fff', borderRadius: 16, padding: 40, boxShadow: '0 10px 40px rgba(15,23,42,0.10)', textAlign: 'center' },
-  badgeMuted: {
-    display: 'inline-block', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
-    color: ACCENT, background: '#ecfdf5', borderRadius: 999, padding: '5px 12px', marginBottom: 16,
-  },
-  title: { fontSize: 22, fontWeight: 800, margin: '0 0 10px' },
-  muted: { color: '#64748b', fontSize: 14, lineHeight: 1.6, margin: 0 },
-  poweredBy: { textAlign: 'center', color: '#94a3b8', fontSize: 12, marginTop: 20 },
-};

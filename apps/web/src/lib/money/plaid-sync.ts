@@ -33,6 +33,14 @@ export async function runBankDailyPullJob(ctx: JobContext): Promise<JobResult> {
   if (!count) return { status: 'skipped', summary: 'No bank is connected.' };
   try {
     const s = await runPlaidSyncForOrg(ctx.admin, ctx.orgId);
+    // Wave 2C: after new bank lines land, mark printed checks that cleared the bank.
+    let cleared = 0;
+    try {
+      const { runCheckClearingJob } = await import('@/lib/ap/checks/clearing');
+      cleared = (await runCheckClearingJob(ctx.admin, ctx.orgId)).cleared;
+    } catch (e) {
+      console.error('[bank.daily_pull] check clearing failed:', e instanceof Error ? e.message : e);
+    }
     const problems = s.errors.length + s.reauthNeeded.length;
     return {
       status: problems === 0 ? 'ok' : s.itemsSynced > 0 ? 'partial' : 'failed',
@@ -44,6 +52,7 @@ export async function runBankDailyPullJob(ctx: JobContext): Promise<JobResult> {
         balances: s.balancesRefreshed,
         needs_relogin: s.reauthNeeded.length,
         errors: s.errors.length,
+        checks_cleared: cleared,
       },
       summary: `${s.transactionsAdded} new bank transaction${s.transactionsAdded === 1 ? '' : 's'} from ${s.itemsSynced} connection${s.itemsSynced === 1 ? '' : 's'}`
         + (s.reauthNeeded.length ? `; ${s.reauthNeeded.length} need${s.reauthNeeded.length === 1 ? 's' : ''} the bank login again` : '')

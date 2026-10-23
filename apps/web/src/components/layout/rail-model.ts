@@ -15,7 +15,7 @@
 import { filterNav, type FilteredNavGroup, type NavGroup as KitNavGroup, type ShellContext } from '@meritbooks/merit-ui';
 import { navigation, type NavGroup } from '@/lib/navigation';
 import { PLANES, type Plane } from '@/lib/planes';
-import { filterNavByPermissions, type ViewProbe } from '@/components/layout/nav-permissions';
+import { featureForHref, filterNavByPermissions, type ViewProbe } from '@/components/layout/nav-permissions';
 import type { IndustryPacks } from '@/lib/hooks/use-industry-packs';
 
 /** The only Home items reachable before a client is picked (cross-client by design). */
@@ -58,7 +58,25 @@ export function visibleNavGroups(input: Omit<RailInput, 'context' | 'counts'>): 
         : g,
     )
     .filter((g) => !g.requiresPack || input.packs[g.requiresPack]);
-  return filterNavByPermissions(gated, { hasPermissionData: input.hasPermissionData, canView: input.canView });
+  const permitted = filterNavByPermissions(gated, { hasPermissionData: input.hasPermissionData, canView: input.canView });
+  return permitted
+    .map((g) => {
+      const items = g.items.filter((i) => isDeepLinkVisible(i.href, input.hasPermissionData, input.canView));
+      return items.length === g.items.length ? g : { ...g, items };
+    })
+    .filter((g) => g.label === 'Home' || g.items.length > 0);
+}
+
+/**
+ * A deep link into a tab (`/team?tab=performance`) is gated by its page's feature (the
+ * page guard checks the path, not the query) — the exact-href map can't see it, so it is
+ * resolved by path here. Same fail-safe as nav-permissions: no usable data → shown.
+ */
+export function isDeepLinkVisible(href: string, hasPermissionData: boolean, canView: ViewProbe): boolean {
+  const q = href.indexOf('?');
+  if (q < 0 || !hasPermissionData) return true;
+  const feature = featureForHref(href.slice(0, q));
+  return !feature || canView(feature);
 }
 
 /** Steps 1–5, as merit-ui FilteredNavGroup[] for <RailNav>. */

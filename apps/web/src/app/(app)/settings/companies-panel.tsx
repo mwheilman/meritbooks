@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Loader2, AlertCircle, Plus, Check, Building2, Sparkles, ArrowRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
+import { CompanyInboxAddresses } from '@/components/inbound-email/company-inbox-addresses';
 
 interface Entity {
   id: string;
@@ -170,6 +171,8 @@ export function CompaniesPanel() {
         </div>
       )}
     </div>
+
+    <CompanyInboxAddresses />
     </div>
   );
 }

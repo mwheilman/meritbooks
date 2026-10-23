@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requireMoneyMovement, PAYMENTS_EXECUTE, AP_DISBURSEMENT_RELEASE_FEATURE } from '@/lib/rbac/payments-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
-import { assembleApprovedBatch } from '@/lib/ap/assemble-batch';
+import { assembleApprovedBatch, heldSummary } from '@/lib/ap/assemble-batch';
 import { buildDisbursementBatch } from '@/lib/ap/disbursement-batch';
 import {
   toBillPayCsv,
@@ -62,13 +62,18 @@ export async function GET(request: Request) {
 
   let assembled;
   try {
-    assembled = await assembleApprovedBatch(supabase);
+    // Vendor holds are re-checked READ-ONLY: a bank change or compliance hold opened
+    // after approval keeps that line out of the bank file.
+    assembled = await assembleApprovedBatch(supabase, { holdCheck: { orgId } });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Assembly failed' }, { status: 500 });
   }
   if (assembled.items.length === 0) {
-    return NextResponse.json({ error: 'No approved disbursements to export' }, { status: 409 });
+    const why = heldSummary(assembled.held);
+    return NextResponse.json({ error: why || 'No approved disbursements to export', held: assembled.held }, { status: 409 });
   }
+  // Header values must be printable ASCII (vendor names can carry curly quotes etc.).
+  const heldNote = heldSummary(assembled.held).replace(/[^\x20-\x7E]/g, '?');
 
   const batch = buildDisbursementBatch(assembled.items);
   const stamp = new Date().toISOString().slice(0, 10);
@@ -85,6 +90,7 @@ export async function GET(request: Request) {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="disbursements-${stamp}.csv"`,
         'Cache-Control': 'no-store',
+        ...(heldNote ? { 'X-Export-Held': heldNote.slice(0, 900) } : {}),
       },
     });
   }
@@ -111,6 +117,7 @@ export async function GET(request: Request) {
       'Content-Disposition': `attachment; filename="disbursements-${stamp}.ach"`,
       'Cache-Control': 'no-store',
       'X-Export-Warnings': nacha.warnings.join(' | ').slice(0, 900),
+      ...(heldNote ? { 'X-Export-Held': heldNote.slice(0, 900) } : {}),
     },
   });
 }
@@ -148,7 +155,7 @@ export async function POST(request: Request) {
   // not client-supplied.
   let assembled;
   try {
-    assembled = await assembleApprovedBatch(supabase);
+    assembled = await assembleApprovedBatch(supabase, { holdCheck: { orgId } });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Assembly failed' }, { status: 500 });
   }
@@ -166,6 +173,7 @@ export async function POST(request: Request) {
       itemCount: batch.controls.itemCount,
       totalCents: batch.controls.totalCents,
       vendorCount: batch.controls.vendorCount,
+      heldCount: assembled.held.length,
     },
   }).catch(() => {});
 

@@ -4,7 +4,9 @@
  *
  * - Implemented jobs call engines that ALREADY exist (report packs, control
  *   detectors, vendor-compliance maintenance, recurring-JE proposals, rev-rec,
- *   prepaid amortization, Projects event drains). Any job that can post to the GL
+ *   prepaid amortization, Projects event drains; Wave 2E: recurring invoices, the
+ *   dunning ladder + late-fee proposals, depreciation / intangible / insurance
+ *   amortization, the close opener, the weekly pay-run proposal, digests). Any job that can post to the GL
  *   goes through the tenant's autonomy dial first (posting-gate.ts) and only
  *   PROPOSES unless the dial allows.
  * - Stubs (`implemented: false`) are the future jobs IA §6 names. They are listed
@@ -27,9 +29,22 @@ import { DEALER_MONTH_END_JOB } from './jobs/dealer-jobs';
 import { REQUESTS_DISPATCH_JOB } from './jobs/requests-dispatch';
 import { runBankDailyPullJob } from '@/lib/money/plaid-sync';
 import { DEALER_CONTROLS_JOB } from './jobs/dealer-controls';
+import { runRecurringInvoicesJob } from './jobs/recurring-invoices';
+import { runDunningJob } from './jobs/dunning';
+import { runLateFeesJob } from './jobs/late-fees';
+import { runDepreciationJob, runInsuranceAmortizeJob } from './jobs/depreciation';
+import { runPayRunProposeJob } from './jobs/pay-run';
+import { runPeriodEndJob } from './jobs/period-end';
+import { NOTIFICATIONS_DIGEST_JOB } from './jobs/digest';
+// Wave 2 sibling slices (2A vendor W-9/COI, 2B receipts) export their own definitions.
+import { RECEIPTS_CHASE_SYNC_JOB, RECEIPTS_DIGEST_JOB } from './jobs/receipts-chase';
+import { VENDOR_AI_RECHECK_JOB } from './jobs/vendor-compliance-recheck';
 import {
+  SCHEDULED_DEPRECIATION_FEATURE,
   SCHEDULED_EVENT_DRAIN_FEATURE,
+  SCHEDULED_INSURANCE_FEATURE,
   SCHEDULED_PREPAID_FEATURE,
+  SCHEDULED_RECURRING_INVOICES_FEATURE,
   SCHEDULED_REV_REC_FEATURE,
 } from './posting-gate';
 
@@ -235,25 +250,137 @@ export const JOBS: readonly JobDefinition[] = [
     run: runAccessExpirySweepJob,
   },
 
+  // ── Wave 2E: "make automatic true" (migration 184) ─────────────────────────
+  {
+    key: 'ar.recurring',
+    label: 'Recurring invoices',
+    description: 'Daily, generates every recurring invoice that has come due — once per template and period. Each is a draft for review unless its template is set to post (or post and email) AND the "Scheduled recurring invoices" dial allows it under the cap.',
+    scope: 'org',
+    cron: '0 12 * * *', // ~06:00–07:00 CT
+    defaultEnabled: true,
+    implemented: true,
+    ownerCapability: 'ar.invoices',
+    owner: 'Invoices (FPB-invoices D6.1)',
+    postsToGl: true,
+    autonomyFeature: SCHEDULED_RECURRING_INVOICES_FEATURE,
+    timeoutMs: 180_000,
+    maxLatenessMinutes: 12 * 60,
+    maxAttempts: 3,
+    run: runRecurringInvoicesJob,
+  },
+  {
+    key: 'ar.dunning',
+    label: 'Payment reminders (dunning ladder)',
+    description: "Daily, prepares the next reminder on each company's dunning ladder for every open invoice — stops on payment, promise-to-pay, dispute or an excluded customer. Reminders wait in Requests for a person to send unless the company is set to send and the \"Scheduled payment reminders\" dial allows it; quiet hours and unsubscribes always apply. Off until a dunning policy is switched on.",
+    scope: 'org',
+    cron: '0 14 * * *', // ~08:00–09:00 CT
+    defaultEnabled: true,
+    implemented: true,
+    ownerCapability: 'ar.collections',
+    owner: 'Collections (FPB-invoices D6.2)',
+    postsToGl: false,
+    timeoutMs: 180_000,
+    maxLatenessMinutes: 12 * 60,
+    maxAttempts: 3,
+    run: runDunningJob,
+  },
+  {
+    key: 'ar.late_fees',
+    label: 'Late fees (proposals)',
+    description: "Daily, proposes the late fee each overdue invoice owes under the company's late-fee policy (once per invoice per month, never on a fee, never on a disputed invoice). Nothing is charged until a person approves — then one finance-charge invoice per customer. Off until a late-fee policy is switched on.",
+    scope: 'org',
+    cron: '30 14 * * *',
+    defaultEnabled: true,
+    implemented: true,
+    ownerCapability: 'ar.collections',
+    owner: 'Collections (FPB-invoices D6.3)',
+    postsToGl: false,
+    timeoutMs: 120_000,
+    maxLatenessMinutes: 12 * 60,
+    maxAttempts: 3,
+    run: runLateFeesJob,
+  },
+  {
+    key: 'close.depreciation',
+    label: 'Depreciation & amortization (1st of month)',
+    description: "On the 1st, works out last month's depreciation (fixed assets) and amortization (intangibles), one line per company. Proposes only, unless the \"Scheduled depreciation & amortization\" dial allows it under the cap; hard-closed months are never touched. Also reports lease periods due (recorded by a person, never automatically).",
+    scope: 'org',
+    cron: '0 8 1 * *',
+    defaultEnabled: true,
+    implemented: true,
+    ownerCapability: 'ctl.schedules',
+    owner: 'Close (fixed assets / intangibles)',
+    postsToGl: true,
+    autonomyFeature: SCHEDULED_DEPRECIATION_FEATURE,
+    timeoutMs: 180_000,
+    maxLatenessMinutes: 3 * 24 * 60,
+    maxAttempts: 4,
+    run: runDepreciationJob,
+  },
+  {
+    key: 'insurance.amortize',
+    label: 'Insurance amortization (1st of month)',
+    description: 'On the 1st, finds every prepaid-insurance period due through the end of last month. Proposes only, unless the "Scheduled insurance amortization" dial allows it under the cap.',
+    scope: 'org',
+    cron: '15 8 1 * *',
+    defaultEnabled: true,
+    implemented: true,
+    ownerCapability: 'ctl.schedules',
+    owner: 'Close (insurance)',
+    postsToGl: true,
+    autonomyFeature: SCHEDULED_INSURANCE_FEATURE,
+    timeoutMs: 120_000,
+    maxLatenessMinutes: 3 * 24 * 60,
+    maxAttempts: 4,
+    run: runInsuranceAmortizeJob,
+  },
+  {
+    key: 'close.period_end',
+    label: 'Open the month-end close',
+    description: "Days 2–10 of each month: opens last month's close checklist for every company that has an open period and re-runs the readiness checks (bank recs, AR/AP tie, leakage, exceptions, drafts, approvals). Never posts.",
+    scope: 'org',
+    cron: '0 13 2-10 * *',
+    defaultEnabled: true,
+    implemented: true,
+    ownerCapability: 'ctl.schedules',
+    owner: 'Close (orchestration)',
+    postsToGl: false,
+    timeoutMs: 180_000,
+    maxLatenessMinutes: 12 * 60,
+    maxAttempts: 3,
+    run: runPeriodEndJob,
+  },
+  {
+    key: 'ap.pay_run_propose',
+    label: 'Weekly pay-run proposal',
+    description: 'Mondays, drafts a pay run of approved bills due in the next 7 days plus bills whose early-pay discount date falls in that window. Proposal only: it waits in Agents; release prepares approvals, and a second person approves and pays (separation of duties).',
+    scope: 'org',
+    cron: '0 13 * * 1',
+    defaultEnabled: true,
+    implemented: true,
+    ownerCapability: 'ap.pay_runs',
+    owner: 'AP / pay runs (PAY_RUN recipe)',
+    postsToGl: false,
+    timeoutMs: 60_000,
+    maxLatenessMinutes: 24 * 60,
+    maxAttempts: 3,
+    run: runPayRunProposeJob,
+  },
+  NOTIFICATIONS_DIGEST_JOB,
+  // 2B receipts (migration 181) and 2A vendor certificates (migration 180).
+  RECEIPTS_CHASE_SYNC_JOB,
+  RECEIPTS_DIGEST_JOB,
+  VENDOR_AI_RECHECK_JOB,
+
   // ── stubs: named in IA §6, not built yet (never run) ───────────────────────
   stub('connectors.sync', 'Connected-system sync', '*/30 * * * *', 'Integrations (07-INTEGRATIONS-PLAN Phase 0)', 'int.sync_runs',
     'TODO(integrations): per-connection incremental sync + nightly reconcile; needs the 07 §1.10 staging/mapping tables and a connector worker.'),
-  stub('ap.pay_run_propose', 'Pay-run proposal', '0 13 * * 1-5', 'AP / pay runs', 'ap.pay_runs',
-    'TODO(AP): draft a pay run by due date and discount from the pay-run agent recipe; proposal only, release stays human.'),
-  stub('ar.recurring', 'Recurring invoices', '0 12 * * *', 'Invoices', 'ar.invoices',
-    'TODO(invoices): generateDueRecurringInvoices issues invoices and posts AR directly; needs a draft/propose mode (or the autonomy gate) before it may run unattended.', true),
-  stub('ar.dunning', 'Collections dunning drafts', '0 15 * * 1-5', 'Collections', 'ar.collections',
-    'TODO(collections): draft dunning messages from the worklist + cadence; sending stays human until approve-before-send exists.'),
-  stub('close.period_end', 'Period-end engines', '0 8 1 * *', 'Close (period engine)', 'ctl.schedules',
-    'TODO(close): /api/period-engine posts recurring JEs, schedules and depreciation directly; needs a preview/proposal mode before it may be scheduled.', true),
   stub('lenders.prepare', 'Lender reporting drafts', '0 13 * * *', 'Debt & lender reporting (IA M-14)', 'debt.lender_calendar',
     'TODO(M-14): draft compliance certificates / BBC / financial packs N days before each lender obligation is due.'),
   stub('payroll.funding_check', 'Payroll funding check', '0 12 * * 1-5', 'Payroll', 'hr.payroll',
     'TODO(payroll): compare upcoming payroll funding to cash; blocked on the payroll provider decision (task #32).'),
   stub('access.review_campaign', 'Quarterly access review', '0 14 1 1,4,7,10 *', 'Access & roles (05-RBAC-SPEC)', 'ta.access_review',
     'TODO(RBAC): open the quarterly access-review campaign.'),
-  stub('notifications.digest', 'Notification digests', '0 13 * * *', 'Notifications & watch rules (IA M-13)', 'home.workspace',
-    'TODO(M-13): evaluate watch rules and send daily/weekly digests; needs notification preferences + a sender.'),
   stub('reports.post_close_bva', 'Post-close budget vs. actual', '0 14 * * *', 'FP&A (FPB-reports-fpna §5.2)', 'reports.packs',
     'TODO(FP&A): after a hard close, push budget-vs-actual to owners and snapshot the forecast.'),
 ];

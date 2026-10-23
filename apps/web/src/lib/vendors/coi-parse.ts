@@ -76,6 +76,8 @@ export interface ProposedCoi {
   named_insured: string | null;
   certificate_holder: string | null;
   additional_insured: boolean | null;
+  /** Waiver of subrogation shown on the certificate (Wave 2A; null when not determinable). */
+  waiver_of_subrogation: boolean | null;
   coverages: ProposedCoverage[];
 }
 
@@ -203,6 +205,7 @@ export function normalizeCoiExtraction(raw: unknown, now: Date = new Date()): Pr
     named_insured?: unknown;
     certificate_holder?: unknown;
     additional_insured?: unknown;
+    waiver_of_subrogation?: unknown;
     coverages?: unknown;
   };
 
@@ -253,6 +256,7 @@ export function normalizeCoiExtraction(raw: unknown, now: Date = new Date()): Pr
     named_insured: toStringOrNull(root.named_insured),
     certificate_holder: toStringOrNull(root.certificate_holder),
     additional_insured: toBoolOrNull(root.additional_insured),
+    waiver_of_subrogation: toBoolOrNull(root.waiver_of_subrogation),
     coverages,
   };
 }
@@ -266,6 +270,7 @@ Return ONLY valid JSON (no markdown, no prose) with this exact shape:
   "named_insured": "string or null — the INSURED (the vendor/contractor), not the certificate holder",
   "certificate_holder": "string or null — the CERTIFICATE HOLDER (who the COI was issued to)",
   "additional_insured": "true | false or null — whether the certificate holder is listed as an additional insured",
+  "waiver_of_subrogation": "true | false or null — whether a waiver of subrogation is shown (the SUBR WVD column / description box)",
   "coverages": [
     {
       "coverage_type": "one of: GENERAL_LIABILITY | WORKERS_COMP | AUTO | UMBRELLA | PROFESSIONAL | POLLUTION | OTHER",
@@ -356,7 +361,8 @@ export async function parseCoiDocument(
   try {
     parsed = JSON.parse(jsonStr);
   } catch {
-    console.error('[coi-parse] Failed to parse model JSON:', jsonStr.slice(0, 500));
+    // Length only — model output is vendor document content.
+    console.error('[coi-parse] Failed to parse model JSON (length', jsonStr.length, ')');
     return { ok: false, error: 'Failed to parse AI response as JSON' };
   }
 

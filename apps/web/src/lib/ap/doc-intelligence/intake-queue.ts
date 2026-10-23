@@ -21,7 +21,7 @@ import { logAction } from '@/lib/trust/action-log';
 import { scopedWriter, writerFor } from '@/lib/db/scoped-writer';
 import type { CreateBillInput } from '@/lib/validations/transactions';
 import { resolveDocProvider, type ResolveDocProviderOptions } from './resolve';
-import type { DocProviderDeps, ExtractedBill } from './types';
+import type { DocIntelligenceProvider, DocProviderDeps, ExtractedBill } from './types';
 
 /** The feature tag that scopes AP intake drafts within ai_decisions. */
 export const AP_DOC_INTAKE_FEATURE = 'AP_DOC_INTAKE';
@@ -45,6 +45,18 @@ export interface DocIntakeInbound {
   receivedAt: string;
   /** Provider message id (for de-dup / trace); null when the provider omits it. */
   messageId: string | null;
+  /** Sender display name, when the email carried one (migration 183+). */
+  fromName?: string | null;
+  /** The company address it was sent to, e.g. ap-heritage@inbound… (183+). */
+  toAddress?: string | null;
+  /** core.inbound_messages row for this delivery (183+). */
+  messageLogId?: string | null;
+  /** The original email kept as a document (.eml) (183+). */
+  emailDocumentId?: string | null;
+  /** The provider verified the From domain (SPF/DKIM/DMARC). false → "Sender not verified" badge. */
+  senderVerified?: boolean | null;
+  /** One-line SPF/DKIM/DMARC summary (badge tooltip). */
+  senderAuth?: string | null;
 }
 
 /** The JSON we persist in ai_decisions.proposed_output for a draft. */
@@ -328,6 +340,17 @@ export interface CreateInboundDraftArgs extends CreateDraftArgs {
   sourceDocumentId: string | null;
   /** Inbound-email envelope metadata to surface in the queue. */
   inbound: DocIntakeInbound;
+  /**
+   * A vendor matched from the SENDER's email/domain (lib/email/inbound-aliases
+   * vendorForSender). Used when the AI read has no vendor match — including when AI
+   * is down — so an emailed bill still arrives with its vendor suggested.
+   */
+  senderVendor?: { id: string; name: string; defaultAccountId: string | null } | null;
+}
+
+/** Options for the inbound draft: the provider resolution plus an explicit engine (tests). */
+export interface CreateInboundDraftOptions extends ResolveDocProviderOptions {
+  provider?: DocIntelligenceProvider;
 }
 
 export type CreateInboundDraftResult =
@@ -357,16 +380,16 @@ export async function createInboundIntakeDraft(
   supabase: SupabaseClient,
   deps: DocProviderDeps | null,
   args: CreateInboundDraftArgs,
-  options: ResolveDocProviderOptions = {},
+  options: CreateInboundDraftOptions = {},
 ): Promise<CreateInboundDraftResult> {
   let extracted: ExtractedBill | null = null;
   let parseState: DocIntakeParseState = 'PENDING_PARSE';
   let providerName = 'pending';
   let pendingReason = 'Awaiting AI parse — the machine could not read this document yet.';
 
-  if (deps && deps.anthropicApiKey) {
+  if (options.provider || (deps && deps.anthropicApiKey)) {
     try {
-      const provider = resolveDocProvider(deps, options);
+      const provider = options.provider ?? resolveDocProvider(deps as DocProviderDeps, options);
       const result = await provider.extractBill({
         base64: args.base64,
         mediaType: args.mediaType,
@@ -394,13 +417,19 @@ export async function createInboundIntakeDraft(
 
   const bill = extracted ?? pendingExtractedBill(pendingReason);
 
-  // Best-effort enrichment (only meaningful when we actually parsed a vendor).
-  const vendorMatch = extracted ? await suggestVendor(supabase, args.orgId, extracted.vendorName) : null;
+  // Best-effort enrichment: the AI vendor name first, else the sender's vendor (works
+  // even when AI is down — the reviewer starts with the vendor already suggested).
+  const nameMatch = extracted ? await suggestVendor(supabase, args.orgId, extracted.vendorName) : null;
+  const vendorMatch =
+    nameMatch ??
+    (args.senderVendor
+      ? { id: args.senderVendor.id, name: args.senderVendor.name, confidence: 0.75, defaultAccountId: args.senderVendor.defaultAccountId }
+      : null);
   const account = await suggestAccount(supabase, args.orgId, vendorMatch?.defaultAccountId ?? null);
   const duplicateWarning = extracted ? await detectDuplicate(supabase, vendorMatch?.id ?? null, extracted) : null;
 
   const proposal: DocIntakeProposal = {
-    extracted: bill,
+    extracted: extracted ? bill : { ...bill, vendorName: vendorMatch?.name ?? '' },
     fileName: args.fileName,
     locationId: args.locationId,
     suggestedVendorId: vendorMatch?.id ?? null,

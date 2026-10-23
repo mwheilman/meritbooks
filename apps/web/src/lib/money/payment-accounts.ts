@@ -64,6 +64,11 @@ export type CollectionPick =
   | { connection: ProviderConnection; source: CollectionSource; ready: boolean }
   | { connection: null; source: null; ready: false };
 
+/** Has Stripe confirmed this account can take charges? */
+export function chargesConfirmed(c: Pick<ProviderConnection, 'account'>): boolean {
+  return c.account.chargesEnabled === true;
+}
+
 /** Is this an active Stripe collection account of the given environment? */
 function isStripeCollection(c: ProviderConnection, environment: ProviderEnvironment): boolean {
   return c.capability === 'AR_COLLECTION' && c.provider === 'stripe' && c.status === 'active' && !!c.accountHandle && c.environment === environment;
@@ -74,7 +79,10 @@ function isStripeCollection(c: ProviderConnection, environment: ProviderEnvironm
  *   company account (same environment)  → it
  *   else, account_mode 'single'         → the tenant-level account
  *   else                                → none (online payment off for this invoice)
- * `ready` is false only when Stripe has told us charges are disabled.
+ * `ready` = Stripe has CONFIRMED the account can take charges (charges_enabled = true). A
+ * never-checked account (null) is not ready: a printed pay link must never be dead, so
+ * Settings → Payments, the documents and the pay intent all wait for Stripe's word
+ * (the Connect webhook or a status refresh fills it in). Live check Wave 1, fix 1G-1.
  */
 export function pickCollectionConnection(
   connections: ReadonlyArray<ProviderConnection>,
@@ -85,7 +93,7 @@ export function pickCollectionConnection(
   const tenant = opts.mode === 'single' ? usable.find((c) => c.locationId === null) : undefined;
   const chosen = own ?? tenant;
   if (!chosen) return { connection: null, source: null, ready: false };
-  return { connection: chosen, source: own ? 'company' : 'tenant', ready: chosen.account.chargesEnabled !== false };
+  return { connection: chosen, source: own ? 'company' : 'tenant', ready: chargesConfirmed(chosen) };
 }
 
 /** Resolve the collection account for an invoice's company in the CURRENT Stripe environment. */

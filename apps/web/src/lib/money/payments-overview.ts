@@ -171,7 +171,9 @@ export async function buildPaymentsOverview(
       shortCode: l.short_code,
       account: view,
       options,
-      acceptsOnline: mode.stripe.state === 'ready' && view.readiness === 'ready' && (options.cardEnabled || options.achEnabled),
+      // Same rule the pay link / pay intent use (lib/invoices/pay-link.ts): keys ready, an
+      // account that serves this company in this mode, charges confirmed, a method on.
+      acceptsOnline: mode.stripe.state === 'ready' && !!pick?.connection && pick.ready && (options.cardEnabled || options.achEnabled),
     };
   });
 

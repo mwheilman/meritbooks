@@ -10,6 +10,7 @@ import {
   Pip,
   QueueTable,
   Seg,
+  Tag,
   money,
   type PipKind,
   type QueueColumn,
@@ -151,7 +152,15 @@ export function InboxClient({ only, tabLabel, data, isLoading, error, refetch, s
             >
               {item.title}
             </a>
-            <span className="l2">{[GROUP_TITLE[item.group], item.subtitle].filter(Boolean).join(' · ')}</span>
+            <span className="l2">
+              {/* Every row names its company (live check 1G-3): an alert is never anonymous. */}
+              {!groupByClient && (
+                <Tag tone="default" title={item.locationName ? `Company: ${item.locationName}` : 'Organization-level (no single company)'}>
+                  {item.locationName ?? 'Organization'}
+                </Tag>
+              )}{' '}
+              {[GROUP_TITLE[item.group], item.subtitle].filter(Boolean).join(' · ')}
+            </span>
           </>
         ),
       },
@@ -208,7 +217,7 @@ export function InboxClient({ only, tabLabel, data, isLoading, error, refetch, s
           ),
       },
     ],
-    [router, snooze, showSnoozed],
+    [router, snooze, showSnoozed, groupByClient],
   );
 
   // ── States ───────────────────────────────────────────────────────────────────

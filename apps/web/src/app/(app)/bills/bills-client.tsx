@@ -7,6 +7,7 @@ import { BillList } from './bill-list';
 import { BillForm } from './bill-form';
 import { AutoFileModal } from './auto-file-modal';
 import { BillsTabs } from './bills-tabs';
+import { InboxAddressCard } from '@/components/inbound-email/inbox-address-card';
 
 export function BillsClient() {
   const [showCreate, setShowCreate] = useState(false);
@@ -49,6 +50,9 @@ export function BillsClient() {
       />
 
       <BillsTabs />
+
+      {/* AP inbox (FPB-ap-intake): the company's ap- address, Copy, Active / Not yet active. */}
+      <InboxAddressCard purpose="ap" />
 
       {showAutoFile && (
         <AutoFileModal onClose={() => setShowAutoFile(false)} onFiled={handleFiled} />

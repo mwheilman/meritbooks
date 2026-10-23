@@ -89,7 +89,7 @@ export const NAV_CATALOG: Array<{ label: string; href: string; keywords: string[
   { label: 'Credit Cards', href: '/credit-cards', keywords: ['credit card', 'credit cards'] },
   { label: 'Receipts', href: '/receipts', keywords: ['receipt', 'receipts'] },
   { label: 'Bills', href: '/bills', keywords: ['bill', 'bills', 'accounts payable', 'ap'] },
-  { label: 'Check Run', href: '/checks', keywords: ['check run', 'checks', 'check'] },
+  { label: 'Checks & payments', href: '/checks', keywords: ['check run', 'checks', 'check', 'payments', 'pay run'] },
   { label: 'Flagged Items', href: '/flagged', keywords: ['flagged', 'flags'] },
   { label: 'Journal Entries', href: '/journal-entries', keywords: ['journal', 'journal entries', 'je', 'general ledger', 'gl'] },
   { label: 'Chart of Accounts', href: '/chart-of-accounts', keywords: ['chart of accounts', 'coa', 'accounts'] },

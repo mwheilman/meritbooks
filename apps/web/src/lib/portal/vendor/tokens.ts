@@ -94,6 +94,34 @@ export function assertSafeUpload(c: UploadCandidate): FileGuardResult {
   return { ok: true };
 }
 
+export type PortalMime = (typeof PORTAL_ALLOWED_MIME)[number];
+
+/** What the bytes actually are (magic numbers), or null when not a PDF / JPEG / PNG. */
+export function sniffPortalMime(bytes: Uint8Array): PortalMime | null {
+  if (bytes.length >= 5 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d) return 'application/pdf'; // %PDF-
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) return 'image/png';
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  return null;
+}
+
+const EXT_MIME: Record<string, PortalMime> = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' };
+
+/**
+ * The byte-level check that runs after assertSafeUpload: the file must REALLY be a PDF /
+ * JPEG / PNG (magic bytes), its extension must name that same type, and a claimed
+ * content-type (when one of ours) must agree. Returns the SNIFFED type — the one the file
+ * is stored and served with, never the client's claim.
+ */
+export function assertSafeUploadBytes(c: UploadCandidate, bytes: Uint8Array): { ok: true; mimeType: PortalMime } | { ok: false; error: string } {
+  const sniffed = sniffPortalMime(bytes);
+  const bad = { ok: false as const, error: 'That file is not a real PDF, JPG, or PNG. Save it as one of those and upload again.' };
+  if (!sniffed) return bad;
+  if (EXT_MIME[extOf(c.fileName)] !== sniffed) return bad;
+  const claimed = (c.mimeType || '').toLowerCase();
+  if ((PORTAL_ALLOWED_MIME as readonly string[]).includes(claimed) && claimed !== sniffed) return bad;
+  return { ok: true, mimeType: sniffed };
+}
+
 // ── Token state (pure) ───────────────────────────────────────────────────────
 export type TokenState = 'not_found' | 'active' | 'revoked' | 'expired';
 

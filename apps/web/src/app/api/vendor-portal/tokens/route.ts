@@ -4,86 +4,48 @@ export const runtime = 'nodejs';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
-import { getSignedUrl } from '@/lib/documents/store';
 import {
   generatePortalToken,
   isPortalDocKind,
-  evaluateTokenState,
   type PortalDocKind,
 } from '@/lib/portal/vendor/tokens';
+import { buildPortalAccessView, portalLinkExpiry } from '@/lib/portal/vendor/access-view';
 import { serviceWriter } from '@/lib/db/scoped-writer';
 
 /**
  * Admin surface for the vendor upload portal (AUTHENTICATED — NOT under /api/portal,
  * so Clerk protects it). Mint / list / revoke a vendor's magic-link, and read what
- * the vendor has submitted (pending human review). All reads/writes go through the
- * RLS-scoped client, so tenant isolation is DB-enforced; minting is gated on the
- * existing `compliance` permission.
+ * the vendor has submitted (pending human review). Reads go through the RLS-scoped
+ * client, so tenant isolation is DB-enforced.
+ *
+ * Security review M8:
+ *   • GET needs compliance:view (a portal link is a bearer credential for the vendor's
+ *     documents); POST / PATCH need compliance:manage.
+ *   • The list NEVER returns a raw token — only its last four + state. The full token
+ *     (and its path) is in the create response only, once, to the person who minted it.
+ *   • A W-9 image carries the full TIN: no signed URL in the list; it is opened through
+ *     POST /api/vendor-portal/tokens/document (logged TIN reveal). Others: download link.
+ *   • A link minted without an expiry expires in 45 days.
  */
 
 // GET /api/vendor-portal/tokens?vendor_id=... → this vendor's links + submissions.
 export async function GET(req: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId } = ctx;
+  const { supabase, orgId, userId } = ctx;
+
+  const guard = await requirePermission(userId, 'compliance', 'view', { route: '/api/vendor-portal/tokens' });
+  if (!guard.ok) return guard.response;
   if (!orgId) return NextResponse.json({ tokens: [], submissions: [] });
 
   const vendorId = new URL(req.url).searchParams.get('vendor_id');
   if (!vendorId) return NextResponse.json({ error: 'vendor_id is required' }, { status: 400 });
 
-  const [{ data: tokenRows }, { data: docRows }] = await Promise.all([
-    supabase
-      .from('vendor_portal_tokens')
-      .select('id, token, label, status, requested_docs, expires_at, last_used_at, created_at')
-      .eq('org_id', orgId)
-      .eq('vendor_id', vendorId)
-      .order('created_at', { ascending: false }),
-    // Portal submissions are `documents` linked to this vendor whose note marks
-    // them as a portal upload. RLS scopes to the caller's org.
-    supabase
-      .from('documents')
-      .select('id, file_name, doc_type, notes, created_at')
-      .eq('entity_type', 'vendor')
-      .eq('entity_id', vendorId)
-      .ilike('notes', 'Vendor portal submission%')
-      .order('created_at', { ascending: false }),
-  ]);
-
-  const now = new Date();
-  const tokens = (tokenRows ?? []).map((t: Record<string, unknown>) => ({
-    id: t.id as string,
-    token: t.token as string,
-    label: (t.label as string) ?? null,
-    // Report the EFFECTIVE state (an ACTIVE-but-past-expiry link reads 'expired').
-    status: evaluateTokenState({ status: t.status as string, expires_at: (t.expires_at as string) ?? null }, now),
-    requestedDocs: Array.isArray(t.requested_docs) ? (t.requested_docs as string[]) : [],
-    expiresAt: (t.expires_at as string) ?? null,
-    lastUsedAt: (t.last_used_at as string) ?? null,
-    createdAt: t.created_at as string,
-  }));
-
-  // Sign short-lived view URLs for each submission (few per vendor).
-  const submissions = await Promise.all(
-    (docRows ?? []).map(async (d: Record<string, unknown>) => {
-      let viewUrl: string | null = null;
-      try {
-        const signed = await getSignedUrl(supabase, d.id as string, 300, { download: false });
-        viewUrl = signed?.url ?? null;
-      } catch {
-        viewUrl = null;
-      }
-      return {
-        id: d.id as string,
-        fileName: d.file_name as string,
-        docType: d.doc_type as string,
-        createdAt: d.created_at as string,
-        reviewStatus: 'PENDING' as const,
-        viewUrl,
-      };
-    }),
-  );
-
-  return NextResponse.json({ tokens, submissions });
+  try {
+    return NextResponse.json(await buildPortalAccessView(supabase, orgId, vendorId));
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not load portal access' }, { status: 500 });
+  }
 }
 
 // POST /api/vendor-portal/tokens → mint a link for a vendor.
@@ -119,12 +81,8 @@ export async function POST(req: Request) {
     : [];
   const requestedDocs = requested.length > 0 ? requested : (['W9', 'COI'] as PortalDocKind[]);
 
-  let expiresAt: string | null = null;
-  if (typeof body.expires_in_days === 'number' && body.expires_in_days > 0) {
-    const d = new Date();
-    d.setDate(d.getDate() + Math.min(Math.trunc(body.expires_in_days), 365));
-    expiresAt = d.toISOString();
-  }
+  // No expiry chosen → 45 days (a forgotten link must not live forever); capped at a year.
+  const expiresAt = portalLinkExpiry(body.expires_in_days, new Date());
 
   // vendor_portal_tokens is SELECT-only for members (migration 171): written with the
   // service role after compliance:manage; the vendor was verified in-org above.

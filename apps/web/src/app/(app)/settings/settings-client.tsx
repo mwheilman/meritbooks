@@ -71,6 +71,11 @@ const TABS: { key: TabKey; label: string; icon: typeof Settings }[] = [
 
 export function SettingsClient() {
   const [activeTab, setActiveTab] = useState<TabKey>('organization');
+  // Deep link: /settings?tab=chase (Receipts → Policy links here).
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (t && TABS.some((x) => x.key === t)) setActiveTab(t as TabKey);
+  }, []);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -211,6 +216,11 @@ export function SettingsClient() {
             <div className="card p-6 space-y-5">
               <h2 className="text-lg font-semibold text-white">Receipt Chase Configuration</h2>
               <p className="text-xs text-slate-500">Controls how aggressively MeritBooks chases missing receipts from cardholders.</p>
+              <p className="text-xs text-slate-500">
+                The first reminder and quiet hours below drive the receipt chase. Reminders always go by email (and in-app for team members) until text and push are set up.
+                Cardholders, the receipt limit, reminder days, escalation and the on/off switch per company are on{' '}
+                <a href="/receipts?tab=policy" className="underline">Receipts → Policy</a>.
+              </p>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className={labelCls}>First Reminder (minutes after charge)</label><input type="number" value={chaseFirst} onChange={(e) => setChaseFirst(Number(e.target.value))} className={inputCls} min={5} max={1440} /></div>
                 <div><label className={labelCls}>Follow-up Interval (minutes)</label><input type="number" value={chaseFollowup} onChange={(e) => setChaseFollowup(Number(e.target.value))} className={inputCls} min={15} max={1440} /></div>

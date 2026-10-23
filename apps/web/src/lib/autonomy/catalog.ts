@@ -105,6 +105,38 @@ export const AUTONOMY_FEATURES: readonly AutonomyFeatureDef[] = [
     defaultMode: 'PROPOSE',
   },
   {
+    feature: 'SCHEDULED_RECURRING_INVOICES',
+    label: 'Scheduled recurring invoices',
+    description:
+      'Daily, generates every recurring invoice that has come due. At Propose each one is created as a DRAFT for a person to review, post and send; at Auto-under-limit a template set to post (or post and send) posts its AR — and emails the customer — when that template\'s total is within the cap.',
+    category: 'processing',
+    defaultMode: 'PROPOSE',
+  },
+  {
+    feature: 'SCHEDULED_DEPRECIATION',
+    label: 'Scheduled depreciation & amortization',
+    description:
+      'On the 1st, works out last month\'s depreciation (fixed assets) and amortization (intangibles) for every company. At Propose it reports the entries for a person to post from Fixed assets; at Auto-under-limit it posts them when the month\'s total is within the cap. Hard-closed months are never touched.',
+    category: 'processing',
+    defaultMode: 'PROPOSE',
+  },
+  {
+    feature: 'SCHEDULED_INSURANCE_AMORTIZATION',
+    label: 'Scheduled insurance amortization',
+    description:
+      'On the 1st, finds every prepaid-insurance period that is due. At Propose it reports them for a person to post from Insurance; at Auto-under-limit it posts them when the total is within the cap.',
+    category: 'processing',
+    defaultMode: 'PROPOSE',
+  },
+  {
+    feature: 'SCHEDULED_DUNNING_SEND',
+    label: 'Scheduled payment reminders (dunning)',
+    description:
+      'Daily, prepares the next reminder on the dunning ladder for every overdue invoice. At Propose each reminder waits in Requests for a person to send; at Auto-under-limit reminders for invoices whose balance is within the cap are sent automatically (quiet hours, unsubscribes and send limits always apply). A company whose dunning policy is set to Draft never auto-sends.',
+    category: 'processing',
+    defaultMode: 'PROPOSE',
+  },
+  {
     feature: 'SCHEDULED_EVENT_DRAIN',
     label: 'Scheduled Projects event drain',
     description:

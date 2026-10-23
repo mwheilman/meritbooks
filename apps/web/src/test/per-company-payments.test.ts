@@ -112,9 +112,13 @@ async function invoiceFor(w: World, locationId: string, cents = 50_000): Promise
   return { id: out.result.invoice_id, token: r.public_token };
 }
 
-async function connect(w: World, locationId: string | null, handle: string, environment: 'test' | 'live' = 'test') {
+async function connect(w: World, locationId: string | null, handle: string, environment: 'test' | 'live' = 'test', chargesConfirmed = true) {
   const { connectProvider } = await import('@/lib/money/connections');
-  return connectProvider(sb, w.org, { capability: 'AR_COLLECTION', provider: 'stripe', environment, locationId, accountHandle: handle, connectedBy: 'user_test' });
+  const c = await connectProvider(sb, w.org, { capability: 'AR_COLLECTION', provider: 'stripe', environment, locationId, accountHandle: handle, connectedBy: 'user_test' });
+  // Stripe confirmed the account can take charges (what the Connect webhook / a status
+  // refresh stores). Online payment requires it (lib/invoices/pay-link.ts, fix 1G-1).
+  if (chargesConfirmed) await db.query(`update core.provider_connections set charges_enabled = true where id = $1`, [c.id]);
+  return c;
 }
 
 async function payIntent(token: string, body: Record<string, unknown>) {
@@ -238,6 +242,30 @@ describe('pay intent routes to the issuing company', () => {
     expect(r.body.enabled).toBe(false);
     expect(r.body.message).toMatch(/being set up/);
     expect(created.length).toBe(before);
+  });
+
+  it('an account Stripe has not confirmed (charges never checked) takes no payment (1G-1)', async () => {
+    const w2 = await world('P9');
+    await connect(w2, w2.loc, 'acct_P9A', 'test', false);
+    const inv = await invoiceFor(w2, w2.loc);
+    const before = created.length;
+    const r = await payIntent(inv.token, { method: 'ACH' });
+    expect(r.body.enabled).toBe(false);
+    expect(created.length).toBe(before);
+    // and the documents agree: no pay link
+    const { loadInvoiceDocById } = await import('@/lib/invoices/invoice-doc');
+    const doc = await loadInvoiceDocById(sb, w2.org, inv.id);
+    expect(doc?.pay).toMatchObject({ payable: false, code: 'NOT_READY' });
+  });
+
+  it('the pay page, documents and intent agree: per-company mode with only a tenant account → no pay link (1G-1)', async () => {
+    const ic = await invoiceFor(w, w.locC);
+    const { loadInvoiceDocById } = await import('@/lib/invoices/invoice-doc');
+    const doc = await loadInvoiceDocById(sb, w.org, ic.id);
+    expect(doc?.pay).toMatchObject({ payable: false, code: 'NO_CONNECTION', methods: [] });
+    const ia = await invoiceFor(w, w.loc);
+    const docA = await loadInvoiceDocById(sb, w.org, ia.id);
+    expect(docA?.pay).toMatchObject({ payable: true, mode: 'test', methods: ['ACH'] });
   });
 
   it('single mode (explicit opt-in): it falls back to the tenant-level account', async () => {

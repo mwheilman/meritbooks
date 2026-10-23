@@ -6,7 +6,7 @@ import { requireAuth, requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { fetchCoreMap } from '@/lib/stitch-core';
-import { initialNextRunDate, type TemplateData } from '@/lib/invoices/recurring-invoices';
+import { initialNextRunDate, templateMode, type TemplateData } from '@/lib/invoices/recurring-invoices';
 
 /**
  * Recurring invoice templates (FPB-invoices Wave C, D6.1 — recurring was MISSING,
@@ -27,7 +27,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('recurring_invoice_templates')
-    .select('id, name, frequency, interval_count, start_date, next_run_date, end_date, occurrences_remaining, is_active, auto_send, template_data, last_generated_at, last_invoice_id, customer_id, location_id, created_at')
+    .select('id, name, frequency, interval_count, start_date, next_run_date, end_date, occurrences_remaining, is_active, auto_send, generate_mode, template_data, last_generated_at, last_invoice_id, customer_id, location_id, created_at')
     .order('next_run_date', { ascending: true, nullsFirst: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -58,6 +58,7 @@ export async function GET() {
       occurrencesRemaining: t.occurrences_remaining,
       isActive: t.is_active,
       autoSend: t.auto_send,
+      generateMode: templateMode({ generate_mode: t.generate_mode as string | null, auto_send: !!t.auto_send }),
       amountCents,
       lineCount: lines.length,
       lastGeneratedAt: t.last_generated_at,
@@ -96,6 +97,8 @@ const createSchema = z.object({
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   occurrences: z.number().int().positive().optional().nullable(),
   auto_send: z.boolean().default(false),
+  /** Migration 184: DRAFT · POST · POST_AND_SEND (wins over auto_send when given). */
+  generate_mode: z.enum(['DRAFT', 'POST', 'POST_AND_SEND']).optional(),
   memo: z.string().max(1000).optional(),
   tax_cents: z.number().int().min(0).default(0),
   terms: z.number().int().min(0).max(365).default(30),
@@ -148,7 +151,8 @@ export async function POST(request: Request) {
       end_date: b.end_date ?? null,
       occurrences_remaining: b.occurrences ?? null,
       is_active: true,
-      auto_send: b.auto_send,
+      auto_send: b.generate_mode ? b.generate_mode === 'POST_AND_SEND' : b.auto_send,
+      generate_mode: b.generate_mode ?? null,
       template_data: templateData,
       created_by: userId,
     })

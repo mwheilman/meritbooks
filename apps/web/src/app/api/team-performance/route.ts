@@ -8,6 +8,7 @@ import { resolveActor } from '@/lib/trust/actor';
 import type { ActorType, Tier } from '@/lib/trust/action-log';
 import { buildSalesTaxCalendar } from '@/lib/tax/sales-tax-calendar';
 import { fetchAllIn } from '@/lib/supabase/fetch-all';
+import { getOrgToday } from '@/lib/dates/org-today';
 import {
   resolveWorkActions,
   resolveTargets,
@@ -23,6 +24,7 @@ import {
   isCloseOnTime,
   calendarDaysBetween,
   rollupCloseAdherence,
+  trailingCloseWindow,
   isFilingOnTime,
   rollupFilingAdherence,
   type Targets,
@@ -358,16 +360,21 @@ export async function GET(req: Request) {
   const nameIds = new Set<string>(people.keys());
 
   // ── Close-schedule adherence (owner KPI #3) — team scope, trailing 12mo. ─────
+  // Filing adherence below keeps its 12-month lower bound (upcoming filings still show).
   const closeSinceDate = new Date(Date.now() - CLOSE_LOOKBACK_MONTHS * 31 * DAY_MS)
     .toISOString()
     .slice(0, 10);
+  // Close adherence: the trailing 12 fiscal months ENDING this month (org calendar) — past
+  // periods included, future periods excluded (compute.ts trailingCloseWindow, fix 1G-5).
   let close: unknown = null;
   if (scope === 'team') {
+    const closeWindow = trailingCloseWindow(await getOrgToday(supabase, orgId), CLOSE_LOOKBACK_MONTHS);
     const { data: periodRows } = await supabase
       .from('fiscal_periods')
       .select('id, location_id, period_year, period_month, end_date, status, closed_at')
       .eq('org_id', orgId)
-      .gte('end_date', closeSinceDate)
+      .gte('end_date', closeWindow.start)
+      .lte('end_date', closeWindow.end)
       .order('period_year', { ascending: false })
       .order('period_month', { ascending: false })
       .limit(500);
@@ -440,7 +447,9 @@ export async function GET(req: Request) {
       targetBusinessDay: targets.closeBusinessDay,
       ...closeRollup,
       openOverdueCount,
-      periods: closePeriodRows.slice(0, 36),
+      // Newest first; every client's 12 months (cap keeps the payload bounded).
+      periods: closePeriodRows.slice(0, 240),
+      window: closeWindow,
     };
   }
 

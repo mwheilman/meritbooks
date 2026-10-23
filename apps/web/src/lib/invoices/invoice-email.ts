@@ -57,6 +57,15 @@ export interface InvoiceEmailOptions {
   attachmentNames?: string[];
 }
 
+/** "Pay by bank transfer or card." — only the methods the pay page really offers (pay-link.ts). */
+export function payMethodsSentence(methods: ReadonlyArray<string>): string {
+  const ach = methods.includes('ACH');
+  const card = methods.includes('CARD');
+  if (ach && card) return 'Pay by bank transfer or card.';
+  if (card) return 'Pay by card.';
+  return 'Pay by bank transfer.';
+}
+
 /**
  * @param payUrlOverride  legacy callers pass the pay URL; the resolved doc.pay.url is used otherwise.
  */
@@ -91,7 +100,7 @@ export function buildInvoiceEmail(doc: InvoiceDoc, payUrlOverride?: string | nul
               <a href="${esc(viewUrl)}" style="display:inline-block;padding:14px 34px;color:${onAccent};font-size:15px;font-weight:700;text-decoration:none;font-family:${FONT};">Pay this invoice</a>
             </td></tr>
           </table>
-          <div style="color:#8494a7;font-size:12px;margin-bottom:22px;">Pay by bank transfer${doc.pay?.methods?.includes('CARD') ? ' or card' : ''}. The PDF is attached.</div>`
+          <div style="color:#8494a7;font-size:12px;margin-bottom:22px;">${payMethodsSentence(doc.pay?.methods ?? [])} The PDF is attached.</div>`
     : `${viewUrl ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 8px;">
             <tr><td style="border:1px solid ${accent};">
               <a href="${esc(viewUrl)}" style="display:inline-block;padding:12px 28px;color:${accent};font-size:14px;font-weight:700;text-decoration:none;font-family:${FONT};">View invoice</a>

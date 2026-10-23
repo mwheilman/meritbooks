@@ -62,6 +62,16 @@ export const RESET_TABLES: readonly ResetTable[] = [
   { schema: 'public', table: 'recurring_je_templates', label: 'Recurring JE templates', group: 'General ledger', scope: 'transactional' },
   { schema: 'public', table: 'recurring_templates', label: 'Recurring templates', group: 'General ledger', scope: 'transactional' },
 
+  // ── Checks (mig 182) — before bank accounts / bill payments (FK order) ────
+  { schema: 'public', table: 'ap_check_payments', label: 'Check ↔ payment links', group: 'Checks', scope: 'transactional' },
+  { schema: 'public', table: 'ap_checks', label: 'Check register', group: 'Checks', scope: 'transactional' },
+  { schema: 'public', table: 'positive_pay_exports', label: 'Positive-pay files', group: 'Checks', scope: 'transactional' },
+  { schema: 'public', table: 'check_print_runs', label: 'Check print runs', group: 'Checks', scope: 'transactional' },
+  { schema: 'public', table: 'check_sequence_events', label: 'Check-number changes', group: 'Checks', scope: 'transactional' },
+  { schema: 'public', table: 'bank_check_sequences', label: 'Check-number sequences', group: 'Checks', scope: 'transactional' },
+  { schema: 'public', table: 'check_stock_security_changes', label: 'Check stock security changes', group: 'Checks', scope: 'transactional' },
+  { schema: 'public', table: 'check_stock_profiles', label: 'Check stock settings', group: 'Checks', scope: 'transactional' },
+
   // ── Banking ───────────────────────────────────────────────────────────────
   { schema: 'public', table: 'bank_reconciliations', label: 'Bank reconciliations', group: 'Banking', scope: 'transactional' },
   { schema: 'public', table: 'bank_transaction_splits', label: 'Bank / card split lines', group: 'Banking', scope: 'transactional' },

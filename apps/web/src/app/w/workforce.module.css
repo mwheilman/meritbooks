@@ -1,0 +1,285 @@
+/* Merit Workforce — the cardholder's phone (390 px first, 15 px base, 44 px+ targets).
+   Layout only; colour, type and focus come from the kit (system.css). Adapted from the
+   S21 / W1 boards. */
+
+.shell {
+  min-height: 100dvh;
+  background: var(--canvas);
+  display: flex;
+  justify-content: center;
+}
+
+.app {
+  width: 100%;
+  max-width: 480px;
+  min-height: 100dvh;
+  background: var(--warm);
+  display: flex;
+  flex-direction: column;
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 20px;
+  background: var(--midnight);
+  color: var(--white);
+  flex: none;
+}
+
+.top img {
+  width: 24px;
+  height: 24px;
+}
+
+.appName {
+  font: 700 15px/20px var(--f-display);
+  letter-spacing: 0.01em;
+}
+
+.who {
+  margin-left: auto;
+  text-align: right;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--grey-300);
+  max-width: 55%;
+}
+
+.rule {
+  height: 2px;
+  background: var(--electric);
+  flex: none;
+}
+
+.body {
+  flex: 1;
+  padding: 16px 20px 32px;
+}
+
+.foot {
+  padding: 16px 20px 28px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.h {
+  font: 700 20px/28px var(--f-display);
+  color: var(--electric);
+  margin-top: 8px;
+}
+
+.p {
+  color: var(--ink-2);
+  margin-top: 4px;
+}
+
+.sum {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--electric);
+}
+
+.sumAmt {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.lst {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lst li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.m {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.a {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.s {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+
+.warn {
+  color: var(--warn);
+  font-weight: 500;
+}
+
+.go {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+
+.big,
+.go :global(.btn) {
+  width: 100%;
+  min-height: 48px;
+  font-size: 15px;
+  justify-content: center;
+}
+
+.chg {
+  padding: 16px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  margin-top: 12px;
+}
+
+.chgTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+
+.chgAmt {
+  font: 600 28px/32px var(--f-text);
+  font-variant-numeric: tabular-nums;
+  margin-top: 8px;
+  color: var(--ink);
+}
+
+.opts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* The two capture buttons are labels for hidden file inputs: real 52 px targets. */
+.pick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-2);
+  background: var(--white);
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+}
+
+.pickPrimary {
+  background: var(--electric);
+  border-color: var(--electric);
+  color: var(--white);
+}
+
+.pick:focus-within {
+  outline: 2px solid var(--electric);
+  outline-offset: 2px;
+}
+
+.thumb {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.thumb img {
+  width: 72px;
+  height: 96px;
+  object-fit: cover;
+  background: var(--canvas);
+}
+
+.thumbDoc {
+  width: 72px;
+  height: 96px;
+  display: grid;
+  place-items: center;
+  background: var(--canvas);
+  color: var(--electric);
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.form :global(.input),
+.form :global(.select),
+.form :global(.textarea) {
+  min-height: 48px;
+  font-size: 16px; /* no iOS zoom on focus */
+}
+
+.row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.hint {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: var(--sky);
+  box-shadow: inset 3px 0 var(--electric);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-2);
+}
+
+.done {
+  margin-top: 24px;
+  padding: 20px 16px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  box-shadow: inset 3px 0 var(--pos);
+}
+
+.section {
+  margin-top: 28px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

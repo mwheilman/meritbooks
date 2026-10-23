@@ -72,9 +72,26 @@ describe('job registry', () => {
       'requests.remind', 'vendors.compliance_scan', 'revrec.monthly', 'reports.packs', 'controls.nightly',
       'close.period_end', 'lenders.prepare', 'access.expiry_sweep', 'access.review_campaign', 'connectors.sync',
       'bank.daily_pull', 'ap.pay_run_propose', 'ar.recurring', 'ar.dunning', 'payroll.funding_check',
+      'ar.late_fees', 'close.depreciation', 'insurance.amortize', 'notifications.digest',
     ]) {
       expect(keys.has(k), k).toBe(true);
     }
+  });
+
+  it('Wave 2E: the "make automatic true" jobs are real, on by default, and GL ones are dial-gated', () => {
+    const byKey = new Map(JOBS.map((j) => [j.key, j]));
+    for (const k of ['ar.recurring', 'ar.dunning', 'ar.late_fees', 'close.depreciation', 'insurance.amortize', 'close.period_end', 'ap.pay_run_propose', 'notifications.digest', 'requests.remind', 'bank.daily_pull']) {
+      const j = byKey.get(k);
+      expect(j?.implemented, k).toBe(true);
+      expect(j?.defaultEnabled, k).toBe(true);
+    }
+    expect(byKey.get('ar.recurring')?.autonomyFeature).toBe('SCHEDULED_RECURRING_INVOICES');
+    expect(byKey.get('close.depreciation')?.autonomyFeature).toBe('SCHEDULED_DEPRECIATION');
+    expect(byKey.get('insurance.amortize')?.autonomyFeature).toBe('SCHEDULED_INSURANCE_AMORTIZATION');
+    // Proposal-only jobs never claim to post.
+    for (const k of ['ar.dunning', 'ar.late_fees', 'close.period_end', 'ap.pay_run_propose', 'notifications.digest']) expect(byKey.get(k)?.postsToGl, k).toBe(false);
+    // The stubs the slice deliberately leaves for later.
+    for (const k of ['connectors.sync', 'lenders.prepare', 'payroll.funding_check', 'access.review_campaign', 'reports.post_close_bva']) expect(byKey.get(k)?.implemented, k).toBe(false);
   });
 
   it('summaries carry no functions', () => {

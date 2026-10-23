@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { Button, InlineNotice, StatementTable, type StatementColumn, type StatementRow } from '@meritbooks/merit-ui';
 import { useQuery } from '@/hooks';
 import type { PnlByDimension, PnlDimension, SplitFigures } from '@/lib/reports/pnl-by-dimension';
@@ -22,6 +22,18 @@ interface Payload extends PnlByDimension {
   filters: { startDate: string; endDate: string; basis: 'accrual' };
   activeValueCount: number;
 }
+
+/** Two lines max, then an ellipsis; the cell's own width is the limit. */
+const HEADER_CLAMP: CSSProperties = {
+  display: '-webkit-box',
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: 'vertical',
+  overflow: 'hidden',
+  whiteSpace: 'normal',
+  overflowWrap: 'anywhere',
+  lineHeight: 1.25,
+  maxWidth: '100%',
+};
 
 const NOUN: Record<PnlDimension, { one: string; many: string }> = {
   department: { one: 'department', many: 'departments' },
@@ -45,7 +57,9 @@ export function PnlByDimensionReport({ dimension, params }: Props) {
     if (!data) return null;
     const ids = data.columns.map((c) => c.id);
     const columns: StatementColumn[] = [
-      ...data.columns.map((c) => ({ id: c.id, header: c.name, width: 132 })),
+      // Long department / class names wrap to two lines and truncate, full name on hover —
+      // they used to run into the next column (live check 1G-10).
+      ...data.columns.map((c) => ({ id: c.id, header: <span title={c.name} style={HEADER_CLAMP}>{c.name}</span>, width: 132 })),
       { id: 'total', header: 'Total', current: true, width: 140 },
     ];
     const rows: StatementRow[] = [];

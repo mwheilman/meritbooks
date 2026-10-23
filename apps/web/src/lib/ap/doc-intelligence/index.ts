@@ -29,6 +29,7 @@ export {
   type CreateDraftResult,
   type CreateInboundDraftArgs,
   type CreateInboundDraftResult,
+  type CreateInboundDraftOptions,
   type DraftResolution,
   type DisposeAction,
 } from './intake-queue';

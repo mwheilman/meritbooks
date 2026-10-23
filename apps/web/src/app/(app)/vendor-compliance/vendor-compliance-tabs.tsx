@@ -1,50 +1,45 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { clsx } from 'clsx';
-import { ShieldCheck, FileBadge, type LucideIcon } from 'lucide-react';
+import { usePathname, useSearchParams } from 'next/navigation';
 
 /**
- * Payables → Vendor Compliance section tabs. Link-based so each child route stays a
- * real, deep-linkable page with its own RBAC guard. Visual matches the reconciliation
- * pill pattern.
+ * Payables → Vendor compliance section tabs (kit underline tabs, link-based so each tab is
+ * deep-linkable). The compliance screen's own tabs live on `?tab=`; 1099 readiness is its
+ * own route with its own RBAC guard.
  */
-interface Tab {
-  href: string;
-  label: string;
-  icon: LucideIcon;
+const TABS = [
+  { href: '/vendor-compliance', tab: 'compliance', label: 'Compliance' },
+  { href: '/vendor-compliance?tab=review', tab: 'review', label: 'Review queue' },
+  { href: '/vendor-compliance?tab=requirements', tab: 'requirements', label: 'Requirements' },
+  { href: '/vendor-compliance?tab=bank', tab: 'bank', label: 'Bank changes' },
+  { href: '/compliance-1099', tab: null, label: '1099 readiness' },
+] as const;
+
+/** Wrapped in Suspense: useSearchParams needs a boundary when a page prerenders. */
+export function VendorComplianceTabs() {
+  return (
+    <Suspense fallback={<nav className="tabs mb-section-tabs" aria-label="Vendor compliance" />}>
+      <TabsInner />
+    </Suspense>
+  );
 }
 
-const TABS: Tab[] = [
-  { href: '/vendor-compliance', label: 'Compliance', icon: ShieldCheck },
-  { href: '/compliance-1099', label: '1099 Readiness', icon: FileBadge },
-];
-
-export function VendorComplianceTabs() {
+function TabsInner() {
   const pathname = usePathname();
-
+  const params = useSearchParams();
+  const current = params.get('tab') ?? 'compliance';
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <nav className="tabs mb-section-tabs" aria-label="Vendor compliance">
       {TABS.map((t) => {
-        const active = pathname === t.href;
-        const Icon = t.icon;
+        const active = t.tab === null ? pathname === t.href : pathname === '/vendor-compliance' && current === t.tab;
         return (
-          <Link
-            key={t.href}
-            href={t.href}
-            className={clsx(
-              'inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors',
-              active
-                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-                : 'border-slate-800 bg-slate-800/30 text-slate-400 hover:text-slate-200',
-            )}
-          >
-            <Icon className="h-3.5 w-3.5" />
+          <Link key={t.href} href={t.href} className="tab" aria-current={active ? 'page' : undefined}>
             {t.label}
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }

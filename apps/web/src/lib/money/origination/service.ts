@@ -33,6 +33,7 @@ import type {
   StatusQuery,
 } from './provider';
 import { scopedWriter, writerFor } from '@/lib/db/scoped-writer';
+import { paymentBlockKey, paymentBlockReasons } from '@/lib/services/vendor-compliance';
 
 // ── Pure helpers (DB-free, unit-tested) ──────────────────────────────────────
 
@@ -99,10 +100,22 @@ export interface AssembledReleasedLine {
   amountCents: number;
   /** derived pay method of the underlying bill ('ACH' | 'CHECK' | other/uppercased). */
   method: string;
+  /** the bill the approval pays (approvals.subject_id). */
+  billId: string;
+}
+
+/** A released line kept OFF the rail because the vendor is held (read-only re-check). */
+export interface HeldReleasedLine {
+  approvalId: string;
+  vendorId: string | null;
+  amountCents: number;
+  reason: string;
 }
 
 export interface AssembledReleased {
   lines: AssembledReleasedLine[];
+  /** lines excluded because the vendor went on hold after release (only when orgId given). */
+  held: HeldReleasedLine[];
   /** approvalIds skipped because a CHECK-method disbursement isn't rail-originated. */
   skippedChecks: string[];
   /** approvalIds skipped because they were already placed in an origination batch. */
@@ -116,7 +129,12 @@ export interface AssembledReleased {
  */
 export async function assembleReleasedDisbursements(
   db: SupabaseClient,
-  opts: { approvalIds?: string[]; includeChecks?: boolean } = {},
+  opts: {
+    approvalIds?: string[];
+    includeChecks?: boolean;
+    /** When set, re-check vendor holds read-only and move held lines into `held`. */
+    orgId?: string;
+  } = {},
 ): Promise<AssembledReleased> {
   let q = db
     .from('approvals')
@@ -128,7 +146,7 @@ export async function assembleReleasedDisbursements(
   const { data: apprData, error: apprErr } = await q;
   if (apprErr) throw new Error(apprErr.message);
   const approvals = (apprData ?? []) as ReleasedApprovalRow[];
-  if (approvals.length === 0) return { lines: [], skippedChecks: [], alreadyOriginated: [] };
+  if (approvals.length === 0) return { lines: [], held: [], skippedChecks: [], alreadyOriginated: [] };
 
   // Idempotency: drop any approval already carried by an origination item.
   const approvalIds = approvals.map((a) => a.id);
@@ -174,9 +192,26 @@ export async function assembleReleasedDisbursements(
       locationId: bill?.location_id ?? null,
       amountCents,
       method,
+      billId: a.subject_id,
     });
   }
-  return { lines, skippedChecks, alreadyOriginated };
+  if (!opts.orgId || lines.length === 0) return { lines, held: [], skippedChecks, alreadyOriginated };
+
+  // Money already released can still be stopped before it reaches the rail: a bank-change
+  // call-back opened (or a compliance hold that started) after release keeps the line off.
+  const reasons = await paymentBlockReasons(
+    db,
+    opts.orgId,
+    lines.map((l) => ({ vendorId: l.vendorId, billId: l.billId, locationId: l.locationId })),
+  );
+  const kept: AssembledReleasedLine[] = [];
+  const held: HeldReleasedLine[] = [];
+  for (const l of lines) {
+    const reason = l.vendorId ? reasons.get(paymentBlockKey(l.vendorId, l.billId)) : undefined;
+    if (reason) held.push({ approvalId: l.approvalId, vendorId: l.vendorId, amountCents: l.amountCents, reason });
+    else kept.push(l);
+  }
+  return { lines: kept, held, skippedChecks, alreadyOriginated };
 }
 
 // ── Batch + item rows ────────────────────────────────────────────────────────
@@ -269,11 +304,29 @@ function toBatch(r: BatchRow, items: OriginationItem[]): OriginationBatch {
 }
 
 export class NothingToOriginateError extends Error {
-  constructor() {
-    super('No released disbursements available to originate.');
+  constructor(readonly held: HeldReleasedLine[] = []) {
+    super(
+      held.length > 0
+        ? `Nothing to originate: ${held.length} released payment(s) are held — ${held[0].reason}`
+        : 'No released disbursements available to originate.',
+    );
     this.name = 'NothingToOriginateError';
   }
 }
+
+/** Submit refused because a line's vendor went on hold after the batch was created. */
+export class OriginationHeldError extends Error {
+  constructor(readonly held: HeldReleasedLine[]) {
+    super(
+      `This batch can't be submitted: ${held.length} payment(s) are held — ${held[0]?.reason ?? 'vendor on hold'} ` +
+        'Clear the hold in Vendor compliance, then submit again.',
+    );
+    this.name = 'OriginationHeldError';
+  }
+}
+
+/** A created batch plus the released lines kept off it by a vendor hold. */
+export type CreatedOriginationBatch = OriginationBatch & { held: HeldReleasedLine[] };
 
 /**
  * Create a CREATED origination batch (+ PENDING items) from already-released
@@ -292,12 +345,13 @@ export async function createOriginationBatch(
     /** Writer override (tests). Default: the service role for a member caller, else `db`. */
     writer?: SupabaseClient;
   },
-): Promise<OriginationBatch> {
+): Promise<CreatedOriginationBatch> {
   const assembled = await assembleReleasedDisbursements(db, {
     approvalIds: opts.approvalIds,
     includeChecks: opts.includeChecks,
+    orgId,
   });
-  if (assembled.lines.length === 0) throw new NothingToOriginateError();
+  if (assembled.lines.length === 0) throw new NothingToOriginateError(assembled.held);
 
   const summary = summarizeLines(assembled.lines);
   const locationId = assembled.lines.find((l) => l.locationId)?.locationId ?? null;
@@ -340,7 +394,40 @@ export async function createOriginationBatch(
     .select('*');
   if (itemErr) throw new Error(itemErr.message);
 
-  return toBatch(batchRow, ((insertedItems ?? []) as ItemRow[]).map(toItem));
+  return { ...toBatch(batchRow, ((insertedItems ?? []) as ItemRow[]).map(toItem)), held: assembled.held };
+}
+
+/** Read-only hold re-check over a batch's items (approval → bill → vendor / company). */
+async function heldBatchItems(db: SupabaseClient, orgId: string, items: OriginationItem[]): Promise<HeldReleasedLine[]> {
+  const approvalIds = items.map((i) => i.approvalId).filter((v): v is string => !!v);
+  const billByApproval = new Map<string, string>();
+  if (approvalIds.length > 0) {
+    const { data, error } = await db.from('approvals').select('id, subject_id').eq('org_id', orgId).in('id', approvalIds);
+    if (error) throw new Error(error.message);
+    for (const a of (data ?? []) as Array<{ id: string; subject_id: string }>) billByApproval.set(a.id, a.subject_id);
+  }
+  const billIds = Array.from(new Set(Array.from(billByApproval.values())));
+  const locByBill = new Map<string, string | null>();
+  if (billIds.length > 0) {
+    const { data, error } = await db.from('bills').select('id, location_id').eq('org_id', orgId).in('id', billIds);
+    if (error) throw new Error(error.message);
+    for (const b of (data ?? []) as Array<{ id: string; location_id: string | null }>) locByBill.set(b.id, b.location_id);
+  }
+  const probe = items.map((i) => {
+    const billId = i.approvalId ? billByApproval.get(i.approvalId) ?? null : null;
+    return { item: i, billId, locationId: billId ? locByBill.get(billId) ?? null : null };
+  });
+  const reasons = await paymentBlockReasons(
+    db,
+    orgId,
+    probe.map((p) => ({ vendorId: p.item.vendorId, billId: p.billId, locationId: p.locationId })),
+  );
+  const held: HeldReleasedLine[] = [];
+  for (const p of probe) {
+    const reason = p.item.vendorId ? reasons.get(paymentBlockKey(p.item.vendorId, p.billId)) : undefined;
+    if (reason) held.push({ approvalId: p.item.approvalId ?? p.item.id, vendorId: p.item.vendorId, amountCents: p.item.amountCents, reason });
+  }
+  return held;
 }
 
 async function loadBatch(db: SupabaseClient, orgId: string, batchId: string): Promise<OriginationBatch | null> {
@@ -386,6 +473,11 @@ export async function submitOriginationBatch(
   if (batch.status !== 'CREATED') {
     return { batch, submitted: false }; // idempotent: already handed off.
   }
+
+  // Re-check holds at hand-off time (time passes between create and submit): a vendor
+  // that went on hold keeps the whole batch on the ground until the hold clears.
+  const held = await heldBatchItems(db, orgId, batch.items);
+  if (held.length > 0) throw new OriginationHeldError(held);
 
   const lines: OriginationLine[] = batch.items.map((i) => ({
     itemId: i.id,

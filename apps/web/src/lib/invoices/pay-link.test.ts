@@ -1,43 +1,123 @@
 import { describe, it, expect } from 'vitest';
-import { decidePayLink, pickArConnection, type ConnectionLite, type PayLinkInput } from './pay-link';
+import { accountSupportedMethods, decidePayLink, evaluatePayLink, type PayLinkInput } from './pay-link';
+import { resolvePaymentTerms } from '@/lib/money/payment-terms';
+import { buildInvoiceEmail, payMethodsSentence } from './invoice-email';
 import { resolveRecipients, parseEmailList } from './recipients';
 import { summarizeOnlineActivity } from './online-activity';
+import type { ConnectedAccountSnapshot, ProviderConnection } from '@/lib/money/providers/types';
 
-const stripe = (over: Partial<ConnectionLite> = {}): ConnectionLite => ({
-  capability: 'AR_COLLECTION', provider: 'stripe', status: 'active', environment: 'test', account_handle: 'acct_1', ...over,
+const READY: ConnectedAccountSnapshot = { chargesEnabled: true, payoutsEnabled: true, detailsSubmitted: true, disabledReason: null, requirementsDue: [], payoutBankName: 'Chase', payoutBankLast4: '6789', checkedAt: '2026-10-23T00:00:00Z' };
+const UNKNOWN: ConnectedAccountSnapshot = { ...READY, chargesEnabled: null, payoutsEnabled: null, detailsSubmitted: null, payoutBankName: null, payoutBankLast4: null, checkedAt: null };
+
+const stripe = (over: Partial<ProviderConnection> = {}): ProviderConnection => ({
+  id: 'c1', orgId: 'org', capability: 'AR_COLLECTION', provider: 'stripe', environment: 'test', locationId: 'loc-a',
+  accountHandle: 'acct_a', secretRef: null, status: 'active', connectedBy: 'u', statusDetail: null, metadata: {},
+  account: READY, createdAt: '', updatedAt: '', ...over,
 });
+/** Company default = bank transfer on, card off (the owner default). */
+const terms = (levels: Parameters<typeof resolvePaymentTerms>[0] = {}) => resolvePaymentTerms(levels);
 const input = (over: Partial<PayLinkInput> = {}): PayLinkInput => ({
   publicToken: '11111111-1111-4111-8111-111111111111', status: 'SENT', balanceCents: 10_000, locationId: 'loc-a',
-  methodLevels: {}, connections: [stripe()], ...over,
+  terms: terms(), connections: [stripe()], accountMode: 'per_company',
+  stripe: { canCharge: true, environment: 'test' }, cardFeeBps: 290, ...over,
 });
 
-describe('decidePayLink — never a dead link', () => {
-  it('payable with an active connection; mode reported honestly', () => {
-    expect(decidePayLink(input())).toMatchObject({ payable: true, mode: 'test', code: 'OK', methods: ['ACH'] });
-    expect(decidePayLink(input({ connections: [stripe({ environment: 'live' })] })).mode).toBe('live');
-    expect(decidePayLink(input()).url).toMatch(/\/pay\/11111111-/);
-  });
-  it('no connection, a disconnected one, or one without an account → not payable', () => {
+describe('pay link — ONE source of truth (live check Wave 1, fix 1G-1)', () => {
+  it('NOT CONNECTED: the live bug — only a tenant-level account, per-company mode → not payable', () => {
+    const tenantOnly = [stripe({ locationId: null, account: UNKNOWN })];
+    const d = decidePayLink(input({ connections: tenantOnly }));
+    expect(d).toMatchObject({ payable: false, code: 'NO_CONNECTION', methods: [] });
     expect(decidePayLink(input({ connections: [] })).code).toBe('NO_CONNECTION');
-    expect(decidePayLink(input({ connections: [stripe({ status: 'disconnected' })] })).payable).toBe(false);
-    expect(decidePayLink(input({ connections: [stripe({ account_handle: null })] })).payable).toBe(false);
+    // another company's account never serves this one
+    expect(decidePayLink(input({ connections: [stripe({ locationId: 'loc-b' })] })).code).toBe('NO_CONNECTION');
+    expect(decidePayLink(input({ connections: [stripe({ status: 'disconnected' })] })).code).toBe('NO_CONNECTION');
+    expect(decidePayLink(input({ connections: [stripe({ accountHandle: null })] })).code).toBe('NO_CONNECTION');
   });
-  it('per-company connections (Wave 1A): own company wins, another company never applies', () => {
-    const own = stripe({ location_id: 'loc-a', account_handle: 'acct_a' });
-    const theirs = stripe({ location_id: 'loc-b', account_handle: 'acct_b' });
-    const orgWide = stripe({ location_id: null, account_handle: 'acct_org' });
-    expect(pickArConnection([theirs, own], 'loc-a')?.account_handle).toBe('acct_a');
-    expect(pickArConnection([theirs, orgWide], 'loc-a')?.account_handle).toBe('acct_org');
-    expect(pickArConnection([theirs], 'loc-a')).toBeNull();
+
+  it('CONNECTED (test): own company account in the current mode, charges confirmed → payable, TEST reported', () => {
+    const d = evaluatePayLink(input());
+    expect(d.state).toMatchObject({ payable: true, mode: 'test', code: 'OK', methods: ['ACH'], cardFeePct: 2.9 });
+    expect(d.state.url).toMatch(/\/pay\/11111111-/);
+    expect(d.connection?.accountHandle).toBe('acct_a');
+    expect(d.source).toBe('company');
+    // the state the browser sees never carries the account id
+    expect(JSON.stringify(d.state)).not.toContain('acct_');
   });
-  it('online methods come from the invoice → job → customer → company cascade', () => {
-    expect(decidePayLink(input({ methodLevels: { customer: ['CHECK'] } })).code).toBe('NO_ONLINE_METHOD');
-    expect(decidePayLink(input({ methodLevels: { invoice: ['ACH', 'CARD'], customer: ['CHECK'] } })).methods).toEqual(['ACH', 'CARD']);
+
+  it('the current mode decides: a test account under a live key (and the reverse) is not used', () => {
+    expect(decidePayLink(input({ stripe: { canCharge: true, environment: 'live' } })).code).toBe('NO_CONNECTION');
+    const live = decidePayLink(input({ connections: [stripe({ environment: 'live' })], stripe: { canCharge: true, environment: 'live' } }));
+    expect(live).toMatchObject({ payable: true, mode: 'live' });
   });
+
+  it('server keys missing or mismatched → off for everyone', () => {
+    expect(decidePayLink(input({ stripe: { canCharge: false, environment: 'test' } })).code).toBe('PAYMENTS_OFF');
+    expect(decidePayLink(input({ stripe: { canCharge: false, environment: null } })).payable).toBe(false);
+  });
+
+  it('charges must be confirmed by Stripe: never checked or disabled → not payable', () => {
+    expect(decidePayLink(input({ connections: [stripe({ account: UNKNOWN })] }))).toMatchObject({ payable: false, code: 'NOT_READY', mode: 'test' });
+    const off = decidePayLink(input({ connections: [stripe({ account: { ...READY, chargesEnabled: false } })] }));
+    expect(off.code).toBe('NOT_READY');
+    expect(off.reason).toMatch(/paused/);
+  });
+
+  it('METHOD OFF: card off at the company → card never offered; nothing online → not payable', () => {
+    expect(decidePayLink(input()).methods).not.toContain('CARD');
+    expect(decidePayLink(input({ terms: terms({ entity: { payment_methods_allowed: ['CHECK'] } }) })).code).toBe('NO_ONLINE_METHOD');
+    expect(decidePayLink(input({ terms: terms({ entity: { payment_methods_allowed: ['CHECK', 'ACH', 'CARD'] } }) })).methods).toEqual(['ACH', 'CARD']);
+    // most-specific wins: an invoice that allows card overrides a company that doesn't
+    expect(decidePayLink(input({ terms: terms({ invoice: { payment_methods_allowed: ['CARD'] }, entity: { payment_methods_allowed: ['ACH'] } }) })).methods).toEqual(['CARD']);
+    expect(decidePayLink(input({ terms: terms({ customer: { payment_methods_allowed: ['CHECK'] } }) })).code).toBe('NO_ONLINE_METHOD');
+  });
+
+  it('methods = enabled ∩ what the account supports', () => {
+    const noCard = stripe({ metadata: { capabilities: { card_payments: 'inactive', us_bank_account_ach_payments: 'active' } } });
+    expect(accountSupportedMethods(noCard)).toEqual(['ACH']);
+    expect(accountSupportedMethods(stripe())).toEqual(['ACH', 'CARD']);
+    const all = terms({ entity: { payment_methods_allowed: ['ACH', 'CARD'] } });
+    expect(decidePayLink(input({ connections: [noCard], terms: all })).methods).toEqual(['ACH']);
+    const onlyCard = terms({ entity: { payment_methods_allowed: ['CARD'] } });
+    expect(decidePayLink(input({ connections: [noCard], terms: onlyCard })).code).toBe('NO_ONLINE_METHOD');
+  });
+
+  it('SHARED-ACCOUNT mode: the tenant account serves every company; a company account still wins', () => {
+    const tenant = stripe({ id: 't', locationId: null, accountHandle: 'acct_shared' });
+    const shared = evaluatePayLink(input({ accountMode: 'single', connections: [tenant] }));
+    expect(shared.state.payable).toBe(true);
+    expect(shared.connection?.accountHandle).toBe('acct_shared');
+    expect(shared.source).toBe('tenant');
+    const own = evaluatePayLink(input({ accountMode: 'single', connections: [tenant, stripe()] }));
+    expect(own.connection?.accountHandle).toBe('acct_a');
+    // and the shared account is never used in per-company mode
+    expect(decidePayLink(input({ accountMode: 'per_company', connections: [tenant] })).code).toBe('NO_CONNECTION');
+  });
+
+  it('card fee: pass-through + % from the merchant fee schedule', () => {
+    expect(decidePayLink(input()).cardPassThrough).toBe(true);
+    expect(decidePayLink(input({ terms: terms({ entity: { card_surcharge_enabled: false } }) })).cardPassThrough).toBe(false);
+    expect(decidePayLink(input({ cardFeeBps: undefined })).cardFeePct).toBe(3);
+  });
+
   it('paid, voided and written-off invoices are not payable', () => {
     expect(decidePayLink(input({ balanceCents: 0 })).code).toBe('PAID');
     expect(decidePayLink(input({ status: 'VOIDED' })).code).toBe('CLOSED');
     expect(decidePayLink(input({ status: 'WRITTEN_OFF' })).code).toBe('CLOSED');
+  });
+
+  it('a DRAFT invoice is never payable, even fully set up with a balance', () => {
+    const d = decidePayLink(input({ status: 'DRAFT' }));
+    expect(d.payable).toBe(false);
+    expect(d.code).toBe('NOT_ISSUED');
+    expect(d.methods).toEqual([]);
+    expect(decidePayLink(input({ status: 'SENT' })).payable).toBe(true);
+  });
+
+  it('the email sentence names only the methods really offered', () => {
+    expect(payMethodsSentence(['ACH', 'CARD'])).toBe('Pay by bank transfer or card.');
+    expect(payMethodsSentence(['CARD'])).toBe('Pay by card.');
+    expect(payMethodsSentence(['ACH'])).toBe('Pay by bank transfer.');
+    expect(typeof buildInvoiceEmail).toBe('function');
   });
 });
 

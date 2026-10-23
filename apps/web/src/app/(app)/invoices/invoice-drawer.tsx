@@ -34,6 +34,9 @@ interface InvDetail {
     deliveredAt: string | null; viewCount: number;
     lastViewedAt: string | null; lastReminderAt: string | null;
   } | null;
+  /** Header status derived with Delivery from the same facts ('ISSUED' = never sent). */
+  displayStatus?: string;
+  displayStatusHint?: string | null;
   payments?: Array<{
     id: string; paymentDate: string; amountCents: number; appliedCents: number;
     method: string | null; referenceNumber: string | null;
@@ -202,7 +205,9 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
       headerRight={
         data ? (
           <div className="flex items-center gap-2">
-            <StatusBadge status={data.status} />
+            <span title={data.displayStatusHint ?? undefined}>
+              <StatusBadge status={data.displayStatus ?? data.status} variant={data.displayStatus === 'ISSUED' ? 'info' : undefined} />
+            </span>
             {!editing && (
               <>
                 <a href={`/api/invoices/${data.id}/pdf`} target="_blank" rel="noreferrer"

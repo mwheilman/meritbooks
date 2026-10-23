@@ -14,7 +14,7 @@ export interface FakeCall {
 }
 export interface FakeResp {
   data: unknown;
-  error: { message: string } | null;
+  error: { message: string; code?: string } | null;
 }
 export type FakeHandler = (call: FakeCall) => FakeResp;
 
@@ -32,6 +32,7 @@ class FakeQuery implements PromiseLike<FakeResp> {
   or(v: string): this { this.call.filters.push(['or', '', v]); return this; }
   order(): this { return this; }
   limit(): this { return this; }
+  range(): this { return this; }
   maybeSingle(): Promise<FakeResp> { return this.exec(); }
   single(): Promise<FakeResp> { return this.exec(); }
   then<A = FakeResp, B = never>(

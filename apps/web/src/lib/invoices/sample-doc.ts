@@ -56,7 +56,7 @@ export function sampleInvoiceDoc(
     template_source: 'BUILT_IN',
     cc_emails: [],
     customer_cc_emails: [],
-    pay: { url: payUrlFor(SAMPLE_TOKEN), payable: true, mode: 'test', methods: ['ACH', 'CARD'], reason: null, code: 'OK' },
+    pay: { url: payUrlFor(SAMPLE_TOKEN), payable: true, mode: 'test', methods: ['ACH', 'CARD'], reason: null, code: 'OK', cardPassThrough: true, cardFeePct: 3 },
     ...over,
   };
 }

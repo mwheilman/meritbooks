@@ -7,7 +7,7 @@ import { requirePermission } from '@/lib/rbac/require-permission';
 import { loadCompanyTemplates } from '@/lib/invoices/templates/resolve';
 import { createTemplateSchema } from '@/lib/invoices/templates/schema';
 import { createTemplate, templateErrorResponse } from '@/lib/invoices/templates/service';
-import { decidePayLink, type ConnectionLite } from '@/lib/invoices/pay-link';
+import { resolveCompanyPayLink, unresolvedPayLink } from '@/lib/invoices/pay-link';
 import { SAMPLE_TOKEN } from '@/lib/invoices/sample-doc';
 
 /**
@@ -29,17 +29,18 @@ export const GET = apiQueryHandler(listQuery, async (q, ctx) => {
   const templates = await loadCompanyTemplates(supabase, orgId, locationId);
   const ids = templates.map((t) => t.id).filter((x): x is string => !!x);
 
-  const [assign, invs, conns, loc] = await Promise.all([
+  const [assign, invs, loc, pay] = await Promise.all([
     ids.length
       ? supabase.from('customer_invoice_settings').select('template_id').eq('org_id', orgId).in('template_id', ids)
       : Promise.resolve({ data: [] }),
     ids.length
       ? supabase.from('invoices').select('template_id').eq('org_id', orgId).in('template_id', ids)
       : Promise.resolve({ data: [] }),
-    supabase.schema('core').from('provider_connections').select('*').eq('org_id', orgId).eq('capability', 'AR_COLLECTION'),
     locationId
-      ? supabase.schema('core').from('locations').select('id, name, payment_methods_allowed').eq('org_id', orgId).eq('id', locationId).maybeSingle()
+      ? supabase.schema('core').from('locations').select('id, name').eq('org_id', orgId).eq('id', locationId).maybeSingle()
       : Promise.resolve({ data: null }),
+    // The same decision a printed invoice of this company gets (lib/invoices/pay-link.ts).
+    resolveCompanyPayLink(supabase, orgId, locationId, SAMPLE_TOKEN).catch(() => unresolvedPayLink(SAMPLE_TOKEN)),
   ]);
   const tally = (rows: unknown) => {
     const m = new Map<string, number>();
@@ -49,19 +50,7 @@ export const GET = apiQueryHandler(listQuery, async (q, ctx) => {
   const byCustomer = tally(assign.data);
   const byInvoice = tally(invs.data);
 
-  const company = loc.data as { id: string; name: string; payment_methods_allowed: string[] | null } | null;
-  const pay = decidePayLink({
-    publicToken: SAMPLE_TOKEN,
-    status: 'SENT',
-    balanceCents: 1,
-    locationId,
-    methodLevels: { entity: company?.payment_methods_allowed ?? null },
-    connections: ((conns.data ?? []) as Record<string, unknown>[]).map((c): ConnectionLite => ({
-      capability: String(c.capability ?? ''), provider: String(c.provider ?? ''), status: String(c.status ?? ''),
-      environment: String(c.environment ?? 'test'), account_handle: (c.account_handle as string | null) ?? null,
-      ...('location_id' in c ? { location_id: (c.location_id as string | null) ?? null } : {}),
-    })),
-  });
+  const company = loc.data as { id: string; name: string } | null;
 
   return NextResponse.json({
     company: company ? { id: company.id, name: company.name } : null,

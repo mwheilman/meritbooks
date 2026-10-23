@@ -5,8 +5,9 @@
  * This is the ONLY "payment" output of the money-out MVP: a file, never an API
  * call. Nothing here moves money, posts to the GL, or contacts a bank.
  *
- * Two formats:
- *   1. Bill-pay / positive-pay CSV — the reliable primary output. The bank's
+ * Two formats (the bank POSITIVE-PAY issue file — account, check number, amount, date,
+ * payee, void flag in the bank's own layout — is lib/ap/checks/positive-pay.ts, Wave 2C):
+ *   1. Bill-pay CSV — the reliable primary output. The bank's
  *      bill-pay portal already holds each payee's banking detail, so the CSV only
  *      needs remittance identity + amount. Always fully populated from owned data.
  *   2. NACHA (ACH) — a standards-SHAPED PPD/CCD file (94-char fixed records,

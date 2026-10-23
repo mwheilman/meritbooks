@@ -26,3 +26,23 @@ export function applyLocationFilter<T extends { eq: (col: string, val: string) =
   if (locationIds.length > 1) return query.in(column, locationIds);
   return query;
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The active single-client context wins over a stale multi-company filter (live check
+ * Wave 1, fix 1G-2). The shared fetch hook attaches the header's client as `location_id`;
+ * a report that still carries the PREVIOUS client in `location_ids` must not show that
+ * client's numbers under the new header. When `location_id` names one client and
+ * `location_ids` names anything other than exactly that client, `location_ids` is
+ * replaced by the client. Consolidated (`location_id` absent / 'all') is untouched.
+ *
+ * Pure: returns the corrected `location_ids` value, or null when nothing changes.
+ */
+export function reconcileClientScope(locationId: string | null, locationIds: string | null): string | null {
+  if (locationIds === null) return null;
+  if (!locationId || locationId === 'all' || !UUID.test(locationId)) return null;
+  const ids = locationIds.split(',').map((s) => s.trim()).filter(Boolean);
+  if (ids.length === 1 && ids[0] === locationId) return null;
+  return locationId;
+}

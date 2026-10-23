@@ -31,7 +31,9 @@ export async function GET() {
   };
 
   try {
-    const { items, unresolved } = await assembleApprovedBatch(supabase);
+    // Read-only vendor-hold re-check so the payer sees, before exporting/releasing, which
+    // approved lines are now held (and why). Held lines are left out of the batch.
+    const { items, unresolved, held } = await assembleApprovedBatch(supabase, { holdCheck: { orgId } });
     if (items.length === 0) {
       return NextResponse.json({
         groups: [],
@@ -40,6 +42,7 @@ export async function GET() {
         profiles: [],
         checkNumbers: {},
         unresolved,
+        held,
       });
     }
     const batch = buildDisbursementBatch(items);
@@ -56,6 +59,7 @@ export async function GET() {
       profiles: Array.from(profileMap.values()),
       checkNumbers: Object.fromEntries(checkMap),
       unresolved,
+      held,
     });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to assemble batch' }, { status: 500 });

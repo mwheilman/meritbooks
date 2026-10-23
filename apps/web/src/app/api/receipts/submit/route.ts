@@ -44,7 +44,9 @@ export const POST = apiHandler(
         receipt_date: body.receipt_date,
         account_id: body.account_id,
         department_id: body.department_id,
-        submitted_by: ctx.userId,
+        // receipts.submitted_by is a legacy uuid column; Clerk ids are text (mig 181).
+        submitted_by: null,
+        submitted_by_user: ctx.userId,
         status: 'PENDING',
       })
       .select('id')
@@ -54,9 +56,8 @@ export const POST = apiHandler(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // TODO: Trigger AI categorization asynchronously
-    // await categorizeReceipt(ctx.supabase, receipt.id);
-
+    // Files go through POST /api/receipts/upload (store → read → match); this route records
+    // a receipt from typed fields only. AI coding runs from Receipts → "AI categorize".
     return NextResponse.json({ receipt_id: receipt.id }, { status: 201 });
   }
 );

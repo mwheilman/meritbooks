@@ -160,6 +160,10 @@ export const navigation: NavGroup[] = [
     items: [
       { label: 'AI decision log', href: '/ai-decisions', icon: 'history' },
       { label: 'AI categorizer', href: '/categorize', icon: 'ask' },
+      // Supervisors work in the Books plane day to day; the team's performance must be
+      // reachable from there too, not only from Team & settings (live check 1G-4). Shown
+      // only to roles with team:view (rail-model filters query-string hrefs by path).
+      { label: 'Team performance', href: '/team?tab=performance', icon: 'up' },
       { label: 'Agents', href: '/agents', icon: 'ask', disclosure: 'M' },
     ],
   },
@@ -178,7 +182,6 @@ export const navigation: NavGroup[] = [
     label: 'Team',
     items: [
       { label: 'Team & access', href: '/team', icon: 'users' },
-      { label: 'Team performance', href: '/team?tab=performance', icon: 'up' },
       { label: 'Roles & permissions', href: '/settings/roles', icon: 'lock' },
       { label: 'Access requests', href: '/settings/access/requests', icon: 'lock' },
       { label: 'Access reviews', href: '/settings/access/reviews', icon: 'eye' },
@@ -209,6 +212,8 @@ export const navigation: NavGroup[] = [
       { label: 'Payments', href: '/settings/payments', icon: 'dollar' },
       { label: 'Approval workflows', href: '/settings/approvals', icon: 'check' },
       { label: 'AI autonomy', href: '/settings/autonomy', icon: 'sliders' },
+      { label: 'Automation', href: '/settings/automation', icon: 'clock' },
+      { label: 'Email inboxes', href: '/settings/inbound-email', icon: 'upload' },
       { label: 'Operations', href: '/operations', icon: 'wrench' },
     ],
   },

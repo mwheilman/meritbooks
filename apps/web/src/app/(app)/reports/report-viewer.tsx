@@ -272,23 +272,31 @@ export function ReportViewer({ initialReport = null, initialToday, initialDealer
     );
   }, [mayConsolidate, activeCompanyId, myCompanies]);
 
-  // ── ACTIVE-COMPANY DEFAULT (admins) ─────────────────────────────────────────
-  // Admins keep the consolidated "All Companies" option, but when they're actively
-  // working inside ONE company (header selector), default the reports scope to that
-  // company so they see its statements immediately — no forced empty re-pick. This
-  // is a ONE-TIME initial default (tracked by a ref) so it never fights an admin who
-  // subsequently chooses All Companies or a different entity. When scope is already
-  // consolidated ('all'), we leave selectedLocs empty (= All Companies).
-  const appliedActiveDefault = useRef(false);
+  // ── ACTIVE-CLIENT SYNC (admins) ─────────────────────────────────────────────
+  // Admins keep the consolidated "All Companies" option, but the header's client switch
+  // is the scope: working inside ONE client, every report shows that client; switching
+  // client (or to All) RESETS the report filters to match (live check Wave 1, fix 1G-2 —
+  // a switch kept the old company's location_ids, so its numbers showed under the new
+  // header). The API enforces the same rule (lib/location-filter.ts reconcileClientScope).
+  const syncedActive = useRef<string | null>(null);
   useEffect(() => {
     if (!mayConsolidate) return;               // non-admins handled above
-    if (appliedActiveDefault.current) return;  // only seed the initial default once
     if (!companyScopeReady) return;            // wait for /api/me to resolve scope
-    appliedActiveDefault.current = true;
+    const key = activeCompanyId ?? 'all';
+    if (syncedActive.current === key) return;  // only on an actual switch
+    const first = syncedActive.current === null;
+    syncedActive.current = key;
     if (isSpecificCompany(activeCompanyId)) {
-      setSelectedLocs((prev) => (prev.length === 0 ? [activeCompanyId] : prev));
+      setSelectedIndustries([]);
+      setSelectedLocs([activeCompanyId]);
+    } else if (!first) {
+      // Switched to All companies: start consolidated, not on the previous client.
+      setSelectedIndustries([]);
+      setSelectedLocs([]);
     }
   }, [mayConsolidate, companyScopeReady, activeCompanyId]);
+  /** Inside one client (header), the company filter is that client — no cross-client picks. */
+  const pinnedToClient = isSpecificCompany(activeCompanyId);
 
   const industries = useMemo(() => {
     const set = new Set(locations.map((l) => l.industry).filter(Boolean) as string[]);
@@ -405,11 +413,12 @@ export function ReportViewer({ initialReport = null, initialToday, initialDealer
     if (typeof c.customS === 'string') setCustomS(c.customS);
     if (typeof c.customE === 'string') setCustomE(c.customE);
     if (Array.isArray(c.selectedIndustries)) setSelectedIndustries(c.selectedIndustries);
-    if (Array.isArray(c.selectedLocs)) setSelectedLocs(c.selectedLocs);
+    // Inside one client a saved view's companies never override the header's client.
+    if (Array.isArray(c.selectedLocs) && !pinnedToClient) setSelectedLocs(c.selectedLocs);
     if (c.basis === 'accrual' || c.basis === 'cash') setBasis(c.basis);
     if (c.viewMode === 'summary' || c.viewMode === 'detail') setViewMode(c.viewMode);
     if (c.compareMode) setCompareMode(c.compareMode as CompareMode);
-  }, []);
+  }, [pinnedToClient]);
 
   // ── Export labels (entity / period / basis) for the currently-viewed statement ──
   const entityLabel = useMemo(() => {
@@ -598,7 +607,13 @@ export function ReportViewer({ initialReport = null, initialToday, initialDealer
                 </div>
               )}
 
-              {mayConsolidate ? (
+              {mayConsolidate && pinnedToClient ? (
+                <div className="flex items-center gap-1.5 text-xs text-slate-300" title="Reports follow the client chosen in the header. Switch the header to All companies to consolidate.">
+                  <Building2 size={13} className="text-slate-500" />
+                  <span>{locations.find((l) => l.id === activeCompanyId)?.name ?? myCompanies.find((c) => c.id === activeCompanyId)?.name ?? 'This client'}</span>
+                  <span className="text-slate-500">· switch to All companies in the header to consolidate</span>
+                </div>
+              ) : mayConsolidate ? (
                 <>
                   <MultiSelect label="Companies" icon={Building2} options={companyOptions} selected={selectedLocs} onChange={setSelectedLocs} allLabel="All Companies" />
                   {industries.length > 0 && (

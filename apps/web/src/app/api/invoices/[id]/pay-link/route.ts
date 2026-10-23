@@ -21,13 +21,14 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
     const { data: inv } = await supabase
       .from('invoices')
-      .select('id, public_token, status, balance_cents, location_id, customer_id, job_id, payment_methods_allowed')
+      .select('id, public_token, status, balance_cents, location_id, customer_id, job_id, payment_methods_allowed, card_surcharge_enabled, ach_surcharge_enabled')
       .eq('org_id', orgId)
       .eq('id', params.id)
       .maybeSingle();
     const row = inv as {
       id: string; public_token: string; status: string; balance_cents: number;
       location_id: string | null; customer_id: string | null; job_id: string | null; payment_methods_allowed: string[] | null;
+      card_surcharge_enabled: boolean | null; ach_surcharge_enabled: boolean | null;
     } | null;
     if (!row) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
 
@@ -53,6 +54,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       methods: link.methods,
       code: link.code,
       reason: link.reason,
+      cardPassThrough: link.cardPassThrough,
+      cardFeePct: link.cardFeePct,
       qr,
       activity,
       // The 12 most recent customer events, newest first (plain English in the UI).

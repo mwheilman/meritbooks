@@ -20,11 +20,14 @@ import {
   type TenantType,
 } from '@/lib/rbac/sod';
 import { loadSodExceptions, loadSodRules, loadTenantSodSettings } from '@/lib/rbac/sod-store';
+import { DEFAULT_DEPS, type EnforcementMode } from '@/lib/rbac/authorize';
 
 type Row = Record<string, unknown>;
 
 export interface ConflictRuleView {
   id: string;
+  /** Internal rule code (never shown) — lets the screen attach per-rule status copy. */
+  key: string;
   name: string;
   description: string;
   suggestedFix: string | null;
@@ -59,6 +62,8 @@ export interface ConflictRulesView {
     /** Mig 174: may the approver also release — off / any amount / up to a limit. */
     approverRelease: ApproverReleasePolicy;
     jeSelfPostThresholdCents: number;
+    /** The tenant's access mode — decides what the JE self-post rule does (je-post-sod-copy.ts). */
+    accessMode: EnforcementMode | null;
   };
 }
 
@@ -74,10 +79,11 @@ export async function coreUserIdFor(admin: SupabaseClient, clerkUserId: string):
 }
 
 export async function loadConflictRulesView(admin: SupabaseClient, orgId: string): Promise<ConflictRulesView> {
-  const [rules, settings, exceptions] = await Promise.all([
+  const [rules, settings, exceptions, accessMode] = await Promise.all([
     loadSodRules(admin, orgId),
     loadTenantSodSettings(admin, orgId),
     loadSodExceptions(admin, orgId),
+    DEFAULT_DEPS.mode(orgId).catch(() => null),
   ]);
   const now = Date.now();
   const live = exceptions.filter((e) => new Date(e.expiresAt).getTime() > now);
@@ -109,6 +115,7 @@ export async function loadConflictRulesView(admin: SupabaseClient, orgId: string
   return {
     rules: rules.map((r) => ({
       id: r.id,
+      key: r.key,
       name: r.name,
       description: r.description,
       suggestedFix: r.suggestedFix,
@@ -139,6 +146,7 @@ export async function loadConflictRulesView(admin: SupabaseClient, orgId: string
       soleApproverMode: settings.soleApproverMode,
       approverRelease: approverReleasePolicyOf(settings.soleApproverMode, settings.soleApproverMaxCents),
       jeSelfPostThresholdCents: settings.jeSelfPostThresholdCents,
+      accessMode,
     },
   };
 }

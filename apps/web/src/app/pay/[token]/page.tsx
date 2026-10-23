@@ -6,11 +6,9 @@ import { InlineNotice, Status } from '@meritbooks/merit-ui';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { loadInvoiceDocByToken } from '@/lib/invoices/invoice-doc';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
-import { resolveSurchargeEnabled } from '@/lib/invoices/resolve-payment-methods';
+import { monogram } from '@/lib/invoices/monogram';
 import { buildLineTable } from '@/lib/invoices/templates/columns';
 import { getPaymentIntentStatus } from '@/lib/money/providers/stripe';
-import { loadInvoicePaymentTerms } from '@/lib/money/payment-terms';
-import { resolveMerchantFeeSchedule } from '@/lib/money/fees';
 import { PayNow } from './pay-now';
 import './pay.css';
 
@@ -89,24 +87,11 @@ export default async function HostedInvoicePage(
   const paid = doc.status === 'PAID' || doc.balance_cents <= 0;
   const closed = doc.status === 'VOIDED' || doc.status === 'WRITTEN_OFF';
   const overdue = !paid && !closed && new Date(doc.due_date + 'T00:00:00') < new Date();
-  // Company / customer / job payment settings (slice 1A) decide which online methods show
-  // and whether the card fee is passed through; the % comes from the merchant fee schedule.
-  const { data: invRow } = await supabase
-    .from('invoices')
-    .select('org_id, location_id, customer_id, job_id, payment_methods_allowed, card_surcharge_enabled')
-    .eq('org_id', orgId)
-    .eq('id', doc.id)
-    .maybeSingle<{
-      org_id: string; location_id: string | null; customer_id: string | null; job_id: string | null;
-      payment_methods_allowed: string[] | null; card_surcharge_enabled: boolean | null;
-    }>();
-  const terms = invRow ? await loadInvoicePaymentTerms(supabase, invRow) : null;
-  const feeSchedule = await resolveMerchantFeeSchedule(supabase, orgId).catch(() => null);
-  const surcharge = terms ? terms.cardPassThrough : resolveSurchargeEnabled({ invoice: doc.card_surcharge_enabled ?? null });
-  const surchargePct = feeSchedule ? feeSchedule.cardFeeBps / 100 : 3;
-  const onlineMethods = terms
-    ? doc.pay.methods.filter((m) => (terms.online as string[]).includes(m))
-    : doc.pay.methods;
+  // ONE decision (lib/invoices/pay-link.ts, fix 1G-1): the company's own Stripe account in
+  // the current mode, charges confirmed, the invoice → job → customer → company methods ∩
+  // what the account takes, the card fee pass-through and % from the merchant fee schedule.
+  // The pay intent enforces the very same answer.
+  const onlineMethods = doc.pay.payable ? doc.pay.methods : [];
   const canPayOnline = doc.pay.payable && onlineMethods.length > 0 && t.show_pay_button && returnBanner?.title !== 'Payment received. Thank you.';
   const table = buildLineTable(doc.lines, t, { jobLabel: doc.job_label });
   const billTo = addressLines(doc.bill_to);
@@ -122,7 +107,7 @@ export default async function HostedInvoicePage(
               // eslint-disable-next-line @next/next/no-img-element
               <img src={t.logo_url} alt={doc.entity?.name ?? ''} className="mb-pay-logo" />
             ) : (
-              <div className="mb-pay-mark" aria-hidden="true">{(doc.entity?.name || 'I').slice(0, 1)}</div>
+              <div className="mb-pay-mark" aria-hidden="true">{monogram(doc.entity?.name)}</div>
             )}
             <div style={{ minWidth: 0 }}>
               <div className="mb-pay-co">{doc.entity?.name}</div>
@@ -163,8 +148,8 @@ export default async function HostedInvoicePage(
               accent={brand}
               balanceLabel={money(doc.balance_cents)}
               methods={onlineMethods}
-              surcharge={surcharge}
-              surchargePct={surchargePct}
+              surcharge={doc.pay.cardPassThrough}
+              surchargePct={doc.pay.cardFeePct}
               payerName={doc.customer?.name ?? ''}
               payerEmail={doc.customer?.email ?? ''}
               testMode={doc.pay.mode === 'test'}

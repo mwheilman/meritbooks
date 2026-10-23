@@ -1,22 +1,31 @@
 /**
- * Vendor-compliance payment-hold enforcement (Session 22).
+ * Vendor-compliance payment-hold enforcement (Session 22; requirement sets + bank-change
+ * call-back, Wave 2A / migration 180 — FPB-vendor-compliance-chase §19).
  *
- * A vendor is on payment hold when any tracked compliance document is MISSING,
- * EXPIRED, or VALID-but-past-its-expiration. The hold is COMPUTED from document
- * state — there is no stored hold flag to drift. A vendor_payment_holds row is an
- * OVERRIDE that lifts the hold:
+ * The hold is COMPUTED — there is no stored hold flag to drift:
+ *   - when a requirement set governs the vendor (lib/vendor-compliance/requirements), the
+ *     vendor is held when any rule the set imposes is missing / short / expired / not met
+ *     / waiting for review and the set blocks payment (grace days honoured; a WARN-only set
+ *     reports but never holds). At pay time the BILL's company picks the set;
+ *   - otherwise (legacy) when any tracked compliance document is MISSING, EXPIRED, or
+ *     VALID-but-past-its-expiration.
+ * A vendor_payment_holds row is an OVERRIDE that lifts the compliance hold:
  *   ONE_TIME   one payment, then consumed
  *   TEMPORARY  until end_date
  *   PERMANENT  indefinitely
+ * A PENDING bank-detail change (VN-10) blocks every payment and is NOT liftable by an
+ * override — only a recorded call-back clears it.
  *
- * `enforcePaymentAllowed` is the gate called from the payment lifecycle: it
- * blocks a non-compliant vendor's payment unless an active override applies
- * (consuming a ONE_TIME override). Every block / grant / consume / release /
- * auto-expiry / chase writes a vendor_compliance_events audit row.
+ * `enforcePaymentAllowed` is the gate called from the payment lifecycle. Every block /
+ * grant / consume / release / auto-expiry / chase writes a vendor_compliance_events row.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { assertOrgRefs, isMemberClient, isWriteScopeError, writerFor } from '@/lib/db/scoped-writer';
+import { logVendorComplianceEvent, type VendorComplianceEventType } from './vendor-compliance-audit';
+import { evaluateRequirements, holdReasons, summarise, type RequirementSet, type RuleResult } from '@/lib/vendor-compliance/requirements';
+import { governingSet, isMissingRelation, loadProfiles, loadRequirementSets, loadVendorCompanies, loadVendorFacts } from '@/lib/vendor-compliance/store';
+import { bankChangeBlock } from '@/lib/vendor-compliance/bank-change';
 
 type DB = SupabaseClient;
 
@@ -50,10 +59,15 @@ export interface OverrideRow {
 
 export interface VendorComplianceState {
   compliant: boolean;
-  issues: { docType: string; label: string; state: string }[];
+  issues: { docType: string; label: string; state: string; reason?: string }[];
   docs: ComplianceDoc[];
   activeOverride: OverrideRow | null;
-  onHold: boolean; // not compliant AND no active override
+  /** The gaps block payment (legacy: any issue; requirement set: block_payment and a blocking rule). */
+  blocks: boolean;
+  onHold: boolean; // blocks AND no active override
+  /** The requirement set that governed this evaluation (null = legacy doc-row rules). */
+  requirementSet: Pick<RequirementSet, 'id' | 'name' | 'blockPayment' | 'graceDays'> | null;
+  rules: RuleResult[];
 }
 
 const EXPIRING_SOON_DAYS = 60;
@@ -74,7 +88,7 @@ function classifyDoc(status: string, expiration: string | null, now: Date): Comp
 }
 
 /** Is an override row currently in force (lifts the hold) as of `now`? */
-function overrideActive(o: OverrideRow, now: Date): boolean {
+export function overrideActive(o: OverrideRow, now: Date): boolean {
   if (o.released_at) return false;
   if (o.hold_type === 'ONE_TIME') return !o.consumed_at; // valid until consumed
   if (o.hold_type === 'PERMANENT') return true;
@@ -84,26 +98,87 @@ function overrideActive(o: OverrideRow, now: Date): boolean {
   return true;
 }
 
+/**
+ * Thrown when compliance could not be evaluated for a reason OTHER than a confirmed
+ * missing table. The pay gate treats it as a hold (fail closed).
+ */
+export class ComplianceUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ComplianceUnavailableError';
+  }
+}
+
+/** Missing table (un-migrated DB) reads as empty; any other error fails closed. */
+function rowsOrThrow<T>(res: { data: unknown; error: { code?: string; message: string } | null }, what: string): T[] {
+  if (res.error) {
+    if (isMissingRelation(res.error)) return [];
+    throw new ComplianceUnavailableError(`Could not read ${what}: ${res.error.message}`);
+  }
+  return (res.data ?? []) as T[];
+}
+
 async function loadOverrides(db: DB, orgId: string, vendorId: string): Promise<OverrideRow[]> {
-  const { data } = await db
+  const res = await db
     .from('vendor_payment_holds')
     .select('id, hold_type, reason, start_date, end_date, consumed_at, released_at, created_at')
     .eq('org_id', orgId)
     .eq('vendor_id', vendorId)
     .order('created_at', { ascending: false });
-  return (data ?? []) as OverrideRow[];
+  return rowsOrThrow<OverrideRow>(res, 'payment-hold overrides');
 }
 
-/** Evaluate a vendor's compliance + hold state. */
-export async function evaluateVendorCompliance(db: DB, orgId: string, vendorId: string): Promise<VendorComplianceState> {
-  const now = new Date();
-  const { data: docRows } = await db
-    .from('vendor_compliance_docs')
-    .select('id, doc_type, status, expiration_date')
-    .eq('org_id', orgId)
-    .eq('vendor_id', vendorId);
+/** The requirement-set evaluation for one vendor, or null when no set governs it (legacy rules apply). */
+async function requirementEvaluation(
+  db: DB,
+  orgId: string,
+  vendorId: string,
+  locationId: string | null | undefined,
+  now: Date,
+): Promise<{ set: RequirementSet; rules: RuleResult[] } | null> {
+  // loadRequirementSets already reads a missing table as "no sets" (legacy rules apply);
+  // any other failure propagates so the pay gate fails closed.
+  const sets: RequirementSet[] = await loadRequirementSets(db, orgId);
+  if (sets.length === 0) return null;
+  const today = now.toISOString().slice(0, 10);
+  const [{ data: v }, profiles] = await Promise.all([
+    db.schema('core').from('vendors').select('id, is_1099_eligible').eq('org_id', orgId).eq('id', vendorId).maybeSingle(),
+    loadProfiles(db, orgId, [vendorId]),
+  ]);
+  const p = profiles.get(vendorId);
+  const vc = {
+    vendorType: p?.vendorType ?? null,
+    workType: p?.workType ?? null,
+    is1099Eligible: typeof (v as { is_1099_eligible?: unknown } | null)?.is_1099_eligible === 'boolean' ? ((v as { is_1099_eligible: boolean }).is_1099_eligible) : null,
+  };
+  let set: RequirementSet | null;
+  if (locationId !== undefined) set = governingSet(sets, vc, { locationId });
+  else set = governingSet(sets, vc, { companies: (await loadVendorCompanies(db, orgId, [vendorId])).get(vendorId) ?? [] });
+  if (!set) return null;
+  const { facts } = await loadVendorFacts(db, orgId, [vendorId], today);
+  const f = facts.get(vendorId);
+  if (!f) return null;
+  return { set, rules: evaluateRequirements(set, f, today) };
+}
 
-  const docs: ComplianceDoc[] = (docRows ?? []).map((d: Record<string, unknown>) => ({
+/**
+ * Evaluate a vendor's compliance + hold state. `locationId` = the company the payment is
+ * for (its requirement set governs); omitted = the strictest merge across every company
+ * that has billed the vendor.
+ */
+export async function evaluateVendorCompliance(
+  db: DB,
+  orgId: string,
+  vendorId: string,
+  opts: { locationId?: string | null; now?: Date } = {},
+): Promise<VendorComplianceState> {
+  const now = opts.now ?? new Date();
+  const docRows = rowsOrThrow<Record<string, unknown>>(
+    await db.from('vendor_compliance_docs').select('id, doc_type, status, expiration_date').eq('org_id', orgId).eq('vendor_id', vendorId),
+    'vendor compliance documents',
+  );
+
+  const docs: ComplianceDoc[] = docRows.map((d: Record<string, unknown>) => ({
     id: d.id as string,
     doc_type: d.doc_type as string,
     status: d.status as string,
@@ -111,49 +186,52 @@ export async function evaluateVendorCompliance(db: DB, orgId: string, vendorId: 
     state: classifyDoc(d.status as string, (d.expiration_date as string) ?? null, now),
   }));
 
-  const issues = docs
-    .filter((d) => d.state === 'missing' || d.state === 'expired')
-    .map((d) => ({ docType: d.doc_type, label: DOC_LABEL[d.doc_type] ?? d.doc_type, state: d.state }));
-
-  const compliant = issues.length === 0;
-
   const overrides = await loadOverrides(db, orgId, vendorId);
   const activeOverride = overrides.find((o) => overrideActive(o, now)) ?? null;
 
+  const req = await requirementEvaluation(db, orgId, vendorId, 'locationId' in opts ? opts.locationId ?? null : undefined, now);
+  if (req) {
+    const sum = summarise(req.set, req.rules);
+    const issues = sum.blocking.map((r) => ({ docType: r.rule, label: r.label, state: r.outcome, reason: r.reason }));
+    return {
+      compliant: issues.length === 0,
+      issues,
+      docs,
+      activeOverride,
+      blocks: sum.holds,
+      onHold: sum.holds && !activeOverride,
+      requirementSet: { id: req.set.id, name: req.set.name, blockPayment: req.set.blockPayment, graceDays: req.set.graceDays },
+      rules: req.rules,
+    };
+  }
+
+  const issues = docs
+    .filter((d) => d.state === 'missing' || d.state === 'expired')
+    .map((d) => ({ docType: d.doc_type, label: DOC_LABEL[d.doc_type] ?? d.doc_type, state: d.state }));
+  const compliant = issues.length === 0;
   return {
     compliant,
     issues,
     docs,
     activeOverride,
+    blocks: !compliant,
     onHold: !compliant && !activeOverride,
+    requirementSet: null,
+    rules: [],
   };
 }
 
-async function logEvent(
+function logEvent(
   db: DB,
   orgId: string,
   vendorId: string,
-  eventType: string,
+  eventType: VendorComplianceEventType,
   detail: string,
   extra: { billId?: string; overrideId?: string; docId?: string; actor?: string | null } = {},
 ): Promise<void> {
-  // Audit logging must never break the financial transaction it accompanies.
-  try {
-    // vendor_compliance_events is SELECT-only for members (migration 172): append-only audit
-    // evidence, service-role insert after the caller's permission check, org pinned.
-    await writerFor(db).from('vendor_compliance_events').insert({
-      org_id: orgId,
-      vendor_id: vendorId,
-      event_type: eventType,
-      detail,
-      bill_id: extra.billId ?? null,
-      override_id: extra.overrideId ?? null,
-      doc_id: extra.docId ?? null,
-      created_by_user: extra.actor ?? null,
-    });
-  } catch (e) {
-    console.warn('[vendor-compliance] audit log failed:', e);
-  }
+  // vendor_compliance_events is SELECT-only for members (migration 172): append-only audit
+  // evidence, service-role insert after the caller's permission check, org pinned.
+  return logVendorComplianceEvent(db, orgId, vendorId, eventType, detail, extra);
 }
 
 export class ComplianceHoldError extends Error {
@@ -166,8 +244,8 @@ export class ComplianceHoldError extends Error {
 /**
  * Gate a payment on vendor compliance. Throws ComplianceHoldError if the vendor
  * is on hold with no active override. Consumes a ONE_TIME override when used.
- * Safe to call even if the enforcement tables aren't present yet (degrades open
- * with a console warning) so an un-migrated deploy never hard-breaks payments.
+ * Fails CLOSED: any error while evaluating is a hold. The only tolerated error is a
+ * CONFIRMED missing table (42P01 / PGRST205 — an un-migrated DB), which reads as "no rows".
  */
 export async function enforcePaymentAllowed(
   db: DB,
@@ -176,15 +254,35 @@ export async function enforcePaymentAllowed(
   billId: string,
   actor: string | null = null,
 ): Promise<void> {
-  let state: VendorComplianceState;
+  // VN-10 first: a pending (or rejected-but-still-on-file) bank change blocks EVERY payment
+  // and no override lifts it — only a recorded call-back does.
+  let bankBlock: string | null = null;
   try {
-    state = await evaluateVendorCompliance(db, orgId, vendorId);
+    bankBlock = await bankChangeBlock(db, orgId, vendorId);
   } catch (e) {
-    console.warn('[vendor-compliance] evaluation skipped (tables not ready?):', e);
-    return; // fail open rather than block all payments on an un-migrated DB
+    console.warn('[vendor-compliance] bank-change check failed, refusing payment:', e);
+    bankBlock = 'We could not confirm this vendor’s bank details are verified. Try again, or check Vendor compliance → Bank changes.';
+  }
+  if (bankBlock) {
+    await logEvent(db, orgId, vendorId, 'PAYMENT_BLOCKED', `Payment blocked — ${bankBlock}`, { billId, actor });
+    throw new ComplianceHoldError(bankBlock);
   }
 
-  if (state.compliant) return;
+  // The bill's company picks the requirement set.
+  let state: VendorComplianceState;
+  try {
+    const { data: bill, error: billErr } = await db.from('bills').select('location_id').eq('org_id', orgId).eq('id', billId).maybeSingle();
+    if (billErr) throw new ComplianceUnavailableError(`Could not read the bill: ${billErr.message}`);
+    const locationId = ((bill as { location_id?: string | null } | null)?.location_id) ?? null;
+    state = await evaluateVendorCompliance(db, orgId, vendorId, { locationId });
+  } catch (e) {
+    console.warn('[vendor-compliance] evaluation failed, refusing payment:', e);
+    const msg = COMPLIANCE_UNAVAILABLE_MESSAGE;
+    await logEvent(db, orgId, vendorId, 'PAYMENT_BLOCKED', `Payment blocked — ${msg}`, { billId, actor }).catch(() => undefined);
+    throw new ComplianceHoldError(msg);
+  }
+
+  if (!state.blocks) return;
 
   if (state.activeOverride) {
     if (state.activeOverride.hold_type === 'ONE_TIME') {
@@ -201,11 +299,15 @@ export async function enforcePaymentAllowed(
     return; // override lifts the hold
   }
 
-  const reasons = state.issues.map((i) => `${i.label} ${i.state}`).join(', ');
+  const reasons = state.requirementSet
+    ? holdReasons(state.rules)
+    : state.issues.map((i) => `${i.label} ${i.state}`).join(', ');
   await logEvent(db, orgId, vendorId, 'PAYMENT_BLOCKED',
     `Payment blocked — compliance issues: ${reasons}`, { billId, actor });
   throw new ComplianceHoldError(
-    `Vendor is on compliance hold (${reasons}). Cure the documents or grant an override before paying.`,
+    state.requirementSet
+      ? `Vendor is on compliance hold under “${state.requirementSet.name}”: ${reasons}. Accept a document that meets the requirement or grant an override before paying.`
+      : `Vendor is on compliance hold (${reasons}). Cure the documents or grant an override before paying.`,
   );
 }
 
@@ -465,4 +567,71 @@ export async function getVendorComplianceOverview(db: DB, orgId: string): Promis
   );
 
   return { rows, summary };
+}
+
+export const COMPLIANCE_UNAVAILABLE_MESSAGE =
+  'We could not confirm this vendor’s compliance status, so the payment is held. Try again, or check Vendor compliance.';
+
+/**
+ * READ-ONLY re-check of the pay gate for money already released (check print, ACH
+ * origination, disbursement export). Same rules as enforcePaymentAllowed — a bank-change
+ * block, then the compliance hold — but it never consumes an override and never logs.
+ * A ONE_TIME override already consumed FOR THIS BILL still counts (it was spent releasing
+ * this very payment). Fails CLOSED on any error except a confirmed missing table.
+ * Returns a plain-English reason when the payment must not go out, else null.
+ */
+export async function paymentBlockReason(
+  db: DB,
+  orgId: string,
+  vendorId: string,
+  opts: { billId?: string | null; locationId?: string | null; now?: Date } = {},
+): Promise<string | null> {
+  try {
+    const bank = await bankChangeBlock(db, orgId, vendorId);
+    if (bank) return bank;
+    const state = await evaluateVendorCompliance(db, orgId, vendorId, { locationId: opts.locationId ?? null, now: opts.now });
+    if (!state.blocks || state.activeOverride) return null;
+    if (opts.billId) {
+      const spent = rowsOrThrow<{ id: string }>(
+        await db.from('vendor_payment_holds').select('id').eq('org_id', orgId).eq('vendor_id', vendorId)
+          .eq('hold_type', 'ONE_TIME').eq('consumed_bill_id', opts.billId).is('released_at', null).limit(1),
+        'payment-hold overrides',
+      );
+      if (spent.length > 0) return null;
+    }
+    const reasons = state.requirementSet ? holdReasons(state.rules) : state.issues.map((i) => `${i.label} ${i.state}`).join(', ');
+    return state.requirementSet
+      ? `Vendor went on compliance hold under “${state.requirementSet.name}” after this payment was released: ${reasons}.`
+      : `Vendor went on compliance hold after this payment was released (${reasons}).`;
+  } catch (e) {
+    console.warn('[vendor-compliance] payment re-check failed, holding:', e);
+    return COMPLIANCE_UNAVAILABLE_MESSAGE;
+  }
+}
+
+/**
+ * paymentBlockReason for a batch: one entry per DISTINCT (vendor, bill, company) key.
+ * Returns key → reason for the blocked ones only. Key = `${vendorId}|${billId ?? ''}`.
+ */
+export async function paymentBlockReasons(
+  db: DB,
+  orgId: string,
+  items: ReadonlyArray<{ vendorId: string | null; billId?: string | null; locationId?: string | null }>,
+  now: Date = new Date(),
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const seen = new Set<string>();
+  for (const it of items) {
+    if (!it.vendorId) continue;
+    const key = paymentBlockKey(it.vendorId, it.billId);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const reason = await paymentBlockReason(db, orgId, it.vendorId, { billId: it.billId ?? null, locationId: it.locationId ?? null, now });
+    if (reason) out.set(key, reason);
+  }
+  return out;
+}
+
+export function paymentBlockKey(vendorId: string, billId?: string | null): string {
+  return `${vendorId}|${billId ?? ''}`;
 }

@@ -28,6 +28,7 @@ import type { ConflictRulesView, ConflictRuleView, AllowedConflictView } from '@
 import type { ApproverReleasePolicy } from '@/lib/rbac/sod';
 import { approverReleaseConfirmation } from '@/lib/approvals/approver-release-form';
 import { ApproverReleaseSetting } from './approver-release-setting';
+import { JE_SELF_POST_RULE_KEY, jeSelfPostCopy } from '@/lib/rbac/je-post-sod-copy';
 
 type Pending =
   | { kind: 'disable'; rule: ConflictRuleView }
@@ -42,6 +43,12 @@ const PERMISSION_OPTIONS: Array<{ value: string; label: string }> = CAPABILITIES
   .flatMap((c) => c.actions.filter((a) => a !== 'view').map((a) => `${c.key}:${a}`))
   .map((ref) => ({ value: ref, label: capabilityPhrase(ref) }))
   .sort((a, b) => a.label.localeCompare(b.label));
+
+const JE_STATUS_CLS: Record<'pos' | 'warn' | 'default', string> = {
+  pos: 'bg-emerald-500/10 text-emerald-300',
+  warn: 'bg-amber-500/10 text-amber-300',
+  default: 'bg-white/5 text-slate-400',
+};
 
 function fmtDate(iso: string): string {
   const d = new Date(iso);
@@ -134,6 +141,8 @@ export function ConflictRulesPanel() {
 
   const thresholdCents = Math.round(Number(threshold) * 100);
   const thresholdValid = threshold.trim() !== '' && Number.isFinite(Number(threshold)) && Number(threshold) >= 0;
+  // One accurate description of the JE self-post rule for both places it appears (1G-6).
+  const jeCopy = jeSelfPostCopy(view.settings.accessMode ?? null, formatMoney(view.settings.jeSelfPostThresholdCents));
   const thresholdChanged = thresholdValid && thresholdCents !== view.settings.jeSelfPostThresholdCents;
   const canAdd = first !== '' && second !== '' && first !== second;
 
@@ -149,7 +158,13 @@ export function ConflictRulesPanel() {
         <ul className="mt-3 space-y-2">
           {locked.map((r) => (
             <li key={r.id} className="rounded-lg border border-white/5 bg-surface-950 px-3 py-2">
-              <div className="text-xs font-medium text-white">{r.description}</div>
+              <div className="text-xs font-medium text-white">
+                {r.description}
+                {r.key === JE_SELF_POST_RULE_KEY && (
+                  <span className={`ml-2 rounded px-1.5 py-0.5 text-2xs ${JE_STATUS_CLS[jeCopy.tone]}`}>{jeCopy.status}</span>
+                )}
+              </div>
+              {r.key === JE_SELF_POST_RULE_KEY && <div className="mt-0.5 text-2xs text-slate-400">{jeCopy.detail}</div>}
               {r.suggestedFix && <div className="mt-0.5 text-2xs text-slate-500">{r.suggestedFix}</div>}
             </li>
           ))}
@@ -394,10 +409,8 @@ export function ConflictRulesPanel() {
             <label className="block">
               <span className="text-xs font-medium text-white">Journal entries that need a second person to post</span>
               <span className="block text-2xs text-slate-500">
-                Entries at or above this amount can’t be posted by the person who prepared them. Currently{' '}
-                {formatMoney(view.settings.jeSelfPostThresholdCents)}. Not yet enforced: until the new role model is
-                enforced, such posts go through and are listed as differences on the Roles page. Posting a draft
-                someone else prepared isn’t available yet.
+                Currently {formatMoney(view.settings.jeSelfPostThresholdCents)} ·{' '}
+                <span className={`rounded px-1 text-2xs ${JE_STATUS_CLS[jeCopy.tone]}`}>{jeCopy.status}</span>. {jeCopy.detail}
               </span>
               <span className="mt-1 flex items-center gap-1">
                 <span className="text-xs text-slate-500">$</span>

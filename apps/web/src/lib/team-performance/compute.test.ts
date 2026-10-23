@@ -23,6 +23,7 @@ import {
   safeRate,
   nthBusinessDayOfMonthUTC,
   closeDueDateForPeriod,
+  trailingCloseWindow,
   isCloseOnTime,
   calendarDaysBetween,
   rollupCloseAdherence,
@@ -259,5 +260,20 @@ describe('regulatory filing adherence (owner KPI #4)', () => {
     expect(r.overdueCount).toBe(1);
     expect(r.totalDue).toBe(4); // 3 filed + 1 overdue
     expect(r.onTimePct).toBeCloseTo(2 / 3, 4);
+  });
+});
+
+describe('trailingCloseWindow — trailing 12 months ENDING this month (1G-5)', () => {
+  it('covers the 12 months up to and including the current month, never future periods', () => {
+    expect(trailingCloseWindow('2026-10-23', 12)).toEqual({ start: '2025-11-01', end: '2026-10-31' });
+  });
+  it('rolls across a year boundary and handles leap February', () => {
+    expect(trailingCloseWindow('2026-01-05', 12)).toEqual({ start: '2025-02-01', end: '2026-01-31' });
+    expect(trailingCloseWindow('2028-02-10', 3)).toEqual({ start: '2027-12-01', end: '2028-02-29' });
+  });
+  it('a 2027 period is outside a window evaluated in 2026', () => {
+    const w = trailingCloseWindow('2026-10-23', 12);
+    expect('2027-01-31' <= w.end).toBe(false);
+    expect('2025-11-30' >= w.start && '2025-11-30' <= w.end).toBe(true);
   });
 });

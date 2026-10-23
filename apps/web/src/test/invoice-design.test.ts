@@ -78,7 +78,7 @@ async function template(over: Record<string, unknown> & { location_id: string | 
 
 async function connectStripe(env: 'test' | 'live' = 'test'): Promise<void> {
   await db.query(
-    `update core.provider_connections set status = 'active', account_handle = 'acct_test_1b'
+    `update core.provider_connections set status = 'active', account_handle = 'acct_test_1b', charges_enabled = true
       where org_id = $1 and capability = 'AR_COLLECTION' and provider = 'stripe' and environment = $2 and location_id is null`,
     [t.org, env]);
   await db.query(
@@ -87,8 +87,8 @@ async function connectStripe(env: 'test' | 'live' = 'test'): Promise<void> {
   // Tenant-level connection (location_id null) — migration 175 keys Stripe per company,
   // with at most one tenant-level row; the org opts into "one account for all companies".
   await db.query(
-    `insert into core.provider_connections (org_id, capability, provider, environment, account_handle, status)
-     select $1, 'AR_COLLECTION', 'stripe', $2, 'acct_test_1b', 'active'
+    `insert into core.provider_connections (org_id, capability, provider, environment, account_handle, status, charges_enabled)
+     select $1, 'AR_COLLECTION', 'stripe', $2, 'acct_test_1b', 'active', true
       where not exists (select 1 from core.provider_connections
                          where org_id = $1 and capability = 'AR_COLLECTION' and provider = 'stripe' and environment = $2 and location_id is null)`,
     [t.org, env]);
@@ -98,6 +98,9 @@ async function disconnectStripe(): Promise<void> {
 }
 
 beforeAll(async () => {
+  // The pay link needs the server's Stripe keys to be present and agree (payments-mode.ts).
+  process.env.STRIPE_SECRET_KEY = 'sk_test_1g';
+  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_1g';
   ({ db } = await createTestDb({ supabaseDefaultGrants: true }));
   sb = pgSupabase(db);
   t = await seedTenant(db, { projects: false, shortCode: 'DSN' });

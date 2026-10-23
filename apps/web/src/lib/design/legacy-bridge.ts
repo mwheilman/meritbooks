@@ -37,6 +37,8 @@ export const PORTED_ROUTES: readonly string[] = [
   '/invoices/design',
   '/pay/[token]',
   '/settings/payments',
+  '/settings/automation', // Wave 2E
+  '/settings/inbound-email', // Wave 2D
   '/settings/payments/refresh',
   '/settings/payments/return',
   '/sign-in/[[...sign-in]]',
@@ -44,6 +46,13 @@ export const PORTED_ROUTES: readonly string[] = [
   '/requests',
   '/r/[token]',
   '/r/[token]/unsubscribe',
+  // Wave 2B — receipt capture & chase + Merit Workforce (receipts), built on the kit
+  '/receipts',
+  '/w',
+  '/w/s/[token]',
+  // Wave 2A — vendor W-9 / COI closed loop, built on the kit
+  '/vendor-compliance',
+  '/portal/vendor/[token]',
 ];
 
 /**
@@ -141,13 +150,11 @@ export const LEGACY_ROUTES: readonly string[] = [
   '/periods',
   '/platform',
   '/portal/customer/[token]',
-  '/portal/vendor/[token]',
   '/portfolio',
   '/portfolio/[locationId]',
   '/prepaids',
   '/profitability',
   '/purchase-orders',
-  '/receipts',
   '/reconciliation',
   '/recurring',
   '/recurring-journal-entries',
@@ -178,7 +185,6 @@ export const LEGACY_ROUTES: readonly string[] = [
   '/tax-provision',
   '/tax/sales-tax',
   '/team',
-  '/vendor-compliance',
   '/vendors',
   '/year-end-close',
 ];
@@ -187,7 +193,7 @@ export const LEGACY_ROUTES: readonly string[] = [
  * The ratchet. LEGACY_ROUTES.length may never exceed this, and the test asks you
  * to lower it whenever a page is ported. It only ever goes DOWN.
  */
-export const LEGACY_BASELINE = 130;
+export const LEGACY_BASELINE = 127;
 
 /** Compile a route pattern to a pathname matcher. */
 export function routePatternToRegExp(pattern: string): RegExp {
