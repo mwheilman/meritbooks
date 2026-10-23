@@ -86,6 +86,18 @@ export async function POST(request: Request) {
   const parsed = postSchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: 'Validation failed' }, { status: 422 });
 
+  // A Stripe collection account or a Plaid Item is never registered from a browser-supplied
+  // handle: Stripe accounts are created server-side per company (/api/payments/connect) and
+  // Plaid Items come from the token exchange (/api/integrations/plaid/exchange). Accepting
+  // an arbitrary acct_… here would let an admin re-point a company's customer payments.
+  const provider = parsed.data.provider.toLowerCase();
+  if ((parsed.data.capability === 'AR_COLLECTION' && provider === 'stripe') || (parsed.data.capability === 'BANK_FEED' && provider === 'plaid')) {
+    return NextResponse.json(
+      { error: 'Connect Stripe from Settings → Payments and banks through the bank connection flow.', code: 'USE_PROVIDER_FLOW' },
+      { status: 422 },
+    );
+  }
+
   // Vault secret writes/deletes are service-role only; scoped to the caller's resolved tenant.
   const supabase = createAdminSupabase();
   try {

@@ -10,13 +10,19 @@ import { AUTONOMY_FEATURE_KEYS } from '@/lib/autonomy/catalog';
 import type { JobContext } from './types';
 
 const mocks = vi.hoisted(() => ({
-  recognizeRun: vi.fn(),
+  loadCompanyPolicy: vi.fn(),
+  proposeWipRun: vi.fn(),
+  postWipRun: vi.fn(),
   processBillingEvents: vi.fn(async () => ({ processed: 2, rejected: 0, results: [] })),
   processDeptInvoiceEvents: vi.fn(async () => ({ processed: 0, rejected: 0, results: [] })),
   processProgressEvents: vi.fn(async () => ({ processed: 0, rejected: 0, results: [] })),
   runPrepaidAmortizations: vi.fn(),
 }));
-vi.mock('@/lib/services/rev-rec', () => ({ recognizeRun: mocks.recognizeRun }));
+vi.mock('@/lib/rev-rec/wip-run-service', () => ({
+  loadCompanyPolicy: mocks.loadCompanyPolicy,
+  proposeWipRun: mocks.proposeWipRun,
+  postWipRun: mocks.postWipRun,
+}));
 vi.mock('@/lib/services/billing-consumer', () => ({ processBillingEvents: mocks.processBillingEvents }));
 vi.mock('@/lib/services/dept-invoice-consumer', () => ({ processDeptInvoiceEvents: mocks.processDeptInvoiceEvents }));
 vi.mock('@/lib/services/job-progress', () => ({ processProgressEvents: mocks.processProgressEvents }));
@@ -132,50 +138,71 @@ const PENDING_BILLING: Row = {
 };
 
 describe('GL-posting jobs only propose by default', () => {
+  const COMPANY = { id: 'loc-1', short_code: 'HHC', org_id: ORG, is_active: true };
+  const scoped = () => fakeAdmin({ locations: [COMPANY] });
+  const policy = (postingMode: 'PROPOSE' | 'AUTO_POST', runCadence: 'MONTHLY_AT_CLOSE' | 'ON_DEMAND' = 'MONTHLY_AT_CLOSE') => ({
+    policy: { accrueUnderbillings: true, deferOverbillings: true, lossProvision: true, runCadence, postingMode, materialityCents: 0, retainagePresentation: 'SEPARATE' },
+    exists: true,
+  });
+
   beforeEach(() => {
-    mocks.recognizeRun.mockReset();
-    mocks.recognizeRun.mockImplementation(async (_db: unknown, _org: string, args: { preview?: boolean }) => ({
-      asOf: '2026-10-31', posted: args.preview ? 1 : 1, unchanged: 0, skipped: 0, totalRecognizedDeltaCents: 125_000,
-      jobs: [{ jobId: 'j1', method: 'PCT_COSTS_INCURRED', earnedToDateCents: 0, priorRecognizedCents: 0, deltaCents: 125_000, status: 'posted' }],
-    }));
+    mocks.loadCompanyPolicy.mockReset();
+    mocks.proposeWipRun.mockReset();
+    mocks.postWipRun.mockReset();
+    mocks.loadCompanyPolicy.mockResolvedValue(policy('PROPOSE'));
+    mocks.proposeWipRun.mockResolvedValue({
+      outcome: 'proposed',
+      run: { id: 'run-1', gross_adjustment_cents: 125_000, reclass_cents: 0 },
+    });
+    mocks.postWipRun.mockResolvedValue({ run: { id: 'run-1' }, entryNumbers: {}, reversalPending: false });
     mocks.processBillingEvents.mockClear();
     mocks.processProgressEvents.mockClear();
   });
 
-  it('revrec.monthly with no dial row previews only (as of the prior month end) and never posts', async () => {
-    const res = await runRevRecMonthlyJob(ctx(fakeAdmin({}), fakeAdmin({})));
-    expect(mocks.recognizeRun).toHaveBeenCalledTimes(1);
-    expect(mocks.recognizeRun.mock.calls[0][2]).toMatchObject({ asOf: '2026-10-31', preview: true });
-    expect(res).toMatchObject({ status: 'ok', itemsProcessed: 0, counts: { mode: 'proposed' } });
+  it('revrec.monthly proposes the prior month for each company and never posts by default', async () => {
+    const res = await runRevRecMonthlyJob(ctx(fakeAdmin({}), scoped()));
+    expect(mocks.proposeWipRun).toHaveBeenCalledTimes(1);
+    expect(mocks.proposeWipRun.mock.calls[0][2]).toMatchObject({ locationId: 'loc-1', periodKey: '2026-10', source: 'SCHEDULER' });
+    expect(mocks.postWipRun).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ status: 'ok', itemsProcessed: 1, counts: { proposed: 1, posted: 0 } });
   });
 
-  it('revrec.monthly posts when the dial is AUTO_UNDER_LIMIT and the total is under the cap', async () => {
+  it('revrec.monthly posts only when the policy is AUTO_POST AND the dial allows under the cap', async () => {
+    mocks.loadCompanyPolicy.mockResolvedValue(policy('AUTO_POST'));
     const admin = fakeAdmin({
       autonomy_settings: [{ org_id: ORG, feature: 'SCHEDULED_REV_REC', mode: 'AUTO_UNDER_LIMIT', materiality_limit_cents: 500_000 }],
     });
-    const res = await runRevRecMonthlyJob(ctx(admin, fakeAdmin({})));
-    expect(mocks.recognizeRun).toHaveBeenCalledTimes(2);
-    expect(mocks.recognizeRun.mock.calls[1][2]).toMatchObject({ preview: false });
-    expect(res.counts).toMatchObject({ mode: 'posted' });
+    const res = await runRevRecMonthlyJob(ctx(admin, scoped()));
+    expect(mocks.postWipRun).toHaveBeenCalledWith(expect.anything(), ORG, { runId: 'run-1', approvedBy: 'system:scheduler' });
+    expect(res.counts).toMatchObject({ posted: 1, proposed: 0 });
   });
 
-  it('revrec.monthly stays a proposal when over the cap or the kill switch is engaged', async () => {
-    const over = fakeAdmin({
-      autonomy_settings: [{ org_id: ORG, feature: 'SCHEDULED_REV_REC', mode: 'AUTO_UNDER_LIMIT', materiality_limit_cents: 1_000 }],
-    });
-    await runRevRecMonthlyJob(ctx(over, fakeAdmin({})));
-    const killed = fakeAdmin({
-      autonomy_settings: [{ org_id: ORG, feature: 'SCHEDULED_REV_REC', mode: 'AUTO_UNDER_LIMIT', materiality_limit_cents: 500_000 }],
-      autonomy_kill_switch: [{ org_id: ORG, engaged: true }],
-    });
-    await runRevRecMonthlyJob(ctx(killed, fakeAdmin({})));
-    expect(mocks.recognizeRun.mock.calls.every((c) => (c[2] as { preview: boolean }).preview === true)).toBe(true);
+  it('revrec.monthly stays a proposal when the policy is PROPOSE, over the cap, or the kill switch is engaged', async () => {
+    const dial = { org_id: ORG, feature: 'SCHEDULED_REV_REC', mode: 'AUTO_UNDER_LIMIT', materiality_limit_cents: 500_000 };
+    // policy PROPOSE even though the dial would allow
+    await runRevRecMonthlyJob(ctx(fakeAdmin({ autonomy_settings: [dial] }), scoped()));
+    mocks.loadCompanyPolicy.mockResolvedValue(policy('AUTO_POST'));
+    // over the cap
+    await runRevRecMonthlyJob(ctx(fakeAdmin({ autonomy_settings: [{ ...dial, materiality_limit_cents: 1_000 }] }), scoped()));
+    // kill switch
+    await runRevRecMonthlyJob(ctx(fakeAdmin({ autonomy_settings: [dial], autonomy_kill_switch: [{ org_id: ORG, engaged: true }] }), scoped()));
+    // no dial row at all (PROPOSE default)
+    await runRevRecMonthlyJob(ctx(fakeAdmin({}), scoped()));
+    expect(mocks.proposeWipRun).toHaveBeenCalledTimes(4);
+    expect(mocks.postWipRun).not.toHaveBeenCalled();
+  });
+
+  it('revrec.monthly skips ON_DEMAND companies', async () => {
+    mocks.loadCompanyPolicy.mockResolvedValue(policy('PROPOSE', 'ON_DEMAND'));
+    const res = await runRevRecMonthlyJob(ctx(fakeAdmin({}), scoped()));
+    expect(mocks.proposeWipRun).not.toHaveBeenCalled();
+    expect(res.counts).toMatchObject({ on_demand: 1 });
   });
 
   it('revrec.monthly fails closed (never uses the admin client) when no scoped client can be minted', async () => {
     const res = await runRevRecMonthlyJob(ctx(fakeAdmin({}), null));
     expect(res.status).toBe('failed');
-    expect(mocks.recognizeRun).not.toHaveBeenCalled();
+    expect(mocks.proposeWipRun).not.toHaveBeenCalled();
   });
 
   it('events.drain leaves pending events for a human by default', async () => {

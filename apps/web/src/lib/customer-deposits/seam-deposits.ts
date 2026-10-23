@@ -17,6 +17,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { applyDeposit, remainingCents, type DepositRow } from './service';
 import { isUniqueViolation } from '@/lib/events/claim';
+import { scopedWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -46,7 +47,10 @@ export interface BilledDepositInput {
 export async function recordBilledDeposit(db: DB, input: BilledDepositInput): Promise<{ id: string; created: boolean }> {
   const existing = await findDepositBySourceRef(db, input.orgId, input.sourceRef);
   if (existing) return { id: existing.id, created: false };
-  const { data, error } = await db
+  // customer_deposits is SELECT-only for members (migration 176). The seam drains hand in
+  // the service role; `scopedWriter` keeps any other caller on the checked path.
+  const w = await scopedWriter(db, input.orgId, [input.locationId]);
+  const { data, error } = await w
     .from('customer_deposits')
     .insert({
       org_id: input.orgId,

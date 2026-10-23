@@ -5,7 +5,7 @@ import React from 'react';
 import { clsx } from 'clsx';
 import {
   Calendar, Building2, AlertCircle, Loader2, ChevronRight,
-  FileText, Users, Briefcase, BarChart3, Shield, DollarSign,
+  FileText, Users, Briefcase, BarChart3, DollarSign,
   GitCompare, List, LayoutGrid, Sparkles, ChevronDown, Check,
   Landmark, PieChart, Filter
 } from 'lucide-react';
@@ -26,6 +26,8 @@ import { ApAgingReport } from './ap-aging-report';
 import { ArAgingReport } from './ar-aging-report';
 import { JobProfitabilityReport } from './job-profitability-report';
 import { ExpenseByVendorReport } from './expense-by-vendor-report';
+import { PnlByDimensionReport } from './pnl-by-dimension-report';
+import { GENERIC_PAGE_SIZE, GenericRowsPager, pageRows } from './generic-rows-pager';
 import { ExportMenu } from './export-menu';
 import { NarrativePanel } from './narrative-panel';
 import { ReportCompiler, type CompilerRequest } from './report-compiler';
@@ -135,8 +137,8 @@ const CATALOG: ReportCategory[] = [
   { key: 'financial', label: 'Financial Statements', icon: FileText, reports: [
     { key: 'pnl', label: 'Profit & Loss', desc: 'Revenue minus expenses for a period', needsDates: true, hasBasis: true, hasDetail: true, hasCompare: true },
     { key: 'pnl_month', label: 'P&L by Month', desc: '12-column monthly breakdown', needsDates: false, hasBasis: true, hasDetail: false, hasCompare: false },
-    { key: 'pnl_dept', label: 'P&L by Department', desc: 'Departmental breakdown', needsDates: true, hasBasis: true, hasDetail: true, hasCompare: false },
-    { key: 'pnl_class', label: 'P&L by Class', desc: 'Class dimension filter', needsDates: true, hasBasis: true, hasDetail: true, hasCompare: false },
+    { key: 'pnl_dept', label: 'P&L by Department', desc: 'One column per department, plus Unassigned and Total', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: false },
+    { key: 'pnl_class', label: 'P&L by Class', desc: 'One column per class, plus Unassigned and Total', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: false },
     { key: 'bs', label: 'Balance Sheet', desc: 'Assets, liabilities, equity at a point in time', needsDates: false, hasBasis: false, hasDetail: true, hasCompare: true },
     { key: 'cf', label: 'Cash Flow Statement', desc: 'Indirect method: operating, investing, financing', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: false },
     { key: 'cf_direct', label: 'Cash Flow (Direct)', desc: 'Direct method: cash from customers, to suppliers/employees', needsDates: true, hasBasis: false, hasDetail: false, hasCompare: false },
@@ -159,7 +161,8 @@ const CATALOG: ReportCategory[] = [
     { key: 'exp_vend', label: 'Expense by Vendor', desc: 'All expenses grouped by vendor', needsDates: true, hasBasis: false, hasDetail: true, hasCompare: false },
     { key: 'vend_bal', label: 'Vendor Balances', desc: 'Open balance per vendor', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
     { key: 'open_ap', label: 'Open Bills', desc: 'All unpaid bills', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
-    { key: 'vendor_1099', label: '1099 Summary', desc: '1099-eligible vendors with YTD payments', needsDates: true, hasBasis: false, hasDetail: true, hasCompare: false },
+    // '1099 Summary' is hidden until it has a backing report (it rendered "not yet
+    // implemented"); 1099 work lives on /compliance-1099 meanwhile.
   ]},
   { key: 'jobs', label: 'Jobs & Projects', icon: Briefcase, reports: [
     { key: 'job_prof', label: 'Job Profitability', desc: 'Contract, cost, billed, margin per job', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
@@ -171,9 +174,8 @@ const CATALOG: ReportCategory[] = [
     { key: 'txn_list', label: 'Transaction List', desc: 'All transactions by date', needsDates: true, hasBasis: false, hasDetail: true, hasCompare: false },
     { key: 'open', label: 'Open Items (AR+AP)', desc: 'Combined unpaid invoices and bills', needsDates: false, hasBasis: false, hasDetail: false, hasCompare: false },
   ]},
-  { key: 'tax', label: 'Tax & Compliance', icon: Shield, reports: [
-    { key: 'sales_tax', label: 'Sales Tax Summary', desc: 'Tax collected by jurisdiction', needsDates: true, hasBasis: false, hasDetail: true, hasCompare: false },
-  ]},
+  // 'Tax & Compliance' (Sales Tax Summary) is hidden until it has a backing report —
+  // it rendered "not yet implemented". Sales tax lives on /tax/sales-tax meanwhile.
   // Dealer Pack (FPB-dealer-pack §7). One client at a time; see dealer/reports/report-panel.tsx.
   { key: 'dealer', label: 'Dealer', icon: Landmark, reports: DEALER_REPORTS.map((r) => (
     { key: r.key, label: r.label, desc: r.desc, needsDates: r.mode === 'period', hasBasis: false, hasDetail: false, hasCompare: false }
@@ -422,7 +424,8 @@ export function ReportViewer({ initialReport = null, initialToday, initialDealer
   }, [reportDef, sd, ed]);
 
   // Reports that can carry the reporting-basis overlay (statements read off the GL).
-  const supportsOverlay = ['pnl', 'pnl_dept', 'pnl_class', 'bs', 'tb'].includes(reportKey ?? '');
+  // (P&L by department/class is accrual-only for now — the overlay isn't split by dimension.)
+  const supportsOverlay = ['pnl', 'bs', 'tb'].includes(reportKey ?? '');
   const overlayActive = supportsOverlay && presentationBasis !== 'GAAP';
   const overlayLabel =
     presentationBasis === 'TAX' ? 'Tax basis (adjusted presentation)'
@@ -727,16 +730,18 @@ function ReportContent({ reportKey, sd, ed, locIds, basis, presentationBasis, ov
   // (incl. one-click Cash) is layered via the presentation overlay, which is the single
   // source of truth for the cash conversion. The legacy accrual/cash toggle only applies to
   // non-overlay basis reports (e.g. P&L by Month), and never while an overlay basis is active.
-  const overlayReport = ['pnl', 'pnl_dept', 'pnl_class', 'bs', 'tb'].includes(reportKey);
+  const overlayReport = ['pnl', 'bs', 'tb'].includes(reportKey);
   if (!overlayReport && basis !== 'accrual' && presentationBasis === 'GAAP') p.basis = basis;
 
   if (reportKey.startsWith('dealer_')) return <DealerReportPanel reportKey={reportKey} sd={sd} ed={ed} locIds={locIds} />;
 
   switch (reportKey) {
     case 'pnl':
-    case 'pnl_dept':
-    case 'pnl_class':
       return <PnlReport p={p} onDrill={onDrill} compareMode={compareMode} overlay={overlay} />;
+    case 'pnl_dept':
+      return <PnlByDimensionReport dimension="department" params={p} />;
+    case 'pnl_class':
+      return <PnlByDimensionReport dimension="class" params={p} />;
     case 'pnl_month':
       return <PnlByMonthReport locIds={locIds} basis={basis} year={sd?.slice(0,4) ?? String(new Date().getFullYear())} />;
     case 'bs':
@@ -802,6 +807,10 @@ function GenericReport({ url, params, title }: { url: string; params: Record<str
   const qs = new URLSearchParams(clean).toString();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, isLoading, error } = useQuery<any>(`${url}${qs ? '?'+qs : ''}`);
+  const [page, setPage] = useState(1);
+  const [showAll, setShowAll] = useState(false);
+  // A new query (period, client, report) starts again at page 1.
+  useEffect(() => { setPage(1); setShowAll(false); }, [url, qs]);
   if (isLoading) return <Ld />;
   if (error) return <Er m={String(error)} />;
   if (!data) return <Em />;
@@ -810,12 +819,12 @@ function GenericReport({ url, params, title }: { url: string; params: Record<str
   const keys = Object.keys(rows[0]).filter((k: string) => !k.includes('Id') && !k.includes('id') && k !== 'transactions' && k !== 'invoices' && k !== 'details' && k !== 'aging' && k !== 'accounts' && k !== 'byAccount' && k !== 'byLocation');
   return (
     <div className="card overflow-hidden">
-      <div className="px-6 py-3 border-b border-slate-800"><p className="text-2xs text-slate-500">{rows.length} rows</p></div>
+      <GenericRowsPager total={rows.length} page={page} perPage={GENERIC_PAGE_SIZE} showAll={showAll} onPage={setPage} onShowAll={setShowAll} />
       <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-slate-800/50">
         {keys.map((k: string) => <th key={k} className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 font-mono tracking-caps whitespace-nowrap font-mono tracking-caps">{k.replace(/([A-Z])/g,' $1').replace(/Cents$/,'').trim()}</th>)}
       </tr></thead><tbody className="divide-y divide-slate-800/30">
         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-        {rows.slice(0,200).map((row: Record<string, unknown>, i: number) => (<tr key={i} className="hover:bg-slate-800/20">{keys.map((k: string) => { const v = row[k]; const m = k.endsWith('Cents')||k.includes('cents'); const b = typeof v==='boolean'; const pct = k.includes('Pct')||k.includes('Rate'); return <td key={k} className={clsx('px-4 py-1.5 whitespace-nowrap',m||pct?'text-right font-mono':'',m?figColor(Number(v??0),'text-slate-200'):'text-slate-400')}>{m?formatMoney(Number(v??0)):b?(v?'✓':'—'):pct?`${v}%`:String(v??'—')}</td>; })}</tr>))}
+        {pageRows(rows as Record<string, unknown>[], page, GENERIC_PAGE_SIZE, showAll).map((row: Record<string, unknown>, i: number) => (<tr key={i} className="hover:bg-slate-800/20">{keys.map((k: string) => { const v = row[k]; const m = k.endsWith('Cents')||k.includes('cents'); const b = typeof v==='boolean'; const pct = k.includes('Pct')||k.includes('Rate'); return <td key={k} className={clsx('px-4 py-1.5 whitespace-nowrap',m||pct?'text-right font-mono':'',m?figColor(Number(v??0),'text-slate-200'):'text-slate-400')}>{m?formatMoney(Number(v??0)):b?(v?'✓':'—'):pct?`${v}%`:String(v??'—')}</td>; })}</tr>))}
       </tbody></table></div>
     </div>
   );

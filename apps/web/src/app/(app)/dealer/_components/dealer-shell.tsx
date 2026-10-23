@@ -10,7 +10,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { clsx } from 'clsx';
 import { Settings2 } from 'lucide-react';
 import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import type { DealerSettings } from '@/lib/dealer/types';
@@ -76,19 +75,13 @@ function PackProvider({ children }: { children: ReactNode }) {
 function SubNav() {
   const path = usePathname() ?? '';
   return (
-    <nav aria-label="Dealer pack" className="-mx-1 mb-5 flex gap-1 overflow-x-auto border-b border-slate-800 pb-px">
+    // Kit link-tabs (.tabs / .tab): the selected tab carries aria-current="page" and the
+    // Electric underline (books.css `.tabs a.tab[aria-current=page]`).
+    <nav aria-label="Dealer pack" className="tabs mb-section-tabs">
       {DEALER_TABS.map((t) => {
         const active = t.match ? t.match(path) : path === t.href || path.startsWith(`${t.href}/`);
         return (
-          <Link
-            key={t.href}
-            href={t.href}
-            aria-current={active ? 'page' : undefined}
-            className={clsx(
-              'whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors',
-              active ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200',
-            )}
-          >
+          <Link key={t.href} href={t.href} className="tab" aria-current={active ? 'page' : undefined}>
             {t.label}
           </Link>
         );

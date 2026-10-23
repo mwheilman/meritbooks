@@ -27,6 +27,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchCoreMap } from '@/lib/stitch-core';
+import { fetchAll, type PageableQuery } from '@/lib/supabase/fetch-all';
 import { collectObligations, type Obligation } from '@/lib/obligations/collect';
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,45 @@ export type InboxGroupKey = 'APPROVALS' | 'POLICY_BLOCKS' | 'ALERTS' | 'EXCEPTIO
 
 /** Urgency band (drives colour + intra-group ordering). */
 export type InboxSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+
+/**
+ * The Inbox TAB an item lives in. Every item is in exactly ONE lane, so the four tab
+ * counts always sum to the "needs you" total (lib/work/needs-attention):
+ *   approvals  → money-movement + expense approvals and policy blocks
+ *   exceptions → AI proposals + flagged bank lines / receipts + job costs to approve
+ *   alerts     → overdue / near-term obligations
+ *   drafts     → unposted manual journal entries
+ */
+export type WorkLane = 'approvals' | 'exceptions' | 'alerts' | 'drafts';
+
+/** The underlying queue an item came from (finer than the lane). */
+export type WorkSource =
+  | 'approval'
+  | 'expense_report'
+  | 'expense_policy'
+  | 'bill_hold'
+  | 'ai_proposal'
+  | 'bank'
+  | 'receipt'
+  | 'cost'
+  | 'obligation'
+  | 'je_draft';
+
+/** Advisory autonomy disposition an AI proposal recorded (ai_proposal only). */
+export type Disposition = 'AUTO' | 'REVIEW' | 'ESCALATE' | 'BLOCKED';
+const DISPOSITIONS: readonly Disposition[] = ['AUTO', 'REVIEW', 'ESCALATE', 'BLOCKED'];
+
+export function toDisposition(raw: unknown): Disposition | null {
+  return typeof raw === 'string' && (DISPOSITIONS as readonly string[]).includes(raw) ? (raw as Disposition) : null;
+}
+
+export const LANE_FOR_TYPE: Record<InboxItemType, WorkLane> = {
+  APPROVAL: 'approvals',
+  POLICY_BLOCK: 'approvals',
+  ALERT: 'alerts',
+  EXCEPTION: 'exceptions',
+  DRAFT: 'drafts',
+};
 
 export interface InboxItem {
   /** Stable, cross-type-unique id: `${type}:${entity.id}`. */
@@ -61,6 +101,18 @@ export interface InboxItem {
   amountCents: number | null;
   /** The underlying record, for drill-through / dedupe. */
   entity: { table: string; id: string };
+  /** Which Inbox tab this item counts in (exactly one). */
+  lane: WorkLane;
+  /** Which queue it came from. */
+  source: WorkSource;
+  /** The client (core.locations id) it belongs to; null = organization-level. */
+  locationId: string | null;
+  /** AI confidence 0..1 (ai_proposal only). */
+  confidence: number | null;
+  /** Advisory autonomy disposition (ai_proposal only). */
+  disposition: Disposition | null;
+  /** When the record was created (ISO), when known. */
+  createdAt: string | null;
   /**
    * Ranking tiebreak within a (type, severity) bucket. Lower = more urgent.
    * For ALERTs this is days-until-due (negative = overdue → sorts first); for
@@ -195,6 +247,7 @@ export interface RawApproval {
   id: string;
   kind: string | null;
   subject_table: string | null;
+  subject_id?: string | null;
   amount_cents: number | string | null;
   created_at: string | null;
 }
@@ -214,7 +267,12 @@ function approvalTarget(kind: string | null): { href: string; label: string } {
   }
 }
 
-export function buildApprovalItem(asOf: string, r: RawApproval, canApprove: boolean): InboxItem {
+export function buildApprovalItem(
+  asOf: string,
+  r: RawApproval,
+  canApprove: boolean,
+  locationId: string | null = null,
+): InboxItem {
   const age = ageInDays(asOf, r.created_at) ?? 0;
   const { href, label } = approvalTarget(r.kind);
   return {
@@ -232,6 +290,12 @@ export function buildApprovalItem(asOf: string, r: RawApproval, canApprove: bool
     amountCents: toNum(r.amount_cents) !== null ? Math.abs(toNum(r.amount_cents)!) : null,
     entity: { table: 'approvals', id: r.id },
     sortValue: -age,
+    lane: 'approvals',
+    source: 'approval',
+    locationId,
+    confidence: null,
+    disposition: null,
+    createdAt: r.created_at,
   };
 }
 
@@ -243,6 +307,7 @@ export interface RawExpenseReport {
   status: string | null;
   submitted_at: string | null;
   created_at: string | null;
+  location_id?: string | null;
 }
 
 /** A SUBMITTED expense report is an approval; a DRAFT with policy flags is a block. */
@@ -266,6 +331,12 @@ export function buildExpenseReportItem(asOf: string, r: RawExpenseReport, canApp
       amountCents,
       entity: { table: 'expense_reports', id: r.id },
       sortValue: -age,
+      lane: 'approvals',
+      source: 'expense_report',
+      locationId: r.location_id ?? null,
+      confidence: null,
+      disposition: null,
+      createdAt: r.submitted_at ?? r.created_at,
     };
   }
 
@@ -284,6 +355,12 @@ export function buildExpenseReportItem(asOf: string, r: RawExpenseReport, canApp
       amountCents,
       entity: { table: 'expense_reports', id: r.id },
       sortValue: -age,
+      lane: 'approvals',
+      source: 'expense_policy',
+      locationId: r.location_id ?? null,
+      confidence: null,
+      disposition: null,
+      createdAt: r.created_at,
     };
   }
 
@@ -297,6 +374,7 @@ export interface RawBillHold {
   payment_hold_reason: string | null;
   vendor_id: string | null;
   created_at: string | null;
+  location_id?: string | null;
 }
 
 export function buildBillHoldItem(asOf: string, r: RawBillHold, vendorName: string | null): InboxItem {
@@ -315,6 +393,12 @@ export function buildBillHoldItem(asOf: string, r: RawBillHold, vendorName: stri
     amountCents: amt !== null ? Math.abs(amt) : null,
     entity: { table: 'bills', id: r.id },
     sortValue: -age,
+    lane: 'approvals',
+    source: 'bill_hold',
+    locationId: r.location_id ?? null,
+    confidence: null,
+    disposition: null,
+    createdAt: r.created_at,
   };
 }
 
@@ -325,6 +409,7 @@ export interface RawAiProposal {
   confidence: number | string | null;
   proposed_output: { disposition?: unknown } | null;
   created_at: string | null;
+  location_id?: string | null;
 }
 
 const ESCALATED_DISPOSITIONS = new Set(['ESCALATE', 'BLOCKED']);
@@ -345,11 +430,17 @@ export function buildAiProposalItem(asOf: string, r: RawAiProposal): InboxItem {
       (conf !== null ? ` · ${Math.round(conf * 100)}% confidence` : ''),
     dueOrAge: formatAge(age),
     severity,
-    actionHref: '/exceptions',
+    actionHref: '/ai-decisions',
     actionLabel: 'Review',
     amountCents: null,
     entity: { table: 'ai_decisions', id: r.id },
     sortValue: -age,
+    lane: 'exceptions',
+    source: 'ai_proposal',
+    locationId: r.location_id ?? null,
+    confidence: conf,
+    disposition: toDisposition(dispo),
+    createdAt: r.created_at,
   };
 }
 
@@ -368,6 +459,12 @@ export function buildObligationItem(o: Obligation): InboxItem {
     amountCents: o.amountCents,
     entity: { table: o.type.toLowerCase(), id: o.entityId },
     sortValue: o.daysUntil,
+    lane: 'alerts',
+    source: 'obligation',
+    locationId: o.locationId ?? null,
+    confidence: null,
+    disposition: null,
+    createdAt: null,
   };
 }
 
@@ -377,6 +474,7 @@ export interface RawJeDraft {
   memo: string | null;
   source_module: string | null;
   created_at: string | null;
+  location_id?: string | null;
 }
 
 export function buildJeDraftItem(asOf: string, r: RawJeDraft): InboxItem {
@@ -394,6 +492,117 @@ export function buildJeDraftItem(asOf: string, r: RawJeDraft): InboxItem {
     amountCents: null,
     entity: { table: 'gl_entries', id: r.id },
     sortValue: -age,
+    lane: 'drafts',
+    source: 'je_draft',
+    locationId: r.location_id ?? null,
+    confidence: null,
+    disposition: null,
+    createdAt: r.created_at,
+  };
+}
+
+// --- Exceptions-lane sources (flagged lines, job costs) — the old /api/exceptions set ---
+
+export interface RawBankFlag {
+  id: string;
+  description: string | null;
+  amount_cents: number | string | null;
+  ai_reasoning: string | null;
+  created_at: string | null;
+  location_id?: string | null;
+}
+
+export function buildBankFlagItem(asOf: string, r: RawBankFlag): InboxItem {
+  const age = ageInDays(asOf, r.created_at) ?? 0;
+  const amt = toNum(r.amount_cents);
+  return {
+    id: `EXCEPTION:bank:${r.id}`,
+    type: 'EXCEPTION',
+    group: 'EXCEPTIONS',
+    title: r.description || 'Bank transaction',
+    subtitle: r.ai_reasoning || 'Flagged for review',
+    dueOrAge: formatAge(age),
+    severity: 'MEDIUM',
+    actionHref: '/bank-feed',
+    actionLabel: 'Review',
+    amountCents: amt !== null ? Math.abs(amt) : null,
+    entity: { table: 'bank_transactions', id: r.id },
+    sortValue: -age,
+    lane: 'exceptions',
+    source: 'bank',
+    locationId: r.location_id ?? null,
+    confidence: null,
+    disposition: null,
+    createdAt: r.created_at,
+  };
+}
+
+export interface RawReceiptFlag {
+  id: string;
+  vendor_name: string | null;
+  amount_cents: number | string | null;
+  submitted_at: string | null;
+  location_id?: string | null;
+}
+
+export function buildReceiptFlagItem(asOf: string, r: RawReceiptFlag): InboxItem {
+  const age = ageInDays(asOf, r.submitted_at) ?? 0;
+  const amt = toNum(r.amount_cents);
+  return {
+    id: `EXCEPTION:receipt:${r.id}`,
+    type: 'EXCEPTION',
+    group: 'EXCEPTIONS',
+    title: r.vendor_name || 'Unknown receipt',
+    subtitle: 'Flagged receipt — requires manual review',
+    dueOrAge: formatAge(age),
+    severity: 'MEDIUM',
+    actionHref: '/receipts',
+    actionLabel: 'Review',
+    amountCents: amt !== null ? Math.abs(amt) : null,
+    entity: { table: 'receipts', id: r.id },
+    sortValue: -age,
+    lane: 'exceptions',
+    source: 'receipt',
+    locationId: r.location_id ?? null,
+    confidence: null,
+    disposition: null,
+    createdAt: r.submitted_at,
+  };
+}
+
+export interface RawCostPending {
+  id: string;
+  cost_type: string | null;
+  memo: string | null;
+  amount_cents: number | string | null;
+  created_at: string | null;
+  location_id?: string | null;
+}
+
+export function buildCostItem(asOf: string, r: RawCostPending): InboxItem {
+  const age = ageInDays(asOf, r.created_at) ?? 0;
+  const amt = toNum(r.amount_cents);
+  const typeLabel = r.cost_type ? r.cost_type.toLowerCase() : 'cost';
+  return {
+    id: `EXCEPTION:cost:${r.id}`,
+    type: 'EXCEPTION',
+    group: 'EXCEPTIONS',
+    title: r.memo || `Job cost — ${typeLabel}`,
+    subtitle: `Job cost approval — ${typeLabel}`,
+    dueOrAge: formatAge(age),
+    severity: 'MEDIUM',
+    // No standalone cost-approvals page exists yet; resolve alongside bills.
+    actionHref: '/bills',
+    actionLabel: 'Review',
+    amountCents: amt !== null ? Math.abs(amt) : null,
+    entity: { table: 'job_cost_attributions', id: r.id },
+    sortValue: -age,
+    lane: 'exceptions',
+    source: 'cost',
+    locationId: r.location_id ?? null,
+    confidence: null,
+    disposition: null,
+    createdAt: r.created_at,
   };
 }
 
@@ -458,6 +667,13 @@ export interface CollectInboxOptions {
    * Default 30 — the inbox is "act now", not the full renewals calendar.
    */
   alertHorizonDays?: number;
+  /**
+   * Pin every source to ONE client (core.locations id). Null/absent = every client the
+   * caller's RLS lets them see (plus organization-level items). This is a sub-filter
+   * inside RLS — the client must already be validated against the caller's client
+   * scope (lib/work/needs-attention resolveWorkScope) before it is passed here.
+   */
+  locationId?: string | null;
 }
 
 export interface CollectInboxResult {
@@ -468,44 +684,150 @@ export interface CollectInboxResult {
   degraded: string[];
 }
 
-const SOURCE_CAP = 100;
+type Row = Record<string, unknown>;
 
-async function collectApprovals(supabase: SupabaseClient, asOf: string, canApprove: boolean): Promise<InboxItem[]> {
-  const { data, error } = await supabase
-    .from('approvals')
-    .select('id, kind, subject_table, amount_cents, created_at')
-    .eq('status', 'PENDING_APPROVAL')
-    .order('created_at', { ascending: true })
-    .limit(SOURCE_CAP);
+/**
+ * Read EVERY row of a source (paged past PostgREST's 1,000-row cap) so counts are exact
+ * — the old 100-row cap made the Inbox say "100" while the queue held 109.
+ */
+async function readAll(label: string, make: () => PageableQuery<Row>): Promise<Row[]> {
+  const { data, error } = await fetchAll<Row>(make, { label: `inbox ${label}` });
   if (error) throw new Error(error.message);
-  return ((data ?? []) as RawApproval[]).map((r) => buildApprovalItem(asOf, r, canApprove));
+  return data ?? [];
 }
 
-async function collectExpenseReports(supabase: SupabaseClient, asOf: string, canApprove: boolean): Promise<InboxItem[]> {
-  const { data, error } = await supabase
-    .from('expense_reports')
-    .select('id, title, total_cents, policy_flag_count, status, submitted_at, created_at')
-    .in('status', ['SUBMITTED', 'DRAFT'])
-    .order('created_at', { ascending: true })
-    .limit(SOURCE_CAP);
-  if (error) throw new Error(error.message);
+/**
+ * Approvals carry no location of their own — the client is the SUBJECT's (a bill, an
+ * invoice, a payroll run …). Tables here all have `location_id` (verified against the
+ * live schema). Anything else stays organization-level (null).
+ */
+const APPROVAL_SUBJECTS_WITH_LOCATION = [
+  'bills',
+  'bill_payments',
+  'invoices',
+  'payroll_runs',
+  'expense_reports',
+  'bank_transactions',
+  'payment_origination_batches',
+  'purchase_orders',
+  'gl_entries',
+] as const;
+type ApprovalSubjectTable = (typeof APPROVAL_SUBJECTS_WITH_LOCATION)[number];
+
+function isLocatedSubject(t: string | null | undefined): t is ApprovalSubjectTable {
+  return !!t && (APPROVAL_SUBJECTS_WITH_LOCATION as readonly string[]).includes(t);
+}
+
+export interface ApprovalLocations {
+  /** approval id → the subject's client. */
+  locations: Map<string, string>;
+  /**
+   * Approvals whose located subject the caller can NOT see (out of their client scope —
+   * RLS hid the row — or the lookup failed). These are dropped from the Inbox, never
+   * re-filed as organization-level: the approval would otherwise leak the subject's
+   * amount and kind to someone outside that client.
+   */
+  hidden: Set<string>;
+}
+
+/**
+ * Resolve each approval's client through its subject row, read through the CALLER's RLS
+ * client (so client scope applies). Fails closed per table: a subject that cannot be read
+ * hides its approvals.
+ */
+export async function resolveApprovalLocations(
+  supabase: SupabaseClient,
+  rows: readonly RawApproval[],
+): Promise<ApprovalLocations> {
+  const byTable = new Map<ApprovalSubjectTable, Set<string>>();
+  for (const r of rows) {
+    if (!isLocatedSubject(r.subject_table) || !r.subject_id) continue;
+    const set = byTable.get(r.subject_table) ?? new Set<string>();
+    set.add(r.subject_id);
+    byTable.set(r.subject_table, set);
+  }
+  const visible = new Set<string>(); // `${table}:${id}` the caller can read
+  const subjectLoc = new Map<string, string>(); // `${table}:${id}` → location
+  await Promise.all(
+    Array.from(byTable.entries()).map(async ([table, ids]) => {
+      try {
+        const { data, error } = await supabase.from(table).select('id, location_id').in('id', Array.from(ids));
+        if (error) return; // unreadable → every approval on this table stays hidden
+        for (const r of (data ?? []) as Array<{ id: string; location_id: string | null }>) {
+          visible.add(`${table}:${r.id}`);
+          if (r.location_id) subjectLoc.set(`${table}:${r.id}`, r.location_id);
+        }
+      } catch {
+        /* unreadable → hidden */
+      }
+    }),
+  );
+  const locations = new Map<string, string>();
+  const hidden = new Set<string>();
+  for (const r of rows) {
+    if (!isLocatedSubject(r.subject_table) || !r.subject_id) continue; // genuinely organization-level
+    const key = `${r.subject_table}:${r.subject_id}`;
+    if (!visible.has(key)) {
+      hidden.add(r.id);
+      continue;
+    }
+    const loc = subjectLoc.get(key);
+    if (loc) locations.set(r.id, loc);
+  }
+  return { locations, hidden };
+}
+
+async function collectApprovals(
+  supabase: SupabaseClient,
+  asOf: string,
+  canApprove: boolean,
+  locationId: string | null,
+): Promise<InboxItem[]> {
+  const rows = (await readAll('approvals', () =>
+    supabase
+      .from('approvals')
+      .select('id, kind, subject_table, subject_id, amount_cents, created_at')
+      .eq('status', 'PENDING_APPROVAL'),
+  )) as unknown as RawApproval[];
+  const { locations, hidden } = await resolveApprovalLocations(supabase, rows);
+  const items = rows
+    .filter((r) => !hidden.has(r.id))
+    .map((r) => buildApprovalItem(asOf, r, canApprove, locations.get(r.id) ?? null));
+  // Approvals can't be filtered in SQL (the client is the subject's) — filter here.
+  return locationId ? items.filter((i) => i.locationId === locationId) : items;
+}
+
+async function collectExpenseReports(
+  supabase: SupabaseClient,
+  asOf: string,
+  canApprove: boolean,
+  locationId: string | null,
+): Promise<InboxItem[]> {
+  const rows = (await readAll('expense_reports', () => {
+    let q = supabase
+      .from('expense_reports')
+      .select('id, title, total_cents, policy_flag_count, status, submitted_at, created_at, location_id')
+      .in('status', ['SUBMITTED', 'DRAFT']);
+    if (locationId) q = q.eq('location_id', locationId);
+    return q;
+  })) as unknown as RawExpenseReport[];
   const out: InboxItem[] = [];
-  for (const r of (data ?? []) as RawExpenseReport[]) {
+  for (const r of rows) {
     const item = buildExpenseReportItem(asOf, r, canApprove);
     if (item) out.push(item);
   }
   return out;
 }
 
-async function collectBillHolds(supabase: SupabaseClient, asOf: string): Promise<InboxItem[]> {
-  const { data, error } = await supabase
-    .from('bills')
-    .select('id, bill_number, total_cents, payment_hold_reason, vendor_id, created_at')
-    .eq('status', 'ON_HOLD')
-    .order('created_at', { ascending: true })
-    .limit(SOURCE_CAP);
-  if (error) throw new Error(error.message);
-  const rows = (data ?? []) as RawBillHold[];
+async function collectBillHolds(supabase: SupabaseClient, asOf: string, locationId: string | null): Promise<InboxItem[]> {
+  const rows = (await readAll('bill_holds', () => {
+    let q = supabase
+      .from('bills')
+      .select('id, bill_number, total_cents, payment_hold_reason, vendor_id, created_at, location_id')
+      .eq('status', 'ON_HOLD');
+    if (locationId) q = q.eq('location_id', locationId);
+    return q;
+  })) as unknown as RawBillHold[];
   // Stitch vendor names (cross-schema embed doesn't work — see stitch-core).
   const venMap = await fetchCoreMap<{ id: string; name: string }>(
     supabase,
@@ -516,45 +838,99 @@ async function collectBillHolds(supabase: SupabaseClient, asOf: string): Promise
   return rows.map((r) => buildBillHoldItem(asOf, r, r.vendor_id ? venMap.get(r.vendor_id)?.name ?? null : null));
 }
 
-async function collectAiProposals(supabase: SupabaseClient, asOf: string): Promise<InboxItem[]> {
-  const { data, error } = await supabase
-    .from('ai_decisions')
-    .select('id, feature, input_summary, confidence, proposed_output, created_at')
-    .eq('status', 'PROPOSED')
-    .order('created_at', { ascending: false })
-    .limit(SOURCE_CAP);
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as RawAiProposal[]).map((r) => buildAiProposalItem(asOf, r));
+async function collectAiProposals(supabase: SupabaseClient, asOf: string, locationId: string | null): Promise<InboxItem[]> {
+  const rows = (await readAll('ai_proposals', () => {
+    let q = supabase
+      .from('ai_decisions')
+      .select('id, feature, input_summary, confidence, proposed_output, created_at, location_id')
+      .eq('status', 'PROPOSED');
+    if (locationId) q = q.eq('location_id', locationId);
+    return q;
+  })) as unknown as RawAiProposal[];
+  return rows.map((r) => buildAiProposalItem(asOf, r));
 }
 
-async function collectAlerts(supabase: SupabaseClient, asOf: string, horizonDays: number): Promise<InboxItem[]> {
+async function collectBankFlags(supabase: SupabaseClient, asOf: string, locationId: string | null): Promise<InboxItem[]> {
+  const rows = (await readAll('bank_flags', () => {
+    let q = supabase
+      .from('bank_transactions')
+      .select('id, description, amount_cents, ai_reasoning, created_at, location_id')
+      .eq('status', 'FLAGGED');
+    if (locationId) q = q.eq('location_id', locationId);
+    return q;
+  })) as unknown as RawBankFlag[];
+  return rows.map((r) => buildBankFlagItem(asOf, r));
+}
+
+async function collectReceiptFlags(supabase: SupabaseClient, asOf: string, locationId: string | null): Promise<InboxItem[]> {
+  const rows = (await readAll('receipt_flags', () => {
+    let q = supabase
+      .from('receipts')
+      .select('id, vendor_name, amount_cents, submitted_at, location_id')
+      .eq('status', 'FLAGGED');
+    if (locationId) q = q.eq('location_id', locationId);
+    return q;
+  })) as unknown as RawReceiptFlag[];
+  return rows.map((r) => buildReceiptFlagItem(asOf, r));
+}
+
+async function collectCostsPending(supabase: SupabaseClient, asOf: string, locationId: string | null): Promise<InboxItem[]> {
+  const rows = (await readAll('job_costs', () => {
+    let q = supabase
+      .from('job_cost_attributions')
+      .select('id, cost_type, memo, amount_cents, created_at, location_id')
+      .eq('lifecycle', 'PENDING');
+    if (locationId) q = q.eq('location_id', locationId);
+    return q;
+  })) as unknown as RawCostPending[];
+  return rows.map((r) => buildCostItem(asOf, r));
+}
+
+async function collectAlerts(
+  supabase: SupabaseClient,
+  asOf: string,
+  horizonDays: number,
+  locationId: string | null,
+): Promise<InboxItem[]> {
   // Reuse the obligations collector; the inbox only surfaces the near-term slice.
   const { obligations } = await collectObligations(supabase, { asOf, horizonDays });
-  return obligations.filter((o) => o.daysUntil <= horizonDays).map(buildObligationItem);
+  return obligations
+    .filter((o) => o.daysUntil <= horizonDays)
+    .filter((o) => !locationId || o.locationId === locationId)
+    .map(buildObligationItem);
 }
 
-async function collectJeDrafts(supabase: SupabaseClient, asOf: string): Promise<InboxItem[]> {
-  const { data, error } = await supabase
-    .from('gl_entries')
-    .select('id, entry_number, memo, source_module, created_at, status')
-    .eq('status', 'PENDING')
-    .order('created_at', { ascending: true })
-    .limit(SOURCE_CAP);
-  if (error) throw new Error(error.message);
+async function collectJeDrafts(supabase: SupabaseClient, asOf: string, locationId: string | null): Promise<InboxItem[]> {
+  // gl_entries.status is transaction_status_enum (PENDING … POSTED, VOIDED) — there is
+  // no 'DRAFT' value; an unposted entry is PENDING.
+  const rows = (await readAll('je_drafts', () => {
+    let q = supabase
+      .from('gl_entries')
+      .select('id, entry_number, memo, source_module, created_at, status, location_id')
+      .eq('status', 'PENDING');
+    if (locationId) q = q.eq('location_id', locationId);
+    return q;
+  })) as unknown as RawJeDraft[];
   // Only surface MANUAL (or unattributed) drafts a human is expected to post; system
   // modules post their own entries and would only be noise here.
-  return ((data ?? []) as Array<RawJeDraft & { source_module: string | null }>)
-    .filter((r) => r.source_module == null || r.source_module === 'MANUAL')
-    .map((r) => buildJeDraftItem(asOf, r));
+  return rows.filter((r) => isManualDraft(r.source_module)).map((r) => buildJeDraftItem(asOf, r));
+}
+
+/** A draft a human is expected to post (manual or unattributed). */
+export function isManualDraft(sourceModule: string | null | undefined): boolean {
+  return sourceModule == null || sourceModule === 'MANUAL';
 }
 
 /**
- * Gather everything that needs the caller right now, ranked.
+ * Gather everything that needs the caller right now, ranked — every Inbox lane.
  *
  * Each source is queried RLS-scoped and try/catched INDEPENDENTLY: a missing
  * table/column or query error degrades that one source (recorded in `degraded`)
  * rather than failing the whole inbox. The obligations source is itself a
  * degrade-isolated aggregate, so a missing renewals table never breaks the inbox.
+ *
+ * Prefer lib/work/needs-attention `loadNeedsAttention` from routes and pages — it
+ * validates the client against the caller's scope and produces the shared counts.
  */
 export async function collectInbox(
   supabase: SupabaseClient,
@@ -562,14 +938,18 @@ export async function collectInbox(
 ): Promise<CollectInboxResult> {
   const { asOf, canApproveMoney } = opts;
   const alertHorizonDays = opts.alertHorizonDays ?? 30;
+  const loc = opts.locationId ?? null;
 
   const sources: Array<[string, () => Promise<InboxItem[]>]> = [
-    ['approvals', () => collectApprovals(supabase, asOf, canApproveMoney)],
-    ['expense_reports', () => collectExpenseReports(supabase, asOf, canApproveMoney)],
-    ['bill_holds', () => collectBillHolds(supabase, asOf)],
-    ['ai_proposals', () => collectAiProposals(supabase, asOf)],
-    ['alerts', () => collectAlerts(supabase, asOf, alertHorizonDays)],
-    ['je_drafts', () => collectJeDrafts(supabase, asOf)],
+    ['approvals', () => collectApprovals(supabase, asOf, canApproveMoney, loc)],
+    ['expense_reports', () => collectExpenseReports(supabase, asOf, canApproveMoney, loc)],
+    ['bill_holds', () => collectBillHolds(supabase, asOf, loc)],
+    ['ai_proposals', () => collectAiProposals(supabase, asOf, loc)],
+    ['bank_flags', () => collectBankFlags(supabase, asOf, loc)],
+    ['receipt_flags', () => collectReceiptFlags(supabase, asOf, loc)],
+    ['job_costs', () => collectCostsPending(supabase, asOf, loc)],
+    ['alerts', () => collectAlerts(supabase, asOf, alertHorizonDays, loc)],
+    ['je_drafts', () => collectJeDrafts(supabase, asOf, loc)],
   ];
 
   const degraded: string[] = [];
@@ -585,7 +965,10 @@ export async function collectInbox(
     }),
   );
 
-  const items = rankInboxItems(results.flat());
+  // Belt and braces: a pinned client never returns another client's row, whatever a
+  // source did (SQL eq above; approvals/alerts filtered in JS).
+  const all = results.flat();
+  const items = rankInboxItems(loc ? all.filter((i) => i.locationId === loc) : all);
   const byType = countsByType(items);
 
   return {

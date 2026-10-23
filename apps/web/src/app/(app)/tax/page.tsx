@@ -3,6 +3,8 @@ import { Scale, Landmark, MapPin, FileCheck, ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/components/ui';
 import { HubTabs } from '../_components/hub-tabs';
 
+export const metadata = { title: 'Tax' };
+
 const CARDS = [
   {
     href: '/book-to-tax',

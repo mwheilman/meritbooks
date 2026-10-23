@@ -25,7 +25,10 @@ export function BankFeedMetricsStrip({ metrics, isLoading }: BankFeedMetricsStri
 
   const { total_today, reviewed_today, auto_approved_today, avg_confidence } = metrics;
   const pctReviewed = total_today > 0 ? Math.round((reviewed_today / total_today) * 100) : 0;
-  const avgPct = Math.round(avg_confidence * 100);
+  // The route reports 0 when no open line has been scored yet — that is "no data",
+  // not "0% confident", so it reads as a neutral dash rather than a red alarm.
+  const hasScored = Number.isFinite(avg_confidence) && avg_confidence > 0;
+  const avgPct = hasScored ? Math.round(avg_confidence * 100) : null;
 
   return (
     <div className="mb-4 flex items-center gap-6 px-4 py-3 rounded-lg bg-surface-900 border border-slate-800">
@@ -67,12 +70,20 @@ export function BankFeedMetricsStrip({ metrics, isLoading }: BankFeedMetricsStri
       <div className="flex items-center gap-2">
         <Bot size={14} className="text-indigo-400" />
         <span className="text-sm text-slate-400">Avg confidence</span>
-        <span className={clsx(
-          'text-sm font-medium font-mono tabular-nums',
-          avgPct >= 85 ? 'text-emerald-400' : avgPct >= 70 ? 'text-amber-400' : 'text-red-400'
-        )}>
-          {avgPct}%
-        </span>
+        {avgPct === null ? (
+          <span className="text-sm font-medium font-mono tabular-nums text-slate-500" title="No open lines have been scored yet">
+            —<span className="sr-only">no scored lines yet</span>
+          </span>
+        ) : (
+          <span
+            className={clsx(
+              'text-sm font-medium font-mono tabular-nums',
+              avgPct >= 85 ? 'text-emerald-400' : avgPct >= 70 ? 'text-amber-400' : 'text-red-400',
+            )}
+          >
+            {avgPct}%
+          </span>
+        )}
       </div>
     </div>
   );

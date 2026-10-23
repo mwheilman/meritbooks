@@ -4,6 +4,8 @@ import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { ExpensesClient } from './expenses-client';
 import { ExpensesTabs } from './expenses-tabs';
 
+export const metadata = { title: 'Expenses' };
+
 export const dynamic = 'force-dynamic';
 
 export default async function ExpensesPage() {

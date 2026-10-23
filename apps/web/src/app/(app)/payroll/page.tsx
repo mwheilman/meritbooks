@@ -2,6 +2,8 @@ import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { PayrollClient } from './payroll-client';
 
+export const metadata = { title: 'Payroll' };
+
 export const dynamic = 'force-dynamic';
 
 export default async function PayrollPage() {

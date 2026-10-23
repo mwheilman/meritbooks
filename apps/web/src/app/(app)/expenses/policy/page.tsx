@@ -3,6 +3,8 @@ import { PageHeader } from '@/components/ui';
 import { ExpensePolicyClient } from './policy-client';
 import { ExpensesTabs } from '../expenses-tabs';
 
+export const metadata = { title: 'Expense policy' };
+
 export const dynamic = 'force-dynamic';
 
 export default async function ExpensePolicyPage() {

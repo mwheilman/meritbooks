@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GitBranch } from 'lucide-react';
+import { Tabs } from '@meritbooks/merit-ui';
 import { formatMoney } from '@meritbooks/shared';
 import { addToast } from '@/hooks/use-toast';
 import { EmptyState, StatusBadge } from '@/components/ui';
@@ -221,24 +222,13 @@ export function ApprovalWorkflowsClient() {
   return (
     <div className="space-y-6">
       {/* View tabs — deepen the admin experience without changing enforcement. */}
-      <div role="tablist" aria-label="Approval workflow views" className="flex flex-wrap gap-1 border-b border-white/5">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
-            className={`-mb-px rounded-t-lg border-b-2 px-3.5 py-2 text-xs font-medium focus:outline-none ${
-              tab === t.id
-                ? 'border-emerald-500 text-white'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        className="mb-section-tabs"
+        aria-label="Approval workflow views"
+        value={tab}
+        onChange={setTab}
+        items={TABS.map((t) => ({ value: t.id, label: t.label }))}
+      />
 
       {tab !== 'configure' && tab !== 'conflicts' && loading && (
         <div className="rounded-lg border border-white/5 bg-surface-900 p-4 text-xs text-slate-500">

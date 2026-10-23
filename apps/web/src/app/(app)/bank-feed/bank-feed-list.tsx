@@ -10,6 +10,8 @@ import { useQuery, useDebounce } from '@/hooks';
 import type { BankFeedRow, JobSearchResult } from '@meritbooks/shared';
 import type { SortField, SortDir } from './bank-feed-content';
 import { type ConfidenceBand, selectionTotals } from './bank-feed-refine';
+import type { SplitSummary } from '@/lib/bank/splits/types';
+import { SplitTag } from './split-grid';
 
 interface BankFeedListProps {
   transactions: BankFeedRow[];
@@ -507,8 +509,12 @@ export function BankFeedList({
               const vendorLabel = txn.ai_vendor?.display_name ?? txn.ai_vendor?.name ?? null;
               const account = txn.final_account ?? txn.ai_account;
               const job = txn.final_job;
-              const isCogs = account?.account_type === 'COGS' || (account?.account_number?.startsWith('5'));
+              // A saved split carries its own accounts / jobs (validated server-side).
+              const split = (txn as BankFeedRow & { split?: SplitSummary | null }).split ?? null;
+              const draftSplit = split?.status === 'DRAFT';
+              const isCogs = !draftSplit && (account?.account_type === 'COGS' || (account?.account_number?.startsWith('5')));
               const isPosted = txn.status === 'POSTED' || txn.status === 'APPROVED';
+              const approvable = draftSplit || !!account;
               const isDuplicate = !isPosted && !!duplicateIds?.has(txn.id);
               // Row-level "meets the AI bar" hint: confidence + amount only. The
               // trusted-vendor leg is confirmed server-side at approve time.
@@ -591,7 +597,15 @@ export function BankFeedList({
 
                   {/* GL Category — INLINE EDITABLE */}
                   <td className="px-3 py-2.5 relative">
-                    {isPosted ? (
+                    {split ? (
+                      <button
+                        onClick={() => onEdit(txn)}
+                        className="text-left"
+                        title={draftSplit ? 'Saved split — open to edit or approve' : 'Posted as a split — open to view'}
+                      >
+                        <SplitTag split={split} />
+                      </button>
+                    ) : isPosted ? (
                       <span className="text-xs font-mono text-slate-400">
                         {account ? `${account.account_number} · ${account.name}` : '--'}
                       </span>
@@ -694,10 +708,10 @@ export function BankFeedList({
                     <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={() => handleApproveClick(txn)}
-                        disabled={!account || approvingId === txn.id || isPosted || (isCogs && !job)}
+                        disabled={!approvable || approvingId === txn.id || isPosted || (isCogs && !job)}
                         className={clsx(
                           'p-1.5 rounded-md transition-colors',
-                          !account || isPosted || (isCogs && !job)
+                          !approvable || isPosted || (isCogs && !job)
                             ? 'text-slate-700 cursor-not-allowed'
                             : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'
                         )}

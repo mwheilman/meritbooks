@@ -11,6 +11,8 @@ import { RecurringPanel } from './recurring-panel';
 import { ContractImport } from './contract-import';
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { InvoicePeek } from './invoice-peek';
+import { OnlineStatusCell, type OnlineSummary } from './online-status';
+import { ButtonLink } from '@meritbooks/merit-ui';
 import {
   FileText, Plus, DollarSign, Clock, AlertCircle, Search, ChevronDown,
   Check, Send, CreditCard, X, Loader2, Building2, ChevronRight, TrendingUp, Sparkles } from 'lucide-react';
@@ -33,6 +35,8 @@ interface InvoiceRow {
   customer: { id: string; name: string; email: string | null } | null;
   location: { id: string; name: string; shortCode: string } | null;
   job: { id: string; jobNumber: string; name: string } | null;
+  /** What the customer did with the online link (viewed / paying / paid online). */
+  online?: OnlineSummary;
 }
 
 interface StatusCounts {
@@ -122,6 +126,8 @@ function InvoiceList({
             <TrendingUp className="w-4 h-4 text-indigo-400" />
             Collections &amp; DSO
           </Link>
+          {/* Invoice design (Slice 1B) — kit button so it reads as Merit on the bridged page. */}
+          <ButtonLink href="/invoices/design">Design invoices</ButtonLink>
           <button
             onClick={onImportClick}
             className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 rounded-lg text-sm font-medium transition-colors"
@@ -236,6 +242,7 @@ function InvoiceList({
                 <th className="pb-3 pr-4 text-right">Paid</th>
                 <th className="pb-3 pr-4 text-right">Balance</th>
                 <th className="pb-3 pr-4">Status</th>
+                <th className="pb-3 pr-4">Online</th>
                 <th className="pb-3">Actions</th>
               </tr>
             </thead>
@@ -278,6 +285,9 @@ function InvoiceList({
                   <td className="py-3 pr-4 text-right font-mono text-white font-medium">{formatMoney(inv.balanceCents, { currency: inv.currency })}</td>
                   <td className="py-3 pr-4">
                     <StatusBadge status={inv.status} />
+                  </td>
+                  <td className="py-3 pr-4">
+                    <OnlineStatusCell online={inv.online} status={inv.status} />
                   </td>
                   <td className="py-3">
                     {inv.status !== 'PAID' && inv.status !== 'VOIDED' && inv.status !== 'DRAFT' && (

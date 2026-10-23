@@ -30,13 +30,13 @@ function escapeHtml(s: string): string {
 }
 
 /** Wrap the approved plain-text letter in a minimal branded HTML shell. */
-function toHtml(bodyText: string, payUrl: string | null): string {
+function toHtml(bodyText: string, payUrl: string | null, brand = '#2563EB'): string {
   const paragraphs = bodyText
     .split(/\n{2,}/)
     .map((p) => `<p style="margin:0 0 16px;line-height:1.6;color:#0f172a;font-size:15px;">${escapeHtml(p).replace(/\n/g, '<br/>')}</p>`)
     .join('');
   const button = payUrl
-    ? `<p style="margin:24px 0 0;"><a href="${escapeHtml(payUrl)}" style="display:inline-block;background:#10b981;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600;font-size:14px;">Pay online</a></p>`
+    ? `<p style="margin:24px 0 0;"><a href="${escapeHtml(payUrl)}" style="display:inline-block;background:${brand};color:#fff;text-decoration:none;padding:10px 20px;font-weight:600;font-size:14px;">Pay online</a></p>`
     : '';
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;">${paragraphs}${button}</div>`;
 }
@@ -92,13 +92,13 @@ export async function POST(req: Request) {
     );
   }
 
-  const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? 'https://meritbooks-web.vercel.app';
-  const payUrl = doc.public_token ? `${base}/pay/${doc.public_token}` : null;
+  // Pay button only when the invoice can really be paid online (Slice 1B: never a dead link).
+  const payUrl = doc.pay.payable && doc.template.show_pay_button ? doc.pay.url : null;
 
   let sent;
   try {
     sent = await provider.send(
-      { to: [to], subject, html: toHtml(letter, payUrl), text: letter },
+      { to: [to], subject, html: toHtml(letter, payUrl, doc.template.accent_color), text: letter },
       from,
     );
   } catch (e) {

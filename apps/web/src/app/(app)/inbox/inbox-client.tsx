@@ -15,7 +15,7 @@ import {
   type QueueColumn,
 } from '@meritbooks/merit-ui';
 import type { InboxItem, InboxGroupKey, InboxSeverity, InboxResponse } from './inbox-types';
-import { SEVERITY_RANK } from './inbox-types';
+import { SEVERITY_RANK, groupRowsByClient } from './inbox-types';
 import { SNOOZE_PRESETS, canSnooze, type UseInboxSnooze } from './use-inbox-snooze';
 
 // ── Presentation ────────────────────────────────────────────────────────────────
@@ -57,9 +57,11 @@ export interface InboxClientProps {
   error: string | null;
   refetch: () => Promise<void>;
   snooze: UseInboxSnooze;
+  /** All-clients context: group rows by client (+ "Organization" for org-level items). */
+  groupByClient?: boolean;
 }
 
-export function InboxClient({ only, tabLabel, data, isLoading, error, refetch, snooze }: InboxClientProps) {
+export function InboxClient({ only, tabLabel, data, isLoading, error, refetch, snooze, groupByClient = false }: InboxClientProps) {
   const router = useRouter();
   const [sevFilter, setSevFilter] = useState<InboxSeverity | 'all'>('all');
   const [groupFilter, setGroupFilter] = useState<InboxGroupKey | 'all'>('all');
@@ -106,6 +108,20 @@ export function InboxClient({ only, tabLabel, data, isLoading, error, refetch, s
     // 'urgency' keeps the server's global rank order.
     return sorted;
   }, [active, snoozed, showSnoozed, sevFilter, groupFilter, sort]);
+
+  // All-clients context: one band per client, busiest first, Organization last.
+  const clientGroups = useMemo(
+    () =>
+      groupByClient
+        ? groupRowsByClient(visible, (i) => ({ id: i.locationId, name: i.locationName })).map((g) => ({
+            id: g.id,
+            title: g.title,
+            count: g.rows.length.toLocaleString(),
+            rows: g.rows,
+          }))
+        : undefined,
+    [groupByClient, visible],
+  );
 
   const columns = useMemo<QueueColumn<InboxItem>[]>(
     () => [
@@ -296,7 +312,8 @@ export function InboxClient({ only, tabLabel, data, isLoading, error, refetch, s
               <QueueTable
                 aria-label={`${tabLabel}, most urgent first`}
                 columns={columns}
-                rows={visible}
+                rows={clientGroups ? undefined : visible}
+                groups={clientGroups}
                 getRowId={(i) => i.id}
                 rowState={(i) => ({ attn: i.severity === 'CRITICAL' })}
                 cursorId={cursor}

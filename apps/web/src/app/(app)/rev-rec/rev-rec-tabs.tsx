@@ -1,59 +1,53 @@
 'use client';
 
-import { useState } from 'react';
-import { clsx } from 'clsx';
-import { Play, BarChart3, TrendingUp } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Tabs } from '@meritbooks/merit-ui';
 import { CompanyScopeGuard } from '@/components/company-scope-guard';
-import { RevRecRun } from './rev-rec-run';
+import { RecognitionPolicyCard } from '@/components/rev-rec/recognition-policy-card';
+import { RevRecMonthEnd } from './rev-rec-month-end';
 import { RevRecReports } from './rev-rec-reports';
-import { RevRecAccrual } from './rev-rec-accrual';
 
-const TABS = [
-  { id: 'run', label: 'Run recognition', icon: Play },
-  { id: 'accrual', label: 'Accrue unbilled', icon: TrendingUp },
-  { id: 'reports', label: 'Reports', icon: BarChart3 },
-] as const;
-type Tab = (typeof TABS)[number]['id'];
+type Tab = 'month-end' | 'policy' | 'reports';
+const TABS: ReadonlyArray<{ value: Tab; label: string; panelId: string }> = [
+  { value: 'month-end', label: 'Month-end entry', panelId: 'rr-panel-month-end' },
+  { value: 'policy', label: 'How you recognize revenue', panelId: 'rr-panel-policy' },
+  { value: 'reports', label: 'Reports', panelId: 'rr-panel-reports' },
+];
+const isTab = (v: string | null): v is Tab => v === 'month-end' || v === 'policy' || v === 'reports';
 
 export function RevRecTabs() {
-  const [tab, setTab] = useState<Tab>('run');
+  const params = useSearchParams();
+  const router = useRouter();
+  const initial = params?.get('tab') ?? null;
+  const [tab, setTab] = useState<Tab>(isTab(initial) ? initial : 'month-end');
+  useEffect(() => {
+    if (isTab(initial)) setTab(initial);
+  }, [initial]);
+
+  const change = (t: Tab) => {
+    setTab(t);
+    router.replace(`/rev-rec?tab=${t}`, { scroll: false });
+  };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-1 border-b border-slate-800">
-        {TABS.map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={clsx(
-                'inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
-                active ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200',
-              )}
-            >
-              <Icon size={14} /> {t.label}
-            </button>
-          );
-        })}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <Tabs<Tab> aria-label="Revenue recognition" items={TABS} value={tab} onChange={change} />
+      <div role="tabpanel" id={TABS.find((x) => x.value === tab)?.panelId}>
+        {tab === 'month-end' ? (
+          // Posting writes into ONE company's books — scope-guarded.
+          <CompanyScopeGuard>
+            <RevRecMonthEnd />
+          </CompanyScopeGuard>
+        ) : tab === 'policy' ? (
+          <CompanyScopeGuard title="Pick a company to set its revenue policy">
+            <RecognitionPolicyCard />
+          </CompanyScopeGuard>
+        ) : (
+          // Reports are read-only and allow the consolidated ("All") view.
+          <RevRecReports />
+        )}
       </div>
-
-      {tab === 'run' ? (
-        // Posting recognition writes into ONE company's books — scope-guard it.
-        <CompanyScopeGuard>
-          <RevRecRun />
-        </CompanyScopeGuard>
-      ) : tab === 'accrual' ? (
-        // Accruing unbilled revenue posts into ONE company's books — scope-guard it.
-        <CompanyScopeGuard>
-          <RevRecAccrual />
-        </CompanyScopeGuard>
-      ) : (
-        // Reports are read-only and allow the consolidated ("All") view — EXEMPT
-        // from the scope guard, mirroring the dashboard/reports exemption.
-        <RevRecReports />
-      )}
     </div>
   );
 }

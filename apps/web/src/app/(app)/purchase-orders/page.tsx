@@ -2,6 +2,8 @@ import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { PoClient } from './po-client';
 
+export const metadata = { title: 'Purchase orders' };
+
 export const dynamic = 'force-dynamic';
 
 export default async function PurchaseOrdersPage() {

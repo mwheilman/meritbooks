@@ -23,7 +23,8 @@ function steps(h: ClientHomeData): Step[] {
   if (!b) return [];
   const closed = b.periodStatus === 'HARD_CLOSE';
   const review = b.toReview + b.needsAttention;
-  const check = b.openExceptions + b.draftJEs;
+  // Step 3 is the Inbox's Exceptions + Drafts tabs — the same shared counts.
+  const check = b.lanes.exceptions + b.lanes.drafts;
   return [
     {
       n: 1,
@@ -45,7 +46,7 @@ function steps(h: ClientHomeData): Step[] {
       n: 3,
       name: 'Check',
       href: '/inbox?tab=exceptions',
-      count: check === 0 ? 'No exceptions' : `${b.openExceptions.toLocaleString()} AI proposals · ${b.draftJEs.toLocaleString()} drafts`,
+      count: check === 0 ? 'No exceptions' : `${b.lanes.exceptions.toLocaleString()} exceptions · ${b.lanes.drafts.toLocaleString()} drafts`,
       detail: 'Exceptions, proposals and unposted entries',
       done: closed || check === 0,
     },
@@ -102,7 +103,9 @@ export async function ClientHome({ locationId }: { locationId: string }) {
 
   const all = steps(home);
   const month = monthLabel(home.today);
-  const needsYou = b.needsAttention + b.openExceptions;
+  // The client's Inbox total — the same number as its Inbox header and the rail badge.
+  const needsYou = b.needsYou;
+  const otherOpen = Math.max(0, b.toReview + b.needsAttention - (home.bands.decide.count + home.bands.check.count + home.bands.ready.count));
   const feedOpen = home.bands.decide.count + home.bands.check.count + home.bands.ready.count;
   const openSteps = all.filter((s) => !s.done).length;
 
@@ -232,34 +235,56 @@ export async function ClientHome({ locationId }: { locationId: string }) {
           />
         </Widget>
 
-        <Widget title="Also waiting" count={(b.openExceptions + b.draftJEs + home.pendingApprovals).toLocaleString()} w={4} h={2}>
+        {/* The client's Inbox, tab by tab — the same shared counts as the Inbox tabs and
+            the rail badge, so this can never say "nothing waiting" while the Inbox has 100+. */}
+        <Widget
+          title="In your Inbox"
+          count={home.work.total.toLocaleString()}
+          meta={`${b.name} only · same counts as the Inbox`}
+          w={4}
+          h={2}
+          foot={
+            otherOpen > 0 ? (
+              <Link className="btn btn--quiet" href="/bills">
+                {otherOpen.toLocaleString()} receipts and bills to review <Icon name="right" />
+              </Link>
+            ) : undefined
+          }
+        >
           <ul className="mb-waiting">
             <li>
-              <Link href="/inbox?tab=exceptions">
-                <span>AI proposals to decide</span>
-                <b className="tnum">{b.openExceptions.toLocaleString()}</b>
-              </Link>
-            </li>
-            <li>
-              <Link href="/journal-entries">
-                <span>Draft journal entries</span>
-                <b className="tnum">{b.draftJEs.toLocaleString()}</b>
-              </Link>
-            </li>
-            <li>
               <Link href="/inbox?tab=approvals">
-                <span>Approvals waiting (all clients)</span>
-                <b className="tnum">{home.pendingApprovals.toLocaleString()}</b>
+                <span>Approvals and policy holds</span>
+                <b className="tnum">{home.work.lanes.approvals.toLocaleString()}</b>
               </Link>
             </li>
             <li>
-              <Link href="/bills">
-                <span>Receipts and bills open</span>
-                {/* Review + attention count bank lines, receipts and bills; the feed is the bank part. */}
-                <b className="tnum">{Math.max(0, b.toReview + b.needsAttention - feedOpen).toLocaleString()}</b>
+              <Link href="/inbox?tab=exceptions">
+                <span>
+                  Exceptions
+                  {b.openExceptions > 0 ? <span className="ink-3"> · {b.openExceptions.toLocaleString()} AI proposals</span> : null}
+                </span>
+                <b className="tnum">{home.work.lanes.exceptions.toLocaleString()}</b>
+              </Link>
+            </li>
+            <li>
+              <Link href="/inbox?tab=alerts">
+                <span>Alerts due within 30 days</span>
+                <b className="tnum">{home.work.lanes.alerts.toLocaleString()}</b>
+              </Link>
+            </li>
+            <li>
+              <Link href="/inbox?tab=drafts">
+                <span>Draft journal entries</span>
+                <b className="tnum">{home.work.lanes.drafts.toLocaleString()}</b>
               </Link>
             </li>
           </ul>
+          {home.workDegraded.length > 0 && (
+            <p className="t-cap" role="status" style={{ padding: '0 16px 12px' }}>
+              Some queues didn’t answer ({home.workDegraded.join(', ')}); these counts may be low.
+            </p>
+          )}
         </Widget>
 
         <Widget

@@ -16,6 +16,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { connectProvider } from '@/lib/money/connections';
 import { resolveProviderContext } from '@/lib/money/connections';
+import { plaidMode } from '@/lib/money/payments-mode';
 import {
   type PlaidEnv,
   exchangePublicToken,
@@ -25,8 +26,10 @@ import {
   describePlaidError,
 } from '@/lib/money/providers/plaid';
 
-const ENV: PlaidEnv = (process.env.PLAID_ENV === 'production' ? 'production' : 'sandbox');
-const CONN_ENV = ENV === 'production' ? 'live' : 'test';
+// PLAID_ENV → API host + connection environment (lib/money/payments-mode.ts). Read at
+// module load like before; the scheduler and routes share one rule.
+const ENV: PlaidEnv = plaidMode().apiEnv;
+const CONN_ENV = plaidMode().connectionEnv;
 
 interface BankAccountRow {
   id: string;
@@ -70,11 +73,14 @@ export async function completePlaidLink(
   const { accounts, institution } = await fetchItemAccounts(adminDb, ENV, accessToken);
 
   // 1) Register the connection (stores the access_token in Vault, returns the row).
-  //    provider 'plaid' + a per-Item account_handle so multiple Items coexist.
+  //    provider 'plaid' + a per-Item account_handle so multiple Items coexist (migration
+  //    175 keys BANK_FEED rows by Item, so a second bank login no longer overwrites the
+  //    first one's token). The company it was linked for is recorded on the row.
   const connection = await connectProvider(adminDb, orgId, {
     capability: 'BANK_FEED',
     provider: 'plaid',
     environment: CONN_ENV,
+    locationId: input.locationId,
     accountHandle: itemId,
     secret: accessToken,
     connectedBy: input.connectedBy,

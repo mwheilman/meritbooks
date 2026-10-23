@@ -2,6 +2,8 @@ import { PageHeader } from '@/components/ui';
 import { FpnaDashboard } from './fpna-dashboard';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 
+export const metadata = { title: 'FP&A' };
+
 export const dynamic = 'force-dynamic';
 
 /**

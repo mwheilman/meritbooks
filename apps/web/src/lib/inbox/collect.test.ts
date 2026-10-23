@@ -16,6 +16,7 @@ import {
   groupInboxItems,
   countsByType,
   collectInbox,
+  resolveApprovalLocations,
   GROUP_FOR_TYPE,
   type InboxItem,
 } from './collect';
@@ -269,7 +270,7 @@ function makeFakeClient(cfg: {
   const makeBuilder = (getResult: () => FakeResult) => {
     const b: Record<string, unknown> = {};
     const chain = () => b;
-    for (const m of ['select', 'eq', 'in', 'order', 'limit', 'not', 'gte', 'maybeSingle', 'single']) {
+    for (const m of ['select', 'eq', 'in', 'order', 'limit', 'range', 'not', 'gte', 'is', 'gt', 'maybeSingle', 'single']) {
       b[m] = chain;
     }
     b.then = (onF: (v: FakeResult) => unknown, onR?: (e: unknown) => unknown) => {
@@ -321,5 +322,46 @@ describe('collectInbox loader — source degrade isolation', () => {
     expect(result.groups).toEqual([]);
     expect(result.counts.total).toBe(0);
     expect(result.degraded).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Approvals outside the caller's client scope are dropped, not re-filed org-level
+// ---------------------------------------------------------------------------
+
+describe('resolveApprovalLocations', () => {
+  /** A caller client that can see only `visible` rows (RLS / client scope), per table. */
+  function scoped(visible: Record<string, Array<{ id: string; location_id: string | null }>>, failing: string[] = []): SupabaseClient {
+    return {
+      from: (table: string) => ({
+        select: () => ({
+          in: async (_col: string, ids: string[]) =>
+            failing.includes(table)
+              ? { data: null, error: { message: 'boom' } }
+              : { data: (visible[table] ?? []).filter((r) => ids.includes(r.id)), error: null },
+        }),
+      }),
+    } as unknown as SupabaseClient;
+  }
+  const appr = (id: string, subject_table: string | null, subject_id: string | null) =>
+    ({ id, kind: 'AP_DISBURSEMENT', subject_table, subject_id, amount_cents: 100, created_at: '2026-08-01' });
+
+  it('a visible subject gives its client; an invisible one hides the approval; non-located stays org-level', async () => {
+    const rows = [
+      appr('a1', 'bills', 'b-mine'),
+      appr('a2', 'bills', 'b-other-client'),
+      appr('a3', 'vendor_bank_changes', 'x'),
+      appr('a4', null, null),
+    ];
+    const { locations, hidden } = await resolveApprovalLocations(scoped({ bills: [{ id: 'b-mine', location_id: 'LOC1' }] }), rows);
+    expect(locations.get('a1')).toBe('LOC1');
+    expect(hidden.has('a2')).toBe(true);
+    expect(hidden.has('a3') || hidden.has('a4')).toBe(false);
+    expect(locations.has('a3') || locations.has('a4')).toBe(false);
+  });
+
+  it('fails closed when a subject table cannot be read', async () => {
+    const { hidden } = await resolveApprovalLocations(scoped({}, ['invoices']), [appr('a1', 'invoices', 'i1')]);
+    expect(hidden.has('a1')).toBe(true);
   });
 });

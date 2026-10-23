@@ -25,6 +25,8 @@ const PUBLIC_PATTERNS = [
   '/pay/(.*)',
   '/api/pay/(.*)',
   '/api/cron/(.*)',
+  '/r/(.*)',
+  '/api/r/(.*)',
 ];
 
 /** Clerk's createRouteMatcher compiles path patterns to regexes; this mirrors it. */
@@ -66,6 +68,21 @@ describe('public routes — scheduler dispatcher', () => {
   it('the run-log read API is NOT public (Clerk + settings_system:view)', () => {
     expect(isPublic('/api/scheduler/runs')).toBe(false);
   });
+});
+
+describe('public routes — request magic links (migration 178)', () => {
+  it('the /r/[token] link and its unsubscribe POST are public', () => {
+    expect(isPublic('/r/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcd')).toBe(true);
+    expect(isPublic('/r/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcd/unsubscribe')).toBe(true);
+    expect(isPublic('/api/r/unsubscribe')).toBe(true);
+  });
+
+  it.each(['/requests', '/reports', '/receipts', '/reconciliation', '/api/requests', '/api/requests/actions', '/api/reports/pl', '/api/notifications', '/r'])(
+    '%s is NOT public',
+    (path) => {
+      expect(isPublic(path)).toBe(false);
+    },
+  );
 });
 
 describe('public routes — prefix collisions stay protected', () => {

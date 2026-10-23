@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 
+export const metadata = { title: 'Customers' };
+
 export const dynamic = 'force-dynamic';
 
 /**

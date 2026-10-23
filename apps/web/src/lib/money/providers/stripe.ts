@@ -35,23 +35,35 @@ export function isStripeConfigured(): boolean {
   return !!process.env.STRIPE_SECRET_KEY;
 }
 
-/** Create a new Express connected account for a tenant. Returns the acct_ id. */
-export async function createConnectedAccount(email?: string | null): Promise<string> {
+// Mode (test vs live) is derived from the key — see lib/money/payments-mode.ts. Nothing
+// in this adapter decides or labels the mode.
+
+/**
+ * Create a new Express connected account for ONE company (migration 175: one account
+ * per company, so each company's customer payments settle to that company's own bank).
+ * The org + company ids ride in the account's metadata so a webhook — or a human in the
+ * Stripe dashboard — can always tell whose account it is. Returns the acct_ id.
+ */
+export async function createConnectedAccount(
+  opts: { email?: string | null; businessName?: string | null; metadata?: Record<string, string> } | string | null = null,
+): Promise<string> {
+  const o = typeof opts === 'string' || opts === null ? { email: opts } : opts;
   const stripe = getPlatformStripe();
   const account = await stripe.accounts.create({
     type: 'express',
-    email: email ?? undefined,
+    email: o.email ?? undefined,
     capabilities: {
       card_payments: { requested: true },
       transfers: { requested: true },
       us_bank_account_ach_payments: { requested: true },
     },
-    business_type: undefined,
+    business_profile: o.businessName ? { name: o.businessName } : undefined,
+    metadata: o.metadata,
   });
   return account.id;
 }
 
-/** Create a hosted onboarding link the tenant completes to activate their account. */
+/** Create a hosted onboarding link the company completes to activate its account. */
 export async function createOnboardingLink(
   accountId: string,
   refreshUrl: string,
@@ -67,21 +79,84 @@ export async function createOnboardingLink(
   return link.url;
 }
 
+/** A one-time link into the company's Stripe Express dashboard (payout bank, statements). */
+export async function createDashboardLink(accountId: string): Promise<string> {
+  const link = await getPlatformStripe().accounts.createLoginLink(accountId);
+  return link.url;
+}
+
 export interface ConnectedAccountStatus {
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
   detailsSubmitted: boolean;
 }
 
-/** Current onboarding/capability status for a connected account. */
-export async function getConnectedAccountStatus(accountId: string): Promise<ConnectedAccountStatus> {
-  const stripe = getPlatformStripe();
-  const a = await stripe.accounts.retrieve(accountId);
+/** Everything the Payments screen shows about a connected account. No secrets, last 4 only. */
+export interface ConnectedAccountDetails extends ConnectedAccountStatus {
+  disabledReason: string | null;
+  requirementsDue: string[];
+  payoutBankName: string | null;
+  payoutBankLast4: string | null;
+}
+
+/** The subset of a Stripe Account object `accountDetailsFromObject` reads (keeps it testable). */
+export interface StripeAccountLike {
+  charges_enabled?: boolean | null;
+  payouts_enabled?: boolean | null;
+  details_submitted?: boolean | null;
+  requirements?: { disabled_reason?: string | null; currently_due?: string[] | null; past_due?: string[] | null } | null;
+  external_accounts?: {
+    data?: Array<{ object?: string; bank_name?: string | null; last4?: string | null; default_for_currency?: boolean | null }>;
+  } | null;
+}
+
+/** Normalize a Stripe Account (API response or `account.updated` payload). Pure. */
+export function accountDetailsFromObject(a: StripeAccountLike): ConnectedAccountDetails {
+  const due = [...(a.requirements?.past_due ?? []), ...(a.requirements?.currently_due ?? [])];
+  const banks = (a.external_accounts?.data ?? []).filter((x) => (x.object ?? 'bank_account') === 'bank_account');
+  const bank = banks.find((b) => b.default_for_currency) ?? banks[0] ?? null;
+  const last4 = bank?.last4 && /^[0-9]{4}$/.test(bank.last4) ? bank.last4 : null;
   return {
     chargesEnabled: !!a.charges_enabled,
     payoutsEnabled: !!a.payouts_enabled,
     detailsSubmitted: !!a.details_submitted,
+    disabledReason: a.requirements?.disabled_reason ?? null,
+    requirementsDue: [...new Set(due)],
+    payoutBankName: bank?.bank_name ?? null,
+    payoutBankLast4: last4,
   };
+}
+
+/** Current onboarding/capability status for a connected account. */
+export async function getConnectedAccountStatus(accountId: string): Promise<ConnectedAccountStatus> {
+  const d = await getConnectedAccountDetails(accountId);
+  return { chargesEnabled: d.chargesEnabled, payoutsEnabled: d.payoutsEnabled, detailsSubmitted: d.detailsSubmitted };
+}
+
+/** Full status + payout bank (last 4) for a connected account. */
+export async function getConnectedAccountDetails(accountId: string): Promise<ConnectedAccountDetails> {
+  const a = await getPlatformStripe().accounts.retrieve(accountId);
+  return accountDetailsFromObject(a as unknown as StripeAccountLike);
+}
+
+/**
+ * Fully refund a destination-charge PaymentIntent: pull the transfer back from the
+ * connected account and return the platform application fee, so the merchant's net
+ * from the whole cycle is zero. Idempotent on the key (one refund per PaymentIntent).
+ */
+export async function refundDestinationPaymentIntent(paymentIntentId: string, idempotencyKey: string): Promise<{ id: string; status: string | null }> {
+  const r = await getPlatformStripe().refunds.create(
+    { payment_intent: paymentIntentId, reverse_transfer: true, refund_application_fee: true },
+    { idempotencyKey },
+  );
+  return { id: r.id, status: r.status ?? null };
+}
+
+/** The connected account a destination-charge PaymentIntent pays out to, if any. */
+export function destinationOf(pi: { transfer_data?: { destination?: string | { id: string } | null } | null }): string | null {
+  const d = pi.transfer_data?.destination;
+  if (!d) return null;
+  return typeof d === 'string' ? d : d.id;
 }
 
 /**

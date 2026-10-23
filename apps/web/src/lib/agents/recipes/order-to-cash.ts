@@ -37,6 +37,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { formatMoney } from '@meritbooks/shared';
 import type { AgentRecipe, AgentRunContext, AgentState, StepExecuteResult } from '../types';
 import { createInvoice, type CreateInvoiceLineInput } from '@/lib/invoices/create-invoice';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { resolveInvoiceCreditAccounts } from '@/lib/invoices/rev-rec-credit';
 import { sendInvoiceById } from '@/lib/invoices/send-invoice';
 
@@ -280,6 +281,20 @@ export const orderToCashRecipe: AgentRecipe = {
       async onAdvance(ctx, state): Promise<StepExecuteResult> {
         const o2c = inputFromState(state);
         const customerName = (state.customerName as string | null) ?? 'the customer';
+
+        // The advance route only checks bills:create (the generic agent gate). This step
+        // creates and posts real AR, so the approver must hold invoices:create on the
+        // invoice's company — the same permission POST /api/invoices requires (HIGH-2).
+        const guard = ctx.userId
+          ? await requirePermission(ctx.userId, 'invoices', 'create', { locationId: o2c.locationId })
+          : null;
+        if (!guard?.ok) {
+          return {
+            status: 'WAITING',
+            summary: `Waiting for someone who can create invoices to approve the invoice for ${customerName}.`,
+            gatePrompt: 'Only a person with permission to create invoices can approve this step.',
+          };
+        }
 
         const outcome = await createInvoice(ctx.supabase, {
           orgId: ctx.orgId,

@@ -2,6 +2,8 @@ import { Suspense } from 'react';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { ComplianceControlsTabs } from './compliance-controls-tabs';
 
+export const metadata = { title: 'Compliance & controls' };
+
 export const dynamic = 'force-dynamic';
 
 /**

@@ -32,6 +32,12 @@ const isPublicRoute = createRouteMatcher([
   // which stays OUTSIDE this matcher and remains Clerk-protected + RBAC-gated.
   '/portal/vendor/(.*)',
   '/api/portal/vendor/(.*)',
+  // Request magic links (migration 178, FPB-request-engine-notifications) — the link in a
+  // chase email (/r/[token]) and its unsubscribe POST. The token is resolved server-side by
+  // its sha256 (service role); bad / expired / closed links reveal nothing. NOTE the
+  // trailing slash: '/r/(.*)' does not match '/reports' or '/requests' (staff surfaces).
+  '/r/(.*)',
+  '/api/r/(.*)',
   // Scheduler dispatcher (Vercel Cron). A cron request has no Clerk session, so
   // auth.protect() would reject it before the route runs. The route itself is the
   // credential check: Bearer CRON_SECRET, constant-time, FAILS CLOSED (401) when the

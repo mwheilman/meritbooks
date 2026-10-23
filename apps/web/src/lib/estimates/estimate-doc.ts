@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { tenantLogoOrNull } from '@/lib/invoices/templates/logo-url';
 
 /**
  * Loads everything needed to render an estimate as a PDF document: the header,
@@ -86,6 +87,8 @@ export async function loadEstimateDocById(
           .select('logo_url, accent_color, remit_to, footer_text')
           .eq('org_id', orgId)
           .eq('location_id', e.location_id)
+          // 176: a company can have many templates — read its default.
+          .eq('is_default', true)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     accountIds.length
@@ -129,7 +132,7 @@ export async function loadEstimateDocById(
     entity: (loc as { name: string; short_code: string | null }) ?? null,
     template: tpl
       ? {
-          logo_url: (tpl.logo_url as string) ?? null,
+          logo_url: tenantLogoOrNull((tpl.logo_url as string) ?? null, orgId),
           accent_color: (tpl.accent_color as string) ?? '#10b981',
           remit_to: (tpl.remit_to as string) ?? null,
           footer_text: (tpl.footer_text as string) ?? null,

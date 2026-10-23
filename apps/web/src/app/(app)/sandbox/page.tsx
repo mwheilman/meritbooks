@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic';
 import { PageHeader } from '@/components/ui';
 import { SandboxConsole } from './sandbox-console';
 
+export const metadata = { title: 'Sandbox' };
+
 export default function SandboxPage() {
   return (
     <div className="space-y-6">

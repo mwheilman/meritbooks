@@ -5,6 +5,8 @@ import { PageHeader } from '@/components/ui';
 import { Spinner } from '../_components/ui';
 import { StatementsList } from './_components/statements-list';
 
+export const metadata = { title: 'Lender statements' };
+
 /**
  * Lender statements and floor checks (FPB §3.10, DL-8): every statement / audit /
  * payoff quote for the client, manual entry with a live footing check, and the way

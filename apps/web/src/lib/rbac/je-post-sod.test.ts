@@ -18,6 +18,16 @@ function deps(mode: EnforcementMode | null, threshold = 25_000_00) {
 }
 
 describe('checkManualJePostSod', () => {
+  it('a separately prepared entry (e.g. a WIP proposal): only the preparer is refused', async () => {
+    const { d } = deps('v2');
+    // someone else approves the proposal → fine
+    expect(await checkManualJePostSod(admin, { ...input, preparedBy: 'user_9' }, d)).toEqual({ ok: true, wouldDeny: false });
+    // the proposer approves their own proposal at/above the threshold → refused
+    expect(await checkManualJePostSod(admin, { ...input, preparedBy: 'user_1' }, d)).toMatchObject({ ok: false, code: 'SOD_SELF_POST' });
+    // a scheduler-made proposal has no human preparer → no conflict
+    expect(await checkManualJePostSod(admin, { ...input, preparedBy: null }, d)).toEqual({ ok: true, wouldDeny: false });
+  });
+
   it('v2: at/above the threshold the preparer cannot post their own entry', async () => {
     const { d } = deps('v2');
     expect(await checkManualJePostSod(admin, input, d)).toMatchObject({ ok: false, status: 409, code: 'SOD_SELF_POST' });

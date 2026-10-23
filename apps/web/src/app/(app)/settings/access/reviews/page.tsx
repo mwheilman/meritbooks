@@ -1,6 +1,8 @@
 import { PageHeader } from '@/components/ui';
 import { AccessReviewsClient } from './reviews-client';
 
+export const metadata = { title: 'Access reviews' };
+
 export const dynamic = 'force-dynamic';
 
 /**

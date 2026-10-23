@@ -18,6 +18,8 @@ const TAB_CONFIG = [
   { key: 'PENDING', label: 'Pending' },
   { key: 'CATEGORIZED', label: 'Categorized' },
   { key: 'FLAGGED', label: 'Flagged' },
+  // Posted lines: open one to view its split or "Reverse & edit" (FPB-bank-feed-splits).
+  { key: 'POSTED', label: 'Posted' },
 ] as const;
 
 export function BankFeedFilters({ activeTab, onTabChange, search, onSearchChange, counts }: BankFeedFiltersProps) {
@@ -45,7 +47,7 @@ export function BankFeedFilters({ activeTab, onTabChange, search, onSearchChange
               )}>
                 {stats
                   ? `${stats.count} · ${formatMoney(stats.amount_cents, { compact: true })}`
-                  : '--'}
+                  : tab.key === 'POSTED' ? '' : '--'}
               </span>
             </button>
           );

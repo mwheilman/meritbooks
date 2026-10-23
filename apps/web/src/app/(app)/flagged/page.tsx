@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
 
+export const metadata = { title: 'Flagged items' };
+
 // RETIRED — "Flagged Items" was a strict subset of the Inbox with a dead "Resolve
 // All" action. Merged into the unified Inbox (flagged bank/receipt/bill items now
 // live on the Inbox → Exceptions tab, which can resolve them inline). Kept as a

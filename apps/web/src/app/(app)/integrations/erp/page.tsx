@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { ConnectErpStep } from '@/components/integrations/connect-erp-step';
 
+export const metadata = { title: 'Integrations' };
+
 /**
  * Integrations → Connect your existing system.
  *

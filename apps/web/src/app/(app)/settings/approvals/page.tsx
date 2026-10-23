@@ -2,6 +2,8 @@ import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { PageHeader } from '@/components/ui';
 import { ApprovalWorkflowsClient } from './approvals-client';
 
+export const metadata = { title: 'Approval workflows' };
+
 export const dynamic = 'force-dynamic';
 
 /**

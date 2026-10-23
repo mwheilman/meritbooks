@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
 
+export const metadata = { title: 'Cash application' };
+
 // Retired standalone route. Cash application now lives as the "Apply Deposits" tab of
 // the Bank Feed; the AR↔GL tie-out moved onto Reconciliation. Keep the URL working by
 // redirecting into its new tab home.

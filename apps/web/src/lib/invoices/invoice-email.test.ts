@@ -10,39 +10,29 @@
 import { describe, it, expect } from 'vitest';
 import { buildInvoiceEmail, readableOn } from './invoice-email';
 import type { InvoiceDoc } from './invoice-doc';
+import { sampleInvoiceDoc } from './sample-doc';
 
 const PAY_URL = 'https://meritbooks-web.vercel.app/pay/198e916c-37c4-4a99-a3bc-29cae886f302';
 
 const doc = (over: Partial<InvoiceDoc> = {}): InvoiceDoc =>
-  ({
-    id: 'inv-1',
+  sampleInvoiceDoc({
     invoice_number: 'INV-2026-0042',
     invoice_date: '2026-07-01',
     due_date: '2026-07-31',
-    status: 'SENT',
-    po_number: null,
-    terms: 'Net 30',
     customer_message: null,
     public_token: '198e916c-37c4-4a99-a3bc-29cae886f302',
-    payment_methods_allowed: ['ACH', 'CARD'],
-    card_surcharge_enabled: false,
     subtotal_cents: 250_000,
-    discount_cents: 0,
     tax_cents: 0,
-    retainage_cents: 0,
     total_cents: 250_000,
-    amount_paid_cents: 0,
     balance_cents: 250_000,
-    bill_to: null,
-    ship_to: null,
     lines: [
-      { line_number: 1, description: 'Progress draw #2', quantity: 1, unit_price_cents: 250_000, amount_cents: 250_000, account: null },
+      { line_number: 1, description: 'Progress draw #2', quantity: 1, unit_price_cents: 250_000, amount_cents: 250_000 },
     ],
-    customer: { name: 'Fabrikam Inc.', email: 'ap@fabrikam.test' },
-    entity: { name: 'Northwind Construction', short_code: 'NWC' },
-    template: { style: 'MODERN', logo_url: null, accent_color: '#10b981', remit_to: null, footer_text: null },
+    customer: { id: null, name: 'Fabrikam Inc.', email: 'ap@fabrikam.test' },
+    entity: { id: null, name: 'Northwind Construction', short_code: 'NWC' },
+    pay: { url: PAY_URL, payable: true, mode: 'live', methods: ['ACH', 'CARD'], reason: null, code: 'OK' },
     ...over,
-  }) as InvoiceDoc;
+  });
 
 describe('invoice email — subject line', () => {
   it('carries issuer, number, amount and due date', () => {
@@ -92,8 +82,8 @@ describe('invoice email — figures agree with the invoice', () => {
     const { html } = buildInvoiceEmail(
       doc({
         lines: [
-          { line_number: 1, description: 'Framing', quantity: 1, unit_price_cents: 100_000, amount_cents: 100_000, account: null },
-          { line_number: 2, description: 'Drywall', quantity: 1, unit_price_cents: 150_000, amount_cents: 150_000, account: null },
+          { line_number: 1, description: 'Framing', quantity: 1, unit_price_cents: 100_000, amount_cents: 100_000 },
+          { line_number: 2, description: 'Drywall', quantity: 1, unit_price_cents: 150_000, amount_cents: 150_000 },
         ],
       }),
       PAY_URL,
@@ -108,7 +98,7 @@ describe('invoice email — figures agree with the invoice', () => {
 describe('invoice email — injection safety', () => {
   it('escapes HTML in customer-controlled text', () => {
     const { html } = buildInvoiceEmail(
-      doc({ customer_message: '<script>alert(1)</script>', entity: { name: 'A & B <Co>', short_code: null } }),
+      doc({ customer_message: '<script>alert(1)</script>', entity: { id: null, name: 'A & B <Co>', short_code: null } }),
       PAY_URL,
     );
     expect(html).not.toContain('<script>');
@@ -118,7 +108,7 @@ describe('invoice email — injection safety', () => {
 
   it('escapes line descriptions', () => {
     const { html } = buildInvoiceEmail(
-      doc({ lines: [{ line_number: 1, description: '"><img src=x>', quantity: 1, unit_price_cents: 1, amount_cents: 1, account: null }] }),
+      doc({ lines: [{ line_number: 1, description: '"><img src=x>', quantity: 1, unit_price_cents: 1, amount_cents: 1 }] }),
       PAY_URL,
     );
     expect(html).not.toContain('<img src=x>');
@@ -152,5 +142,46 @@ describe('invoice email — overdue framing', () => {
     const { html } = buildInvoiceEmail(doc({ due_date: '2099-01-01' }), PAY_URL);
     expect(html).toContain('Amount due');
     expect(html).not.toContain('>Overdue');
+  });
+});
+
+describe('invoice email — Slice 1B (pay button only when payable, brand, no GL, no banned fonts)', () => {
+  it('no Pay button when the invoice cannot be paid online — View invoice + payment instructions instead', () => {
+    const d = doc({
+      pay: { url: PAY_URL, payable: false, mode: null, methods: [], reason: 'not set up', code: 'NO_CONNECTION' },
+    });
+    d.template = { ...d.template, payment_instructions: 'Wire to First Bank, ABA 073000228.' };
+    const { html, text, hasPayButton } = buildInvoiceEmail(d);
+    expect(hasPayButton).toBe(false);
+    expect(html).not.toContain('Pay this invoice');
+    expect(html).toContain('View invoice');
+    expect(html).toContain('How to pay');
+    expect(text).toContain('View invoice:');
+    expect(text).not.toContain('Pay online:');
+  });
+
+  it('the template can switch the Pay button off', () => {
+    const d = doc();
+    d.template = { ...d.template, show_pay_button: false };
+    expect(buildInvoiceEmail(d).hasPayButton).toBe(false);
+  });
+
+  it('uses the brand colour, DM Sans, square corners — never the banned fonts or emerald', () => {
+    const d = doc();
+    d.template = { ...d.template, accent_color: '#8A2D3B' };
+    const { html } = buildInvoiceEmail(d);
+    expect(html).toContain('#8A2D3B');
+    expect(html).toContain('DM Sans');
+    expect(html).not.toMatch(/Plus Jakarta|JetBrains|#10b981|border-radius/i);
+  });
+
+  it('prints terms, lists extra attachments, and a per-send message replaces the default', () => {
+    const d = doc({ customer_message: 'Default thanks' });
+    d.template = { ...d.template, terms_text: 'Net 30. 1.5% late fee.' };
+    const { html } = buildInvoiceEmail(d, null, { message: 'Draw 2 per the schedule.', attachmentNames: ['lien-waiver.pdf'] });
+    expect(html).toContain('1.5% late fee');
+    expect(html).toContain('lien-waiver.pdf');
+    expect(html).toContain('Draw 2 per the schedule.');
+    expect(html).not.toContain('Default thanks');
   });
 });

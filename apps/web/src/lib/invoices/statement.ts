@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildActivityLedger, type StatementTxn } from '@/lib/ar/activity-ledger';
+import { tenantLogoOrNull } from '@/lib/invoices/templates/logo-url';
 
 export type { StatementTxn } from '@/lib/ar/activity-ledger';
 
@@ -267,6 +268,8 @@ export async function loadCustomerStatement(
           .select('logo_url, accent_color, remit_to, footer_text')
           .eq('org_id', orgId)
           .eq('location_id', locationId)
+          // 176: a company can have many templates — read its default.
+          .eq('is_default', true)
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
@@ -289,7 +292,7 @@ export async function loadCustomerStatement(
     },
     entity: loc ? { name: String((loc as Record<string, unknown>).name ?? '') } : null,
     template: {
-      logoUrl: (t?.logo_url as string) ?? null,
+      logoUrl: tenantLogoOrNull((t?.logo_url as string) ?? null, orgId),
       accentColor: (t?.accent_color as string) || '#10b981',
       remitTo: (t?.remit_to as string) ?? null,
       footerText: (t?.footer_text as string) ?? null,

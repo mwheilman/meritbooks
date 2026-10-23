@@ -3,6 +3,8 @@ import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { JournalEntriesTabs } from './journal-entries-tabs';
 
+export const metadata = { title: 'Journal entries' };
+
 export const dynamic = 'force-dynamic';
 
 export default async function JournalEntriesPage() {

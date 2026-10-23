@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { agingBucketFor, type AgingBucket } from '@/lib/invoices/statement';
+import { tenantLogoOrNull } from '@/lib/invoices/templates/logo-url';
 
 /**
  * Loads everything the CUSTOMER PORTAL page renders for ONE customer: identity,
@@ -124,6 +125,8 @@ export async function loadCustomerPortal(
           .select('logo_url, accent_color')
           .eq('org_id', orgId)
           .eq('location_id', locationId)
+          // 176: a company can have many templates — read its default.
+          .eq('is_default', true)
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
@@ -137,7 +140,7 @@ export async function loadCustomerPortal(
     },
     entity: loc ? { name: String((loc as Record<string, unknown>).name ?? '') } : null,
     branding: {
-      logoUrl: (t?.logo_url as string) ?? null,
+      logoUrl: tenantLogoOrNull((t?.logo_url as string) ?? null, orgId),
       accentColor: (t?.accent_color as string) || '#10b981',
     },
     asOf,

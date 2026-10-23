@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import ConversionClient from './conversion-client';
 
+export const metadata = { title: 'Historical conversion' };
+
 /**
  * /onboarding/conversion — bring a company's opening balances over from the old system.
  * Optional prefill via query string (deep links): ?companyId=<location uuid>&asOf=YYYY-MM-DD,

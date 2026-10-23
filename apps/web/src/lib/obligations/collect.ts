@@ -67,6 +67,12 @@ export interface Obligation {
   severity: ObligationSeverity;
   /** Whole days from `asOf` to `dueDate`. Negative = overdue. */
   daysUntil: number;
+  /**
+   * The client (core.locations id) this obligation belongs to, when the source carries
+   * one; null/absent = organization-level (e.g. a vendor's W-9). Lets the Inbox scope
+   * alerts to the active client (lib/work/needs-attention).
+   */
+  locationId?: string | null;
 }
 
 /** Everything needed to build an Obligation except the derived urgency fields. */
@@ -303,6 +309,7 @@ async function collectLeases(supabase: SupabaseClient, asOf: string, loc: String
       dueDate: r.end_date ?? '',
       amountCents: typeof r.payment_cents === 'number' ? r.payment_cents : null,
       entityId: r.id,
+      locationId: r.location_id ?? null,
       href: `/leases?focus=${r.id}`,
     });
     if (o) out.push(o);
@@ -336,6 +343,7 @@ async function collectDebtMaturities(supabase: SupabaseClient, asOf: string, loc
       dueDate: r.maturity_date ?? '',
       amountCents: typeof r.current_balance_cents === 'number' ? r.current_balance_cents : null,
       entityId: r.id,
+      locationId: r.location_id ?? null,
       href: `/debt?focus=${r.id}`,
     });
     if (o) out.push(o);
@@ -350,7 +358,12 @@ interface DebtScheduleRow {
   payment_cents: number | null;
 }
 
-async function collectDebtPayments(supabase: SupabaseClient, asOf: string, instr: StringMap): Promise<Obligation[]> {
+async function collectDebtPayments(
+  supabase: SupabaseClient,
+  asOf: string,
+  instr: StringMap,
+  instrLoc: StringMap = new Map(),
+): Promise<Obligation[]> {
   const { data, error } = await supabase
     .from('debt_schedule_lines')
     .select('id, instrument_id, period_date, payment_cents')
@@ -372,6 +385,7 @@ async function collectDebtPayments(supabase: SupabaseClient, asOf: string, instr
       dueDate: r.period_date ?? '',
       amountCents: typeof r.payment_cents === 'number' ? r.payment_cents : null,
       entityId: r.instrument_id,
+      locationId: instrLoc.get(r.instrument_id) ?? null,
       href: `/debt?focus=${r.instrument_id}`,
     });
     if (o) out.push(o);
@@ -410,6 +424,7 @@ async function collectCovenants(supabase: SupabaseClient, asOf: string, loc: Str
       dueDate: next,
       amountCents: null,
       entityId: r.id,
+      locationId: r.location_id ?? null,
       href: `/covenants?focus=${r.id}`,
     });
     if (o) out.push(o);
@@ -444,6 +459,7 @@ async function collectInsurance(supabase: SupabaseClient, asOf: string, loc: Str
       dueDate: r.expiration_date ?? '',
       amountCents: typeof r.premium_cents === 'number' ? r.premium_cents : null,
       entityId: r.id,
+      locationId: r.location_id ?? null,
       href: `/insurance?focus=${r.id}`,
     });
     if (o) out.push(o);
@@ -458,13 +474,14 @@ interface SubscriptionRow {
   next_renewal_date: string | null;
   amount_cents: number | null;
   status: string | null;
+  location_id?: string | null;
 }
 
 async function collectSubscriptions(supabase: SupabaseClient, asOf: string): Promise<Obligation[]> {
   // `subscriptions` may not exist yet — the query throws, the loader degrades it.
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('id, vendor_name, product, next_renewal_date, amount_cents, status');
+    .select('id, vendor_name, product, next_renewal_date, amount_cents, status, location_id');
   if (error) throw new Error(error.message);
   const out: Obligation[] = [];
   for (const r of (data ?? []) as SubscriptionRow[]) {
@@ -479,6 +496,7 @@ async function collectSubscriptions(supabase: SupabaseClient, asOf: string): Pro
       dueDate: r.next_renewal_date ?? '',
       amountCents: typeof r.amount_cents === 'number' ? r.amount_cents : null,
       entityId: r.id,
+      locationId: r.location_id ?? null,
       href: `/subscriptions?focus=${r.id}`,
     });
     if (o) out.push(o);
@@ -526,12 +544,13 @@ interface RecurringRow {
   name: string | null;
   next_run_date: string | null;
   is_active: boolean | null;
+  location_id?: string | null;
 }
 
 async function collectRecurringInvoices(supabase: SupabaseClient, asOf: string): Promise<Obligation[]> {
   const { data, error } = await supabase
     .from('recurring_invoice_templates')
-    .select('id, name, next_run_date, is_active')
+    .select('id, name, next_run_date, is_active, location_id')
     .eq('is_active', true)
     .not('next_run_date', 'is', null);
   if (error) throw new Error(error.message);
@@ -545,6 +564,7 @@ async function collectRecurringInvoices(supabase: SupabaseClient, asOf: string):
       dueDate: r.next_run_date ?? '',
       amountCents: null,
       entityId: r.id,
+      locationId: r.location_id ?? null,
       href: `/recurring?focus=${r.id}`,
     });
     if (o) out.push(o);
@@ -573,10 +593,12 @@ export async function collectObligations(
 
   // id→name for debt instruments (drives the next-payment title). Best-effort.
   const instrNames: StringMap = new Map();
+  const instrLoc: StringMap = new Map();
   try {
-    const { data } = await supabase.from('debt_instruments').select('id, name');
-    for (const r of (data ?? []) as Array<{ id: string; name: string | null }>) {
+    const { data } = await supabase.from('debt_instruments').select('id, name, location_id');
+    for (const r of (data ?? []) as Array<{ id: string; name: string | null; location_id?: string | null }>) {
       if (r.id && r.name) instrNames.set(r.id, r.name);
+      if (r.id && r.location_id) instrLoc.set(r.id, r.location_id);
     }
   } catch {
     /* degrade to blank names */
@@ -585,7 +607,7 @@ export async function collectObligations(
   const sources: Array<[string, () => Promise<Obligation[]>]> = [
     ['leases', () => collectLeases(supabase, asOf, locNames)],
     ['debt_maturities', () => collectDebtMaturities(supabase, asOf, locNames)],
-    ['debt_payments', () => collectDebtPayments(supabase, asOf, instrNames)],
+    ['debt_payments', () => collectDebtPayments(supabase, asOf, instrNames, instrLoc)],
     ['covenants', () => collectCovenants(supabase, asOf, locNames)],
     ['insurance', () => collectInsurance(supabase, asOf, locNames)],
     ['subscriptions', () => collectSubscriptions(supabase, asOf)],

@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import ImportClient from './import-client';
 
+export const metadata = { title: 'Import data' };
+
 export default function ImportPage() {
   return (
     <div className="px-6 py-6">

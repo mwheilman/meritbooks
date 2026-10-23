@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { z } from 'zod';
 
@@ -192,6 +193,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (ctx instanceof NextResponse) return ctx;
   const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+  // Changing a job's recognition method / inputs moves revenue — editors only.
+  const guard = await requirePermission(ctx.userId, 'jobs', 'edit');
+  if (!guard.ok) return guard.response;
 
   let raw: unknown;
   try { raw = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }

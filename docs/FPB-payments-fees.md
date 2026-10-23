@@ -169,3 +169,83 @@ The defensible deltas: (1) a platform-admin pricing screen instead of an API, (2
 ## Still open (can resolve during build, not blocking)
 
 - **Refund fee treatment:** on refund, does the merchant get the MeritBooks fee back? Recommend: yes for full refunds, no for partials (standard). Confirm during the refund-path build.
+
+---
+
+## 17. Amendment (2026-10-23, Wave 1A) — live mode, one Stripe account per company, Payments settings
+
+**Why.** Audit `docs/audit-2026-10/FEATURE-GAP-AUDIT.md` §2.9 / PM-01 / PM-02 / BF-03: Stripe was hard-coded to
+test mode, the screen said "payments are live" in test mode, and there was ONE connected account per tenant, so
+every company's customer payments would land in one bank account. This amendment governs slice 1A.
+
+### 17.1 Mode is derived, never hard-coded
+- `paymentsMode()` (server) derives Stripe mode from `STRIPE_SECRET_KEY`: `sk_live_` / `rk_live_` → live,
+  `sk_test_` / `rk_test_` → test, anything else → unknown (treated as not configured). The publishable key's mode
+  must agree; a live secret with a test publishable key (or vice versa) is **misconfigured** — online payment is
+  turned off and the screen says so.
+- Plaid: `PLAID_ENV` = `sandbox` | `development` | `production` (unknown → sandbox; `development` is retired by Plaid
+  and is treated as sandbox with a warning). Connection environment: production → `live`, else `test`.
+- Every connection row records the environment it was created in; lookups only ever use rows of the CURRENT
+  environment (a test `acct_…` is never charged under a live key).
+- **The word "live" appears only when the mode is live AND the company's account can take charges.** Test mode
+  always shows a TEST badge and the sentence "Test mode — no real money moves."
+
+### 17.2 One Stripe account per company (migration 175)
+- `core.provider_connections.location_id` (nullable = tenant-level). Uniqueness: one row per (org, capability,
+  provider, environment, company) for collection/disbursement/payroll; Plaid stays one row per Item.
+- Account status is cached on the row: charges enabled, payouts enabled, details submitted, disabled reason,
+  requirements due, payout bank name + last 4, last checked. Refreshed on screen load (on demand) and by the
+  Connect webhook `account.updated`.
+- Setting `core.org_payment_settings.account_mode`: `per_company` (**default**) or `single` ("one account for all
+  companies", explicit opt-in). Pay-intent resolution: the invoice company's own account → else, only in
+  `single` mode, the tenant-level account → else online payment is off for that invoice ("being set up").
+- Webhooks route by connected-account id → connection → company: `payout.paid` posts to THAT company (no
+  "first location" guess when the account is per company); a `payment_intent.succeeded` whose destination does
+  not match the invoice's company account is still applied to the invoice (A/R must be relieved where it was
+  booked) and logged loudly for reconciliation. Idempotency (migration 064 + `stripe_events`) is unchanged.
+- Security: connected-account ids are never accepted from a browser (the generic connections endpoint refuses
+  Stripe collection and Plaid rows); pay links stay token-scoped; every payout-bank change, account-mode change
+  and onboarding start is written to `audit_log`.
+
+### 17.3 Payments settings screen (`/settings/payments`, merit-ui)
+One row per company: Stripe status (Not connected · Setup incomplete · Restricted · Ready), payout bank
+(bank name ··1234), TEST/LIVE badge, card on/off, bank transfer (ACH) on/off, who pays the card fee
+(customer surcharge vs. company absorbs) and who pays the ACH fee, using the existing fee engine for the
+"what MeritBooks charges" read-only line (Layer 1 is never editable here). Actions: Connect / Continue setup /
+Manage on Stripe; "Run a $1 test payment".
+- States: loading (skeleton), error (retry), empty (no companies → link to add one), not configured (no Stripe
+  key on the server — plain sentence, no env-var names shown to non-admins), misconfigured (key mismatch).
+- Card/ACH toggles and fee payer write the company-level cascade (`core.locations.payment_methods_allowed`,
+  `card_surcharge_enabled`, `ach_surcharge_enabled`). Defaults unchanged: card OFF, ACH ON, card fee passed to the
+  customer, ACH fee absorbed. The pay intent enforces the cascade (invoice → job → customer → company): a
+  method that is off is refused server-side.
+
+### 17.4 "$1 test payment"
+- Creates a $1.00 invoice on the chosen company to an internal customer "Payment test (internal)", posted to the
+  GL, and returns its pay link. Confirmation required; in live mode the dialog says real money moves and that the
+  payer should be the admin.
+- Recorded in `public.payment_test_runs` (company, environment, invoice, who, status). Before payment it can be
+  **cancelled** (invoice voided, issuance reversed). After payment it can be **refunded** (full refund only):
+  Stripe refund with `reverse_transfer` + `refund_application_fee`, then the issuance and collection GL entries
+  are voided, the payment is marked REFUNDED and the invoice VOIDED — the books return to exactly where they were
+  (refused, before any Stripe call, if either entry sits in a hard-closed period).
+- Only invoices created by the helper can be refunded through it (general customer refunds are out of scope).
+
+### 17.5 Plaid
+- Bank feed and cash screens show the Plaid environment (Sandbox / Production), last successful sync, and a stale
+  warning when no Item synced in 48 h (or any Item needs re-login / errored).
+- `runPlaidSyncForOrg(adminDb, orgId)` is the scheduler entry point (lead registers `bank.daily_pull`).
+
+### 17.6 Acceptance criteria (1A)
+1. With a `sk_test_` key the screen, API and pay page never say "live"; with `sk_live_` + `pk_live_` and a ready
+   account the company row shows LIVE · Ready.
+2. Company A's invoice creates its PaymentIntent with A's connected account as destination; company B's with B's.
+3. In `per_company` mode an invoice whose company has no account gets "online payment is being set up"; in
+   `single` mode it uses the tenant-level account.
+4. `payout.paid` from A's account posts the payout entry on company A.
+5. A test-mode connection is never used when the key is live (and vice versa).
+6. CARD refused by the intent when the company (or a more specific level) has card off.
+7. PAID → GL still posts exactly once on webhook replay (existing chain tests stay green).
+8. A payout bank change is in `audit_log` with old/new last 4.
+9. The $1 test payment can be created, paid, and refunded; after the refund the company's GL nets to zero for the
+   test (only Stripe's own cost, borne by the platform, is outside the merchant's books).

@@ -1,6 +1,8 @@
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { IntakeQueueClient } from './intake-queue-client';
 
+export const metadata = { title: 'AP intake queue' };
+
 export const dynamic = 'force-dynamic';
 
 /**

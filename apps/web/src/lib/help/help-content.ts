@@ -925,13 +925,17 @@ export const HELP_CONTENT: Record<string, HelpContent> = {
   '/settings/payments': {
     title: 'Payments',
     whatItDoes:
-      'Connect a Stripe account so customers can pay invoices online by card or bank transfer. Once connected, invoice payment → PAID → GL post runs automatically.',
+      'Let customers pay invoices online by card or bank transfer. Each company connects its own Stripe account, so its customers\' payments land in its own bank. Paid invoices post to the books automatically.',
     keyFeatures: [
-      'Guided Stripe Connect onboarding for the tenant',
-      'Card and ACH bank-transfer acceptance on the hosted invoice pay page',
-      'Payments turn on automatically once Stripe finishes its review',
+      'One Stripe account per company (or, by choice, one shared account for all companies)',
+      'TEST / LIVE badge from the server keys — the screen never says live in test mode',
+      'Per company: card and bank transfer on/off, and who pays each processing fee',
+      'Payout bank (last 4) and Stripe status, with every bank change logged',
+      'A $1 test payment you can pay, watch post to the books, then refund',
     ],
     tips: [
+      'Open a company (Enter) to connect Stripe, change its payment options or run the $1 test.',
+      'Live keys are added to the server by the owner — never typed into this screen.',
       'System/integration setting — restricted to roles that can view org settings.',
     ],
   },

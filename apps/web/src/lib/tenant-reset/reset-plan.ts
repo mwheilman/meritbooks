@@ -64,6 +64,7 @@ export const RESET_TABLES: readonly ResetTable[] = [
 
   // ── Banking ───────────────────────────────────────────────────────────────
   { schema: 'public', table: 'bank_reconciliations', label: 'Bank reconciliations', group: 'Banking', scope: 'transactional' },
+  { schema: 'public', table: 'bank_transaction_splits', label: 'Bank / card split lines', group: 'Banking', scope: 'transactional' },
   { schema: 'public', table: 'bank_transactions', label: 'Bank transactions (feed)', group: 'Banking', scope: 'transactional' },
   { schema: 'public', table: 'ach_authorizations', label: 'ACH authorizations', group: 'Banking', scope: 'transactional' },
   { schema: 'public', table: 'plaid_pending_accounts', label: 'Plaid pending accounts', group: 'Banking', scope: 'transactional' },
@@ -156,6 +157,7 @@ export const RESET_TABLES: readonly ResetTable[] = [
   { schema: 'public', table: 'ai_decisions', label: 'AI decisions', group: 'AI & automation', scope: 'transactional' },
   { schema: 'public', table: 'ai_audit_log', label: 'AI audit log', group: 'AI & automation', scope: 'transactional' },
   { schema: 'public', table: 'vendor_patterns', label: 'Learned vendor patterns', group: 'AI & automation', scope: 'transactional' },
+  { schema: 'public', table: 'split_rules', label: 'Remembered split rules', group: 'AI & automation', scope: 'transactional' },
   { schema: 'public', table: 'learned_preferences', label: 'Learned preferences', group: 'AI & automation', scope: 'transactional' },
   { schema: 'core', table: 'action_log', label: 'Action log (activity trail)', group: 'AI & automation', scope: 'transactional' },
 

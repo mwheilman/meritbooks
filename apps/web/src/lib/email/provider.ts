@@ -27,6 +27,10 @@ export interface EmailAttachment {
 
 export interface EmailMessage {
   to: string[];
+  /** Visible copies (invoice CC list). */
+  cc?: string[];
+  /** Hidden copies (e.g. "send me a copy"). */
+  bcc?: string[];
   subject: string;
   html: string;
   /** Plain-text alternative. Absent = poorer deliverability; callers should set it. */
@@ -62,6 +66,22 @@ export class EmailSendError extends Error {
 const toBase64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64');
 
 /**
+ * A single-line header value: CR / LF (and other control characters) become spaces, runs
+ * of whitespace collapse, and the result is trimmed. Subjects, display names, reply-to and
+ * attachment filenames are built from tenant- and user-typed text (invoice numbers,
+ * company names, request titles); a stray newline must never become a second header.
+ */
+export function headerSafe(value: string, max = 998): string {
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, max);
+}
+
+/** An address list entry with no header-breaking characters (an address never contains them). */
+function addressSafe(value: string): string {
+  return headerSafe(value, 320);
+}
+
+/**
  * Resend (https://resend.com). Requires RESEND_API_KEY and a verified sending
  * domain — an unverified domain is accepted by the API and then silently fails
  * to deliver, so verification is a real prerequisite, not a formality.
@@ -81,14 +101,16 @@ export class ResendProvider implements EmailProvider {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from,
-        to: message.to,
-        subject: message.subject,
+        from: headerSafe(from, 400),
+        to: message.to.map(addressSafe),
+        ...(message.cc?.length ? { cc: message.cc.map(addressSafe) } : {}),
+        ...(message.bcc?.length ? { bcc: message.bcc.map(addressSafe) } : {}),
+        subject: headerSafe(message.subject),
         html: message.html,
         text: message.text,
-        reply_to: message.replyTo,
+        reply_to: message.replyTo ? addressSafe(message.replyTo) : undefined,
         attachments: message.attachments?.map((a) => ({
-          filename: a.filename,
+          filename: headerSafe(a.filename, 255).replace(/["\\/]/g, '_'),
           content: toBase64(a.content),
         })),
       }),

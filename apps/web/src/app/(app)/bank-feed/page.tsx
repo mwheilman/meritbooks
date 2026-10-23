@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { CompanyScopeGuard } from '@/components/company-scope-guard';
+import { FeedHealthBanner } from '@/components/bank/feed-health-banner';
 import { BankFeedTabs } from './bank-feed-tabs';
 
 export default function BankFeedPage() {
@@ -10,6 +11,7 @@ export default function BankFeedPage() {
   // via useSearchParams (Next 14 requirement).
   return (
     <CompanyScopeGuard>
+      <FeedHealthBanner />
       <Suspense fallback={null}>
         <BankFeedTabs />
       </Suspense>

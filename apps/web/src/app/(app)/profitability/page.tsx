@@ -2,6 +2,8 @@ import { PageHeader } from '@/components/ui';
 import { ProfitabilityBoard } from './profitability-board';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 
+export const metadata = { title: 'Profitability' };
+
 export const dynamic = 'force-dynamic';
 
 /**

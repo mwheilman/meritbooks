@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
-import { Pencil, Plus, Trash2, Loader2, ShieldAlert, Download, Link2, Send, Receipt, Ban, FileX } from 'lucide-react';
+import { Pencil, Plus, Trash2, Loader2, ShieldAlert, Download, Send, Receipt, Ban, FileX } from 'lucide-react';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { StatusBadge, CurrencyTag } from '@/components/ui';
@@ -10,6 +10,8 @@ import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/compone
 import { InvoiceTextOverrides } from '@/components/invoice-text-overrides';
 import { AttachmentsPanel } from '@/components/documents/attachments-panel';
 import { ExplainPanel } from '@/components/explain-panel';
+import { PayLinkPanel } from './pay-link-panel';
+import { SendInvoiceDialog } from './send-invoice-dialog';
 
 interface InvLine {
   id?: string; lineNumber?: number; description: string;
@@ -69,7 +71,6 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
   const [overrideReason, setOverrideReason] = useState('');
   const [needsOverride, setNeedsOverride] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [sending, setSending] = useState(false);
 
   // Irreversible AR corrections (void / write-off). `confirm` holds which action
   // is armed; each requires a typed reason before it fires.
@@ -104,29 +105,11 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
     }
   }
 
-  async function sendInvoice() {
+  // Send / Resend opens the Send dialog (To, CC, copy to me, message, attachments).
+  const [sendOpen, setSendOpen] = useState(false);
+  function sendInvoice() {
     if (!data) return;
-    if (!data.customerEmail) {
-      addToast('error', `${data.customerName} has no email address on file.`);
-      return;
-    }
-    setSending(true);
-    try {
-      const res = await fetch(`/api/invoices/${data.id}/send`, { method: 'POST' });
-      const body = await res.json().catch(() => ({}));
-      if (res.ok && body.sent) {
-        addToast('success', `Invoice emailed to ${body.to}`);
-        refetch();
-      } else {
-        // Surface the real reason, not a generic failure — "not configured",
-        // "no email on file", and "provider rejected" are different problems.
-        addToast('error', body.error ?? 'Could not send the invoice.');
-      }
-    } catch {
-      addToast('error', 'Could not reach the send service. Try again.');
-    } finally {
-      setSending(false);
-    }
+    setSendOpen(true);
   }
 
   const [memo, setMemo] = useState('');
@@ -226,15 +209,11 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
                   <Download size={12} /> PDF
                 </a>
-                <button onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/pay/${data.publicToken}`); addToast('success', 'Customer link copied'); }}
-                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
-                  <Link2 size={12} /> Link
-                </button>
-                <button onClick={sendInvoice} disabled={sending || !data.customerEmail}
-                   title={data.customerEmail ? `Email this invoice to ${data.customerEmail}` : 'No customer email on file'}
+                <button onClick={sendInvoice} disabled={data.status === 'VOIDED'}
+                   title={data.customerEmail ? `Email this invoice to ${data.customerEmail}` : 'Type an address in the Send dialog'}
                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-                  {sending ? 'Sending…' : data.delivery?.sentAt ? 'Resend' : 'Send'}
+                  <Send size={12} />
+                  {data.delivery?.sentAt ? 'Resend' : 'Send'}
                 </button>
               </>
             )}
@@ -386,6 +365,10 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
               </div>
             )}
           </DetailSection>
+
+          <div className="mt-5">
+            <PayLinkPanel invoiceId={data.id} />
+          </div>
 
           <div className="mt-5 pt-4 border-t border-slate-800">
             <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Customer-facing text — this invoice</h3>
@@ -553,6 +536,16 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
             </button>
           </div>
         </>
+      )}
+      {data && (
+        <SendInvoiceDialog
+          invoiceId={data.id}
+          invoiceNumber={data.invoiceNumber}
+          open={sendOpen}
+          resend={!!data.delivery?.sentAt}
+          onClose={() => setSendOpen(false)}
+          onSent={() => { void refetch(); }}
+        />
       )}
     </DetailDrawer>
   );

@@ -3,8 +3,10 @@ export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
 import { createAdminSupabase } from '@/lib/supabase/server';
-import { listConnections } from '@/lib/money/connections';
 import { createDestinationPaymentIntent } from '@/lib/money/providers/stripe';
+import { resolveCollectionAccount } from '@/lib/money/payment-accounts';
+import { loadInvoicePaymentTerms } from '@/lib/money/payment-terms';
+import { stripeCanCharge, stripeMode } from '@/lib/money/payments-mode';
 import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
 import { computeFee, resolveMerchantFeeSchedule } from '@/lib/money/fees';
 import { sharedRateLimiter, clientIp, retryAfterSeconds } from '@/lib/security/rate-limit';
@@ -17,8 +19,15 @@ const INTENT_PER_IP = { windowMs: 60_000, max: 30 } as const;
 
 /**
  * POST /api/pay/[token]/intent — create a Stripe PaymentIntent for the hosted
- * invoice. Destination charge to the tenant's connected account; the platform
- * application fee is the spread. Returns the client secret for Stripe.js.
+ * invoice. Destination charge to the connected account of the COMPANY that issued
+ * the invoice (migration 175 — falls back to the tenant-level account only when the
+ * tenant opted into "one account for all companies"); the platform application fee
+ * is the spread. Returns the client secret for Stripe.js.
+ *
+ * The connected account is resolved here from the invoice — never accepted from the
+ * caller. The method must be allowed by the invoice → job → customer → company
+ * cascade (refused server-side, not just hidden on the page). Only connections of the
+ * environment the server key belongs to (test vs live) are ever used.
  *
  * The invoice total never changes. ACH/absorbed-card charge the balance; a
  * passed-through card surcharge is added to the amount charged only.
@@ -45,19 +54,45 @@ export async function POST(req: Request, { params }: { params: { token: string }
 
   const { data: inv } = await supabase
     .from('invoices')
-    .select('id, org_id, location_id, customer_id, balance_cents, status, card_surcharge_enabled, ach_surcharge_enabled')
+    .select('id, org_id, location_id, customer_id, job_id, balance_cents, status, payment_methods_allowed, card_surcharge_enabled, ach_surcharge_enabled')
     .eq('public_token', params.token)
     .maybeSingle();
   if (!inv) return NextResponse.json({ enabled: false, message: 'This invoice link is no longer valid.' }, { status: 404 });
 
-  const i = inv as { id: string; org_id: string; location_id: string; customer_id: string; balance_cents: number; status: string; card_surcharge_enabled: boolean | null; ach_surcharge_enabled: boolean | null };
+  const i = inv as {
+    id: string; org_id: string; location_id: string; customer_id: string; job_id: string | null;
+    balance_cents: number; status: string;
+    payment_methods_allowed: string[] | null; card_surcharge_enabled: boolean | null; ach_surcharge_enabled: boolean | null;
+  };
   if (i.balance_cents <= 0) return NextResponse.json({ enabled: false, message: 'This invoice is already paid in full.' });
-
-  const conns = await listConnections(supabase, i.org_id);
-  const conn = conns.find((c) => c.capability === 'AR_COLLECTION' && c.provider === 'stripe' && c.status === 'active' && c.accountHandle);
-  if (!conn?.accountHandle) {
-    return NextResponse.json({ enabled: false, message: 'Online payment for this business is being set up. Please use the remit-to details on this invoice.' });
+  if (i.status === 'VOIDED' || i.status === 'WRITTEN_OFF') {
+    return NextResponse.json({ enabled: false, message: 'This invoice cannot be paid online. Please contact the sender.' });
   }
+
+  const setUpMessage = 'Online payment for this business is being set up. Please use the remit-to details on this invoice.';
+  if (!stripeCanCharge()) {
+    // Keys missing or mismatched (e.g. live secret + test publishable): never guess.
+    console.error('[pay intent] online payment unavailable:', stripeMode().state);
+    return NextResponse.json({ enabled: false, message: setUpMessage });
+  }
+
+  // The method must be one the invoice is actually offered on (full cascade).
+  const terms = await loadInvoicePaymentTerms(supabase, i);
+  if (!terms.online.includes(method)) {
+    const label = method === 'CARD' ? 'Card payment' : 'Bank transfer';
+    return NextResponse.json({ enabled: false, message: `${label} is not accepted for this invoice.` }, { status: 409 });
+  }
+
+  // The issuing company's own account (or the tenant account in single-account mode).
+  const pick = await resolveCollectionAccount(supabase, i.org_id, i.location_id);
+  if (!pick.connection?.accountHandle) {
+    return NextResponse.json({ enabled: false, message: setUpMessage });
+  }
+  if (!pick.ready) {
+    return NextResponse.json({ enabled: false, message: 'Online payment for this business is paused. Please use the remit-to details on this invoice.' });
+  }
+  const conn = pick.connection;
+  const destination = conn.accountHandle as string;
 
   const base = i.balance_cents;
 
@@ -68,13 +103,10 @@ export async function POST(req: Request, { params }: { params: { token: string }
   const appFeeCents = computeFee(schedule, method, base);
 
   // Layer 2 — does the merchant pass this fee to the customer, or absorb it?
-  // Defaults asymmetric by method: card passes through, ACH is absorbed. Invoice
-  // level is the most-specific override honoured here.
+  // Defaults asymmetric by method: card passes through, ACH is absorbed; resolved
+  // most-specific-wins over invoice → job → customer → company.
   const passThrough =
-    appFeeCents > 0 &&
-    (method === 'CARD'
-      ? i.card_surcharge_enabled !== false // card: pass-through unless explicitly off
-      : i.ach_surcharge_enabled === true); // ACH: absorbed unless explicitly on
+    appFeeCents > 0 && (method === 'CARD' ? terms.cardPassThrough : terms.achPassThrough);
 
   if (passThrough && !acceptFee) {
     const label = method === 'CARD' ? 'card' : 'bank transfer';
@@ -89,24 +121,39 @@ export async function POST(req: Request, { params }: { params: { token: string }
     const { clientSecret, id } = await createDestinationPaymentIntent({
       amountCents,
       applicationFeeCents: appFeeCents,
-      destinationAccount: conn.accountHandle,
+      destinationAccount: destination,
       method,
       metadata: {
         invoice_id: i.id, org_id: i.org_id, location_id: i.location_id ?? '',
         customer_id: i.customer_id ?? '', token: params.token,
         base_cents: String(base), amount_cents: String(amountCents), app_fee_cents: String(appFeeCents),
         method,
+        connection_id: conn.id, account_source: pick.source ?? '', environment: conn.environment,
       },
     });
-    await recordInvoiceEvent(supabase, { orgId: i.org_id, invoiceId: i.id, type: 'PAY_INITIATED', actor: 'customer', meta: { method, amount_cents: amountCents, pi: id } });
+    await recordInvoiceEvent(supabase, {
+      orgId: i.org_id, invoiceId: i.id, type: 'PAY_INITIATED', actor: 'customer',
+      meta: { method, amount_cents: amountCents, pi: id, connection_id: conn.id, account_source: pick.source, environment: conn.environment },
+    });
     return NextResponse.json({
       enabled: true,
       client_secret: clientSecret,
       publishable_key: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '',
       amount_cents: amountCents,
       fee_cents: appFeeCents,
+      // The payer sees whether this is a real charge (never "live" in test mode).
+      test_mode: conn.environment !== 'live',
     });
   } catch (e) {
-    return NextResponse.json({ enabled: false, message: e instanceof Error ? e.message : 'Could not start the payment.' }, { status: 500 });
+    // The caller is unauthenticated: never echo provider / internal error text (it can carry
+    // account ids, request ids or configuration detail). Log it server-side, answer generically.
+    const err = e as { type?: string; code?: string; statusCode?: number; message?: string };
+    console.error('[pay intent] could not create the PaymentIntent', {
+      invoice_id: i.id, method, type: err?.type, code: err?.code, statusCode: err?.statusCode, message: err?.message,
+    });
+    return NextResponse.json(
+      { enabled: false, message: 'We could not start the payment just now. Please try again in a few minutes, or use the remit-to details on this invoice.' },
+      { status: 502 },
+    );
   }
 }

@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic';
 import { AutonomyConsole } from './autonomy-console';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 
+export const metadata = { title: 'AI autonomy' };
+
 /**
  * Autonomy & Kill-Switch Control Plane (M10) — the supervision screen that governs
  * every AI capability. Turning autonomous action on/off is a system-level control,

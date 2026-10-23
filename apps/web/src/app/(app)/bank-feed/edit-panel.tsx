@@ -9,6 +9,8 @@ import { ConfidenceBar } from '@/components/ui';
 import { ExplainPanel } from '@/components/explain-panel';
 import type { BankFeedRow, JobSearchResult } from '@meritbooks/shared';
 import type { ApproveBankTransactionInput } from '@/lib/validations/transactions';
+import type { SplitSummary } from '@/lib/bank/splits/types';
+import { SplitGrid } from './split-grid';
 
 interface EditPanelProps {
   transaction: BankFeedRow;
@@ -154,6 +156,13 @@ function groupByType(accounts: AccountOption[]): Array<{ type: string; rows: Acc
 
 export function EditPanel({ transaction, locationId, onClose, onSave }: EditPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // Split mode (FPB-bank-feed-splits): opens straight into the grid when the line
+  // already carries a draft or posted split.
+  const existingSplit = (transaction as BankFeedRow & { split?: SplitSummary | null }).split ?? null;
+  const [splitMode, setSplitMode] = useState<boolean>(!!existingSplit);
+  const [reverseOpen, setReverseOpen] = useState(false);
+  const [reverseReason, setReverseReason] = useState('');
+  const [isReversing, setIsReversing] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
@@ -362,6 +371,34 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
     }
   }, [selectedAccount, transaction, onSave, selectedJob, selectedDept, selectedClass, jobMissing, deptMissing, classMissing, entity, vendorName, notes]);
 
+  // Reversal-on-edit (Spec Part G; posted-GL immutability, migration 153): voids the
+  // posting and returns the line to review — nothing is silently changed.
+  const handleReverse = useCallback(async () => {
+    if (reverseReason.trim().length < 3) {
+      addToast('error', 'Say why the posting is being reversed');
+      return;
+    }
+    setIsReversing(true);
+    try {
+      const res = await fetch('/api/bank-feed/reverse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transaction_id: transaction.id, reason: reverseReason.trim() }),
+      });
+      const result = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string; voided?: string[] };
+      if (res.ok && result.success) {
+        addToast('success', `Reversed ${result.voided?.join(', ') ?? ''} — the line is back in review`);
+        onSave();
+      } else {
+        addToast('error', result.error ?? 'Could not reverse the posting');
+      }
+    } catch {
+      addToast('error', 'Network error while reversing');
+    } finally {
+      setIsReversing(false);
+    }
+  }, [reverseReason, transaction.id, onSave]);
+
   const isAlreadyPosted = transaction.status === 'POSTED' || transaction.status === 'APPROVED';
   const groupedAccounts = useMemo(
     () => groupByType(accountResults?.accounts ?? []),
@@ -380,6 +417,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
         aria-modal="true"
         aria-labelledby="edit-panel-title"
         className="fixed top-0 right-0 h-full w-[480px] max-w-full bg-surface-900 border-l border-slate-800 z-50 flex flex-col animate-in slide-in-from-right duration-200"
+        style={splitMode ? { width: 780 } : undefined}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
@@ -528,6 +566,39 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
             />
           </div>
 
+          {/* Split toggle (FPB-bank-feed-splits) — card lines use the same grid. */}
+          {!splitMode && transaction.status !== 'POSTED' && (
+            <div className="flex items-center justify-between">
+              <span className="text-2xs text-slate-500">One account for the whole amount, or split it across accounts, companies and jobs.</span>
+              <button
+                type="button"
+                onClick={() => setSplitMode(true)}
+                className="px-3 py-1.5 rounded-md text-xs font-medium border border-slate-700 text-slate-300 hover:border-brand-500/40 hover:text-brand-400"
+              >
+                Split
+              </button>
+            </div>
+          )}
+
+          {splitMode ? (
+            <SplitGrid
+              transaction={{
+                id: transaction.id,
+                amount_cents: transaction.amount_cents,
+                status: transaction.status,
+                location_id: effectiveLocationId,
+                vendor_id: transaction.ai_vendor?.id ?? null,
+                vendor_name: transaction.ai_vendor?.display_name ?? transaction.ai_vendor?.name ?? null,
+                description: transaction.description,
+              }}
+              seedAccount={selectedAccount ?? null}
+              vendorName={vendorName}
+              notes={notes}
+              onUnsplit={() => setSplitMode(false)}
+              onDone={() => onSave()}
+            />
+          ) : (
+          <>
           {/* GL Account (grouped by type) */}
           <div className="account-search-container">
             <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
@@ -805,6 +876,9 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
             )}
           </div>
 
+          </>
+          )}
+
           {/* Notes */}
           <div>
             <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
@@ -829,6 +903,39 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
           >
             Cancel
           </button>
+          {transaction.status === 'POSTED' ? (
+            reverseOpen ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={reverseReason}
+                  onChange={(e) => setReverseReason(e.target.value)}
+                  placeholder="Why reverse? (required)"
+                  aria-label="Reason for reversal"
+                  className="w-56 px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500/40"
+                  autoFocus
+                />
+                <button
+                  onClick={handleReverse}
+                  disabled={isReversing || reverseReason.trim().length < 3}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-red-600 text-white hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isReversing ? <Loader2 size={14} className="animate-spin" /> : null}
+                  Confirm reversal
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setReverseOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-slate-700 text-slate-300 hover:border-red-500/40 hover:text-red-400"
+                title="Voids the posted journal entries and returns this line to review"
+              >
+                Reverse &amp; edit
+              </button>
+            )
+          ) : splitMode ? (
+            <span className="text-2xs text-slate-500">Approve from the split above</span>
+          ) : (
           <button
             onClick={handleSaveApprove}
             disabled={!selectedAccount || isSaving || isAlreadyPosted || blockingMissing}
@@ -842,6 +949,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
             {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
             {isAlreadyPosted ? 'Already Posted' : 'Save & Approve'}
           </button>
+          )}
         </div>
       </div>
     </>

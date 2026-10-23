@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
 
+export const metadata = { title: 'Controls' };
+
 // Retired standalone route. The SOX controls command center is now the "Controls" tab
 // of the merged Compliance & Controls screen (both share the `compliance` permission,
 // which is enforced by the /compliance page guard). Keep the URL working by redirecting

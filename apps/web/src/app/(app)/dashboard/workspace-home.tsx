@@ -132,7 +132,8 @@ export async function WorkspaceHome() {
   const open = companies.filter((x) => x.periodStatus === 'OPEN').length;
   const soft = companies.filter((x) => x.periodStatus === 'SOFT_CLOSE').length;
   const none = companies.filter((x) => x.periodStatus === 'NO_PERIOD').length;
-  const needsYou = c.needsAttention + c.openExceptions + c.pendingApprovals;
+  // The all-clients Inbox total — the same number as the Inbox header and the rail badge.
+  const needsYou = c.needsYou;
   const month = monthLabel(board.today);
 
   return (
@@ -208,17 +209,19 @@ export async function WorkspaceHome() {
           </ul>
         </Widget>
 
+        {/* The Inbox, tab by tab, across every client — the same shared counts (and
+            scope) as the Inbox tabs and the rail badge. */}
         <Widget
           title="Needs your judgment"
           count={needsYou.toLocaleString()}
-          meta="Approvals, flags and AI proposals across clients"
+          meta="Your Inbox across every client — same counts as the Inbox tabs"
           w={8}
           h={2}
           foot={
             <>
               <span className="tnum">
-                {c.pendingApprovals.toLocaleString()} + {c.needsAttention.toLocaleString()} + {c.openExceptions.toLocaleString()} ={' '}
-                {needsYou.toLocaleString()} · then {c.toReview.toLocaleString()} to review
+                {c.lanes.approvals.toLocaleString()} + {c.lanes.exceptions.toLocaleString()} + {c.lanes.alerts.toLocaleString()} +{' '}
+                {c.lanes.drafts.toLocaleString()} = {needsYou.toLocaleString()} · then {c.toReview.toLocaleString()} to review
               </span>
               <Link className="btn btn--primary" href="/inbox">
                 Open inbox
@@ -227,10 +230,22 @@ export async function WorkspaceHome() {
           }
         >
           <div className="bands mb-bands-4">
-            <Band label="Approvals" count={c.pendingApprovals} caption="Money movement waiting on sign-off" split={[]} href="/inbox?tab=approvals" />
-            <Band label="Attention" count={c.needsAttention} caption="Flagged lines and bills on hold" split={topTwo(companies, (x) => x.needsAttention)} href="/inbox?tab=exceptions" />
-            <Band label="AI proposals" count={c.openExceptions} caption="Waiting for a decision" split={topTwo(companies, (x) => x.openExceptions)} href="/inbox?tab=exceptions" />
-            <Band label="To review" count={c.toReview} caption="Pick a client to work its feed" split={topTwo(companies, (x) => x.toReview)} />
+            <Band
+              label="Approvals"
+              count={c.lanes.approvals}
+              caption="Money movement, expenses and policy holds"
+              split={topTwo(companies, (x) => x.lanes.approvals)}
+              href="/inbox?tab=approvals"
+            />
+            <Band
+              label="Exceptions"
+              count={c.lanes.exceptions}
+              caption={`${c.openExceptions.toLocaleString()} AI proposals, plus flagged lines`}
+              split={topTwo(companies, (x) => x.lanes.exceptions)}
+              href="/inbox?tab=exceptions"
+            />
+            <Band label="Alerts" count={c.lanes.alerts} caption="Overdue or due within 30 days" split={topTwo(companies, (x) => x.lanes.alerts)} href="/inbox?tab=alerts" />
+            <Band label="Drafts" count={c.lanes.drafts} caption="Journal entries to post" split={topTwo(companies, (x) => x.lanes.drafts)} href="/inbox?tab=drafts" />
           </div>
         </Widget>
 

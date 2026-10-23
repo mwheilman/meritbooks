@@ -27,6 +27,7 @@ import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
 import { resolveInvoiceCreditAccounts } from '@/lib/invoices/rev-rec-credit';
 import { resolveRole } from '@/lib/posting/account-roles';
 import { resolveInvoiceTax } from '@/lib/tax/resolve-invoice-tax';
+import { assertOrgRefs, isWriteScopeError, scopedWriter } from '@/lib/db/scoped-writer';
 
 export interface CreateInvoiceLineInput {
   description: string;
@@ -138,6 +139,27 @@ export async function createInvoice(
 ): Promise<CreateInvoiceOutcome> {
   const { orgId, actor, input } = args;
 
+  // invoices / invoice_lines are SELECT-only for members (migration 176, HIGH-2). The
+  // caller has ALREADY authorized the action (invoices:create on the route / recipe /
+  // estimate convert; the seam drains run as the service role). Every write below goes
+  // through `w`: for a member client the company is checked against the org and the
+  // caller's client scope first, then the service role writes, org pinned; a service-role
+  // caller (drains, dealer, scheduler) writes as itself. FKs never check the tenant, so
+  // every referenced id is verified to belong to this org before a service-role insert.
+  let w: SupabaseClient;
+  try {
+    await assertOrgRefs(orgId, [
+      { schema: 'core', table: 'locations', ids: [input.location_id], label: 'company' },
+      { schema: 'core', table: 'customers', ids: [input.customer_id], label: 'customer' },
+      { schema: 'core', table: 'jobs', ids: [input.job_id], label: 'job' },
+      { table: 'accounts', ids: input.lines.map((l) => l.account_id), label: 'account' },
+    ], { caller: supabase });
+    w = await scopedWriter(supabase, orgId, [input.location_id]);
+  } catch (e) {
+    if (isWriteScopeError(e)) return { ok: false, status: 403, error: e.message };
+    throw e;
+  }
+
   // Mint the Books-owned invoice number: INV-{YYYYMMDD}-{seq} (per-org sequence).
   // The (org_id, invoice_number) unique index is the guarantor; a concurrent creator
   // that took the same number makes the insert below retry with the next one.
@@ -235,7 +257,7 @@ export async function createInvoice(
 
   let created: { id: string; invoice_number: string } | null = null;
   for (let attempt = 0; attempt < 25; attempt++) {
-    const { data, error: invErr } = await supabase
+    const { data, error: invErr } = await w
       .from('invoices')
       .insert({ ...header, invoice_number: invoiceNumber })
       .select('id, invoice_number')
@@ -269,9 +291,9 @@ export async function createInvoice(
     job_phase_id: l.job_phase_id ?? null,
     cost_code_id: l.cost_code_id ?? null,
   }));
-  const { error: linesErr } = await supabase.from('invoice_lines').insert(lineInserts);
+  const { error: linesErr } = await w.from('invoice_lines').insert(lineInserts);
   if (linesErr) {
-    await supabase.from('invoices').delete().eq('id', invoice.id);
+    await w.from('invoices').delete().eq('id', invoice.id).eq('org_id', orgId);
     return { ok: false, status: 500, code: 'INSERT_FAILED', error: linesErr.message };
   }
 
@@ -280,10 +302,11 @@ export async function createInvoice(
   // so if they aren't present yet this no-ops and creation is unaffected.
   if (resolvedTaxRatePct != null || resolvedTaxJurisdiction != null) {
     try {
-      await supabase
+      await w
         .from('invoices')
         .update({ tax_rate_pct: resolvedTaxRatePct, tax_jurisdiction: resolvedTaxJurisdiction })
-        .eq('id', invoice.id);
+        .eq('id', invoice.id)
+        .eq('org_id', orgId);
     } catch {
       /* columns not present yet — the collected tax still flows via tax_cents. */
     }
@@ -395,9 +418,10 @@ export async function createInvoice(
 
         if (jeResult.success && jeResult.entry_id) {
           glEntryId = jeResult.entry_id;
-          await supabase.from('invoices')
+          await w.from('invoices')
             .update({ gl_entry_id: jeResult.entry_id, status: 'SENT' })
-            .eq('id', invoice.id);
+            .eq('id', invoice.id)
+            .eq('org_id', orgId);
           await recordInvoiceEvent(supabase, {
             orgId, invoiceId: invoice.id, type: 'POSTED', actor,
             meta: { gl_entry_id: jeResult.entry_id, total_cents: totalCents },
@@ -417,7 +441,7 @@ export async function createInvoice(
   if (input.strict_gl && !posted) {
     // An event-issued invoice must never exist without its entry: remove it (lines and
     // invoice_events cascade) so a retry starts clean.
-    await supabase.from('invoices').delete().eq('id', invoice.id).eq('org_id', orgId);
+    await w.from('invoices').delete().eq('id', invoice.id).eq('org_id', orgId);
     return {
       ok: false,
       status: 422,

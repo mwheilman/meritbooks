@@ -12,6 +12,8 @@ import type { ApproveBankTransactionInput } from '@/lib/validations/transactions
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { isSpecificCompany } from '@/lib/company-scope';
 import { FlagDialog, useFlagTransaction } from '../bank-feed/flag-dialog';
+import { SplitTag } from '../bank-feed/split-grid';
+import type { SplitSummary } from '@/lib/bank/splits/types';
 
 interface CCRow {
   id: string;
@@ -28,6 +30,8 @@ interface CCRow {
   bank_account: { id: string; account_name: string; account_mask: string } | null;
   receiptStatus: 'MATCHED' | 'MISSING' | 'PENDING';
   chaseCount: number;
+  /** Saved / posted split (FPB-bank-feed-splits). */
+  split?: SplitSummary | null;
 }
 
 interface CCResponse {
@@ -107,14 +111,15 @@ export function CreditCardFeed() {
 
   const handleApprove = useCallback(async (txn: CCRow) => {
     const account = txn.final_account ?? txn.ai_account;
-    if (!account) {
+    // A saved draft split posts itself (the approve route reads it).
+    if (!account && txn.split?.status !== 'DRAFT') {
       addToast('error', 'No GL account assigned');
       return;
     }
     setApprovingId(txn.id);
     const result = await approveTxn({
       transaction_id: txn.id,
-      account_id: account.id,
+      account_id: account?.id,
       vendor_id: txn.ai_vendor?.id ?? undefined,
     });
     if (result) {
@@ -251,7 +256,9 @@ export function CreditCardFeed() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {account ? (
+                      {txn.split ? (
+                        <SplitTag split={txn.split} />
+                      ) : account ? (
                         <span className="text-xs font-mono text-slate-400">
                           {account.account_number} · {account.name}
                         </span>
@@ -272,10 +279,10 @@ export function CreditCardFeed() {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={(e) => { e.stopPropagation(); handleApprove(txn); }}
-                          disabled={!account || approvingId === txn.id || isPosted}
+                          disabled={(!account && txn.split?.status !== 'DRAFT') || approvingId === txn.id || isPosted}
                           className={clsx(
                             'p-1.5 rounded-md transition-colors',
-                            !account || isPosted
+                            (!account && txn.split?.status !== 'DRAFT') || isPosted
                               ? 'text-slate-700 cursor-not-allowed'
                               : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'
                           )}
@@ -327,7 +334,11 @@ export function CreditCardFeed() {
         )}
       </HoverPeekCard>
 
-      <CreditCardDrawer txn={selectedTxn} onClose={() => setSelectedTxn(null)} />
+      <CreditCardDrawer
+        txn={selectedTxn}
+        onClose={() => setSelectedTxn(null)}
+        onChanged={() => { setSelectedTxn(null); refetch(); }}
+      />
 
       {flaggingTxn && (
         <FlagDialog

@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic';
 import type { ImportFileKind } from '@/lib/dealer/types';
 import { ImportsScreen } from './_components/imports-screen';
 
+export const metadata = { title: 'Dealer imports' };
+
 /**
  * Dealer imports (FPB-dealer-pack §8, D2 slice E). Page guard + one-client scope live in
  * ../layout.tsx. `?new=1` opens the wizard; `?kind=OPENING` (etc.) preselects the kind —

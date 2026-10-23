@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { CompanyScopeGuard } from '@/components/company-scope-guard';
 
+export const metadata = { title: 'AI categorizer' };
+
 export const dynamic = 'force-dynamic';
 
 /**

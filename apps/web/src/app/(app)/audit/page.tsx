@@ -1,6 +1,8 @@
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { AuditClient } from './audit-client';
 
+export const metadata = { title: 'Audit trail' };
+
 export const dynamic = 'force-dynamic';
 
 export default async function AuditPage() {

@@ -1,6 +1,8 @@
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { TeamClient } from './team-client';
 
+export const metadata = { title: 'Team & access' };
+
 export const dynamic = 'force-dynamic';
 
 export default async function TeamPage() {

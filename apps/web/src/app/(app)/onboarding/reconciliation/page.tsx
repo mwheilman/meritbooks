@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import ReconciliationClient from './reconciliation-client';
 
+export const metadata = { title: 'Conversion reconciliation' };
+
 export default function ReconciliationPage() {
   return (
     <div className="px-6 py-6">

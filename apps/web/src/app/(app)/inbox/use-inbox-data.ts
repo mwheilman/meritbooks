@@ -1,25 +1,27 @@
 'use client';
 
 /**
- * INBOX DATA — one place that loads everything the unified Inbox shell needs, so
- * the tab bar can show per-tab counts + a total badge that matches the header
- * bell without each tab double-fetching.
+ * INBOX DATA — one read of /api/inbox powers every tab, the tab badges and the
+ * "need you" total, so none of them can disagree.
  *
- * Two read-only, RLS-scoped sources (no writes here):
- *   • /api/inbox      → ranked "needs you" aggregate (approvals, policy blocks,
- *                       alerts, drafts — and the EXCEPTION count the bell shows).
- *                       Its `counts.total` is exactly what the header bell badges,
- *                       so `total` below is guaranteed to match it.
- *   • /api/exceptions → the broader flagged/held/proposed queue that powers the
- *                       Exceptions tab's inline (safe, non-financial) resolve.
+ *   • /api/inbox is built by lib/work/needs-attention — the same counting service the
+ *     home ("Also waiting", the four-step strip) and the rail's Inbox badge use — over
+ *     ONE scoped item set. The shared useQuery hook attaches the active client
+ *     (`location_id`), and the server validates it against the caller's client scope;
+ *     switching clients refetches.
+ *   • The Exceptions tab is a projection of the same payload (toExceptionsResponse) —
+ *     it used to be a second endpoint with its own sources, which is how its count
+ *     and the home's drifted apart.
  *
  * The alert horizon lives here (not inside a tab) so the Alerts tab count and the
- * Alerts list always agree.
+ * Alerts list always agree. Read-only; no writes here.
  */
 
 import { useMemo, useState } from 'react';
 import { useQuery } from '@/hooks';
-import type { InboxResponse, ExceptionsResponse, TabKey } from './inbox-types';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
+import { toExceptionsResponse, type InboxResponse, type ExceptionsResponse, type TabKey } from './inbox-types';
 
 export interface UseInboxData {
   horizon: number;
@@ -30,17 +32,15 @@ export interface UseInboxData {
   inboxError: string | null;
   refetchInbox: () => Promise<void>;
 
+  /** The Exceptions tab — derived from the same payload as every other tab. */
   exceptions: ExceptionsResponse | null;
-  exLoading: boolean;
-  exError: string | null;
-  refetchExceptions: () => Promise<void>;
 
-  /** Per-tab counts for the tab-bar badges. */
+  /** Per-tab counts for the tab-bar badges (the server's full-set lane counts). */
   tabCounts: Record<TabKey, number>;
-  /** The single "needs you" total — identical to the header bell (/api/inbox). */
+  /** The single "needs you" total — the sum of the four tabs; identical to the rail badge. */
   total: number;
-  /** Convenience: refetch both sources at once. */
-  refetchAll: () => Promise<void>;
+  /** True once the first load has answered (never show "all clear" before that). */
+  loaded: boolean;
 }
 
 export const HORIZON_OPTIONS = [30, 60, 90];
@@ -48,36 +48,27 @@ export const HORIZON_OPTIONS = [30, 60, 90];
 export function useInboxData(): UseInboxData {
   const [horizon, setHorizon] = useState(30);
 
-  const inboxParams = useMemo<Record<string, string>>(
-    () => ({ alert_horizon: String(horizon) }),
-    [horizon],
-  );
+  const inboxParams = useMemo<Record<string, string>>(() => ({ alert_horizon: String(horizon) }), [horizon]);
 
-  const {
-    data: inbox,
-    error: inboxError,
-    isLoading: inboxLoading,
-    refetch: refetchInbox,
-  } = useQuery<InboxResponse>('/api/inbox', inboxParams);
+  const { data: raw, error: inboxError, isLoading: inboxLoading, refetch: refetchInbox } = useQuery<InboxResponse>('/api/inbox', inboxParams);
 
-  const {
-    data: exceptions,
-    error: exError,
-    isLoading: exLoading,
-    refetch: refetchExceptions,
-  } = useQuery<ExceptionsResponse>('/api/exceptions');
+  // While a client switch is refetching, the previous payload belongs to the OLD
+  // client — never show it (or its counts) under the new client's name.
+  const { activeCompanyId } = useActiveCompany();
+  const wanted = isSpecificCompany(activeCompanyId) ? activeCompanyId : null;
+  const inbox = raw && (raw.scope?.locationId ?? null) === wanted ? raw : null;
+
+  const exceptions = useMemo(() => (inbox ? toExceptionsResponse(inbox) : null), [inbox]);
 
   const tabCounts = useMemo<Record<TabKey, number>>(() => {
-    const byType = inbox?.counts.byType;
+    const lanes = inbox?.counts.byLane;
     return {
-      approvals: (byType?.APPROVAL ?? 0) + (byType?.POLICY_BLOCK ?? 0),
-      alerts: byType?.ALERT ?? 0,
-      drafts: byType?.DRAFT ?? 0,
-      exceptions: exceptions?.counts.total ?? 0,
+      approvals: lanes?.approvals ?? 0,
+      exceptions: lanes?.exceptions ?? 0,
+      alerts: lanes?.alerts ?? 0,
+      drafts: lanes?.drafts ?? 0,
     };
-  }, [inbox, exceptions]);
-
-  const total = inbox?.counts.total ?? 0;
+  }, [inbox]);
 
   return {
     horizon,
@@ -86,14 +77,9 @@ export function useInboxData(): UseInboxData {
     inboxLoading,
     inboxError,
     refetchInbox,
-    exceptions: exceptions ?? null,
-    exLoading,
-    exError,
-    refetchExceptions,
+    exceptions,
     tabCounts,
-    total,
-    refetchAll: async () => {
-      await Promise.all([refetchInbox(), refetchExceptions()]);
-    },
+    total: inbox?.counts.total ?? 0,
+    loaded: !!inbox,
   };
 }

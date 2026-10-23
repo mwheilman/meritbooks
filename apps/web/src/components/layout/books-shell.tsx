@@ -17,6 +17,11 @@
  * first" gate, role-permission filtering, the industry-pack gate, the Access nav
  * entries, the live inbox count (was the bell), ⌘K owned by the CPA Desk command
  * bar, ⌘/ search, the Clerk user menu.
+ *
+ * Notifications (Wave 1D, migration 178): the kit puts no bell and no user menu in the
+ * bar (RailFoot: "No bell, no user menu in the bar"), so the unread count lives in the
+ * rail foot as a "Notifications" row (brick count when an escalation or bounce is
+ * unread) that opens the notification panel. `g n` opens it from anywhere.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -71,6 +76,9 @@ import { buildRail, visibleNavGroups } from '@/components/layout/rail-model';
 import { crumbsFor } from '@/components/layout/crumbs';
 import { ShellSlotsProvider } from '@/components/layout/shell-context';
 import { useInboxCount } from '@/components/layout/use-inbox-count';
+import { useShellSeed } from '@/lib/shell/seed';
+import { useNotifications } from '@/components/notifications/use-notifications';
+import { NotificationsDrawer } from '@/components/notifications/notifications-drawer';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const PERIOD_WORD: Record<ShellPeriodStatus, string> = { OPEN: 'open', SOFT_CLOSE: 'soft close', HARD_CLOSE: 'closed', NO_PERIOD: 'no period' };
@@ -157,7 +165,12 @@ export function BooksShell({ children }: { children: ReactNode }) {
   const { permissions, can, user, orgName } = useMe();
   const packs = useIndustryPacks();
   const inbox = useInboxCount(true);
-  const clientCtx = useClientContext(plane === 'books' && !isAll ? activeCompanyId : null);
+  const notifications = useNotifications(true);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const seed = useShellSeed();
+  const liveClientCtx = useClientContext(plane === 'books' && !isAll ? activeCompanyId : null);
+  // First paint uses the server-read seed (slice 1F) until the client read answers.
+  const clientCtx = liveClientCtx ?? (seed.clientContext?.id === activeCompanyId ? seed.clientContext : null);
   const loadedAt = useLoadedAt(pathname);
 
   const chipRef = useRef<HTMLButtonElement>(null);
@@ -193,6 +206,8 @@ export function BooksShell({ children }: { children: ReactNode }) {
     });
   }, []);
   useHotkey('[', toggleMini, { owner: 'Books rail', description: 'Collapse or expand the rail' });
+  const openNotifications = useCallback(() => setNotifOpen(true), []);
+  useHotkey('g n', openNotifications, { owner: 'Books rail', description: 'Open notifications' });
 
   // ⌘/ opens search (⌘K is owned by the CPA Desk command bar — never bind it twice).
   useEffect(() => {
@@ -462,7 +477,7 @@ export function BooksShell({ children }: { children: ReactNode }) {
     [],
   );
 
-  const userName = user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email : null;
+  const userName = (user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email : null) ?? seed.userName;
   const footEyebrow =
     view === 'client' ? (activeCompany?.name ?? 'Client') : view === 'all' ? 'All clients' : view === 'consolidated' ? 'Consolidated' : PLANES[plane].label;
   const footPeriod =
@@ -485,6 +500,45 @@ export function BooksShell({ children }: { children: ReactNode }) {
             mini={mini}
             foot={
               <RailFoot eyebrow={mini ? undefined : footEyebrow} period={mini ? undefined : footPeriod}>
+                {mini ? (
+                  <button
+                    type="button"
+                    className="rail-icon"
+                    onClick={openNotifications}
+                    aria-haspopup="dialog"
+                    aria-expanded={notifOpen}
+                    aria-keyshortcuts="g n"
+                    aria-label={notifications.unread > 0 ? `Notifications, ${notifications.unread} unread` : 'Notifications'}
+                    title={notifications.unread > 0 ? `Notifications · ${notifications.unread} unread (g n)` : 'Notifications (g n)'}
+                    style={{ position: 'relative' }}
+                  >
+                    <Icon name="history" />
+                    {notifications.unread > 0 && (
+                      <span className={notifications.attention > 0 ? 'count count--alert' : 'count'} aria-hidden="true" style={{ position: 'absolute', top: 2, right: 2 }}>
+                        {notifications.unread > 9 ? '9+' : notifications.unread}
+                      </span>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="rail-link"
+                    onClick={openNotifications}
+                    aria-haspopup="dialog"
+                    aria-expanded={notifOpen}
+                    aria-keyshortcuts="g n"
+                    aria-label={notifications.unread > 0 ? `Notifications, ${notifications.unread} unread` : 'Notifications'}
+                    style={{ width: '100%' }}
+                  >
+                    Notifications
+                    <span className="keys" aria-hidden="true">
+                      <ChordCaps chord="g n" />
+                    </span>
+                    {notifications.unread > 0 && (
+                      <span className={notifications.attention > 0 ? 'count count--alert' : 'count'}>{notifications.unread > 99 ? '99+' : notifications.unread}</span>
+                    )}
+                  </button>
+                )}
                 <div className="rail-user">
                   <UserButton appearance={{ elements: { avatarBox: { width: 32, height: 32, borderRadius: 0 } } }} />
                   {!mini && (
@@ -570,6 +624,7 @@ export function BooksShell({ children }: { children: ReactNode }) {
         <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
         <CommandBar />
       </LegacyIsland>
+      <NotificationsDrawer open={notifOpen} onClose={() => setNotifOpen(false)} n={notifications} />
       <HelpButtonFloating />
       <ToastContainer />
     </ShellSlotsProvider>

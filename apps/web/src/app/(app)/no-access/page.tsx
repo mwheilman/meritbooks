@@ -3,6 +3,8 @@ import { ACTIONS, isCapabilityKey, type Action } from '@/lib/rbac/capabilities';
 import { createAuthedServerSupabase } from '@/lib/supabase/authed';
 import { noAccessCopy } from './no-access-copy';
 
+export const metadata = { title: 'No access' };
+
 export const dynamic = 'force-dynamic';
 
 /**

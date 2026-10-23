@@ -34,7 +34,16 @@
 export const PORTED_ROUTES: readonly string[] = [
   '/dashboard',
   '/inbox',
+  '/invoices/design',
+  '/pay/[token]',
+  '/settings/payments',
+  '/settings/payments/refresh',
+  '/settings/payments/return',
   '/sign-in/[[...sign-in]]',
+  // Wave 1D — request engine + notifications (built on the kit)
+  '/requests',
+  '/r/[token]',
+  '/r/[token]/unsubscribe',
 ];
 
 /**
@@ -127,7 +136,6 @@ export const LEGACY_ROUTES: readonly string[] = [
   '/onboarding/sections/equity',
   '/onboarding/tour',
   '/operations',
-  '/pay/[token]',
   '/payroll',
   '/pbc',
   '/periods',
@@ -159,9 +167,6 @@ export const LEGACY_ROUTES: readonly string[] = [
   '/settings/autonomy',
   '/settings/billing',
   '/settings/new-entity',
-  '/settings/payments',
-  '/settings/payments/refresh',
-  '/settings/payments/return',
   '/settings/permissions',
   '/settings/roles',
   '/setup',
@@ -182,7 +187,7 @@ export const LEGACY_ROUTES: readonly string[] = [
  * The ratchet. LEGACY_ROUTES.length may never exceed this, and the test asks you
  * to lower it whenever a page is ported. It only ever goes DOWN.
  */
-export const LEGACY_BASELINE = 134;
+export const LEGACY_BASELINE = 130;
 
 /** Compile a route pattern to a pathname matcher. */
 export function routePatternToRegExp(pattern: string): RegExp {

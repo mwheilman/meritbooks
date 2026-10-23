@@ -3,6 +3,8 @@ import { PageHeader } from '@/components/ui';
 import { ApPolicyClient } from './ap-policy-client';
 import { BillsTabs } from '../bills-tabs';
 
+export const metadata = { title: 'AP policy' };
+
 export const dynamic = 'force-dynamic';
 
 export default async function ApPolicyPage() {

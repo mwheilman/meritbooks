@@ -32,6 +32,8 @@ export interface ProviderConnection {
   capability: Capability;
   provider: string;
   environment: ProviderEnvironment;
+  /** The company (core.locations) this connection belongs to; null = tenant-level (migration 175). */
+  locationId: string | null;
   accountHandle: string | null;
   /** Reference into the Vault — opaque; the secret value is fetched server-side only. */
   secretRef: string | null;
@@ -39,8 +41,22 @@ export interface ProviderConnection {
   connectedBy: string | null;
   statusDetail: string | null;
   metadata: Record<string, unknown>;
+  /** Cached processor account status (Stripe Connect; migration 175). Null = never checked. */
+  account: ConnectedAccountSnapshot;
   createdAt: string;
   updatedAt: string;
+}
+
+/** What the processor last told us about a connected account (no secrets, no full bank numbers). */
+export interface ConnectedAccountSnapshot {
+  chargesEnabled: boolean | null;
+  payoutsEnabled: boolean | null;
+  detailsSubmitted: boolean | null;
+  disabledReason: string | null;
+  requirementsDue: string[];
+  payoutBankName: string | null;
+  payoutBankLast4: string | null;
+  checkedAt: string | null;
 }
 
 /** Resolved adapter context: the connection plus the decrypted secret (server-only). */

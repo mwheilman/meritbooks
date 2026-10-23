@@ -30,6 +30,12 @@ export interface JePostSodInput {
   orgId: string;
   /** Clerk id of the person creating + posting the entry. */
   actor: string;
+  /**
+   * Who prepared the entry, when that is not the actor (e.g. the member who proposed a
+   * month-end WIP run that someone now approves). Defaults to `actor` (create + post in one
+   * request). null = system-prepared with no human preparer → no self-post conflict.
+   */
+  preparedBy?: string | null;
   /** Entry size: total debits (bigint cents as number). */
   amountCents: number;
   /** Static route label for the dual-run log. */
@@ -90,7 +96,7 @@ export async function checkManualJePostSod(
   const code = checkActionSod({
     actor: input.actor,
     action: 'post',
-    preparedBy: input.actor,
+    preparedBy: input.preparedBy === undefined ? input.actor : input.preparedBy,
     amountCents: input.amountCents,
     jeSelfPostThresholdCents: threshold,
   });

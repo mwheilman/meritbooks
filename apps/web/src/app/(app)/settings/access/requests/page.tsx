@@ -1,6 +1,8 @@
 import { PageHeader } from '@/components/ui';
 import { AccessRequestsClient } from './requests-client';
 
+export const metadata = { title: 'Access requests' };
+
 export const dynamic = 'force-dynamic';
 
 /**

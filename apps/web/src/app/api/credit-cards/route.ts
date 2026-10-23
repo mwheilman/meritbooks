@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
 import { z } from 'zod';
 import { fetchCoreMap } from '@/lib/stitch-core';
+import { fetchSplitSummaries, type SplitSummary } from '@/lib/bank/splits/service';
 
 const ccQuerySchema = z.object({
   status: z.enum(['all', 'PENDING', 'CATEGORIZED', 'FLAGGED', 'APPROVED']).optional(),
@@ -124,6 +125,9 @@ export const GET = apiQueryHandler(
     const venMap = await fetchCoreMap<{ id: string; name: string; display_name: string | null }>(
       ctx.supabase, 'vendors', 'id, name, display_name', (data ?? []).map((t: any) => t.ai_vendor_id));
 
+    // "Split · 3 lines" (FPB-bank-feed-splits) — card lines split through the same path.
+    const splitById = await fetchSplitSummaries(ctx.supabase, txnIds).catch(() => new Map<string, SplitSummary>());
+
     // Transform data — add receipt status + stitched entities
     const rows = (data ?? []).map((t: any) => {
       const receipt = receiptMap[t.id];
@@ -140,6 +144,7 @@ export const GET = apiQueryHandler(
         ai_vendor: t.ai_vendor_id ? venMap.get(t.ai_vendor_id) ?? null : null,
         receiptStatus,
         chaseCount: receipt?.chase_reminder_count ?? 0,
+        split: splitById.get(t.id) ?? null,
       };
     });
 

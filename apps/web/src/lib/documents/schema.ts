@@ -356,3 +356,18 @@ export function entityRecordHref(
       return null;
   }
 }
+
+/**
+ * Is `path` an object key inside this org's folder of the documents bucket? Uploads are
+ * always keyed `${orgId}/<entity>/<id>-<name>` (lib/documents/schema.ts buildStoragePath).
+ * Downloads run on the service role, which can read ANY tenant's objects, so a
+ * metadata row whose storage_path was pointed elsewhere must never be followed.
+ */
+export function isOrgStoragePath(orgId: string, path: string | null | undefined): boolean {
+  if (!orgId || typeof path !== 'string' || path.length === 0 || path.length > 1024) return false;
+  if (!path.startsWith(`${orgId}/`)) return false;
+  // No traversal, empty segments, backslashes or control characters.
+  // eslint-disable-next-line no-control-regex
+  if (/[\\\u0000-\u001f]/.test(path)) return false;
+  return path.split('/').every((seg) => seg.length > 0 && seg !== '.' && seg !== '..');
+}

@@ -3,47 +3,59 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiQueryHandler } from '@/lib/api-handler';
-import { collectInbox } from '@/lib/inbox/collect';
 import { canApprove } from '@/lib/money/approvals';
 import { createAdminSupabase } from '@/lib/supabase/server';
+import { groupInboxItems } from '@/lib/inbox/collect';
+import { capPerLane, loadNeedsAttention, resolveWorkScope } from '@/lib/work/needs-attention';
 
 /**
  * GET /api/inbox
  *
- * The ACTION INBOX feed — one ranked, RLS-scoped list of everything that needs the
- * caller right now: pending money-movement approvals, submitted expense reports,
- * bills held by AP policy, expense-policy-flagged drafts, open AI proposals,
- * overdue/near-term obligations, and unposted manual journal-entry drafts.
+ * The INBOX feed — one ranked, RLS-scoped list of everything that needs the caller
+ * right now, in four lanes (one per Inbox tab): approvals (money movement, expense
+ * reports, policy blocks), exceptions (AI proposals, flagged bank lines and receipts,
+ * job costs), alerts (overdue / near-term obligations) and drafts (manual JEs).
  *
- * READ-ONLY aggregate — no new tables, no writes. Each source degrades independently
- * (a missing table is reported in `degraded`, never a 500). apiQueryHandler enforces
- * Clerk auth + Zod; RLS enforces tenant isolation. Page + route gate on `reports:view`.
+ * CLIENT SCOPE. `location_id` (attached automatically by the shared useQuery hook
+ * when a client is active) pins every lane to that client; it is validated against
+ * the caller's client scope SERVER-SIDE (403 under `enforce` when out of scope). No
+ * `location_id` = every client the caller may see, plus organization-level items.
  *
- * Money-movement approval authority (`canApprove`) is resolved ONCE, on the Core
- * identity spine (admin client, read-only) — it decides whether a pending approval is
- * ranked CRITICAL ("you can clear this") vs HIGH ("waiting, but not on you"). It never
- * relaxes RLS: the approval rows themselves come from the user-scoped client.
+ * Counts come from lib/work/needs-attention — the same service the home and the rail
+ * use — computed over the FULL scoped set; the item list is capped per lane for
+ * payload size (`truncated` says which lanes were cut).
+ *
+ * READ-ONLY — no writes. Each source degrades independently (`degraded`), never a 500.
+ * Money-movement approval authority (`canApprove`, on the Core identity spine) only
+ * changes an approval's severity; it never relaxes RLS.
  */
+
+/** Rows per lane returned to the client; counts are always over the full set. */
+const LIST_CAP_PER_LANE = 500;
 
 const querySchema = z.object({
   /** Days ahead an obligation counts as an inbox alert (overdue always). 1..180, default 30. */
   alert_horizon: z.coerce.number().int().optional(),
-  /** Override "today" (yyyy-mm-dd) — testing/hypotheticals. Defaults to server date. */
+  /** Override "today" (yyyy-mm-dd) — testing/hypotheticals. Defaults to the org's date. */
   as_of: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  /** The active client (core.locations id); absent or 'all' = all clients. */
+  location_id: z.string().max(64).optional(),
+  /** `counts` = the summary only (the rail's badge poll) — no item list. */
+  view: z.enum(['full', 'counts']).optional(),
 });
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
-  const asOf = params.as_of ?? todayIso();
-  // Default 30 days, clamped to 1..180 (previously done in the schema transform).
+  const resolved = await resolveWorkScope(ctx, params.location_id);
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.error, code: resolved.code }, { status: resolved.status });
+  }
+
+  // Default 30 days, clamped to 1..180.
   const alertHorizonDays =
-    params.alert_horizon != null ? Math.min(Math.max(params.alert_horizon, 1), 180) : 30;
+    params.alert_horizon != null ? Math.min(Math.max(params.alert_horizon, 1), 180) : undefined;
 
   // Resolve money-movement approval authority once, on the identity spine. Read-only;
   // fails closed to "cannot approve" so nothing is over-elevated on a lookup error.
@@ -56,18 +68,27 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
     }
   }
 
-  const { items, groups, counts, degraded } = await collectInbox(ctx.supabase, {
-    asOf,
-    canApproveMoney,
+  const countsOnly = params.view === 'counts';
+  const result = await loadNeedsAttention(ctx.supabase, {
+    scope: resolved.scope,
+    asOf: params.as_of,
     alertHorizonDays,
+    canApproveMoney,
+    withNames: !countsOnly,
   });
+  if (countsOnly) {
+    return NextResponse.json({ asOf: result.asOf, scope: result.scope, counts: result.counts, degraded: result.degraded });
+  }
+  const { items, truncated } = capPerLane(result.items, LIST_CAP_PER_LANE);
 
   return NextResponse.json({
-    asOf,
+    asOf: result.asOf,
     canApproveMoney,
+    scope: result.scope,
     items,
-    groups,
-    counts,
-    degraded,
+    groups: groupInboxItems(items),
+    counts: result.counts,
+    truncated,
+    degraded: result.degraded,
   });
 });

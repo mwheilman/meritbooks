@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/ui';
 import { BasisAdjustmentsManager } from './manager';
 
 export const dynamic = 'force-dynamic';
+export const metadata = { title: 'Reporting-basis adjustments' };
 
 /**
  * Reporting-basis adjustments manager. Defining how a statement is re-presented on a TAX /

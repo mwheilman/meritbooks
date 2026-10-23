@@ -138,6 +138,7 @@ export async function GET(req: NextRequest) {
       .from('invoice_templates')
       .select('remit_to')
       .eq('org_id', orgId)
+      .order('is_default', { ascending: false })
       .limit(1)
       .maybeSingle(),
   ]);

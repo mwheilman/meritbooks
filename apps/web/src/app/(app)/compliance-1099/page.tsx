@@ -1,6 +1,8 @@
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { Compliance1099Client } from './compliance-1099-client';
 
+export const metadata = { title: '1099 readiness' };
+
 export const dynamic = 'force-dynamic';
 
 export default async function Compliance1099Page() {

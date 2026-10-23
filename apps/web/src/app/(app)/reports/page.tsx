@@ -6,6 +6,7 @@ import { ReportViewer } from './report-viewer';
 import { utcIsoDate } from './period-presets';
 
 export const dynamic = 'force-dynamic';
+export const metadata = { title: 'Reports' };
 
 /**
  * Everything the viewer's FIRST render depends on is read here and passed down, so the

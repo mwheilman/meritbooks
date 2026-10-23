@@ -55,6 +55,7 @@ const DEFERRED_CHILDREN = new Set<string>([
   // reference / config rows keyed to a client-owned dimension, not client books
   'core.employees', // HR master data (department FK); the seat itself, not client books
   'core.vendors', // shared vendor master (default_department_id is a hint, not ownership)
+  'public.customer_invoice_settings', // per-CUSTOMER invoice defaults (176): customers are org-level; template_id is a presentation reference, not ownership
   'core.memberships', // identity spine (role_definition_id FK)
   'core.role_versions', // grant definitions (role FK) — the role row itself is scoped
   'core.permission_set_versions',

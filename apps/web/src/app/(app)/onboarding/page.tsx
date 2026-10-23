@@ -4,6 +4,8 @@ import { requirePreparerCapabilityPage } from '@/lib/team/admin-scope-guard';
 import { resolveOnboardingFlow } from '@/lib/onboarding/flow';
 import { OnboardingWizard } from './onboarding-wizard';
 
+export const metadata = { title: 'Get started' };
+
 export const dynamic = 'force-dynamic';
 
 /**

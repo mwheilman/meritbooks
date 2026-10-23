@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
 import { formatMoney, type BankFeedResponse, type BankFeedRow } from '@meritbooks/shared';
 import type { ApproveBankTransactionInput, FlagTransactionInput } from '@/lib/validations/transactions';
+import type { SplitSummary } from '@/lib/bank/splits/types';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { isSpecificCompany } from '@/lib/company-scope';
 import { BankFeedFilters } from './bank-feed-filters';
@@ -76,6 +77,12 @@ interface DuplicatesResponse {
   duplicate_ids: string[];
   total_flagged: number;
   group_count: number;
+}
+
+
+/** A row whose saved (unposted) split the approve route will post. */
+function hasDraftSplit(txn: BankFeedRow): boolean {
+  return (txn as BankFeedRow & { split?: SplitSummary | null }).split?.status === 'DRAFT';
 }
 
 export type SortField = 'date' | 'amount' | 'confidence' | 'vendor' | 'company';
@@ -257,7 +264,9 @@ export function BankFeedContent() {
 
   const handleApprove = useCallback(async (txn: BankFeedRow) => {
     const account = txn.final_account ?? txn.ai_account;
-    if (!account) {
+    // A saved draft split posts itself (the server reads it); no single account needed.
+    const draftSplit = hasDraftSplit(txn);
+    if (!account && !draftSplit) {
       addToast('error', 'Cannot approve: no GL account assigned');
       return;
     }
@@ -268,7 +277,7 @@ export function BankFeedContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           transaction_id: txn.id,
-          account_id: account.id,
+          account_id: account?.id,
           vendor_id: txn.ai_vendor?.id ?? undefined,
           job_id: txn.final_job?.id ?? undefined,
         }),
@@ -419,13 +428,13 @@ export function BankFeedContent() {
     for (const id of txnIds) {
       const txn = transactions.find((t) => t.id === id);
       const account = txn?.final_account ?? txn?.ai_account;
-      if (account) {
+      if (account || (txn && hasDraftSplit(txn))) {
         const res = await fetch('/api/bank-feed/approve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             transaction_id: id,
-            account_id: account.id,
+            account_id: account?.id,
             vendor_id: txn?.ai_vendor?.id ?? undefined,
             job_id: txn?.final_job?.id ?? undefined,
           }),

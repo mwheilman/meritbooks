@@ -2,6 +2,8 @@ import { PageHeader } from '@/components/ui';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { NewEntityWizard } from './new-entity-wizard';
 
+export const metadata = { title: 'Add a company' };
+
 export const dynamic = 'force-dynamic';
 
 export default async function NewEntityPage() {

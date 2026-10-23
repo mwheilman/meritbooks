@@ -4,6 +4,8 @@ import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { DepositsManager } from './deposits-manager';
 
+export const metadata = { title: 'Customer deposits' };
+
 /**
  * Customer Deposits / Retainers — unapplied customer cash held as a liability
  * (Customer Deposits, 2420) and drawn down against invoices.

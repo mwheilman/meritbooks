@@ -5,9 +5,10 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { isCapabilityEntitled } from '@/lib/money/connections';
 import { createLinkToken, type PlaidEnv } from '@/lib/money/providers/plaid';
+import { plaidMode } from '@/lib/money/payments-mode';
 import { requirePermission } from '@/lib/rbac/require-permission';
 
-const ENV: PlaidEnv = process.env.PLAID_ENV === 'production' ? 'production' : 'sandbox';
+const ENV: PlaidEnv = plaidMode().apiEnv;
 
 /**
  * POST /api/integrations/plaid/link-token

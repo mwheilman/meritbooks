@@ -59,6 +59,7 @@ export const navigation: NavGroup[] = [
       { label: 'Home', href: '/dashboard', icon: 'home', keys: 'g h' },
       { label: 'Inbox', href: '/inbox', icon: 'flag', keys: 'g i' },
       { label: 'Close', href: '/close', icon: 'check', keys: 'g c' },
+      { label: 'Requests', href: '/requests', icon: 'clock' },
     ],
   },
   {
@@ -73,7 +74,7 @@ export const navigation: NavGroup[] = [
     items: [
       { label: 'Bills', href: '/bills', icon: 'bill' },
       { label: 'Purchase orders', href: '/purchase-orders', icon: 'clipboard' },
-      { label: 'Pay runs', href: '/checks', icon: 'dollar' },
+      { label: 'Checks & payments', href: '/checks', icon: 'dollar' },
       { label: 'Expenses', href: '/expenses', icon: 'receipt' },
       { label: 'Receipts', href: '/receipts', icon: 'camera' },
       { label: 'Payroll', href: '/payroll', icon: 'users' },
@@ -85,6 +86,7 @@ export const navigation: NavGroup[] = [
     label: 'Receivables',
     items: [
       { label: 'Invoices', href: '/invoices', icon: 'file-text' },
+      { label: 'Invoice design', href: '/invoices/design', icon: 'sliders' },
       { label: 'Estimates', href: '/estimates', icon: 'file-text' },
       { label: 'Customer deposits', href: '/customer-deposits', icon: 'dollar' },
       { label: 'Collections', href: '/collections', icon: 'clock' },
@@ -176,6 +178,7 @@ export const navigation: NavGroup[] = [
     label: 'Team',
     items: [
       { label: 'Team & access', href: '/team', icon: 'users' },
+      { label: 'Team performance', href: '/team?tab=performance', icon: 'up' },
       { label: 'Roles & permissions', href: '/settings/roles', icon: 'lock' },
       { label: 'Access requests', href: '/settings/access/requests', icon: 'lock' },
       { label: 'Access reviews', href: '/settings/access/reviews', icon: 'eye' },

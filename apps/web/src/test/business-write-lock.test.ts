@@ -35,6 +35,7 @@ import { applyMigrationFile, createTestDb, listMigrationFiles } from './pg';
 
 const LOCK_MIGRATION = '171';
 const LOCK_MIGRATION_2 = '172';
+const LOCK_MIGRATION_3 = '176';
 /** The migration right before 171 (whatever its number) — the negative-control state. */
 const PRE_LOCK = listMigrationFiles().filter((f) => f.slice(0, 3) < LOCK_MIGRATION).pop()!.slice(0, 3);
 
@@ -157,11 +158,30 @@ const BUSINESS_LOCKED_TABLES_172: ReadonlyArray<readonly [schema: 'public' | 'co
   ['public', 'expense_policies'],
 ];
 
+/**
+ * Tables 176 §4 makes SELECT-only for members (HIGH-2: the AR / internal-billing / deposit
+ * tables the Projects seam used to block, plus the invoice design templates and the
+ * per-customer template / CC settings). Keep in sync with 176 §4.
+ */
+const BUSINESS_LOCKED_TABLES_176: ReadonlyArray<readonly [schema: 'public' | 'core', table: string]> = [
+  ['public', 'invoices'],
+  ['public', 'invoice_lines'],
+  ['public', 'internal_invoices'],
+  ['public', 'internal_invoice_lines'],
+  ['public', 'customer_deposits'],
+  ['public', 'customer_deposit_applications'],
+  ['public', 'invoice_templates'],
+  ['public', 'customer_invoice_settings'],
+  // 177: bank-feed split lines + remembered split rules (service writes only)
+  ['public', 'bank_transaction_splits'],
+  ['public', 'split_rules'],
+];
+
 /** 172 §2: append-only evidence — no UPDATE / DELETE / TRUNCATE for ANY role. */
 const APPEND_ONLY_EVIDENCE = ['audit_log', 'ai_audit_log', 'invoice_events', 'vendor_compliance_events'] as const;
 
-/** Every member-locked table (171 + 172). */
-const ALL_LOCKED_TABLES = [...BUSINESS_LOCKED_TABLES, ...BUSINESS_LOCKED_TABLES_172];
+/** Every member-locked table (171 + 172 + 176). */
+const ALL_LOCKED_TABLES = [...BUSINESS_LOCKED_TABLES, ...BUSINESS_LOCKED_TABLES_172, ...BUSINESS_LOCKED_TABLES_176];
 
 /** 171 §2: member policies were already read-only / service-only; write GRANTs revoked. */
 const GRANT_HARDENED_TABLES: ReadonlyArray<readonly [string, string]> = [
@@ -184,10 +204,6 @@ const GRANT_HARDENED_TABLES: ReadonlyArray<readonly [string, string]> = [
 //       member-writable.
 //   C — ownership / sensitivity unclear (shared with Projects, config, evidence) — needs
 //       an owner decision before it is locked or accepted.
-const A_SEAM =
-  'A (seam-blocked): money table — every write site was moved to the service role EXCEPT the ones in files the Projects-seam ' +
-  'builder owns (lib/invoices/create-invoice.ts, lib/services/billing-consumer.ts, dept-invoice-consumer.ts, ' +
-  'lib/customer-deposits/**); lock it (172 pattern) once the seam lands';
 const A_PROJECTS =
   'A (partial, 172 §3): Merit Projects still proposes / approves through the member client (apps/projects/src/lib/ai/decisions.ts). ' +
   'Members may only INSERT a PROPOSED row and move a PROPOSED row to a disposition (evidence immutable, no DELETE); ' +
@@ -196,13 +212,6 @@ const B = 'B: user workspace / planning / AI working state / append-only — int
 const C = 'C: ownership or sensitivity unclear — needs an owner decision';
 
 const MEMBER_WRITABLE: Readonly<Record<string, string>> = {
-  // A — receivables / internal billing: blocked on the Projects seam
-  'public.invoices': A_SEAM,
-  'public.invoice_lines': A_SEAM,
-  'public.customer_deposits': A_SEAM,
-  'public.customer_deposit_applications': A_SEAM,
-  'public.internal_invoices': A_SEAM,
-  'public.internal_invoice_lines': A_SEAM,
   // A — AI decision log: partial lock (Projects writes it)
   'public.ai_decisions': A_PROJECTS,
   // B
@@ -213,7 +222,6 @@ const MEMBER_WRITABLE: Readonly<Record<string, string>> = {
   'public.learned_preferences': B,
   'public.agent_runs': B,
   'public.agent_run_steps': B,
-  'public.invoice_templates': B,
   'public.invoice_text_overrides': B,
   'public.pbc_requests': B,
   'public.subscriptions': B,
@@ -548,17 +556,70 @@ describe('migration 171 — after (members are SELECT-only on business tables)',
     for (const [s, t] of ALL_LOCKED_TABLES) expect(MEMBER_WRITABLE[q(s, t)], q(s, t)).toBeUndefined();
   });
 
-  it('RATCHET: no class-A table is left without a named blocker (172 cleared the follow-up list)', () => {
+  it('RATCHET: no class-A table is left without a named blocker (172 + 176 cleared the follow-up list)', () => {
     const a = Object.entries(MEMBER_WRITABLE).filter(([, why]) => why.startsWith('A')).map(([t]) => t).sort();
-    expect(a).toEqual([
-      'public.ai_decisions',
-      'public.customer_deposit_applications',
-      'public.customer_deposits',
-      'public.internal_invoice_lines',
-      'public.internal_invoices',
-      'public.invoice_lines',
-      'public.invoices',
+    // 176 locked the seam-blocked receivables tables (HIGH-2); only the Projects-written
+    // AI decision log remains class A.
+    expect(a).toEqual(['public.ai_decisions']);
+  });
+
+  // ── 176 (HIGH-2): the AR tables ───────────────────────────────────────────
+  it('176: a member can no longer issue, rewrite or delete an invoice; the service role still can', async () => {
+    const CUST = 'aaaaaaaa-1760-0000-0000-0000000000c1';
+    await db.query(`insert into core.customers (id, org_id, name) values ($1, $2, 'Customer 176') on conflict (id) do nothing`, [CUST, ORG_A]);
+    const insertInvoice = (num: string) =>
+      db.query<{ id: string }>(
+        `insert into public.invoices (org_id, location_id, customer_id, invoice_number, invoice_date, due_date, total_cents)
+         values ($1, $2, $3, $4, '2025-03-10', '2025-04-09', 12500) returning id`,
+        [ORG_A, LOC_A, CUST, num],
+      );
+    const memberErr = await asRole('authenticated', async () => {
+      try { await insertInvoice('INV-176-M'); return null; } catch (e) { return e instanceof Error ? e.message : String(e); }
+    });
+    expect(memberErr).toMatch(/permission denied/);
+
+    const svc = await asRole('service_role', () => insertInvoice('INV-176-S'));
+    expect(svc.rows).toHaveLength(1);
+    const id = svc.rows[0].id;
+
+    const errs = await asRole('authenticated', async () => [
+      await errorOf(`update public.invoices set status = 'PAID', amount_paid_cents = total_cents where id = $1`, [id]),
+      await errorOf(`delete from public.invoices where id = $1`, [id]),
+      await errorOf(`insert into public.invoice_templates (org_id, location_id, name) values ($1, $2, 'Forged')`, [ORG_A, LOC_A]),
     ]);
+    for (const e of errs) expect(e).toMatch(/permission denied/);
+
+    // Members still read their own tenant's invoice (and not another tenant's).
+    const seen = await asRole('authenticated', () => db.query(`select id from public.invoices where id = $1`, [id]));
+    expect(seen.rows).toHaveLength(1);
+    const other = await asRole(
+      'authenticated',
+      () => db.query(`select id from public.invoices where id = $1`, [id]),
+      { sub: MEMBER, org_id: ORG_B, role: 'authenticated' },
+    );
+    expect(other.rows).toHaveLength(0);
+    await db.query(`delete from public.invoices where id = $1`, [id]);
+  });
+
+  it('176: the 163 client-scope RESTRICTIVE policy survives on the AR tables', async () => {
+    const r = await db.query<{ tablename: string }>(
+      `select tablename from pg_policies where schemaname = 'public' and policyname = 'client_scope_rls' and permissive = 'RESTRICTIVE'
+         and tablename in ('invoices', 'invoice_lines', 'customer_deposits', 'internal_invoices')`,
+    );
+    expect(r.rows.map((x) => x.tablename).sort()).toEqual(['customer_deposits', 'internal_invoices', 'invoice_lines', 'invoices']);
+  });
+
+  it('is idempotent: re-running 176 changes nothing (policies, grants)', async () => {
+    const snap = async () => ({
+      pol: (await db.query(`select schemaname, tablename, policyname, cmd, permissive, roles::text r, qual, with_check
+                              from pg_policies where schemaname in ('public', 'core') order by 1, 2, 3`)).rows,
+      grants: (await db.query(`select table_schema, table_name, grantee, privilege_type from information_schema.role_table_grants
+                                where table_schema in ('public', 'core') and grantee in ('anon', 'authenticated') order by 1, 2, 3, 4`)).rows,
+    });
+    const before = await snap();
+    const file = listMigrationFiles().find((f) => f.startsWith(`${LOCK_MIGRATION_3}_`))!;
+    await applyMigrationFile(db, file);
+    expect(await snap()).toEqual(before);
   });
 });
 
@@ -909,7 +970,7 @@ function scanSource(src: string, rel: string, locked: ReadonlySet<string>): Site
   return sites;
 }
 
-describe('static: no member-client write to a locked table (171 + 172)', () => {
+describe('static: no member-client write to a locked table (171 + 172 + 176)', () => {
   const lockedNames = new Set(ALL_LOCKED_TABLES.map(([, t]) => t));
   // Books writes ai_decisions only through the service role too (172 §3: Projects is the
   // one remaining member writer, so it is scanned in apps/web only).
@@ -938,7 +999,7 @@ describe('static: no member-client write to a locked table (171 + 172)', () => {
       `await writerFor(db).from(RUNS).insert(rows);`,
     ].join('\n');
     const flagged = scanSource(src, 'x.ts', lockedNames).map((s) => `${s.line}:${s.table}`);
-    expect(flagged).toEqual(['2:bills', '4:gl_entries', '7:bills', '8:items', '9:bills', '20:recurring_je_runs']);
+    expect(flagged).toEqual(['2:bills', '4:gl_entries', '7:bills', '8:items', '9:invoices', '20:recurring_je_runs']);
   });
 
   it('apps/web/src writes locked tables only through the service role', () => {
@@ -959,11 +1020,15 @@ describe('static: no member-client write to a locked table (171 + 172)', () => {
     }
   });
 
-  it('no migration after 171 / 172 re-grants member writes or adds a member write policy on a locked table', () => {
+  it('no migration after 171 / 172 / 176 re-grants member writes or adds a member write policy on a locked table', () => {
     const later = listMigrationFiles().filter((f) => f.slice(0, 3) > LOCK_MIGRATION && /^\d{3}_/.test(f));
     for (const f of later) {
       const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8').toLowerCase();
-      const tables = f.slice(0, 3) > LOCK_MIGRATION_2 ? ALL_LOCKED_TABLES : BUSINESS_LOCKED_TABLES;
+      const tables = f.slice(0, 3) > LOCK_MIGRATION_3
+        ? ALL_LOCKED_TABLES
+        : f.slice(0, 3) > LOCK_MIGRATION_2
+          ? [...BUSINESS_LOCKED_TABLES, ...BUSINESS_LOCKED_TABLES_172]
+          : BUSINESS_LOCKED_TABLES;
       for (const [s, t] of tables) {
         const tbl = `${s}.${t}`;
         const grant = new RegExp(`grant[^;]*(insert|update|delete|all)[^;]*on\\s+(table\\s+)?${tbl.replace('.', '\\.')}\\b[^;]*to[^;]*(authenticated|anon|public)`);

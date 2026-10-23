@@ -1,6 +1,8 @@
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { AgentsClient } from './AgentsClient';
 
+export const metadata = { title: 'Agents' };
+
 export const dynamic = 'force-dynamic';
 
 /**

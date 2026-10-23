@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { DealsList } from './deals-list';
 
+export const metadata = { title: 'Deals & trade-ins' };
+
 /**
  * Deals & trade-ins (FPB §3.4–3.5, DL-11; D2 slice A). Query: tab=deals|trades,
  * status. Guard + client scope: ../layout.tsx.

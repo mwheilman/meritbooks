@@ -36,6 +36,7 @@ import {
   resolveChargeMethod,
   nextInternalInvoiceNumber,
 } from './internal-invoices';
+import { isWriteScopeError, scopedWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -154,10 +155,22 @@ async function processEvent(
   // Resolve charge method from Books config (payload never carries it).
   const chargeMethod = await resolveChargeMethod(db, p.location_id, p.provider_department_id);
 
+  // internal_invoices / internal_invoice_lines are SELECT-only for members (migration
+  // 176). The drains hand in the service role (or the scheduler's SYSTEM org client), so
+  // `w` is the service role pinned to THIS event's org; the company is verified to belong
+  // to it before anything is written.
+  let w: DB;
+  try {
+    w = await scopedWriter(db, orgId, [p.location_id]);
+  } catch (e) {
+    if (isWriteScopeError(e)) return reject(e.message);
+    throw e;
+  }
+
   // Mint number; create the internal-invoice record (approved upstream in Projects).
   const invoiceNumber = await nextInternalInvoiceNumber(db, orgId);
   const now = new Date().toISOString();
-  const { data: inv, error: invErr } = await db
+  const { data: inv, error: invErr } = await w
     .from('internal_invoices')
     .insert({
       org_id: orgId,
@@ -188,9 +201,9 @@ async function processEvent(
     description: l.description || 'Internal services',
     amount_cents: Math.round(Number(l.amount_cents)),
   }));
-  const { error: lineErr } = await db.from('internal_invoice_lines').insert(lineRows);
+  const { error: lineErr } = await w.from('internal_invoice_lines').insert(lineRows);
   if (lineErr) {
-    await db.from('internal_invoices').delete().eq('id', invoiceId);
+    await w.from('internal_invoices').delete().eq('id', invoiceId).eq('org_id', orgId);
     return reject(`Internal invoice lines: ${lineErr.message}`);
   }
 
@@ -210,12 +223,12 @@ async function processEvent(
     });
     glEntryId = r.glEntryId;
   } catch (e) {
-    await db.from('internal_invoices').delete().eq('id', invoiceId); // lines cascade; frees source_ref for retry
+    await w.from('internal_invoices').delete().eq('id', invoiceId).eq('org_id', orgId); // lines cascade; frees source_ref for retry
     return reject(e instanceof Error ? e.message : 'Booking failed');
   }
 
   // Finalize the invoice + write the number back onto the event row.
-  await db.from('internal_invoices').update({ status: 'booked', booked_at: now, booked_gl_entry_id: glEntryId }).eq('id', invoiceId);
+  await w.from('internal_invoices').update({ status: 'booked', booked_at: now, booked_gl_entry_id: glEntryId }).eq('id', invoiceId).eq('org_id', orgId);
   // Lost the claim after booking → the new owner finds this invoice by source_event_id.
   await finalize({ invoice_number: invoiceNumber, gl_entry_id: glEntryId }, invoiceNumber);
 }

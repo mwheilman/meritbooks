@@ -22,6 +22,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { assertOrgRefs, scopedWriter } from '@/lib/db/scoped-writer';
 import {
   postJournalEntry,
   type JournalEntryLineInput,
@@ -260,6 +261,16 @@ export async function takeDeposit(db: DB, input: TakeDepositInput): Promise<Depo
     throw new PostingError('Deposit amount must be a positive integer of cents');
   }
 
+  // customer_deposits is SELECT-only for members (migration 176). The route has already
+  // authorized the action; verify every referenced id is in this org (FKs never check the
+  // tenant) and the company is in the caller's client scope BEFORE anything posts, then
+  // write through the service role, org pinned.
+  await assertOrgRefs(input.orgId, [
+    { schema: 'core', table: 'customers', ids: [input.customerId], label: 'customer' },
+    { schema: 'core', table: 'jobs', ids: [input.jobId], label: 'job' },
+  ], { caller: db });
+  const w = await scopedWriter(db, input.orgId, [input.locationId]);
+
   const deposits = await resolveRole(db, input.orgId, 'CUSTOMER_DEPOSITS', input.locationId);
   const cash = input.undeposited
     ? await resolveRole(db, input.orgId, 'UNDEPOSITED_FUNDS', input.locationId)
@@ -280,7 +291,7 @@ export async function takeDeposit(db: DB, input: TakeDepositInput): Promise<Depo
     throw new PostingError(je.error ?? 'Failed to post customer deposit');
   }
 
-  const { data, error } = await db
+  const { data, error } = await w
     .from('customer_deposits')
     .insert({
       org_id: input.orgId,
@@ -382,6 +393,12 @@ export async function applyDeposit(db: DB, input: ApplyDepositInput): Promise<Ap
 
   assertCanApply(deposit, invoiceBalance, input.amountCents);
 
+  // customer_deposit_applications / customer_deposits / invoices are SELECT-only for
+  // members (migration 176): both rows were read through the caller's client above (RLS
+  // proved org + client scope); the writes below go through the service role, org pinned,
+  // after the company is re-checked against the caller's scope.
+  const w = await scopedWriter(db, input.orgId, [deposit.location_id, invoice.location_id]);
+
   const deposits = await resolveRole(db, input.orgId, 'CUSTOMER_DEPOSITS', deposit.location_id);
   const ar = await resolveRole(db, input.orgId, 'AR_CONTROL');
 
@@ -399,7 +416,7 @@ export async function applyDeposit(db: DB, input: ApplyDepositInput): Promise<Ap
   });
   if (!je.success || !je.entry_id) throw new PostingError(je.error ?? 'Failed to post deposit application');
 
-  const { data: appRow, error: appErr } = await db
+  const { data: appRow, error: appErr } = await w
     .from('customer_deposit_applications')
     .insert({
       org_id: input.orgId,
@@ -421,7 +438,7 @@ export async function applyDeposit(db: DB, input: ApplyDepositInput): Promise<Ap
   // matches zero rows and we unwind. (The DB CHECK applied<=amount is the backstop.)
   const newApplied = deposit.applied_cents + input.amountCents;
   const newStatus = statusAfterApply(deposit.amount_cents, newApplied);
-  const { data: updated, error: updErr } = await db
+  const { data: updated, error: updErr } = await w
     .from('customer_deposits')
     .update({ applied_cents: newApplied, status: newStatus, updated_at: new Date().toISOString() })
     .eq('id', deposit.id)
@@ -430,7 +447,7 @@ export async function applyDeposit(db: DB, input: ApplyDepositInput): Promise<Ap
     .select('id');
   if (updErr || !updated || updated.length === 0) {
     // Lost the race (or CHECK rejected). Unwind both the subledger row and the JE.
-    await db.from('customer_deposit_applications').delete().eq('id', appRow.id).eq('org_id', input.orgId);
+    await w.from('customer_deposit_applications').delete().eq('id', appRow.id).eq('org_id', input.orgId);
     await reverseGlEntry(db, input.orgId, je.entry_id, 'Concurrent deposit application; unwound');
     throw new PostingError('Deposit changed concurrently; application was not applied. Retry.');
   }
@@ -438,7 +455,7 @@ export async function applyDeposit(db: DB, input: ApplyDepositInput): Promise<Ap
   // Advance the invoice (applying a deposit settles AR just like a cash receipt).
   const newPaid = toNum(invoice.amount_paid_cents) + input.amountCents;
   const invStatus = newPaid >= toNum(invoice.total_cents) ? 'PAID' : 'PARTIALLY_PAID';
-  await db
+  await w
     .from('invoices')
     .update({ amount_paid_cents: newPaid, status: invStatus, updated_at: new Date().toISOString() })
     .eq('id', invoice.id)
@@ -490,6 +507,10 @@ export async function refundDeposit(db: DB, input: RefundDepositInput): Promise<
   const remaining = refundableCents(deposit);
   if (remaining <= 0) throw new PostingError('Deposit has no unapplied balance to refund');
 
+  // customer_deposits is SELECT-only for members (migration 176): read above through the
+  // caller's client; the update goes through the service role, org pinned.
+  const w = await scopedWriter(db, input.orgId, [deposit.location_id]);
+
   const deposits = await resolveRole(db, input.orgId, 'CUSTOMER_DEPOSITS', deposit.location_id);
   const cash = await resolveCashSide(db, input.orgId, input.rail ?? 'ach', deposit.location_id);
 
@@ -509,7 +530,7 @@ export async function refundDeposit(db: DB, input: RefundDepositInput): Promise<
   if (!je.success || !je.entry_id) throw new PostingError(je.error ?? 'Failed to post deposit refund');
 
   const newRefunded = deposit.refunded_cents + remaining;
-  const { data: updated, error: updErr } = await db
+  const { data: updated, error: updErr } = await w
     .from('customer_deposits')
     .update({ refunded_cents: newRefunded, status: 'REFUNDED', updated_at: new Date().toISOString() })
     .eq('id', deposit.id)

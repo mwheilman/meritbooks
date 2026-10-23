@@ -4,6 +4,8 @@ import { Lockup } from '@meritbooks/merit-ui';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { previewInvitationByToken, isWellFormedInviteToken, type InvitationPreview } from '@/lib/team/invitations';
 
+export const metadata = { title: 'Sign up' };
+
 export const dynamic = 'force-dynamic';
 
 /**

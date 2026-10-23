@@ -4,6 +4,8 @@ import { TemplateSuggestionsNote } from '@/components/access/template-suggestion
 import { RolesClient } from './roles-client';
 import { DualRunPanel } from './dual-run-panel';
 
+export const metadata = { title: 'Roles & permissions' };
+
 export const dynamic = 'force-dynamic';
 
 /**

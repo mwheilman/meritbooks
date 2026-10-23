@@ -3,6 +3,8 @@ import { PageHeader } from '@/components/ui';
 import { TemplateSuggestionsNote } from '@/components/access/template-suggestions-note';
 import { RolesClient } from '../roles/roles-client';
 
+export const metadata = { title: 'Permissions' };
+
 export const dynamic = 'force-dynamic';
 
 /**

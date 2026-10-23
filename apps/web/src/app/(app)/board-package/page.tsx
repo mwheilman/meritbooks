@@ -1,6 +1,8 @@
 import { PageHeader } from '@/components/ui';
 import { BoardPackageViewer } from './board-package-viewer';
 
+export const metadata = { title: 'Board package' };
+
 export default function BoardPackagePage() {
   return (
     <>

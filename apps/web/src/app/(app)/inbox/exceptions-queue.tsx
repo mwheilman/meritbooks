@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button, Conf, Icon, Keyhints, QueueTable, Seg, Tag, money, type QueueColumn, type TagTone } from '@meritbooks/merit-ui';
 import { addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
-import type { ExceptionItem, ExceptionSource, ExceptionsResponse, Disposition } from './inbox-types';
+import { groupRowsByClient, type ExceptionItem, type ExceptionSource, type ExceptionsResponse, type Disposition } from './inbox-types';
 
 // ── Autonomy disposition presentation ─────────────────────────────────────────
 
@@ -39,13 +39,11 @@ const DISPOSITION_META: Record<Disposition, { label: string; tone: TagTone; help
 const SOURCE_LABEL: Record<ExceptionSource, string> = {
   bank: 'Bank feed',
   receipt: 'Receipt',
-  bill: 'Bill on hold',
   ai_proposal: 'AI proposal',
-  approval: 'Approval',
   cost: 'Job cost',
 };
 
-const SOURCE_ORDER: ExceptionSource[] = ['bank', 'receipt', 'bill', 'ai_proposal', 'approval', 'cost'];
+const SOURCE_ORDER: ExceptionSource[] = ['ai_proposal', 'bank', 'receipt', 'cost'];
 
 // ── Sort ────────────────────────────────────────────────────────────────────────
 
@@ -80,9 +78,11 @@ function relativeTime(iso: string): string {
 const RESOLVE_LABEL: Partial<Record<ExceptionSource, string>> = {
   bank: 'Resolve',
   receipt: 'Resolve',
-  bill: 'Resolve',
   ai_proposal: 'Dismiss',
 };
+
+/** The disposition filter: any row, every AI proposal, one disposition, or AI rows with none recorded. */
+type DispoFilter = 'all' | 'ai' | Disposition | 'unscored';
 
 const keyOf = (item: ExceptionItem) => `${item.source}:${item.id}`;
 
@@ -105,12 +105,14 @@ export interface ExceptionsQueueProps {
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  /** All-clients context: group rows by client (+ "Organization" for org-level items). */
+  groupByClient?: boolean;
 }
 
-export function ExceptionsQueue({ data, isLoading, error, refetch }: ExceptionsQueueProps) {
+export function ExceptionsQueue({ data, isLoading, error, refetch, groupByClient = false }: ExceptionsQueueProps) {
   const router = useRouter();
   const [filter, setFilter] = useState<ExceptionSource | 'all'>('all');
-  const [dispoFilter, setDispoFilter] = useState<Disposition | 'all'>('all');
+  const [dispoFilter, setDispoFilter] = useState<DispoFilter>('all');
   const [sort, setSort] = useState<SortKey>('urgency');
   const [resolvingKey, setResolvingKey] = useState<string | null>(null);
   const [recentlyResolved, setRecentlyResolved] = useState<ResolvedTrailItem[]>([]);
@@ -122,6 +124,8 @@ export function ExceptionsQueue({ data, isLoading, error, refetch }: ExceptionsQ
   const filtered = useMemo(() => {
     const base = items.filter((i) => {
       if (filter !== 'all' && i.source !== filter) return false;
+      if (dispoFilter === 'ai') return i.source === 'ai_proposal';
+      if (dispoFilter === 'unscored') return i.source === 'ai_proposal' && i.disposition === null;
       if (dispoFilter !== 'all' && i.disposition !== dispoFilter) return false;
       return true;
     });
@@ -135,15 +139,37 @@ export function ExceptionsQueue({ data, isLoading, error, refetch }: ExceptionsQ
     return sorted;
   }, [items, filter, dispoFilter, sort]);
 
+  // All-clients context: one band per client, busiest first, Organization last.
+  const clientGroups = useMemo(
+    () =>
+      groupByClient
+        ? groupRowsByClient(filtered, (i) => ({ id: i.companyId, name: i.companyName })).map((g) => ({
+            id: g.id,
+            title: g.title,
+            count: g.rows.length.toLocaleString(),
+            rows: g.rows,
+          }))
+        : undefined,
+    [groupByClient, filtered],
+  );
+
+  // The AI-disposition chips sum to the AI proposal count (proposals with no recorded
+  // disposition are their own "Not scored" chip), and "All AI" filters to exactly
+  // those rows — so every chip's number is the number of rows it shows.
   const dispoChips = useMemo(() => {
     const byDisposition = counts?.byDisposition ?? { AUTO: 0, REVIEW: 0, ESCALATE: 0, BLOCKED: 0 };
-    const total = DISPOSITION_ORDER.reduce((sum, d) => sum + (byDisposition[d] ?? 0), 0);
-    if (total === 0) return [];
-    const list: { value: Disposition | 'all'; label: string; count: number }[] = [{ value: 'all', label: 'All AI', count: total }];
+    const unscored = counts?.unscored ?? 0;
+    const aiTotal = DISPOSITION_ORDER.reduce((sum, d) => sum + (byDisposition[d] ?? 0), 0) + unscored;
+    if (aiTotal === 0) return [];
+    const list: { value: DispoFilter; label: string; count: number }[] = [
+      { value: 'all', label: 'Any', count: counts?.total ?? 0 },
+      { value: 'ai', label: 'All AI', count: aiTotal },
+    ];
     for (const d of DISPOSITION_ORDER) {
       const c = byDisposition[d] ?? 0;
       if (c > 0) list.push({ value: d, label: DISPOSITION_META[d].label, count: c });
     }
+    if (unscored > 0) list.push({ value: 'unscored', label: 'Not scored', count: unscored });
     return list;
   }, [counts]);
 
@@ -183,7 +209,7 @@ export function ExceptionsQueue({ data, isLoading, error, refetch }: ExceptionsQ
         id: 'source',
         header: 'Source',
         width: 132,
-        cell: (item) => <Tag tone={item.source === 'ai_proposal' ? 'ai' : item.source === 'bill' ? 'neg' : 'default'}>{SOURCE_LABEL[item.source]}</Tag>,
+        cell: (item) => <Tag tone={item.source === 'ai_proposal' ? 'ai' : 'default'}>{SOURCE_LABEL[item.source]}</Tag>,
       },
       {
         id: 'item',
@@ -312,8 +338,8 @@ export function ExceptionsQueue({ data, isLoading, error, refetch }: ExceptionsQ
           <span className="wg-done-mark" aria-hidden="true">
             <Icon name="check" />
           </span>
-          <span className="t-head">You’re all caught up</span>
-          <p>Nothing needs your attention right now. New flags, proposals and approvals land here.</p>
+          <span className="t-head">No exceptions right now</span>
+          <p>No AI proposals, flagged lines or job costs are waiting. New ones land here; approvals are on the Approvals tab.</p>
         </div>
       ) : (
         <>
@@ -355,7 +381,8 @@ export function ExceptionsQueue({ data, isLoading, error, refetch }: ExceptionsQ
               <QueueTable
                 aria-label="Exceptions needing a human"
                 columns={columns}
-                rows={filtered}
+                rows={clientGroups ? undefined : filtered}
+                groups={clientGroups}
                 getRowId={keyOf}
                 rowState={(i) => ({ attn: i.disposition === 'ESCALATE' })}
                 cursorId={cursor}

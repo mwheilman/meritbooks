@@ -6,6 +6,8 @@ import { OperatorDashboard } from './_components/operator-dashboard';
 import { FeeRevenueReport } from './_components/fee-revenue-report';
 import { OpsHealthDashboard } from './_components/ops-health-dashboard';
 
+export const metadata = { title: 'Operator console' };
+
 export const dynamic = 'force-dynamic';
 
 // Remaining operator-console surfaces still to be built (shown below the live

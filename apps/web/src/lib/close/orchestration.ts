@@ -56,6 +56,7 @@ export type CloseTaskKey =
   | 'accruals_posted'
   | 'prepaids_posted'
   | 'depreciation_posted'
+  | 'wip_accrual_reviewed'
   | 'reviewed';
 
 export type CloseTaskKind = 'AUTO' | 'MANUAL';
@@ -269,6 +270,20 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
     dueDay: 10,
   },
   {
+    key: 'wip_accrual_reviewed',
+    label: 'WIP: review proposed accrual',
+    description:
+      'The month-end work-in-progress entry (underbillings to Unbilled AR, overbillings to Deferred revenue, anticipated contract losses) is approved and posted — or dismissed with a reason. Applies to companies with jobs that accrue revenue on the WIP schedule.',
+    kind: 'AUTO',
+    blocking: true,
+    dependsOn: ['ar_subledger_tie', 'ap_subledger_tie'],
+    phase: 'FINAL',
+    unit: 'cents',
+    order: 14,
+    dueDay: 10,
+    deepLinkHref: '/jobs/wip',
+  },
+  {
     key: 'reviewed',
     label: 'Reviewed & approved to close',
     description:
@@ -285,10 +300,11 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
       'accruals_posted',
       'prepaids_posted',
       'depreciation_posted',
+      'wip_accrual_reviewed',
     ],
     phase: 'FINAL',
     unit: 'none',
-    order: 14,
+    order: 15,
     dueDay: 10,
   },
 ] as const;
@@ -342,6 +358,23 @@ export interface CloseSignals {
   unappliedPaymentCents: number;
   /** Period-relevant bills/JEs still awaiting an approval decision. Clear when 0. */
   pendingApprovalCount: number;
+  /**
+   * The month-end WIP review (lib/rev-rec/wip-close-signal.ts). Absent / not applicable ⇒ the
+   * task passes (no WIP jobs, or the company accrues neither under- nor overbillings).
+   */
+  wipAccrual?: WipCloseSignal | null;
+}
+
+/** The month's WIP run as the close sees it. */
+export interface WipCloseSignal {
+  applicable: boolean;
+  status: 'NOT_RUN' | 'PROPOSED' | 'POSTING' | 'POSTED' | 'DISMISSED' | 'NO_CHANGE' | 'FAILED' | 'UNKNOWN';
+  jobs: number;
+  underbilledCents: number;
+  overbilledCents: number;
+  lossProvisionCents: number;
+  dismissReason: string | null;
+  reversalPending: boolean;
 }
 
 /** Set of MANUAL task keys a human has checked off for an entity + period. */
@@ -516,6 +549,36 @@ function evaluateAuto(key: CloseTaskKey, s: CloseSignals): AutoCheck {
         driverLabel: ok ? 'None pending' : `${v} awaiting approval`,
         reason: ok ? null : `${v} period-dated bill(s)/journal entr${v === 1 ? 'y is' : 'ies are'} still awaiting an approval decision`,
       };
+    }
+    case 'wip_accrual_reviewed': {
+      const w = s.wipAccrual;
+      if (!w || !w.applicable) {
+        return { satisfied: true, driverValue: 0, driverLabel: 'No WIP jobs to accrue', reason: null };
+      }
+      const size = w.underbilledCents + w.overbilledCents + w.lossProvisionCents;
+      const summary = `${w.jobs} job(s), underbilled ${formatMoney(w.underbilledCents)}, overbilled ${formatMoney(w.overbilledCents)}`;
+      switch (w.status) {
+        case 'POSTED':
+          return { satisfied: true, driverValue: size, driverLabel: w.reversalPending ? 'Posted — reversal pending' : 'Posted', reason: null };
+        case 'NO_CHANGE':
+          return { satisfied: true, driverValue: 0, driverLabel: 'Nothing to accrue', reason: null };
+        case 'DISMISSED':
+          return { satisfied: true, driverValue: 0, driverLabel: `Dismissed: ${w.dismissReason ?? 'reason recorded'}`, reason: null };
+        case 'PROPOSED':
+          return {
+            satisfied: false, driverValue: size, driverLabel: 'Proposed — awaiting approval',
+            reason: `WIP: ${summary} → proposed entry awaiting approval`,
+          };
+        case 'POSTING':
+          return { satisfied: false, driverValue: size, driverLabel: 'Posting now', reason: 'The WIP entry is being posted — refresh in a moment' };
+        case 'FAILED':
+          return { satisfied: false, driverValue: size, driverLabel: 'Posting failed', reason: 'The WIP entry failed to post — open the WIP schedule to fix and re-approve' };
+        case 'UNKNOWN':
+          return { satisfied: false, driverValue: null, driverLabel: 'Status unknown', reason: 'The WIP review status could not be confirmed' };
+        case 'NOT_RUN':
+        default:
+          return { satisfied: false, driverValue: null, driverLabel: 'Not run yet', reason: `WIP has not been run for this month (${w.jobs} job(s) on the schedule)` };
+      }
     }
     default:
       // Exhaustiveness: MANUAL keys never reach here.

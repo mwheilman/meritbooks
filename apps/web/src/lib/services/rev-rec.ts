@@ -13,25 +13,21 @@
  *   CR Revenue (delta); DR Deferred Revenue (relieve billings-in-excess) and/or
  *   DR Unbilled Receivable / Contract Asset (earned beyond billed).
  *
- * ORDERING vs the unbilled-accrual service (lib/rev-rec/unbilled-accrual-service):
- * both mechanisms can touch the contract asset (1180 / UNBILLED_RECEIVABLE), so a
- * job must be driven by ONE of them, not both:
- *   • THIS method-driven engine is the authoritative recognizer for jobs with a
- *     rev-rec method — it advances `revenue_recognized_cents` and posts the P&L
- *     revenue with its 1180/2410 balance-sheet offsets.
- *   • The unbilled-accrual service is a POC-based *adjust-to-target* accrual for jobs
- *     NOT under method-driven rev-rec. It nets against the EXISTING 1180 balance
- *     (target − existing), so if it runs AFTER this engine it simply sees 1180
- *     already at target and does nothing (action NONE) — it will not double-count the
- *     balance-sheet asset. Do not run both as independent revenue recognizers for the
- *     same job in the same period; pick one per job.
+ * ONE MONTH-END MECHANISM (FPB-rev-rec-wip §4). `earnedToDate` here is the method
+ * authority for every recognizer. The month-end recognition step is the canonical WIP
+ * engine (lib/rev-rec/wip-engine.ts): a permanent billings reclass + a self-reversing
+ * over/under (1180/2410) + loss-provision adjustment, adjust-to-target on GL balances.
+ * The old standalone 1180 accrual and the batch `recognizeRun` are retired. The
+ * per-job `recognizeJob` below remains only for the JOB_PROGRESS event path; any
+ * interim posting it makes is swept and trued up at month end, so nothing double counts.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { postJournalEntry } from './gl-posting';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
-import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
+import { fetchAll } from '@/lib/supabase/fetch-all';
 import { scopedWriter } from '@/lib/db/scoped-writer';
+import { earnedToDate } from '@/lib/rev-rec/earned';
 
 type DB = SupabaseClient;
 
@@ -62,6 +58,9 @@ export interface JobRevRecRow {
   revenue_recognized_cents: number | null;
   service_start_date: string | null;
   service_end_date: string | null;
+  /** MILESTONE: milestones defined / accepted on the contract (optional). */
+  total_milestones?: number | null;
+  completed_milestones?: number | null;
 }
 
 /**
@@ -92,58 +91,9 @@ async function loadRevenueTypeMap(db: DB, orgId: string, locationId: string): Pr
   return new Map((data ?? []).map((r) => [(r as { revenue_account_id: string }).revenue_account_id, (r as { method: RevRecMethod }).method]));
 }
 
-/**
- * Earned-revenue-to-date for the resolved method.
- * Returns the cumulative revenue that should be recognized through `asOf`,
- * plus the fraction (0..1) for audit. `collectedToDate` is only used by CASH.
- */
-export function earnedToDate(
-  method: RevRecMethod,
-  job: JobRevRecRow,
-  asOf: string,
-  collectedToDateCents: number,
-): { earnedCents: number; fraction: number } {
-  const contract = Number(job.contract_amount_cents ?? 0);
-  const estimate = Number(job.estimated_cost_cents ?? 0);
-  const actual = Number(job.actual_cost_cents ?? 0);
-  const billed = Number(job.billed_to_date_cents ?? 0);
-  const done = job.status === 'COMPLETE' || job.status === 'CLOSED';
-
-  const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
-
-  switch (method) {
-    case 'PCT_COSTS_INCURRED': {
-      const f = estimate > 0 ? clamp01(actual / estimate) : 0;
-      return { earnedCents: Math.round(contract * f), fraction: f };
-    }
-    case 'PCT_COMPLETE': {
-      const f = clamp01(Number(job.pct_complete ?? 0) / 100);
-      return { earnedCents: Math.round(contract * f), fraction: f };
-    }
-    case 'COMPLETED_CONTRACT':
-      return { earnedCents: done ? contract : 0, fraction: done ? 1 : 0 };
-    case 'RATABLY':
-    case 'SUBSCRIPTION': {
-      if (job.service_start_date && job.service_end_date) {
-        const s = new Date(`${job.service_start_date}T00:00:00Z`).getTime();
-        const e = new Date(`${job.service_end_date}T00:00:00Z`).getTime();
-        const now = new Date(`${asOf}T00:00:00Z`).getTime();
-        const f = e > s ? clamp01((now - s) / (e - s)) : (now >= e ? 1 : 0);
-        return { earnedCents: Math.round(contract * f), fraction: f };
-      }
-      return { earnedCents: billed, fraction: contract > 0 ? clamp01(billed / contract) : 0 };
-    }
-    case 'POINT_OF_SALE':
-    case 'MILESTONE':
-    case 'AS_BILLED':
-      // Point-in-time / billing-based: revenue follows what's been billed.
-      return { earnedCents: billed, fraction: contract > 0 ? clamp01(billed / contract) : 0 };
-    case 'CASH':
-      return { earnedCents: collectedToDateCents, fraction: contract > 0 ? clamp01(collectedToDateCents / contract) : 0 };
-    default:
-      return { earnedCents: 0, fraction: 0 };
-  }
-}
+// Earned-revenue-to-date per method lives in the PURE module lib/rev-rec/earned.ts (so
+// the WIP engine and the election card's worked examples share it without server code).
+export { earnedToDate };
 
 async function revenueAccount(db: DB, orgId: string): Promise<string | null> {
   const { data } = await db.from('accounts').select('id, name').eq('org_id', orgId).eq('account_type', 'REVENUE').eq('is_active', true).order('account_number', { ascending: true });
@@ -328,7 +278,7 @@ export async function recognizeJob(
 const JOB_SELECT =
   'id, location_id, job_type, archetype, status, rev_rec_method, rev_rec_method_override, revenue_account_id, ' +
   'contract_amount_cents, estimated_cost_cents, actual_cost_cents, billed_to_date_cents, ' +
-  'pct_complete, revenue_recognized_cents, service_start_date, service_end_date';
+  'pct_complete, revenue_recognized_cents, service_start_date, service_end_date, total_milestones, completed_milestones';
 
 /** Resolve + recognize a single job by id through `asOf` (used by the JOB_PROGRESS consumer). */
 export async function recognizeJobById(
@@ -355,65 +305,8 @@ async function loadMethodMap(db: DB, orgId: string, locationId: string): Promise
   return new Map((data ?? []).map((r) => [(r as { job_type: string }).job_type, (r as { method: RevRecMethod }).method]));
 }
 
-export interface RecognizeRunResult {
-  asOf: string;
-  posted: number;
-  unchanged: number;
-  skipped: number;
-  totalRecognizedDeltaCents: number;
-  jobs: (RecognizeOneResult & { jobNumber?: string; jobName?: string })[];
-}
-
-/** Recognize all eligible jobs (optionally one company) through `asOf`. preview = compute, don't post. */
-export async function recognizeRun(
-  db: DB,
-  orgId: string,
-  args: { locationId?: string | null; asOf: string; runBy: string | null; preview?: boolean },
-): Promise<RecognizeRunResult> {
-  // Paged — past 1,000 jobs a single read would silently skip recognizing the rest.
-  const buildJobsQuery = () => {
-    let q = db.schema('core').from('jobs').select(JOB_SELECT)
-      .eq('org_id', orgId)
-      .in('status', ['ACTIVE', 'COMPLETE', 'ON_HOLD']);
-    if (args.locationId) q = q.eq('location_id', args.locationId);
-    return q;
-  };
-  const { data: jobs } = await fetchAll(buildJobsQuery, { label: 'rev-rec run jobs' });
-
-  // Company defaults + per-company method maps (cache by location).
-  const locIds = [...new Set((jobs ?? []).map((j) => (j as unknown as JobRevRecRow).location_id))];
-  const defaultByLoc = new Map<string, RevRecMethod>();
-  const mapByLoc = new Map<string, Map<string, RevRecMethod>>();
-  const revTypeByLoc = new Map<string, Map<string, RevRecMethod>>();
-  for (const lid of locIds) {
-    const { data: loc } = await db.schema('core').from('locations').select('rev_rec_method').eq('id', lid).maybeSingle();
-    defaultByLoc.set(lid, ((loc as { rev_rec_method: RevRecMethod } | null)?.rev_rec_method ?? 'PCT_COSTS_INCURRED'));
-    mapByLoc.set(lid, await loadMethodMap(db, orgId, lid));
-    revTypeByLoc.set(lid, await loadRevenueTypeMap(db, orgId, lid));
-  }
-
-  const out: RecognizeRunResult = { asOf: args.asOf, posted: 0, unchanged: 0, skipped: 0, totalRecognizedDeltaCents: 0, jobs: [] };
-
-  for (const raw of (jobs ?? []) as unknown as (JobRevRecRow & { id: string })[]) {
-    const method = resolveRevRecMethod(raw, mapByLoc.get(raw.location_id) ?? new Map(), defaultByLoc.get(raw.location_id) ?? 'PCT_COSTS_INCURRED', revTypeByLoc.get(raw.location_id));
-    const r = await recognizeJob(db, orgId, raw, method, args.asOf, args.runBy, { preview: args.preview });
-    if (r.status === 'posted') { out.posted++; out.totalRecognizedDeltaCents += r.deltaCents; }
-    else if (r.status === 'unchanged') out.unchanged++;
-    else out.skipped++;
-    out.jobs.push(r);
-  }
-
-  // Enrich with job number/name for display.
-  if (out.jobs.length > 0) {
-    const ids = out.jobs.map((j) => j.jobId);
-    const { data: meta } = await fetchAllIn(
-      ids,
-      (chunk) => db.schema('core').from('jobs').select('id, job_number, name').in('id', chunk),
-      { label: 'rev-rec run job names' },
-    );
-    const m = new Map((meta ?? []).map((x) => [(x as { id: string }).id, x as { job_number: string; name: string }]));
-    out.jobs = out.jobs.map((j) => ({ ...j, jobNumber: m.get(j.jobId)?.job_number, jobName: m.get(j.jobId)?.name }));
-  }
-
-  return out;
-}
+// The month-end batch run (`recognizeRun`) is RETIRED (FPB-rev-rec-wip §4): the ONE
+// canonical month-end recognizer is the WIP engine (lib/rev-rec/wip-engine.ts +
+// wip-run-service.ts). recognizeJob / recognizeJobById stay for the Projects-seam
+// JOB_PROGRESS consumer (interim recognition on a progress event); the month-end WIP
+// reclass + adjustment trues those postings up by construction.

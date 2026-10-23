@@ -4,6 +4,8 @@ import { Suspense } from 'react';
 import { Spinner } from '../_components/ui';
 import { WarrantyWorkspace } from './_components/warranty-workspace';
 
+export const metadata = { title: 'Warranty claims' };
+
 /**
  * /dealer/warranty — manufacturer warranty claims (FPB-dealer-pack §3.8, DL-5/DL-6).
  * The dealer layout already guards the page (journal_entries:view) and the client

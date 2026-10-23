@@ -2,6 +2,8 @@ import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { BillsClient } from './bills-client';
 
+export const metadata = { title: 'Bills' };
+
 export const dynamic = 'force-dynamic';
 
 export default async function BillsPage() {

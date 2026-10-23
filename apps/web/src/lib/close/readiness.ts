@@ -16,6 +16,8 @@
  *                                    AR/AP control account net balance in
  *                                    `v_trial_balance` (`resolveRole`).
  *   • review queue ................ `ai_decisions` status='PROPOSED' per entity.
+ *   • WIP review .................. the month's rev_rec_wip_runs status (loadWipCloseSignals,
+ *                                    FPB-rev-rec-wip §5) — feeds `wip_accrual_reviewed`.
  *
  * Manual sign-off state is stored in the existing `close_checklists` table (no new
  * table): one row per (fiscal_period_id, location_id, task_name = CloseTaskKey).
@@ -32,6 +34,7 @@ import { scanUncategorizedLeakage } from '@/lib/controls/uncategorized-leakage';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { gatherOpenItemsByLocation, gatherEntityOpenItems, emptyOpenItems } from './open-items';
+import { loadWipCloseSignals } from '@/lib/rev-rec/wip-close-signal';
 import {
   evaluateCloseGraph,
   evaluateHardCloseGate,
@@ -270,7 +273,7 @@ export async function gatherCloseOrchestration(
   });
 
   // Shared, run-once reads.
-  const [subledger, leakage, aiRes, checkoffsByLoc, openItemsByLoc] = await Promise.all([
+  const [subledger, leakage, aiRes, checkoffsByLoc, openItemsByLoc, wipByLoc] = await Promise.all([
     loadSubledgerVariance(supabase, orgId),
     scanUncategorizedLeakage(supabase, orgId, { dryRun: true, asOfISO: now.toISOString() }),
     fetchAll(
@@ -279,6 +282,7 @@ export async function gatherCloseOrchestration(
     ),
     loadManualCheckoffs(supabase, periodIds),
     gatherOpenItemsByLocation(supabase, openItemsContexts).catch(() => new Map<string, ReturnType<typeof emptyOpenItems>>()),
+    loadWipCloseSignals(supabase, orgId, periodKey, locations.map((l) => l.id)),
   ]);
 
   // Per-entity leakage roll-up (across all aged periods — how a controller reasons).
@@ -330,6 +334,7 @@ export async function gatherCloseOrchestration(
       unappliedPaymentCount: oi.unappliedPaymentCount,
       unappliedPaymentCents: oi.unappliedPaymentCents,
       pendingApprovalCount: oi.pendingApprovalCount,
+      wipAccrual: wipByLoc.get(loc.id) ?? null,
     };
     const checkoffs = checkoffsByLoc.get(loc.id) ?? new Set<CloseTaskKey>();
     const evaluation = evaluateCloseGraph(signals, checkoffs);
@@ -396,12 +401,16 @@ export async function gatherCloseSignals(
   // The period's end date bounds bill-date scoping in the open-items scan.
   const { data: periodRow } = await supabase
     .from('fiscal_periods')
-    .select('end_date')
+    .select('end_date, period_year, period_month')
     .eq('id', args.fiscalPeriodId)
     .maybeSingle();
-  const periodEndISO = (periodRow as { end_date: string | null } | null)?.end_date ?? null;
+  const pr = periodRow as { end_date: string | null; period_year: number | null; period_month: number | null } | null;
+  const periodEndISO = pr?.end_date ?? null;
+  const periodKey = pr?.period_year && pr?.period_month
+    ? `${pr.period_year}-${String(pr.period_month).padStart(2, '0')}`
+    : periodEndISO ? periodEndISO.slice(0, 7) : null;
 
-  const [subledger, leakage, recon, aiRes, openItems] = await Promise.all([
+  const [subledger, leakage, recon, aiRes, openItems, wipByLoc] = await Promise.all([
     loadSubledgerVariance(supabase, orgId),
     scanUncategorizedLeakage(supabase, orgId, { dryRun: true }),
     gatherReconciliationCloseStatus(supabase, args).catch(() => null),
@@ -414,6 +423,7 @@ export async function gatherCloseSignals(
       periodId: args.fiscalPeriodId,
       periodEndISO,
     }).catch(() => emptyOpenItems()),
+    periodKey ? loadWipCloseSignals(supabase, orgId, periodKey, [args.locationId]) : Promise.resolve(null),
   ]);
 
   let uncodedBankCents = 0;
@@ -440,6 +450,10 @@ export async function gatherCloseSignals(
     unappliedPaymentCount: openItems.unappliedPaymentCount,
     unappliedPaymentCents: openItems.unappliedPaymentCents,
     pendingApprovalCount: openItems.pendingApprovalCount,
+    // No resolvable period month ⇒ fail closed (the WIP review cannot be confirmed).
+    wipAccrual: wipByLoc
+      ? wipByLoc.get(args.locationId) ?? null
+      : { applicable: true, status: 'UNKNOWN', jobs: 0, underbilledCents: 0, overbilledCents: 0, lossProvisionCents: 0, dismissReason: null, reversalPending: false },
   };
 }
 

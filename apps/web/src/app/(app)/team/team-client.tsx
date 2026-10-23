@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Loader2,
   AlertCircle,
@@ -619,6 +620,12 @@ function MemberModal({ mode, member, locations, onClose, onSaved }: MemberModalP
 
 type SectionTab = 'access' | 'performance';
 
+/** `/team?tab=performance` deep-links straight to the performance view (nav: "Team performance"). */
+function useInitialSectionTab(): SectionTab {
+  const params = useSearchParams();
+  return params?.get('tab') === 'performance' ? 'performance' : 'access';
+}
+
 function SectionTabs({
   active,
   onChange,
@@ -656,7 +663,7 @@ function SectionTabs({
 // ── Read-only roster (non-admins) ───────────────────────────────────────────────
 
 function ReadOnlyRoster({ canViewTeamPerf }: { canViewTeamPerf: boolean }) {
-  const [tab, setTab] = useState<SectionTab>('access');
+  const [tab, setTab] = useState<SectionTab>(useInitialSectionTab());
   const { data, isLoading, error, refetch } = useQuery<RosterResponse>('/api/team');
   const rows = data?.data ?? [];
 
@@ -993,7 +1000,7 @@ export function TeamClient() {
   // panel trusts the server as the source of truth for which rows it returns.
   const canViewTeamPerf = can('team', 'manage');
 
-  const [tab, setTab] = useState<SectionTab>('access');
+  const [tab, setTab] = useState<SectionTab>(useInitialSectionTab());
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; member: Member | null } | null>(null);

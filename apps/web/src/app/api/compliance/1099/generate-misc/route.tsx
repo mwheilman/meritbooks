@@ -144,6 +144,7 @@ export async function GET(req: NextRequest) {
       .from('invoice_templates')
       .select('remit_to, logo_url, accent_color')
       .eq('org_id', orgId)
+      .order('is_default', { ascending: false })
       .limit(1)
       .maybeSingle(),
   ]);

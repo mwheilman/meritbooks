@@ -28,35 +28,55 @@ import {
 
 const ALL_CAPABILITIES: Capability[] = ['AR_COLLECTION', 'AP_DISBURSEMENT', 'PAYROLL', 'BANK_FEED'];
 
-interface ConnectionRow {
+export interface ConnectionRow {
   id: string;
   org_id: string;
   capability: Capability;
   provider: string;
   environment: ProviderEnvironment;
+  location_id?: string | null;
   account_handle: string | null;
   secret_ref: string | null;
   status: 'active' | 'disconnected' | 'error';
   connected_by: string | null;
   status_detail: string | null;
   metadata: Record<string, unknown> | null;
+  charges_enabled?: boolean | null;
+  payouts_enabled?: boolean | null;
+  details_submitted?: boolean | null;
+  disabled_reason?: string | null;
+  requirements_due?: string[] | null;
+  payout_bank_name?: string | null;
+  payout_bank_last4?: string | null;
+  status_checked_at?: string | null;
   created_at: string;
   updated_at: string;
 }
 
-function toConnection(r: ConnectionRow): ProviderConnection {
+export function toConnection(r: ConnectionRow): ProviderConnection {
   return {
     id: r.id,
     orgId: r.org_id,
     capability: r.capability,
     provider: r.provider,
     environment: r.environment,
+    locationId: r.location_id ?? null,
     accountHandle: r.account_handle,
     secretRef: r.secret_ref,
     status: r.status,
     connectedBy: r.connected_by,
     statusDetail: r.status_detail,
     metadata: r.metadata ?? {},
+    account: {
+      chargesEnabled: r.charges_enabled ?? null,
+      payoutsEnabled: r.payouts_enabled ?? null,
+      detailsSubmitted: r.details_submitted ?? null,
+      disabledReason: r.disabled_reason ?? null,
+      requirementsDue: r.requirements_due ?? [],
+      payoutBankName: r.payout_bank_name ?? null,
+      payoutBankLast4: r.payout_bank_last4 ?? null,
+      checkedAt: r.status_checked_at ?? null,
+    },
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -108,6 +128,13 @@ export class CapabilityNotEntitledError extends Error {
 /**
  * Register/connect a provider for a capability. Fails closed if the tenant is not
  * entitled. Stores the credential in Vault and persists only its reference.
+ *
+ * Identity of a connection (migration 175): one row per (org, capability, provider,
+ * environment, company) — `locationId` null = tenant-level — except BANK_FEED, where a
+ * row is one Plaid Item (keyed by its account handle, so a second bank login never
+ * overwrites the first one's token). The row is looked up by that key, then updated or
+ * inserted; the partial unique indexes are the race guard (a concurrent insert that
+ * loses retries as an update).
  */
 export async function connectProvider(
   adminDb: SupabaseClient,
@@ -116,6 +143,7 @@ export async function connectProvider(
     capability: Capability;
     provider: string;
     environment: ProviderEnvironment;
+    locationId?: string | null;
     accountHandle?: string | null;
     secret?: string | null;
     connectedBy: string;
@@ -137,33 +165,76 @@ export async function connectProvider(
     secretRef = await storeProviderSecret(adminDb, input.secret, secretName);
   }
 
-  const { data, error } = await adminDb
-    .schema('core')
-    .from('provider_connections')
-    .upsert(
-      {
-        org_id: orgId,
-        capability: input.capability,
-        provider: input.provider,
-        environment: input.environment,
-        account_handle: input.accountHandle ?? null,
-        secret_ref: secretRef,
-        status: 'active',
-        connected_by: input.connectedBy,
-        status_detail: null,
-        metadata: input.metadata ?? {},
-      },
-      { onConflict: 'org_id,capability,provider,environment' },
-    )
-    .select('*')
-    .single();
+  const locationId = input.locationId ?? null;
+  const row = {
+    org_id: orgId,
+    capability: input.capability,
+    provider: input.provider,
+    environment: input.environment,
+    location_id: locationId,
+    account_handle: input.accountHandle ?? null,
+    secret_ref: secretRef,
+    status: 'active' as const,
+    connected_by: input.connectedBy,
+    status_detail: null,
+    metadata: input.metadata ?? {},
+  };
 
-  if (error) {
+  const findExisting = async (): Promise<{ id: string; secret_ref: string | null } | null> => {
+    let q = adminDb
+      .schema('core')
+      .from('provider_connections')
+      .select('id, secret_ref')
+      .eq('org_id', orgId)
+      .eq('capability', input.capability)
+      .eq('provider', input.provider)
+      .eq('environment', input.environment);
+    if (input.capability === 'BANK_FEED') {
+      q = input.accountHandle ? q.eq('account_handle', input.accountHandle) : q.is('account_handle', null);
+    } else {
+      q = locationId ? q.eq('location_id', locationId) : q.is('location_id', null);
+    }
+    const { data, error } = await q.limit(1).maybeSingle<{ id: string; secret_ref: string | null }>();
+    if (error) throw new Error(error.message);
+    return data ?? null;
+  };
+
+  const write = async (): Promise<{ data: ConnectionRow | null; error: { message: string; code?: string } | null; replacedSecret: string | null }> => {
+    const existing = await findExisting();
+    if (existing) {
+      const { data, error } = await adminDb
+        .schema('core')
+        .from('provider_connections')
+        .update(row)
+        .eq('org_id', orgId)
+        .eq('id', existing.id)
+        .select('*')
+        .single();
+      return { data: (data as ConnectionRow | null) ?? null, error, replacedSecret: existing.secret_ref };
+    }
+    const { data, error } = await adminDb
+      .schema('core')
+      .from('provider_connections')
+      .insert(row)
+      .select('*')
+      .single();
+    return { data: (data as ConnectionRow | null) ?? null, error, replacedSecret: null };
+  };
+
+  let res = await write();
+  // Lost an insert race to a concurrent connect of the same key → update that row instead.
+  if (res.error?.code === '23505') res = await write();
+
+  if (res.error || !res.data) {
     // Don't orphan a freshly-stored secret if the row write failed.
     if (secretRef) await deleteProviderSecret(adminDb, secretRef).catch(() => undefined);
-    throw new Error(error.message);
+    throw new Error(res.error?.message ?? 'Could not save the connection.');
   }
-  return toConnection(data as ConnectionRow);
+  // A re-connect that replaced the stored credential: drop the old Vault secret.
+  if (secretRef && res.replacedSecret && res.replacedSecret !== secretRef) {
+    await deleteProviderSecret(adminDb, res.replacedSecret).catch(() => undefined);
+  }
+  return toConnection(res.data);
 }
 
 /** Disconnect a connection: mark disconnected and remove its Vault secret. */

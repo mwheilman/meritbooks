@@ -6,6 +6,8 @@ import { createAdminSupabase } from '@/lib/supabase/server';
 import { resolvePortalToken } from '@/lib/portal/customer/tokens';
 import { loadCustomerPortal, type PortalInvoice } from '@/lib/portal/customer/data';
 
+export const metadata = { title: { absolute: 'Customer portal' } };
+
 /**
  * CUSTOMER SELF-SERVICE PORTAL — public, tokenized, no login. A customer opens
  * /portal/customer/<token> and sees ALL of their invoices (open + paid), their

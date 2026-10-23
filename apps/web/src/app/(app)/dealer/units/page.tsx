@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { UnitsRegister, type UnitsQuery } from './units-register';
 
+export const metadata = { title: 'Units' };
+
 /**
  * Unit register (FPB §3.6–3.7, R3, DL-4/DL-12; D2 slice A). Honors the canonical
  * drill query (lib/dealer/ui/links.ts → dealerLinks.units): status, condition,

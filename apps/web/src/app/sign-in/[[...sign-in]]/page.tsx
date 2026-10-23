@@ -1,6 +1,8 @@
 import { SignIn } from '@clerk/nextjs';
 import { Lockup } from '@meritbooks/merit-ui';
 
+export const metadata = { title: 'Sign in' };
+
 export default function SignInPage() {
   return (
     <main className="mb-auth">

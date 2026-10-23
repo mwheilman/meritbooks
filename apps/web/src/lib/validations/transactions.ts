@@ -1,21 +1,33 @@
 import { z } from 'zod';
+import { splitLinesSchema } from './bank-splits';
 
 // =============================================================
 // BANK TRANSACTIONS
 // =============================================================
 
-export const approveBankTransactionSchema = z.object({
-  transaction_id: z.string().uuid(),
-  account_id: z.string().uuid('GL account is required'),
-  vendor_id: z.string().uuid().optional().nullable(),
-  department_id: z.string().uuid().optional().nullable(),
-  class_id: z.string().uuid().optional().nullable(),
-  job_id: z.string().uuid().optional().nullable(),
-  /** Payee as typed in the edit panel; resolved (find-or-create) server-side. */
-  vendor_name: z.string().max(200).optional().nullable(),
-  /** Reviewer note; appended to the JE memo. */
-  notes: z.string().max(1000).optional().nullable(),
-});
+export const approveBankTransactionSchema = z
+  .object({
+    transaction_id: z.string().uuid(),
+    /** Required for a single-account approve; ignored when the line is split. */
+    account_id: z.string().uuid('GL account is required').optional(),
+    vendor_id: z.string().uuid().optional().nullable(),
+    department_id: z.string().uuid().optional().nullable(),
+    class_id: z.string().uuid().optional().nullable(),
+    job_id: z.string().uuid().optional().nullable(),
+    /** Payee as typed in the edit panel; resolved (find-or-create) server-side. */
+    vendor_name: z.string().max(200).optional().nullable(),
+    /** Reviewer note; appended to the JE memo. */
+    notes: z.string().max(1000).optional().nullable(),
+    /**
+     * Split lines (FPB-bank-feed-splits). When present the line posts N balanced lines
+     * (one JE per company for a cross-company split). When absent, a saved DRAFT split
+     * for the transaction is used; otherwise the classic two-line post.
+     */
+    splits: splitLinesSchema.optional(),
+    /** "Remember this split for <vendor>" — saves the split as a % rule on approve. */
+    remember_split: z.boolean().optional(),
+    split_rule_id: z.string().uuid().nullable().optional(),
+  });
 
 export const batchApproveSchema = z.object({
   transaction_ids: z.array(z.string().uuid()).min(1, 'Select at least one transaction').max(100),

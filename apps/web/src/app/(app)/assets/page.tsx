@@ -3,6 +3,8 @@ import { Package, FileText, Receipt, ShieldCheck, Sparkles, Calculator, ArrowRig
 import { PageHeader } from '@/components/ui';
 import { HubTabs } from '../_components/hub-tabs';
 
+export const metadata = { title: 'Assets & schedules' };
+
 const CARDS = [
   {
     href: '/fixed-assets',

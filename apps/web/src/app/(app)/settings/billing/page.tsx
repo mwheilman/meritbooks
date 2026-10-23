@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { BillingPlanView } from './_components/billing-plan-view';
 
+export const metadata = { title: 'Plan & billing' };
+
 export default async function BillingSettingsPage() {
   // PAGE-LEVEL RBAC (identity gate #9). Plan & cost is an org/system setting — restrict the
   // screen to admin-equivalent roles that may view system settings. Fails closed. Reuses the

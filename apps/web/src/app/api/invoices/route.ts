@@ -9,6 +9,7 @@ import { getHomeCurrency, normalizeCurrency } from '@/lib/currency';
 import { resolvePageParams, totalPages } from '@/lib/pagination';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { getOrgToday } from '@/lib/dates/org-today';
+import { summarizeOnlineActivity, ONLINE_EVENT_TYPES, type OnlineEvent } from '@/lib/invoices/online-activity';
 import { daysPastDue, effectiveInvoiceStatus, invoiceTabOrFilter, isInvoiceOverdue, isOpenInvoiceStatus } from '@/lib/ar/overdue';
 
 // ─── GET: List invoices ───────────────────────────────────────────────
@@ -150,6 +151,23 @@ export async function GET(request: Request) {
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
   ]);
 
+  // What customers did with the online link (viewed / paying / paid online), per row.
+  const pageIds = rows.map((r) => r.id as string);
+  const eventsByInvoice = new Map<string, OnlineEvent[]>();
+  if (pageIds.length) {
+    const { data: evRows } = await supabase
+      .from('invoice_events')
+      .select('invoice_id, event_type, created_at, meta')
+      .eq('org_id', orgId)
+      .in('invoice_id', pageIds)
+      .in('event_type', ONLINE_EVENT_TYPES);
+    for (const e of (evRows ?? []) as Array<OnlineEvent & { invoice_id: string }>) {
+      const list = eventsByInvoice.get(e.invoice_id) ?? [];
+      list.push(e);
+      eventsByInvoice.set(e.invoice_id, list);
+    }
+  }
+
   const customerById = new Map((custRes.data ?? []).map((c: Record<string, unknown>) => [c.id as string, c]));
   const locationById = new Map((locRes.data ?? []).map((l: Record<string, unknown>) => [l.id as string, l]));
   const jobById = new Map((jobRes.data ?? []).map((j: Record<string, unknown>) => [j.id as string, j]));
@@ -193,6 +211,10 @@ export async function GET(request: Request) {
       customer: customer ? { id: customer.id, name: customer.name, email: customer.email, paymentTermsDays: customer.payment_terms_days } : null,
       location: location ? { id: location.id, name: location.name, shortCode: location.short_code } : null,
       job: job ? { id: job.id, jobNumber: job.job_number, name: job.name } : null,
+      online: (() => {
+        const a = summarizeOnlineActivity(eventsByInvoice.get(inv.id as string) ?? []);
+        return { status: a.status, label: a.label, views: a.views, paidOnlineAt: a.paidOnlineAt };
+      })(),
     };
   });
 

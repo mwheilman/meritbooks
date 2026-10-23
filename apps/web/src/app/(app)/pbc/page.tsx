@@ -2,6 +2,8 @@ import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { PageHeader } from '@/components/ui';
 import { PbcClient } from './pbc-client';
 
+export const metadata = { title: 'Audit requests (PBC)' };
+
 export const dynamic = 'force-dynamic';
 
 /**

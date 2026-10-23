@@ -24,6 +24,8 @@ import { runEventsDrainJob, runPrepaidAmortizeJob, runRevRecMonthlyJob } from '.
 import { runPruneRunsJob } from './jobs/platform-jobs';
 import { runAccessExpirySweepJob } from './jobs/access-jobs';
 import { DEALER_MONTH_END_JOB } from './jobs/dealer-jobs';
+import { REQUESTS_DISPATCH_JOB } from './jobs/requests-dispatch';
+import { runBankDailyPullJob } from '@/lib/money/plaid-sync';
 import { DEALER_CONTROLS_JOB } from './jobs/dealer-controls';
 import {
   SCHEDULED_EVENT_DRAIN_FEATURE,
@@ -62,6 +64,24 @@ function stub(
 }
 
 export const JOBS: readonly JobDefinition[] = [
+  // Wave 1: requests & chase engine (mig 178) and the nightly Plaid pull (slice 1A).
+  REQUESTS_DISPATCH_JOB,
+  {
+    key: 'bank.daily_pull',
+    label: 'Daily bank pull',
+    description: 'Nightly incremental Plaid sync for every connected bank of the tenant (stored cursor); flags feeds that have not synced in 48 hours. No GL effect.',
+    scope: 'org',
+    cron: '0 11 * * *',
+    defaultEnabled: true,
+    implemented: true,
+    ownerCapability: 'bk.feeds',
+    owner: 'Bank feed / Plaid',
+    postsToGl: false,
+    timeoutMs: 120_000,
+    maxLatenessMinutes: 6 * 60,
+    maxAttempts: 3,
+    run: runBankDailyPullJob,
+  },
   // Dealer pack (industry module) — no-ops for clients without the pack enabled.
   DEALER_MONTH_END_JOB,
   DEALER_CONTROLS_JOB,
@@ -101,7 +121,7 @@ export const JOBS: readonly JobDefinition[] = [
   {
     key: 'vendors.compliance_scan',
     label: 'Vendor compliance scan',
-    description: 'Expires lapsed W-9/COI documents, advances the chase cadence, and escalates high-risk vendors to Exceptions. Sends nothing yet (see requests.remind).',
+    description: 'Expires lapsed W-9/COI documents, advances the chase cadence, and escalates high-risk vendors to Exceptions. W-9/COI reminder emails go out through requests.remind when the tenant switches vendor chase on.',
     scope: 'org',
     cron: '30 8 * * *',
     defaultEnabled: true,
@@ -133,7 +153,7 @@ export const JOBS: readonly JobDefinition[] = [
   {
     key: 'revrec.monthly',
     label: 'Revenue recognition (1st of month)',
-    description: 'On the 1st, previews recognition through month-end for every eligible job. Proposes only, unless the tenant set the "Scheduled revenue recognition" dial to auto-under-limit.',
+    description: "On the 1st, proposes last month's WIP entry (underbillings to Unbilled AR, overbillings to deferred revenue, loss provisions) for each company set to monthly; posts only when the company is set to auto-post and the Scheduled revenue recognition dial allows it.",
     scope: 'org',
     cron: '0 7 1 * *',
     defaultEnabled: true,
@@ -216,12 +236,8 @@ export const JOBS: readonly JobDefinition[] = [
   },
 
   // ── stubs: named in IA §6, not built yet (never run) ───────────────────────
-  stub('bank.daily_pull', 'Daily bank pull', '0 11 * * *', 'Bank feed / Plaid', 'bk.feeds',
-    'TODO(bank feed): incremental Plaid /transactions/sync per item using the stored cursor (mig 046); today pulls are user-triggered.'),
   stub('connectors.sync', 'Connected-system sync', '*/30 * * * *', 'Integrations (07-INTEGRATIONS-PLAN Phase 0)', 'int.sync_runs',
     'TODO(integrations): per-connection incremental sync + nightly reconcile; needs the 07 §1.10 staging/mapping tables and a connector worker.'),
-  stub('requests.remind', 'Request reminders', '0 14 * * *', 'Requests & chase engine (IA M-7)', 'bk.requests_out',
-    'TODO(M-7): send due reminders for client questions, receipt chase (cadence 0/2/5/10 days, quiet hours) and vendor-document chase; needs the request engine + an email/SMS sender.'),
   stub('ap.pay_run_propose', 'Pay-run proposal', '0 13 * * 1-5', 'AP / pay runs', 'ap.pay_runs',
     'TODO(AP): draft a pay run by due date and discount from the pay-run agent recipe; proposal only, release stays human.'),
   stub('ar.recurring', 'Recurring invoices', '0 12 * * *', 'Invoices', 'ar.invoices',

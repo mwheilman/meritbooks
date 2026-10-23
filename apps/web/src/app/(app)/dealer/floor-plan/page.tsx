@@ -5,6 +5,8 @@ import { PageHeader } from '@/components/ui';
 import { Spinner } from '../_components/ui';
 import { FloorPlanWorkspace } from './_components/workspace';
 
+export const metadata = { title: 'Floor plan' };
+
 /**
  * Floor plan (FPB-dealer-pack §3.1–3.4, DL-1/2/9/10): line positions, sold-out-of-trust,
  * notes, curtailments, the payoff queue (propose ≠ release), month-end interest and

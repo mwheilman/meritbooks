@@ -133,6 +133,24 @@ export async function seedChartOfAccounts(db: DB, orgId: string): Promise<CoaSee
       }
     }
   }
+  // Contract-loss provision accounts (migration 179): not in the shared template, but every
+  // tenant needs them for the WIP loss provision (roles CONTRACT_LOSS_PROVISION 2450 /
+  // CONTRACT_LOSS_EXPENSE 5250). Placed next to 2410 Deferred Revenue / 5240 WIP.
+  const extras: Array<{ number: string; name: string; type: string; sub: string; group: string }> = [
+    { number: '2450', name: 'Provision for Anticipated Contract Losses', type: 'LIABILITY', sub: 'CURRENT_LIABILITY', group: 'Other Current Liabilities' },
+    { number: '5250', name: 'Anticipated Contract Losses', type: 'COGS', sub: 'COST_OF_GOODS_SOLD', group: 'Other COGS' },
+  ];
+  for (const x of extras) {
+    const groupId = groupIdByName.get(x.group);
+    if (!groupId || accountRows.some((r) => r.account_number === x.number)) continue;
+    accountRows.push({
+      org_id: orgId, account_group_id: groupId, account_number: x.number, name: x.name,
+      account_type: x.type, account_sub_type: x.sub, display_order: 10,
+      is_control_account: false, is_company_specific: false, company_location_id: null,
+      is_bank_account: false, is_credit_card: false, require_department: false, require_class: false,
+      approval_status: 'APPROVED', is_active: true,
+    });
+  }
   // public.accounts is SELECT-only for members (migration 171): the org-level template
   // accounts (company_location_id null, org_id pinned on every row) are written through
   // writerFor(db) — the service role for a member caller. Callers authorize first (settings_acct:edit / import:run / sandbox).

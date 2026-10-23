@@ -2,6 +2,8 @@ import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { PageHeader } from '@/components/ui';
 import { AccessLogClient } from './log-client';
 
+export const metadata = { title: 'Access log' };
+
 export const dynamic = 'force-dynamic';
 
 /**

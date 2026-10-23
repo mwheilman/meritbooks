@@ -1,264 +1,282 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { clsx } from 'clsx';
-import {
-  ArrowLeft, Loader2, AlertCircle, Inbox, Layers, TrendingDown, AlertTriangle, CircleAlert,
-} from 'lucide-react';
+import { ButtonLink, ContextLine, Eyebrow, InlineNotice, Search, Seg, Tag, money, pct, useDebounce } from '@meritbooks/merit-ui';
 import { PageHeader } from '@/components/ui';
-import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import type { WipLineView, WipScheduleView } from '@/lib/rev-rec/wip-view';
+import type { TieOutSide } from '@/lib/rev-rec/wip-engine';
+import { METHOD_COPY } from '@/lib/rev-rec/policy';
+import { PeriodPicker, lastClosedPeriod, periodLabel } from '@/components/rev-rec/period-picker';
+import { WipProposalPanel, WipRunHistory } from '@/components/rev-rec/wip-proposal-panel';
 
-/** Mirror of JobPLResult / JobPLPortfolioTotals (lib/jobs/job-pl.ts). */
-interface PLJob {
-  jobId: string;
-  jobNumber: string;
-  jobName: string;
-  status: string | null;
-  company: string | null;
-  contractValueCents: number;
-  estimatedCostCents: number;
-  costsToDateCents: number;
-  eacCents: number;
-  billedToDateCents: number;
-  earnedRevenueCents: number;
-  overBillingCents: number;
-  underBillingCents: number;
-  pctCompleteDisplay: number;
-  costPctCompleteDisplay: number;
-  pctBasis: 'PHYSICAL' | 'COST_TO_COST';
-  projectedFinalMarginCents: number;
-  projectedFinalMarginPct: number | null;
-  wipStatus: 'OVERBILLED' | 'UNDERBILLED' | 'ON_TARGET';
-  projectedLoss: boolean;
-  marginFade: boolean;
-  overBudget: boolean;
-  glCostTied: boolean;
-}
+/**
+ * WIP schedule (/jobs/wip) — FPB-rev-rec-wip §6. The contractor's work-in-progress schedule
+ * for ONE company and month, tied to GL 1180 / 2410 (difference shown), with last month's
+ * comparison, fade / gain, the month-end proposal (approve / dismiss), export, and drill to
+ * each job. Every figure comes from /api/rev-rec/wip (the canonical engine).
+ */
 
-interface PLTotals {
-  jobs: number;
-  contractValueCents: number;
-  estimatedCostCents: number;
-  costsToDateCents: number;
-  eacCents: number;
-  earnedRevenueCents: number;
-  billedToDateCents: number;
-  overBillingCents: number;
-  underBillingCents: number;
-  netWipCents: number;
-  projectedFinalMarginCents: number;
-  projectedFinalMarginPct: number | null;
-  overbilledJobs: number;
-  underbilledJobs: number;
-  projectedLossJobs: number;
-  marginFadeJobs: number;
-  overBudgetJobs: number;
-  projectedLossExposureCents: number;
-  glUntiedJobs: number;
-}
+type Filter = 'all' | 'under' | 'over' | 'loss' | 'fade';
+type SortKey = 'job' | 'under' | 'over' | 'fade' | 'pct';
 
-interface Portfolio {
-  method: string;
-  jobs: PLJob[];
-  totals: PLTotals;
-}
+const usd = (c: number) => money(c, { symbol: '$' });
+const usd0 = (c: number) => money(c, { symbol: '$', decimals: 0 });
 
-const METHODS: { value: 'COMMITMENTS' | 'COST_TO_COST' | 'PROGRESS'; label: string; hint: string }[] = [
-  { value: 'COMMITMENTS', label: 'Commitments', hint: 'costs to date + open commitments (default)' },
-  { value: 'COST_TO_COST', label: 'Cost-to-cost', hint: 'holds the budget unless actuals exceed it' },
-  { value: 'PROGRESS', label: 'Physical %', hint: 'CPI projection from measured %-complete' },
-];
-
-function SummaryTile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'good' | 'bad' | 'warn' | 'info' }) {
+function TieTile({ title, account, side }: { title: string; account: string | null; side: TieOutSide }) {
+  const tied = side.differenceCents === 0;
   return (
-    <div className="card p-4">
-      <p className="text-2xs uppercase tracking-wider text-slate-500 font-semibold">{label}</p>
-      <p className={clsx('text-xl font-mono font-semibold mt-1',
-        tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-red-400' : tone === 'warn' ? 'text-amber-400' : tone === 'info' ? 'text-blue-400' : 'text-white')}>
-        {value}
-      </p>
-      {sub && <p className="text-2xs text-slate-500 mt-0.5">{sub}</p>}
+    <div className="surface" style={{ padding: 16 }}>
+      <Eyebrow>{[account ?? '—', title]}</Eyebrow>
+      <div className="row row--between" style={{ marginTop: 8 }}>
+        <span className="t-cap ink-2">Schedule</span>
+        <span className="tnum b">{usd(side.scheduleCents)}</span>
+      </div>
+      <div className="row row--between">
+        <span className="t-cap ink-2">General ledger (jobs)</span>
+        <span className="tnum">{usd(side.glJobsCents)}</span>
+      </div>
+      <div className="row row--between hairline" style={{ marginTop: 6, paddingTop: 6 }}>
+        <span className="t-cap ink-2">Difference</span>
+        <span className={`tnum b ${tied ? 'pos' : 'neg'}`}>{tied ? 'Ties' : usd(side.differenceCents)}</span>
+      </div>
+      {side.glOtherCents !== 0 && (
+        <p className="t-cap ink-3" style={{ marginTop: 6 }}>Plus {usd(side.glOtherCents)} on this account not tagged to a job (not part of WIP).</p>
+      )}
     </div>
   );
 }
 
-const STATUS_STYLE: Record<PLJob['wipStatus'], string> = {
-  OVERBILLED: 'bg-amber-500/15 text-amber-300',
-  UNDERBILLED: 'bg-blue-500/15 text-blue-300',
-  ON_TARGET: 'bg-emerald-500/15 text-emerald-300',
-};
-
-function marginColor(pct: number | null): string {
-  if (pct == null) return 'text-slate-500';
-  if (pct < 0) return 'text-red-400';
-  if (pct < 10) return 'text-amber-400';
-  return 'text-emerald-400';
+function rowNote(l: WipLineView): string | null {
+  if (l.excluded) return 'Excluded from WIP';
+  if (l.belowMateriality) return 'Below threshold';
+  if (l.underCents > 0 && !l.accrueUnderbillings) return 'Underbillings off';
+  if (l.overCents > 0 && !l.deferOverbillings) return 'Overbillings off';
+  return null;
 }
 
 export function WipScheduleClient() {
-  const [method, setMethod] = useState<'COMMITMENTS' | 'COST_TO_COST' | 'PROGRESS'>('COMMITMENTS');
-  const { data, isLoading, error } = useQuery<Portfolio>('/api/jobs/pl', { method });
+  const { activeCompanyId } = useActiveCompany();
+  const [period, setPeriod] = useState(lastClosedPeriod());
+  const [filter, setFilter] = useState<Filter>('all');
+  const [sort, setSort] = useState<SortKey>('job');
+  const [q, setQ] = useState('');
+  const dq = useDebounce(q, 200);
+  const [refresh, setRefresh] = useState(0);
+
+  const { data, isLoading, error, refetch } = useQuery<WipScheduleView>(
+    '/api/rev-rec/wip',
+    { location_id: activeCompanyId, period },
+    { key: `${activeCompanyId}:${period}:${refresh}` },
+  );
+
+  const lines = useMemo(() => {
+    let ls = data?.lines ?? [];
+    if (filter === 'under') ls = ls.filter((l) => l.underCents > 0);
+    if (filter === 'over') ls = ls.filter((l) => l.overCents > 0);
+    if (filter === 'loss') ls = ls.filter((l) => l.lossProvisionCents > 0 || l.estGrossProfitCents < 0);
+    if (filter === 'fade') ls = ls.filter((l) => (l.fadeGainCents ?? 0) < 0);
+    const needle = dq.trim().toLowerCase();
+    if (needle) ls = ls.filter((l) => `${l.jobNumber ?? ''} ${l.jobName ?? ''}`.toLowerCase().includes(needle));
+    const by: Record<SortKey, (a: WipLineView, b: WipLineView) => number> = {
+      job: (a, b) => (a.jobNumber ?? '').localeCompare(b.jobNumber ?? ''),
+      under: (a, b) => b.underCents - a.underCents,
+      over: (a, b) => b.overCents - a.overCents,
+      fade: (a, b) => (a.fadeGainCents ?? 0) - (b.fadeGainCents ?? 0),
+      pct: (a, b) => b.pctComplete - a.pctComplete,
+    };
+    return [...ls].sort(by[sort]);
+  }, [data, filter, sort, dq]);
+
+  const t = data?.totals;
+  const prior = data?.priorRun ?? null;
+  const exportHref = `/api/rev-rec/wip/export?location_id=${encodeURIComponent(activeCompanyId)}&period=${period}`;
+
+  const sortHeader = (key: SortKey, label: string, numeric = true) => (
+    <th className={numeric ? 'n' : undefined} aria-sort={sort === key ? 'descending' : 'none'}>
+      <button type="button" className="mb-th-btn" onClick={() => setSort(key)}>{label}{sort === key ? ' ↓' : ''}</button>
+    </th>
+  );
 
   return (
-    <div>
-      <Link href="/jobs" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white mb-3"><ArrowLeft size={14} /> Jobs</Link>
+    <div className="stack" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <PageHeader
-        title="WIP Schedule"
-        description="Work-in-progress across all open jobs — earned revenue vs billings, EAC, and margin at completion"
+        eyebrow={['Jobs', 'WIP schedule']}
+        title="Work in progress"
+        description="Earned vs billed on every job, tied to your Unbilled AR (1180) and Deferred revenue (2410) accounts. Approve the month-end entry here."
         actions={
-          <div className="flex items-center gap-1 rounded-lg bg-slate-800/50 p-0.5">
-            {METHODS.map((m) => (
-              <button key={m.value} onClick={() => setMethod(m.value)} title={m.hint}
-                className={clsx('px-2.5 py-1 rounded-md text-2xs font-medium transition-colors',
-                  method === m.value ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200')}>
-                {m.label}
-              </button>
-            ))}
-          </div>
+          <>
+            <PeriodPicker value={period} onChange={setPeriod} />
+            {/* A plain anchor: the CSV is a file download from an API route, not an app page. */}
+            <a className="btn" href={exportHref} download>Export CSV</a>
+            <ButtonLink href="/rev-rec?tab=policy" variant="quiet">Revenue policy</ButtonLink>
+          </>
         }
       />
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
-      ) : error ? (
-        <div className="card p-8 text-center"><AlertCircle size={24} className="mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{error}</p></div>
-      ) : !data || data.jobs.length === 0 ? (
-        <div className="card p-12 text-center">
-          <Inbox size={28} className="mx-auto mb-2 text-slate-600" />
-          <p className="text-sm text-slate-400">No open jobs to schedule.</p>
-          <p className="text-2xs text-slate-500 mt-1">Jobs appear here once they are ACTIVE, ON_HOLD, or COMPLETE.</p>
+      {isLoading && !data ? (
+        <div className="surface wg-loading mb-state-block" aria-busy="true">
+          <span className="bar-l" style={{ width: '70%' }} aria-hidden="true" />
+          <span className="bar-l" style={{ width: '55%' }} aria-hidden="true" />
+          <span className="bar-l" style={{ width: '62%' }} aria-hidden="true" />
+          <span className="t-cap" role="status">Building the WIP schedule…</span>
+        </div>
+      ) : error || !data ? (
+        <div className="surface wg-state mb-state-block" role="alert">
+          <span className="tag tag--neg">Not loaded</span>
+          <span className="t-head">The WIP schedule didn’t load</span>
+          <span className="t-cap ink-2">{error ?? 'Unknown error'}</span>
+          <button type="button" className="btn" onClick={() => void refetch()}>Try again</button>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <SummaryTile label="Overbilled (Liability)" value={formatMoney(data.totals.overBillingCents)}
-              sub={`${data.totals.overbilledJobs} job${data.totals.overbilledJobs === 1 ? '' : 's'} · billings in excess`} tone="warn" />
-            <SummaryTile label="Underbilled (Asset)" value={formatMoney(data.totals.underBillingCents)}
-              sub={`${data.totals.underbilledJobs} job${data.totals.underbilledJobs === 1 ? '' : 's'} · costs & earnings in excess`} tone="info" />
-            <SummaryTile label="Net WIP Position" value={formatMoney(data.totals.netWipCents)}
-              sub="underbilled − overbilled" tone={data.totals.netWipCents < 0 ? 'warn' : 'good'} />
-            <SummaryTile label="Projected Margin at Completion"
-              value={data.totals.projectedFinalMarginPct != null ? `${data.totals.projectedFinalMarginPct}%` : '--'}
-              sub={`${formatMoney(data.totals.projectedFinalMarginCents)} on ${formatMoney(data.totals.contractValueCents)} backlog`}
-              tone={data.totals.projectedFinalMarginCents < 0 ? 'bad' : 'good'} />
-          </div>
+          <ContextLine
+            items={[
+              data.company?.name ?? 'Company',
+              periodLabel(period),
+              `as of ${data.asOf}`,
+              { label: `${t!.jobs} job${t!.jobs === 1 ? '' : 's'}`, strong: true, tnum: true },
+              { label: `net ${usd0(t!.underCents - t!.overCents)} ${t!.underCents >= t!.overCents ? 'underbilled' : 'overbilled'}`, tnum: true },
+            ]}
+          />
 
-          {/* Risk banner */}
-          {(data.totals.projectedLossJobs > 0 || data.totals.marginFadeJobs > 0 || data.totals.overBudgetJobs > 0 || data.totals.glUntiedJobs > 0) && (
-            <div className="flex flex-wrap gap-2 mb-4">
-              {data.totals.projectedLossJobs > 0 && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-2xs font-semibold bg-red-500/15 text-red-300">
-                  <TrendingDown size={12} /> {data.totals.projectedLossJobs} projecting a loss · {formatMoney(data.totals.projectedLossExposureCents)} exposure
-                </span>
-              )}
-              {data.totals.marginFadeJobs > 0 && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-2xs font-semibold bg-amber-500/15 text-amber-300">
-                  <AlertTriangle size={12} /> {data.totals.marginFadeJobs} fading vs original margin
-                </span>
-              )}
-              {data.totals.overBudgetJobs > 0 && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-2xs font-semibold bg-amber-500/15 text-amber-300">
-                  <AlertTriangle size={12} /> {data.totals.overBudgetJobs} over budget (EAC &gt; budget)
-                </span>
-              )}
-              {data.totals.glUntiedJobs > 0 && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-2xs font-semibold bg-slate-700/40 text-slate-300">
-                  <CircleAlert size={12} /> {data.totals.glUntiedJobs} not tied to the GL
-                </span>
-              )}
-            </div>
+          {data.tieOut ? (
+            <section aria-label="Tie-out to the general ledger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+              <TieTile title="Unbilled receivable" account={data.accounts.unbilled} side={data.tieOut.unbilled} />
+              <TieTile title="Deferred revenue" account={data.accounts.deferred} side={data.tieOut.deferred} />
+              {data.policy.lossProvision && <TieTile title="Loss provision" account={data.accounts.lossProvision} side={data.tieOut.lossProvision} />}
+              <div className="surface" style={{ padding: 16 }}>
+                <Eyebrow>{['vs', prior ? periodLabel(prior.period_key) : 'last month']}</Eyebrow>
+                {prior ? (
+                  <>
+                    <div className="row row--between" style={{ marginTop: 8 }}>
+                      <span className="t-cap ink-2">Underbilled</span>
+                      <span className="tnum">{usd0(t!.targetUnderCents)} <span className="ink-3">vs {usd0(Number(prior.underbilled_cents))}</span></span>
+                    </div>
+                    <div className="row row--between">
+                      <span className="t-cap ink-2">Overbilled</span>
+                      <span className="tnum">{usd0(t!.targetOverCents)} <span className="ink-3">vs {usd0(Number(prior.overbilled_cents))}</span></span>
+                    </div>
+                    <div className="row row--between hairline" style={{ marginTop: 6, paddingTop: 6 }}>
+                      <span className="t-cap ink-2">Fade / gain ({t!.fadeJobs} fading)</span>
+                      <span className={`tnum b ${t!.fadeGainCents < 0 ? 'neg' : 'pos'}`}>{money(t!.fadeGainCents, { symbol: '$', sign: 'delta', decimals: 0 })}</span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="t-cap ink-3" style={{ marginTop: 8 }}>No run for the prior month yet — fade / gain starts after the first posted month.</p>
+                )}
+              </div>
+            </section>
+          ) : (
+            <InlineNotice tone="warn" title="Tie-out unavailable">{data.setupIssues[0] ?? 'The contract-asset accounts are not set up.'}</InlineNotice>
           )}
 
-          <div className="card overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2">
-              <Layers size={14} className="text-brand-400" />
-              <h2 className="text-sm font-semibold text-white">Schedule · {data.totals.jobs} open job{data.totals.jobs === 1 ? '' : 's'}</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px]">
-                <thead>
-                  <tr className="border-b border-slate-800">
-                    <th className="px-3 py-2 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Job</th>
-                    <th className="px-3 py-2 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">% Compl.</th>
-                    <th className="px-3 py-2 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Contract</th>
-                    <th className="px-3 py-2 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Cost to Date</th>
-                    <th className="px-3 py-2 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">EAC</th>
-                    <th className="px-3 py-2 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Billed</th>
-                    <th className="px-3 py-2 text-right text-2xs font-semibold uppercase tracking-wider text-amber-400">Overbilled</th>
-                    <th className="px-3 py-2 text-right text-2xs font-semibold uppercase tracking-wider text-blue-400">Underbilled</th>
-                    <th className="px-3 py-2 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Proj. Margin</th>
-                    <th className="px-3 py-2 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/30">
-                  {data.jobs.map((j) => (
-                    <tr key={j.jobId} className="table-row-hover">
-                      <td className="px-3 py-2.5">
-                        <Link href={`/jobs/${j.jobId}`} className="group inline-flex flex-col">
-                          <span className="text-sm text-slate-200 group-hover:text-white truncate max-w-[220px]">{j.jobName}</span>
-                          <span className="text-2xs font-mono text-slate-500">{j.jobNumber}{j.company ? ` · ${j.company}` : ''}</span>
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2.5 text-right text-sm font-mono text-slate-300">
-                        {j.pctCompleteDisplay}%
-                        <span className="block text-2xs text-slate-600">{j.pctBasis === 'PHYSICAL' ? 'physical' : 'cost-to-cost'}</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right text-sm font-mono text-slate-300">{formatMoney(j.contractValueCents)}</td>
-                      <td className="px-3 py-2.5 text-right text-sm font-mono text-slate-400">{formatMoney(j.costsToDateCents)}</td>
-                      <td className={clsx('px-3 py-2.5 text-right text-sm font-mono', j.overBudget ? 'text-amber-300' : 'text-slate-300')}>
-                        {formatMoney(j.eacCents)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right text-sm font-mono text-slate-200">{formatMoney(j.billedToDateCents)}</td>
-                      <td className={clsx('px-3 py-2.5 text-right text-sm font-mono', j.overBillingCents > 0 ? 'text-amber-300' : 'text-slate-600')}>
-                        {j.overBillingCents > 0 ? formatMoney(j.overBillingCents) : '--'}
-                      </td>
-                      <td className={clsx('px-3 py-2.5 text-right text-sm font-mono', j.underBillingCents > 0 ? 'text-blue-300' : 'text-slate-600')}>
-                        {j.underBillingCents > 0 ? formatMoney(j.underBillingCents) : '--'}
-                      </td>
-                      <td className={clsx('px-3 py-2.5 text-right text-sm font-mono', marginColor(j.projectedFinalMarginPct))}>
-                        {j.projectedFinalMarginPct != null ? `${j.projectedFinalMarginPct}%` : '--'}
-                        {(j.projectedLoss || j.marginFade) && (
-                          <span className="block text-2xs">
-                            {j.projectedLoss
-                              ? <span className="text-red-400 inline-flex items-center gap-0.5"><TrendingDown size={9} /> loss</span>
-                              : <span className="text-amber-400 inline-flex items-center gap-0.5"><AlertTriangle size={9} /> fade</span>}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className={clsx('inline-block px-2 py-0.5 rounded text-2xs font-semibold', STATUS_STYLE[j.wipStatus])}>
-                          {j.wipStatus === 'ON_TARGET' ? 'On target' : j.wipStatus === 'OVERBILLED' ? 'Overbilled' : 'Underbilled'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-slate-700 bg-slate-800/20">
-                    <td className="px-3 py-2.5 text-2xs font-semibold uppercase tracking-wider text-slate-400">Total</td>
-                    <td />
-                    <td className="px-3 py-2.5 text-right text-sm font-mono text-slate-200">{formatMoney(data.totals.contractValueCents)}</td>
-                    <td className="px-3 py-2.5 text-right text-sm font-mono text-slate-300">{formatMoney(data.totals.costsToDateCents)}</td>
-                    <td className="px-3 py-2.5 text-right text-sm font-mono text-slate-300">{formatMoney(data.totals.eacCents)}</td>
-                    <td className="px-3 py-2.5 text-right text-sm font-mono text-white">{formatMoney(data.totals.billedToDateCents)}</td>
-                    <td className="px-3 py-2.5 text-right text-sm font-mono text-amber-300">{formatMoney(data.totals.overBillingCents)}</td>
-                    <td className="px-3 py-2.5 text-right text-sm font-mono text-blue-300">{formatMoney(data.totals.underBillingCents)}</td>
-                    <td className={clsx('px-3 py-2.5 text-right text-sm font-mono font-semibold', marginColor(data.totals.projectedFinalMarginPct))}>
-                      {data.totals.projectedFinalMarginPct != null ? `${data.totals.projectedFinalMarginPct}%` : '--'}
-                    </td>
-                    <td />
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
+          <WipProposalPanel view={data} onChanged={async () => { setRefresh((n) => n + 1); }} />
 
-          <p className="text-2xs text-slate-600 mt-3">
-            Earned revenue = contract × %-complete. EAC and margin fade are projected by the selected method; every figure is
-            computed deterministically in code (lib/jobs/job-pl.ts) and ties to the GL.
-          </p>
+          <section aria-labelledby="wip-sched-h" className="stack">
+            <div className="row row--between" style={{ flexWrap: 'wrap', gap: 12 }}>
+              <h2 id="wip-sched-h" className="t-section">Schedule</h2>
+              <div className="row" style={{ flexWrap: 'wrap' }}>
+                <Seg<Filter>
+                  aria-label="Show"
+                  value={filter}
+                  onChange={setFilter}
+                  items={[
+                    { value: 'all', label: 'All', count: data.lines.length },
+                    { value: 'under', label: 'Underbilled', count: t!.underbilledJobs },
+                    { value: 'over', label: 'Overbilled', count: t!.overbilledJobs },
+                    { value: 'loss', label: 'Losses', count: t!.lossJobs },
+                    { value: 'fade', label: 'Fading', count: t!.fadeJobs },
+                  ]}
+                />
+                <Search value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a job" aria-label="Find a job" style={{ width: 200 }} />
+              </div>
+            </div>
+
+            {data.lines.length === 0 ? (
+              <div className="surface wg-state mb-state-block">
+                <span className="t-head">No jobs on the WIP schedule</span>
+                <span className="t-cap ink-2">Active, on-hold and completed jobs for this company appear here. <Link className="link" href="/jobs">Go to jobs</Link></span>
+              </div>
+            ) : lines.length === 0 ? (
+              <div className="surface wg-state mb-state-block"><span className="t-head">No jobs match this filter</span></div>
+            ) : (
+              <div className="surface mb-scroll-x">
+                <table className="tbl tbl-q" aria-label={`WIP schedule ${periodLabel(period)}`} style={{ minWidth: 1320 }}>
+                  <thead>
+                    <tr>
+                      {sortHeader('job', 'Job', false)}
+                      <th className="n">Contract</th>
+                      <th className="n">EAC</th>
+                      <th className="n">Cost to date</th>
+                      {sortHeader('pct', '% done')}
+                      <th className="n">Earned</th>
+                      <th className="n">Billed</th>
+                      {data.policy.retainagePresentation === 'SEPARATE' && <th className="n">Retainage</th>}
+                      {sortHeader('under', 'Underbilled')}
+                      {sortHeader('over', 'Overbilled')}
+                      <th className="n">Loss prov.</th>
+                      <th className="n">Est. GP</th>
+                      {sortHeader('fade', 'Fade / gain')}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lines.map((l) => {
+                      const note = rowNote(l);
+                      return (
+                        <tr key={l.jobId} className={`q-row${l.estGrossProfitCents < 0 ? ' is-attn' : ''}`}>
+                          <td style={{ width: 260 }}>
+                            <Link className="l1 mb-row-link" href={`/jobs/${l.jobId}`}>{l.jobNumber ?? '—'} · {l.jobName ?? 'Job'}</Link>
+                            <span className="l2">{l.methodLabel}{note ? ` · ${note}` : ''}</span>
+                          </td>
+                          <td className="n tnum">{money(l.contractCents, { decimals: 0 })}</td>
+                          <td className="n tnum">{money(l.eacCents, { decimals: 0 })}</td>
+                          <td className="n tnum">{money(l.costToDateCents, { decimals: 0 })}</td>
+                          <td className="n tnum">{pct(l.pctComplete)}</td>
+                          <td className="n tnum">{money(l.earnedCents, { decimals: 0 })}</td>
+                          <td className="n tnum">{money(l.billedCents, { decimals: 0 })}</td>
+                          {data.policy.retainagePresentation === 'SEPARATE' && <td className="n tnum">{money(l.retainageCents, { decimals: 0, zeroAsDash: true })}</td>}
+                          <td className="n tnum">{money(l.underCents, { decimals: 0, zeroAsDash: true })}</td>
+                          <td className="n tnum">{money(l.overCents, { decimals: 0, zeroAsDash: true })}</td>
+                          <td className="n tnum">{money(l.lossProvisionCents, { decimals: 0, zeroAsDash: true })}</td>
+                          <td className={`n tnum${l.estGrossProfitCents < 0 ? ' neg' : ''}`}>{money(l.estGrossProfitCents, { decimals: 0 })}</td>
+                          <td className={`n tnum${(l.fadeGainCents ?? 0) < 0 ? ' neg' : ''}`}>
+                            {l.fadeGainCents == null ? <span className="ink-3">—</span> : money(l.fadeGainCents, { decimals: 0, sign: 'delta' })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="q-group">
+                      <td><b>Total · {t!.jobs} jobs</b></td>
+                      <td className="n tnum b">{money(t!.contractCents, { decimals: 0 })}</td>
+                      <td className="n tnum b">{money(t!.eacCents, { decimals: 0 })}</td>
+                      <td className="n tnum b">{money(t!.costToDateCents, { decimals: 0 })}</td>
+                      <td />
+                      <td className="n tnum b">{money(t!.earnedCents, { decimals: 0 })}</td>
+                      <td className="n tnum b">{money(t!.billedCents, { decimals: 0 })}</td>
+                      {data.policy.retainagePresentation === 'SEPARATE' && <td className="n tnum b">{money(t!.retainageCents, { decimals: 0 })}</td>}
+                      <td className="n tnum b">{money(t!.underCents, { decimals: 0 })}</td>
+                      <td className="n tnum b">{money(t!.overCents, { decimals: 0 })}</td>
+                      <td className="n tnum b">{money(t!.lossProvisionCents, { decimals: 0 })}</td>
+                      <td />
+                      <td className="n tnum b">{money(t!.fadeGainCents, { decimals: 0, sign: 'delta' })}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="t-cap ink-3">
+              In US dollars. Earned follows each job’s method{data.company ? ` (company default: ${METHOD_COPY[data.company.defaultMethod].label})` : ''}.
+              Billed is gross of retainage. <Tag>EAC</Tag> = the larger of the estimate and cost to date.
+            </p>
+          </section>
+
+          <section aria-labelledby="wip-hist-h" className="stack">
+            <h2 id="wip-hist-h" className="t-section">Run history</h2>
+            <WipRunHistory runs={data.history} />
+          </section>
         </>
       )}
     </div>

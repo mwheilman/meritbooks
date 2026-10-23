@@ -1,5 +1,7 @@
 import { Lockup } from '@meritbooks/merit-ui';
 
+export const metadata = { title: 'Set up' };
+
 export default function SetupLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-surface-950 flex flex-col">

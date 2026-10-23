@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 
+export const metadata = { title: 'AI decision log' };
+
 export const dynamic = 'force-dynamic';
 
 /**

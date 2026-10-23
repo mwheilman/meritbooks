@@ -1,5 +1,7 @@
 import { TourClient } from './tour-client';
 
+export const metadata = { title: 'Product tour' };
+
 export const dynamic = 'force-dynamic';
 
 /**

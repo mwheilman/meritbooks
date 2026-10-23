@@ -2,6 +2,8 @@ import { PageHeader } from '@/components/ui';
 import { HubTabs } from '../_components/hub-tabs';
 import { TaxPackageClient } from './tax-package-client';
 
+export const metadata = { title: 'Tax package' };
+
 export default function TaxPackagePage() {
   return (
     <div className="p-6 max-w-6xl mx-auto">

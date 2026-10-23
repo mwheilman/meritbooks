@@ -99,7 +99,12 @@ export type AccountRoleKey =
   // override either with an explicit account. Registered in the vocabulary by
   // migration 101 (see the inventory build report).
   | 'INVENTORY_ASSET'
-  | 'INVENTORY_COGS';
+  | 'INVENTORY_COGS'
+  // Contract loss provision (ASC 605-35 / 606 onerous contract) — the monthly WIP run books
+  // DR CONTRACT_LOSS_EXPENSE / CR CONTRACT_LOSS_PROVISION for a job whose EAC exceeds its
+  // contract. Registered + seeded (2450 / 5250) by migration 179.
+  | 'CONTRACT_LOSS_PROVISION'
+  | 'CONTRACT_LOSS_EXPENSE';
 
 /** Standard COA numbers per role — fallback when account_roles isn't seeded. */
 export const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
@@ -182,6 +187,10 @@ export const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
   // the two role keys the seeder maps.
   INVENTORY_ASSET: '1200',
   INVENTORY_COGS: '5100',
+  // Contract loss provision — NEW numbers 2450 (liability, next to 2410 Deferred Revenue) and
+  // 5250 (COGS, next to 5240 WIP), both free in the standard COA; created by migration 179.
+  CONTRACT_LOSS_PROVISION: '2450',
+  CONTRACT_LOSS_EXPENSE: '5250',
 };
 
 /** A resolved account, carrying the type/sub-type the direction helper needs. */

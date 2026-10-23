@@ -2,6 +2,8 @@ import { PageHeader } from '@/components/ui';
 import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { ReceiptQueue } from './receipt-queue';
 
+export const metadata = { title: 'Receipts' };
+
 export default function ReceiptsPage() {
   // COMPANY-SCOPE CONTROL: receipts are processed per company.
   return (

@@ -5,6 +5,8 @@ import { createAdminSupabase } from '@/lib/supabase/server';
 import { validatePortalToken, PORTAL_DOC_LABEL, type PortalDocKind } from '@/lib/portal/vendor/tokens';
 import { VendorPortalClient } from './upload-portal';
 
+export const metadata = { title: { absolute: 'Vendor portal' } };
+
 /**
  * Vendor self-service upload portal — PUBLIC, tokenized, no login. A branded page
  * where a vendor uploads the W-9 / COI / banking details a company requested. The

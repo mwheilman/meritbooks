@@ -1,9 +1,19 @@
 'use server';
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAuthedServerSupabase } from '@/lib/supabase/authed';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { fetchBookCash } from '@/lib/cash/book-cash';
 import { getOrgToday } from '@/lib/dates/org-today';
+import { loadClientScope } from '@/lib/rbac/client-scope';
+import {
+  countNeedsAttention,
+  countsForLocation,
+  emptyCounts,
+  type LaneCounts,
+  type LocationCounts,
+  type NeedsAttentionCounts,
+} from '@/lib/work/needs-attention';
 
 /**
  * Dashboard = the ONE consolidated, cross-company landing on the processing side.
@@ -17,6 +27,12 @@ import { getOrgToday } from '@/lib/dates/org-today';
  * Each source degrades independently: a failed sub-query drops to zero for that
  * signal rather than blanking the whole board. Only a failure to resolve the
  * company list itself yields an error state.
+ *
+ * EVERYTHING "WAITING ON YOU" (approvals, exceptions/AI proposals, alerts, drafts,
+ * flagged lines) comes from lib/work/needs-attention — the same counting service the
+ * Inbox tabs and the rail badge use, with the same client scope — so the home can
+ * never say "Nothing waiting" while the Inbox says 100+. Only the to-review feed
+ * (unflagged open bank lines, receipts, bills) and the money figures are read here.
  */
 
 // A tenant has a bounded number of companies (Merit: 17) and open work items;
@@ -35,12 +51,16 @@ export interface CompanyBoard {
   isOwnBooks: boolean;
   /** Items waiting to be processed: pending bank txns + receipts + bills. */
   toReview: number;
-  /** Items a human must look at now: flagged bank/receipts + on-hold bills. */
+  /** Items a human must look at now: flagged bank lines/receipts + bills on hold (shared service). */
   needsAttention: number;
-  /** Open AI proposals in the review queue (ai_decisions PROPOSED). */
+  /** Open AI proposals (shared service — the Exceptions tab's AI rows). */
   openExceptions: number;
-  /** Unposted manual journal-entry drafts (gl_entries DRAFT). */
+  /** Unposted manual journal entries (shared service — the Drafts tab). */
   draftJEs: number;
+  /** This client's Inbox lanes — identical to its Inbox tab counts. */
+  lanes: LaneCounts;
+  /** This client's Inbox total (= the rail badge when the client is active). */
+  needsYou: number;
   /** Current-month fiscal period status for this company. */
   periodStatus: PeriodStatus;
   /** CANONICAL book cash (lib/cash/book-cash) as of today in the org's timezone. */
@@ -48,8 +68,38 @@ export interface CompanyBoard {
   cashStatus: CashStatus;
   openAPCents: number;
   openARCents: number;
-  /** Total actionable items (toReview + needsAttention + openExceptions + draftJEs). */
+  /** Total actionable items (toReview + everything in the Inbox). */
   totalOpen: number;
+}
+
+/** Board figures for one client, from the shared needs-attention counts. */
+function workFigures(c: LocationCounts): Pick<CompanyBoard, 'needsAttention' | 'openExceptions' | 'draftJEs' | 'lanes' | 'needsYou'> {
+  return {
+    needsAttention: c.sources.bank + c.sources.receipt + c.sources.bill_hold,
+    openExceptions: c.sources.ai_proposal,
+    draftJEs: c.lanes.drafts,
+    lanes: c.lanes,
+    needsYou: c.total,
+  };
+}
+
+/**
+ * The shared needs-attention counts for a scope (null = all clients). Degrades to
+ * zeros (and `degraded: ['needs_attention']`) rather than blanking the home.
+ */
+async function loadWork(
+  supabase: SupabaseClient,
+  locationId: string | null,
+  asOf: string,
+): Promise<{ counts: NeedsAttentionCounts; degraded: string[] }> {
+  try {
+    const state = await loadClientScope({ supabase });
+    const r = await countNeedsAttention(supabase, { scope: { locationId, state }, asOf });
+    return { counts: r.counts, degraded: r.degraded };
+  } catch (e) {
+    console.error('[dashboard] needs-attention degraded:', e instanceof Error ? e.message : e);
+    return { counts: emptyCounts(), degraded: ['needs_attention'] };
+  }
 }
 
 export interface WorkboardConsolidated {
@@ -58,8 +108,11 @@ export interface WorkboardConsolidated {
   needsAttention: number;
   openExceptions: number;
   draftJEs: number;
-  /** Org-wide money-movement approvals awaiting sign-off (not company-scoped). */
+  /** Approvals lane across every client + organization-level items. */
   pendingApprovals: number;
+  /** The Inbox (all clients) lanes and total — identical to the Inbox tabs + rail badge. */
+  lanes: LaneCounts;
+  needsYou: number;
   cashCents: number;
   openAPCents: number;
   openARCents: number;
@@ -82,6 +135,8 @@ const EMPTY_CONSOLIDATED: WorkboardConsolidated = {
   openExceptions: 0,
   draftJEs: 0,
   pendingApprovals: 0,
+  lanes: { approvals: 0, exceptions: 0, alerts: 0, drafts: 0 },
+  needsYou: 0,
   cashCents: 0,
   openAPCents: 0,
   openARCents: 0,
@@ -94,15 +149,6 @@ interface LocationRow {
   short_code: string | null;
   minimum_cash_cents: number | null;
   is_tenant_own_books: boolean | null;
-}
-
-function tally(rows: Array<{ location_id: string | null }> | null | undefined): Map<string, number> {
-  const m = new Map<string, number>();
-  for (const r of rows ?? []) {
-    if (!r.location_id) continue;
-    m.set(r.location_id, (m.get(r.location_id) ?? 0) + 1);
-  }
-  return m;
 }
 
 function num(v: number | string | null | undefined): number {
@@ -143,17 +189,7 @@ export async function getWorkboard(): Promise<Workboard> {
 
   // Fire every source in parallel. Each degrades to empty on error (see below), so
   // one broken queue never blanks the whole board.
-  const [
-    bankRes,
-    receiptRes,
-    billRes,
-    invoiceRes,
-    bookCash,
-    aiRes,
-    jeRes,
-    periodRes,
-    approvalRes,
-  ] = await Promise.all([
+  const [bankRes, receiptRes, billRes, invoiceRes, bookCash, periodRes, work] = await Promise.all([
     supabase
       .from('bank_transactions')
       .select('location_id, status')
@@ -180,24 +216,13 @@ export async function getWorkboard(): Promise<Workboard> {
     // Cash = the CANONICAL book cash (posted GL, bank/cash-role accounts), not
     // bank-feed balances — the same figure every other surface shows (audit L6).
     fetchBookCash(supabase, null, { asOfDate: today }).catch(() => null),
-    // Paged: `.limit(ROW_CAP)` alone is silently capped at PostgREST's 1,000 rows.
-    fetchAll(() => supabase.from('ai_decisions').select('id, location_id').eq('status', 'PROPOSED'), {
-      label: 'dashboard proposed ai_decisions',
-    }),
-    // Paged: `.limit(ROW_CAP)` alone is silently capped at PostgREST's 1,000 rows.
-    fetchAll(() => supabase.from('gl_entries').select('location_id').eq('status', 'DRAFT'), {
-      label: 'dashboard draft gl_entries',
-    }),
     supabase
       .from('fiscal_periods')
       .select('location_id, status')
       .eq('period_year', year)
       .eq('period_month', month),
-    // Money-movement approvals are org-wide (no location_id); a consolidated count.
-    supabase
-      .from('approvals')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'PENDING_APPROVAL'),
+    // Everything waiting on a human — the SAME service + scope as the Inbox (all clients).
+    loadWork(supabase, null, today),
   ]);
 
   // ── Bucket per company ──────────────────────────────────────────────────────
@@ -214,26 +239,23 @@ export async function getWorkboard(): Promise<Workboard> {
   }>;
 
   const toReview = new Map<string, number>();
-  const attention = new Map<string, number>();
 
   const bump = (m: Map<string, number>, loc: string | null, by = 1) => {
     if (!loc) return;
     m.set(loc, (m.get(loc) ?? 0) + by);
   };
 
+  // FLAGGED lines and ON_HOLD bills are "needs you" — counted by the shared service.
   for (const r of bankRows) {
-    if (r.status === 'FLAGGED') bump(attention, r.location_id);
-    else bump(toReview, r.location_id);
+    if (r.status !== 'FLAGGED') bump(toReview, r.location_id);
   }
   for (const r of receiptRows) {
-    if (r.status === 'FLAGGED') bump(attention, r.location_id);
-    else bump(toReview, r.location_id);
+    if (r.status !== 'FLAGGED') bump(toReview, r.location_id);
   }
 
   const openAP = new Map<string, number>();
   for (const b of billRows) {
-    if (b.status === 'ON_HOLD') bump(attention, b.location_id);
-    else if (b.status === 'PENDING') bump(toReview, b.location_id);
+    if (b.status === 'PENDING') bump(toReview, b.location_id);
     if (b.status !== 'PAID' && b.location_id) {
       openAP.set(b.location_id, (openAP.get(b.location_id) ?? 0) + num(b.balance_cents));
     }
@@ -248,8 +270,6 @@ export async function getWorkboard(): Promise<Workboard> {
 
   const cash = new Map<string, number>(Object.entries(bookCash?.byLocation ?? {}));
 
-  const exceptions = tally(aiRes.data as Array<{ location_id: string | null }> | null);
-  const draftJEs = tally(jeRes.data as Array<{ location_id: string | null }> | null);
 
   const periodByLoc = new Map<string, PeriodStatus>();
   for (const p of (periodRes.data ?? []) as Array<{ location_id: string; status: PeriodStatus }>) {
@@ -259,9 +279,7 @@ export async function getWorkboard(): Promise<Workboard> {
   // ── Compose per-company cards ───────────────────────────────────────────────
   const companies: CompanyBoard[] = locations.map((loc) => {
     const rev = toReview.get(loc.id) ?? 0;
-    const att = attention.get(loc.id) ?? 0;
-    const exc = exceptions.get(loc.id) ?? 0;
-    const drafts = draftJEs.get(loc.id) ?? 0;
+    const w = workFigures(countsForLocation(work.counts, loc.id));
     const cashCents = cash.get(loc.id) ?? 0;
     return {
       id: loc.id,
@@ -269,15 +287,13 @@ export async function getWorkboard(): Promise<Workboard> {
       shortCode: (loc.short_code || loc.name).slice(0, 4).toUpperCase(),
       isOwnBooks: loc.is_tenant_own_books === true,
       toReview: rev,
-      needsAttention: att,
-      openExceptions: exc,
-      draftJEs: drafts,
+      ...w,
       periodStatus: periodByLoc.get(loc.id) ?? 'NO_PERIOD',
       cashCents,
       cashStatus: cashStatusFor(cashCents, loc.minimum_cash_cents),
       openAPCents: openAP.get(loc.id) ?? 0,
       openARCents: openAR.get(loc.id) ?? 0,
-      totalOpen: rev + att + exc + drafts,
+      totalOpen: rev + w.needsYou,
     };
   });
 
@@ -293,10 +309,15 @@ export async function getWorkboard(): Promise<Workboard> {
   const consolidated: WorkboardConsolidated = {
     companyCount: companies.length,
     toReview: companies.reduce((n, c) => n + c.toReview, 0),
-    needsAttention: companies.reduce((n, c) => n + c.needsAttention, 0),
-    openExceptions: companies.reduce((n, c) => n + c.openExceptions, 0),
-    draftJEs: companies.reduce((n, c) => n + c.draftJEs, 0),
-    pendingApprovals: approvalRes.count ?? 0,
+    // All-clients Inbox figures straight from the shared service — they include
+    // organization-level items (e.g. an approval with no client, a loan file), which
+    // is why they are not a sum over the client rows.
+    needsAttention: work.counts.bySource.bank + work.counts.bySource.receipt + work.counts.bySource.bill_hold,
+    openExceptions: work.counts.bySource.ai_proposal,
+    draftJEs: work.counts.byLane.drafts,
+    pendingApprovals: work.counts.byLane.approvals,
+    lanes: work.counts.byLane,
+    needsYou: work.counts.total,
     cashCents: companies.reduce((n, c) => n + c.cashCents, 0),
     openAPCents: companies.reduce((n, c) => n + c.openAPCents, 0),
     openARCents: companies.reduce((n, c) => n + c.openARCents, 0),
@@ -384,8 +405,12 @@ export interface ClientHome {
   bands: { decide: ConfidenceBand; check: ConfidenceBand; ready: ConfidenceBand };
   /** Decide band, lowest confidence first (FLAGGED and unscored lead). */
   decide: ClientQueueItem[];
-  /** Org-wide money-movement approvals awaiting sign-off. */
+  /** This client's Approvals tab count (shared service). */
   pendingApprovals: number;
+  /** This client's Inbox counts — the same numbers its Inbox tabs and the rail show. */
+  work: LocationCounts;
+  /** Shared-service sources that didn't answer (shown as a quiet notice). */
+  workDegraded: string[];
   /** The org-calendar date the figures are "as of" (YYYY-MM-DD). */
   today: string;
 }
@@ -406,7 +431,16 @@ function bandOf(status: string, confidence: number | null): 'decide' | 'check' |
  * sub-filtered by location_id; each source degrades on its own.
  */
 export async function getClientHome(locationId: string): Promise<ClientHome> {
-  const fail = (today: string): ClientHome => ({ status: 'error', board: null, bands: EMPTY_BANDS, decide: [], pendingApprovals: 0, today });
+  const fail = (today: string): ClientHome => ({
+    status: 'error',
+    board: null,
+    bands: EMPTY_BANDS,
+    decide: [],
+    pendingApprovals: 0,
+    work: countsForLocation(emptyCounts(), locationId),
+    workDegraded: [],
+    today,
+  });
   const supabase = await createAuthedServerSupabase();
   if (!supabase) return fail('');
 
@@ -421,7 +455,7 @@ export async function getClientHome(locationId: string): Promise<ClientHome> {
   const location = loc as LocationRow;
   const [year, month] = today.split('-').map(Number);
 
-  const [bankRes, receiptRes, billRes, invoiceRes, bookCash, aiRes, jeRes, periodRes, approvalRes] = await Promise.all([
+  const [bankRes, receiptRes, billRes, invoiceRes, bookCash, periodRes, workRes] = await Promise.all([
     fetchAll(
       () =>
         supabase
@@ -440,26 +474,25 @@ export async function getClientHome(locationId: string): Promise<ClientHome> {
       .not('status', 'in', '("PAID","VOIDED","DRAFT","WRITTEN_OFF")')
       .limit(ROW_CAP),
     fetchBookCash(supabase, null, { asOfDate: today, locationIds: [locationId] }).catch(() => null),
-    supabase.from('ai_decisions').select('id', { count: 'exact', head: true }).eq('location_id', locationId).eq('status', 'PROPOSED'),
-    supabase.from('gl_entries').select('id', { count: 'exact', head: true }).eq('location_id', locationId).eq('status', 'DRAFT'),
     supabase.from('fiscal_periods').select('status').eq('location_id', locationId).eq('period_year', year).eq('period_month', month).maybeSingle(),
-    supabase.from('approvals').select('id', { count: 'exact', head: true }).eq('status', 'PENDING_APPROVAL'),
+    // Everything waiting on a human for THIS client — the same service + scope as its Inbox.
+    loadWork(supabase, locationId, today),
   ]);
+  const work = countsForLocation(workRes.counts, locationId);
+  const w = workFigures(work);
 
   type BankRow = { id: string; transaction_date: string; description: string; amount_cents: number | string; status: string; ai_confidence: number | string | null };
   const bankRows = (bankRes.data ?? []) as BankRow[];
   const bands = { decide: { count: 0, amountCents: 0 }, check: { count: 0, amountCents: 0 }, ready: { count: 0, amountCents: 0 } };
   const decide: ClientQueueItem[] = [];
   let bankReview = 0;
-  let bankAttention = 0;
   for (const r of bankRows) {
     const conf = r.ai_confidence === null || r.ai_confidence === undefined ? null : Math.round(Number(r.ai_confidence) * 100);
     const cents = num(r.amount_cents);
     const band = bandOf(r.status, conf);
     bands[band].count += 1;
     bands[band].amountCents += cents;
-    if (r.status === 'FLAGGED') bankAttention += 1;
-    else bankReview += 1;
+    if (r.status !== 'FLAGGED') bankReview += 1;
     if (band === 'decide') {
       decide.push({
         id: r.id,
@@ -481,22 +514,18 @@ export async function getClientHome(locationId: string): Promise<ClientHome> {
 
   const receiptRows = (receiptRes.data ?? []) as Array<{ status: string }>;
   const billRows = (billRes.data ?? []) as Array<{ status: string; balance_cents: number | string | null }>;
+  // FLAGGED lines and ON_HOLD bills are "needs you" — counted by the shared service.
   let review = bankReview;
-  let attention = bankAttention;
   for (const r of receiptRows) {
-    if (r.status === 'FLAGGED') attention += 1;
-    else review += 1;
+    if (r.status !== 'FLAGGED') review += 1;
   }
   let openAP = 0;
   for (const b of billRows) {
-    if (b.status === 'ON_HOLD') attention += 1;
-    else if (b.status === 'PENDING') review += 1;
+    if (b.status === 'PENDING') review += 1;
     if (b.status !== 'PAID') openAP += num(b.balance_cents);
   }
   const openAR = ((invoiceRes.data ?? []) as Array<{ balance_cents: number | string | null }>).reduce((n, i) => n + num(i.balance_cents), 0);
   const cashCents = num(bookCash?.byLocation?.[locationId]);
-  const exceptions = aiRes.count ?? 0;
-  const drafts = jeRes.count ?? 0;
   const status = (periodRes.data as { status?: PeriodStatus } | null)?.status;
 
   const board: CompanyBoard = {
@@ -505,15 +534,13 @@ export async function getClientHome(locationId: string): Promise<ClientHome> {
     shortCode: (location.short_code || location.name).slice(0, 4).toUpperCase(),
     isOwnBooks: location.is_tenant_own_books === true,
     toReview: review,
-    needsAttention: attention,
-    openExceptions: exceptions,
-    draftJEs: drafts,
+    ...w,
     periodStatus: status ?? 'NO_PERIOD',
     cashCents,
     cashStatus: cashStatusFor(cashCents, location.minimum_cash_cents),
     openAPCents: openAP,
     openARCents: openAR,
-    totalOpen: review + attention + exceptions + drafts,
+    totalOpen: review + w.needsYou,
   };
 
   return {
@@ -521,7 +548,9 @@ export async function getClientHome(locationId: string): Promise<ClientHome> {
     board,
     bands,
     decide: decide.slice(0, 8),
-    pendingApprovals: approvalRes.count ?? 0,
+    pendingApprovals: work.lanes.approvals,
+    work,
+    workDegraded: workRes.degraded,
     today,
   };
 }

@@ -1,6 +1,8 @@
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { SettingsClient } from './settings-client';
 
+export const metadata = { title: 'Settings' };
+
 export const dynamic = 'force-dynamic';
 
 /**

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
 import { bankFeedQuerySchema, type BankFeedQuery } from '@/lib/validations/transactions';
+import { fetchSplitSummaries, type SplitSummary } from '@/lib/bank/splits/service';
 
 /**
  * GET /api/bank-feed
@@ -90,7 +91,7 @@ export const GET = apiQueryHandler(
     const vendorIds = [...new Set(rows.map(shownVendorId).filter((v): v is string => !!v))];
     const jobIds = [...new Set(rows.map((r) => r.final_job_id).filter((v): v is string => !!v))];
 
-    const [locsRes, vendorsRes, jobsRes] = await Promise.all([
+    const [locsRes, vendorsRes, jobsRes, splitById] = await Promise.all([
       locationIds.length
         ? ctx.supabase.schema('core').from('locations').select('id, name, short_code').in('id', locationIds)
         : Promise.resolve({ data: [] as Array<{ id: string; name: string; short_code: string }> }),
@@ -100,6 +101,8 @@ export const GET = apiQueryHandler(
       jobIds.length
         ? ctx.supabase.schema('core').from('jobs').select('id, job_number, name').in('id', jobIds)
         : Promise.resolve({ data: [] as Array<{ id: string; job_number: string; name: string }> }),
+      // "Split · 3 lines" (FPB-bank-feed-splits): draft or posted split summary per row.
+      fetchSplitSummaries(ctx.supabase, rows.map((r) => r.id as string)).catch(() => new Map<string, SplitSummary>()),
     ]);
 
     const locById = new Map((locsRes.data ?? []).map((l) => [l.id, l]));
@@ -111,6 +114,7 @@ export const GET = apiQueryHandler(
       location: r.location_id ? locById.get(r.location_id) ?? null : null,
       ai_vendor: shownVendorId(r) ? venById.get(shownVendorId(r) as string) ?? null : null,
       final_job: r.final_job_id ? jobById.get(r.final_job_id) ?? null : null,
+      split: splitById.get(r.id as string) ?? null,
     }));
 
     // ---- Status counts + metrics (respect the location filter) ----

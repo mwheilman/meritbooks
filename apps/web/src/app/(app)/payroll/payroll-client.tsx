@@ -6,18 +6,17 @@ import {
   Loader2,
   AlertCircle,
   Wallet,
-  Play,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
   CalendarClock,
   EyeOff,
   UploadCloud,
-  FileSpreadsheet,
   Info,
   FlaskConical,
   PlugZap,
 } from 'lucide-react';
+import { Button } from '@meritbooks/merit-ui';
 import { PageHeader, EmptyState } from '@/components/ui';
 import { BuildStatusBadge } from '@/components/brand';
 import { useQuery } from '@/hooks';
@@ -103,34 +102,38 @@ export function PayrollClient() {
         description="Run payroll at your processor, then import the register — we read the period totals and post the balanced, job-costed payroll entry to the ledger. That import is the production path today. Running payroll end to end inside the app requires a connected payroll provider."
         actions={
           canCreate ? (
-            <div className="flex items-center gap-2">
-              <button
+            // Kit verbs (32px, square): ONE primary — the production path — and two short
+            // secondaries, so the row holds on one line at 1280–1440px. The long
+            // explanations live in each button's tooltip and in the two cards below.
+            <>
+              <Button
+                variant="primary"
+                icon="upload"
                 onClick={() => setImportOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
                 title="Drop the processor's payroll register (PDF or image) and post a balanced payroll entry to the ledger"
               >
-                <UploadCloud size={14} /> Import payroll register
-              </button>
-              <button
+                Import register
+              </Button>
+              <Button
+                icon="file-text"
                 onClick={() => setCsvImportOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-slate-700 text-slate-200 hover:bg-slate-800 transition-colors"
                 title="Import a CSV or Excel payroll register — no AI. Map the columns, save the mapping, and post a balanced payroll entry."
               >
-                <FileSpreadsheet size={14} /> Import from spreadsheet
-              </button>
-              <button
+                From spreadsheet
+              </Button>
+              <Button
+                variant="quiet"
+                icon={providerReady ? 'right' : 'clipboard'}
                 onClick={() => setWizardOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-slate-700 text-slate-200 hover:bg-slate-800 transition-colors"
                 title={
                   providerReady
                     ? 'Run payroll end-to-end through your connected provider'
                     : 'No payroll provider connected — the run wizard produces a non-binding estimate only (not a tax calculation, no filing, no money movement)'
                 }
               >
-                {providerReady ? <Play size={14} /> : <FlaskConical size={14} className="text-amber-400" />}
-                {providerReady ? 'Run payroll' : 'Run payroll (estimate)'}
-              </button>
-            </div>
+                {providerReady ? 'Run payroll' : 'Estimate a run'}
+              </Button>
+            </>
           ) : undefined
         }
       />

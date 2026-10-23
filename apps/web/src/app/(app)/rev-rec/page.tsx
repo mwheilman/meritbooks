@@ -1,18 +1,21 @@
 'use client';
 
+import { Suspense } from 'react';
 import { PageHeader } from '@/components/ui';
 import { RevRecTabs } from './rev-rec-tabs';
 
 export default function RevRecPage() {
-  // Run tab posts into ONE company's books (scope-guarded inside the tabs);
-  // Reports tab is read-only and allows the consolidated view.
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <PageHeader
-        title="Revenue Recognition"
-        description="Preview and post period revenue recognition, then report on deferred-revenue rollforward, per-contract recognition waterfall, and revenue recognized by method."
+        eyebrow={['Revenue', 'Recognition']}
+        title="Revenue recognition"
+        description="Choose how each company earns revenue on its jobs, then review and approve the month-end entry that books underbillings to Unbilled AR and overbillings to Deferred revenue."
       />
-      <RevRecTabs />
+      {/* useSearchParams (the ?tab= deep link) needs a Suspense boundary. */}
+      <Suspense fallback={null}>
+        <RevRecTabs />
+      </Suspense>
     </div>
   );
 }

@@ -9,13 +9,12 @@
  *                                       its guards apply: balance, period lock,
  *                                       idempotent run ledgers).
  *
- *   revrec.monthly    on the 1st, recognize through the last day of the prior month.
+ *   revrec.monthly    on the 1st, propose (or, if allowed, post) the prior month's WIP entry.
  *   prepaid.amortize  monthly, post every due prepaid amortization period.
  *   events.drain      hourly, process pending Projects → Books events (FROZEN v3).
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { recognizeRun } from '@/lib/services/rev-rec';
 import { runPrepaidAmortizations } from '@/lib/prepaid/amortize';
 import { buildAmortizationSchedule } from '@/lib/prepaid/schedule';
 import { processBillingEvents, type BillingPayload } from '@/lib/services/billing-consumer';
@@ -28,44 +27,14 @@ import {
   postingGate,
   SCHEDULED_EVENT_DRAIN_FEATURE,
   SCHEDULED_PREPAID_FEATURE,
-  SCHEDULED_REV_REC_FEATURE,
 } from '../posting-gate';
 import type { CountValue, JobContext, JobResult } from '../types';
-import { dollars, isoDate, lastDayOfPriorMonth, scopedOrFail } from './shared';
+import { dollars, isoDate, scopedOrFail } from './shared';
 
 // ── revrec.monthly ───────────────────────────────────────────────────────────
-
-export async function runRevRecMonthlyJob(ctx: JobContext): Promise<JobResult> {
-  const s = scopedOrFail(ctx);
-  if (!s.ok) return s.result;
-  const asOf = lastDayOfPriorMonth(ctx.slotAt);
-
-  const preview = await recognizeRun(s.db, s.orgId, { asOf, runBy: null, preview: true });
-  const pending = preview.jobs.filter((j) => j.status === 'posted' && j.deltaCents !== 0);
-  const totalAbs = pending.reduce((sum, j) => sum + Math.abs(j.deltaCents), 0);
-  const net = pending.reduce((sum, j) => sum + j.deltaCents, 0);
-  if (pending.length === 0) {
-    return { status: 'ok', itemsProcessed: 0, counts: { as_of: asOf, jobs: preview.jobs.length }, summary: `Revenue is up to date through ${asOf}.` };
-  }
-
-  const gate = await postingGate(ctx.admin, s.orgId, SCHEDULED_REV_REC_FEATURE, totalAbs);
-  if (!gate.allowed) {
-    return {
-      status: 'ok',
-      itemsProcessed: 0,
-      counts: { as_of: asOf, mode: 'proposed', jobs_to_recognize: pending.length, net_delta_cents: net, gate: gate.disposition },
-      summary: `Proposed: ${pending.length} job(s) would recognize ${dollars(net)} through ${asOf}. Review and post it from Revenue recognition. (${gate.reason})`,
-    };
-  }
-
-  const run = await recognizeRun(s.db, s.orgId, { asOf, runBy: null, preview: false });
-  return {
-    status: 'ok',
-    itemsProcessed: run.posted,
-    counts: { as_of: asOf, mode: 'posted', posted: run.posted, unchanged: run.unchanged, skipped: run.skipped, net_delta_cents: run.totalRecognizedDeltaCents },
-    summary: `Posted rev-rec for ${run.posted} job(s), ${dollars(run.totalRecognizedDeltaCents)} through ${asOf} (within your auto-post limit).`,
-  };
-}
+// The month-end WIP run (FPB-rev-rec-wip): proposes per company; posts only when the
+// company policy is AUTO_POST AND the SCHEDULED_REV_REC dial allows under the cap.
+export { runRevRecMonthlyJob } from '@/lib/rev-rec/monthly-job';
 
 // ── prepaid.amortize ─────────────────────────────────────────────────────────
 

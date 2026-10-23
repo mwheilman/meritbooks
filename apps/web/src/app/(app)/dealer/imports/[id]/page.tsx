@@ -5,6 +5,8 @@ import { createServerSupabase } from '@/lib/supabase/server';
 import { BatchDetail, type BatchStatementRow } from '../_components/batch-detail';
 import type { BatchRow } from '../_components/imports-screen';
 
+export const metadata = { title: 'Dealer import' };
+
 /**
  * One import batch: what came in, what was refused and why, the rows it created, and
  * Undo. The batch + its statements are read here through the caller's RLS client (tenant

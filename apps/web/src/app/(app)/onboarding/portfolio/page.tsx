@@ -2,6 +2,8 @@ import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { requirePreparerCapabilityPage } from '@/lib/team/admin-scope-guard';
 import { PortfolioOnboarding } from './portfolio-onboarding';
 
+export const metadata = { title: 'Add clients' };
+
 export const dynamic = 'force-dynamic';
 
 /**
