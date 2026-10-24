@@ -11,7 +11,7 @@ import type { PGlite } from '@electric-sql/pglite';
 import { createReplayDb, MIGRATIONS_DIR } from './pg';
 import { PROJECT_CAPABILITIES, PROJECT_CAPABILITY_KEYS, riskTier, isPlatformOnly, ACTIONS } from '../src/capabilities';
 import { PROJECT_ROLE_TEMPLATES, PROJECT_PERMISSION_SET_TEMPLATES, PERSONA_KEYS } from '../src/roles';
-import { renderMigration } from '../scripts/generate-seed';
+import { renderCarriers } from '../scripts/generate-seed';
 import { PROJECT_CAPABILITIES as APP_CAPS, PERSONAS as APP_PERSONAS, PERSONA_RANK as APP_RANK } from '../../../apps/projects/src/lib/access/types';
 
 let db: PGlite;
@@ -101,7 +101,7 @@ describe('DB mirror == code', () => {
            from core.role_definitions where owner_level = 'platform' and key = $1`, [t.key]);
       const row = r.rows[0];
       expect(row, t.key).toBeTruthy();
-      expect(row.current_version, t.key).toBe(1);
+      expect(row.current_version, t.key).toBeGreaterThanOrEqual(1); // a later migration republishes a changed template (1111: supervisor)
       expect({ name: row.name, audience: row.audience, scope: row.default_scope, field: row.field_policy, auth: row.auth_policy, band: row.assignable_band }, t.key)
         .toEqual({ name: t.name, audience: t.audience, scope: t.defaultScope, field: t.fieldPolicy, auth: t.authPolicy, band: t.assignableBand });
       expect(row.grants, t.key).toEqual(t.grants.map((g) => ({ capability: g.capability, actions: g.actions, constraints: g.constraints })));
@@ -136,9 +136,9 @@ describe('DB mirror == code', () => {
     }
   });
 
-  it('1110 GENERATED blocks are up to date with the code', () => {
-    const file = path.join(MIGRATIONS_DIR, '1110_pm_access.sql');
-    const sql = fs.readFileSync(file, 'utf8');
-    expect(renderMigration(sql) === sql).toBe(true);
+  it('GENERATED blocks are up to date with the code (each block in its latest carrier; 1110 is frozen live history)', () => {
+    const carriers = renderCarriers();
+    expect(carriers.size).toBeGreaterThan(0);
+    for (const [file, c] of carriers) expect(c.rendered === c.current, `${file}: ${c.blocks.join(', ')}`).toBe(true);
   });
 });

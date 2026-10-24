@@ -87,7 +87,7 @@ const SPECS: Readonly<Record<PersonaKey, Spec>> = {
     'projects.selections': VCEA, 'projects.production': VCE, 'projects.reports': V, 'projects.team': VE,
   },
   projects_supervisor: {
-    'projects.jobs': VE, 'projects.change_orders': VC, 'projects.time': VCEA, 'projects.dispatch': V,
+    'projects.jobs': VCE, 'projects.change_orders': VC, 'projects.time': VCEA, 'projects.dispatch': V,
     'projects.documents': VCE, 'projects.selections': V, 'projects.production': VE, 'projects.team': V,
   },
   projects_labor: { 'projects.jobs': V, 'projects.time': VCE, 'projects.documents': VC },

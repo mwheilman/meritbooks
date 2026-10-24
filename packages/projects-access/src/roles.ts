@@ -282,7 +282,7 @@ export const PROJECT_ROLE_TEMPLATES: readonly ProjectRoleTemplate[] = [
     assignableBand: 'managers',
     rank: 30,
     grants: grants({
-      'projects.jobs': VE,
+      'projects.jobs': VCE, // create: punch items / tasks from the phone app (1111)
       'projects.change_orders': VC,
       'projects.time': ['view', 'create', 'edit', 'approve'],
       'projects.dispatch': V,

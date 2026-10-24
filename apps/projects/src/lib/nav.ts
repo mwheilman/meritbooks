@@ -71,6 +71,7 @@ const RULES: ReadonlyArray<readonly [string, Rule]> = [
   ['/review', { any: APPROVER }],
   ['/estimates', { all: ['projects.estimates:view'] }],
   ['/leads', { all: ['projects.leads:view'] }],
+  ['/customers', { all: ['projects.customers:view'] }],
   ['/change-orders', { all: ['projects.change_orders:view'] }],
   ['/selections', { all: ['projects.selections:view'] }],
   ['/units', { all: ['projects.jobs:view'] }],
@@ -176,7 +177,10 @@ function items(i: NavInput) {
     me: { label: 'Me', href: '/me', keys: 'g m' } satisfies NavItem,
     jobs: { label: v.jobs, href: '/jobs', keys: 'g j', count: openJobs } satisfies NavItem,
     myJobs: { label: `My ${lower(v.jobs)}`, href: '/jobs', keys: 'g j', count: openJobs } satisfies NavItem,
-    leads: a('Leads', '/leads', 'estimates'),
+    // The lead flow and the shared customer list are not pack modules (SHARED-RECORDS §2): they
+    // show for everyone holding the grant, in every industry.
+    leads: { label: 'Leads', href: '/leads' } satisfies NavItem,
+    customers: { label: 'Customers', href: '/customers' } satisfies NavItem,
     estimates: a(v.estimates, '/estimates', 'estimates'),
     changeOrders: a(v.change_orders, '/change-orders', 'change_orders', { keys: 'g c' }),
     selections: a(v.selections, '/selections', 'selections'),
@@ -225,7 +229,7 @@ function managementRail(i: NavInput, it: Items): NavGroup[] {
     { id: 'home', items: [it.home, it.inbox, { ...it.approvals, contexts: COMPANY }] },
     // ---- company rail ----
     storeGroup(it),
-    { id: 'sell', label: 'Pipeline', contexts: COMPANY, items: [it.leads, it.estimates] },
+    { id: 'sell', label: 'Pipeline', contexts: COMPANY, items: [it.leads, it.customers, it.estimates] },
     { id: 'jobs', label: i.vocab.jobs, contexts: COMPANY, items: [it.jobs, it.changeOrders, it.selections, it.units] },
     {
       id: 'field', label: 'Field', contexts: COMPANY,
@@ -239,6 +243,7 @@ function managementRail(i: NavInput, it: Items): NavGroup[] {
     { id: 'controls', label: 'Controls', contexts: COMPANY, items: [it.activity, it.aiDecisions, it.settings] },
     // ---- workspace / consolidated rail ----
     { id: 'work', label: 'Work', contexts: ROLLUP, items: [{ ...it.jobs }, it.schedule, it.approvals] },
+    { id: 'pipeline', label: 'Pipeline', contexts: ROLLUP, items: [it.leads, it.customers] },
     {
       id: 'insights', label: 'Insights', contexts: ROLLUP,
       items: [it.margin, it.backlog, ...(i.companyCount > 1 ? [it.compare] : [])],
@@ -253,6 +258,7 @@ function pmRail(i: NavInput, it: Items): NavGroup[] {
     { id: 'home', items: [it.home, it.inbox, it.toReview] },
     storeGroup(it),
     { id: 'jobs', label: `My ${lower(i.vocab.jobs)}`, items: [it.myJobs, it.changeOrders, it.selections, it.units, it.jobCost] },
+    { id: 'sell', label: 'Customers', items: [it.customers, it.leads] },
     { id: 'field', label: 'Schedule', items: [it.schedule, it.workOrders, it.logs, it.punch, it.time, it.production] },
     { id: 'buy', label: 'Buy', items: [it.commitments, it.subcontractors] },
     { id: 'bill', label: 'Bill', items: [it.billing, it.retainage, it.draws] },
@@ -264,7 +270,7 @@ function adminRail(i: NavInput, it: Items): NavGroup[] {
   return [
     { id: 'home', items: [it.home, it.inbox, it.toReview] },
     storeGroup(it),
-    { id: 'sell', label: 'Calls and leads', items: [it.leads, it.estimates] },
+    { id: 'sell', label: 'Calls and leads', items: [it.leads, it.customers, it.estimates] },
     { id: 'jobs', label: i.vocab.jobs, items: [it.jobs, it.changeOrders, it.selections, it.units] },
     { id: 'field', label: 'Schedule and dispatch', items: [it.schedule, it.dispatch, it.workOrders, it.agreements, it.equipment, it.time] },
     { id: 'buy', label: 'Buy', items: [it.commitments, it.subcontractors] },
@@ -291,7 +297,7 @@ function salesRail(i: NavInput, it: Items): NavGroup[] {
   return [
     { id: 'home', items: [it.home, it.inbox] },
     storeGroup(it),
-    { id: 'sell', label: 'Pipeline', items: [it.leads, it.estimates] },
+    { id: 'sell', label: 'Pipeline', items: [it.leads, it.customers, it.estimates] },
     { id: 'jobs', label: `My ${lower(i.vocab.jobs)}`, items: [it.myJobs] },
   ];
 }

@@ -6,6 +6,13 @@
  * and must not fail. This is what catches a select of a member-revoked money column (1110 masks)
  * or of a column that does not exist.
  *
+ * Schemas: pm, crm, core and public reads, resolved from `.schema('x')`, the pm() / core() /
+ * pmOf() helpers, a local `const x = db.schema('y')`, the 1111 contract map (`T.<key>` →
+ * { schema, table } in lib/crm/contract.ts) used as `.schema(T.k.schema).from(T.k.table)` or
+ * `from(db, T.k)`, and `db.from(...)` (public). A read whose schema cannot be resolved is
+ * treated as pm (when pm has that relation). Runs on the full migration chain (1110 fixture +
+ * every later migration) as every fixture persona.
+ *
  * Covers, among others: jobs list (v_project_list), job page (v_job_overview, v_job_financials,
  * budgets, v_tasks_masked / v_wbs_nodes_masked milestones, v_estimates_masked, v_estimate_lines_masked,
  * billing_requests, commitments), time page (v_time_entries_masked), production board
@@ -17,13 +24,14 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildFixture, as, errorOf, q, type Fixture, type Persona } from './fixture';
+import { buildFixture, applyAfter1110, as, errorOf, q, type Fixture, type Persona } from './fixture';
 
 const APP_SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../apps/projects/src');
 
 interface AppRead {
   file: string;   // relative to apps/projects/src
   line: number;
+  schema: string | null; // null = not resolvable statically (treated as pm)
   relation: string;
   columns: string; // PostgREST select string
 }
@@ -139,9 +147,37 @@ function firstArg(src: string, open: number): string {
   return '';
 }
 
+/** `key: { schema: 's', table: 't' }` entries (the 1111 contract map T), across the app. */
+function contractTables(files: string[]): Map<string, { schema: string; table: string }> {
+  const out = new Map<string, { schema: string; table: string }>();
+  for (const f of files) {
+    for (const m of fs.readFileSync(f, 'utf8').matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\{\s*schema\s*:\s*'([a-z_]+)'\s*,\s*table\s*:\s*'([a-z_][a-z0-9_]*)'\s*\}/g)) {
+      out.set(m[1], { schema: m[2], table: m[3] });
+    }
+  }
+  return out;
+}
+
+/** The schema of the client expression right before `.from(` (null when unknown). */
+function schemaBefore(src: string, idx: number): string | null {
+  const before = src.slice(Math.max(0, idx - 160), idx);
+  let m = before.match(/\.schema\(\s*'([a-z_]+)'\s*\)\s*$/);
+  if (m) return m[1];
+  if (/\bpm(?:Of)?\(\s*[A-Za-z_.]*\s*\)\s*$/.test(before)) return 'pm';
+  if (/\bcore\(\s*[A-Za-z_.]*\s*\)\s*$/.test(before)) return 'core';
+  m = before.match(/\b([A-Za-z_][A-Za-z0-9_]*)\s*$/);
+  if (m) {
+    const local = src.match(new RegExp(`\\b(?:const|let)\\s+${m[1]}\\s*=\\s*[A-Za-z_.()]*\\.schema\\(\\s*'([a-z_]+)'\\s*\\)`));
+    if (local) return local[1];
+    if (/^(db|supabase|client|admin)$/.test(m[1])) return 'public';
+  }
+  return null;
+}
+
 function extractReads(): { reads: AppRead[]; unresolved: string[] } {
   const files = walk(APP_SRC);
   const all = new Map(files.map((f) => [f, fileConstants(f)] as const));
+  const tmap = contractTables(files);
   const reads: AppRead[] = [];
   const unresolved: string[] = [];
   const lineOf = (src: string, idx: number): number => src.slice(0, idx).split('\n').length;
@@ -149,21 +185,33 @@ function extractReads(): { reads: AppRead[]; unresolved: string[] } {
     const src = fs.readFileSync(f, 'utf8');
     const rel = path.relative(APP_SRC, f);
     const consts = constantsFor(f, all);
-    // .from('x') … .select(arg) within the same statement
+    // .from('x') / .from(T.k.table) / from(db, T.k) … .select(arg) within the same statement
+    const sites: { idx: number; end: number; schema: string | null; relation: string }[] = [];
     for (const m of src.matchAll(/\.from\(\s*'([a-z_][a-z0-9_]*)'\s*\)/g)) {
-      const start = (m.index ?? 0) + m[0].length;
+      sites.push({ idx: m.index ?? 0, end: (m.index ?? 0) + m[0].length, schema: schemaBefore(src, m.index ?? 0), relation: m[1] });
+    }
+    for (const m of src.matchAll(/\.from\(\s*T\.([A-Za-z_][A-Za-z0-9_]*)\.table\s*\)/g)) {
+      const t = tmap.get(m[1]);
+      if (t) sites.push({ idx: m.index ?? 0, end: (m.index ?? 0) + m[0].length, schema: t.schema, relation: t.table });
+    }
+    for (const m of src.matchAll(/(?<![.\w])from\(\s*[A-Za-z_][A-Za-z0-9_]*\s*,\s*T\.([A-Za-z_][A-Za-z0-9_]*)\s*\)/g)) {
+      const t = tmap.get(m[1]);
+      if (t) sites.push({ idx: m.index ?? 0, end: (m.index ?? 0) + m[0].length, schema: t.schema, relation: t.table });
+    }
+    for (const site of sites) {
+      const start = site.end;
       const tail = src.slice(start);
-      const stop = tail.search(/;|\.from\(/);
+      const stop = tail.search(/;|\.from\(|(?<![.\w])from\(/);
       const stmt = stop < 0 ? tail : tail.slice(0, stop);
       const s = stmt.search(/\.select\(/);
       if (s < 0) continue;
       const open = start + s + '.select'.length;
       const arg = firstArg(src, open);
       const line = lineOf(src, open);
-      if (arg.trim() === '') { reads.push({ file: rel, line, relation: m[1], columns: '*' }); continue; }
+      if (arg.trim() === '') { reads.push({ file: rel, line, schema: site.schema, relation: site.relation, columns: '*' }); continue; }
       const cols = resolveArg(arg, consts);
-      if (cols === null) unresolved.push(`${rel}:${line} ${m[1]} select(${arg.trim().slice(0, 60)})`);
-      else reads.push({ file: rel, line, relation: m[1], columns: cols });
+      if (cols === null) unresolved.push(`${rel}:${line} ${site.schema ?? '?'}.${site.relation} select(${arg.trim().slice(0, 60)})`);
+      else reads.push({ file: rel, line, schema: site.schema, relation: site.relation, columns: cols });
     }
     // ops own(db, 'table', cols, …) / dealer downs(db, 'table', cols, …)
     for (const m of src.matchAll(/\b(?:own|downs)(?:<[^>]*>)?\(\s*db\s*,\s*'([a-z_][a-z0-9_]*)'\s*,\s*/g)) {
@@ -172,16 +220,16 @@ function extractReads(): { reads: AppRead[]; unresolved: string[] } {
       const cols = resolveArg(arg, consts);
       const line = lineOf(src, idx);
       if (cols === null) unresolved.push(`${rel}:${line} ${m[1]} own/downs(${arg.trim().slice(0, 60)})`);
-      else reads.push({ file: rel, line, relation: m[1], columns: cols });
+      else reads.push({ file: rel, line, schema: 'pm', relation: m[1], columns: cols });
     }
   }
   return { reads, unresolved };
 }
 
-interface SqlRead { relation: string; sql: string }
+interface SqlRead { schema: string; relation: string; sql: string }
 
 /** PostgREST select string → the SQL reads it performs (top level + one per embedded resource). */
-function toSql(relation: string, columns: string): SqlRead[] {
+function toSql(schema: string, relation: string, columns: string): SqlRead[] {
   const items: string[] = [];
   let depth = 0;
   let cur = '';
@@ -195,23 +243,30 @@ function toSql(relation: string, columns: string): SqlRead[] {
   const out: SqlRead[] = [];
   for (const raw of items) {
     const emb = raw.match(/^(?:[a-z_][a-z0-9_]*:)?([a-z_][a-z0-9_]*)(?:![a-z_0-9]+)*\((.*)\)$/s);
-    if (emb) { out.push(...toSql(emb[1], emb[2])); continue; }
+    if (emb) { out.push(...toSql(schema, emb[1], emb[2])); continue; }
     if (raw === '*') { plain.push('*'); continue; }
     const col = raw.replace(/^[a-z_][a-z0-9_]*:/, '').replace(/::.*$/, '').replace(/->.*$/, '').trim();
     if (/^[a-z_][a-z0-9_]*$/.test(col)) plain.push(`"${col}"`);
   }
-  out.unshift({ relation, sql: `select ${plain.length ? plain.join(', ') : '1'} from pm."${relation}" limit 50` });
+  out.unshift({ schema, relation, sql: `select ${plain.length ? plain.join(', ') : '1'} from "${schema}"."${relation}" limit 50` });
   return out;
 }
 
 let f: Fixture;
-let pmRelations: Set<string>;
+let relations: Set<string>; // 'schema.relation'
 const { reads, unresolved } = extractReads();
+const PERSONAS_ALL = ['owner', 'gm', 'pm', 'supervisor', 'labor', 'dispatcher', 'accountant', 'legacyOwner', 'legacyStaff', 'legacyPm', 'bOwner'] as const satisfies readonly Persona[];
+
+/** The schema a read runs in: its resolved schema, else pm (the pre-1111 default). Null = skip. */
+const schemaOf = (r: { schema: string | null; relation: string }): string | null =>
+  r.schema ?? (relations.has(`pm.${r.relation}`) ? 'pm' : null);
 
 beforeAll(async () => {
   f = await buildFixture();
-  pmRelations = new Set((await q<{ relname: string }>(f.db,
-    `select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'pm' and c.relkind in ('r', 'p', 'v')`)).map((r) => r.relname));
+  await applyAfter1110(f.db);
+  relations = new Set((await q<{ r: string }>(f.db,
+    `select n.nspname || '.' || c.relname as r from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname in ('pm', 'crm', 'core', 'public') and c.relkind in ('r', 'p', 'v')`)).map((x) => x.r));
 }, 600_000);
 
 afterAll(async () => {
@@ -229,14 +284,35 @@ describe('app pm reads run for members', () => {
     expect(reads.length).toBeGreaterThan(150);
   });
 
-  for (const persona of ['owner', 'gm', 'pm', 'supervisor', 'labor', 'dispatcher', 'accountant', 'legacyStaff', 'bOwner'] as const satisfies readonly Persona[]) {
-    it(`every pm read succeeds as ${persona}`, async () => {
+  it('the extractor resolves the crm / shared-record reads and the field (phone) routes', () => {
+    const keys = new Set(reads.map((r) => `${r.schema ?? '?'}.${r.relation}`));
+    for (const k of ['crm.leads', 'crm.pipelines', 'crm.pipeline_stages', 'crm.activities', 'crm.followups', 'crm.lead_stage_events',
+      'core.contacts', 'core.sites', 'core.duplicate_reviews', 'core.v_customer_relationship', 'pm.v_customer_360', 'pm.v_job_tieout']) {
+      expect(keys.has(k), k).toBe(true);
+    }
+    const field = reads.filter((r) => r.file.startsWith(path.join('app', 'api', 'field')));
+    for (const k of ['pm.field_logs', 'pm.punch_items', 'pm.v_time_entries_masked', 'core.employees', 'public.documents']) {
+      expect(field.some((r) => `${r.schema}.${r.relation}` === k), `field route read ${k}`).toBe(true);
+    }
+    const by = (sc: string) => reads.filter((r) => r.schema === sc).length;
+    console.log(`[app-queries] reads by schema: pm ${by('pm')} · crm ${by('crm')} · core ${by('core')} · public ${by('public')} · unresolved-schema ${reads.filter((r) => r.schema === null).length}`);
+    expect(by('crm')).toBeGreaterThanOrEqual(8);
+    expect(by('core')).toBeGreaterThanOrEqual(10);
+    // every resolved read names a relation that exists in its schema
+    const missing = reads.filter((r) => r.schema && !relations.has(`${r.schema}.${r.relation}`)).map((r) => `${r.file}:${r.line} ${r.schema}.${r.relation}`);
+    expect(missing).toEqual([]);
+  });
+
+  for (const persona of PERSONAS_ALL) {
+    it(`every pm / crm / core / public read succeeds as ${persona}`, async () => {
       const failures: string[] = [];
       for (const r of reads) {
-        for (const s of toSql(r.relation, r.columns)) {
-          if (!pmRelations.has(s.relation)) continue; // core / public tables are outside pm
+        const schema = schemaOf(r);
+        if (!schema) continue;
+        for (const s of toSql(schema, r.relation, r.columns)) {
+          if (!relations.has(`${s.schema}.${s.relation}`)) continue;
           const err = await as(f, persona, async () => errorOf(f.db, s.sql));
-          if (err) failures.push(`${r.file}:${r.line} ${s.relation}: ${err}`);
+          if (err) failures.push(`${r.file}:${r.line} ${s.schema}.${s.relation}: ${err}`);
         }
       }
       expect([...new Set(failures)]).toEqual([]);

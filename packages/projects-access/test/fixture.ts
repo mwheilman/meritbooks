@@ -15,7 +15,7 @@
  */
 
 import type { PGlite } from '@electric-sql/pglite';
-import { applyMigration, createReplayDb } from './pg';
+import { applyMigration, createReplayDb, listMigrationFiles } from './pg';
 
 export const ORG_A = 'a0000000-0000-4000-8000-000000000001';
 export const ORG_B = 'b0000000-0000-4000-8000-000000000001';
@@ -207,4 +207,14 @@ export async function buildFixture(): Promise<Fixture> {
 
   const clerk = Object.fromEntries((Object.keys(membership) as Persona[]).map((p) => [p, clerkOf(p)])) as Record<Persona, string>;
   return { db, membership, clerk, employee, ids };
+}
+
+/**
+ * Apply every migration after 1110, in numeric order (1111 shared records, …), on top of a
+ * fixture — the state production reaches. Additive: buildFixture() itself still stops at 1110.
+ */
+export async function applyAfter1110(db: PGlite): Promise<string[]> {
+  const files = listMigrationFiles().filter((f) => parseInt(f, 10) > 1110);
+  for (const file of files) await applyMigration(db, file);
+  return files;
 }

@@ -3,6 +3,9 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Field, Input, Seg, api, toast, useDebounce } from '@meritbooks/merit-ui';
 import { VENDOR_COMPLIANCE_NOTE, VENDOR_KIND_WORDS, sameName, type VendorKind } from '@/lib/pm/parties/schemas';
+import { checkDecision, decisionBody, type MatchCandidate, type MatchDecision } from '@/lib/parties/match';
+import { MatchAtTheDoor, useDoorMatch } from '@/components/crm/MatchAtTheDoor';
+import { fieldErrors, postToDoor } from '@/components/crm/door-fetch';
 
 export interface VendorOption {
   id: string;
@@ -143,23 +146,34 @@ function NewVendorInline({ name: initial, add, onCancel, onAdded }: { name: stri
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<Record<string, string>>({});
+  // Matching at the door (SHARED-RECORDS §3): a vendor Books already pays is offered first.
+  const [decision, setDecision] = useState<MatchDecision | null>(null);
+  const [conflict, setConflict] = useState<MatchCandidate[] | null>(null);
+  const [doorProblem, setDoorProblem] = useState<string | null>(null);
+  const door = useDoorMatch('vendor', { name, email, phone }, conflict);
 
   const submit = async () => {
     const e: Record<string, string> = {};
     if (!name.trim()) e.name = 'Give the vendor a name.';
     if (email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) e.email = 'Enter an email like office@company.com.';
+    const check = checkDecision(door.verdict, decision, 'vendor');
     setErr(e);
-    if (Object.keys(e).length) return;
+    setDoorProblem(check.ok ? null : check.message);
+    if (Object.keys(e).length || !check.ok) return;
     setBusy(true);
-    const r = await api.post<{ vendor: VendorOption; existing: boolean }>('/api/vendors', { name: name.trim(), kind, email: email.trim() || null, phone: phone.trim() || null, companyId: add.companyId });
+    const r = await postToDoor<{ vendor: VendorOption; existing: boolean }>('/api/vendors', { name: name.trim(), kind, email: email.trim() || null, phone: phone.trim() || null, companyId: add.companyId, match: decisionBody(decision) });
     setBusy(false);
-    if (r.error) {
-      const d = r.error.details ?? {};
-      setErr({ ...Object.fromEntries(Object.entries(d).map(([k, m]) => [k, m[0] ?? ''])), _: r.error.error });
+    if (r.kind === 'match') {
+      setConflict(r.candidates);
+      setDoorProblem(r.message);
       return;
     }
-    toast(r.data!.existing ? `${r.data!.vendor.name} is already on your vendor list; picked it` : `Added ${r.data!.vendor.name}. Merit Books will request the W-9 and COI`);
-    onAdded(r.data!.vendor);
+    if (r.kind === 'error') {
+      setErr({ ...fieldErrors(r.error), _: r.error.error });
+      return;
+    }
+    toast(r.data.existing ? `${r.data.vendor.name} is already on your vendor list; picked it` : `Added ${r.data.vendor.name}. Merit Books will request the W-9 and COI`);
+    onAdded(r.data.vendor);
   };
   const enter = (e: KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); void submit(); }
@@ -177,6 +191,7 @@ function NewVendorInline({ name: initial, add, onCancel, onAdded }: { name: stri
         <Field label="Email" error={err.email} help="Where the W-9 and COI request goes"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={enter} maxLength={254} /></Field>
         <Field label="Phone" error={err.phone}><Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} onKeyDown={enter} maxLength={40} placeholder="Optional" /></Field>
       </div>
+      <MatchAtTheDoor kind="vendor" verdict={door.verdict} decision={decision} onDecision={setDecision} loading={door.loading} error={door.error} problem={doorProblem} />
       <span className="t-cap">{VENDOR_COMPLIANCE_NOTE} Terms, tax details and retainage defaults are set there.</span>
       {err._ && <span className="field-error" role="alert">{err._}</span>}
       <div className="btn-row">

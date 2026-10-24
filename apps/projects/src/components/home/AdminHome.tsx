@@ -122,9 +122,9 @@ export function AdminHome({ data, readOnly }: { data: AdminHomeData; readOnly: b
           title="New leads"
           state={{
             kind: 'empty',
-            title: 'Leads arrive in the next release',
-            body: 'Calls and web inquiries will land here with their source and a follow-up date. Until then, start the work as a job.',
-            action: readOnly ? undefined : <ButtonLink href="/jobs?new=1">New {lower(v.job)}</ButtonLink>,
+            title: 'Calls and web inquiries',
+            body: 'Log each one as a lead with its source, a speed-to-lead timer and its follow-ups. The person is matched to your customers as you type.',
+            action: readOnly ? <ButtonLink href="/leads">Open leads</ButtonLink> : <ButtonLink href="/leads?new=1">New lead</ButtonLink>,
           }}
         />
       )}

@@ -40,3 +40,22 @@ Checksum-pinned runner: `extensions.http_get` the file from GitHub at a pinned c
 4. AI: no `ANTHROPIC_API_KEY` in Projects env and the Anthropic org is disabled — onboarding/intake run rules-only ("AI assist paused").
 5. Clerk production on `meritmgt.com` for one sign-in across both apps.
 6. Legacy `proj` drop after one close cycle (`1199`); dealer `DEALER_DEPOSIT_REQUEST` needs Books agreement.
+
+## 3b. Shared records, CRM leads, Merit Workforce phone app (2026-10-24)
+- Wave 0a LIVE: 1110 applied (checksum runner, commit 035ee4c), projects.meritmgt.com READY, no runtime errors.
+- Owner rulings: spec approved, build; field app = native phone app (one app: Merit Workforce, shared with Books' employee cards);
+  Projects has its own CRM lead flow on a shared `crm` schema so a future Merit CRM uses the same rows.
+- Design: docs/suite/SHARED-RECORDS-CRM-PROJECTS-BOOKS.md (one record per customer/contact/site/vendor; match at the door;
+  duplicate review + merge; nightly tie-outs "Ties to Books").
+- Built: migration 1111_shared_records.sql (core.contacts/sites/duplicate_reviews, crm schema + per-pack pipelines, matcher,
+  merge, safety-net trigger, convert_lead, customer 360, job/company tie-outs, supervisor punch grant, field idempotency
+  indexes); Projects Leads board/list/page, Customers list + 360, Possible duplicates, Ties to Books panels, matching on every
+  Projects create door; apps/workforce/mobile (Expo, Clerk, encrypted offline SQLite queue, Today/Clock/Log/Photos/Checklist/
+  Punch/Crew/Me) + apps/projects/src/app/api/field/**.
+- Tests: projects-access 188/188 (app reads as 11 personas), Projects 967/967, Books 5,011 pass. Security review x2: all fixed.
+- Apply steps: run 1111 via the checksum runner AFTER the commit is on GitHub, then add `crm` to authenticator
+  pgrst.db_schemas ('public, core, proj, pm, crm, graphql_public') and `notify pgrst, 'reload config'`.
+- Open: commitments and time tie-outs show "pending" (Books doesn't match bills to Projects commitments or record payroll
+  hours by job); onboarding import doesn't use the matcher yet (safety-net trigger catches duplicates); phone app needs Apple
+  Developer + Google Play + Expo accounts and Clerk email/SMS code sign-in (apps/workforce/README.md); Books needs
+  /api/w/me/pay and /commissions for the Me cards; ask Books to call core.match_parties on its create doors.

@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "Merit Workforce",
+    "slug": "merit-workforce",
+    "scheme": "meritworkforce",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#FFFFFF",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "com.meritsuite.workforce",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Merit Workforce uses the camera to take job photos and checklist photos.",
+        "NSLocationWhenInUseUsageDescription": "Merit Workforce records where you are only at the moment you clock in, clock out or take a break, to show the job site you were at. It does not track you in between.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.meritsuite.workforce",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "blockedPermissions": [
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECORD_AUDIO"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true
+        }
+      ],
+      "expo-secure-store",
+      "expo-localization",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Merit Workforce records where you are only at the moment you clock in, clock out or take a break, to show the job site you were at. It does not track you in between.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Merit Workforce uses the camera to take job photos and checklist photos.",
+          "photosPermission": false,
+          "microphonePermission": false
+        }
+      ]
+    ]
+  }
+}

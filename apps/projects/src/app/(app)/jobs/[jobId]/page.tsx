@@ -49,6 +49,8 @@ import { moneyVisFor, seesMargin } from '@/components/money/visibility';
 import { MoneyScope } from '@/components/shell/ShellContext';
 import { JobTeamPanel } from '@/components/job/JobTeamPanel';
 import { loadJobTeam } from '@/components/job/team-data';
+import { loadJobTieout } from '@/lib/crm/tieout-server';
+import { JobTieoutPanel } from '@/components/tieout/TieoutPanels';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -124,10 +126,13 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
   if (tab.later) {
     body = <LaterTab label={tab.label} what={LATER_WHAT[tab.value] ?? ''} />;
   } else if (tab.value === 'overview') {
-    const [tasks, activity, team] = await Promise.all([
+    // Ties to Books (SHARED-RECORDS §6): for people who work the job's money, when Books is on.
+    const showTie = scope.tenant.booksPresent && (mv.cost || mv.contract || may('projects.billing:view'));
+    const [tasks, activity, team, tie] = await Promise.all([
       modules.has('schedule') ? listTasks(db, list.job_id) : Promise.resolve([]),
       listActivity(db, { jobId: list.job_id }, 8),
       loadJobTeam(db, list.job_id, canTeam ? { clerkUserId: scope.userId, companyId: list.location_id } : null),
+      showTie ? loadJobTieout(db, access, list.job_id, list.location_id) : Promise.resolve(null),
     ]);
     body = (
       <>
@@ -149,6 +154,7 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
         }}
       />
       <JobTeamPanel jobId={list.job_id} team={team} canEdit={canTeam} />
+      {tie && <JobTieoutPanel load={tie} jobId={list.job_id} />}
       </>
     );
   } else if (tab.value === 'budget') {

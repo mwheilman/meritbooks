@@ -3,6 +3,9 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Field, Input, api, toast, useDebounce } from '@meritbooks/merit-ui';
 import { CUSTOMER_SHARED_NOTE, sameName } from '@/lib/pm/parties/schemas';
+import { checkDecision, decisionBody, type MatchCandidate, type MatchDecision } from '@/lib/parties/match';
+import { MatchAtTheDoor, useDoorMatch } from '@/components/crm/MatchAtTheDoor';
+import { fieldErrors, postToDoor } from '@/components/crm/door-fetch';
 
 export interface CustomerValue {
   id: string | null;
@@ -140,25 +143,37 @@ function NewCustomerInline({ name: initial, companyId, onCancel, onAdded }: { na
   const [last, setLast] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<Record<string, string>>({});
+  // Matching at the door (SHARED-RECORDS §3): a customer Books already knows is offered first.
+  const [decision, setDecision] = useState<MatchDecision | null>(null);
+  const [conflict, setConflict] = useState<MatchCandidate[] | null>(null);
+  const [doorProblem, setDoorProblem] = useState<string | null>(null);
+  const door = useDoorMatch('customer', { name, email, phone }, conflict);
 
   const add = async () => {
     const e: Record<string, string> = {};
     if (!name.trim()) e.name = 'Give the customer a name.';
     if (email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) e.email = 'Enter an email like name@company.com.';
+    const check = checkDecision(door.verdict, decision, 'customer');
     setErr(e);
-    if (Object.keys(e).length) return;
+    setDoorProblem(check.ok ? null : check.message);
+    if (Object.keys(e).length || !check.ok) return;
     setBusy(true);
-    const r = await api.post<{ customer: { id: string; name: string }; existing: boolean }>('/api/customers', {
+    const r = await postToDoor<{ customer: { id: string; name: string }; existing: boolean }>('/api/customers', {
       name: name.trim(), email: email.trim() || null, phone: phone.trim() || null, companyId, contactFirst: first.trim() || null, contactLast: last.trim() || null,
+      match: decisionBody(decision),
     });
     setBusy(false);
-    if (r.error) {
-      const d = r.error.details ?? {};
-      setErr({ ...Object.fromEntries(Object.entries(d).map(([k, m]) => [k, m[0] ?? ''])), _: r.error.error });
+    if (r.kind === 'match') {
+      setConflict(r.candidates);
+      setDoorProblem(r.message);
       return;
     }
-    toast(r.data!.existing ? `${r.data!.customer.name} is already on your customer list; linked it` : `Added ${r.data!.customer.name} to your customers`);
-    onAdded(r.data!.customer);
+    if (r.kind === 'error') {
+      setErr({ ...fieldErrors(r.error), _: r.error.error });
+      return;
+    }
+    toast(r.data.existing ? `${r.data.customer.name} is already on your customer list; linked it` : `Added ${r.data.customer.name} to your customers`);
+    onAdded(r.data.customer);
   };
   const enter = (e: KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); void add(); }
@@ -176,6 +191,7 @@ function NewCustomerInline({ name: initial, companyId, onCancel, onAdded }: { na
         <Field label="Contact first name"><Input value={first} onChange={(e) => setFirst(e.target.value)} onKeyDown={enter} maxLength={100} placeholder="Optional" /></Field>
         <Field label="Contact last name"><Input value={last} onChange={(e) => setLast(e.target.value)} onKeyDown={enter} maxLength={100} placeholder="Optional" /></Field>
       </div>
+      <MatchAtTheDoor kind="customer" verdict={door.verdict} decision={decision} onDecision={setDecision} loading={door.loading} error={door.error} problem={doorProblem} />
       <span className="t-cap">{CUSTOMER_SHARED_NOTE}</span>
       {err._ && <span className="field-error" role="alert">{err._}</span>}
       <div className="btn-row">

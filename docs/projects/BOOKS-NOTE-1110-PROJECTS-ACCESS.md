@@ -32,3 +32,17 @@ uncovered table. Please don't change the meaning of `core.is_projects_only_seat(
 
 Also open for Books: `core.jobs` money columns remain member-readable for unflagged seats (Books reads them
 through RLS clients); a masked view on the Books side would let Projects drop its row-narrowing workaround.
+
+## Addendum — migration 1111 (shared records)
+- New core tables `core.contacts`, `core.sites`, `core.duplicate_reviews`; `merged_into`/`merged_at` on core.customers and
+  core.vendors. A safety-net AFTER INSERT trigger on core.customers/vendors/contacts files strong duplicate matches into
+  core.duplicate_reviews (never blocks the insert).
+- Ask: on Books' create doors (customer, vendor, invoice quick-add, imports) call `core.match_parties(kind, name, email,
+  phone, address, tax_id)` first and offer the existing record; read `core.duplicate_reviews` in the customer dedupe screen
+  and resolve through `core.merge_parties` / `core.dismiss_duplicate` (merge of records with Books money needs
+  mdm.customers:edit / mdm.vendors:edit or an owner seat). The SQL scorer mirrors lib/customers/dedupe.ts (parity test in
+  packages/projects-access/test/match-parity.test.ts) — keep them in step.
+- Tie-outs (pm.v_job_tieout) read Books invoices, deposits, GL job lines and core.events; commitments-to-bills and payroll
+  hours by job show "pending" until Books records them.
+- Merit Workforce: one native phone app (apps/workforce/mobile). Pay/commission cards call /api/w/me/pay and
+  /api/w/me/commissions when Books adds them; receipts use the existing /api/w/* routes.
