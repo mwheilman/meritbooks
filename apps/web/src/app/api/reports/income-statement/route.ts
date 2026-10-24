@@ -5,6 +5,7 @@ import { getOrgToday } from '@/lib/dates/org-today';
 import { monthBoundsIso } from '@/lib/dates/org-date';
 import { z } from 'zod';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { governDateRange } from '@/lib/reports/governance/route-guard';
 
 const isQuerySchema = z.object({
   location_id: z.string().optional(),
@@ -47,6 +48,14 @@ export const GET = apiQueryHandler(
     } else if (params.location_id && params.location_id !== 'all') {
       locationIds.push(params.location_id);
     }
+
+    // Number governance: every month of the range must be released for a non-finance
+    // caller (a combined month needs every company released) — else 403 NOT_RELEASED.
+    const gov = await governDateRange(
+      { supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.userId },
+      { startDate, endDate, locationIds },
+    );
+    if (gov instanceof NextResponse) return gov;
 
     // Paged: PostgREST caps responses at 1,000 rows — an unpaged read silently truncates.
     const buildQuery = () => {
@@ -246,6 +255,7 @@ export const GET = apiQueryHandler(
         departmentId: params.department_id,
         classId: params.class_id,
       },
+      governance: gov.info,
     });
   }
 );

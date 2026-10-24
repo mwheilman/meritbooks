@@ -8,6 +8,8 @@ import {
 import { DebtForm, type DebtFormInitial } from './debt-form';
 import { uploadForParse } from '@/lib/uploads/client-upload';
 import { displayNameFromStoragePath } from '@/lib/uploads/paths';
+import { acceptDocumentProposal, openDocument, type ProposalWithDoc } from '@/components/documents/intelligence-client';
+import { addToast } from '@/hooks/use-toast';
 
 type Frequency = 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
 
@@ -58,12 +60,38 @@ export interface DebtParseReviewProps {
   existingDefault?: boolean;
   /** B9: the cutover (as-of) date for an existing loan's balance. */
   cutoverDate?: string | null;
+  /**
+   * Document intelligence (FPB-document-intelligence §7.5): a loan AI found in Documents.
+   * The form opens pre-filled (stored DEBT_EXTRACT result); saving links the document.
+   */
+  fromProposal?: ProposalWithDoc | null;
+}
+
+/** ProposedLoan (parse response) → the confirm form's initial values. */
+function toInitial(l: ProposedLoan): DebtFormInitial {
+  return {
+    loan_name: l.loan_name,
+    lender: l.lender,
+    facility: l.facility,
+    principal_dollars: l.principal,
+    interest_rate: l.interest_rate,
+    rate_type: l.rate_type,
+    amortization_method: l.amortization_method,
+    payment_frequency: l.payment_frequency,
+    term_periods: l.term_periods,
+    payment_dollars: l.payment,
+    origination_date: l.origination_date,
+    maturity_date: l.maturity_date,
+    notes: l.notes,
+    proposedCovenants: l.covenants ?? [],
+    lowConfidenceFields: l.lowConfidenceFields,
+  };
 }
 
 export function DebtParseReview({
-  onClose, onConfirmed, initialStoragePath = null, existingDefault, cutoverDate,
+  onClose, onConfirmed, initialStoragePath = null, existingDefault, cutoverDate, fromProposal = null,
 }: DebtParseReviewProps) {
-  const [phase, setPhase] = useState<'upload' | 'parsing' | 'review'>(initialStoragePath ? 'parsing' : 'upload');
+  const [phase, setPhase] = useState<'upload' | 'parsing' | 'review'>(fromProposal ? 'review' : initialStoragePath ? 'parsing' : 'upload');
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [canManual, setCanManual] = useState(false);
@@ -106,23 +134,7 @@ export function DebtParseReview({
       const l = parsed.loan;
       setMeta(parsed.meta);
       setSnippet(l.snippet);
-      setInitial({
-        loan_name: l.loan_name,
-        lender: l.lender,
-        facility: l.facility,
-        principal_dollars: l.principal,
-        interest_rate: l.interest_rate,
-        rate_type: l.rate_type,
-        amortization_method: l.amortization_method,
-        payment_frequency: l.payment_frequency,
-        term_periods: l.term_periods,
-        payment_dollars: l.payment,
-        origination_date: l.origination_date,
-        maturity_date: l.maturity_date,
-        notes: l.notes,
-        proposedCovenants: l.covenants ?? [],
-        lowConfidenceFields: l.lowConfidenceFields,
-      });
+      setInitial(toInitial(l));
       setPhase('review');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Network error');
@@ -153,6 +165,27 @@ export function DebtParseReview({
     setMeta(initialStoragePath ? { fileName: displayNameFromStoragePath(initialStoragePath), model: '', documentNote: null } : null);
     setPhase('review');
   }, [initialStoragePath]);
+
+  // Document intelligence: open pre-filled from the stored extraction (blank when AI hasn't read it yet).
+  useEffect(() => {
+    if (!fromProposal) return;
+    const payload = fromProposal.payload as Partial<ParseResponse>;
+    setMeta({ fileName: payload.meta?.fileName ?? fromProposal.document?.file_name ?? 'Document', model: payload.meta?.model ?? '', documentNote: payload.meta?.documentNote ?? null });
+    setSnippet(payload.loan?.snippet ?? null);
+    setInitial(payload.loan ? toInitial(payload.loan) : { lowConfidenceFields: [] });
+    setPhase('review');
+  }, [fromProposal]);
+
+  const onSaved = useCallback(
+    async (id?: string) => {
+      if (fromProposal) {
+        const err = id ? await acceptDocumentProposal(fromProposal.id, 'debt_instrument', id) : 'No loan id returned';
+        if (err) addToast('error', `Loan saved, but linking the document failed: ${err}`);
+      }
+      onConfirmed();
+    },
+    [fromProposal, onConfirmed],
+  );
 
   // Smart Intake handoff: parse the already-uploaded file once.
   const startedFor = useRef<string | null>(null);
@@ -276,7 +309,16 @@ export function DebtParseReview({
                 &ldquo;{snippet}&rdquo;
               </p>
             )}
-            <DebtForm initial={initial} onClose={onClose} onSaved={onConfirmed} existingDefault={existingDefault} cutoverDate={cutoverDate} />
+            {fromProposal && (
+              <p className="mb-3 text-[11px] text-slate-400" data-testid="from-document">
+                From document: <span className="text-slate-200">{fromProposal.document?.file_name ?? 'stored document'}</span>
+                {fromProposal.confidence != null && <> · AI {Math.round(Number(fromProposal.confidence) * 100)}%</>}
+                {fromProposal.extract_state !== 'done' && <> · AI hasn’t read the terms yet — enter them from the document</>}
+                {' · '}
+                <button type="button" className="underline" onClick={() => { void openDocument(fromProposal.document_id).then((e) => { if (e) addToast('error', e); }); }}>Open the document</button>
+              </p>
+            )}
+            <DebtForm initial={initial} onClose={onClose} onSaved={(id) => { void onSaved(id); }} existingDefault={existingDefault} cutoverDate={cutoverDate} />
           </>
         )}
       </div>

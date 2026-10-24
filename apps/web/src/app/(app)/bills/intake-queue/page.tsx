@@ -1,5 +1,6 @@
 import { requirePagePermission } from '@/lib/rbac/page-guard';
 import { IntakeQueueClient } from './intake-queue-client';
+import { DocumentProposalsBanner } from '@/components/documents/document-proposals-banner';
 
 export const metadata = { title: 'AP intake queue' };
 
@@ -13,5 +14,11 @@ export const dynamic = 'force-dynamic';
  */
 export default async function IntakeQueuePage() {
   await requirePagePermission('bills', 'view');
-  return <IntakeQueueClient />;
+  return (
+    <>
+      {/* Bills found in Documents that still need a company before they can be drafted here. */}
+      <DocumentProposalsBanner kind="bill" />
+      <IntakeQueueClient />
+    </>
+  );
 }

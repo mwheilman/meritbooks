@@ -14,6 +14,8 @@ import { vendorPortalPathFor } from './vendor-compliance';
 import { workforcePathFor } from '@/lib/receipts/links';
 import { KIND_LABEL, type RequestKind } from './types';
 import { notifyMembers, tenantAdminMemberships } from '@/lib/notify/in-app';
+import { loadBrand } from '@/lib/branding/resolve';
+import type { ResolvedBrand } from '@/lib/branding/types';
 
 export interface LandingView {
   senderName: string;
@@ -24,6 +26,8 @@ export interface LandingView {
   dueDate: string | null;
   recipientEmail: string | null;
   unsubscribed: boolean;
+  /** The asking company's brand (FPB-branding) for the page frame. */
+  brand: ResolvedBrand;
 }
 
 export type OpenResult =
@@ -69,6 +73,7 @@ export async function openRequestLink(admin: SupabaseClient, token: string, now:
       dueDate: r.due_date,
       recipientEmail: r.recipient_email,
       unsubscribed: !!r.unsubscribed_at,
+      brand: await loadBrand(admin, r.org_id, r.location_id),
     },
   };
 }

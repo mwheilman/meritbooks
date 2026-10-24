@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { agingBucketFor, type AgingBucket } from '@/lib/invoices/statement';
 import { tenantLogoOrNull } from '@/lib/invoices/templates/logo-url';
+import { loadBrandTemplate } from '@/lib/invoices/templates/resolve';
+import { loadBrand } from '@/lib/branding/resolve';
+import { onColorFor } from '@/lib/branding/color';
 
 /**
  * Loads everything the CUSTOMER PORTAL page renders for ONE customer: identity,
@@ -38,7 +41,15 @@ export interface PortalInvoice {
 export interface CustomerPortalData {
   customer: { id: string; name: string; email: string | null };
   entity: { name: string } | null;
-  branding: { logoUrl: string | null; accentColor: string };
+  branding: {
+    logoUrl: string | null;
+    /** The brand's dark-background logo (for the coloured band), when uploaded. */
+    logoDarkUrl: string | null;
+    accentColor: string;
+    /** Text colour on the accent (WCAG: white or Midnight). */
+    onAccent: string;
+    fontStack: string;
+  };
   asOf: string; // YYYY-MM-DD
   invoices: PortalInvoice[];
   totalBalanceCents: number;
@@ -115,22 +126,16 @@ export async function loadCustomerPortal(
   const locationId =
     (c.location_id as string | null) ?? mostCommonLocation(rows) ?? null;
 
-  const [{ data: loc }, { data: tmpl }] = await Promise.all([
+  const [{ data: loc }, brand, t] = await Promise.all([
     locationId
       ? admin.schema('core').from('locations').select('name').eq('id', locationId).maybeSingle()
       : Promise.resolve({ data: null }),
-    locationId
-      ? admin
-          .from('invoice_templates')
-          .select('logo_url, accent_color')
-          .eq('org_id', orgId)
-          .eq('location_id', locationId)
-          // 176: a company can have many templates — read its default.
-          .eq('is_default', true)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+    // FPB-branding: the issuing company's brand (company → tenant → Merit default), and the
+    // company's default template with that brand applied (a template that opted out keeps
+    // its own logo / colour, exactly as on its invoices).
+    loadBrand(admin, orgId, locationId),
+    loadBrandTemplate(admin, orgId, locationId),
   ]);
-  const t = (tmpl as Record<string, unknown> | null) ?? null;
 
   return {
     customer: {
@@ -140,8 +145,13 @@ export async function loadCustomerPortal(
     },
     entity: loc ? { name: String((loc as Record<string, unknown>).name ?? '') } : null,
     branding: {
-      logoUrl: tenantLogoOrNull((t?.logo_url as string) ?? null, orgId),
-      accentColor: (t?.accent_color as string) || '#10b981',
+      logoUrl: tenantLogoOrNull(t.logo_url, orgId),
+      logoDarkUrl: brand.source !== 'MERIT_DEFAULT' ? brand.logoDarkUrl : null,
+      accentColor: t.accent_color,
+      onAccent: brand.source !== 'MERIT_DEFAULT' && brand.palette.primary === t.accent_color.toUpperCase()
+        ? brand.palette.on_primary
+        : onColorFor(t.accent_color),
+      fontStack: brand.fontStack,
     },
     asOf,
     invoices,

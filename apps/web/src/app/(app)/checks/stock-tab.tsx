@@ -16,6 +16,7 @@ import {
   useQuery,
 } from '@meritbooks/merit-ui';
 import { CHECK_LAYOUTS } from '@/lib/ap/check-print/layout';
+import { LayoutThumb } from './layout-thumb';
 import {
   CHASE_STYLE_FIXED,
   GENERIC_CSV_MAPPING,
@@ -261,11 +262,7 @@ export function StockTab({ account, userId, onChanged }: StockTabProps) {
             <div className={s.layouts} role="group" aria-label="Check stock layout">
               {CHECK_LAYOUTS.map((l) => (
                 <button key={l.value} type="button" className={s.layout} aria-pressed={form.layout === l.value} onClick={() => set('layout', l.value)}>
-                  <span className={s.mini} aria-hidden="true">
-                    {(l.value === 'THREE_UP' ? ['c', 'c', 'c'] : l.value === 'VOUCHER_TOP' ? ['c', 's', 's'] : l.value === 'VOUCHER_MIDDLE' ? ['s', 'c', 's'] : ['s', 's', 'c']).map((k, i) => (
-                      <i key={i} className={k === 'c' ? s.miniCheck : s.miniStub} />
-                    ))}
-                  </span>
+                  <LayoutThumb layout={l.value} className={s.thumb} />
                   <b>{l.label}</b>
                   <span>{l.help}</span>
                 </button>

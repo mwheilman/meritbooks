@@ -2,6 +2,8 @@
  * Branded email for a scheduled report-pack delivery. The combined PDF rides as
  * an attachment; the body is a short, emerald-accented note listing what's inside.
  * Kept deliberately plain — this is an internal financial deliverable, not marketing.
+ * Only sent for a pack whose every section is released (scheduled-delivery holds the rest),
+ * so the body never names an unreleased figure.
  */
 
 import type { CompiledPack } from './run';
@@ -54,7 +56,7 @@ export function buildPackEmail(pack: CompiledPack, packName: string, cadenceLabe
     ``,
     contentsText,
     ``,
-    `Every figure is computed directly from the general ledger.`,
+    `Every figure is computed directly from the general ledger, and covers released periods only.`,
   ].join('\n');
 
   const html = `
@@ -72,7 +74,7 @@ export function buildPackEmail(pack: CompiledPack, packName: string, cadenceLabe
       <tbody>${contentsHtml}</tbody>
     </table>
     <p style="font-size:12px;color:#9ca3af;line-height:1.5;">
-      Every figure is computed directly from the general ledger — this is a book-of-record document.
+      Every figure is computed directly from the general ledger and covers released periods only — this is a book-of-record document.
     </p>
   </div>`;
 

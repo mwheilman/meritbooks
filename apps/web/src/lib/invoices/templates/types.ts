@@ -87,6 +87,8 @@ export interface InvoiceTemplate {
   show_qr: boolean;
   show_pay_button: boolean;
   attachments_allowed: boolean;
+  /** Take logo / accent / font from the company brand (migration 190, FPB-branding §4.3). */
+  inherit_brand: boolean;
   updated_at: string | null;
 }
 
@@ -115,14 +117,15 @@ export const BUILT_IN_TEMPLATE: InvoiceTemplate = {
   show_qr: true,
   show_pay_button: true,
   attachments_allowed: true,
+  inherit_brand: true,
   updated_at: null,
 };
 
-/** The columns every template row read selects (Rule 11: matches migrations 050 + 176). */
+/** The columns every template row read selects (Rule 11: matches migrations 050 + 176 + 190). */
 export const TEMPLATE_SELECT =
   'id, org_id, location_id, name, is_default, style, font, accent_color, logo_url, visible_columns, ' +
   'custom_fields, line_fields, remit_to, footer_text, default_message, terms_text, payment_instructions, ' +
-  'show_qr, show_pay_button, attachments_allowed, updated_at';
+  'show_qr, show_pay_button, attachments_allowed, inherit_brand, updated_at';
 
 const isLayout = (v: unknown): v is InvoiceLayout => typeof v === 'string' && (INVOICE_LAYOUTS as readonly string[]).includes(v);
 const isFont = (v: unknown): v is InvoiceFont => typeof v === 'string' && (INVOICE_FONTS as readonly string[]).includes(v);
@@ -185,6 +188,7 @@ export function templateFromRow(row: Record<string, unknown> | null | undefined)
     show_qr: row.show_qr !== false,
     show_pay_button: row.show_pay_button !== false,
     attachments_allowed: row.attachments_allowed !== false,
+    inherit_brand: row.inherit_brand !== false,
     updated_at: typeof row.updated_at === 'string' ? row.updated_at : null,
   };
 }

@@ -28,8 +28,9 @@ interface CCRow {
   ai_vendor: { id: string; name: string; display_name: string | null } | null;
   final_account: { id: string; account_number: string; name: string } | null;
   bank_account: { id: string; account_name: string; account_mask: string } | null;
-  /** From the receipt chase (migration 181): MISSING = no receipt yet, PENDING = the cardholder has been asked. */
-  receiptStatus: 'MATCHED' | 'MISSING' | 'PENDING' | 'NOT_REQUIRED';
+  /** From the receipt chase (migration 181): MISSING = no receipt yet, PENDING = the cardholder has been asked,
+   *  NOT_APPLICABLE = a card payment / refund / credit, which never needs a receipt. */
+  receiptStatus: 'MATCHED' | 'MISSING' | 'PENDING' | 'NOT_REQUIRED' | 'NOT_APPLICABLE';
   chaseCount: number;
   /** Saved / posted split (FPB-bank-feed-splits). */
   split?: SplitSummary | null;
@@ -55,6 +56,8 @@ const TAB_CONFIG = [
 ] as const;
 
 function ReceiptBadge({ status, chaseCount }: { status: string; chaseCount: number }) {
+  // Payments, refunds and credits are not purchases — no receipt badge at all.
+  if (status === 'NOT_APPLICABLE') return <span className="text-2xs text-slate-500" aria-label="No receipt needed for a payment or credit">—</span>;
   if (status === 'MATCHED') {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium bg-emerald-500/10 text-emerald-400">

@@ -1,18 +1,26 @@
 /**
  * Shapes the /receipts screens read from the API (lib/receipts + app/api/receipts/*).
  */
-import type { PipKind } from '@meritbooks/merit-ui';
+import { money, type PipKind } from '@meritbooks/merit-ui';
 import type { ChargeState, MatchStatus } from '@/lib/receipts/types';
-import type { OutstandingGroup, OutstandingStrip } from '@/lib/receipts/bookkeeper';
+import type { OlderCharge, OlderUnreceipted, OutstandingGroup, OutstandingStrip } from '@/lib/receipts/bookkeeper';
 import type { ReceiptPolicy } from '@/lib/receipts/policy';
+import type { QuietHoursSummary } from '@/lib/requests/quiet-display';
 
-export type { OutstandingGroup, OutstandingStrip, ReceiptPolicy };
+export type { OlderCharge, OlderUnreceipted, OutstandingGroup, OutstandingStrip, ReceiptPolicy };
 export type OutstandingCharge = OutstandingGroup['charges'][number];
 
 export interface ChaseResponse {
   groups: OutstandingGroup[];
   strip: OutstandingStrip;
   chase: { tenantEnabled: boolean; clientEnabled: boolean | null };
+  /** Charges older than the chase window with no receipt (null if it could not be read). */
+  older: OlderUnreceipted | null;
+}
+
+/** Receipt amounts always carry the "$" (summaries, captions and cells alike). */
+export function usd(cents: number): string {
+  return money(Math.round(cents), { symbol: '$' });
 }
 
 export interface ChargeRef {
@@ -135,6 +143,7 @@ export interface PolicyResponse {
     effective: boolean;
   };
   cadence: { firstReminderMinutes: number; channel: string | null; quietStart: string | null; quietEnd: string | null; timezone: string | null };
+  quietHours: QuietHoursSummary | null;
 }
 
 export interface ActionResult {

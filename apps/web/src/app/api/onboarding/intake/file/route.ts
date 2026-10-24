@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic';
+export const maxDuration = 120;
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -8,6 +9,11 @@ import { isOrgIntakePath, displayNameFromStoragePath } from '@/lib/uploads/paths
 import { mediaTypeFromName } from '@/lib/uploads/resolve-upload';
 import { INTAKE_DOC_TYPES, INTAKE_ROUTES, type IntakeDocType } from '@/lib/onboarding/intake/types';
 import { buildHandoff } from '@/lib/onboarding/intake/handoff';
+import { intelDeps } from '@/lib/documents/intelligence/server';
+import { analyzeDocument } from '@/lib/documents/intelligence/service';
+import { classFromIntakeType } from '@/lib/documents/intelligence/types';
+import { draftAuthorizer } from '@/lib/documents/intelligence/route-auth';
+import { presentIntel } from '@/lib/documents/intelligence/present';
 
 /**
  * POST /api/onboarding/intake/file — keep a dropped file in the company's DOCUMENTS.
@@ -29,6 +35,9 @@ const bodySchema = z.object({
   companyId: z.string().uuid().nullish(),
   sizeBytes: z.number().int().nonnegative().nullish(),
   mimeType: z.string().max(200).nullish(),
+  /** How Smart Intake typed it (ai | rules | user) and how sure — seeds document intelligence. */
+  classSource: z.enum(['ai', 'rules', 'user']).nullish(),
+  confidence: z.number().min(0).max(1).nullish(),
 });
 type Body = z.infer<typeof bodySchema>;
 
@@ -82,5 +91,31 @@ export const POST = apiHandler(bodySchema, async (body: Body, ctx: ApiContext): 
     return NextResponse.json({ error: 'Could not save the document. Please try again.', code: 'SAVE_FAILED' }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, documentId: (data as { id: string }).id, note }, { status: 201 });
+  const documentId = (data as { id: string }).id;
+
+  // Document intelligence (FPB-document-intelligence §7.1): route the file to the module
+  // it belongs to as a PROPOSAL ("We found a lease — added to Leases for your review").
+  // Best-effort: with AI off the rules answer and a retry is queued; never fails the save.
+  let found: string | null = null;
+  let intelligence: ReturnType<typeof presentIntel> | null = null;
+  try {
+    // No module draft without the target module's permission + write scope on the company.
+    const canDraft = draftAuthorizer({ userId, orgId, supabase: ctx.supabase, route: '/api/onboarding/intake/file' });
+    const r = await analyzeDocument(intelDeps(), {
+      canDraft,
+      orgId,
+      documentId,
+      userId,
+      source: 'onboarding',
+      uploadLocationId: body.companyId ?? null,
+      preset: { docClass: classFromIntakeType(body.docType), confidence: body.confidence ?? (body.classSource === 'user' ? 1 : 0.6), source: body.classSource ?? 'rules' },
+    });
+    // Browser projection: redacted, no payload / internal fields.
+    intelligence = r.intelligence ? presentIntel(r.intelligence) : null;
+    found = r.skipped ? null : r.message;
+  } catch (e) {
+    console.error('[onboarding/intake/file] document intelligence failed (non-fatal):', e instanceof Error ? e.message : e);
+  }
+
+  return NextResponse.json({ ok: true, documentId, note, found, intelligence }, { status: 201 });
 });

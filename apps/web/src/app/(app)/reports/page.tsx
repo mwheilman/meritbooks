@@ -1,8 +1,7 @@
-import { PageHeader } from '@/components/ui';
 import { readInitialCompany } from '@/lib/company-scope-server';
 import { isSpecificCompany } from '@/lib/company-scope';
 import { readDealerPackEnabled } from '@/lib/dealer/pack-enabled-server';
-import { ReportViewer } from './report-viewer';
+import { ReportsScreen } from './engine/reports-screen';
 import { utcIsoDate } from './period-presets';
 
 export const dynamic = 'force-dynamic';
@@ -28,16 +27,10 @@ export default async function ReportsPage({
   const dealerEnabled = await readDealerPackEnabled(locationId);
 
   return (
-    <>
-      <PageHeader
-        title="Financial Reports"
-        description="Generate statements from GL data across all entities"
-      />
-      <ReportViewer
-        initialReport={initialReport}
-        initialToday={utcIsoDate()}
-        initialDealer={{ locationId, enabled: dealerEnabled }}
-      />
-    </>
+    <ReportsScreen
+      initialReport={initialReport}
+      initialToday={utcIsoDate()}
+      initialDealer={{ locationId, enabled: dealerEnabled }}
+    />
   );
 }

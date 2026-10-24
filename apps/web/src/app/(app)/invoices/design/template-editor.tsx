@@ -78,6 +78,18 @@ export function TemplateEditor({
           </div>
         </div>
         <div className="field">
+          <Switch
+            label="Use the company brand"
+            checked={draft.inherit_brand}
+            onChange={(e) => set('inherit_brand', e.target.checked)}
+          />
+          <span className="field-help">
+            {draft.inherit_brand
+              ? <>When the company has a brand (<a className="link" href="/settings/brand">Settings → Brand</a>), its logo, colour and font replace the three below. With no brand set, these print.</>
+              : 'This template keeps its own logo, colour and font, whatever the company brand is.'}
+          </span>
+        </div>
+        <div className="field">
           <span className="field-label">Font</span>
           <Seg
             aria-label="Font"

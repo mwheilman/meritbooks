@@ -4,6 +4,7 @@ import { apiQueryHandler } from '@/lib/api-handler';
 import { z } from 'zod';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { fetchSplitSummaries, type SplitSummary } from '@/lib/bank/splits/service';
+import { cardLineReceiptStatus } from '@/lib/receipts/charges';
 
 const ccQuerySchema = z.object({
   status: z.enum(['all', 'PENDING', 'CATEGORIZED', 'FLAGGED', 'APPROVED']).optional(),
@@ -68,6 +69,7 @@ export const GET = apiQueryHandler(
         ai_reasoning,
         match_type,
         matched_receipt_id,
+        matched_bill_id,
         location_id, ai_vendor_id,
         ai_account:accounts!bank_transactions_ai_account_id_fkey(id, account_number, name, account_type),
         final_account:accounts!bank_transactions_final_account_id_fkey(id, account_number, name, account_type),
@@ -130,10 +132,8 @@ export const GET = apiQueryHandler(
     // Transform data — add receipt status + stitched entities
     const rows = (data ?? []).map((t: any) => {
       const chase = chaseMap[t.id];
-      let receiptStatus: 'MATCHED' | 'MISSING' | 'PENDING' | 'NOT_REQUIRED' = 'MISSING';
-      if (t.matched_receipt_id || chase?.status === 'matched') receiptStatus = 'MATCHED';
-      else if (chase && (chase.status === 'not_required' || chase.status === 'below_threshold')) receiptStatus = 'NOT_REQUIRED';
-      else if (chase?.status === 'requested') receiptStatus = 'PENDING';
+      // Card payments / autopay / refunds / credits never "need a receipt" (lib/receipts/charges).
+      const receiptStatus = cardLineReceiptStatus(t, chase?.status ?? null);
       const chaseCount = chase?.request_id ? sendsByRequest[chase.request_id] ?? chase.chase_count : chase?.chase_count ?? 0;
 
       return {

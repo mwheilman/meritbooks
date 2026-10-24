@@ -17,10 +17,13 @@ import {
   type QueueAction,
   type QueueColumn,
 } from '@meritbooks/merit-ui';
-import { RUN_LOOK, STATE_LOOK, countChips, describeCron, relative, stamp, type JobView, type RunsResponse } from './automation-types';
+import { RUN_LOOK, STATE_LOOK, countChips, describeCron, emptyHistoryText, relative, stamp, type JobView, type RunsResponse } from './automation-types';
 import s from './automation.module.css';
 
 type Band = 'all' | 'attention' | 'off' | 'not_built';
+
+/** Runs shown in a job's panel. */
+const JOB_HISTORY_LIMIT = 20;
 
 interface RunNowResponse {
   ok: boolean;
@@ -42,7 +45,7 @@ export function JobsTab() {
   const [confirmToggle, setConfirmToggle] = useState<{ job: JobView; enabled: boolean } | null>(null);
   const [running, setRunning] = useState<string | null>(null);
 
-  const { data, error, isLoading, refetch } = useQuery<RunsResponse>('/api/scheduler/runs', { limit: '100' }, { key: String(refreshKey), scope: false });
+  const { data, error, isLoading, refetch } = useQuery<RunsResponse>('/api/scheduler/runs', { limit: '1' }, { key: String(refreshKey), scope: false }); // job health + last run; per-job history below
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const jobs = useMemo(() => data?.jobs ?? [], [data]);
@@ -63,7 +66,18 @@ export function JobsTab() {
   }, [jobs, band]);
 
   const selected = jobs.find((j) => j.key === cursor) ?? shown[0] ?? null;
-  const history = useMemo(() => (data?.runs ?? []).filter((r) => !selected || r.job_key === selected.key).slice(0, 20), [data, selected]);
+  // The panel's history is fetched PER JOB (?job_key=…&limit=20): the page-level run log is
+  // dominated by the 15-minute jobs, so filtering it client-side left rarely-run jobs with
+  // "No runs yet" while their row said "Failing · 3×".
+  const jobRuns = useQuery<RunsResponse>(
+    '/api/scheduler/runs',
+    { limit: String(JOB_HISTORY_LIMIT), job_key: selected?.key ?? '' },
+    { key: `${selected?.key ?? ''}:${refreshKey}`, scope: false, enabled: !!selected },
+  );
+  const history = useMemo(
+    () => (jobRuns.data?.runs ?? []).filter((r) => !!selected && r.job_key === selected.key).slice(0, JOB_HISTORY_LIMIT),
+    [jobRuns.data, selected],
+  );
 
   const runNow = useCallback(
     async (job: JobView) => {
@@ -251,8 +265,14 @@ export function JobsTab() {
               </Button>
             )}
           </div>
-          {history.length === 0 ? (
-            <p className="ink-3">No runs yet.</p>
+          {jobRuns.isLoading && !jobRuns.data ? (
+            <div className="wg-loading" style={{ height: 96 }} aria-busy="true"><span className="bar-l" style={{ width: '50%' }} /></div>
+          ) : jobRuns.error ? (
+            <InlineNotice tone="neg" title={`Couldn't load the runs for ${selected.label}.`}>
+              {jobRuns.error} <Button variant="quiet" onClick={() => void jobRuns.refetch()}>Try again</Button>
+            </InlineNotice>
+          ) : history.length === 0 ? (
+            <p className="ink-3">{emptyHistoryText(selected)}</p>
           ) : (
             <ul className={s.runList}>
               {history.map((r) => (
@@ -313,3 +333,4 @@ export function JobsTab() {
     </div>
   );
 }
+

@@ -169,7 +169,7 @@ export function DriverBuilder() {
     if (!locationId) { addToast('error', 'Select a company first.'); return; }
     if (drivers.length === 0) { addToast('error', 'Add at least one complete driver (label + account + values).'); return; }
     setSaving(true);
-    const res = await api.post<{ saved: number; accounts: number }>('/api/budgets/drivers', {
+    const res = await api.post<{ saved: number; accounts: number; versionLabel?: string; skippedClosedPeriods?: number[] }>('/api/budgets/drivers', {
       location_id: locationId,
       fiscal_year: fiscalYear,
       drivers,
@@ -177,7 +177,8 @@ export function DriverBuilder() {
     });
     setSaving(false);
     if (res.error) { addToast('error', `Save failed: ${res.error.error}`); return; }
-    addToast('success', `Budget built from ${drivers.length} drivers → ${res.data?.accounts ?? 0} accounts, ${res.data?.saved ?? 0} cells saved.`);
+    const kept = res.data?.skippedClosedPeriods?.length ?? 0;
+    addToast('success', `Budget built from ${drivers.length} drivers → ${res.data?.accounts ?? 0} accounts, saved to ${res.data?.versionLabel ?? 'the draft budget'}${kept ? ` (${kept} closed month${kept === 1 ? '' : 's'} kept as budgeted)` : ''}. It publishes once the draft is approved.`);
   }, [locationId, fiscalYear, drivers]);
 
   return (

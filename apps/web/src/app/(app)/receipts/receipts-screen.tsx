@@ -2,7 +2,8 @@
 
 import { useCallback, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, PageHead, Tabs, money, useQuery } from '@meritbooks/merit-ui';
+import { Button, PageHead, Tabs, useQuery } from '@meritbooks/merit-ui';
+import { usd } from './receipts-types';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { useShellLine } from '@/components/layout/shell-context';
 import { ChaseBoard } from './chase-board';
@@ -53,11 +54,12 @@ export function ReceiptsScreen() {
     strip
       ? [
           { label: `${strip.outstanding.toLocaleString()} receipt${strip.outstanding === 1 ? '' : 's'} owed`, strong: strip.outstanding > 0 },
-          `${money(strip.totalCents)} without a receipt`,
+          `${usd(strip.totalCents)} without a receipt`,
           strip.escalated ? `${strip.escalated} escalated` : 'Nothing escalated',
+          ...(chase?.older?.count ? [`${chase.older.count.toLocaleString()} older outside the chase window`] : []),
         ]
       : null,
-    strip ? `${strip.outstanding}:${strip.escalated}:${strip.totalCents}` : 'none',
+    strip ? `${strip.outstanding}:${strip.escalated}:${strip.totalCents}:${chase?.older?.count ?? 0}` : 'none',
   );
 
   return (

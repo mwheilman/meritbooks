@@ -1,0 +1,11 @@
+/* Tenant brand area (FPB-branding §4.1). Only the rail's top-left changes; the Merit
+   lockup steps back to "Powered by Merit Books". Square geometry, thin brand rule. */
+.rail:has(.mb-tenant-brand) > .rail-logo{display:none}
+.mb-tenant-brand{position:sticky;top:-8px;z-index:1;margin:-8px 0 8px;padding:12px 24px 10px;background:var(--midnight);border-bottom:1px solid var(--tb-accent,var(--electric));display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.mb-tenant-brand-link{display:flex;align-items:center;max-width:100%}
+.mb-tenant-brand-link:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+.mb-tenant-brand-img{display:block;height:28px;width:auto;max-width:176px;object-fit:contain}
+.mb-tenant-brand-img--chip{background:var(--white);padding:4px 6px;height:32px}
+.mb-tenant-brand-powered{font-size:10px;line-height:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--slate,#8494A7)}
+.mb-tenant-brand--mini{padding:10px 0;align-items:center}
+.mb-tenant-brand--mini .mb-tenant-brand-img{height:28px;width:28px;max-width:28px;padding:2px}

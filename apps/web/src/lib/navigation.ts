@@ -146,6 +146,7 @@ export const navigation: NavGroup[] = [
     label: 'Planning & reports',
     items: [
       { label: 'Reports', href: '/reports', icon: 'file-text' },
+      { label: 'Reporting calendar', href: '/reporting-calendar', icon: 'calendar' },
       { label: 'Board package', href: '/board-package', icon: 'file-text' },
       { label: 'Budgets', href: '/budgets', icon: 'sliders' },
       { label: 'FP&A', href: '/fpna', icon: 'sliders' },
@@ -210,6 +211,7 @@ export const navigation: NavGroup[] = [
       { label: 'Settings', href: '/settings', icon: 'sliders' },
       { label: 'Plan & billing', href: '/settings/billing', icon: 'dollar' },
       { label: 'Payments', href: '/settings/payments', icon: 'dollar' },
+      { label: 'Brand', href: '/settings/brand', icon: 'sliders' },
       { label: 'Approval workflows', href: '/settings/approvals', icon: 'check' },
       { label: 'AI autonomy', href: '/settings/autonomy', icon: 'sliders' },
       { label: 'Automation', href: '/settings/automation', icon: 'clock' },

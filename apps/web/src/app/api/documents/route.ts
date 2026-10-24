@@ -12,6 +12,10 @@ import {
   type DocType,
 } from '@/lib/documents/schema';
 import { listDocuments, uploadDocument } from '@/lib/documents/store';
+import { intelDeps } from '@/lib/documents/intelligence/server';
+import { isEligible, registerDocument } from '@/lib/documents/intelligence/service';
+import { presetFromDocType } from '@/lib/documents/intelligence/types';
+import { presentIntel } from '@/lib/documents/intelligence/present';
 
 /**
  * /api/documents — the Document Management Center store.
@@ -46,6 +50,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       linked: parsed.data.linked ?? null,
       dateFrom: parsed.data.date_from ?? null,
       dateTo: parsed.data.date_to ?? null,
+      ids: parsed.data.ids !== undefined ? parsed.data.ids.split(',').map((x) => x.trim()).filter((x) => /^[0-9a-f-]{36}$/i.test(x)) : null,
       page: parsed.data.page ?? null,
       perPage: parsed.data.per_page ?? null,
     });
@@ -114,7 +119,27 @@ export async function POST(request: Request): Promise<NextResponse> {
       entityId: meta.entity_id ?? null,
       notes: meta.notes ?? null,
     });
-    return NextResponse.json({ document }, { status: 201 });
+    // Document intelligence (FPB-document-intelligence §7.1): type it at once with the
+    // deterministic rules + hash it; the center then asks for the AI read. Best-effort —
+    // the upload never fails because of it.
+    let intelligence: Awaited<ReturnType<typeof registerDocument>> = null;
+    if (isEligible(document)) {
+      try {
+        intelligence = await registerDocument(intelDeps(), {
+          orgId,
+          documentId: document.id,
+          userId,
+          source: 'center',
+          bytes: new Uint8Array(await file.arrayBuffer()),
+          // A type the uploader picked is theirs; "Contract" is broad, so the read may refine it.
+          preset: form?.get('doc_type') ? presetFromDocType(meta.doc_type) : null,
+        });
+      } catch (e) {
+        console.error('[documents] intelligence register failed (non-fatal):', e instanceof Error ? e.message : e);
+      }
+    }
+    // DTO columns only, TIN-redacted (security review H4); a fresh row has no duplicate yet.
+    return NextResponse.json({ document, intelligence: intelligence ? { ...presentIntel(intelligence), duplicate_of: null } : null }, { status: 201 });
   } catch (err) {
     console.error('[documents] upload failed:', err);
     return NextResponse.json(

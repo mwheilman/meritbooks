@@ -9,6 +9,8 @@ import { InvoiceDrawer } from './invoice-drawer';
 import { CreditMemosPanel, type CreditMemoPrefill } from './credit-memos-panel';
 import { RecurringPanel } from './recurring-panel';
 import { ContractImport } from './contract-import';
+import { DocumentProposalsBanner } from '@/components/documents/document-proposals-banner';
+import { useDocumentProposal, type ProposalWithDoc } from '@/components/documents/intelligence-client';
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { InvoicePeek } from './invoice-peek';
 import { OnlineStatusCell, type OnlineSummary } from './online-status';
@@ -783,6 +785,10 @@ export function InvoiceManager() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [view, setView] = useState<'invoices' | 'credit-memos' | 'recurring' | 'unapplied'>('invoices');
   const [creditPrefill, setCreditPrefill] = useState<CreditMemoPrefill | null>(null);
+  // Document intelligence: a customer contract AI found in Documents (banner Review or ?proposal=).
+  const deepLinked = useDocumentProposal('customer_contract');
+  const [fromDoc, setFromDoc] = useState<ProposalWithDoc | null>(null);
+  const reviewingContract = fromDoc ?? deepLinked.proposal;
 
   // Deep-link: open the panel from ?invoice=<id> on load, and keep the URL in
   // sync so a refresh re-opens it and the link is shareable.
@@ -831,6 +837,8 @@ export function InvoiceManager() {
 
       {view === 'invoices' ? (
         <>
+          {/* Customer contracts found in Documents (document intelligence). */}
+          <DocumentProposalsBanner kind="customer_contract" refreshKey={refreshKey} onReview={(p) => setFromDoc(p)} />
           <InvoiceList
             onCreateClick={() => setShowCreate(true)}
             onImportClick={() => setShowImport(true)}
@@ -847,7 +855,15 @@ export function InvoiceManager() {
             }}
           />
           {showCreate && <CreateInvoiceForm onClose={() => setShowCreate(false)} onCreated={refresh} />}
-          {showImport && <ContractImport onClose={() => setShowImport(false)} onCreated={refresh} />}
+          {showImport && !reviewingContract && <ContractImport onClose={() => setShowImport(false)} onCreated={refresh} />}
+          {reviewingContract && (
+            <ContractImport
+              key={reviewingContract.id}
+              fromProposal={reviewingContract}
+              onClose={() => { setFromDoc(null); deepLinked.clear(); }}
+              onCreated={() => { setFromDoc(null); deepLinked.clear(); refresh(); }}
+            />
+          )}
           {paymentInvoice && <PaymentDialog invoice={paymentInvoice} onClose={() => setPaymentInvoice(null)} onPaid={refresh} />}
         </>
       ) : view === 'recurring' ? (

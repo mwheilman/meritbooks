@@ -9,12 +9,11 @@ import {
   Input,
   QueueTable,
   Tag,
-  money,
   toast,
   useQuery,
   type QueueColumn,
 } from '@meritbooks/merit-ui';
-import { accountLabel, postForFile, shortDate, todayLocal, who, type AccountsResponse, type CheckAccount, type ReadyCheck, type ReadyResponse } from './checks-types';
+import { accountLabel, postForFile, usd, shortDate, todayLocal, who, type AccountsResponse, type CheckAccount, type ReadyCheck, type ReadyResponse } from './checks-types';
 import s from './checks.module.css';
 
 export interface PrintTabProps {
@@ -135,7 +134,7 @@ export function PrintTab({ account, mail, userId, onChanged, onSetup }: PrintTab
           </>
         ),
       },
-      { id: 'amount', header: 'Amount', width: 130, numeric: true, cell: (c) => <span className="tnum">{money(c.amountCents)}</span> },
+      { id: 'amount', header: 'Amount', width: 130, numeric: true, cell: (c) => <span className="tnum">{usd(c.amountCents)}</span> },
     ],
     [names, userId],
   );
@@ -162,9 +161,15 @@ export function PrintTab({ account, mail, userId, onChanged, onSetup }: PrintTab
 
       <div className={s.hero}>
         <span className={s.heroCount}>
-          {data ? `${data.totals.count} check${data.totals.count === 1 ? '' : 's'} ready to print` : 'Checks ready to print'}
+          {data ? (
+            <>
+              <span className={s.heroNum}>{data.totals.count.toLocaleString()}</span> check{data.totals.count === 1 ? '' : 's'} ready to print
+            </>
+          ) : (
+            'Checks ready to print'
+          )}
         </span>
-        {data && <span className={`${s.heroSub} tnum`}>{money(data.totals.amountCents)} · {accountLabel(account)} · next number {first}</span>}
+        {data && <span className={`${s.heroSub} tnum`}>{usd(data.totals.amountCents)} · {accountLabel(account)} · next number {first}</span>}
       </div>
 
       <div className={s.bar}>
@@ -226,7 +231,7 @@ export function PrintTab({ account, mail, userId, onChanged, onSetup }: PrintTab
           <>
             <div className={s.toolbar}>
               <span className="t-cap tnum">
-                {chosen.length} of {printable.length} selected · {money(chosenCents)}
+                {chosen.length} of {printable.length} selected · {usd(chosenCents)}
                 {blocked > 0 && ` · ${blocked} you can't print (someone else has to)`}
               </span>
               <div className={s.grow} />
@@ -255,7 +260,7 @@ export function PrintTab({ account, mail, userId, onChanged, onSetup }: PrintTab
         open={confirm}
         onClose={() => setConfirm(false)}
         onConfirm={() => print()}
-        title={`Print ${chosen.length} check${chosen.length === 1 ? '' : 's'} for ${money(chosenCents)}?`}
+        title={`Print ${chosen.length} check${chosen.length === 1 ? '' : 's'} for ${usd(chosenCents)}?`}
         confirmLabel={`Print ${range}`}
         footNote="Numbers are used the moment the PDF is created. A jammed or misprinted sheet is spoiled from the Register and reprinted on the next number."
       >

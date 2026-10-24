@@ -13,11 +13,11 @@ import {
   Select,
   Tag,
   api,
-  money,
   toast,
   useQuery,
   type QueueColumn,
 } from '@meritbooks/merit-ui';
+import { usd } from './receipts-types';
 import type { ActionResult, CardholderOptions, CardholderRow } from './receipts-types';
 import s from './receipts.module.css';
 
@@ -101,7 +101,7 @@ export function CardholdersTab({ locationId, companyName, refreshKey, onChanged,
         header: 'Owes',
         width: 140,
         numeric: true,
-        cell: (r) => (r.open_count ? <span className="tnum">{r.open_count} · {money(r.open_cents)}</span> : <span className="ink-3">Nothing</span>),
+        cell: (r) => (r.open_count ? <span className="tnum">{r.open_count} · {usd(r.open_cents)}</span> : <span className="ink-3">Nothing</span>),
       },
     ],
     [],

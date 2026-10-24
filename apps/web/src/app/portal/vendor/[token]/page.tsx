@@ -9,6 +9,7 @@ import { buildPortalView } from '@/lib/vendor-compliance/portal';
 import { W9_CERTIFICATION_TEXT } from '@/lib/vendor-compliance/w9-form';
 import { PublicRequestFrame, PublicRequestNotice } from '@/app/r/[token]/frame';
 import { VendorPortalClient } from './upload-portal';
+import { loadBrand } from '@/lib/branding/resolve';
 
 export const metadata = { title: { absolute: 'Documents requested' }, robots: { index: false, follow: false } };
 
@@ -43,9 +44,10 @@ export default async function VendorPortalPage({ params }: { params: { token: st
     );
   }
 
-  const view = await buildPortalView(admin, result.token);
+  // Vendor compliance is tenant-level (core.vendors): the vendor sees the TENANT brand.
+  const [view, brand] = await Promise.all([buildPortalView(admin, result.token), loadBrand(admin, result.token.orgId, null)]);
   return (
-    <PublicRequestFrame eyebrow="Documents requested" sender={view.companyName}>
+    <PublicRequestFrame eyebrow="Documents requested" sender={view.companyName} brand={brand}>
       <VendorPortalClient token={params.token} view={view} certification={W9_CERTIFICATION_TEXT} />
     </PublicRequestFrame>
   );

@@ -16,14 +16,13 @@ import {
   Search,
   Textarea,
   api,
-  money,
   toast,
   useDebounce,
   useQuery,
   type PipKind,
   type QueueColumn,
 } from '@meritbooks/merit-ui';
-import { accountLabel, postForFile, shortDate, todayLocal, who, type CheckAccount, type CheckStatus, type RegisterResponse, type RegisterRow } from './checks-types';
+import { accountLabel, postForFile, usd, shortDate, todayLocal, who, type CheckAccount, type CheckStatus, type RegisterResponse, type RegisterRow } from './checks-types';
 import s from './checks.module.css';
 
 type Filter = 'all' | 'outstanding' | 'cleared' | 'void' | 'spoiled' | 'stale';
@@ -123,7 +122,7 @@ export function RegisterTab({ account, userId, onChanged }: RegisterTabProps) {
         width: 150,
         cell: (r) => (r.clearedAt ? shortDate(r.clearedAt) : r.voidedAt ? shortDate(r.voidedAt) : <span className={s.muted}>—</span>),
       },
-      { id: 'amount', header: 'Amount', width: 130, numeric: true, sort: sortable('amount', 'Sort by amount'), cell: (r) => <span className="tnum">{money(r.amountCents)}</span> },
+      { id: 'amount', header: 'Amount', width: 130, numeric: true, sort: sortable('amount', 'Sort by amount'), cell: (r) => <span className="tnum">{usd(r.amountCents)}</span> },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sort, dir],
@@ -146,18 +145,18 @@ export function RegisterTab({ account, userId, onChanged }: RegisterTabProps) {
       <div className={s.strip}>
         <div className={s.cell}>
           <span className={s.cellL}>Outstanding</span>
-          <span className={s.cellV}>{sum ? money(sum.outstandingCents) : '—'}</span>
+          <span className={s.cellV}>{sum ? usd(sum.outstandingCents) : '—'}</span>
           <span className={s.cellS}>{sum ? `${sum.outstandingCount} check${sum.outstandingCount === 1 ? '' : 's'} not yet cleared` : ' '}</span>
         </div>
         <div className={s.cell}>
           <span className={s.cellL}>Cleared this month</span>
-          <span className={s.cellV}>{sum ? money(sum.clearedThisMonthCents) : '—'}</span>
+          <span className={s.cellV}>{sum ? usd(sum.clearedThisMonthCents) : '—'}</span>
           <span className={s.cellS}>{sum ? `${sum.clearedThisMonthCount} from the bank feed` : ' '}</span>
         </div>
         <div className={`${s.cell} ${sum && sum.staleCount > 0 ? s.cellWarn : ''}`}>
           <span className={s.cellL}>Stale</span>
           <span className={s.cellV}>{sum ? sum.staleCount : '—'}</span>
-          <span className={s.cellS}>{sum ? `Outstanding over ${data?.staleAfterDays ?? 180} days${sum.staleCount ? ` · ${money(sum.staleCents)}` : ''}` : ' '}</span>
+          <span className={s.cellS}>{sum ? `Outstanding over ${data?.staleAfterDays ?? 180} days${sum.staleCount ? ` · ${usd(sum.staleCents)}` : ''}` : ' '}</span>
         </div>
         <div className={`${s.cell} ${sum && sum.gaps.length > 0 ? s.cellWarn : ''}`}>
           <span className={s.cellL}>Number check</span>
@@ -190,8 +189,11 @@ export function RegisterTab({ account, userId, onChanged }: RegisterTabProps) {
       <div className={s.surface}>
         <div className={s.toolbar}>
           <Search aria-label="Search payee or check number" placeholder="Payee or check number" value={search} onChange={(e) => setSearch(e.target.value)} slashToFocus />
-          <Input type="date" aria-label="From date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          <Input type="date" aria-label="To date" value={to} onChange={(e) => setTo(e.target.value)} />
+          <div className={s.dateRange} role="group" aria-label="Check date range">
+            <Input type="date" aria-label="From date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+            <span className={s.muted} aria-hidden="true">to</span>
+            <Input type="date" aria-label="To date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+          </div>
           <div className={s.grow} />
           <Button variant="quiet" onClick={() => void matchCleared()} disabled={matching}>{matching ? 'Matching…' : 'Match cleared checks'}</Button>
           <a className="btn" href={csvHref}>Export CSV</a>
@@ -233,7 +235,7 @@ export function RegisterTab({ account, userId, onChanged }: RegisterTabProps) {
         onClose={() => { setOpenId(null); setAction(null); }}
         eyebrow={['Check', open ? `#${open.checkNumber}` : '']}
         title={open?.payeeName ?? ''}
-        figure={open ? <span className="tnum">{money(open.amountCents)}</span> : null}
+        figure={open ? <span className="tnum">{usd(open.amountCents)}</span> : null}
         width={440}
         foot={open ? <CheckActions row={open} userId={userId} onAction={setAction} onMarked={reload} /> : null}
       >
@@ -253,7 +255,7 @@ export function RegisterTab({ account, userId, onChanged }: RegisterTabProps) {
               {open.replacesCheckId && <p className="t-cap" style={{ marginTop: 8 }}>Reprint of a spoiled check.</p>}
             </PanelSection>
             <PanelSection title="Bills paid">
-              <KV items={open.bills.map((b) => ({ term: b.billNumber ?? 'Bill', value: <span className="tnum">{money(b.amountCents)}</span> }))} />
+              <KV items={open.bills.map((b) => ({ term: b.billNumber ?? 'Bill', value: <span className="tnum">{usd(b.amountCents)}</span> }))} />
               {open.memo && <p className="t-cap" style={{ marginTop: 8 }}>Memo: {open.memo}</p>}
             </PanelSection>
           </>
@@ -366,7 +368,7 @@ function ActionDialog({ row, kind, onClose, onDone }: { row: RegisterRow; kind: 
               : undefined
       }
     >
-      <p>{row.payeeName} · <span className="tnum">{money(row.amountCents)}</span> · dated {shortDate(row.checkDate)}</p>
+      <p>{row.payeeName} · <span className="tnum">{usd(row.amountCents)}</span> · dated {shortDate(row.checkDate)}</p>
       {needsReason && (
         <Field label="Reason" help="Kept in the audit trail.">
           <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} autoFocus />

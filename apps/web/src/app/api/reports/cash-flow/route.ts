@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
+import { governDateRange } from '@/lib/reports/governance/route-guard';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
 import { z } from 'zod';
@@ -67,6 +68,14 @@ export async function GET(request: Request) {
     ? params.location_ids.split(",").filter(Boolean)
     : (params.location_id && params.location_id !== "all" ? [params.location_id] : []);
 
+  // Number governance: the period's activity AND its beginning cash (a balance — cumulative
+  // rule) must be released for a non-finance caller, else 403 NOT_RELEASED.
+  const gov = await governDateRange(
+    { supabase, orgId, userId: ctx.userId },
+    { startDate: params.start_date, endDate: params.end_date, locationIds: locFilter, cumulative: true },
+  );
+  if (gov instanceof NextResponse) return gov;
+
   // Posted entries in the period (RLS scopes to this org). Only an EXISTENCE probe
   // now — the period's lines are read below by joining to gl_entries with the
   // same filters, paged, instead of an unbounded id list (PostgREST caps any
@@ -90,6 +99,7 @@ export async function GET(request: Request) {
       netChangeCents: 0,
       beginningCashCents: 0,
       endingCashCents: 0,
+      governance: gov.info,
     });
   }
 
@@ -265,5 +275,6 @@ export async function GET(request: Request) {
     netChangeCents: netChange,
     beginningCashCents: beginningCash,
     endingCashCents: beginningCash + netChange,
+    governance: gov.info,
   });
 }

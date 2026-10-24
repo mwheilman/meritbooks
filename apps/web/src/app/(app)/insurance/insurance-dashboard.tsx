@@ -11,6 +11,8 @@ import {
   AlertTriangle, Repeat2,
 } from 'lucide-react';
 import { InsuranceParseReview } from './insurance-parse-review';
+import { DocumentProposalsBanner } from '@/components/documents/document-proposals-banner';
+import { useDocumentProposal, type ProposalWithDoc } from '@/components/documents/intelligence-client';
 import { InsuranceEditor, type EditorPolicy } from './insurance-editor';
 import { InsuranceAmortization, type AmortizeSetupPrefill } from './insurance-amortization';
 
@@ -98,6 +100,10 @@ export function InsuranceDashboard() {
   const [parsing, setParsing] = useState(false);
   const [amortizeFor, setAmortizeFor] = useState<AmortizeSetupPrefill | null>(null);
   const [refreshKey, setRefreshKey] = useState('0');
+  // Document intelligence: a policy AI found in Documents (banner Review or ?proposal=).
+  const deepLinked = useDocumentProposal('insurance_policy');
+  const [fromDoc, setFromDoc] = useState<ProposalWithDoc | null>(null);
+  const reviewing = fromDoc ?? deepLinked.proposal;
 
   const { data, isLoading, error, refetch } = useQuery<InsuranceResponse>('/api/insurance', undefined, { key: refreshKey });
 
@@ -155,6 +161,9 @@ export function InsuranceDashboard() {
 
   return (
     <div className="space-y-5">
+      {/* Policies found in Documents (document intelligence) — shows on the empty state too. */}
+      <DocumentProposalsBanner kind="insurance_policy" refreshKey={Number(refreshKey)} onReview={(p) => setFromDoc(p)} />
+
       {/* Summary strip */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-4 text-xs">
@@ -298,7 +307,16 @@ export function InsuranceDashboard() {
         <InsuranceAmortization pendingSetup={amortizeFor} onCloseSetup={() => setAmortizeFor(null)} />
       </div>
 
-      {parsing && (
+      {reviewing && (
+        <InsuranceParseReview
+          key={reviewing.id}
+          fromProposal={reviewing}
+          onClose={() => { setFromDoc(null); deepLinked.clear(); }}
+          onConfirmed={() => { setFromDoc(null); deepLinked.clear(); bump(); }}
+        />
+      )}
+
+      {parsing && !reviewing && (
         <InsuranceParseReview
           onClose={() => setParsing(false)}
           onConfirmed={() => { setParsing(false); bump(); }}

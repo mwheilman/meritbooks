@@ -11,7 +11,8 @@ import {
   type ExportMeta,
 } from '@/lib/reports/export/build-model';
 import { workbookFromModels } from '@/lib/reports/export/xlsx';
-import { buildExportFilename, type StatementModel, type StmtRow } from '@/lib/reports/export/statement-model';
+import { buildExportFilename, stampUngoverned, type StatementModel, type StmtRow } from '@/lib/reports/export/statement-model';
+import { governPostedPackage } from '../posted-governance';
 
 /**
  * POST /api/reports/board-package/xlsx — render an assembled Board Package to a
@@ -20,6 +21,10 @@ import { buildExportFilename, type StatementModel, type StmtRow } from '@/lib/re
  * the SAME BoardPackage it got from GET and is previewing, so the workbook ties out
  * to the screen. No GL is re-queried here, so there is nothing tenant-sensitive to
  * leak — the route only formats and needs an authenticated user.
+ *
+ * Governance (../posted-governance): a non-finance caller may only render a released
+ * period (403 NOT_RELEASED otherwise), and every sheet is stamped as prepared from the
+ * on-screen package (stampUngoverned).
  */
 function meta(pkg: BoardPackage, reportLabel: string): ExportMeta {
   return {
@@ -161,6 +166,8 @@ export async function POST(req: Request) {
     );
   }
   const pkg = parsed.data;
+  const denied = await governPostedPackage(ctx, pkg);
+  if (denied) return denied;
 
   const models: StatementModel[] = [
     kpiModel(pkg),
@@ -174,7 +181,7 @@ export async function POST(req: Request) {
     notesModel(pkg),
   ];
 
-  const buffer = workbookFromModels(models);
+  const buffer = workbookFromModels(models.map(stampUngoverned));
   const filename = buildExportFilename(`board-package-${pkg.meta.entityLabel}`, 'xlsx');
 
   return new NextResponse(new Uint8Array(buffer), {

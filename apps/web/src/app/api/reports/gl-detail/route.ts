@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { fetchCoreMap } from '@/lib/stitch-core';
 import { z } from 'zod';
+import { getOrgToday } from '@/lib/dates/org-today';
+import { asOfMonth, governDateRange, governRoute } from '@/lib/reports/governance/route-guard';
 
 const querySchema = z.object({
   account_id: z.string().uuid().optional(),
@@ -18,11 +20,21 @@ const querySchema = z.object({
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase } = ctx;
+  const { supabase, orgId, userId } = ctx;
 
   const { searchParams } = new URL(request.url);
   const params = querySchema.parse(Object.fromEntries(searchParams.entries()));
   const locFilter = params.location_ids ? params.location_ids.split(",").filter(Boolean) : (params.location_id && params.location_id !== "all" ? [params.location_id] : []);
+
+  // Number governance (non-finance): a dated range → every month released; no start date →
+  // every line through the end (or today, open-ended) → the cumulative rule; open-ended
+  // ranges run through today's month (never released → finance-only in practice).
+  const gctx = { supabase, orgId, userId };
+  const today = await getOrgToday(supabase, orgId);
+  const gov = params.start_date
+    ? await governDateRange(gctx, { startDate: params.start_date, endDate: params.end_date ?? (today > params.start_date ? today : params.start_date), locationIds: locFilter })
+    : await governRoute(gctx, { months: [asOfMonth(params.end_date ?? today)], locationIds: locFilter, cumulative: true });
+  if (gov instanceof NextResponse) return gov;
 
   const page = parseInt(params.page ?? '1', 10);
   const perPage = parseInt(params.per_page ?? '100', 10);
@@ -137,5 +149,6 @@ export async function GET(request: Request) {
       total: count ?? 0,
       total_pages: Math.ceil((count ?? 0) / perPage),
     },
+    governance: gov.info,
   });
 }

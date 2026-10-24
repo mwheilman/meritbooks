@@ -4,6 +4,7 @@ import { resolveInvoiceTemplate, type TemplateSource } from './templates/resolve
 import { BUILT_IN_TEMPLATE, type InvoiceTemplate } from './templates/types';
 import { allocateLineTax, type DocLineInput } from './templates/columns';
 import { resolvePayLink, unresolvedPayLink, type PayLinkState } from './pay-link';
+import { MERIT_DEFAULT_BRAND, type ResolvedBrand } from '@/lib/branding/types';
 
 /**
  * Loads everything needed to render an invoice as a CUSTOMER-FACING document (PDF,
@@ -52,6 +53,12 @@ export interface InvoiceDoc {
   /** The resolved design template with customer-facing text overrides applied. */
   template: InvoiceTemplate;
   template_source: TemplateSource;
+  /**
+   * The issuing company's resolved brand (FPB-branding) — palette roles beyond the
+   * template's accent (on-primary text, surface tint, font stack). Optional so hand-built
+   * docs (sample / tests) stay valid; renderers fall back to the template accent.
+   */
+  brand?: ResolvedBrand;
   /** Invoice-level CC list (invoices.cc_emails). */
   cc_emails: string[];
   /** The customer's default CC list (customer_invoice_settings). */
@@ -163,7 +170,7 @@ async function hydrate(
       : Promise.resolve({ data: [] }),
     resolveInvoiceTemplate(supabase, orgId, {
       template_id: s(inv.template_id), customer_id: customerId, location_id: locationId,
-    }).catch(() => ({ template: BUILT_IN_TEMPLATE, source: 'BUILT_IN' as const, customerCc: [] as string[] })),
+    }).catch(() => ({ template: BUILT_IN_TEMPLATE, source: 'BUILT_IN' as const, customerCc: [] as string[], brand: MERIT_DEFAULT_BRAND })),
     // Customer-facing text overrides (invoice → invoice_type → job → customer → template).
     supabase.from('invoice_text_overrides').select('scope, slot, value').eq('org_id', orgId)
       .in('scope_ref', [invoiceId, s(inv.invoice_type), jobId, customerId].filter((x): x is string => !!x)),
@@ -269,6 +276,7 @@ async function hydrate(
       payment_instructions: text('payment_instructions'),
     },
     template_source: resolved.source,
+    brand: resolved.brand,
     cc_emails: Array.isArray(inv.cc_emails) ? (inv.cc_emails as string[]) : [],
     customer_cc_emails: resolved.customerCc,
     pay,

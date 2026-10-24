@@ -1,0 +1,13 @@
+/* HOME · Performance (merit-ui v2.3 tokens only). Ledger | comparison | monthly bars. */
+.grid { display: grid; grid-template-columns: minmax(240px, 4fr) minmax(320px, 5fr) minmax(200px, 3fr); gap: var(--s3); align-items: start; min-width: 0; }
+.ledger :global(.ev) { margin-top: 0; }
+.cmp { width: 100%; }
+.cmp th[scope=row] { font-weight: 500; color: var(--ink-2); text-align: left; }
+.cmp td, .cmp th { padding-top: 4px; padding-bottom: 4px; }
+.bars { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.bars ol { list-style: none; display: flex; align-items: flex-end; gap: 2px; height: 120px; border-bottom: 1px solid var(--line-2); }
+.bars li { position: relative; flex: 1 1 0; min-width: 2px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.bar { display: block; width: 100%; background: var(--electric); }
+.barNeg { background: var(--neg); }
+.barL { position: absolute; bottom: -18px; font-size: 10px; line-height: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+@media (max-width: 1100px) { .grid { grid-template-columns: minmax(0, 1fr); } }

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildActivityLedger, type StatementTxn } from '@/lib/ar/activity-ledger';
 import { tenantLogoOrNull } from '@/lib/invoices/templates/logo-url';
+import { loadBrandTemplate } from '@/lib/invoices/templates/resolve';
 
 export type { StatementTxn } from '@/lib/ar/activity-ledger';
 
@@ -258,22 +259,14 @@ export async function loadCustomerStatement(
   const locationId =
     (c.location_id as string | null) ?? mostCommonLocation(rows) ?? null;
 
-  const [{ data: loc }, { data: tmpl }] = await Promise.all([
+  const [{ data: loc }, t] = await Promise.all([
     locationId
       ? supabase.schema('core').from('locations').select('name').eq('id', locationId).maybeSingle()
       : Promise.resolve({ data: null }),
-    locationId
-      ? supabase
-          .from('invoice_templates')
-          .select('logo_url, accent_color, remit_to, footer_text')
-          .eq('org_id', orgId)
-          .eq('location_id', locationId)
-          // 176: a company can have many templates — read its default.
-          .eq('is_default', true)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+    // Company default template → org default → built-in, with the company brand applied
+    // (FPB-branding: statements wear the same logo / colour as the company's invoices).
+    loadBrandTemplate(supabase, orgId, locationId),
   ]);
-  const t = (tmpl as Record<string, unknown> | null) ?? null;
 
   const addressLines = [
     c.address_line1,
@@ -292,10 +285,10 @@ export async function loadCustomerStatement(
     },
     entity: loc ? { name: String((loc as Record<string, unknown>).name ?? '') } : null,
     template: {
-      logoUrl: tenantLogoOrNull((t?.logo_url as string) ?? null, orgId),
-      accentColor: (t?.accent_color as string) || '#10b981',
-      remitTo: (t?.remit_to as string) ?? null,
-      footerText: (t?.footer_text as string) ?? null,
+      logoUrl: tenantLogoOrNull(t.logo_url, orgId),
+      accentColor: t.accent_color,
+      remitTo: t.remit_to,
+      footerText: t.footer_text,
     },
     mode,
     asOf,

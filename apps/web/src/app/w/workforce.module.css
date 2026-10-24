@@ -283,3 +283,17 @@
     animation: none !important;
   }
 }
+
+/* Company brand in the header (FPB-branding). */
+.top img.coLogo {
+  width: auto;
+  height: 28px;
+  max-width: 120px;
+  object-fit: contain;
+}
+
+.top img.coLogoChip {
+  background: var(--white);
+  padding: 3px 6px;
+  height: 30px;
+}

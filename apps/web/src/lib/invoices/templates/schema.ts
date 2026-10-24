@@ -38,6 +38,8 @@ export const templateBodySchema = z.object({
   show_qr: z.boolean(),
   show_pay_button: z.boolean(),
   attachments_allowed: z.boolean(),
+  /** Print with the company brand's logo / colour / font (FPB-branding §4.3). */
+  inherit_brand: z.boolean().default(true),
 });
 
 export type TemplateBody = z.infer<typeof templateBodySchema>;
@@ -68,6 +70,7 @@ export function bodyFromTemplate(t: InvoiceTemplate): TemplateBody {
     show_qr: t.show_qr,
     show_pay_button: t.show_pay_button,
     attachments_allowed: t.attachments_allowed,
+    inherit_brand: t.inherit_brand,
   };
 }
 

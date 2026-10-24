@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { SubscriptionEditor, type EditorSubscription } from './subscription-editor';
 import { SubscriptionParseReview } from './subscription-parse-review';
+import { DocumentProposalsBanner } from '@/components/documents/document-proposals-banner';
+import { useDocumentProposal, type ProposalWithDoc } from '@/components/documents/intelligence-client';
 import {
   type Subscription, type SubsResponse,
   STATUS_STYLE, FLAG_STYLE, CADENCE_LABEL, fmtDate, fmtCents, annualized,
@@ -36,6 +38,10 @@ export function SubscriptionsDashboard() {
   const [parsing, setParsing] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [refreshKey, setRefreshKey] = useState('0');
+  // Document intelligence: an agreement AI found in Documents (banner Review or ?proposal=).
+  const deepLinked = useDocumentProposal('subscription');
+  const [fromDoc, setFromDoc] = useState<ProposalWithDoc | null>(null);
+  const reviewing = fromDoc ?? deepLinked.proposal;
   const [view, setView] = useState<View>('overview');
   const [windowDays, setWindowDays] = useState(60);
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -130,6 +136,9 @@ export function SubscriptionsDashboard() {
 
   return (
     <div className="space-y-5">
+      {/* Subscriptions found in Documents (document intelligence). */}
+      <DocumentProposalsBanner kind="subscription" refreshKey={Number(refreshKey)} onReview={(p) => setFromDoc(p)} />
+
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={scan} disabled={scanning} className="px-3 py-1.5 text-xs font-medium bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
@@ -278,8 +287,16 @@ export function SubscriptionsDashboard() {
           onSaved={() => { setEditing(null); bump(); }}
         />
       )}
-      {parsing && (
+      {parsing && !reviewing && (
         <SubscriptionParseReview onClose={() => setParsing(false)} onSaved={() => { setParsing(false); bump(); }} />
+      )}
+      {reviewing && (
+        <SubscriptionParseReview
+          key={reviewing.id}
+          fromProposal={reviewing}
+          onClose={() => { setFromDoc(null); deepLinked.clear(); }}
+          onSaved={() => { setFromDoc(null); deepLinked.clear(); bump(); }}
+        />
       )}
     </div>
   );

@@ -250,11 +250,14 @@ export function SmartIntake({ companyId: companyIdProp, onboarding = true, cutov
           companyId,
           sizeBytes: item.size,
           mimeType: item.file.type || null,
+          classSource: item.source,
+          confidence: item.confidence,
         }),
       });
-      const body = (await res.json().catch(() => null)) as { note?: string; error?: string } | null;
+      // `found` = document intelligence routed it ("We found a lease — added to Leases for your review").
+      const body = (await res.json().catch(() => null)) as { note?: string; found?: string | null; error?: string } | null;
       if (!res.ok) { patch(item.id, { busy: false, error: body?.error ?? 'Could not save it — try again.' }); return; }
-      markDone(item.id, body?.note ?? 'Saved to your documents.');
+      markDone(item.id, body?.found ?? body?.note ?? 'Saved to your documents.');
     } catch {
       patch(item.id, { busy: false, error: 'Network error — try again.' });
     }

@@ -8,6 +8,7 @@ import { recordInvoiceEvent } from '@/lib/invoices/invoice-events';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { resolveEmailProvider, resolveFromAddress, EmailSendError } from '@/lib/email/provider';
 import { DUNNING_LADDER, getDunningStage, type DunningStageKey } from '@/lib/collections/cadence';
+import { brandedLetterHtml, emailBrandOf } from '@/lib/branding/email';
 
 /**
  * POST /api/collections/send — SEND a human-approved dunning reminder.
@@ -24,22 +25,6 @@ import { DUNNING_LADDER, getDunningStage, type DunningStageKey } from '@/lib/col
  */
 
 const STAGE_KEYS = new Set<string>(DUNNING_LADDER.map((s) => s.key));
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-/** Wrap the approved plain-text letter in a minimal branded HTML shell. */
-function toHtml(bodyText: string, payUrl: string | null, brand = '#2563EB'): string {
-  const paragraphs = bodyText
-    .split(/\n{2,}/)
-    .map((p) => `<p style="margin:0 0 16px;line-height:1.6;color:#0f172a;font-size:15px;">${escapeHtml(p).replace(/\n/g, '<br/>')}</p>`)
-    .join('');
-  const button = payUrl
-    ? `<p style="margin:24px 0 0;"><a href="${escapeHtml(payUrl)}" style="display:inline-block;background:${brand};color:#fff;text-decoration:none;padding:10px 20px;font-weight:600;font-size:14px;">Pay online</a></p>`
-    : '';
-  return `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;">${paragraphs}${button}</div>`;
-}
 
 export async function POST(req: Request) {
   const ctx = await requireAuthedContext();
@@ -98,7 +83,19 @@ export async function POST(req: Request) {
   let sent;
   try {
     sent = await provider.send(
-      { to: [to], subject, html: toHtml(letter, payUrl, doc.template.accent_color), text: letter },
+      {
+        to: [to],
+        subject,
+        // The issuing company's brand (FPB-branding): logo, brand rule, brand Pay button.
+        html: brandedLetterHtml({
+          bodyText: letter,
+          senderName: doc.entity?.name ?? 'Accounts receivable',
+          accent: doc.template.accent_color,
+          brand: emailBrandOf(doc.brand),
+          cta: payUrl ? { url: payUrl, label: 'Pay online' } : null,
+        }),
+        text: letter,
+      },
       from,
     );
   } catch (e) {

@@ -19,6 +19,7 @@ import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks/use-query';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
+import { acceptDocumentProposal, openDocument, type ProposalWithDoc } from '@/components/documents/intelligence-client';
 import {
   UploadCloud, FileText, Loader2, X, Trash2, Sparkles, AlertTriangle, Info, Plus, Check,
 } from 'lucide-react';
@@ -100,8 +101,17 @@ function addDays(date: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function ContractImport({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [phase, setPhase] = useState<'upload' | 'parsing' | 'review' | 'confirming'>('upload');
+export function ContractImport({
+  onClose,
+  onCreated,
+  fromProposal = null,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  /** Document intelligence: a contract AI found in Documents — opens pre-filled; creating links the document. */
+  fromProposal?: ProposalWithDoc | null;
+}) {
+  const [phase, setPhase] = useState<'upload' | 'parsing' | 'review' | 'confirming'>(fromProposal ? 'parsing' : 'upload');
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<ParseResponse['meta'] | null>(null);
@@ -152,6 +162,16 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
         setPhase('upload');
         return;
       }
+      applyParse(body);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error');
+      setPhase('upload');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Load a parse response (fresh upload or a stored document proposal) into the review form. */
+  function applyParse(body: ParseResponse) {
       const c = body.contract;
       setMeta(body.meta);
       setContract(c);
@@ -175,11 +195,39 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
         setNewCustomerEmail(body.customerMatch.email ?? '');
       }
       setPhase('review');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Network error');
+  }
+
+  // Pre-fill from the stored CONTRACT_EXTRACT result once the customer list is in (to match the customer).
+  const appliedProposal = useRef(false);
+  useEffect(() => {
+    if (!fromProposal || appliedProposal.current || !custData) return;
+    appliedProposal.current = true;
+    const payload = fromProposal.payload as Partial<ParseResponse>;
+    if (fromProposal.location_id) setLocationId(fromProposal.location_id);
+    if (!payload.contract) {
       setPhase('upload');
+      setError('AI hasn’t read this contract yet — drop the file here to read it now.');
+      return;
     }
-  }, []);
+    const key = payload.contract.customer.matchKey;
+    const fold = (n: string) => n.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\b(llc|inc|corp|co|ltd|the)\b/g, ' ').replace(/\s+/g, ' ').trim();
+    const exact = key ? customers.filter((c) => fold(c.name) === key) : [];
+    applyParse({
+      ...(payload as ParseResponse),
+      meta: { ...(payload.meta as ParseResponse['meta']), fileName: payload.meta?.fileName ?? fromProposal.document?.file_name ?? 'Document' },
+      customerMatch: exact.length === 1
+        ? { type: 'MATCHED', customer: exact[0] }
+        : { type: 'PROPOSED', name: payload.contract.customer.name, email: payload.contract.customer.email, candidates: [] },
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromProposal, custData]);
+
+  /** Link the stored document to what the contract created. Never blocks the create. */
+  async function linkFromDocument(targetType: string, id: string | null | undefined) {
+    if (!fromProposal || !id) return;
+    const err = await acceptDocumentProposal(fromProposal.id, targetType, id);
+    if (err) addToast('error', `Created, but linking the document failed: ${err}`);
+  }
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -260,6 +308,7 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
           lines: [{ description: contract.contract_title ?? 'Recurring charge', account_id: revenueAccountId, quantity: 1, unit_price_cents: recurring.amount_cents }],
         });
         if (r.error) { setError(r.error.error); setPhase('review'); return; }
+        await linkFromDocument('customer_contract', r.data?.id);
         addToast('success', 'Recurring billing schedule created from the contract.');
         onCreated();
         return;
@@ -271,7 +320,7 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
         let failed = 0;
         for (const m of milestones) {
           const invDate = m.due_date ?? todayISO();
-          const res = await api.post('/api/invoices', {
+          const res = await api.post<{ invoice_id: string }>('/api/invoices', {
             location_id: locationId,
             customer_id: custId,
             invoice_date: invDate,
@@ -280,7 +329,11 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
             tax_cents: 0,
             lines: [{ description: m.name || 'Milestone', account_id: revenueAccountId, quantity: 1, unit_price_cents: m.amount_cents }],
           });
-          if (res.error) failed += 1; else ok += 1;
+          if (res.error) failed += 1;
+          else {
+            ok += 1;
+            if (ok === 1) await linkFromDocument('invoice', res.data?.invoice_id);
+          }
         }
         if (failed > 0) { addToast('error', `${ok} invoice(s) created · ${failed} failed`); }
         else addToast('success', `${ok} milestone invoice${ok === 1 ? '' : 's'} created (draft).`);
@@ -305,6 +358,7 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
         })),
       });
       if (res.error) { setError(res.error.error); setPhase('review'); return; }
+      await linkFromDocument('invoice', res.data?.invoice_id);
       addToast('success', 'Invoice created from the contract (draft).');
       onCreated();
     } catch (e) {
@@ -383,6 +437,13 @@ export function ContractImport({ onClose, onCreated }: { onClose: () => void; on
         )}
 
         {/* Review */}
+        {fromProposal && (
+          <p className="mb-3 text-[11px] text-slate-400" data-testid="from-document">
+            From document: <span className="text-slate-200">{fromProposal.document?.file_name ?? 'stored document'}</span>
+            {' · '}
+            <button type="button" className="underline" onClick={() => { void openDocument(fromProposal.document_id).then((e) => { if (e) addToast('error', e); }); }}>Open the document</button>
+          </p>
+        )}
         {(phase === 'review' || phase === 'confirming') && contract && (
           <div className="space-y-4">
             {/* File + doc note */}

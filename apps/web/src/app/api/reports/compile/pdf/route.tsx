@@ -43,7 +43,8 @@ export async function POST(req: Request) {
 
   let compiled;
   try {
-    compiled = await runPack(ctx.supabase, ctx.orgId, parsed.data);
+    // Governed for the signed-in reader (non-finance: unreleased sections are withheld).
+    compiled = await runPack(ctx.supabase, ctx.orgId, parsed.data, { userId: ctx.userId });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Failed to compile report pack', code: 'COMPILE_ERROR' },

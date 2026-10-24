@@ -12,6 +12,10 @@
  *     below, all RLS-scoped and read-only.
  *
  * Money is bigint cents throughout. No AI, no writes, no SQL from a model.
+ *
+ * NUMBER GOVERNANCE (./governance.ts): every section is gated for the READER before its
+ * figures are read — a withheld section is a "not released" note with no figures, listed in
+ * `withheld`. `governance.userId` null (scheduled / emailed delivery) → non-finance.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -35,6 +39,9 @@ import {
 import type { StatementModel, StmtRow } from '@/lib/reports/export/statement-model';
 import { fetchCashIncomeStatement } from '@/lib/reports/income-statement-cash';
 import { REPORT_CATALOG, type ReportType, type ResolvedPack, type ResolvedPeriod, type ResolvedSpec } from './spec';
+import { resolveRouteAudience } from '@/lib/reports/governance/route-guard';
+import type { PeriodKey } from '@/lib/reports/governance/types';
+import { gateSection, stampGoverned, withheldModel, type PackGovernanceContext } from './governance';
 
 const ACCENT = '#10b981';
 
@@ -46,6 +53,15 @@ export interface CompiledSection {
   /** Non-null when the requested cash basis was substituted with accrual. */
   warning: string | null;
   model: StatementModel;
+  /** True when governance withheld this section's figures (model is a note). */
+  withheld?: boolean;
+  withheldPeriods?: PeriodKey[];
+}
+
+export interface WithheldSection {
+  report: ReportType;
+  periodLabel: string;
+  periods: PeriodKey[];
 }
 
 export interface CompiledPack {
@@ -57,7 +73,12 @@ export interface CompiledPack {
     contents: { report: string; basisLabel: string; periodLabel: string }[];
   };
   sections: CompiledSection[];
+  /** Sections whose figures governance withheld for this reader. */
+  withheld: WithheldSection[];
 }
+
+/** Who the pack is compiled for. `userId` null = scheduled / emailed (non-finance). */
+export type PackGovernance = Omit<PackGovernanceContext, 'supabase' | 'orgId'>;
 
 function basisLabelFor(report: ReportType, requested: 'ACCRUAL' | 'CASH', effectiveCash: boolean): string {
   const e = REPORT_CATALOG[report];
@@ -242,12 +263,29 @@ async function buildSection(
   spec: ResolvedSpec,
   period: ResolvedPeriod,
   locationIds: string[],
+  gov: PackGovernanceContext,
+  today: string,
 ): Promise<CompiledSection> {
   const entry = REPORT_CATALOG[spec.report];
   const wantCash = spec.basis === 'CASH' && entry.cashBasis === 'FULL';
   const basisLabel = basisLabelFor(spec.report, spec.basis, wantCash);
   const meta = exportMeta(entityLabel, entry.title, period.label, basisLabel);
   const warning = spec.cashWarning ?? null;
+
+  // Governance first — a withheld section never reads its figures.
+  const gate = await gateSection(gov, spec.report, period, locationIds, today);
+  if (!gate.shown) {
+    return {
+      report: spec.report,
+      reportTitle: entry.title,
+      basisLabel,
+      periodLabel: period.label,
+      warning: 'Not released — figures withheld.',
+      model: withheldModel(entry.title, entityLabel, period.label, gate.denied, ACCENT),
+      withheld: true,
+      withheldPeriods: gate.denied,
+    };
+  }
 
   let model: StatementModel;
   switch (spec.report) {
@@ -291,25 +329,29 @@ async function buildSection(
       break;
     }
     case 'AR_AGING': {
-      const aging = await fetchArAging(supabase, locationIds, await getOrgToday(supabase, orgId));
+      const aging = await fetchArAging(supabase, locationIds, today);
       model = buildAgingModel(aging.buckets, aging.totalOutstanding, 'Accounts Receivable Aging', meta);
       break;
     }
     case 'AP_AGING': {
-      const aging = await fetchApAging(supabase, locationIds, await getOrgToday(supabase, orgId));
+      const aging = await fetchApAging(supabase, locationIds, today);
       model = buildAgingModel(aging.buckets, aging.totalOutstanding, 'Accounts Payable Aging', meta);
       break;
     }
   }
 
-  return { report: spec.report, reportTitle: entry.title, basisLabel, periodLabel: period.label, warning, model };
+  return { report: spec.report, reportTitle: entry.title, basisLabel, periodLabel: period.label, warning, model: stampGoverned(model, gate.info) };
 }
 
 /** Run a whole resolved pack into rendered sections (cover + one section per report×period). */
-export async function runPack(supabase: SupabaseClient, orgId: string, pack: ResolvedPack): Promise<CompiledPack> {
+export async function runPack(supabase: SupabaseClient, orgId: string, pack: ResolvedPack, governance: PackGovernance): Promise<CompiledPack> {
   const entityLabel = pack.entityLabel || 'All Companies (Consolidated)';
   const locationIds = pack.locationIds ?? [];
   const generatedAt = new Date().toISOString();
+  const today = await getOrgToday(supabase, orgId);
+  // One audience for the whole pack (the reader's; no user → non-finance).
+  const gov: PackGovernanceContext = { ...governance, supabase, orgId };
+  gov.audience = await resolveRouteAudience(gov);
 
   const sections: CompiledSection[] = [];
   for (const spec of pack.specs) {
@@ -317,7 +359,7 @@ export async function runPack(supabase: SupabaseClient, orgId: string, pack: Res
       // Sections are built sequentially — the sandbox is memory-limited and each
       // engine already fans out its own queries; serial keeps peak memory low.
       // eslint-disable-next-line no-await-in-loop
-      sections.push(await buildSection(supabase, orgId, entityLabel, spec, period, locationIds));
+      sections.push(await buildSection(supabase, orgId, entityLabel, spec, period, locationIds, gov, today));
     }
   }
 
@@ -330,5 +372,8 @@ export async function runPack(supabase: SupabaseClient, orgId: string, pack: Res
       contents: sections.map((s) => ({ report: s.reportTitle, basisLabel: s.basisLabel, periodLabel: s.periodLabel })),
     },
     sections,
+    withheld: sections
+      .filter((s) => s.withheld)
+      .map((s) => ({ report: s.report, periodLabel: s.periodLabel, periods: s.withheldPeriods ?? [] })),
   };
 }

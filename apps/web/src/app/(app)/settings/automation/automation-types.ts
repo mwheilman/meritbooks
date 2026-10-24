@@ -198,3 +198,17 @@ export function countChips(counts: Record<string, CountValue>): Array<{ k: strin
   }
   return out.slice(0, 8);
 }
+
+/**
+ * What the panel says when the run log has nothing for a job. It must never contradict the
+ * row: a job the scheduler has recorded failures or a last run for is not "never run".
+ */
+export function emptyHistoryText(job: Pick<JobView, 'consecutiveFailures' | 'lastRunAt' | 'lastStatus' | 'implemented' | 'enabled'>): string {
+  if (job.consecutiveFailures > 0) {
+    return `The scheduler recorded ${job.consecutiveFailures} failed attempt${job.consecutiveFailures === 1 ? '' : 's'} in a row${job.lastRunAt ? ` (last ${relative(job.lastRunAt)})` : ''}, but no run log is on file for this organization — use Run now to capture a logged run with its error.`;
+  }
+  if (job.lastRunAt) return `Last ran ${relative(job.lastRunAt)}${job.lastStatus ? ` (${RUN_LOOK[job.lastStatus].word.toLowerCase()})` : ''}; its run log is no longer on file.`;
+  if (!job.implemented) return 'Not built yet — nothing has run.';
+  if (!job.enabled) return 'Switched off — no runs yet.';
+  return 'No runs yet.';
+}

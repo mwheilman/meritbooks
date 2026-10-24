@@ -8,6 +8,11 @@ import {
 import { clsx } from 'clsx';
 import { useQuery, addToast } from '@/hooks';
 import { EmptyState } from '@/components/ui';
+import { PeriodPicker, usePeriodParam } from '@/components/period';
+import type { PeriodBasis } from '@/lib/period/resolve';
+
+/** A tax return covers a fiscal year (or a short year / any range of months). */
+const TAX_BASES: readonly PeriodBasis[] = ['fy', 'ytd', 'quarter', 'range'];
 import type { TaxReturnPackage } from '@/lib/tax/return-package';
 
 interface LocationOption { id: string; name: string }
@@ -16,9 +21,8 @@ const fmt = (cents: number) => (cents / 100).toLocaleString('en-US', { style: 'c
 const signed = (cents: number) => `${cents < 0 ? '−' : ''}${fmt(Math.abs(cents))}`;
 
 export function TaxPackageClient() {
-  const now = new Date();
-  const [startDate, setStartDate] = useState(`${now.getFullYear()}-01-01`);
-  const [endDate, setEndDate] = useState(`${now.getFullYear()}-12-31`);
+  const pp = usePeriodParam({ pageKey: 'tax-package', defaultPreset: 'last_year', bases: TAX_BASES });
+  const { startDate, endDate } = pp.period;
   const [rate, setRate] = useState('21');
   const [locationId, setLocationId] = useState<string>('all');
   const [downloading, setDownloading] = useState(false);
@@ -33,7 +37,7 @@ export function TaxPackageClient() {
     () => ({ start_date: startDate, end_date: endDate, statutory_rate: rate, location_id: locationId, entity_label: entityLabel }),
     [startDate, endDate, rate, locationId, entityLabel],
   );
-  const { data, isLoading, error, refetch } = useQuery<{ data: TaxReturnPackage }>('/api/tax/return-package', params);
+  const { data, isLoading, error, refetch } = useQuery<{ data: TaxReturnPackage }>(pp.ready ? '/api/tax/return-package' : null, params);
   const pkg = data?.data;
 
   const downloadPdf = useCallback(async () => {
@@ -72,12 +76,8 @@ export function TaxPackageClient() {
       {/* Controls */}
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className="text-xs text-slate-400">Period start</label>
-          <input type="date" className="input mt-1" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-        </div>
-        <div>
-          <label className="text-xs text-slate-400">Period end</label>
-          <input type="date" className="input mt-1" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <span className="block text-xs text-slate-400 mb-1">Tax period</span>
+          <PeriodPicker {...pp.pickerProps} label="Tax period" />
         </div>
         <div>
           <label className="text-xs text-slate-400">Statutory rate %</label>
@@ -102,7 +102,7 @@ export function TaxPackageClient() {
         </div>
       </div>
 
-      {isLoading && (
+      {(isLoading || !pp.ready) && (
         <div className="flex items-center justify-center py-20 text-slate-500"><Loader2 className="animate-spin" size={20} /></div>
       )}
       {error && !isLoading && (

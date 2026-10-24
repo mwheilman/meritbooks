@@ -13,10 +13,13 @@ import {
   Status,
   Switch,
   api,
-  money,
   toast,
   useQuery,
 } from '@meritbooks/merit-ui';
+import { usd } from './receipts-types';
+import { QuietHoursNote } from '@/components/requests/quiet-hours-note';
+import { formatQuietHours } from '@/lib/requests/quiet-display';
+import { quietHoursOf } from '@/lib/requests/cadence';
 import type { ActionResult, CardholderOptions, PolicyResponse, ReceiptPolicy } from './receipts-types';
 import s from './receipts.module.css';
 
@@ -116,11 +119,17 @@ export function PolicyTab({ locationId, companyName, onChanged }: { locationId: 
           </div>
         )}
         <p className="t-cap" style={{ marginTop: 12 }}>
-          First reminder {data.cadence.firstReminderMinutes} min after the charge appears · quiet hours {data.cadence.quietStart ?? '—'}–{data.cadence.quietEnd ?? '—'} in the cardholder’s time zone ·{' '}
+          First reminder {data.cadence.firstReminderMinutes} min after the charge appears (change under{' '}
           <a className="link" href="/settings?tab=chase">
-            change in Settings → Receipt chase
+            Settings → Receipt chase
           </a>
-          . Reminders go by email (and in-app for team members); text and push start when they are set up.
+          ).{' '}
+          {data.quietHours ? (
+            <QuietHoursNote summary={data.quietHours} primary="receipt" />
+          ) : (
+            <>Quiet hours {formatQuietHours(quietHoursOf(data.cadence.quietStart, data.cadence.quietEnd))} in the cardholder’s time zone.</>
+          )}{' '}
+          Reminders go by email (and in-app for team members); text and push start when they are set up.
         </p>
       </section>
 
@@ -273,7 +282,7 @@ function PolicyForm({ policy, scope, locationId, hasOverride, members, onSaved }
       </div>
       <div className={s.three}>
         <Field label="Note required">
-          <Switch label={p.memoRequired ? `Over ${money(p.memoRequiredOverCents)}` : 'Not required'} checked={p.memoRequired} onChange={(e) => set('memoRequired', e.target.checked)} />
+          <Switch label={p.memoRequired ? `Over ${usd(p.memoRequiredOverCents)}` : 'Not required'} checked={p.memoRequired} onChange={(e) => set('memoRequired', e.target.checked)} />
         </Field>
         <Field label="Note required over">
           <MoneyInput valueCents={p.memoRequiredOverCents} disabled={!p.memoRequired} onChangeCents={(c) => set('memoRequiredOverCents', Math.max(0, c ?? 0))} />

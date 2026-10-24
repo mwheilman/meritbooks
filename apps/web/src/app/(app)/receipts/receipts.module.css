@@ -188,3 +188,9 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* Charges older than the chase window (Wave 2 live check: truthful empty state). */
+.olderLine { margin-top: var(--s1); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.older { margin-top: var(--s2); border: 1px solid var(--line); background: var(--white); }
+.older > :global(.tbl) { width: 100%; }
+.older > p { padding: 8px 16px; }

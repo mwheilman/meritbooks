@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { asOfMonth, governRoute } from '@/lib/reports/governance/route-guard';
+import { getOrgToday } from '@/lib/dates/org-today';
 import { fetchCoreMap } from '@/lib/stitch-core';
 
 export async function GET(request: Request) {
@@ -11,6 +13,16 @@ export async function GET(request: Request) {
   const locationIds = searchParams.get('location_ids');
   const locationId = searchParams.get('location_id');
   const locFilter = locationIds ? locationIds.split(',').filter(Boolean) : (locationId && locationId !== 'all' ? [locationId] : []);
+
+  // (open-items filters by `location_id` only)
+  const govLocs = locationId && locationId !== 'all' ? [locationId] : [];
+
+  // Number governance: open AR / AP items as of today — a balance as of today, so a non-finance caller needs every
+  // month through the current one released (cumulative rule; the current month never is →
+  // finance-only in practice). 403 NOT_RELEASED otherwise.
+  const govToday = await getOrgToday(ctx.supabase, ctx.orgId);
+  const gov = await governRoute({ supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.userId }, { months: [asOfMonth(govToday)], locationIds: govLocs, cumulative: true });
+  if (gov instanceof NextResponse) return gov;
   const type = searchParams.get('type'); // 'ar', 'ap', or null for both
 
   const items: {
@@ -87,7 +99,7 @@ export async function GET(request: Request) {
   const totalAR = items.filter((i) => i.type === 'invoice').reduce((s, i) => s + i.balanceCents, 0);
   const totalAP = items.filter((i) => i.type === 'bill').reduce((s, i) => s + i.balanceCents, 0);
 
-  return NextResponse.json({
+  return NextResponse.json({ governance: gov.info,
     data: items,
     summary: {
       openInvoices: items.filter((i) => i.type === 'invoice').length,

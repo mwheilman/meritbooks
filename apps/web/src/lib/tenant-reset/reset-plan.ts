@@ -158,6 +158,16 @@ export const RESET_TABLES: readonly ResetTable[] = [
   { schema: 'public', table: 'documents', label: 'Uploaded documents (metadata)', group: 'Close & controls', scope: 'transactional' },
 
   // ── Budgets & planning ────────────────────────────────────────────────────
+  // Mig 189 (child-first). The guards on approved versions / events honor the 153 purge GUC
+  // (set local meritbooks.allow_ledger_purge = 'on') that reset_tenant_data must set.
+  { schema: 'public', table: 'budget_events', label: 'Budget events (audit)', group: 'Budgets & planning', scope: 'transactional' },
+  { schema: 'public', table: 'budget_comments', label: 'Budget comments & variance explanations', group: 'Budgets & planning', scope: 'transactional' },
+  { schema: 'public', table: 'budget_line_drivers', label: 'Budget line drivers', group: 'Budgets & planning', scope: 'transactional' },
+  { schema: 'public', table: 'budget_version_lines', label: 'Budget version lines', group: 'Budgets & planning', scope: 'transactional' },
+  { schema: 'public', table: 'budget_department_plans', label: 'Department budget plans', group: 'Budgets & planning', scope: 'transactional' },
+  { schema: 'public', table: 'budget_department_owners', label: 'Department budget owners', group: 'Budgets & planning', scope: 'transactional' },
+  { schema: 'public', table: 'budget_templates', label: 'Budget templates (tenant)', group: 'Budgets & planning', scope: 'transactional' },
+  { schema: 'public', table: 'budget_plan_versions', label: 'Budget plan versions', group: 'Budgets & planning', scope: 'transactional' },
   { schema: 'public', table: 'budget_versions', label: 'Budget versions', group: 'Budgets & planning', scope: 'transactional' },
   { schema: 'public', table: 'budgets', label: 'Budgets', group: 'Budgets & planning', scope: 'transactional' },
 

@@ -101,7 +101,8 @@ export function DebtForm({
   cutoverDate,
 }: {
   initial: DebtFormInitial | null;
-  onSaved: () => void;
+  /** Called after a successful save with the new instrument's id (document-intelligence linking). */
+  onSaved: (id?: string) => void;
   onClose: () => void;
   /**
    * B9: start in "This loan already exists" mode. Leave undefined to let the form
@@ -270,7 +271,7 @@ export function DebtForm({
         ? `Loan brought over · ${res.data?.schedule.periods ?? 0} payments scheduled · nothing posted (your opening balances already include it)`
         : `Loan added · ${res.data?.schedule.periods ?? 0}-period schedule generated`,
     );
-    onSaved();
+    onSaved(res.data?.id);
   }
 
   const inputCls = 'w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-white focus:border-emerald-500 focus:outline-none';

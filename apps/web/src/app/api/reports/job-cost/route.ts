@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { asOfMonth, governDateRange, governRoute } from '@/lib/reports/governance/route-guard';
+import { getOrgToday } from '@/lib/dates/org-today';
 import { fetchAllIn } from '@/lib/supabase/fetch-all';
 
 /**
@@ -18,6 +20,15 @@ export async function GET(request: Request) {
   const start = sp.get('start_date');
   const end = sp.get('end_date');
   const locIds = sp.get('location_ids');
+
+  // Number governance: a dated range → every month released; otherwise every cost through the
+  // end date (or today) → cumulative rule. Non-finance only; finance passes.
+  const govLocs = (locIds ?? '').split(',').filter(Boolean);
+  const gctx = { supabase, orgId, userId: ctx.userId };
+  const gov = start
+    ? await governDateRange(gctx, { startDate: start, endDate: end ?? (await getOrgToday(supabase, orgId)), locationIds: govLocs })
+    : await governRoute(gctx, { months: [asOfMonth(end ?? (await getOrgToday(supabase, orgId)))], locationIds: govLocs, cumulative: true });
+  if (gov instanceof NextResponse) return gov;
 
   let q = supabase
     .from('job_cost_entries')
@@ -112,5 +123,5 @@ export async function GET(request: Request) {
     })
     .filter(Boolean);
 
-  return NextResponse.json({ data: out, totals: { entries: out.length, amountCents: totalCents } });
+  return NextResponse.json({ governance: gov.info, data: out, totals: { entries: out.length, amountCents: totalCents } });
 }

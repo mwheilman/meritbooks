@@ -115,19 +115,20 @@ describe('invoice email — injection safety', () => {
   });
 });
 
-describe('invoice email — accent contrast', () => {
+describe('invoice email — accent contrast (WCAG, lib/branding/color)', () => {
   it('uses white text on a dark accent', () => {
     expect(readableOn('#0f172a')).toBe('#ffffff');
-    expect(readableOn('#10b981')).toBe('#ffffff');
+    expect(readableOn('#2563eb')).toBe('#ffffff');
   });
 
-  it('uses dark text on a light accent', () => {
-    expect(readableOn('#ffffff')).toBe('#0f172a');
-    expect(readableOn('#fde047')).toBe('#0f172a');
+  it('uses Midnight ink on a light accent — including mid-tones white fails on (emerald: 2.5:1)', () => {
+    expect(readableOn('#ffffff')).toBe('#0a1628');
+    expect(readableOn('#fde047')).toBe('#0a1628');
+    expect(readableOn('#10b981')).toBe('#0a1628');
   });
 
   it('handles 3-digit hex', () => {
-    expect(readableOn('#fff')).toBe('#0f172a');
+    expect(readableOn('#fff')).toBe('#0a1628');
     expect(readableOn('#000')).toBe('#ffffff');
   });
 });

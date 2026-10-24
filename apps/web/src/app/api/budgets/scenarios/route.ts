@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { budgetCtx } from '@/lib/budgets/route-support';
+import { canEditDepartment, canSeeDepartment } from '@/lib/budgets/scope';
 import { assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
 import { z } from 'zod';
 import {
@@ -9,6 +11,8 @@ import {
   type ScenarioOverride,
 } from '@/lib/budget/scenarios';
 import type { BudgetDriver } from '@/lib/budget/drivers';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FP&A SCENARIO / WHAT-IF — best/base/worst on a driver-based budget.
@@ -157,6 +161,12 @@ export async function POST(request: Request) {
   if (!orgId) {
     return NextResponse.json({ error: 'No organization on session', code: 'NO_ORG' }, { status: 403 });
   }
+  // SECURITY (H6): saving a scenario needs budget edit rights on that company + department.
+  const b = await budgetCtx(ctx, body.location_id);
+  if (b instanceof NextResponse) return b;
+  if (!canEditDepartment(b.access, body.department_id ?? null)) {
+    return NextResponse.json({ error: 'You can’t save scenarios for that department’s budget.', code: 'BUDGET_SCOPE' }, { status: 403 });
+  }
 
   // ai_decisions is SELECT-only for members (migration 172): service-role write, org pinned
   // to the session org; the client (location_id) is asserted in the caller's scope first.
@@ -205,20 +215,29 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase } = ctx;
 
   const { searchParams } = new URL(request.url);
   const locationId = searchParams.get('location_id');
   const fiscalYear = parseInt(searchParams.get('fiscal_year') ?? '0', 10);
-  const departmentId = searchParams.get('department_id'); // absent ⇒ company-level
+  const deptRaw = searchParams.get('department_id'); // absent ⇒ company-level
+  const departmentId = deptRaw && deptRaw !== 'null' ? deptRaw : null;
+  if (!locationId || !UUID.test(locationId) || (departmentId && !UUID.test(departmentId))) {
+    return NextResponse.json({ error: 'Pick a company (location_id).', code: 'VALIDATION_ERROR' }, { status: 422 });
+  }
+  // SECURITY (H6): budget view for the company + the department scope.
+  const b = await budgetCtx(ctx, locationId);
+  if (b instanceof NextResponse) return b;
+  if (!canSeeDepartment(b.access, departmentId)) {
+    return NextResponse.json({ error: 'That department’s budget isn’t yours to see.', code: 'BUDGET_SCOPE' }, { status: 403 });
+  }
 
-  let query = supabase
+  const query = b.reader
     .from('ai_decisions')
     .select('id, proposed_output, created_at, disposition_by_user')
     .eq('feature', 'BUDGET_SCENARIO')
+    .eq('location_id', locationId)
     .order('created_at', { ascending: false })
     .limit(50);
-  if (locationId) query = query.eq('location_id', locationId);
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -229,7 +248,7 @@ export async function GET(request: Request) {
       if (!out) return false;
       if (fiscalYear && out.fiscal_year !== fiscalYear) return false;
       const rowDept = out.department_id ?? null;
-      return rowDept === (departmentId ?? null);
+      return rowDept === departmentId;
     })
     .map((row) => {
       const out = row.proposed_output as {

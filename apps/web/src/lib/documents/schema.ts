@@ -99,6 +99,8 @@ export const listDocumentsQuery = z.object({
   date_from: z.string().trim().min(1).max(40).optional(),
   /** Inclusive created_at upper bound (YYYY-MM-DD or ISO). */
   date_to: z.string().trim().min(1).max(40).optional(),
+  /** Comma-separated document ids (≤ 200) — the center's "Needs review" / "Proposals" bands. */
+  ids: z.string().trim().max(8000).optional(),
   /** 1-based page number (server-side pagination — the store hard-caps page size). */
   page: z.string().regex(/^\d+$/).optional(),
   /** Rows per page (clamped to the store's MAX_PAGE_SIZE). */
@@ -280,6 +282,10 @@ export const ENTITY_TYPE_LABEL: Record<string, string> = {
   prepaid: 'Prepaid',
   receipt: 'Receipt',
   policy: 'Insurance Policy',
+  subscription: 'Subscription',
+  customer_contract: 'Recurring invoice',
+  payroll_run: 'Payroll run',
+  location: 'Company',
 };
 
 /** The record types that can appear in the "Linked record" filter, in menu order. */
@@ -352,6 +358,12 @@ export function entityRecordHref(
       return '/receipts';
     case 'policy':
       return '/insurance';
+    case 'subscription':
+      return '/subscriptions';
+    case 'customer_contract':
+      return '/invoices';
+    case 'payroll_run':
+      return '/payroll';
     default:
       return null;
   }

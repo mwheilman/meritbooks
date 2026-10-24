@@ -100,6 +100,7 @@ export const NAV_HREF_FEATURE: Record<string, string> = {
   // Settings & Admin
   '/settings/billing': 'settings_system',
   '/settings/payments': 'settings_system',
+  '/settings/brand': 'settings_system',
   '/settings/approvals': 'settings_system',
   '/settings/roles': 'user_permissions',
   '/settings/autonomy': 'settings_system',

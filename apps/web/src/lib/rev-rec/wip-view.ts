@@ -163,7 +163,7 @@ export function scheduleCsv(v: WipScheduleView): string {
   const t = v.totals;
   const ct = wipColumnTotals(v.lines);
   rows.push([
-    'TOTAL', `${t.jobs} jobs`, '', dollars(t.contractCents), dollars(t.eacCents), dollars(t.costToDateCents), '',
+    'TOTAL', `${t.jobs} jobs`, '', dollars(t.contractCents), dollars(t.eacCents), dollars(t.costToDateCents), ct.pctComplete == null ? '' : (ct.pctComplete * 100).toFixed(1),
     dollars(t.earnedCents), dollars(t.billedCents), dollars(t.retainageCents), dollars(t.underCents), dollars(t.overCents),
     dollars(t.lossProvisionCents), dollars(ct.estGrossProfitCents), ct.fadeGainCents == null ? '' : dollars(ct.fadeGainCents), dollars(t.targetUnderCents), dollars(t.targetOverCents), dollars(t.targetLossCents), '',
   ]);

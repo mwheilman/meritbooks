@@ -5,7 +5,6 @@ import Link from 'next/link';
 import {
   Loader2,
   AlertCircle,
-  ChevronLeft,
   ChevronRight,
   RefreshCw,
   ArrowUpDown,
@@ -21,6 +20,7 @@ import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { isSpecificCompany } from '@/lib/company-scope';
+import { PeriodPicker, usePeriodParam } from '@/components/period';
 
 // ── Types (mirror /api/profitability) ───────────────────────────────────────────
 
@@ -229,9 +229,8 @@ function SortHeader({
 // ── Main board ────────────────────────────────────────────────────────────────────
 
 export function ProfitabilityBoard() {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1); // 1-12
+  // Shared period picker: a month, quarter, YTD, TTM, last year or any range of months.
+  const pp = usePeriodParam({ pageKey: 'profitability', defaultPreset: 'this_month' });
   const [sortKey, setSortKey] = useState<SortKey>('netIncome');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -256,11 +255,10 @@ export function ProfitabilityBoard() {
     setFocusMode(m);
   }, []);
 
-  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-  const endDate = new Date(year, month, 0).toISOString().split('T')[0]; // last day of month
+  const { startDate, endDate } = pp.period;
 
   const { data, isLoading, error, refetch } = useQuery<ProfitabilityResponse>(
-    '/api/profitability',
+    pp.ready ? '/api/profitability' : null,
     { start_date: startDate, end_date: endDate },
     { key: String(refreshKey), refetchInterval: 120_000, scope: false },
   );
@@ -270,12 +268,6 @@ export function ProfitabilityBoard() {
     const t = setInterval(() => forceTick((n) => n + 1), 15_000);
     return () => clearInterval(t);
   }, []);
-
-  const stepMonth = useCallback((delta: number) => {
-    const d = new Date(year, month - 1 + delta, 1);
-    setYear(d.getFullYear());
-    setMonth(d.getMonth() + 1);
-  }, [year, month]);
 
   const setSort = useCallback((key: SortKey) => {
     setSortKey((prev) => {
@@ -308,7 +300,6 @@ export function ProfitabilityBoard() {
   }, [data?.entities, sortKey, sortDir]);
 
   const rollup = data?.rollup;
-  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
 
   // Focused-entity view: the active company's own row + where it ranks by net
   // income among entities that actually posted activity this period.
@@ -330,26 +321,7 @@ export function ProfitabilityBoard() {
       {/* Period selector + focus toggle + refresh */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-surface-900 p-1">
-            <button
-              onClick={() => stepMonth(-1)}
-              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
-              aria-label="Previous month"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <span className="min-w-[9.5rem] px-2 text-center text-sm font-medium text-white">
-              {data?.period.label ?? new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })}
-            </span>
-            <button
-              onClick={() => stepMonth(1)}
-              disabled={isCurrentMonth}
-              className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-white disabled:opacity-30"
-              aria-label="Next month"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
+          <PeriodPicker {...pp.pickerProps} label="Period" />
 
           {/* Focus toggle — only when a specific company is active in the header. */}
           {isSpecificCompany(activeCompanyId) && activeCompany && (
@@ -390,7 +362,7 @@ export function ProfitabilityBoard() {
         </div>
       </div>
 
-      {isLoading && !data ? (
+      {(isLoading || !pp.ready) && !data ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
         </div>
@@ -598,7 +570,7 @@ export function ProfitabilityBoard() {
           </div>
 
           <p className="text-[11px] leading-relaxed text-slate-600">
-            Each row is that entity&apos;s income statement for the selected month, resolved by account
+            Each row is that entity&apos;s income statement for {pp.period.label} ({pp.period.spanLabel}), resolved by account
             type (Revenue − COGS = Gross Profit − OpEx − Other = Net Income), read live from posted GL
             entries. The Consolidated total is a straight sum; it does not apply intercompany eliminations —
             the Consolidated statement in Reports does. &ldquo;Statements&rdquo; opens that entity&apos;s full reports.

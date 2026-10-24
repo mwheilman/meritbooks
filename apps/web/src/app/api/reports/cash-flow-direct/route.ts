@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { governDateRange } from '@/lib/reports/governance/route-guard';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/account-roles';
@@ -95,6 +96,14 @@ export async function GET(request: Request) {
       ? [params.location_id]
       : [];
 
+  // Number governance: activity + beginning cash (cumulative rule) must be released for a
+  // non-finance caller, else 403 NOT_RELEASED.
+  const gov = await governDateRange(
+    { supabase, orgId, userId },
+    { startDate: params.start_date, endDate: params.end_date, locationIds: locFilter, cumulative: true },
+  );
+  if (gov instanceof NextResponse) return gov;
+
   // ── Account metadata + role tags (by ROLE, never by number) ──
   const { data: accts } = await supabase
     .from('accounts')
@@ -155,6 +164,7 @@ export async function GET(request: Request) {
       varianceCents: 0,
       reconciled: true,
       meta: { entryCount: 0, cashMovingEntryCount: 0, consolidated: locFilter.length === 0 },
+      governance: gov.info,
     });
 
   if (entryIds.length === 0) return emptyResult();
@@ -259,5 +269,6 @@ export async function GET(request: Request) {
       consolidated: locFilter.length === 0,
       generatedAt: new Date().toISOString(),
     },
+    governance: gov.info,
   });
 }

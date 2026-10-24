@@ -47,7 +47,7 @@ export default async function RequestLinkPage({ params }: { params: { token: str
 
   const v = res.view;
   return (
-    <PublicRequestFrame eyebrow={`${v.kindLabel} request`} sender={v.senderName}>
+    <PublicRequestFrame eyebrow={`${v.kindLabel} request`} sender={v.senderName} brand={v.brand}>
       <h1 className="t-title" style={{ margin: '8px 0 0' }}>
         {v.title}
       </h1>

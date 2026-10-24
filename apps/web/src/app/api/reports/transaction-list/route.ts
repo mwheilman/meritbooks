@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { governDateRange } from '@/lib/reports/governance/route-guard';
 import { getOrgToday } from '@/lib/dates/org-today';
 import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 
@@ -15,6 +16,12 @@ export async function GET(request: Request) {
   const accountId = searchParams.get('account_id');
   const startDate = searchParams.get('start_date') ?? new Date().toISOString().slice(0, 8) + '01';
   const endDate = searchParams.get('end_date') ?? (await getOrgToday(supabase, orgId));
+
+  // Number governance: every month of the range released for a non-finance caller (the
+  // query filters by `location_id` only, so that is the scope governed).
+  const govLocs = locationId && locationId !== 'all' ? [locationId] : [];
+  const gov = await governDateRange({ supabase, orgId, userId: ctx.userId }, { startDate, endDate, locationIds: govLocs });
+  if (gov instanceof NextResponse) return gov;
   const mode = searchParams.get('mode') ?? 'detail';
 
   // Get posted GL entries in range — paged (PostgREST caps a response at 1,000 rows).
@@ -25,7 +32,7 @@ export async function GET(request: Request) {
   }, { label: 'transaction-list gl_entries' });
 
   if (!entries || entries.length === 0) {
-    return NextResponse.json({ period: { startDate, endDate }, mode, data: [], summary: { totalDebits: 0, totalCredits: 0, entryCount: 0 } });
+    return NextResponse.json({ governance: gov.info, period: { startDate, endDate }, mode, data: [], summary: { totalDebits: 0, totalCredits: 0, entryCount: 0 } });
   }
 
   // Lines for those entries: id list chunked + each chunk paged (output is sorted below).
@@ -73,14 +80,14 @@ export async function GET(request: Request) {
       if (existing) { existing.entryCount++; existing.debitCents += t.debitCents; existing.creditCents += t.creditCents; }
       else { dayMap.set(t.date, { date: t.date, entryCount: 1, debitCents: t.debitCents, creditCents: t.creditCents }); }
     }
-    return NextResponse.json({
+    return NextResponse.json({ governance: gov.info,
       period: { startDate, endDate }, mode,
       data: Array.from(dayMap.values()),
       summary: { totalDebits: transactions.reduce((s, t) => s + t.debitCents, 0), totalCredits: transactions.reduce((s, t) => s + t.creditCents, 0), entryCount: transactions.length },
     });
   }
 
-  return NextResponse.json({
+  return NextResponse.json({ governance: gov.info,
     period: { startDate, endDate }, mode,
     data: transactions,
     summary: { totalDebits: transactions.reduce((s, t) => s + t.debitCents, 0), totalCredits: transactions.reduce((s, t) => s + t.creditCents, 0), entryCount: transactions.length },

@@ -10,9 +10,12 @@ import { ReviewTab } from './review-tab';
 import { RequirementsTab } from './requirements-tab';
 import { BankChangesTab } from './bank-changes-tab';
 import { ChaseDrawer } from './chase-drawer';
+import { LegacyIsland } from '@/components/layout/legacy-scope';
+import { Compliance1099Client } from '../compliance-1099/compliance-1099-client';
+import { DocumentProposalsBanner } from '@/components/documents/document-proposals-banner';
 
-type TabId = 'compliance' | 'review' | 'requirements' | 'bank';
-const TAB_IDS: readonly TabId[] = ['compliance', 'review', 'requirements', 'bank'];
+type TabId = 'compliance' | 'review' | 'requirements' | 'bank' | '1099';
+const TAB_IDS: readonly TabId[] = ['compliance', 'review', 'requirements', 'bank', '1099'];
 
 /**
  * Vendor compliance — the AP clerk's exception list for vendor paperwork (FPB §11, §19.2).
@@ -54,10 +57,21 @@ export function VendorComplianceScreen() {
 
       <VendorComplianceTabs />
 
+      {/* W-9s / certificates found in Documents that still need their vendor (document intelligence). */}
+      <DocumentProposalsBanner kind="vendor_w9" refreshKey={refreshKey} />
+      <DocumentProposalsBanner kind="vendor_coi" refreshKey={refreshKey} />
+
       {tab === 'compliance' && <ComplianceTab locationId={locationId} companyName={activeCompany?.name ?? null} refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} />}
       {tab === 'review' && <ReviewTab refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} />}
       {tab === 'requirements' && <RequirementsTab />}
       {tab === 'bank' && <BankChangesTab refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} />}
+      {/* 1099 readiness (formerly /compliance-1099, which now redirects here). Its screen is
+          still on the legacy bridge, so it renders inside a bridged island until it is ported. */}
+      {tab === '1099' && (
+        <LegacyIsland>
+          <Compliance1099Client embedded />
+        </LegacyIsland>
+      )}
 
       <ChaseDrawer open={chaseOpen} onClose={() => setChaseOpen(false)} locationId={locationId} companyName={activeCompany?.name ?? null} />
     </div>

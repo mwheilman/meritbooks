@@ -108,7 +108,7 @@ export function BudgetEntryGrid({ locationId, locationName, fiscalYear, departme
   }, [markDirty]);
 
   const copyPriorYear = useCallback(async () => {
-    const params: Record<string, string> = { location_id: locationId, fiscal_year: String(fiscalYear - 1) };
+    const params: Record<string, string> = { location_id: locationId, fiscal_year: String(fiscalYear - 1), source: 'published' };
     if (departmentId) params.department_id = departmentId;
     const res = await api.get<BudgetResp>('/api/budgets', params);
     if (res.error) { addToast('error', `Copy failed: ${res.error.error}`); return; }
@@ -130,7 +130,7 @@ export function BudgetEntryGrid({ locationId, locationName, fiscalYear, departme
       const p = draft[accountId] ?? {};
       for (const n of PERIODS) entries.push({ account_id: accountId, period_number: n, amount_cents: p[n] ?? 0 });
     }
-    const res = await api.post<{ saved: number }>('/api/budgets', {
+    const res = await api.post<{ saved: number; versionLabel?: string }>('/api/budgets', {
       location_id: locationId,
       fiscal_year: fiscalYear,
       department_id: departmentId,
@@ -140,7 +140,7 @@ export function BudgetEntryGrid({ locationId, locationName, fiscalYear, departme
     if (res.error) { addToast('error', `Save failed: ${res.error.error}`); return; }
     dirty.current = new Set();
     setDirtyCount(0);
-    addToast('success', `Budget saved (${entries.length} cells).`);
+    addToast('success', `Saved to ${res.data?.versionLabel ?? 'the draft budget'} (${entries.length} cells). It publishes once the draft is approved.`);
   }, [draft, locationId, fiscalYear, departmentId]);
 
   // ── States ──

@@ -73,7 +73,9 @@ export function RequestsScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(params.get('id'));
   const [refreshKey, setRefreshKey] = useState(0);
   const [newOpen, setNewOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Deep link: /requests?settings=1 opens "Cadence & quiet hours" (the quiet-hours notes on
+  // Vendor compliance and Receipts link here).
+  const [settingsOpen, setSettingsOpen] = useState(() => params.get('settings') === '1');
   const [confirm, setConfirm] = useState<{ kind: 'cancel' | 'fulfil'; row: RequestListRow } | null>(null);
 
   const clientFilter = !isAll && scope === 'client' && activeCompanyId ? activeCompanyId : undefined;

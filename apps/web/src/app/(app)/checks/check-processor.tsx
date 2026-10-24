@@ -10,6 +10,7 @@ import { PrintTab } from './print-tab';
 import { RegisterTab } from './register-tab';
 import { PositivePayTab } from './positive-pay-tab';
 import { StockTab } from './stock-tab';
+import { defaultCheckAccountId } from '@/lib/ap/checks/check-accounts';
 import { accountLabel, type AccountsResponse } from './checks-types';
 import s from './checks.module.css';
 
@@ -36,7 +37,8 @@ export function CheckProcessor() {
 
   useEffect(() => {
     if (!accounts.length) { setAccountId(null); return; }
-    if (!accountId || !accounts.some((a) => a.id === accountId)) setAccountId(accounts[0].id);
+    // Open on the account with a check-stock profile, else the first checking account.
+    if (!accountId || !accounts.some((a) => a.id === accountId)) setAccountId(defaultCheckAccountId(accounts));
   }, [accounts, accountId]);
 
   const account = accounts.find((a) => a.id === accountId) ?? null;
@@ -101,7 +103,11 @@ export function CheckProcessor() {
         ) : !account ? (
           <div className={`${s.surface} ${s.state}`}>
             <h2 className="t-section">No checking account for {companyName}</h2>
-            <p>Checks are drawn on a checking account. Connect or add one under Banking, then come back to set up check stock.</p>
+            <p>
+              Checks are drawn on a checking or operating account. Savings, credit card, loan, mortgage, retirement (401k,
+              IRA) and HSA accounts are not listed. Connect or add a checking account under Banking, then come back to set
+              up check stock.
+            </p>
           </div>
         ) : tab === 'print' ? (
           <PrintTab account={account} mail={data?.mail ?? null} userId={userId ?? null} onChanged={changed} onSetup={() => setTab('stock')} />

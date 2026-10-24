@@ -5,8 +5,6 @@ import Link from 'next/link';
 import {
   Loader2,
   AlertCircle,
-  ChevronLeft,
-  ChevronRight,
   ChevronDown,
   RefreshCw,
   TrendingUp,
@@ -35,6 +33,8 @@ import { useQuery } from '@/hooks';
 import { useMe } from '@/lib/hooks/use-me';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { FpnaNlScenario } from './fpna-nl-scenario';
+import { PeriodPicker, usePeriodParam } from '@/components/period';
+import type { PeriodComparison } from '@/lib/period/resolve';
 import {
   KPI_CATALOG,
   KPI_IDS,
@@ -45,7 +45,6 @@ import {
   serializeConfig,
   moveMetric,
   toggleMetric,
-  setPeriodOffset,
   kpiConfigStorageKey,
   kpiMeta,
   type KpiId,
@@ -126,14 +125,26 @@ interface TrendPoint {
 }
 interface DashboardResponse {
   period: { fiscalYear: number; asOfMonth: number; asOfDate: string; label: string; forecastMethod: string };
-  kpis: Kpis;
+  /** Present when the request carried a picked window (period_end). */
+  range?: { start: string; end: string; months: number; basis: string } | null;
+  comparison?: { kind: string; start: string; end: string; label: string; vsLabel: string } | null;
+  /** null when the period isn't released for the caller (number governance). */
+  kpis: Kpis | null;
   priorKpis: Kpis | null;
   deltas: Record<string, Delta>;
-  runway: RunwayResult;
+  /** null when the as-of balance or the burn months aren't released. */
+  runway: RunwayResult | null;
   variance: { rows: VarianceRow[]; totalsBySection: VarianceTotalRow[]; netIncome: VarianceTotalRow };
   trend: TrendPoint[];
   filters: { locationIds: string[]; departmentId: string | null };
   meta: { accountCount: number; hasBudget: boolean; generatedAt: string };
+  governance?: {
+    withheldPeriods?: string[];
+    kpisWithheld?: boolean;
+    runwayWithheld?: boolean;
+    footnote?: string;
+    releasedThrough?: string | null;
+  };
 }
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
@@ -494,21 +505,28 @@ interface KpiTileProps {
  * dashboard response (KPIs / runway / prior-period deltas). No fabricated
  * numbers — a metric the response can't supply is simply not in the catalog.
  */
-function kpiTileProps(id: KpiId, data: DashboardResponse): KpiTileProps {
+function withheldTile(id: KpiId): KpiTileProps {
+  const label = KPI_CATALOG.find((m) => m.id === id)?.label ?? id;
+  return { label, value: 'Not released', sub: 'not released for your view yet', icon: Timer };
+}
+
+function kpiTileProps(id: KpiId, data: DashboardResponse, periodLabel: string): KpiTileProps {
   const k = data.kpis;
   const d = data.deltas;
   const runway = data.runway;
+  if (!k) return withheldTile(id);
+  if (!runway && (id === 'monthlyBurn' || id === 'runway')) return withheldTile(id);
   switch (id) {
     case 'revenue':
-      return { label: 'Revenue (month)', value: formatMoney(k.revenueCents, { compact: true }), sub: 'current month', icon: Wallet, delta: d.revenue };
+      return { label: 'Revenue', value: formatMoney(k.revenueCents, { compact: true }), sub: periodLabel, icon: Wallet, delta: d.revenue };
     case 'grossProfit':
       return { label: 'Gross profit', value: formatMoney(k.grossProfitCents, { compact: true }), sub: fmtPct(k.grossMarginPct) + ' margin', icon: Percent, tone: k.grossProfitCents >= 0 ? 'good' : 'danger', delta: d.grossProfit };
     case 'grossMargin':
       return { label: 'Gross margin', value: fmtPct(k.grossMarginPct), sub: `${formatMoney(k.grossProfitCents, { compact: true })} gross profit`, icon: Percent, tone: k.grossProfitCents >= 0 ? 'good' : 'danger', delta: d.grossMarginPct, deltaKind: 'points' };
     case 'cogs':
-      return { label: 'Cost of goods sold', value: formatMoney(k.cogsCents, { compact: true }), sub: 'current month', icon: Landmark, higherIsBetter: false };
+      return { label: 'Cost of goods sold', value: formatMoney(k.cogsCents, { compact: true }), sub: periodLabel, icon: Landmark, higherIsBetter: false };
     case 'opex':
-      return { label: 'Operating expenses', value: formatMoney(k.opexCents, { compact: true }), sub: 'current month', icon: Landmark, higherIsBetter: false };
+      return { label: 'Operating expenses', value: formatMoney(k.opexCents, { compact: true }), sub: periodLabel, icon: Landmark, higherIsBetter: false };
     case 'operatingIncome':
       return { label: 'Operating income', value: formatMoney(k.operatingIncomeCents, { compact: true }), sub: fmtPct(k.operatingMarginPct) + ' margin', icon: k.operatingIncomeCents >= 0 ? TrendingUp : TrendingDown, tone: k.operatingIncomeCents >= 0 ? 'good' : 'danger', delta: d.operatingIncome };
     case 'operatingMargin':
@@ -522,18 +540,18 @@ function kpiTileProps(id: KpiId, data: DashboardResponse): KpiTileProps {
     case 'monthlyBurn':
       return {
         label: 'Monthly burn',
-        value: runway.cashGenerating ? 'Cash+' : formatMoney(runway.monthlyBurnCents, { compact: true }),
-        sub: runway.cashGenerating ? 'generating cash' : `avg of ${runway.basisMonths} mo`,
+        value: runway?.cashGenerating ? 'Cash+' : formatMoney(runway?.monthlyBurnCents ?? 0, { compact: true }),
+        sub: runway?.cashGenerating ? 'generating cash' : `avg of ${runway?.basisMonths ?? 0} mo`,
         icon: Flame,
-        tone: runway.cashGenerating ? 'good' : 'warn',
+        tone: runway?.cashGenerating ? 'good' : 'warn',
       };
     case 'runway':
       return {
         label: 'Runway',
-        value: runway.runwayMonths === null ? '∞' : `${runway.runwayMonths.toFixed(1)} mo`,
-        sub: runway.cashGenerating ? 'not burning' : 'cash ÷ burn',
+        value: !runway || runway.runwayMonths === null ? '∞' : `${runway.runwayMonths.toFixed(1)} mo`,
+        sub: runway?.cashGenerating ? 'not burning' : 'cash ÷ burn',
         icon: Timer,
-        tone: runway.runwayMonths !== null && runway.runwayMonths < 6 ? 'danger' : runway.runwayMonths !== null && runway.runwayMonths < 12 ? 'warn' : 'good',
+        tone: runway && runway.runwayMonths !== null && runway.runwayMonths < 6 ? 'danger' : runway && runway.runwayMonths !== null && runway.runwayMonths < 12 ? 'warn' : 'good',
       };
     case 'ar':
       return { label: 'Accounts receivable', value: formatMoney(k.arCents, { compact: true }), sub: 'as of period end', icon: Landmark, delta: d.ar, higherIsBetter: false };
@@ -558,22 +576,12 @@ function kpiTileProps(id: KpiId, data: DashboardResponse): KpiTileProps {
 
 const GROUP_ORDER: KpiGroup[] = ['Profitability', 'Liquidity & runway', 'Balance sheet'];
 
-function monthOffsetLabel(offset: number): string {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() + offset);
-  const label = d.toLocaleString('en-US', { month: 'short', year: 'numeric' });
-  if (offset === 0) return `Current month (${label})`;
-  return `${-offset} mo ago (${label})`;
-}
-
 function CustomizePanel({
   config,
   onToggle,
   onMove,
   onApplyLayout,
   onReset,
-  onSetPeriod,
   onClose,
 }: {
   config: KpiDashboardConfig;
@@ -581,7 +589,6 @@ function CustomizePanel({
   onMove: (id: KpiId, dir: -1 | 1) => void;
   onApplyLayout: (layoutId: (typeof LAYOUTS)[number]['id']) => void;
   onReset: () => void;
-  onSetPeriod: (offset: number) => void;
   onClose: () => void;
 }) {
   const visibleSet = new Set(config.visible);
@@ -638,22 +645,10 @@ function CustomizePanel({
         </div>
       </div>
 
-      {/* Default period */}
-      <div>
-        <label htmlFor="fpna-default-period" className="mb-2 block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-          Default period on open
-        </label>
-        <select
-          id="fpna-default-period"
-          value={config.periodOffset}
-          onChange={(e) => onSetPeriod(Number(e.target.value))}
-          className="w-full max-w-xs rounded-lg border border-slate-800 bg-surface-950 px-3 py-2 text-sm text-slate-200 focus:border-brand-500/50 focus:outline-none"
-        >
-          {Array.from({ length: 12 }, (_, i) => -i).map((off) => (
-            <option key={off} value={off}>{monthOffsetLabel(off)}</option>
-          ))}
-        </select>
-      </div>
+      {/* Period — chosen with the period picker above and remembered for this page. */}
+      <p className="text-[11px] text-slate-500">
+        The period you pick above (this month, YTD, TTM, last year, a quarter or a custom range) is remembered for this page and kept in the link.
+      </p>
 
       {/* Shown tiles (ordered) */}
       <div>
@@ -744,10 +739,12 @@ function CustomizePanel({
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+const FPNA_COMPARISONS: readonly PeriodComparison[] = ['prior_period', 'prior_year', 'budget'];
+
 export function FpnaDashboard() {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  // The shared period picker: YTD / TTM / last year / a quarter / any range, with a comparison.
+  const pp = usePeriodParam({ pageKey: 'fpna', defaultPreset: 'this_month', comparisons: FPNA_COMPARISONS, defaultCompare: 'prior_period' });
+  const period = pp.period;
   const [refreshKey, setRefreshKey] = useState(0);
   const [, forceTick] = useState(0);
 
@@ -757,7 +754,6 @@ export function FpnaDashboard() {
   const [config, setConfig] = useState<KpiDashboardConfig>(() => defaultConfig());
   const [customizing, setCustomizing] = useState(false);
   const hydratedRef = useRef(false);
-  const appliedPeriodRef = useRef(false);
 
   const storageKey = useMemo(
     () => kpiConfigStorageKey(user?.clerkId ?? 'anon', activeCompanyId),
@@ -776,7 +772,6 @@ export function FpnaDashboard() {
     }
     const next = deserializeConfig(stored);
     hydratedRef.current = true;
-    appliedPeriodRef.current = false;
     setConfig(next);
   }, [meLoading, companyReady, storageKey]);
 
@@ -791,23 +786,14 @@ export function FpnaDashboard() {
     }
   }, [config, storageKey]);
 
-  // Apply the saved default period offset once per hydration (the user can still
-  // navigate months freely afterwards).
-  useEffect(() => {
-    if (!hydratedRef.current || appliedPeriodRef.current) return;
-    appliedPeriodRef.current = true;
-    if (config.periodOffset !== 0) {
-      const d = new Date();
-      d.setDate(1);
-      d.setMonth(d.getMonth() + config.periodOffset);
-      setYear(d.getFullYear());
-      setMonth(d.getMonth() + 1);
-    }
-  }, [config.periodOffset]);
-
   const { data, isLoading, error, refetch } = useQuery<DashboardResponse>(
-    '/api/fpna/dashboard',
-    { fiscal_year: String(year), as_of_month: String(month) },
+    pp.ready ? '/api/fpna/dashboard' : null,
+    {
+      period_end: period.end,
+      basis: period.basis,
+      ...(period.basis === 'range' ? { period_start: period.start } : {}),
+      compare: period.compare,
+    },
     { key: String(refreshKey), refetchInterval: 120_000 },
   );
 
@@ -815,12 +801,6 @@ export function FpnaDashboard() {
     const t = setInterval(() => forceTick((n) => n + 1), 15_000);
     return () => clearInterval(t);
   }, []);
-
-  const stepMonth = useCallback((delta: number) => {
-    const d = new Date(year, month - 1 + delta, 1);
-    setYear(d.getFullYear());
-    setMonth(d.getMonth() + 1);
-  }, [year, month]);
 
   // Config mutators (all pure helpers → new config → persisted by the effect).
   const handleToggle = useCallback((id: KpiId) => setConfig((c) => toggleMetric(c, id)), []);
@@ -830,44 +810,18 @@ export function FpnaDashboard() {
     [],
   );
   const handleReset = useCallback(() => setConfig(() => defaultConfig()), []);
-  const handleSetPeriod = useCallback((offset: number) => {
-    setConfig((c) => setPeriodOffset(c, offset));
-    if (offset !== 0) {
-      const d = new Date();
-      d.setDate(1);
-      d.setMonth(d.getMonth() + offset);
-      setYear(d.getFullYear());
-      setMonth(d.getMonth() + 1);
-    } else {
-      setYear(now.getFullYear());
-      setMonth(now.getMonth() + 1);
-    }
-  }, [now]);
-
-  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
   const k = data?.kpis;
   const drillBase = useMemo(() => {
     if (!data) return '/reports';
-    const start = `${data.period.fiscalYear}-${String(data.period.asOfMonth).padStart(2, '0')}-01`;
-    return `/reports?start_date=${start}&end_date=${data.period.asOfDate}`;
-  }, [data]);
+    return `/reports?start_date=${period.startDate}&end_date=${period.endDate}`;
+  }, [data, period.startDate, period.endDate]);
   const budgetDrill = data ? `/budgets?fiscal_year=${data.period.fiscalYear}` : '/budgets';
 
   return (
     <div className="space-y-5">
       {/* Period selector + refresh */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-surface-900 p-1">
-          <button onClick={() => stepMonth(-1)} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white" aria-label="Previous month">
-            <ChevronLeft size={16} />
-          </button>
-          <span className="min-w-[10rem] px-2 text-center text-sm font-medium text-white">
-            {data?.period.label ?? new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })}
-          </span>
-          <button onClick={() => stepMonth(1)} disabled={isCurrentMonth} className="rounded-md p-1.5 text-slate-400 enabled:hover:bg-slate-800 enabled:hover:text-white disabled:opacity-30" aria-label="Next month">
-            <ChevronRight size={16} />
-          </button>
-        </div>
+        <PeriodPicker {...pp.pickerProps} label="Period" />
         <div className="flex items-center gap-3">
           {data && <span className="text-[11px] text-slate-500">Updated {relativeTime(data.meta.generatedAt)}</span>}
           <button
@@ -901,12 +855,11 @@ export function FpnaDashboard() {
           onMove={handleMove}
           onApplyLayout={handleApplyLayout}
           onReset={handleReset}
-          onSetPeriod={handleSetPeriod}
           onClose={() => setCustomizing(false)}
         />
       )}
 
-      {isLoading && !data ? (
+      {(isLoading || !pp.ready) && !data ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
         </div>
@@ -921,8 +874,19 @@ export function FpnaDashboard() {
       ) : !k ? (
         <div className="card p-12 text-center">
           <BarChart3 className="mx-auto mb-3 h-8 w-8 text-slate-600" />
-          <p className="text-sm font-medium text-slate-300">No data to report on</p>
-          <p className="mt-1 text-xs text-slate-500">Post GL activity and set budgets to light up the dashboard.</p>
+          {data?.governance?.kpisWithheld ? (
+            <>
+              <p className="text-sm font-medium text-slate-300">This period isn&rsquo;t released yet</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {data.governance.releasedThrough ? `Figures are released through ${data.governance.releasedThrough}.` : 'Finance hasn’t released any month for your view yet.'} Pick an earlier period.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-slate-300">No data to report on</p>
+              <p className="mt-1 text-xs text-slate-500">Post GL activity and set budgets to light up the dashboard.</p>
+            </>
+          )}
         </div>
       ) : (
         <>
@@ -932,7 +896,7 @@ export function FpnaDashboard() {
               ids were already dropped when the config was hydrated. */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
             {config.visible.map((id) => {
-              const props = kpiTileProps(id, data);
+              const props = kpiTileProps(id, data, period.label);
               return <Kpi key={id} {...props} />;
             })}
           </div>
@@ -957,8 +921,9 @@ export function FpnaDashboard() {
           <VarianceTable data={data.variance} drillHref={budgetDrill} />
 
           <p className="text-[11px] leading-relaxed text-slate-600">
-            KPIs are for {data.period.label} with deltas vs the prior month. Cash, AR, AP, and the current
-            ratio are balance-sheet snapshots as of {data.period.asOfDate}. Burn is the average monthly net
+            KPIs are for {period.label} ({period.spanLabel})
+            {data.comparison ? <> with deltas {data.comparison.vsLabel}{data.comparison.kind === 'budget' ? ' (profit and loss only — a budget has no balance sheet)' : ''}</> : ' with no comparison'}.
+            Cash, AR, AP, and the current ratio are balance-sheet snapshots as of {data.period.asOfDate}. Burn is the average monthly net
             income across elapsed months; runway = cash ÷ burn. The variance table compares actuals booked so
             far this year against the full-year budget and the rolling forecast ({data.period.forecastMethod === 'run_rate' ? 'run-rate' : 'budget-remaining'} method).
             Everything is read live from posted GL entries — reuse the same account-type math as the financial statements.{' '}

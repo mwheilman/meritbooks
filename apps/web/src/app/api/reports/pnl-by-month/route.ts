@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
 import { z } from 'zod';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { governRouteMonths } from '@/lib/reports/governance/route-guard';
 
 const schema = z.object({
   location_id: z.string().optional(),
@@ -28,6 +29,12 @@ export const GET = apiQueryHandler(
     } else if (params.location_id && params.location_id !== 'all') {
       locationIds.push(params.location_id);
     }
+
+    // Number governance (month-columned): a non-finance caller sees only released months —
+    // withheld months' lines are DROPPED before aggregation (their columns read 0 and are
+    // listed in `withheldMonths`; totals cover released months only).
+    const yearMonths = Array.from({ length: 12 }, (_, i) => `${year}-${pad(i + 1)}`);
+    const gov = await governRouteMonths({ supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.userId }, { months: yearMonths, locationIds });
 
     // Query all GL entry lines for the full year
     // Paged: PostgREST caps responses at 1,000 rows — an unpaged read silently truncates.
@@ -82,7 +89,10 @@ export const GET = apiQueryHandler(
       return NextResponse.json({ error: error.message, code: 'QUERY_ERROR' }, { status: 500 });
     }
 
-    let filteredData = data ?? [];
+    let filteredData = gov.keepShown(data ?? [], (line: Record<string, unknown>) => {
+      const d = (line.gl_entries as unknown as Record<string, unknown> | null)?.entry_date;
+      return typeof d === 'string' ? d.slice(0, 7) : null;
+    });
 
     // Cash basis filter
     if (basis === 'cash' && filteredData.length > 0) {
@@ -205,6 +215,9 @@ export const GET = apiQueryHandler(
         netIncome: { label: 'Net Income', months: netIncomeMonths, totalCents: netIncomeMonths.reduce((s: number, m: number) => s + m, 0) },
       },
       filters: { year, basis, locationIds: locationIds.length > 0 ? locationIds : ['all'] },
+      withheldMonths: gov.deniedMonths,
+      monthsShown: yearMonths.map((m) => gov.isShown(m)),
+      governance: gov.info,
     });
   }
 );

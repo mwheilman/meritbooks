@@ -13,6 +13,8 @@ import {
 import { LeaseParseReview } from './lease-parse-review';
 import { LeaseRemeasureModal, type RemeasureMode } from './lease-remeasure-modal';
 import { AttachmentsPanel } from '@/components/documents/attachments-panel';
+import { DocumentProposalsBanner } from '@/components/documents/document-proposals-banner';
+import { useDocumentProposal, type ProposalWithDoc } from '@/components/documents/intelligence-client';
 
 interface Lease {
   id: string;
@@ -74,6 +76,11 @@ export function LeasesDashboard() {
   const [detail, setDetail] = useState<Record<string, DetailResponse['data']>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [remeasure, setRemeasure] = useState<{ lease: Lease; mode: RemeasureMode } | null>(null);
+  // Document intelligence: a lease AI found in Documents, opened from the banner or ?proposal=.
+  const deepLinked = useDocumentProposal('lease');
+  const [fromDoc, setFromDoc] = useState<ProposalWithDoc | null>(null);
+  const [proposalsKey, setProposalsKey] = useState(0);
+  const reviewing = fromDoc ?? deepLinked.proposal;
 
   const leases = data?.data ?? [];
   const summary = data?.summary ?? { total: 0, active: 0, ended: 0 };
@@ -131,6 +138,9 @@ export function LeasesDashboard() {
           </button>
         </div>
       </div>
+
+      {/* ── Leases found in Documents (document intelligence) ─────────── */}
+      <DocumentProposalsBanner kind="lease" refreshKey={proposalsKey} onReview={(p) => setFromDoc(p)} />
 
       {/* ── States ───────────────────────────────────────────────────── */}
       {isLoading ? (
@@ -278,10 +288,19 @@ export function LeasesDashboard() {
         </div>
       )}
 
-      {showUpload && (
+      {showUpload && !reviewing && (
         <LeaseParseReview
           onClose={() => setShowUpload(false)}
           onCreated={() => { setShowUpload(false); void refetch(); }}
+        />
+      )}
+
+      {reviewing && (
+        <LeaseParseReview
+          key={reviewing.id}
+          fromProposal={reviewing}
+          onClose={() => { setFromDoc(null); deepLinked.clear(); }}
+          onCreated={() => { setFromDoc(null); deepLinked.clear(); setProposalsKey((k) => k + 1); void refetch(); }}
         />
       )}
 

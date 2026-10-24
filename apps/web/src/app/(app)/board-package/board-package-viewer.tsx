@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
-  Calendar, Building2, ChevronDown, Check, Loader2, AlertCircle, Sparkles, RefreshCw,
+  Building2, ChevronDown, Check, Loader2, AlertCircle, Sparkles, RefreshCw,
   Download, FileText, ShieldCheck, TrendingUp, TrendingDown, BookOpen, Sheet,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -14,30 +14,17 @@ import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { canConsolidate, isSpecificCompany } from '@/lib/company-scope';
 import type { BoardPackage } from '@/lib/reports/board-package';
 import { MdnaSection, KpiTrendStrip } from './board-package-sections';
+import { PeriodPicker, usePeriodParam } from '@/components/period';
 
 interface BoardPackageResponse extends BoardPackage {
   aiMeta?: { requested: boolean; message: string | null };
 }
 
-// ── Period presets ────────────────────────────────────────────────────────────
-function pad(n: number) { return String(n).padStart(2, '0'); }
-function fmt(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
-const PERIODS = [
-  { key: 'last_month', label: 'Last Month', get: () => { const n = new Date(); const d = new Date(n.getFullYear(), n.getMonth() - 1, 1); return { s: fmt(d), e: fmt(new Date(d.getFullYear(), d.getMonth() + 1, 0)) }; } },
-  { key: 'this_month', label: 'This Month', get: () => { const n = new Date(); return { s: `${n.getFullYear()}-${pad(n.getMonth() + 1)}-01`, e: fmt(new Date(n.getFullYear(), n.getMonth() + 1, 0)) }; } },
-  { key: 'this_qtr', label: 'This Quarter', get: () => { const n = new Date(); const q = Math.floor(n.getMonth() / 3) * 3; return { s: `${n.getFullYear()}-${pad(q + 1)}-01`, e: fmt(new Date(n.getFullYear(), q + 3, 0)) }; } },
-  { key: 'last_qtr', label: 'Last Quarter', get: () => { const n = new Date(); let q = Math.floor(n.getMonth() / 3) * 3 - 3; let y = n.getFullYear(); if (q < 0) { q += 12; y--; } return { s: `${y}-${pad(q + 1)}-01`, e: fmt(new Date(y, q + 3, 0)) }; } },
-  { key: 'ytd', label: 'Year to Date', get: () => ({ s: `${new Date().getFullYear()}-01-01`, e: fmt(new Date()) }) },
-  { key: 'last_year', label: 'Last Year', get: () => { const y = new Date().getFullYear() - 1; return { s: `${y}-01-01`, e: `${y}-12-31` }; } },
-  { key: 'custom', label: 'Custom Range', get: () => ({ s: '', e: '' }) },
-];
-
 interface LocationEx extends Location { industry: string | null }
 
 export function BoardPackageViewer() {
-  const [periodKey, setPeriodKey] = useState('last_month');
-  const [customS, setCustomS] = useState('');
-  const [customE, setCustomE] = useState('');
+  // Shared period picker (month · quarter · YTD · TTM · last year · any range), fiscal-year aware.
+  const pp = usePeriodParam({ pageKey: 'board-package', defaultPreset: 'last_month' });
   const [selectedLocs, setSelectedLocs] = useState<string[]>([]);
   const [wantAi, setWantAi] = useState(false);
   const [nonce, setNonce] = useState(0);
@@ -81,10 +68,8 @@ export function BoardPackageViewer() {
     }
   }, [mayConsolidate, companyScopeReady, activeCompanyId]);
 
-  const { s: sd, e: ed } = useMemo(() => {
-    if (periodKey === 'custom') return { s: customS, e: customE };
-    return PERIODS.find((p) => p.key === periodKey)?.get() ?? { s: '', e: '' };
-  }, [periodKey, customS, customE]);
+  const sd = pp.period.startDate;
+  const ed = pp.period.endDate;
 
   const entityLabel = useMemo(() => {
     if (selectedLocs.length === 0) return 'All Companies (Consolidated)';
@@ -94,7 +79,7 @@ export function BoardPackageViewer() {
 
   // Non-admins must never fire a consolidated (cross-entity) fetch: hold until their
   // single company is pinned. Admins may run consolidated (empty selectedLocs = All).
-  const ready = !!sd && !!ed && (mayConsolidate || selectedLocs.length > 0);
+  const ready = pp.ready && !!sd && !!ed && (mayConsolidate || selectedLocs.length > 0);
 
   const params = useMemo(() => {
     const p: Record<string, string> = { start_date: sd, end_date: ed, as_of_date: ed, entity_label: entityLabel };
@@ -156,19 +141,7 @@ export function BoardPackageViewer() {
     <div className="space-y-5">
       {/* ── Controls ── */}
       <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-800/20 border border-slate-800 flex-wrap">
-        <div className="flex items-center gap-1.5">
-          <Calendar size={13} className="text-slate-500" />
-          <select value={periodKey} onChange={(e) => setPeriodKey(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
-            {PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
-          </select>
-          {periodKey === 'custom' && (
-            <>
-              <input type="date" value={customS} onChange={(e) => setCustomS(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono w-32" />
-              <span className="text-slate-600 text-xs">to</span>
-              <input type="date" value={customE} onChange={(e) => setCustomE(e.target.value)} className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white font-mono w-32" />
-            </>
-          )}
-        </div>
+        <PeriodPicker {...pp.pickerProps} label="Reporting period" />
 
         {mayConsolidate ? (
           <CompanyMultiSelect options={locations.map((l) => ({ value: l.id, label: `${l.short_code} · ${l.name}`, group: l.industry ?? 'Other' }))} selected={selectedLocs} onChange={setSelectedLocs} />

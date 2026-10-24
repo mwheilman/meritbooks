@@ -4,6 +4,7 @@ import { ShellLine } from '@/components/layout/shell-context';
 import { getRecentActivity, getWorkboard, type CompanyBoard, type RecentActivity } from './actions';
 import { WorkspaceClients } from './workspace-clients';
 import { ago, cents, dayLabel, monthLabel, shortLabel } from './home-format';
+import { PerformanceWidget } from './performance-widget';
 
 /** Top two clients for a queue — "Clive 6 · Dorrian 9" — so a band says where the work is. */
 function topTwo(companies: CompanyBoard[], pick: (c: CompanyBoard) => number): Array<{ name: string; n: number }> {
@@ -262,6 +263,9 @@ export async function WorkspaceHome() {
         >
           <ActivityList items={activity} />
         </Widget>
+
+        {/* Period-based P&L across the clients in scope — follows the period picker. */}
+        <PerformanceWidget scopeLabel="All clients" />
       </Dash>
     </>
   );

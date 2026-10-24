@@ -7,6 +7,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { BoardPackagePdf } from '../board-package-pdf';
 import { boardPackageSchema } from '@/lib/reports/board-package';
 import { buildExportFilename } from '@/lib/reports/export/statement-model';
+import { governPostedPackage, UNGOVERNED_FOOTNOTE } from '../posted-governance';
 
 /**
  * POST /api/reports/board-package/pdf — render an assembled Board Package to a
@@ -15,6 +16,10 @@ import { buildExportFilename } from '@/lib/reports/export/statement-model';
  * ties out to what the user sees. No GL is re-queried here — the route only
  * formats — so there is nothing tenant-sensitive to leak; it just needs an
  * authenticated user. Mirrors /api/reports/export/pdf.
+ *
+ * Governance (../posted-governance): a non-finance caller may only render a released
+ * period (403 NOT_RELEASED otherwise), and every PDF is stamped as prepared from the
+ * on-screen package.
  */
 export async function POST(req: Request) {
   const ctx = await requireAuthedContext();
@@ -35,7 +40,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const buffer = await renderToBuffer(<BoardPackagePdf pkg={parsed.data} />);
+  const denied = await governPostedPackage(ctx, parsed.data);
+  if (denied) return denied;
+
+  const buffer = await renderToBuffer(<BoardPackagePdf pkg={parsed.data} governanceNote={UNGOVERNED_FOOTNOTE} />);
   const filename = buildExportFilename(`board-package-${parsed.data.meta.entityLabel}`, 'pdf');
 
   return new NextResponse(new Uint8Array(buffer), {

@@ -2,12 +2,18 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { assertWriteScope, serviceWriter } from '@/lib/db/scoped-writer';
+import { budgetCtx, budgetError, ensureDraftTarget } from '@/lib/budgets/route-support';
+import { assertEditable, writeCellsDetailed } from '@/lib/budgets/service/lines';
+import { canSeeDepartment } from '@/lib/budgets/scope';
+import { logEvent } from '@/lib/budgets/service/data';
 import { z } from 'zod';
 import {
   expandDrivers,
   expansionToBudgetCells,
   type BudgetDriver,
 } from '@/lib/budget/drivers';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Driver-based budgeting — build a full-year budget from a driver MODEL.
@@ -103,26 +109,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No organization on session', code: 'NO_ORG' }, { status: 403 });
   }
 
-  // Commit — upsert expanded cells into the existing budgets table (RLS-scoped).
-  const inserts = cells.map((c) => ({
-    org_id: orgId,
-    location_id: body.location_id,
-    account_id: c.account_id,
-    department_id: body.department_id ?? null,
-    fiscal_year: body.fiscal_year,
-    period_number: c.period_number,
-    amount_cents: c.amount_cents,
-    created_by: userId,
-  }));
-
-  const { error: upsertErr } = await supabase
-    .from('budgets')
-    .upsert(inserts, {
-      onConflict: 'org_id,location_id,account_id,department_id,fiscal_year,period_number',
-    });
-  if (upsertErr) {
-    return NextResponse.json({ error: upsertErr.message }, { status: 500 });
+  // Commit — mig 189: cells land in the company-year's DRAFT version (current, else a new v1) and
+  // publish to public.budgets through the version triggers. A non-draft target is a 409.
+  const b = await budgetCtx(ctx, body.location_id);
+  if (b instanceof NextResponse) return b;
+  let saved = 0;
+  let skippedClosed: number[] = [];
+  let versionLabel = '';
+  try {
+    const version = await ensureDraftTarget(b, body.location_id, body.fiscal_year);
+    versionLabel = version.label;
+    await assertEditable(b, version, body.department_id ?? null);
+    // A driver model regenerates the year: closed months keep their budget (reported back).
+    ({ changed: saved, skippedClosed } = await writeCellsDetailed(
+      b, version, body.department_id ?? null,
+      cells.map((c) => ({ accountId: c.account_id, periodNumber: c.period_number, amountCents: c.amount_cents })),
+      'DRIVER',
+      { closedMonths: 'skip' },
+    ));
+    await logEvent(b, { locationId: version.locationId, versionId: version.id, kind: 'LINES_GENERATED', meta: { department_id: body.department_id ?? null, source: 'driver-builder', drivers: body.drivers.length, cells: saved } });
+  } catch (e) {
+    return budgetError(e, 'drivers commit');
   }
+  const inserts = cells;
 
   // Persist the driver MODEL for audit + reload (best-effort; the plan-of-record
   // is the budgets cells above, so a log failure must not fail the save).
@@ -154,6 +163,10 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     saved: inserts.length,
+    changed: saved,
+    skippedClosedPeriods: skippedClosed,
+    versionLabel,
+    published: false,
     accounts: expansion.lines.length,
     totalRevenueCents: expansion.totalRevenueCents,
   });
@@ -164,20 +177,30 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase } = ctx;
 
   const { searchParams } = new URL(request.url);
   const locationId = searchParams.get('location_id');
   const fiscalYear = parseInt(searchParams.get('fiscal_year') ?? '0', 10);
-  const departmentId = searchParams.get('department_id'); // absent ⇒ company-level
+  const deptRaw = searchParams.get('department_id'); // absent ⇒ company-level
+  const departmentId = deptRaw && deptRaw !== 'null' ? deptRaw : null;
+  if (!locationId || !UUID.test(locationId) || (departmentId && !UUID.test(departmentId))) {
+    return NextResponse.json({ error: 'Pick a company (location_id).', code: 'VALIDATION_ERROR' }, { status: 422 });
+  }
+  // SECURITY (H6): budget view for the company + the department scope (company-level models are
+  // finance's; a department owner reloads only their departments' models).
+  const b = await budgetCtx(ctx, locationId);
+  if (b instanceof NextResponse) return b;
+  if (!canSeeDepartment(b.access, departmentId)) {
+    return NextResponse.json({ error: 'That department’s budget isn’t yours to see.', code: 'BUDGET_SCOPE' }, { status: 403 });
+  }
 
-  let query = supabase
+  const query = b.reader
     .from('ai_decisions')
     .select('id, proposed_output, created_at, disposition_by_user')
     .eq('feature', 'BUDGET_DRIVER_MODEL')
+    .eq('location_id', locationId)
     .order('created_at', { ascending: false })
     .limit(25);
-  if (locationId) query = query.eq('location_id', locationId);
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -189,7 +212,7 @@ export async function GET(request: Request) {
     if (!out) return false;
     if (fiscalYear && out.fiscal_year !== fiscalYear) return false;
     const rowDept = out.department_id ?? null;
-    return rowDept === (departmentId ?? null);
+    return rowDept === departmentId;
   });
 
   return NextResponse.json({

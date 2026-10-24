@@ -94,7 +94,28 @@ export async function GET(request: Request): Promise<NextResponse> {
     const runs = hasMore ? rows.slice(0, q.limit) : rows;
     const lastByJob = new Map<string, LastRunView>();
     for (const r of (latestRes.data ?? []) as LastRunView[]) if (!lastByJob.has(r.job_key)) lastByJob.set(r.job_key, r);
-    const jobs = buildJobHealth(orgId, (statesRes.data ?? []) as ScheduledJobStateView[]).map((j) => ({
+    const health = buildJobHealth(orgId, (statesRes.data ?? []) as ScheduledJobStateView[]);
+    // The 400-row scan is dominated by the 15-minute jobs; a job that has run (it has a
+    // last_run_at) but fell outside it gets its own newest-run read, so its "last run"
+    // column and panel agree with its failure count.
+    const missing = health.filter((j) => !lastByJob.has(j.key) && j.lastRunAt).map((j) => j.key);
+    if (missing.length) {
+      const extra = await Promise.all(
+        missing.map((key) =>
+          ctx.supabase
+            .schema('core')
+            .from('job_runs')
+            .select('job_key, status, started_at, finished_at, items_processed, summary, error, trigger')
+            .eq('org_id', orgId)
+            .eq('job_key', key)
+            .order('started_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ),
+      );
+      for (const r of extra) if (r.data) lastByJob.set((r.data as LastRunView).job_key, r.data as LastRunView);
+    }
+    const jobs = health.map((j) => ({
       ...j,
       lastRun: lastByJob.get(j.key) ?? null,
     }));

@@ -37,6 +37,7 @@
  */
 
 import { formatMoney } from '@meritbooks/shared';
+import type { FluxCloseSignal } from './flux/types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Task graph
@@ -57,6 +58,7 @@ export type CloseTaskKey =
   | 'prepaids_posted'
   | 'depreciation_posted'
   | 'wip_accrual_reviewed'
+  | 'flux_reviewed'
   | 'reviewed';
 
 export type CloseTaskKind = 'AUTO' | 'MANUAL';
@@ -284,6 +286,20 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
     deepLinkHref: '/jobs/wip',
   },
   {
+    key: 'flux_reviewed',
+    label: 'Flux review',
+    description:
+      'Every material change against the materiality policy (by $ and/or %) is explained and reviewed by someone other than the preparer — or a controller waived the review with a reason. Passes when the company needs no flux review or nothing is material.',
+    kind: 'AUTO',
+    blocking: true,
+    dependsOn: ['accruals_posted', 'prepaids_posted', 'depreciation_posted', 'wip_accrual_reviewed'],
+    phase: 'FINAL',
+    unit: 'count',
+    order: 15,
+    dueDay: 10,
+    deepLinkHref: '/close?tab=flux',
+  },
+  {
     key: 'reviewed',
     label: 'Reviewed & approved to close',
     description:
@@ -301,10 +317,11 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
       'prepaids_posted',
       'depreciation_posted',
       'wip_accrual_reviewed',
+      'flux_reviewed',
     ],
     phase: 'FINAL',
     unit: 'none',
-    order: 15,
+    order: 16,
     dueDay: 10,
   },
 ] as const;
@@ -363,6 +380,11 @@ export interface CloseSignals {
    * task passes (no WIP jobs, or the company accrues neither under- nor overbillings).
    */
   wipAccrual?: WipCloseSignal | null;
+  /**
+   * The month's flux review (lib/close/flux/load.ts loadFluxCloseSignals). Absent ⇒ the task
+   * passes (callers that load it fail CLOSED with status UNKNOWN on a read error).
+   */
+  flux?: FluxCloseSignal | null;
 }
 
 /** The month's WIP run as the close sees it. */
@@ -578,6 +600,37 @@ function evaluateAuto(key: CloseTaskKey, s: CloseSignals): AutoCheck {
         case 'NOT_RUN':
         default:
           return { satisfied: false, driverValue: null, driverLabel: 'Not run yet', reason: `WIP has not been run for this month (${w.jobs} job(s) on the schedule)` };
+      }
+    }
+    case 'flux_reviewed': {
+      const f = s.flux;
+      if (!f || !f.applicable || f.status === 'NOT_REQUIRED') {
+        return { satisfied: true, driverValue: 0, driverLabel: 'No flux review for this company', reason: null };
+      }
+      const open = f.material - f.reviewed;
+      switch (f.status) {
+        case 'NOTHING_MATERIAL':
+          return { satisfied: true, driverValue: 0, driverLabel: 'Nothing material', reason: null };
+        case 'COMPLETE':
+          return { satisfied: true, driverValue: 0, driverLabel: `${f.reviewed} line(s) reviewed`, reason: null };
+        case 'WAIVED':
+          return { satisfied: true, driverValue: open, driverLabel: `Waived: ${f.waiverReason ?? 'reason recorded'}`, reason: null };
+        case 'UNKNOWN':
+          return { satisfied: false, driverValue: null, driverLabel: 'Status unknown', reason: 'The flux review could not be confirmed' };
+        case 'OPEN':
+        default: {
+          const parts = [
+            f.unexplained ? `${f.unexplained} unexplained` : null,
+            f.explained ? `${f.explained} awaiting review` : null,
+            f.stale ? `${f.stale} changed since explained` : null,
+          ].filter(Boolean);
+          return {
+            satisfied: false,
+            driverValue: open,
+            driverLabel: `${open} of ${f.material} open`,
+            reason: `Flux: ${f.material} material change(s) — ${parts.join(', ') || 'not yet reviewed'}`,
+          };
+        }
       }
     }
     default:

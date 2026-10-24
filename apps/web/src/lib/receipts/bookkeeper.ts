@@ -12,8 +12,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cancelRequest, RequestError, sendNow } from '@/lib/requests/service';
 import type { EngineDeps } from '@/lib/requests/dispatch';
-import { PAUSE_PREFIX, syncReceiptChase } from './chase';
-import { OUTSTANDING_STATES, SYSTEM_ACTOR, type ChargeState } from './types';
+import { ASSIGNMENT_COLUMNS, PAUSE_PREFIX, syncReceiptChase } from './chase';
+import { merchantLabel, olderUnreceiptedCharges } from './charges';
+import { mergeReceiptPolicy, type ReceiptPolicyContext } from './policy';
+import { OUTSTANDING_STATES, SYSTEM_ACTOR, type CardAccount, type CardAssignmentRow, type ChargeState, type ChargeTxn } from './types';
 
 const LIVE = ['open', 'sent', 'snoozed'];
 const DAY = 86_400_000;
@@ -188,6 +190,120 @@ export async function listOutstanding(
     matchedThisWeek: matchedThisWeek ?? 0,
   };
   return { groups: groupOutstanding(rows, holders), strip };
+}
+
+/** A card charge older than the chase window that never got a receipt (read-only). */
+export interface OlderCharge {
+  transactionId: string;
+  merchant: string;
+  chargeDate: string;
+  amountCents: number;
+  ageDays: number;
+  locationId: string;
+}
+
+export interface OlderUnreceipted {
+  /** Charges over the receipt limit, older than the chase window, with no receipt. */
+  count: number;
+  totalCents: number;
+  /** The narrowest chase window in play (days) — for the sentence on the board. */
+  windowDays: number;
+  /** The charges themselves, newest first (only when asked for; capped at 200). */
+  charges: OlderCharge[];
+}
+
+/** How far before the chase window the board looks for aged-out charges. */
+const OLDER_LOOKBACK_DAYS = 365;
+
+/**
+ * Card charges that need a receipt but are older than the chase window, so the chase never
+ * asked for them (FPB-workforce-app §15; Wave 2 live check). Read through the CALLER's RLS
+ * client. Bounded: one year before the window, 2,000 lines.
+ */
+export async function listOlderUnreceipted(
+  db: SupabaseClient,
+  orgId: string,
+  opts: { locationId?: string | null; now: Date; ctx: ReceiptPolicyContext; includeRows?: boolean },
+): Promise<OlderUnreceipted> {
+  const policies = [mergeReceiptPolicy(opts.ctx.rows, opts.locationId ?? null), ...opts.ctx.rows.filter((r) => r.location_id).map((r) => mergeReceiptPolicy(opts.ctx.rows, r.location_id))];
+  const minWindow = Math.min(...policies.map((p) => p.chaseWindowDays));
+  const maxWindow = Math.max(...policies.map((p) => p.chaseWindowDays));
+  const iso = (days: number) => new Date(opts.now.getTime() - days * DAY).toISOString().slice(0, 10);
+
+  const [{ data: accts, error: aErr }, { data: asg, error: gErr }] = await Promise.all([
+    db.from('bank_accounts').select('id, location_id, account_type, account_mask, account_name, is_active').eq('org_id', orgId),
+    db.from('card_assignments').select(ASSIGNMENT_COLUMNS).eq('org_id', orgId),
+  ]);
+  if (aErr) throw new Error(`Could not read bank accounts: ${aErr.message}`);
+  if (gErr) throw new Error(`Could not read card assignments: ${gErr.message}`);
+  const accounts = new Map(((accts ?? []) as CardAccount[]).map((a) => [a.id, a]));
+  const assignments = (asg ?? []) as CardAssignmentRow[];
+  const cardAccountIds = new Set<string>([...accounts.values()].filter((a) => a.account_type === 'CREDIT_CARD').map((a) => a.id));
+  let anyAccount = false;
+  for (const a of assignments) {
+    if (!a.card_last4) continue;
+    if (a.bank_account_id) cardAccountIds.add(a.bank_account_id);
+    else anyAccount = true;
+  }
+  const empty: OlderUnreceipted = { count: 0, totalCents: 0, windowDays: minWindow, charges: [] };
+  if (!anyAccount && cardAccountIds.size === 0) return empty;
+
+  let tq = db
+    .from('bank_transactions')
+    .select('id, org_id, location_id, bank_account_id, transaction_date, description, amount_cents, matched_receipt_id, matched_bill_id')
+    .eq('org_id', orgId)
+    .lt('amount_cents', 0)
+    .is('matched_receipt_id', null)
+    .is('matched_bill_id', null)
+    .lt('transaction_date', iso(minWindow))
+    .gte('transaction_date', iso(maxWindow + OLDER_LOOKBACK_DAYS));
+  if (!anyAccount) tq = tq.in('bank_account_id', [...cardAccountIds]);
+  if (opts.locationId) tq = tq.eq('location_id', opts.locationId);
+  const { data: tx, error: tErr } = await tq.order('transaction_date', { ascending: false }).limit(2000);
+  if (tErr) throw new Error(`Could not read older card charges: ${tErr.message}`);
+  const txns = ((tx ?? []) as ChargeTxn[]).map((t) => ({ ...t, amount_cents: Number(t.amount_cents) }));
+  if (txns.length === 0) return empty;
+
+  const tracked = new Set<string>();
+  const withReceipt = new Set<string>();
+  const ids = txns.map((t) => t.id);
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200);
+    const [{ data: st, error: sErr }, { data: rc, error: rErr }] = await Promise.all([
+      db.from('receipt_charge_states').select('bank_transaction_id').eq('org_id', orgId).in('bank_transaction_id', chunk),
+      db.from('receipts').select('bank_transaction_id').eq('org_id', orgId).in('bank_transaction_id', chunk),
+    ]);
+    if (sErr) throw new Error(`Could not read charge states: ${sErr.message}`);
+    if (rErr) throw new Error(`Could not read receipts: ${rErr.message}`);
+    for (const r of (st ?? []) as Array<{ bank_transaction_id: string }>) tracked.add(r.bank_transaction_id);
+    for (const r of (rc ?? []) as Array<{ bank_transaction_id: string | null }>) if (r.bank_transaction_id) withReceipt.add(r.bank_transaction_id);
+  }
+
+  const older = olderUnreceiptedCharges({
+    txns,
+    accounts,
+    assignments,
+    tracked,
+    withReceipt,
+    policyFor: (loc) => mergeReceiptPolicy(opts.ctx.rows, loc),
+    now: opts.now,
+  });
+  const nowMs = opts.now.getTime();
+  return {
+    count: older.length,
+    totalCents: older.reduce((n, t) => n + Math.abs(t.amount_cents), 0),
+    windowDays: minWindow,
+    charges: opts.includeRows
+      ? older.slice(0, 200).map((t) => ({
+          transactionId: t.id,
+          merchant: merchantLabel(t.description) || 'Card charge',
+          chargeDate: t.transaction_date,
+          amountCents: Math.abs(t.amount_cents),
+          ageDays: Math.max(0, Math.floor((nowMs - Date.parse(`${t.transaction_date}T00:00:00Z`)) / DAY)),
+          locationId: t.location_id,
+        }))
+      : [],
+  };
 }
 
 // ── actions (service role; the route authorized and read the state through RLS) ─────────

@@ -26,14 +26,6 @@ const money = (cents: number) =>
 const fmtDate = (d: string) =>
   d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 
-function readable(hex: string): string {
-  const h = hex.replace('#', '');
-  if (h.length !== 6) return '#ffffff';
-  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum > 0.6 ? '#0f172a' : '#ffffff';
-}
-
 const STATUS_LABEL: Record<string, string> = {
   SENT: 'Open', OVERDUE: 'Overdue', PARTIALLY_PAID: 'Partially paid',
   PAID: 'Paid', DRAFT: 'Draft', WRITTEN_OFF: 'Written off',
@@ -71,20 +63,25 @@ export default async function CustomerPortalPage({ params }: { params: { token: 
     );
   }
 
-  const accent = data.branding.accentColor || '#10b981';
-  const onAccent = readable(accent);
+  // FPB-branding: the issuing company's brand colour, its on-colour (WCAG) and font.
+  const accent = data.branding.accentColor || '#2563EB';
+  const onAccent = data.branding.onAccent;
   const openInvoices = data.invoices.filter((i) => i.isOpen);
   const historyInvoices = data.invoices.filter((i) => !i.isOpen);
   const statementHref = `/api/portal/customer/${params.token}/statement`;
 
   return (
-    <main style={S.wrap}>
+    <main style={{ ...S.wrap, fontFamily: data.branding.fontStack }}>
       <FontHead />
       <div style={S.sheet}>
         {/* Branded header band */}
         <header style={{ ...S.band, background: accent, color: onAccent }}>
           <div style={S.bandLeft}>
-            {data.branding.logoUrl ? (
+            {data.branding.logoDarkUrl && onAccent.toUpperCase() === '#FFFFFF' ? (
+              // A dark-background logo sits straight on the brand band.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={data.branding.logoDarkUrl} alt="" style={{ ...S.logo, background: 'transparent', padding: 0 }} />
+            ) : data.branding.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={data.branding.logoUrl} alt="" style={S.logo} />
             ) : (

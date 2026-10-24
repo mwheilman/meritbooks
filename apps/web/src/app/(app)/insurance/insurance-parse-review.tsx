@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
 import { UploadCloud, FileText, Loader2, X, Trash2, Sparkles, AlertTriangle, Info } from 'lucide-react';
+import { acceptDocumentProposal, openDocument, type ProposalWithDoc } from '@/components/documents/intelligence-client';
 
 /** Mirrors ProposedPolicy from lib/insurance/parse-policy. Amounts are cents. */
 interface ProposedPolicy {
@@ -76,11 +77,14 @@ function dollarStrToCents(v: string): number | null {
 export function InsuranceParseReview({
   onClose,
   onConfirmed,
+  fromProposal = null,
 }: {
   onClose: () => void;
   onConfirmed: (count: number) => void;
+  /** Document intelligence: a policy AI found in Documents — opens pre-filled; saving links the document. */
+  fromProposal?: ProposalWithDoc | null;
 }) {
-  const [phase, setPhase] = useState<'upload' | 'parsing' | 'review' | 'confirming'>('upload');
+  const [phase, setPhase] = useState<'upload' | 'parsing' | 'review' | 'confirming'>(fromProposal ? 'review' : 'upload');
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<ParseResponse['meta'] | null>(null);
@@ -117,6 +121,16 @@ export function InsuranceParseReview({
     }
   }, []);
 
+  // Pre-fill from the stored INSURANCE_EXTRACT result (same shape as /api/insurance/parse).
+  useEffect(() => {
+    if (!fromProposal) return;
+    const payload = fromProposal.payload as Partial<ParseResponse>;
+    const policies = payload.policies ?? [];
+    setMeta({ fileName: payload.meta?.fileName ?? fromProposal.document?.file_name ?? 'Document', model: payload.meta?.model ?? '', documentNote: payload.meta?.documentNote ?? null, policyCount: policies.length });
+    setRows(policies.map(toRow));
+    setPhase('review');
+  }, [fromProposal]);
+
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragOver(false);
@@ -135,6 +149,7 @@ export function InsuranceParseReview({
     setPhase('confirming');
     let ok = 0;
     let failed = 0;
+    const createdIds: string[] = [];
     for (const r of rows) {
       const payload = {
         carrier: r.carrier?.trim() || null,
@@ -152,7 +167,19 @@ export function InsuranceParseReview({
       };
       const res = await api.post('/api/insurance', payload);
       if (res.error) failed += 1;
-      else ok += 1;
+      else {
+        ok += 1;
+        const id = (res.data as { id?: string } | null)?.id;
+        if (id) createdIds.push(id);
+      }
+    }
+    // Document intelligence: the first policy closes the proposal; any others are linked too.
+    if (fromProposal && createdIds.length > 0) {
+      const err = await acceptDocumentProposal(fromProposal.id, 'policy', createdIds[0]);
+      for (const id of createdIds.slice(1)) {
+        await api.post('/api/documents/intelligence/update', { action: 'link', document_id: fromProposal.document_id, target_type: 'policy', target_id: id });
+      }
+      if (err) addToast('error', `Saved, but linking the document failed: ${err}`);
     }
     if (failed > 0) {
       addToast('error', `${ok} policy(ies) added · ${failed} failed`);
@@ -235,6 +262,14 @@ export function InsuranceParseReview({
         {/* ── Review ───────────────────────────────────────────────────── */}
         {(phase === 'review' || phase === 'confirming') && (
           <>
+            {fromProposal && (
+              <p className="mb-3 text-[11px] text-slate-400" data-testid="from-document">
+                From document: <span className="text-slate-200">{fromProposal.document?.file_name ?? 'stored document'}</span>
+                {fromProposal.extract_state !== 'done' && <> · AI hasn’t read it yet — open the document and add the policy by hand from the register</>}
+                {' · '}
+                <button type="button" className="underline" onClick={() => { void openDocument(fromProposal.document_id).then((e) => { if (e) addToast('error', e); }); }}>Open the document</button>
+              </p>
+            )}
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-[11px] text-slate-400">
                 <FileText size={13} className="text-indigo-400" />

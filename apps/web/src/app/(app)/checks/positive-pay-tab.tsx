@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Field, InlineNotice, Input, Seg, money, toast, useQuery } from '@meritbooks/merit-ui';
+import { Button, Field, InlineNotice, Input, Seg, toast, useQuery } from '@meritbooks/merit-ui';
 import { POSITIVE_PAY_FORMATS } from '@/lib/ap/checks/positive-pay';
-import { accountLabel, postForFile, shortDate, todayLocal, who, type CheckAccount, type PositivePayResponse } from './checks-types';
+import { accountLabel, postForFile, usd, shortDate, todayLocal, who, type CheckAccount, type PositivePayResponse } from './checks-types';
 import s from './checks.module.css';
 
 type Mode = 'SINCE_LAST' | 'RANGE';
@@ -79,12 +79,12 @@ export function PositivePayTab({ account, userId, onSetup }: PositivePayTabProps
               <div className={s.cell}>
                 <span className={s.cellL}>Issued checks</span>
                 <span className={s.cellV}>{next.issueCount}</span>
-                <span className={s.cellS}>{money(next.issueTotalCents)}</span>
+                <span className={s.cellS}>{usd(next.issueTotalCents)}</span>
               </div>
               <div className={s.cell}>
                 <span className={s.cellL}>Voids</span>
                 <span className={s.cellV}>{next.voidCount}</span>
-                <span className={s.cellS}>{money(next.voidTotalCents)} · voided and spoiled</span>
+                <span className={s.cellS}>{usd(next.voidTotalCents)} · voided and spoiled</span>
               </div>
             </div>
           ) : null}
@@ -114,7 +114,7 @@ export function PositivePayTab({ account, userId, onSetup }: PositivePayTabProps
                   <tr key={h.id}>
                     <td>{shortDate(h.created_at)}</td>
                     <td>{h.file_name}</td>
-                    <td className="n">{h.issue_count} · {money(h.issue_total_cents)}</td>
+                    <td className="n">{h.issue_count} · {usd(h.issue_total_cents)}</td>
                     <td className="n">{h.void_count}</td>
                     <td>{who(data?.names ?? {}, h.generated_by, userId)}</td>
                   </tr>

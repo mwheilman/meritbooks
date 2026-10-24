@@ -350,9 +350,61 @@ Recommended sets by industry ship as **KPI packs**: HVAC (KP-01..04), Constructi
 plus a universal finance pack (margins, EBITDA %, DSO, DPO, DIO, CCC, current ratio, debt/EBITDA, DSCR, runway, revenue
 per employee, opex % of revenue).
 
----
+#### 1.15a Registry & analytics contract (Wave 3B amendment, 2026-10-24)
+Built as pure, tested TypeScript in `apps/web/src/lib/metrics/**` (registry, expression language, evaluator, data-source
+interface) and `apps/web/src/lib/analytics/**` (bridges, variance, growth, seasonality, league, concentration, anomaly,
+forecast, flux helper). No migration; storage for tenant-defined KPIs, add-back schedules and `fpa.metrics` uploads is
+deferred to the slices that own those tables (Wave 4A/4B).
 
-## §2. Charts & visual analysis library
+- **Definition shape.** Each registry entry carries: `key` · plain-English `name` · `definition` sentence · `formula` as a
+  **typed expression tree** over named inputs (account *classes* resolved by role/sub-type, GL flows and balances,
+  budget flows, operational inputs from sub-ledgers, other metrics, time shifts) · `unit` (money / percent / ratio /
+  days / count / times / months / points) · `direction` (higher better / lower better / neutral) · `period` (flow,
+  balance or mixed; request basis or a fixed basis such as TTM) · `requires` (gl, budget, headcount, jobs, ar_subledger,
+  ap_subledger, inventory, dealer, practice, addbacks, covenants) · optional benchmark `bands` (with source) ·
+  `audiences` (owner, cfo, controller, lender, construction, dealer, practice). The human formula string is **generated
+  from the tree**, so the (i) tooltip can never disagree with the computation.
+- **Unavailable states** (a card says why in words, never a fabricated 0): `not_enough_history` (with months on file),
+  `not_on_file`, `not_mapped` (names the missing account role/class), `not_meaningful` (base ≤ 0, sign flip, cash-generating
+  for runway), `no_approved_budget`, `no_jobs`, `zero_denominator`. **Preliminary** (period after books-closed-through) is a
+  flag on an OK value, not a failure.
+- **Evaluation.** `evaluate(metric, {companies, weighting, periodEnd, basis, comparison, sparkline})` returns value,
+  comparison value, change ($ and %, or **points** for percent metrics; % is n/m when the base ≤ 0 or the sign flips),
+  a verdict word (**improvement / erosion** vs prior period or prior year; **favourable / unfavourable** vs budget;
+  higher / lower for neutral metrics; unchanged), a sparkline (12 or 24 month-ends, **null for a gap, never 0**), status,
+  and a drill reference (statement line + account ids per input class, or the sub-ledger source).
+- **Scope.** One company, any selection (added together), or **ownership-weighted** (each company × its effective
+  `entity_ownership.ownership_percent`; companies with no ownership row are assumed 100% and named). Ratios are computed
+  on the combined inputs, never by averaging company ratios. A company contributes only when every month the formula
+  touches is on file (like-for-like growth); excluded companies are listed with the reason. No figures before a
+  company's "in group from" month.
+- **Data access** goes through a `MetricDataSource` interface: (a) the current adapter over existing RLS-scoped GL /
+  sub-ledger queries, (b) a stub for the 3A period-balances API, switched by the lead. The evaluator itself is I/O-free.
+
+**Acceptance criteria (Wave 3B; each is a unit test in `lib/metrics/*.test.ts` or `lib/analytics/*.test.ts`):**
+- AC-K1 The registry holds **≥ 80** metrics; every key is unique; every expression references only defined inputs and
+  metrics (no cycles); every entry has a name, definition, unit, direction, ≥ 1 audience and a generated formula string.
+- AC-K2 Covered families: revenue / GP / EBITDA / adjusted EBITDA (documented add-backs); gross, operating, net, EBITDA
+  margins; MoM / YoY / CAGR 1-3-5y (TTM-to-TTM); current, quick, cash ratio, working capital, burn, runway, days cash,
+  CCC; DSO, best-possible DSO, ADD, CEI, DPO, DIO, AR/AP/inventory turnover, revenue and EBITDA per employee, payroll %;
+  debt/EBITDA, DSCR, FCCR, interest coverage, covenant headroom; ROA, ROE, contribution margin; aging-bucket %, % current,
+  top-customer and vendor concentration, HHI, early-pay discount capture; backlog, months of backlog, under/over billings,
+  fade, cost to complete, retainage receivable/payable, GP in backlog; floor-plan days, aged units %, warranty receivable
+  days; close-cycle days, items per bookkeeper; Rule of 40; operating leverage.
+- AC-K3 Worked examples in cents reproduce exactly (margins, EBITDA = operating income + operating D&A, DSO = AR ÷ revenue
+  × days, CEI and BPDSO/ADD against the textbook example, DSCR, FCCR, CCC = DSO + DIO − DPO, runway = cash ÷ 3-month burn).
+- AC-K4 Each unavailable reason is produced by a test case with the expected plain-English message.
+- AC-K5 Direction wording: a lower-is-better metric that falls reads "improvement"; vs budget reads "favourable /
+  unfavourable"; percent metrics change in points; % change is n/m on a base ≤ 0 or a sign flip.
+- AC-K6 Sparklines return `null` for months not on file (gaps are never drawn as zero) and flag preliminary months.
+- AC-K7 Ownership weighting: two companies at 100% and 60% produce combined inputs = A + 0.6·B; ratios use the weighted
+  inputs; an unowned company is reported as assumed-100%.
+- AC-K8 Analytics: price + volume + mix effects sum exactly to the revenue change (cents); EBITDA, working-capital and
+  cash bridges' steps sum exactly to end − start; budget-vs-actual F/U follows account type; the seasonality index
+  averages 1.00 over complete years and ignores incomplete years; league tables rank nulls last; HHI and top-N shares
+  match hand calculations; z-score anomalies need a minimum history; forecast bands widen monotonically with horizon;
+  the flux helper applies $ and % materiality with AND/OR logic.
+
 
 All charts are drawn in the v2 system: brand palette only, square geometry, DM Sans tabular figures, no gradients or
 3-D, every chart has a table view and a text alternative, and every mark drills. Colour never carries sign alone:
@@ -528,6 +580,98 @@ cash forecast; funding by cash or a loan (draw schedule into the debt forecast a
   exceeds a threshold).
 - Versions are kept and comparable (BD-05); accuracy is tracked (BD-13).
 
+### 4.11 Wave 4B amendment — department budgets, budget bridges (migration 189, 2026-10-24)
+
+Owner (2026-10): *"For departments, I want department budgets and budget bridges for them as well."* This amendment is
+the buildable cut of §4.1–4.7 + FP-06…FP-08, FP-21 (audit §3). Where it differs from §4.1 it wins (reason given).
+
+**Data model (189, schema `public`, not `fpa.*`** — PostgREST exposes `public`, every other Books planning table lives
+there, and `core` can't be embedded from `public`):
+
+| Table | Purpose |
+|---|---|
+| `budget_plan_versions` | One version of a company's fiscal-year plan. `kind` BUDGET / REFORECAST; `status` DRAFT → IN_REVIEW → APPROVED → LOCKED (+ SUPERSEDED); `version_number`, `label`, `parent_version_id`, `basis`, due date, materiality ($ + bps), submitted/approved/locked by + at. At most **one current BUDGET version** per company × FY (`is_current`). |
+| `budget_version_lines` | company × **department (nullable = company-level)** × account × month (1–12, 13 = adjustments), bigint cents, `source` (MANUAL / IMPORT / TEMPLATE / PRIOR_YEAR / DRIVER / COPY / PASTE / MIGRATED / REFORECAST). |
+| `budget_line_drivers` | How a line was built (method + params) so the owner sees and re-runs it. |
+| `budget_department_plans` | The unit a person owns inside a version: department, owner, template, status NOT_STARTED → DRAFT → SUBMITTED → APPROVED (or RETURNED with a note), due date, revenue/expense targets, gap note, submitter / reviewer / approver. |
+| `budget_department_owners` | The standing owner of each department (carried into every new version). Also the source of "my departments" for department-head scope. |
+| `budget_templates` | Tenant templates (immutable rows; editing = a new `version`). System templates ship in code (`lib/budgets/templates/system.ts`). |
+| `budget_comments` | Threaded comments on a line, "please justify" requests, and **variance explanations** (owner explains → manager reviews; reviewer ≠ author, DB CHECK). |
+| `budget_events` | Append-only audit of every transition, import, generation and owner change. |
+
+`public.budgets` (013) stays the **published budget of record** every reader already uses (BvA, report engine, flux, FP&A,
+metrics): it gains `version_id` and is maintained **by trigger** from the current version's lines (publish on approval /
+on becoming current; mirror on each line write while current). Readers never see two versions summed. Existing rows are
+migrated into a **"FY{year} Budget v1"** DRAFT version per company × FY that is current, and linked (`version_id`). The
+old unique key (NULL department never collided → duplicate company-level rows) is replaced by a NULLS NOT DISTINCT key.
+Members **read only**; every write is the service role after the route's permission + client-scope check (171 pattern).
+
+**Locks (DB, not just UI).** A line/driver write is refused unless its version is DRAFT and its department plan (if any)
+is not SUBMITTED / APPROVED. Version transitions are checked by trigger: APPROVED → LOCKED | SUPERSEDED only; LOCKED →
+SUPERSEDED only; SUPERSEDED is terminal; a non-DRAFT version can't be deleted; approver ≠ submitter. Changing an approved
+budget means **"New version from this one"** (copies lines, drivers, department plans back to DRAFT).
+
+**Generators (pure, `lib/budgets/generators.ts`, all integer cents, every spread ties to its annual total by
+largest-remainder):** fixed monthly · annual amount spread evenly · annual × prior-year seasonality · prior-year actuals
++ growth % (bps; month shape preserved) · % of revenue (bps of the version's budgeted revenue for the same department, or
+company) · headcount × monthly rate × (1 + burden %) with start month · units × rate per unit · last year's budget + x%.
+"Start from last year's actuals +x%" and "Start from template" act on one department or the whole company.
+
+**Templates (system set, editable into tenant templates):** Sales · Marketing · Operations / Field · Service · Parts ·
+Shop / Production · Construction PM · Admin & G&A · Executive · Finance & accounting — each lists line items with an
+**account selector by type / sub-type / group / name pattern (never an account number)**, a default driver and the
+recommended KPIs. A template line that resolves to no account in the tenant's COA is shown as "not in your chart" and
+skipped (never invented).
+
+**Bridges per department (`lib/budgets/bridges.ts` on 3B's `buildBridge`; drawn with 3C's `WaterfallChart`):**
+(a) prior-year actual → this-year budget, steps = headcount (payroll-family accounts), rate / price (revenue at PY volume
+× growth), volume, new initiatives (lines with no PY actual), one-time items (PY lines with no budget), inflation (the
+remaining cost growth), each sized from the lines' driver method — every step sums to end − start exactly or the
+residual is named; (b) budget → actual (MTD / QTD / YTD / TTM) by account group, favourable / unfavourable by account
+nature; (c) budget → latest forecast (latest REFORECAST version; when none, actuals through the closed month + budget for
+the rest, labelled "Latest estimate").
+
+**Department BvA (`/api/budgets/department-bva`):** department P&L actual vs budget vs prior year, $ and %, windows
+month / QTD / YTD / TTM; a variance list filtered by the version's materiality; drill to the GL lines posted to that
+department (`gl_entry_lines.department_id`); commentary per variance.
+
+**Scope.** View = `fpa.budgets:view` (legacy: `reports:view`, or owning a department). Edit = `fpa.budgets:edit` (legacy:
+`close_mgmt:view` — finance staff — or owning the department). Approve = `fpa.budgets:approve` (legacy: `close_mgmt:manage`).
+A caller who is not finance staff and can't approve is **department-scoped**: every budget route filters to the
+departments they own and refuses others (403), company-level lines included. Client scope (163) applies to every row.
+
+#### Acceptance criteria (Wave 4B)
+- **AC-B9 Versions.** Creating a version gives the next `version_number` for company × FY × kind; only one BUDGET
+  version is current; approving v2 supersedes the previously current version and `public.budgets` then holds exactly v2's
+  lines (no double counting) — PGlite test.
+- **AC-B10 Locks.** Inserting / updating / deleting a line of an APPROVED, LOCKED, SUPERSEDED or IN_REVIEW version fails in
+  the database; so does a line in a SUBMITTED or APPROVED department plan; APPROVED → DRAFT is refused; a LOCKED version
+  can't be superseded by a budget version. Members can't write any 189 table; anon reads nothing — PGlite test.
+- **AC-B11 SoD.** A department plan or version approved by its submitter is refused (route 409 + DB CHECK); a variance
+  explanation reviewed by its author is refused.
+- **AC-B12 Migration.** Pre-189 budget rows land in one "FY{yr} Budget v1" version per company × FY with identical cents,
+  `budgets.version_id` set, and re-running 189 changes nothing.
+- **AC-B13 Generators.** Each method returns 12 integer-cent months that sum to its annual total exactly; PY +x% keeps the
+  PY month shape; seasonality of a zero PY falls back to even; headcount respects the start month; % of revenue uses the
+  department's revenue lines.
+- **AC-B14 Templates.** Every system template line resolves by type / sub-type / group / name, never by account number;
+  an unresolvable line is reported, not invented; saving a tenant template from a system one creates version 1, saving
+  again creates version 2 and leaves version 1 intact.
+- **AC-B15 Bridges tie.** For every bridge (PY → budget, budget → actual, budget → forecast) start + Σ steps = end to the
+  cent (unit tests on random inputs), and the PY → budget steps come from the line drivers.
+- **AC-B16 Department BvA ties to the GL.** Department actuals equal a manual sum of POSTED `gl_entry_lines` for that
+  department × account × window (natural sign by account type); budget equals the current version's lines for that
+  department; PY equals the same window a year earlier.
+- **AC-B17 Department-owner scope.** A department-scoped caller sees only their departments in the board, grid, BvA and
+  bridges, and a write to another department is a 403.
+- **AC-B18 Import.** Uploading to a department targets a DRAFT version only (an approved one is refused with "create a
+  new version"), mapping reuses `lib/budgets/import.ts`, and the imported cents equal the file to the cent.
+- **AC-B19 Board.** The submission board lists every department with owner, status, due date (overdue flagged), plan
+  total, last-year actual and the change, and the version's progress ("3 of 5 approved").
+- **AC-B20 Grid.** The grid edits department × account × month with arrow-key navigation, Enter to edit, fill-right,
+  apply % growth to a row, and paste a block from Excel (tab / newline separated) — every edit saves as cents and a locked
+  version renders read-only with the reason.
+
 ---
 
 ## §5. Report builder & packs
@@ -617,6 +761,11 @@ cash forecast; funding by cash or a loan (draw schedule into the debt forecast a
   sees delivery and read status.
 - AC-B7 Headcount and capex lines roll into the P&L, cash forecast and covenant forecast of the version.
 - AC-B8 Drivers and scenarios live in `fpa.*` tables, not `ai_decisions` (migration moves existing rows).
+- AC-B9 … AC-B20 (department budgets, versions, locks, generators, templates, bridges, department BvA, owner scope,
+  import, board, grid) — §4.11 (Wave 4B, migration 189).
+
+**KPI registry & analytics (Wave 3B)** — AC-K1…AC-K8 in §1.15a; guard test `lib/metrics/registry.test.ts` enumerates the
+registry and fails on any entry missing a field, an undefined input, or a cycle.
 
 **Packs & builder**
 - AC-P1 A pack scheduled "after close" sends once per period, after the hard close, to the right audience, and logs it.

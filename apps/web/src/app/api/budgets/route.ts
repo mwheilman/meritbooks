@@ -2,76 +2,101 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { z } from 'zod';
+import { budgetCtx, budgetError, ensureDraftTarget, findDraftTarget } from '@/lib/budgets/route-support';
+import { assertEditable, closedPeriods, writeCells } from '@/lib/budgets/service/lines';
+import { loadAccounts, loadLines, logEvent } from '@/lib/budgets/service/data';
+import { canSeeDepartment } from '@/lib/budgets/scope';
+import { fetchAll } from '@/lib/supabase/fetch-all';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ─── GET: Budget entries pivoted by account (periods as columns) ──────────
-// SECURITY: runs AS THE USER so org_isolation RLS enforces the tenant on every
-// budget/account query (was previously on the RLS-bypassing admin client — the
-// same cross-tenant leak class flagged in FPB-financial-reports Dimension 15).
+// SECURITY (H6): budgetCtx (org pin + client scope + budget view) and the department scope — a
+// department owner reads only departments they own; company-level lines (department NULL) are
+// finance's. Reads AS THE USER (RLS). Mig 189: the classic grid shows the company-year's open
+// DRAFT (what a save changes) when there is one, else the published budget; `source=published`
+// forces the published budget (e.g. "copy last year").
 export async function GET(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase } = ctx;
 
   const { searchParams } = new URL(request.url);
   const locationId = searchParams.get('location_id');
+  if (!locationId || !UUID.test(locationId)) {
+    return NextResponse.json({ error: 'Pick a company (location_id).', code: 'VALIDATION_ERROR' }, { status: 422 });
+  }
   const fiscalYear = parseInt(searchParams.get('fiscal_year') ?? String(new Date().getFullYear()), 10);
-  const departmentId = searchParams.get('department_id'); // null/absent => company-level (dept IS NULL)
+  if (!Number.isInteger(fiscalYear) || fiscalYear < 2000 || fiscalYear > 2100) {
+    return NextResponse.json({ error: 'Pick a fiscal year.', code: 'VALIDATION_ERROR' }, { status: 422 });
+  }
+  const deptRaw = searchParams.get('department_id'); // null/absent => company-level (dept IS NULL)
+  const departmentId = deptRaw && deptRaw !== 'null' ? deptRaw : null;
+  if (departmentId && !UUID.test(departmentId)) {
+    return NextResponse.json({ error: 'Invalid department.', code: 'VALIDATION_ERROR' }, { status: 422 });
+  }
+  const forcePublished = searchParams.get('source') === 'published';
 
-  let query = supabase
-    .from('budgets')
-    .select(`
-      id, location_id, account_id, department_id, fiscal_year,
-      period_number, amount_cents, notes,
-      account:accounts!budgets_account_id_fkey(account_number, name, account_type)
-    `)
-    .eq('fiscal_year', fiscalYear)
-    .order('account_id')
-    .order('period_number');
-
-  if (locationId) query = query.eq('location_id', locationId);
-  // Scope to the chosen dimension: a specific department, or the company-level
-  // (department_id IS NULL) budget. This keeps the entry grid unambiguous.
-  if (departmentId) query = query.eq('department_id', departmentId);
-  else query = query.is('department_id', null);
-
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Pivot: group by account, periods (1..13) as columns.
-  const accountMap = new Map<string, {
-    accountId: string;
-    accountNumber: string;
-    accountName: string;
-    accountType: string;
-    periods: Record<number, number>;
-    totalCents: number;
-  }>();
-
-  for (const row of data ?? []) {
-    const acct = Array.isArray(row.account) ? row.account[0] : row.account;
-    if (!acct) continue;
-    const key = row.account_id;
-    const amt = Number(row.amount_cents);
-    const existing = accountMap.get(key);
-    if (existing) {
-      existing.periods[row.period_number] = amt;
-      existing.totalCents += amt;
-    } else {
-      accountMap.set(key, {
-        accountId: row.account_id,
-        accountNumber: acct.account_number,
-        accountName: acct.name,
-        accountType: acct.account_type,
-        periods: { [row.period_number]: amt },
-        totalCents: amt,
-      });
-    }
+  const b = await budgetCtx(ctx, locationId);
+  if (b instanceof NextResponse) return b;
+  if (!canSeeDepartment(b.access, departmentId)) {
+    return NextResponse.json({ error: 'That department’s budget isn’t yours to see.', code: 'BUDGET_SCOPE' }, { status: 403 });
   }
 
-  return NextResponse.json({
-    fiscalYear,
-    accounts: Array.from(accountMap.values()).sort((a, b) => a.accountNumber.localeCompare(b.accountNumber)),
-  });
+  try {
+    const { byId } = await loadAccounts(b.reader, b.orgId);
+    const draft = forcePublished ? null : await findDraftTarget(b, locationId, fiscalYear);
+    let cells: Array<{ accountId: string; periodNumber: number; amountCents: number }>;
+    if (draft) {
+      cells = (await loadLines(b.reader, draft.id, departmentId)).map((l) => ({ accountId: l.accountId, periodNumber: l.periodNumber, amountCents: l.amountCents }));
+    } else {
+      const { data, error } = await fetchAll<Record<string, unknown>>(() => {
+        let q = b.reader.from('budgets').select('account_id, period_number, amount_cents')
+          .eq('location_id', locationId).eq('fiscal_year', fiscalYear);
+        q = departmentId ? q.eq('department_id', departmentId) : q.is('department_id', null);
+        return q;
+      }, { label: 'budgets grid', orderBy: 'id' });
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      cells = (data ?? []).map((r) => ({ accountId: String(r.account_id), periodNumber: Number(r.period_number), amountCents: Number(r.amount_cents) }));
+    }
+
+    // Pivot: group by account, periods (1..13) as columns.
+    const accountMap = new Map<string, {
+      accountId: string;
+      accountNumber: string;
+      accountName: string;
+      accountType: string;
+      periods: Record<number, number>;
+      totalCents: number;
+    }>();
+    for (const c of cells) {
+      const acct = byId.get(c.accountId);
+      if (!acct) continue;
+      const existing = accountMap.get(c.accountId);
+      if (existing) {
+        existing.periods[c.periodNumber] = (existing.periods[c.periodNumber] ?? 0) + c.amountCents;
+        existing.totalCents += c.amountCents;
+      } else {
+        accountMap.set(c.accountId, {
+          accountId: c.accountId,
+          accountNumber: acct.number,
+          accountName: acct.name,
+          accountType: acct.type,
+          periods: { [c.periodNumber]: c.amountCents },
+          totalCents: c.amountCents,
+        });
+      }
+    }
+
+    return NextResponse.json({
+      fiscalYear,
+      source: draft ? 'DRAFT' : 'PUBLISHED',
+      version: draft ? { id: draft.id, label: draft.label, status: draft.status } : null,
+      closedPeriods: await closedPeriods(b, locationId, fiscalYear),
+      accounts: Array.from(accountMap.values()).sort((x, y) => x.accountNumber.localeCompare(y.accountNumber)),
+    });
+  } catch (e) {
+    return budgetError(e, 'budgets GET');
+  }
 }
 
 // ─── POST: Bulk create/update (save the whole grid) ───────────────────────
@@ -91,7 +116,7 @@ const bulkSchema = z.object({
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId, userId } = ctx;
+  const { orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization on session', code: 'NO_ORG' }, { status: 403 });
 
   try {
@@ -101,26 +126,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Validation failed', details: result.error.issues }, { status: 422 });
     }
     const body = result.data;
-
-    const inserts = body.entries.map((e) => ({
-      org_id: orgId,
-      location_id: body.location_id,
-      account_id: e.account_id,
-      department_id: body.department_id ?? null,
-      fiscal_year: body.fiscal_year,
-      period_number: e.period_number,
-      amount_cents: e.amount_cents,
-      created_by: userId,
-    }));
-
-    const { error } = await supabase
-      .from('budgets')
-      .upsert(inserts, { onConflict: 'org_id,location_id,account_id,department_id,fiscal_year,period_number' });
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ saved: inserts.length }, { status: 201 });
+    // Mig 189: budgets is the PUBLISHED budget (member read-only). Writes land in the company-year's
+    // newest draft (else a new draft copied from the published budget); it publishes on approval.
+    const b = await budgetCtx(ctx, body.location_id);
+    if (b instanceof NextResponse) return b;
+    const version = await ensureDraftTarget(b, body.location_id, body.fiscal_year);
+    await assertEditable(b, version, body.department_id ?? null);
+    const saved = await writeCells(
+      b, version, body.department_id ?? null,
+      body.entries.map((e) => ({ accountId: e.account_id, periodNumber: e.period_number, amountCents: e.amount_cents })),
+      'MANUAL',
+    );
+    if (saved > 0) await logEvent(b, { locationId: version.locationId, versionId: version.id, kind: 'LINES_SAVED', meta: { department_id: body.department_id ?? null, cells: saved, source: 'classic-grid' } });
+    return NextResponse.json({ saved: body.entries.length, changed: saved, versionId: version.id, versionLabel: version.label, published: false }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal server error' }, { status: 500 });
+    return budgetError(error, 'budgets POST');
   }
 }
 
@@ -137,7 +157,7 @@ const cellSchema = z.object({
 export async function PATCH(request: Request) {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId, userId } = ctx;
+  const { orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization on session', code: 'NO_ORG' }, { status: 403 });
 
   try {
@@ -146,24 +166,14 @@ export async function PATCH(request: Request) {
     if (!result.success) {
       return NextResponse.json({ error: 'Validation failed', details: result.error.issues }, { status: 422 });
     }
-    const b = result.data;
-
-    const { error } = await supabase
-      .from('budgets')
-      .upsert({
-        org_id: orgId,
-        location_id: b.location_id,
-        account_id: b.account_id,
-        department_id: b.department_id ?? null,
-        fiscal_year: b.fiscal_year,
-        period_number: b.period_number,
-        amount_cents: b.amount_cents,
-        created_by: userId,
-      }, { onConflict: 'org_id,location_id,account_id,department_id,fiscal_year,period_number' });
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true });
+    const cell = result.data;
+    const b = await budgetCtx(ctx, cell.location_id);
+    if (b instanceof NextResponse) return b;
+    const version = await ensureDraftTarget(b, cell.location_id, cell.fiscal_year);
+    await assertEditable(b, version, cell.department_id ?? null);
+    await writeCells(b, version, cell.department_id ?? null, [{ accountId: cell.account_id, periodNumber: cell.period_number, amountCents: cell.amount_cents }], 'MANUAL');
+    return NextResponse.json({ ok: true, versionId: version.id, versionLabel: version.label, published: false });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal server error' }, { status: 500 });
+    return budgetError(error, 'budgets PATCH');
   }
 }

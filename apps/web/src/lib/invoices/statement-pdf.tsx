@@ -219,7 +219,7 @@ function StatementBody({ doc, accent }: { doc: StatementDoc; accent: string }) {
 }
 
 export function StatementPdf({ doc }: { doc: StatementDoc }) {
-  const accent = doc.template.accentColor || '#10b981';
+  const accent = doc.template.accentColor || '#2563EB';
   return (
     <Document title={`Statement — ${doc.customer.name}`}>
       <StatementBody doc={doc} accent={accent} />

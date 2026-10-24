@@ -3,7 +3,7 @@
  *
  * Table-based HTML with inline styles, same rationale as invoice-email.ts: email
  * clients aren't browsers. Visual continuity with the invoice email and hosted
- * pay page is deliberate — same accent band, same JetBrains-Mono figures — so a
+ * pay page is deliberate — same accent band, same tabular figures — so a
  * statement and an invoice read as one system. The branded PDF rides along as an
  * attachment; the email body carries the aging summary + balance so it's useful
  * even before the PDF is opened.
@@ -26,7 +26,7 @@ export interface StatementEmailContent {
 }
 
 export function buildStatementEmail(doc: StatementDoc): StatementEmailContent {
-  const accent = doc.template.accentColor || '#10b981';
+  const accent = doc.template.accentColor || '#2563EB';
   const onAccent = readableOn(accent);
   const from = doc.entity?.name ?? 'Your supplier';
   const balance = doc.totalBalanceCents;
@@ -37,7 +37,7 @@ export function buildStatementEmail(doc: StatementDoc): StatementEmailContent {
     (b) => `
       <td align="center" style="padding:8px 6px;border:1px solid #e2e8f0;">
         <div style="color:#94a3b8;font-size:10px;letter-spacing:.5px;text-transform:uppercase;">${AGING_BUCKET_LABELS[b]}</div>
-        <div style="color:#0f172a;font-size:13px;font-weight:700;font-family:'JetBrains Mono',Menlo,Consolas,monospace;">${money(doc.aging[b])}</div>
+        <div style="color:#0f172a;font-size:13px;font-weight:700;font-family:'DM Sans',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-variant-numeric:tabular-nums;">${money(doc.aging[b])}</div>
       </td>`,
   ).join('');
 
@@ -45,9 +45,9 @@ export function buildStatementEmail(doc: StatementDoc): StatementEmailContent {
     .map(
       (l) => `
       <tr>
-        <td style="padding:8px 0;border-bottom:1px solid #e2e8f0;color:#0f172a;font-size:13px;font-family:'JetBrains Mono',Menlo,Consolas,monospace;">${esc(l.invoiceNumber)}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #e2e8f0;color:#0f172a;font-size:13px;font-family:'DM Sans',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-variant-numeric:tabular-nums;">${esc(l.invoiceNumber)}</td>
         <td style="padding:8px 0;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:12px;">${longDate(l.dueDate)}</td>
-        <td align="right" style="padding:8px 0;border-bottom:1px solid #e2e8f0;color:${l.balanceCents > 0 ? '#0f172a' : '#94a3b8'};font-size:13px;font-family:'JetBrains Mono',Menlo,Consolas,monospace;">${money(l.balanceCents)}</td>
+        <td align="right" style="padding:8px 0;border-bottom:1px solid #e2e8f0;color:${l.balanceCents > 0 ? '#0f172a' : '#94a3b8'};font-size:13px;font-family:'DM Sans',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-variant-numeric:tabular-nums;">${money(l.balanceCents)}</td>
       </tr>`,
     )
     .join('');
@@ -72,7 +72,7 @@ export function buildStatementEmail(doc: StatementDoc): StatementEmailContent {
         </tr>
         <tr><td style="padding:32px;">
           <div style="color:#64748b;font-size:13px;font-weight:600;">${scopeLabel} · as of ${longDate(doc.asOf)}</div>
-          <div style="color:#0f172a;font-size:34px;font-weight:700;margin:6px 0 4px;font-family:'JetBrains Mono',Menlo,Consolas,monospace;">${money(balance)}</div>
+          <div style="color:#0f172a;font-size:34px;font-weight:700;margin:6px 0 4px;font-family:'DM Sans',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-variant-numeric:tabular-nums;">${money(balance)}</div>
           <div style="color:#64748b;font-size:13px;">Total balance due · ${doc.openInvoiceCount} open invoice${doc.openInvoiceCount === 1 ? '' : 's'}</div>
 
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:22px 0 6px;border-collapse:collapse;">
@@ -89,7 +89,7 @@ export function buildStatementEmail(doc: StatementDoc): StatementEmailContent {
             ${lineRows}
             <tr>
               <td colspan="2" style="padding-top:14px;color:#0f172a;font-size:15px;font-weight:700;">Total due</td>
-              <td align="right" style="padding-top:14px;color:${accent};font-size:15px;font-weight:700;font-family:'JetBrains Mono',Menlo,Consolas,monospace;">${money(balance)}</td>
+              <td align="right" style="padding-top:14px;color:${accent};font-size:15px;font-weight:700;font-family:'DM Sans',-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-variant-numeric:tabular-nums;">${money(balance)}</td>
             </tr>
           </table>`
             : `<div style="margin-top:20px;color:#64748b;font-size:13.5px;">This account has a zero balance. Thank you.</div>`}

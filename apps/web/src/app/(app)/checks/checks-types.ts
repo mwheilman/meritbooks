@@ -3,6 +3,8 @@
  * server modules, so the client bundle never reaches server code).
  */
 
+import { money } from '@meritbooks/merit-ui';
+
 export type CheckLayout = 'VOUCHER_TOP' | 'VOUCHER_MIDDLE' | 'VOUCHER_BOTTOM' | 'THREE_UP';
 export type CheckStatus = 'PRINTED' | 'ISSUED' | 'MAILED' | 'CLEARED' | 'VOIDED' | 'SPOILED';
 export type PositivePayFormat = 'GENERIC_CSV' | 'CHASE_STYLE_FIXED' | 'BOFA_STYLE_FIXED' | 'CUSTOM_CSV' | 'CUSTOM_FIXED';
@@ -14,6 +16,8 @@ export interface CheckAccount {
   institution: string;
   mask: string | null;
   layout: CheckLayout;
+  /** A check-stock profile is on file — the picker opens on this account. */
+  hasStockProfile?: boolean;
   hasMicr: boolean;
   hasSignature: boolean;
   nextNumber: number;
@@ -234,4 +238,12 @@ export async function postForFile(url: string, body: unknown, fallbackName: stri
   }
   setTimeout(() => URL.revokeObjectURL(href), 60_000);
   return res.headers;
+}
+
+/**
+ * Check amounts always carry the "$" (checks, register, positive pay are read as prose and
+ * on paper, not under a currency column header). Integer cents in, "$1,234.56" / "($12.00)" out.
+ */
+export function usd(cents: number): string {
+  return money(Math.round(cents), { symbol: '$' });
 }

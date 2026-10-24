@@ -12,13 +12,29 @@ import type { StatementModel } from './statement-model';
  * ("Account #" and "Description") keep codes and names separate for pivoting.
  */
 
-function esc(v: string): string {
+/**
+ * CSV / formula injection (CWE-1236): a TEXT cell starting with = + - @ (or tab / CR, or
+ * their full-width forms) is executed by Excel / Sheets as a formula. Prefix it with a single
+ * quote so it is shown as text. Only TEXT cells — money / numbers are emitted as numeric
+ * cells (typeof number), so a negative figure (-1500.99) stays a real number.
+ */
+const FORMULA_START = /^[=+\-@\t\r\uFF1D\uFF0B\uFF0D\uFF20]/;
+/** A plain signed number / percent ("-12.5%", "+3", "-1,500.25") can't be a formula. */
+const PLAIN_NUMBER = /^[+-]?\d[\d,]*(\.\d+)?%?$/;
+
+export function neutralizeFormula(v: string): string {
+  if (!FORMULA_START.test(v) || PLAIN_NUMBER.test(v)) return v;
+  return `'${v}`;
+}
+
+function esc(raw: string): string {
+  const v = neutralizeFormula(raw);
   if (/[",\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
   return v;
 }
 
 function line(cells: (string | number)[]): string {
-  return cells.map((c) => (typeof c === 'number' ? String(c) : esc(c))).join(',');
+  return cells.map((c) => (typeof c === 'number' ? (Number.isFinite(c) ? String(c) : '') : esc(c))).join(',');
 }
 
 export function toCsv(model: StatementModel): string {
@@ -28,6 +44,9 @@ export function toCsv(model: StatementModel): string {
   if (model.periodLabel) out.push(line([model.periodLabel]));
   if (model.basisLabel) out.push(line([model.basisLabel]));
   out.push(line([`Generated ${new Date(model.generatedAt).toLocaleString('en-US')}`]));
+  // Governance marks travel with the data (preview / preliminary, warnings, closed-through).
+  if (model.watermark) out.push(line([model.watermark]));
+  if (model.banner) out.push(line([model.banner]));
   out.push('');
 
   const header: (string | number)[] = ['Account #', 'Description', ...model.columns.map((c) => c.label)];
@@ -44,6 +63,10 @@ export function toCsv(model: StatementModel): string {
       else cells.push(typeof v === 'number' ? v : String(v));
     });
     out.push(line(cells));
+  }
+  if (model.footnote) {
+    out.push('');
+    out.push(line([model.footnote]));
   }
   return out.join('\r\n');
 }

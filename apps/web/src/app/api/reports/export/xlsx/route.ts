@@ -4,19 +4,25 @@ export const runtime = 'nodejs'; // Buffer + zlib (xlsx zip assembly) — not ed
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { requirePermission } from '@/lib/rbac/require-permission';
 import { workbookFromModels } from '@/lib/reports/export/xlsx';
-import { statementModelSchema, buildExportFilename, type StatementModel } from '@/lib/reports/export/statement-model';
+import { buildStatementSummary } from '@/lib/reports/export/build-model';
+import { statementModelSchema, buildExportFilename, stampUngoverned, type StatementModel } from '@/lib/reports/export/statement-model';
+import { engineExportSchema, governedStatementModel, isEngineExportBody } from '@/lib/reports/export/engine-export';
+import { engineErrorResponse, validationResponse } from '@/lib/reports/engine/http';
 
 /**
- * POST /api/reports/export/xlsx — render one or more financial-statement models to
- * a genuine .xlsx workbook (one worksheet per model). Mirrors /export/pdf: the
- * client sends the SAME StatementModel(s) it built from the report data it already
- * fetched (under RLS) and is displaying, so the spreadsheet ties out to the screen.
- * No GL is re-queried here, so there is nothing tenant-sensitive to leak — the route
- * only needs an authenticated user. Money arrives as bigint cents in the model and
- * is written as true numeric dollar cells with an accounting number format.
+ * POST /api/reports/export/xlsx — render financial statements to a genuine .xlsx workbook
+ * (one worksheet per model; money as true numeric cells; text cells are inline strings, so a
+ * label can never execute as a formula).
  *
- * Body: a single StatementModel, OR { title?, sheets: StatementModel[] }.
+ *  - ENGINE statements: body { engine: ReportRequest, collapsed?, hideZero?, summary? }. The
+ *    server RE-RUNS the report as the caller (client scope + number governance, like
+ *    /api/reports/engine/run) and writes the governed result with its governance marks.
+ *    reports:export. A client-sent model is never written for an engine statement.
+ *  - LEGACY statements: a single StatementModel, OR { title?, sheets: StatementModel[] },
+ *    built by the client from data it fetched under RLS. Governance marks in it are
+ *    discarded and every sheet is stamped "not a released (governed) statement".
  */
 const multiSchema = z.object({
   title: z.string().min(1).max(160).optional(),
@@ -34,23 +40,38 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid JSON body', code: 'BAD_REQUEST' }, { status: 400 });
   }
 
-  // Accept a single StatementModel or { title?, sheets: StatementModel[] }.
   let models: StatementModel[];
   let title: string;
-  const single = statementModelSchema.safeParse(body);
-  if (single.success) {
-    models = [single.data];
-    title = single.data.title;
-  } else {
-    const multi = multiSchema.safeParse(body);
-    if (!multi.success) {
-      return NextResponse.json(
-        { error: 'Invalid statement model', code: 'VALIDATION_ERROR', details: multi.error.flatten().fieldErrors },
-        { status: 422 },
-      );
+  if (isEngineExportBody(body)) {
+    if (!ctx.orgId) return NextResponse.json({ error: 'No organization', code: 'NO_ORG' }, { status: 400 });
+    const guard = await requirePermission(ctx.userId, 'reports', 'export', { route: '/api/reports/export/xlsx' });
+    if (!guard.ok) return guard.response;
+    const parsed = engineExportSchema.safeParse(body);
+    if (!parsed.success) return validationResponse(parsed.error);
+    try {
+      const model = await governedStatementModel({ supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.userId }, parsed.data);
+      models = parsed.data.summary && model.columns.length > 1 ? [{ ...buildStatementSummary(model), watermark: model.watermark, banner: model.banner, footnote: model.footnote }, model] : [model];
+      title = model.title;
+    } catch (e) {
+      return engineErrorResponse(e);
     }
-    models = multi.data.sheets;
-    title = multi.data.title ?? 'report-pack';
+  } else {
+    // Accept a single StatementModel or { title?, sheets: StatementModel[] }.
+    const single = statementModelSchema.safeParse(body);
+    if (single.success) {
+      models = [stampUngoverned(single.data)];
+      title = single.data.title;
+    } else {
+      const multi = multiSchema.safeParse(body);
+      if (!multi.success) {
+        return NextResponse.json(
+          { error: 'Invalid statement model', code: 'VALIDATION_ERROR', details: multi.error.flatten().fieldErrors },
+          { status: 422 },
+        );
+      }
+      models = multi.data.sheets.map(stampUngoverned);
+      title = multi.data.title ?? 'report-pack';
+    }
   }
 
   const buffer = workbookFromModels(models);

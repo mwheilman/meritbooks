@@ -13,6 +13,7 @@ import { InvoicePdf } from '@/lib/invoices/invoice-pdf';
 import { resolveCompanyPayLink } from '@/lib/invoices/pay-link';
 import type { InvoiceTemplate } from '@/lib/invoices/templates/types';
 import { isTenantLogoUrl, LOGO_URL_ERROR } from '@/lib/invoices/templates/logo-url';
+import { applyBrandToTemplate, loadBrand } from '@/lib/branding/resolve';
 
 /**
  * POST /api/invoice-templates/preview — render the template being edited as a PDF, live.
@@ -41,7 +42,10 @@ export const POST = apiHandler(bodySchema, async (body, ctx) => {
   if (tplBody.logo_url && !isTenantLogoUrl(tplBody.logo_url, orgId)) {
     return NextResponse.json({ error: LOGO_URL_ERROR, code: 'LOGO_URL_NOT_ALLOWED' }, { status: 422 });
   }
-  const draft = (base: InvoiceTemplate): InvoiceTemplate => ({ ...base, ...tplBody, logo_url: tplBody.logo_url ?? null });
+  // The company brand applies to the draft exactly as it will when printed (FPB-branding §4.3).
+  const brand = await loadBrand(supabase, orgId, body.location_id ?? null);
+  const draft = (base: InvoiceTemplate): InvoiceTemplate =>
+    applyBrandToTemplate({ ...base, ...tplBody, logo_url: tplBody.logo_url ?? null }, brand);
 
   let doc;
   if (body.invoice_id) {

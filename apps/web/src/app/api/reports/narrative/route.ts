@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { runAiGateway } from '@meritbooks/core-ai';
 import { formatMoney } from '@meritbooks/shared';
 import { apiHandler, type ApiContext } from '@/lib/api-handler';
+import { governRoute, rangeMonths, rangeTooLongResponse, type RouteGuardRequest } from '@/lib/reports/governance/route-guard';
 import { createAdminSupabase } from '@/lib/supabase/server';
 import { serviceWriter } from '@/lib/db/scoped-writer';
 import { getAnthropicApiKey } from '@/lib/ai/gateway';
@@ -601,7 +602,51 @@ const SYSTEM_BUDGET =
 
 // ── Handler ──────────────────────────────────────────────────────────────────
 
+/**
+ * The months a narrative states figures for (PURE). null = nothing to govern yet (missing
+ * dates are rejected below, before any figure is read); 'too_long' = a range past the cap.
+ */
+function narrativeGovernance(body: Body): RouteGuardRequest | null | 'too_long' {
+  const locationIds = resolveLocationIds(body.dimensions);
+  const both = (cumulative: boolean): RouteGuardRequest | null | 'too_long' => {
+    const a = body.periodA;
+    const b = body.periodB;
+    if (!a.start_date || !a.end_date || !b.start_date || !b.end_date) return null;
+    const ma = rangeMonths(a.start_date, a.end_date);
+    const mb = rangeMonths(b.start_date, b.end_date);
+    if (!ma || !mb) return 'too_long';
+    return { months: Array.from(new Set([...ma, ...mb])), locationIds, cumulative };
+  };
+  switch (body.report) {
+    case 'pnl':
+      return both(false);
+    case 'cash_flow':
+      return both(true); // beginning / ending cash are balances
+    case 'balance_sheet':
+      if (!body.periodA.as_of_date || !body.periodB.as_of_date) return null;
+      return { months: [body.periodA.as_of_date.slice(0, 7), body.periodB.as_of_date.slice(0, 7)], locationIds, cumulative: true };
+    case 'budget_vs_actual': {
+      const fy = body.fiscal_year ?? (body.periodA.start_date ? Number(body.periodA.start_date.slice(0, 4)) : new Date().getUTCFullYear());
+      const pn = body.period_number ?? 0;
+      const months = pn >= 1 && pn <= 12
+        ? [`${fy}-${String(pn).padStart(2, '0')}`]
+        : Array.from({ length: 12 }, (_, i) => `${fy}-${String(i + 1).padStart(2, '0')}`);
+      return { months, locationIds };
+    }
+  }
+}
+
 export const POST = apiHandler(schema, async (body: Body, ctx: ApiContext) => {
+  // 0. Number governance: a narrative cites figures for every month it compares — a
+  //    non-finance caller needs all of them released (balances: cumulative rule), else 403.
+  const govReq = narrativeGovernance(body);
+  if (govReq === 'too_long') return rangeTooLongResponse();
+  let governance: unknown = null;
+  if (govReq) {
+    const gov = await governRoute({ supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.userId }, govReq);
+    if (gov instanceof NextResponse) return gov;
+    governance = gov.info;
+  }
   // 1. Deterministically fetch + compute variances (RLS-scoped, org-isolated).
   //    Every figure below is computed IN CODE; the model only phrases them.
   let variance: VarianceResult;
@@ -698,7 +743,7 @@ export const POST = apiHandler(schema, async (body: Body, ctx: ApiContext) => {
 
   // No movement → truthful, no model call.
   if (variance.drivers.length === 0) {
-    return NextResponse.json({
+    return NextResponse.json({ governance,
       narrative: noMovementMessage,
       drivers: responseDrivers,
       citations,
@@ -709,7 +754,7 @@ export const POST = apiHandler(schema, async (body: Body, ctx: ApiContext) => {
   // 2. Ask the gateway to PHRASE the computed facts. Fall back deterministically.
   const apiKey = getAnthropicApiKey();
   if (!apiKey) {
-    return NextResponse.json({
+    return NextResponse.json({ governance,
       narrative: fallbackNarrative(),
       drivers: responseDrivers,
       citations,
@@ -736,7 +781,7 @@ export const POST = apiHandler(schema, async (body: Body, ctx: ApiContext) => {
       },
     );
   } catch (e) {
-    return NextResponse.json({
+    return NextResponse.json({ governance,
       narrative: fallbackNarrative(),
       drivers: responseDrivers,
       citations,
@@ -745,7 +790,7 @@ export const POST = apiHandler(schema, async (body: Body, ctx: ApiContext) => {
   }
 
   if (gw.status === 'blocked' || gw.result == null) {
-    return NextResponse.json({
+    return NextResponse.json({ governance,
       narrative: fallbackNarrative(),
       drivers: responseDrivers,
       citations,
@@ -785,7 +830,7 @@ export const POST = apiHandler(schema, async (body: Body, ctx: ApiContext) => {
     console.error('[reports-narrative] decision log failed (non-fatal):', e);
   }
 
-  return NextResponse.json({
+  return NextResponse.json({ governance,
     narrative,
     drivers: responseDrivers,
     citations,

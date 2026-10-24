@@ -24,6 +24,13 @@ describe('wipColumnTotals — every money column totals (1G-8)', () => {
     expect(t.fadeGainCents).toBe(-3_500_00);
     expect(t.fadeComparedJobs).toBe(2);
   });
+  it('% done total = Σ earned ÷ Σ contract, matching the rows (a 66.7% job with no cost is not 0.0%)', () => {
+    const t = wipColumnTotals([line({ contractCents: 300_000_00, earnedCents: 200_010_00, costToDateCents: 0, eacCents: 0 })]);
+    expect(t.pctComplete).toBeCloseTo(0.6667, 4);
+    const mixed = wipColumnTotals([line({ contractCents: 100_000_00, earnedCents: 100_000_00 }), line({ contractCents: 300_000_00, earnedCents: 0 })]);
+    expect(mixed.pctComplete).toBeCloseTo(0.25);
+    expect(wipColumnTotals([line({ contractCents: 0, earnedCents: 0 })]).pctComplete).toBeNull();
+  });
   it('an empty table totals to zero with no % complete', () => {
     expect(wipColumnTotals([])).toMatchObject({ jobs: 0, estGrossProfitCents: 0, fadeGainCents: null, pctComplete: null });
   });

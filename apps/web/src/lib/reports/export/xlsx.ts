@@ -241,6 +241,9 @@ function sheetXml(model: StatementModel): string {
   if (model.periodLabel) emit(textCell(`A${r + 1}`, model.periodLabel, S.meta));
   if (model.basisLabel) emit(textCell(`A${r + 1}`, model.basisLabel, S.meta));
   emit(textCell(`A${r + 1}`, `Generated ${new Date(model.generatedAt).toLocaleString('en-US')}`, S.meta));
+  // Governance marks travel with the figures (preview / preliminary, warning banner).
+  if (model.watermark) emit(textCell(`A${r + 1}`, model.watermark, S.meta));
+  if (model.banner) emit(textCell(`A${r + 1}`, model.banner, S.meta));
   emitBlank();
 
   // ── Header row ──
@@ -280,6 +283,10 @@ function sheetXml(model: StatementModel): string {
       }
     });
     emit(cells.join(''));
+  }
+  if (model.footnote) {
+    emitBlank();
+    emit(textCell(`B${r + 1}`, model.footnote, S.meta));
   }
 
   const lastCol = colLetter(2 + Math.max(1, model.columns.length));

@@ -56,7 +56,8 @@ export function PrepaidSetup({
 }: {
   prefill?: PrepaidPrefill | null;
   onClose: () => void;
-  onSaved: () => void;
+  /** Called with the new schedule's id (document-intelligence linking). */
+  onSaved: (id?: string) => void;
 }) {
   const { data: acctResp } = useQuery<{ data: AccountOption[] }>('/api/accounts?approval_status=APPROVED');
   const { data: locResp } = useQuery<LocationOption[]>('/api/locations');
@@ -118,7 +119,7 @@ export function PrepaidSetup({
       return;
     }
     addToast('success', 'Prepaid schedule created');
-    onSaved();
+    onSaved(res.data?.id);
   }
 
   const inputCls =

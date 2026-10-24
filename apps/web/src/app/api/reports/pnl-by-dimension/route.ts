@@ -6,6 +6,7 @@ import { apiQueryHandler } from '@/lib/api-handler';
 import { getOrgToday } from '@/lib/dates/org-today';
 import { monthBoundsIso } from '@/lib/dates/org-date';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { governDateRange } from '@/lib/reports/governance/route-guard';
 import {
   buildPnlByDimension,
   type DimensionLine,
@@ -52,6 +53,10 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
   const locationIds: string[] = [];
   if (params.location_ids) locationIds.push(...params.location_ids.split(',').filter(Boolean));
   else if (params.location_id && params.location_id !== 'all') locationIds.push(params.location_id);
+
+  // Number governance: every month of the range released for a non-finance caller.
+  const gov = await governDateRange({ supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.userId }, { startDate, endDate, locationIds });
+  if (gov instanceof NextResponse) return gov;
 
   const buildQuery = () => {
     let q = ctx.supabase
@@ -157,5 +162,6 @@ export const GET = apiQueryHandler(querySchema, async (params, ctx) => {
     ...report,
     filters: { startDate, endDate, locationIds: locationIds.length > 0 ? locationIds : ['all'], basis: 'accrual' },
     activeValueCount: activeValues.length,
+    governance: gov.info,
   });
 });

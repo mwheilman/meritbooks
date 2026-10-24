@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, ConfirmDialog, InlineNotice, KV, Panel, PanelSection, Tag, api, money, toast, useQuery } from '@meritbooks/merit-ui';
-import { MATCH_LOOK, SOURCE_LABEL, type ActionResult, type CandidatesResponse, type ReceiptDetail } from './receipts-types';
+import { Button, ConfirmDialog, InlineNotice, KV, Panel, PanelSection, Tag, api, toast, useQuery } from '@meritbooks/merit-ui';
+import { MATCH_LOOK, SOURCE_LABEL, type ActionResult, type CandidatesResponse, type ReceiptDetail, usd } from './receipts-types';
 import s from './receipts.module.css';
 
 const METHOD: Record<string, string> = {
@@ -58,7 +58,7 @@ export function ReceiptPanel({ receiptId, onClose, onChanged }: { receiptId: str
       eyebrow={['Receipt', MATCH_LOOK[r.matchStatus].word]}
       title={r.vendorName ?? 'Unread receipt'}
       meta={[r.receiptDate, r.locationName, SOURCE_LABEL[r.source as keyof typeof SOURCE_LABEL] ?? r.source].filter(Boolean).join(' · ')}
-      figure={r.amountCents != null ? money(r.amountCents) : undefined}
+      figure={r.amountCents != null ? usd(r.amountCents) : undefined}
       onClose={onClose}
       foot={
         <div className={s.actions}>
@@ -117,7 +117,7 @@ export function ReceiptPanel({ receiptId, onClose, onChanged }: { receiptId: str
             items={[
               { term: 'Charge', value: r.matchedCharge.description },
               { term: 'Date', value: r.matchedCharge.date },
-              { term: 'Amount', value: money(r.matchedCharge.amountCents) },
+              { term: 'Amount', value: usd(r.matchedCharge.amountCents) },
               { term: 'How', value: r.matchMethod ? METHOD[r.matchMethod] ?? r.matchMethod : '—' },
               { term: 'Reminders sent', value: String(r.chaseReminderCount) },
             ]}
@@ -135,7 +135,7 @@ export function ReceiptPanel({ receiptId, onClose, onChanged }: { receiptId: str
                     {c.score ? ` · ${Math.round(c.score.total * 100)}%${c.score.amountBasis === 'tip' ? ' · tip added' : ''}` : ''}
                   </span>
                 </span>
-                <span className="tnum">{money(c.charge.amountCents)}</span>
+                <span className="tnum">{usd(c.charge.amountCents)}</span>
                 <Button disabled={busy} onClick={() => void act({ action: 'link', transaction_id: c.charge.id })}>
                   Match
                 </Button>
@@ -152,8 +152,8 @@ export function ReceiptPanel({ receiptId, onClose, onChanged }: { receiptId: str
           items={[
             { term: 'Merchant', value: r.vendorName ?? '—' },
             { term: 'Date', value: r.receiptDate ?? '—' },
-            { term: 'Total', value: r.amountCents != null ? money(r.amountCents) : '—' },
-            { term: 'Tax · tip', value: [r.extraction?.taxCents != null ? money(r.extraction.taxCents) : null, r.extraction?.tipCents != null ? money(r.extraction.tipCents) : null].filter(Boolean).join(' · ') || '—' },
+            { term: 'Total', value: r.amountCents != null ? usd(r.amountCents) : '—' },
+            { term: 'Tax · tip', value: [r.extraction?.taxCents != null ? usd(r.extraction.taxCents) : null, r.extraction?.tipCents != null ? usd(r.extraction.tipCents) : null].filter(Boolean).join(' · ') || '—' },
             { term: 'Card', value: r.extraction?.cardLast4 ? `••${r.extraction.cardLast4}` : '—' },
             { term: 'GL category', value: r.accountLabel ?? 'Not coded yet' },
           ]}

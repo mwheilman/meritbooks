@@ -5,6 +5,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { getOrgToday } from '@/lib/dates/org-today';
+import { asOfMonth, governRoute } from '@/lib/reports/governance/route-guard';
 import { agingBucketFor } from '@/lib/ar/overdue';
 import {
   buildUnbilledAging,
@@ -132,6 +133,16 @@ export async function GET(request: Request) {
   // aging_bucket uses the database's UTC CURRENT_DATE (a day ahead in US evenings).
   const today = await getOrgToday(supabase, orgId);
   const asOf = searchParams.get('end_date') || searchParams.get('as_of_date') || today;
+  if (!/^\d{4}-\d{2}-\d{2}/.test(asOf)) return NextResponse.json({ error: 'end_date must be YYYY-MM-DD', code: 'VALIDATION_ERROR' }, { status: 422 });
+
+  // Number governance: billed AR is the invoice sub-ledger as of TODAY and unbilled AR is a
+  // GL balance as of `asOf` — both cumulative, so a non-finance caller needs every month
+  // through both released (finance-only in practice; the current month never is).
+  const gov = await governRoute(
+    { supabase, orgId, userId: ctx.userId },
+    { months: [asOfMonth(today), asOfMonth(asOf)], locationIds: locFilter, cumulative: true },
+  );
+  if (gov instanceof NextResponse) return gov;
 
   // Defensive: exclude WRITTEN_OFF (and any settled) rows. A written-off invoice
   // has balance_cents = 0 (paid advanced to total), so `> 0` drops it from the
@@ -189,5 +200,6 @@ export async function GET(request: Request) {
     },
     asOf,
     totalReceivablesCents: billedTotal + unbilled.totalCents,
+    governance: gov.info,
   });
 }

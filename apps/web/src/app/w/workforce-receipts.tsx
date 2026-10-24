@@ -71,20 +71,33 @@ export function WorkforceReceipts({ mode }: { mode: Mode }) {
   }, []);
 
   const card: HolderCard | null = view?.cards.find((c) => c.assignmentId === cardId) ?? view?.cards[0] ?? null;
+  const hb = card?.brand ?? null;
+  const hbLogo = hb ? hb.logoDarkUrl ?? hb.logoUrl : null;
 
   return (
     <div className={s.shell}>
       <div className={s.app}>
         <header className={s.top}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/lockups/merit-icon-on-dark.svg" alt="" />
+          {hb && hbLogo ? (
+            // The company's own logo (FPB-branding): the dark-background version straight on
+            // the Midnight bar, else the light logo on a white chip so it never disappears.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={hbLogo}
+              alt={card?.companyName ?? ''}
+              className={hb.logoDarkUrl ? s.coLogo : `${s.coLogo} ${s.coLogoChip}`}
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src="/brand/lockups/merit-icon-on-dark.svg" alt="" />
+          )}
           <span className={s.appName}>Merit Workforce</span>
           <span className={s.who}>
             {view?.holderName ? <b>{view.holderName}</b> : null}
             {card ? <span style={{ display: 'block' }}>{card.companyName}</span> : null}
           </span>
         </header>
-        <div className={s.rule} />
+        <div className={s.rule} style={hb ? { background: hb.primary } : undefined} />
         <main className={s.body} id="main">
           {!online && (
             <InlineNotice tone="warn" title="You’re offline.">

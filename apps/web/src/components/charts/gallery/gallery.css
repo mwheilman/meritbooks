@@ -1,0 +1,16 @@
+/* Chart-kit gallery (internal QA) — layout only, kit tokens. */
+.mc-gal{padding:32px var(--margin) 64px;max-width:1440px;background:var(--warm)}
+.mc-gal-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding-bottom:16px;border-bottom:2px solid var(--electric)}
+.mc-gal-lede{margin-top:8px;max-width:72ch;color:var(--ink-2)}
+.mc-gal-ctl{flex:none}
+.mc-gal-log{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:16px;padding:8px 12px;background:var(--canvas);box-shadow:inset 3px 0 var(--steel);font-size:var(--t-12);min-height:40px}
+.mc-gal-log code{font-variant-numeric:tabular-nums;color:var(--ink)}
+.mc-gal-h{display:flex;align-items:baseline;margin:40px 0 16px;font:500 var(--t-12)/var(--lh-12) var(--f-text);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+.mc-gal-h .tnum{color:var(--electric);font-weight:600}
+.mc-gal-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.mc-gal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:40px 32px}
+.density-cockpit .mc-gal-grid{gap:16px}
+.mc-gal-grid--4{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.mc-gal-wide{grid-column:1/-1}
+.mc-gal-sample{margin-left:4px}
+@media (max-width:900px){.mc-gal-grid{grid-template-columns:minmax(0,1fr)}.mc-gal{padding:16px}}

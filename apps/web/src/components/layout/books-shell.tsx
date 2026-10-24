@@ -78,6 +78,7 @@ import { ShellSlotsProvider } from '@/components/layout/shell-context';
 import { useInboxCount } from '@/components/layout/use-inbox-count';
 import { useShellSeed } from '@/lib/shell/seed';
 import { useNotifications } from '@/components/notifications/use-notifications';
+import { TenantBrandMark } from '@/components/layout/tenant-brand';
 import { NotificationsDrawer } from '@/components/notifications/notifications-drawer';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -564,6 +565,8 @@ export function BooksShell({ children }: { children: ReactNode }) {
               </RailFoot>
             }
           >
+            {/* FPB-branding: the tenant's logo in the brand area only (renders nothing without one). */}
+            <TenantBrandMark mini={mini} />
             <RailNav groups={railGroups} pathname={pathname} />
             {mustSelectCompany && !mini && (
               <div className="mb-rail-note" role="note">

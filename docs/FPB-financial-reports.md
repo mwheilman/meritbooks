@@ -396,3 +396,233 @@ Strictly ordered; each slice behind the wave pipeline (FPB → disjoint slices �
 ## §3. Definition of Complete for this module
 
 Financial Reporting & FP&A is **Complete** when: every Wave A–D slice ships and passes its acceptance criteria; the module-level gates AC-M1…AC-M6 are green; **GATE 11a consolidation-with-eliminations (Wave B) is demonstrated, not asserted** (eliminating accounts net to zero, consolidated BS balances, RLS-scoped); every Rule-14 benchmark row is MATCH-or-better (or explicitly deferred with reason in the Ledger); and the verifier + security agents confirm TRUTH against the deployed app and live Supabase (no admin-client report routes, tenant isolation proven). Wave E raises it toward **Verified**. Until then the Ledger row stays **Functional — partial**.
+
+---
+
+## §4. Amendment A-3A (2026-10-24) — Wave 3A: shared report engine + core statements
+
+**Source:** `docs/audit-2026-10/FEATURE-GAP-AUDIT.md` §4.1–4.2, §3 RP-01…RP-08/RP-10/RP-16, §6.3 Wave 3;
+`E-REPORTING-BENCHMARK.md` §1 (A1–A17), §3 (universal contract), §4 (U4, U13, U17);
+`D-PARTNER-PORTAL-REPORTING.md` M2, M6, X1, X2, X3, X11. Migration **185**. Engine contract:
+`docs/report-engine-api.md` (consumed by 3B metrics, 3C charts, 3D governance, 3E flux).
+
+**What changes.** Every core statement is a *definition* rendered by one engine
+(`apps/web/src/lib/reports/engine/**`) over one maintained balances store
+(`public.period_balances`). §0's "never from a cached rollup that can drift" is honoured by
+construction: the store is maintained **inside the posting transaction** by triggers on
+`gl_entries` / `gl_entry_lines` (not refreshed later), it can be rebuilt from the GL at any time,
+and a tie-out guard (test + admin endpoint) proves `Σ period_balances = Σ POSTED gl_entry_lines`
+per org × company × month × account. If the guard ever fails the report says so (it never
+silently serves a drifted figure).
+
+### A-3A acceptance criteria (testable; each maps to a test or a visible behaviour)
+
+**Balances store (185)**
+- **AC3A.1** Posting an entry (header POSTED, then its lines) adds exactly its debits/credits to
+  `period_balances` for (company = line `location_id`, account, month of `entry_date`, department,
+  class, job, item, counterparty company, entry kind). *Test:* `period-balances.test.ts`.
+- **AC3A.2** Voiding (POSTED → VOIDED) removes the entry's contribution; re-dating a POSTED entry
+  moves it between months; a header delete in the purge path removes it; a PENDING/DRAFT entry never
+  contributes. *Test:* same file.
+- **AC3A.3** `public.period_balances_tieout()` returns zero rows after post / void / re-date /
+  backfill; `public.rebuild_period_balances(org)` reproduces the incremental store exactly.
+  *Test + endpoint:* `GET /api/reports/engine/tie-out` (reports:view).
+- **AC3A.4** Members can SELECT only their org's rows (RLS) and only their clients' rows when
+  client-scope is enforced (163 restrictive policy applies — the table carries `location_id`);
+  no member can INSERT/UPDATE/DELETE the store (service-role / trigger only).
+- **AC3A.5** Backfill: the migration populates the store from every existing POSTED line.
+
+**Engine (pure core + DB adapter)**
+- **AC3A.6** Period engine: month, quarter, year, MTD, QTD, YTD, TTM and custom ranges, fiscal-year
+  aware (org/company `fiscal_year_start_month`); columns single / by month / by quarter / by year.
+- **AC3A.7** Comparisons: prior period (equal length), prior year (same span shifted 12 months),
+  budget (`budgets`), forecast (closed months actual + open months budget), several at once; each
+  with $ variance, % variance and F/U by account type (revenue up = F, cost up = U); margins compare
+  in points.
+- **AC3A.8** Column splits by company, department, class, job, location (company), each with
+  Unassigned + Total; Total column = Σ split columns exactly.
+- **AC3A.9** Subtotals tie: every subtotal = Σ of its rows in cents, in every column (asserted by
+  the engine — a non-tying total throws in tests).
+- **AC3A.10** Rounding ($ / $K / $M) is presentation-only and **drift-free**: displayed subtotals are
+  computed from unrounded cents then rounded (documented in the API doc; the footer states
+  "Rounded; totals computed before rounding"). The CSV/XLSX export carries full cents.
+- **AC3A.11** Common-size: every P&L line as % of revenue, every BS line as % of total assets.
+- **AC3A.12** Basis: ACCRUAL from the store; TAX/CUSTOM layer `reporting_basis_adjustments`
+  (signed natural deltas, mig 147); CASH reuses the proven cash conversion for P&L-type statements.
+  The basis is stated on every report.
+- **AC3A.13** Consolidation: companies → combined → **Eliminations column** → consolidated, using
+  the existing pure engine (`lib/consolidation/consolidate.ts`; `is_eliminating` accounts + the
+  INTERCOMPANY_AR/AP roles with counterparty inside the group). Eliminations are explicit lines;
+  consolidated BS balances. *Test.*
+- **AC3A.14** Drill: every account cell carries a drill key; `POST /api/reports/engine/drill`
+  returns the GL lines for exactly that key and **their sum equals the cell amount to the cent**
+  (*test*), paginated, each line linking to its journal entry and source document.
+- **AC3A.15** Client scope: a request that names an out-of-scope company is refused (403) under
+  `enforce` and logged under `shadow`; "all companies" resolves to the caller's scope. *Test.*
+- **AC3A.16** Performance: 24 months × 10 companies of activity in PGlite computes an income
+  statement by month in < 3 s and a balance sheet by company in < 3 s. *Test.*
+
+**Statements on the engine (R1–R14 of the gap audit §4.2)**
+- **AC3A.17** Income statement (standard, % of revenue, PP/PY/budget); P&L by month (12/24 +
+  total + TTM column); P&L by quarter / year; P&L by department / class / job / location (real
+  dimension columns — fixes the mislabelled stubs); P&L by company side by side (+ eliminations +
+  consolidated); comparative with $/% change; common-size P&L/BS; budget vs actual with F/U.
+- **AC3A.18** Balance sheet (as of; comparative; by company; consolidated) always balances:
+  A = L + E including "Retained earnings — prior years (not yet closed)" and "Net income (current
+  year)". *Test.*
+- **AC3A.19** Cash flow (indirect) for **any set of companies** — fixes "first company only".
+  Classification by type / sub-type / role / bank flag (never number ranges); Δ cash on the
+  statement = Δ cash on the balance sheet across multiple companies. *Test.* Direct method stays on
+  the existing route.
+- **AC3A.20** Statement of changes in equity (opening + activity by account + net income = closing,
+  ties to BS equity); trial balance worksheet (unadjusted / adjusting / adjusted, debits = credits);
+  GL detail (paginated, no 200-row cap, running balance, drill to source).
+- **AC3A.21** Closing entries (entry_type CLOSING) are excluded from P&L activity and included in
+  balance-sheet balances, so a closed year's P&L is not zeroed.
+
+**Viewer (merit-ui v2.3)**
+- **AC3A.22** Report library: search, categories, favourites, recently run (server-side,
+  per user). Old `/reports?report=<key>` URLs keep working.
+- **AC3A.23** One viewer for every engine statement: period picker, compare picker (multi),
+  columns/dimension picker, basis, rounding, show-zero-rows, collapse/expand groups, sticky header +
+  first column, row drill to a GL side panel → journal entry → source, export CSV/XLSX/PDF, save view
+  (`report_views`), schedule to a pack (existing packs), print layout. Loading / empty (with why) /
+  populated / error-with-retry / partial-period warning. Keyboard: `j/k` row, `Enter` drill, `[`/`]`
+  collapse/expand all, `Esc` close panel. Density by role (cockpit for staff, report for owners).
+- **AC3A.24** Custom row designer (MVP): tenant layouts with header / account-range / group / role /
+  subtotal / formula (row refs) / spacer rows and per-row sign; saved per tenant
+  (`report_layouts`, 185); usable as the layout of any P&L or BS statement. Formula rows evaluate
+  deterministically; a circular reference is rejected on save.
+
+**Governance hook (3D)** — the engine calls `applyGovernance(view, ctx)` on every result before it
+is returned; Wave 3A ships an identity implementation; 3D replaces it (release cut-off, books closed
+through, restatement snapshot, draft watermark).
+
+**Wave 3 integration (A-3A.1, 2026-10-24)**
+- **AC3A.25 Pre-acquisition exclusion before aggregation.** Governance decides each company's
+  in-group window for the caller and scope before any figure is summed; the income statement,
+  balance sheet, cash flow and changes in equity leave months outside the window out (flows by
+  month; balances by the as-of month), the balance sheet still balances, current-year net income
+  equals the group P&L (pre-joining earnings sit in prior equity), the cash flow shows "Cash of
+  companies joining (leaving) the group" and still ties to balance-sheet cash, changes in equity
+  carries a joining column and still ties per row, and every drill reproduces its cell.
+  TB / GL summary stay unwindowed. *Test:* `report-engine.test.ts` "in-group windows";
+  `governance/engine-adapter.test.ts` "windowsFromDecision".
+- **AC3A.26 Subtotals drill.** Gross profit, operating income, net income, total assets and total
+  liabilities open their GL lines; the drill sums to the cell. *Test:* "drill reproduces the cell".
+- **AC3A.27 One source of numbers.** 3B metrics (`createMetricSource`) and 3E flux ending balances
+  (`periodBalanceFluxSource`) read the same store as the statements, with a ledger fallback only
+  when the store is not deployed. *Test:* "Wave 3 consumers read the balances store".
+- **AC3A.28 Governance is visible.** The viewer shows "Books closed through …", Preview /
+  Preliminary, "N columns not released" and the governance banner; the period picker offers This
+  month, Last month, QTD, Last quarter, YTD, Last fiscal year, TTM, custom (and "End of …" for
+  point-in-time statements), isolated as `PeriodControl` for the shared picker swap.
+
+**Deferred (with reason):** ownership-weighted (look-through %) scope → 4A; saved dimension groups
+→ 4A; standard-lines EBITDA bucket mapping UI → the row designer covers it; live-formula XLSX →
+existing exporter (values) until 4D; share links → 4D.
+
+---
+
+## §5. Amendment A-3E (2026-10-24) — Wave 3E: flux analysis with materiality + the close gate
+
+**Audit rows:** CL-05 (flux / variance analysis with materiality + required explanations before
+sign-off — MISSING, P0) and CL-03 (period close gate + manager override — PARTIAL, P0)
+(`docs/audit-2026-10/FEATURE-GAP-AUDIT.md` §3, §6.3 Wave 3E). Benchmark: `E-REPORTING-BENCHMARK.md`
+H1 / U11 / AI2 / AI10 — Rillet (materiality by $ and %, AI explanation per flagged variance) and
+Campfire (drafted flux commentary with human approval + audit trail). **Our delta past both:** the
+explanation is a *gate* on HARD_CLOSE (not a report), preparer ≠ reviewer is enforced by the database,
+every figure in an AI draft must trace to a supplied line or the draft is refused, and balance-sheet
+flux is first-class (Rillet lists BS flux as in progress).
+
+**Migration 187** (`187_flux_review.sql`): `flux_materiality_policies`, `flux_explanations`,
+`flux_reviews`. Members read their org; the service role writes after the route's permission check
+(the 184 pattern). Client-scope RLS re-applied. No GL effect — flux never writes the ledger and never
+changes `fiscal_periods`; the period lock (`enforce_period_lock`) is untouched.
+
+### A-3E.1 Materiality policy (per company, tenant default)
+- Row per company (`location_id`) or a tenant default (`location_id` NULL); company row wins; no row ⇒
+  built-in default **$5,000 OR 10%, prior month, review required**.
+- `threshold_mode`: `EITHER` (breach on $ or %), `BOTH` ($ and %), `ABS_ONLY`, `PCT_ONLY`.
+  `abs_threshold_cents` (bigint) and `pct_threshold_bps` (1000 = 10%).
+- `comparison_basis`: `PRIOR_MONTH` · `PRIOR_YEAR_MONTH` (same month last year) · `BUDGET` (P&L lines
+  vs `budgets` for the month; balance-sheet lines fall back to prior month and say so) ·
+  `TRAILING_3_AVG` (mean of the prior three months, integer cents, half-away-from-zero).
+- `overrides` (≤ 100): `{scope: TYPE|GROUP|ACCOUNT, key, absThresholdCents?, pctThresholdBps?, mode?,
+  excluded?}`. Precedence **ACCOUNT > GROUP > TYPE > policy**; an override may exclude.
+  `excluded_account_ids` excludes accounts outright. `include_balance_sheet` / `include_pnl` toggles.
+- `dimension`: `ACCOUNT` (default) · `ACCOUNT_DEPARTMENT` · `ACCOUNT_CLASS` — flux lines per account
+  or per account × department / class.
+- `review_required = false` ⇒ the flux close task passes as "No flux review for this company".
+- **Amounts:** P&L lines compare period *activity*; balance-sheet lines compare *ending balances*. All
+  figures are signed in the account's normal balance (`normalBalanceFor`), bigint cents. The % change is
+  `change / |comparison|` in basis points, and **null when the comparison is 0** (a %-only test can't
+  breach on a zero base; `EITHER` still breaches on $; `BOTH` falls back to the $ test alone).
+
+### A-3E.2 Flux list (Close → Flux review)
+Every in-scope account (or account × dept/class) for the closing month with: current, comparison,
+change $ / %, the threshold that applied (and where it came from), a 6-month trailing series
+(sparkline-ready), status (`UNEXPLAINED` · `DRAFT` · `EXPLAINED` · `REVIEWED` · `STALE`), and
+**drivers** for every material line: the largest lines, **new counterparties** (a vendor/customer with
+activity this month and none in the comparison window), **one-offs** (counterparty/memo not seen in
+the trailing three months), **reclasses** (manual/adjusting entries whose every leg is on the same
+statement and touches no cash account), and the counterparty decomposition of the change. Each driver
+drills to its journal entry (`/journal-entries?id=`); the panel drills to the account's GL detail.
+
+### A-3E.3 Explanations + review (SoD)
+- An explanation = text (≥ 10 chars), category (`TIMING` · `ONE_TIME` · `VOLUME` · `PRICE` ·
+  `RECLASS` · `ERROR_CORRECTED` · `EXPECTED`), optional attachment (`documents` row), preparer.
+- The server **re-computes the line and snapshots** current / comparison / change at submit — the
+  client never supplies a figure.
+- Reviewer sign-off: **preparer ≠ reviewer** (route check AND a DB CHECK). Reviewer may send back with
+  a note (→ `DRAFT`).
+- **Staleness:** a submitted/reviewed explanation is `STALE` when the live change moved by
+  ≥ max($100, 5% of the explained change) since the snapshot — it no longer counts toward the gate
+  and must be re-submitted and re-reviewed.
+- **AI draft:** "Draft with AI" sends ONLY the deterministic driver facts through `runAiGateway`
+  (feature `FLUX_EXPLAIN`). The draft must cite driver ids from the supplied list; **every $ amount in
+  the text must equal a supplied figure** or the draft is refused and the driver summary is returned.
+  The draft is never saved by itself — it becomes an explanation only when a person edits/accepts and
+  submits (`drafted_by_ai`, `ai_decision_id` recorded; the decision is marked APPROVED on accept). AI
+  down (no key / org disabled / budget blocked) ⇒ the panel says "AI assist paused" and offers the
+  deterministic driver summary as a starting point. Decision rows are org-level (no `location_id`) so
+  they never block `exceptions_cleared`.
+- **Carry-forward:** for each line the prior three months' submitted explanations are offered as a
+  suggestion ("Last month: …") when the category is recurring (`TIMING`, `EXPECTED`, `VOLUME`, `PRICE`)
+  or the same category was used in two of the last three months. A suggestion is never auto-saved.
+- Edits are refused once the period is `HARD_CLOSE` (the documentation is frozen with the books).
+
+### A-3E.4 Close gate
+- New blocking AUTO task **`flux_reviewed` "Flux review"** (FINAL phase, after accruals / prepaids /
+  depreciation / WIP; `reviewed` now depends on it). Passes when: not applicable (review not required,
+  or no material lines), or every material line is `REVIEWED` and not stale, or a **waiver** is on file.
+- **Waiver (override):** `close_mgmt:manage` (controller / CFO / accounting manager / admin), reason
+  ≥ 10 chars, stored in `flux_reviews` and logged to `core.action_log`; revocable (logged).
+- A load failure fails CLOSED (status `UNKNOWN` blocks); the existing whole-gate override on
+  `PATCH /api/periods` still works and still records the named blockers.
+
+### A-3E.5 Export
+`GET /api/close/flux/export?format=csv` and the pure `buildFluxPackageSection(board)` (for the close
+package / board pack slice): lines, explanations, categories, preparer/reviewer, waiver.
+
+### A-3E acceptance criteria (testable)
+- **AC-3E.1** materiality: `EITHER`/`BOTH`/`ABS_ONLY`/`PCT_ONLY`, null % on a zero base, override
+  precedence ACCOUNT > GROUP > TYPE, exclusions (`flux/materiality.test.ts`).
+- **AC-3E.2** comparison bases incl. trailing-3 rounding and BUDGET → BS fallback; BS = ending balance,
+  P&L = activity; normal-balance signing (`flux/compute.test.ts`).
+- **AC-3E.3** driver ranking: largest first, new counterparty, one-off, reclass detection
+  (`flux/drivers.test.ts`).
+- **AC-3E.4** SoD: preparer cannot review own; DB CHECK refuses `reviewed_by = prepared_by`; send-back;
+  staleness (`flux/explanations.test.ts`, `test/flux-schema.test.ts`).
+- **AC-3E.5** the gate blocks HARD_CLOSE with an unexplained/unreviewed/stale material line, passes when
+  reviewed, waived, not required, or nothing material; UNKNOWN fails closed (`flux/gate.test.ts`,
+  `close/flux-close-task.test.ts`).
+- **AC-3E.6** AI-down fallback returns the driver summary; an AI draft with an untraceable $ figure or
+  an unknown citation is refused (`flux/ai-draft.test.ts`).
+- **AC-3E.7** carry-forward suggestions (`flux/explanations.test.ts`).
+- **AC-3E.8** migration 187: members can't write, read only their org, client-scope policy present,
+  vocabularies hold; flux writes never touch `gl_entries` / `fiscal_periods` (`test/flux-schema.test.ts`).
+
+**Deferred (with reason):** QoQ/YoY-cumulative bases (monthly close is the gate; quarterly flux → 3A
+engine); budget versions (the `budgets` table carries no version column — sums the month's rows);
+dimension-level materiality overrides; flux on consolidated groups (per company first).

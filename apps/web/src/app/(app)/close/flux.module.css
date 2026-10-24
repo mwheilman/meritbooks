@@ -1,0 +1,65 @@
+/* Close → Flux review (merit-ui v2.3, density cockpit). Kit tokens only. */
+.bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s2); margin-bottom: var(--s2); }
+.bar :global(.field) { margin: 0; }
+.grow { flex: 1 1 auto; }
+.company { min-width: 240px; }
+.notice { margin-bottom: var(--s2); }
+
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); margin-bottom: var(--s2); }
+.cell { background: var(--white); padding: 12px 16px; min-width: 0; }
+.cellL { display: block; font: 500 var(--t-12)/var(--lh-12) var(--f-text); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.cellV { display: block; margin-top: 4px; font: 600 var(--t-20)/var(--lh-20) var(--f-text); font-variant-numeric: tabular-nums; color: var(--ink); }
+.cellS { display: block; margin-top: 2px; color: var(--ink-3); font-size: var(--t-12); line-height: var(--lh-12); }
+.cellWarn .cellV { color: var(--neg); }
+.cellOk .cellV { color: var(--pos); }
+.meter { margin-top: 6px; }
+
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: var(--s2); align-items: start; }
+@media (max-width: 1180px) { .cols { grid-template-columns: 1fr; } }
+.surface { border: 1px solid var(--line); background: var(--white); min-width: 0; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1); padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.toolbar :global(.field) { margin: 0; }
+.state { padding: var(--s4); text-align: center; color: var(--ink-2); }
+.state p { margin: 8px auto 16px; max-width: 56ch; }
+.muted { color: var(--ink-3); }
+.neg { color: var(--neg); }
+.pos { color: var(--pos); }
+.pill { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.spark { display: block; }
+.sticky { position: sticky; top: var(--s2); }
+
+.panelEmpty { padding: var(--s3); color: var(--ink-2); }
+.figs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.fig { border: 1px solid var(--line); padding: 8px 10px; }
+.figL { display: block; font-size: var(--t-12); line-height: var(--lh-12); color: var(--ink-2); }
+.figV { display: block; margin-top: 2px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.drivers { list-style: none; margin: 0; padding: 0; }
+.driver { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); align-items: baseline; }
+.driver:first-child { border-top: 0; }
+.ref { font-weight: 600; color: var(--electric); font-variant-numeric: tabular-nums; }
+.driverMain { min-width: 0; }
+.driverMain a { color: var(--ink); text-decoration: none; }
+.driverMain a:hover, .driverMain a:focus-visible { color: var(--electric); text-decoration: underline; }
+.driverSub { display: block; color: var(--ink-3); font-size: var(--t-12); line-height: var(--lh-12); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tags { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.cpTable { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.cpTable th { text-align: left; font: 500 var(--t-12)/var(--lh-12) var(--f-text); color: var(--ink-2); padding: 4px 0; border-bottom: 1px solid var(--line); }
+.cpTable td { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.cpTable .n { text-align: right; white-space: nowrap; }
+
+.editor :global(.field) { margin-bottom: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.suggest { border: 1px dashed var(--line-2); background: var(--canvas); padding: 10px 12px; margin-bottom: 12px; }
+.suggest p { margin: 4px 0 8px; }
+.review { border-left: 3px solid var(--electric); padding: 6px 10px; background: var(--sky); margin-bottom: 12px; }
+.reviewNeg { border-left-color: var(--neg); background: var(--canvas); }
+.glList { list-style: none; margin: 8px 0 0; padding: 0; max-height: 280px; overflow: auto; }
+.glList li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-top: 1px solid var(--line); }
+
+.policyGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+@media (max-width: 720px) { .policyGrid { grid-template-columns: 1fr; } }
+.ovRow { display: grid; grid-template-columns: 110px minmax(0, 1.6fr) 120px 90px 110px 80px 32px; gap: 8px; align-items: center; margin-bottom: 6px; }
+@media (max-width: 900px) { .ovRow { grid-template-columns: 1fr 1fr; } }

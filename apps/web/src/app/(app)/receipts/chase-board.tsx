@@ -16,7 +16,6 @@ import {
   Search,
   Select,
   api,
-  money,
   toast,
   useDebounce,
   useQuery,
@@ -24,7 +23,8 @@ import {
   type QueueColumn,
   type QueueGroup,
 } from '@meritbooks/merit-ui';
-import { STATE_LOOK, relative, type ActionResult, type CardholderRow, type ChaseResponse, type OutstandingCharge } from './receipts-types';
+import Link from 'next/link';
+import { STATE_LOOK, relative, type ActionResult, type CardholderRow, type ChaseResponse, type OlderUnreceipted, type OutstandingCharge, usd } from './receipts-types';
 import s from './receipts.module.css';
 
 type Band = 'all' | 'over30' | 'escalated' | 'none';
@@ -55,12 +55,14 @@ export function ChaseBoard({ locationId, refreshKey, onChanged, onAssignCardhold
   const [waive, setWaive] = useState<OutstandingCharge | null>(null);
   const [reassign, setReassign] = useState<OutstandingCharge | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showOlder, setShowOlder] = useState(false);
 
   const { data, error, isLoading, refetch } = useQuery<ChaseResponse>(
     '/api/receipts/chase',
-    { location_id: locationId ?? undefined, q: q || undefined },
+    { location_id: locationId ?? undefined, q: q || undefined, include_older: showOlder ? '1' : undefined },
     { key: String(refreshKey), scope: false },
   );
+  const older = data?.older ?? null;
 
   const groups = useMemo<QueueGroup<OutstandingCharge>[]>(() => {
     const pick = (c: OutstandingCharge) =>
@@ -72,7 +74,7 @@ export function ChaseBoard({ locationId, refreshKey, onChanged, onAssignCardhold
           id: g.assignmentId ?? 'none',
           title: g.holderName,
           count: rows.length,
-          caption: [g.cardLabel, `${money(rows.reduce((n, c) => n + c.amountCents, 0))} owed`, rows.length ? `oldest ${Math.max(...rows.map((c) => c.ageDays))} d` : null, g.holderEmail]
+          caption: [g.cardLabel, `${usd(rows.reduce((n, c) => n + c.amountCents, 0))} owed`, rows.length ? `oldest ${Math.max(...rows.map((c) => c.ageDays))} d` : null, g.holderEmail]
             .filter(Boolean)
             .join(' · '),
           rows,
@@ -124,7 +126,7 @@ export function ChaseBoard({ locationId, refreshKey, onChanged, onAssignCardhold
           </>
         ),
       },
-      { id: 'amount', header: 'Amount', width: 112, numeric: true, cell: (c) => <span className="tnum">{money(c.amountCents)}</span> },
+      { id: 'amount', header: 'Amount', width: 112, numeric: true, cell: (c) => <span className="tnum">{usd(c.amountCents)}</span> },
       { id: 'age', header: 'Age', width: 64, numeric: true, cell: (c) => <span className="tnum">{c.ageDays}d</span> },
       {
         id: 'asks',
@@ -181,7 +183,7 @@ export function ChaseBoard({ locationId, refreshKey, onChanged, onAssignCardhold
         value={band}
         onChange={setBand}
         items={[
-          { value: 'all', label: 'Outstanding', count: strip ? strip.outstanding.toLocaleString() : '—', caption: strip ? `${money(strip.totalCents)} without a receipt` : 'Loading' },
+          { value: 'all', label: 'Outstanding', count: strip ? strip.outstanding.toLocaleString() : '—', caption: strip ? `${usd(strip.totalCents)} without a receipt` : 'Loading' },
           { value: 'over30', label: 'Over 30 days', count: strip ? strip.over30.toLocaleString() : '—', caption: 'The close will ask about these' },
           { value: 'escalated', label: 'Escalated', count: strip ? strip.escalated.toLocaleString() : '—', caption: 'A manager has been told' },
           { value: 'none', label: 'No cardholder', count: strip ? strip.noCardholder.toLocaleString() : '—', caption: 'Assign the card to chase it' },
@@ -209,10 +211,23 @@ export function ChaseBoard({ locationId, refreshKey, onChanged, onAssignCardhold
           ) : groups.length === 0 ? (
             <div className={s.state}>
               {band === 'all' && !q ? (
-                <>
-                  <p className="t-head">Every card charge has its receipt.</p>
-                  <p className="ink-2">New charges over the receipt limit appear here within 15 minutes, with who was asked and when.</p>
-                </>
+                older && older.count > 0 ? (
+                  <>
+                    <p className="t-head">Nothing inside the {older.windowDays}-day chase window is waiting on a receipt.</p>
+                    <p className="ink-2">
+                      <span className="tnum">{older.count.toLocaleString()}</span> older charge{older.count === 1 ? '' : 's'} without receipts{' '}
+                      ({usd(older.totalCents)}) {older.count === 1 ? 'is' : 'are'} outside the chase window, so nobody was asked for them.
+                    </p>
+                    {!showOlder && (
+                      <Button onClick={() => setShowOlder(true)}>Show the older charges</Button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="t-head">Every card charge has its receipt.</p>
+                    <p className="ink-2">New charges over the receipt limit appear here within 15 minutes, with who was asked and when.</p>
+                  </>
+                )
               ) : (
                 <>
                   <p className="t-head">Nothing in this band.</p>
@@ -234,6 +249,15 @@ export function ChaseBoard({ locationId, refreshKey, onChanged, onAssignCardhold
               actions={actions}
             />
           )}
+          {older && older.count > 0 && groups.length > 0 && !showOlder && band === 'all' && !q && (
+            <p className={`t-cap ${s.olderLine}`}>
+              Plus <span className="tnum">{older.count.toLocaleString()}</span> older charge{older.count === 1 ? '' : 's'} ({usd(older.totalCents)}) outside the {older.windowDays}-day chase window.{' '}
+              <Button variant="quiet" onClick={() => setShowOlder(true)}>Show them</Button>
+            </p>
+          )}
+          {showOlder && older && (
+            <OlderCharges older={older} onHide={() => setShowOlder(false)} />
+          )}
         </div>
         <div>
           {selected ? (
@@ -242,7 +266,7 @@ export function ChaseBoard({ locationId, refreshKey, onChanged, onAssignCardhold
               eyebrow={['Receipt chase', STATE_LOOK[selected.status].word]}
               title={selected.merchant}
               meta={selected.chargeDate}
-              figure={money(selected.amountCents)}
+              figure={usd(selected.amountCents)}
               onClose={() => setCursor(null)}
               foot={
                 <div className={s.actions}>
@@ -336,7 +360,7 @@ function ReassignDialog({ charge, onClose, onDone }: { charge: OutstandingCharge
       open
       onClose={onClose}
       title={`Who has the receipt for ${charge.merchant}?`}
-      footNote={`${money(charge.amountCents)} on ${charge.chargeDate}`}
+      footNote={`${usd(charge.amountCents)} on ${charge.chargeDate}`}
       actions={
         <>
           <Button onClick={onClose}>Cancel</Button>
@@ -366,5 +390,56 @@ function ReassignDialog({ charge, onClose, onDone }: { charge: OutstandingCharge
         </Select>
       </Field>
     </Dialog>
+  );
+}
+
+/**
+ * Charges older than the chase window that never got a receipt. Read-only: the chase never
+ * asked for them, so there is no request to remind or waive — attach a receipt from the Inbox
+ * or the card feed, or widen the window under Policy.
+ */
+function OlderCharges({ older, onHide }: { older: OlderUnreceipted; onHide: () => void }) {
+  return (
+    <section className={s.older} aria-label="Older charges outside the chase window">
+      <div className={s.toolbar}>
+        <span className="t-section">Outside the {older.windowDays}-day chase window</span>
+        <span className="t-cap">
+          <span className="tnum">{older.count.toLocaleString()}</span> · {usd(older.totalCents)}
+        </span>
+        <div className={s.grow} />
+        <Link className="btn btn--quiet" href="/credit-cards">Open the card feed</Link>
+        <Button variant="quiet" onClick={onHide}>Hide</Button>
+      </div>
+      {older.charges.length === 0 ? (
+        <p className="ink-3">Loading the older charges…</p>
+      ) : (
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">Merchant</th>
+              <th scope="col" className="n">Age</th>
+              <th scope="col" className="n">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {older.charges.map((c) => (
+              <tr key={c.transactionId}>
+                <td className="tnum">{c.chargeDate}</td>
+                <td>{c.merchant}</td>
+                <td className="n tnum">{c.ageDays} d</td>
+                <td className="n tnum">{usd(c.amountCents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {older.count > older.charges.length && older.charges.length > 0 && (
+        <p className="t-cap">Showing the newest {older.charges.length.toLocaleString()} of {older.count.toLocaleString()}.</p>
+      )}
+      <p className="t-cap">
+        The chase only asks about charges inside its window so switching it on never floods cardholders. Attach receipts for these from the Inbox, or change the window under Policy.
+      </p>
+    </section>
   );
 }

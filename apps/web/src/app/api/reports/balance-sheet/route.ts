@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { getOrgToday } from '@/lib/dates/org-today';
 import { applyEarningsToBalanceSheet, fetchUnclosedEarnings } from '@/lib/reports/bs-earnings';
+import { asOfMonth, governRoute } from '@/lib/reports/governance/route-guard';
 
 const bsQuerySchema = z.object({
   location_id: z.string().optional(),
@@ -40,6 +41,14 @@ export const GET = apiQueryHandler(
     } else if (params.location_id && params.location_id !== 'all') {
       locationIds.push(params.location_id);
     }
+
+    // Number governance: a balance as of a month needs every month through it released
+    // (cumulative rule) for a non-finance caller — else 403 NOT_RELEASED, no figures.
+    const gov = await governRoute(
+      { supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.userId },
+      { months: [asOfMonth(asOfDate)], locationIds, cumulative: true },
+    );
+    if (gov instanceof NextResponse) return gov;
 
     // Paged read: PostgREST caps a response at 1,000 rows, so an unpaged read
     // silently truncates the ledger once a company passes 1,000 lines.
@@ -217,6 +226,7 @@ export const GET = apiQueryHandler(
     return NextResponse.json({
       ...presented,
       filters: { asOfDate, locationIds: locationIds.length > 0 ? locationIds : ['all'] },
+      governance: gov.info,
     });
   }
 );

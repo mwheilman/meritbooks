@@ -5,7 +5,10 @@
  *
  *  - Fade / gain totals only jobs that HAVE a prior month to compare with; when none do,
  *    the total is null ("—"), never a misleading 0.
- *  - % complete total = Σ cost to date ÷ Σ EAC (cost-weighted), null when EAC is 0.
+ *  - % complete total = Σ earned ÷ Σ contract — the same basis every row's % reads on (earned is
+ *    % complete × contract under every method), so the total is the contract-weighted average
+ *    of the rows. (It was Σ cost ÷ Σ EAC, which read 0.0% beside a 66.7% job on a non-cost
+ *    method — Wave 2 live check.) null when Σ contract is 0.
  * Integer cents throughout.
  */
 
@@ -39,7 +42,7 @@ export interface WipColumnTotals {
   fadeGainCents: number | null;
   /** Jobs that contributed to the fade / gain total. */
   fadeComparedJobs: number;
-  /** Cost-weighted % complete (0..1), null when Σ EAC is 0. */
+  /** Contract-weighted % complete = Σ earned ÷ Σ contract (0..1), null when Σ contract is 0. */
   pctComplete: number | null;
 }
 
@@ -66,6 +69,6 @@ export function wipColumnTotals(lines: ReadonlyArray<WipTotalsLine>): WipColumnT
       t.fadeComparedJobs += 1;
     }
   }
-  t.pctComplete = t.eacCents > 0 ? Math.min(1, t.costToDateCents / t.eacCents) : null;
+  t.pctComplete = t.contractCents > 0 ? Math.min(1, Math.max(0, t.earnedCents / t.contractCents)) : null;
   return t;
 }

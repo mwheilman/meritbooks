@@ -6,6 +6,8 @@ import { clsx } from 'clsx';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
+import { PeriodPicker, usePeriodParam } from '@/components/period';
+import type { PeriodBasis } from '@/lib/period/resolve';
 
 // ---- Response types (mirror lib/services/rev-rec-reporting.ts) ----
 interface Period { month: string; start: string; end: string; label: string }
@@ -33,10 +35,8 @@ interface ReportResponse {
   rollforward: Rollforward; waterfall: Waterfall; methodSummary: MethodSummary;
 }
 
-function defaultMonth(): string {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-}
+/** The reporting endpoint computes one month (rollforward / waterfall / methods as of it). */
+const MONTH_ONLY: readonly PeriodBasis[] = ['month'];
 
 function monthLabel(ym: string): string {
   const [y, m] = ym.split('-').map(Number);
@@ -51,11 +51,13 @@ const REPORT_TABS = [
 type ReportTab = (typeof REPORT_TABS)[number]['id'];
 
 export function RevRecReports() {
-  const [month, setMonth] = useState(defaultMonth());
+  // Shared with the Month-end tab (pageKey 'rev-rec'): one month for the page, in the URL.
+  const pp = usePeriodParam({ pageKey: 'rev-rec', defaultPreset: 'last_month', bases: MONTH_ONLY });
+  const month = pp.selection.end;
   const [tab, setTab] = useState<ReportTab>('rollforward');
 
   const { data, isLoading, error } = useQuery<ReportResponse>(
-    '/api/rev-rec/reporting',
+    pp.ready ? '/api/rev-rec/reporting' : null,
     { month },
     { key: `revrec-report-${month}` },
   );
@@ -63,16 +65,7 @@ export function RevRecReports() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-2xs uppercase tracking-wider text-slate-500">Reporting period</label>
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value || defaultMonth())}
-            className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-sm text-white font-mono"
-          />
-          {data?.period && <span className="text-2xs text-slate-500">{data.period.label}</span>}
-        </div>
+        <PeriodPicker {...pp.pickerProps} label="Reporting period" showLabel />
         <div className="inline-flex rounded-lg bg-slate-800/60 p-0.5">
           {REPORT_TABS.map((t) => {
             const Icon = t.icon;
@@ -92,7 +85,7 @@ export function RevRecReports() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isLoading || !pp.ready ? (
         <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 text-emerald-400 animate-spin" /></div>
       ) : error ? (
         <div className="card p-6 text-center"><AlertCircle className="mx-auto text-red-400 mb-2" size={20} /><p className="text-sm text-red-400">{error}</p></div>

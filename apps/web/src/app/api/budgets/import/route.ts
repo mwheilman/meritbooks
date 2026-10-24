@@ -3,8 +3,12 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { budgetCtx, budgetError, ensureDraftTarget } from '@/lib/budgets/route-support';
+import { assertEditable, writeCells } from '@/lib/budgets/service/lines';
+import { logEvent } from '@/lib/budgets/service/data';
 import { parseCsv } from '@/lib/import/csv';
 import { readXlsx } from '@/lib/payroll/xlsx-read';
+import { xlsxBombReason } from '@/lib/budgets/xlsx-guard';
 import { resolveUploadedFile, SPREADSHEET_TYPES } from '@/lib/uploads/resolve-upload';
 import { isOrgIntakePath } from '@/lib/uploads/paths';
 import {
@@ -28,10 +32,9 @@ import {
  * budget cells the Budget Entry grid reads.
  *
  * `dryRun=true` returns a full preview (matched/unmatched accounts, footing, errors)
- * and writes NOTHING. Otherwise the cells are UPSERTED into `public.budgets` with the
- * exact same row shape and conflict target the app's own POST /api/budgets uses
- * (`org_id,location_id,account_id,department_id,fiscal_year,period_number`), so a
- * re-import overwrites rather than duplicates.
+ * and writes NOTHING. Otherwise the cells are written into a DRAFT budget version (`versionId`,
+ * else the company-year's current version, else a new v1 — migration 189), replacing the same
+ * cells, so a re-import overwrites rather than duplicates. A non-draft version is refused (409).
  *
  * Fail-closed: 400 with no org on the session; org-scoped on every query.
  */
@@ -66,14 +69,14 @@ function makeAccountResolver(accounts: AccountRow[]): (ref: string) => AccountRo
 export async function POST(request: Request): Promise<NextResponse> {
   const ctx = await requireAuthedContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { supabase, orgId, userId } = ctx;
+  const { supabase, orgId } = ctx;
   if (!orgId) return NextResponse.json({ error: 'No organization on session', code: 'NO_ORG' }, { status: 400 });
 
   // ── Read the payload: JSON { storagePath, … } (intake handoff) or multipart ──
   let fileName: string;
   let buffer: Buffer;
   const isJson = (request.headers.get('content-type') ?? '').includes('application/json');
-  let fields: { companyId: unknown; fiscalYear: unknown; departmentId: unknown; layout: unknown; dryRun: unknown };
+  let fields: { companyId: unknown; fiscalYear: unknown; departmentId: unknown; layout: unknown; dryRun: unknown; versionId?: unknown };
   if (isJson) {
     let body: Record<string, unknown>;
     try {
@@ -98,6 +101,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       departmentId: body.departmentId,
       layout: body.layout,
       dryRun: body.dryRun === true ? 'true' : body.dryRun,
+      versionId: body.versionId,
     };
   } else {
     try {
@@ -117,6 +121,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         departmentId: form.get('departmentId'),
         layout: form.get('layout'),
         dryRun: form.get('dryRun'),
+        versionId: form.get('versionId'),
       };
     } catch {
       return NextResponse.json({ error: 'Failed to read the uploaded file', code: 'UPLOAD_ERROR' }, { status: 400 });
@@ -138,10 +143,15 @@ export async function POST(request: Request): Promise<NextResponse> {
   const forcedLayout: BudgetLayout | undefined = layoutRaw === 'monthly' || layoutRaw === 'annual' ? layoutRaw : undefined;
 
   const dryRun = String(fields.dryRun ?? '') === 'true';
+  const versionRaw = String(fields.versionId ?? '').trim();
+  const versionId = /^[0-9a-f-]{36}$/i.test(versionRaw) ? versionRaw : null;
 
   // ── Parse the file into a grid ──────────────────────────────────────────
   let parsed;
   if (isXlsx(fileName, '')) {
+    // Zip-bomb guard BEFORE the (uncapped) shared reader inflates anything.
+    const bomb = xlsxBombReason(buffer);
+    if (bomb) return NextResponse.json({ error: bomb, code: 'XLSX_REJECTED' }, { status: 422 });
     const grid = readXlsx(buffer);
     if (grid.headers.length === 0) {
       return NextResponse.json({ error: 'Could not read this spreadsheet. Re-save it as .xlsx or export a CSV and try again.', code: 'XLSX_UNREADABLE' }, { status: 422 });
@@ -238,27 +248,25 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, saved: 0, error: 'No account in the file matched this company’s chart of accounts', ...preview }, { status: 422 });
   }
 
-  // ── Upsert — identical row shape + conflict target to POST /api/budgets ──
-  const inserts: Record<string, string | number | null>[] = [];
+  // ── Write — mig 189: into a DRAFT version (the one asked for, else the company-year's newest
+  //    draft, else a new draft copied from the published budget). An approved / locked / in-review
+  //    target is refused (AC-B18); a change to a closed month is refused (BUDGET_PERIOD_CLOSED).
+  const b = await budgetCtx(ctx, companyId);
+  if (b instanceof NextResponse) return b;
+  const cellsIn: Array<{ accountId: string; periodNumber: number; amountCents: number }> = [];
   for (const m of matched) {
-    for (const [periodStr, cents] of Object.entries(m.periods)) {
-      inserts.push({
-        org_id: orgId,
-        location_id: companyId,
-        account_id: m.accountId,
-        department_id: departmentId,
-        fiscal_year: fiscalYear,
-        period_number: Number(periodStr),
-        amount_cents: cents,
-        created_by: userId,
-      });
-    }
+    for (const [periodStr, cents] of Object.entries(m.periods)) cellsIn.push({ accountId: m.accountId, periodNumber: Number(periodStr), amountCents: cents });
   }
-
-  const { error: upsertErr } = await supabase
-    .from('budgets')
-    .upsert(inserts, { onConflict: 'org_id,location_id,account_id,department_id,fiscal_year,period_number' });
-  if (upsertErr) return NextResponse.json({ ok: false, saved: 0, error: upsertErr.message, ...preview }, { status: 500 });
+  let version;
+  try {
+    version = await ensureDraftTarget(b, companyId, fiscalYear, versionId);
+    await assertEditable(b, version, departmentId);
+    await writeCells(b, version, departmentId, cellsIn, 'IMPORT');
+    await logEvent(b, { locationId: companyId, versionId: version.id, kind: 'LINES_IMPORTED', meta: { file: fileName, department_id: departmentId, cells: cellsIn.length, matched_total_cents: matchedTotalCents, parsed_total_cents: result.totalCents, unmatched } });
+  } catch (e) {
+    return budgetError(e, 'budgets import');
+  }
+  const inserts = cellsIn;
 
   return NextResponse.json({
     ok: true,
@@ -268,5 +276,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     layout: result.layout,
     fiscalYear,
     matchedTotalCents,
+    versionId: version.id,
+    versionLabel: version.label,
   }, { status: 201 });
 }

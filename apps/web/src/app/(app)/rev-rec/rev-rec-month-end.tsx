@@ -5,7 +5,11 @@ import { ButtonLink, InlineNotice } from '@meritbooks/merit-ui';
 import { useQuery } from '@/hooks';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import type { WipScheduleView } from '@/lib/rev-rec/wip-view';
-import { PeriodPicker, lastClosedPeriod, periodLabel } from '@/components/rev-rec/period-picker';
+import { periodLabel } from '@/components/rev-rec/period-picker';
+import { PeriodPicker, usePeriodParam } from '@/components/period';
+import type { PeriodBasis } from '@/lib/period/resolve';
+
+const MONTH_ONLY: readonly PeriodBasis[] = ['month'];
 import { WipProposalPanel, WipRunHistory } from '@/components/rev-rec/wip-proposal-panel';
 
 /**
@@ -15,10 +19,12 @@ import { WipProposalPanel, WipRunHistory } from '@/components/rev-rec/wip-propos
  */
 export function RevRecMonthEnd() {
   const { activeCompanyId } = useActiveCompany();
-  const [period, setPeriod] = useState(lastClosedPeriod());
+  // Shared with the Reports tab (pageKey 'rev-rec'): one month for the whole page, in the URL.
+  const pp = usePeriodParam({ pageKey: 'rev-rec', defaultPreset: 'last_month', bases: MONTH_ONLY });
+  const period = pp.selection.end;
   const [refresh, setRefresh] = useState(0);
   const { data, isLoading, error, refetch } = useQuery<WipScheduleView>(
-    '/api/rev-rec/wip',
+    pp.ready ? '/api/rev-rec/wip' : null,
     { location_id: activeCompanyId, period },
     { key: `${activeCompanyId}:${period}:${refresh}` },
   );
@@ -26,10 +32,10 @@ export function RevRecMonthEnd() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="row row--between" style={{ flexWrap: 'wrap', gap: 12 }}>
-        <PeriodPicker value={period} onChange={setPeriod} />
+        <PeriodPicker {...pp.pickerProps} label="Month" />
         <ButtonLink href="/jobs/wip" variant="default" iconAfter="right">Open the WIP schedule</ButtonLink>
       </div>
-      {isLoading && !data ? (
+      {(isLoading || !pp.ready) && !data ? (
         <div className="surface wg-loading mb-state-block" aria-busy="true">
           <span className="bar-l" style={{ width: '64%' }} aria-hidden="true" />
           <span className="bar-l" style={{ width: '48%' }} aria-hidden="true" />

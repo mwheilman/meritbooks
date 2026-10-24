@@ -1,5 +1,6 @@
 import React from 'react';
 import { Document, Font, Page, Text, View, Image, Link, Svg, Path, Rect, StyleSheet } from '@react-pdf/renderer';
+import { onColorFor } from '@/lib/branding/color';
 import type { InvoiceDoc } from './invoice-doc';
 import { buildLineTable, columnWidths, type LineTable } from './templates/columns';
 import type { InvoiceFont, InvoiceLayout } from './templates/types';
@@ -41,10 +42,9 @@ const fmtAddress = (a: Record<string, unknown> | null): string[] => {
 };
 
 /** Black or white text, whichever reads on the brand colour. */
+/** White or Midnight on the accent — whichever has the higher WCAG contrast (lib/branding/color). */
 function onColor(hex: string): string {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#0A1628' : '#FFFFFF';
+  return onColorFor(hex);
 }
 
 interface Faces { regular: string; bold: string; italic: string }
@@ -173,9 +173,16 @@ export function InvoicePdf({ doc, style }: { doc: InvoiceDoc; style?: InvoiceLay
   if (doc.po_number) meta.push(['PO', doc.po_number]);
   for (const h of headerFields) meta.push([h.label, h.value]);
 
-  const brand = t.logo_url
-    ? <Image src={t.logo_url} style={st.logo} />
-    : <Text style={[st.entity, bandHeader ? { color: onAccent } : {}]}>{doc.entity?.name || 'Invoice'}</Text>;
+  // On the BOLD brand band (FPB-branding): the brand's dark-background logo when it has one,
+  // else the logo on a white chip so a logo in the brand colour never vanishes into the band.
+  const darkLogo = bandHeader && doc.brand?.logoDarkUrl && t.logo_url && t.logo_url === doc.brand.logoUrl ? doc.brand.logoDarkUrl : null;
+  const brand = darkLogo
+    ? <Image src={darkLogo} style={st.logo} />
+    : t.logo_url
+      ? bandHeader
+        ? <View style={{ backgroundColor: '#FFFFFF', paddingVertical: 4, paddingHorizontal: 6, alignSelf: 'flex-start' }}><Image src={t.logo_url} style={st.logo} /></View>
+        : <Image src={t.logo_url} style={st.logo} />
+      : <Text style={[st.entity, bandHeader ? { color: onAccent } : {}]}>{doc.entity?.name || 'Invoice'}</Text>;
 
   const Masthead = (
     <View style={bandHeader ? st.band : { marginBottom: 26, ...(layout === 'CLASSIC' ? { borderTopWidth: 2.5, borderBottomWidth: 0.75, borderColor: INK, paddingVertical: 12 } : {}), ...(layout === 'COMPACT' ? { borderBottomWidth: 2, borderBottomColor: accent, paddingBottom: 8 } : {}) }}>

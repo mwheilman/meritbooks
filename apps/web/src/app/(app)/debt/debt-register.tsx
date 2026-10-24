@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { DebtForm } from './debt-form';
 import { DebtParseReview } from './debt-parse-review';
+import { DocumentProposalsBanner } from '@/components/documents/document-proposals-banner';
+import { useDocumentProposal, type ProposalWithDoc } from '@/components/documents/intelligence-client';
 import { ResetModal, RefinanceModal, PayoffModal, type ActionInstrument } from './debt-actions';
 import { AttachmentsPanel } from '@/components/documents/attachments-panel';
 import { DebtSummary } from './debt-summary';
@@ -81,6 +83,10 @@ export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void
   const [mode, setMode] = useState<null | 'parse' | 'manual'>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState('0');
+  // Document intelligence: a loan AI found in Documents (banner Review or ?proposal=).
+  const deepLinked = useDocumentProposal('debt_instrument');
+  const [fromDoc, setFromDoc] = useState<ProposalWithDoc | null>(null);
+  const reviewing = fromDoc ?? deepLinked.proposal;
   // Smart Intake handoff: `/debt?intake=<storagePath>` opens the loan review on the file
   // the user already dropped — parsing starts immediately, no re-upload (FPB §5).
   const [intakePath, setIntakePath] = useState<string | null>(null);
@@ -150,6 +156,9 @@ export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void
     <div className="space-y-5">
       {/* At-a-glance posture — current/non-current, next payment, 12mo service, covenant headroom */}
       <DebtSummary key={`sum-${refreshKey}`} onViewCovenants={onViewCovenants} />
+
+      {/* Loans found in Documents (document intelligence) — shows on the empty state too. */}
+      <DocumentProposalsBanner kind="debt_instrument" refreshKey={Number(refreshKey)} onReview={(p) => setFromDoc(p)} />
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-4 text-xs">
@@ -235,7 +244,18 @@ export function DebtRegister({ onViewCovenants }: { onViewCovenants?: () => void
         against cash — both by account role, source-ref-guarded against a double post. AI is used only to read the document.
       </p>
 
-      {mode === 'parse' && (
+      {reviewing && (
+        <DebtParseReview
+          key={reviewing.id}
+          fromProposal={reviewing}
+          existingDefault={onboardingHint ? onboardingHint.defaultExistingLoan : undefined}
+          cutoverDate={onboardingHint ? onboardingHint.cutoverDate : undefined}
+          onClose={() => { setFromDoc(null); deepLinked.clear(); }}
+          onConfirmed={() => { setFromDoc(null); deepLinked.clear(); bump(); }}
+        />
+      )}
+
+      {mode === 'parse' && !reviewing && (
         <DebtParseReview
           initialStoragePath={intakePath}
           existingDefault={onboardingHint ? onboardingHint.defaultExistingLoan : undefined}

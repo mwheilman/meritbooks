@@ -12,13 +12,12 @@ import {
   Seg,
   Tag,
   api,
-  money,
   toast,
   useDebounce,
   useQuery,
   type QueueColumn,
 } from '@meritbooks/merit-ui';
-import { MATCH_LOOK, SOURCE_LABEL, type ReceiptListResponse, type ReceiptListRow } from './receipts-types';
+import { MATCH_LOOK, SOURCE_LABEL, type ReceiptListResponse, type ReceiptListRow, usd } from './receipts-types';
 import { ReceiptPanel } from './receipt-panel';
 import s from './receipts.module.css';
 
@@ -163,14 +162,14 @@ export function ReceiptsInbox({ locationId, companyName, refreshKey, onChanged }
             <>
               <span className="l1">{c.description}</span>
               <span className="l2">
-                {c.date} · {money(c.amountCents)}
+                {c.date} · {usd(c.amountCents)}
                 {r.suggested_charge && r.match_score != null ? ` · ${Math.round(r.match_score * 100)}% likely` : ''}
               </span>
             </>
           );
         },
       },
-      { id: 'amount', header: 'Amount', width: 112, numeric: true, cell: (r) => <span className="tnum">{r.amount_cents != null ? money(r.amount_cents) : '—'}</span> },
+      { id: 'amount', header: 'Amount', width: 112, numeric: true, cell: (r) => <span className="tnum">{r.amount_cents != null ? usd(r.amount_cents) : '—'}</span> },
       {
         id: 'flags',
         header: 'Review',
@@ -236,7 +235,7 @@ export function ReceiptsInbox({ locationId, companyName, refreshKey, onChanged }
             <li key={`${r.fileName}-${i}`}>
               <span>
                 <b>{r.fileName}</b>{' '}
-                <span className="ink-2">{r.ok ? [r.merchant, r.amountCents != null ? money(r.amountCents) : null].filter(Boolean).join(' · ') : r.error}</span>
+                <span className="ink-2">{r.ok ? [r.merchant, r.amountCents != null ? usd(r.amountCents) : null].filter(Boolean).join(' · ') : r.error}</span>
               </span>
               <span>{!r.ok ? <Tag tone="neg">Not saved</Tag> : r.duplicate ? <Tag>Already had it</Tag> : r.match === 'matched' || r.match === 'attached' ? <Tag tone="pos">Matched</Tag> : r.match === 'suggested' ? <Tag tone="warn">Confirm match</Tag> : <Tag>No charge yet</Tag>}</span>
             </li>
@@ -297,7 +296,7 @@ export function ReceiptsInbox({ locationId, companyName, refreshKey, onChanged }
                 onOpen={(r) => setCursor(r.id)}
                 openOnClick
                 actions={[{ key: 'a', label: 'Mark reviewed', run: (rs) => void approve(rs.map((r) => r.id)) }]}
-                bulkSummary={(rs) => [money(rs.reduce((n, r) => n + (r.amount_cents ?? 0), 0))]}
+                bulkSummary={(rs) => [usd(rs.reduce((n, r) => n + (r.amount_cents ?? 0), 0))]}
                 bulkActions={(rs) => (
                   <Button variant="primary" onClick={() => void approve(rs.map((r) => r.id))}>
                     Mark {rs.length} reviewed

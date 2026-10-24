@@ -5,6 +5,7 @@ import { getOrgToday } from '@/lib/dates/org-today';
 import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { applyEliminations, type ConsolAccountInput } from './eliminations';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { governDateRange } from '@/lib/reports/governance/route-guard';
 
 /**
  * Consolidated P&L across entities, with proper intercompany/interdepartmental
@@ -38,6 +39,14 @@ export async function GET(request: Request) {
   const startDate = searchParams.get('start_date') ?? orgToday.slice(0, 8) + '01';
   const endDate = searchParams.get('end_date') ?? orgToday;
   const eliminateIc = searchParams.get('eliminate_ic') !== 'false'; // default true
+
+  // Number governance: the whole group (every company) for every month of the range, plus
+  // the intercompany balances (cumulative rule), must be released for a non-finance caller.
+  const gov = await governDateRange(
+    { supabase, orgId, userId: ctx.userId },
+    { startDate, endDate, locationIds: [], scopeKind: 'consolidated', cumulative: true },
+  );
+  if (gov instanceof NextResponse) return gov;
 
   // Entities
   const { data: locations } = await supabase
@@ -110,6 +119,7 @@ export async function GET(request: Request) {
       eliminatedCents,
       eliminationsApplied: eliminateIc,
       intercompany,
+      governance: gov.info,
     });
   }
 
@@ -174,5 +184,6 @@ export async function GET(request: Request) {
     eliminatedCents,
     eliminationsApplied: eliminateIc,
     intercompany,
+    governance: gov.info,
   });
 }

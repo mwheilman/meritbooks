@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { governDateRange } from '@/lib/reports/governance/route-guard';
 import { getOrgToday } from '@/lib/dates/org-today';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 
@@ -15,6 +16,12 @@ export async function GET(request: Request) {
   const startDate = searchParams.get('start_date') ?? new Date().toISOString().slice(0, 8) + '01';
   const endDate = searchParams.get('end_date') ?? (await getOrgToday(supabase, orgId));
 
+  // Number governance: period activity + beginning balances (cumulative rule) released for a
+  // non-finance caller (the query filters by `location_id` only).
+  const govLocs = locationId && locationId !== 'all' ? [locationId] : [];
+  const gov = await governDateRange({ supabase, orgId, userId: ctx.userId }, { startDate, endDate, locationIds: govLocs, cumulative: true });
+  if (gov instanceof NextResponse) return gov;
+
   // Get equity accounts
   const { data: equityAccounts } = await supabase
     .from('accounts')
@@ -24,7 +31,7 @@ export async function GET(request: Request) {
     .order('account_number');
 
   if (!equityAccounts || equityAccounts.length === 0) {
-    return NextResponse.json({ accounts: [], period: { startDate, endDate } });
+    return NextResponse.json({ governance: gov.info, accounts: [], period: { startDate, endDate } });
   }
 
   const accountIds = equityAccounts.map((a) => a.id);
@@ -101,7 +108,7 @@ export async function GET(request: Request) {
   const totalActivity = accounts.reduce((s, a) => s + a.activityCents, 0);
   const totalEnding = accounts.reduce((s, a) => s + a.endingBalanceCents, 0);
 
-  return NextResponse.json({
+  return NextResponse.json({ governance: gov.info,
     period: { startDate, endDate },
     accounts,
     netIncomeCents: netIncome,

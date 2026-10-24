@@ -6,6 +6,7 @@ import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
 import { Loader2, X, Sparkles, UploadCloud, FileText } from 'lucide-react';
 import type { Cadence } from './subscription-editor';
+import { acceptDocumentProposal, openDocument, type ProposalWithDoc } from '@/components/documents/intelligence-client';
 
 interface ProposedTerms {
   vendor_name: string | null;
@@ -28,7 +29,16 @@ function fmtCents(cents: number | null): string {
   return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export function SubscriptionParseReview({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+export function SubscriptionParseReview({
+  onClose,
+  onSaved,
+  fromProposal = null,
+}: {
+  onClose: () => void;
+  onSaved: () => void;
+  /** Document intelligence: an agreement AI found in Documents — opens pre-filled; adding links the document. */
+  fromProposal?: ProposalWithDoc | null;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -41,6 +51,14 @@ export function SubscriptionParseReview({ onClose, onSaved }: { onClose: () => v
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [busy, saving, onClose]);
+
+  // Pre-fill from the stored SUBSCRIPTION_EXTRACT result (same shape as /api/subscriptions/parse-agreement).
+  useEffect(() => {
+    if (!fromProposal) return;
+    const payload = fromProposal.payload as { terms?: ProposedTerms; meta?: { fileName?: string } };
+    setFileName(payload.meta?.fileName ?? fromProposal.document?.file_name ?? 'Document');
+    if (payload.terms) setTerms(payload.terms);
+  }, [fromProposal]);
 
   async function upload(file: File) {
     setBusy(true);
@@ -93,6 +111,11 @@ export function SubscriptionParseReview({ onClose, onSaved }: { onClose: () => v
       addToast('error', res.error.error);
       return;
     }
+    if (fromProposal) {
+      const id = (res.data as { id?: string } | null)?.id;
+      const err = id ? await acceptDocumentProposal(fromProposal.id, 'subscription', id) : 'No subscription id returned';
+      if (err) addToast('error', `Added, but linking the document failed: ${err}`);
+    }
     addToast('success', 'Subscription added from agreement');
     onSaved();
   }
@@ -112,6 +135,15 @@ export function SubscriptionParseReview({ onClose, onSaved }: { onClose: () => v
             <X size={18} />
           </button>
         </div>
+
+        {fromProposal && (
+          <p className="mb-3 text-[11px] text-slate-400" data-testid="from-document">
+            From document: <span className="text-slate-200">{fromProposal.document?.file_name ?? 'stored document'}</span>
+            {!terms && <> · AI hasn’t read it yet — drop it below to read it now, or add it by hand</>}
+            {' · '}
+            <button type="button" className="underline" onClick={() => { void openDocument(fromProposal.document_id).then((e) => { if (e) addToast('error', e); }); }}>Open the document</button>
+          </p>
+        )}
 
         {!terms && (
           <>

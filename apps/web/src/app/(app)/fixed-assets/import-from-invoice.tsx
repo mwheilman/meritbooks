@@ -21,6 +21,7 @@ import { clsx } from 'clsx';
 import { formatMoney, dollarsToCents, centsToDollars } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
+import { acceptDocumentProposal, openDocument, type ProposalWithDoc } from '@/components/documents/intelligence-client';
 
 // ── Types mirroring the parse API's ProposedAsset ────────────────────────────
 interface ProposedAsset {
@@ -353,7 +354,18 @@ function AssetCard({
 }
 
 // ── Main modal ───────────────────────────────────────────────────────────────
-export function ImportFromInvoice({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+export function ImportFromInvoice({
+  open,
+  onClose,
+  onCreated,
+  fromProposal = null,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  /** Document intelligence: an equipment invoice AI found in Documents — drafts pre-filled; adding links the document. */
+  fromProposal?: ProposalWithDoc | null;
+}) {
   const [phase, setPhase] = useState<'idle' | 'parsing' | 'review' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -379,6 +391,20 @@ export function ImportFromInvoice({ open, onClose, onCreated }: { open: boolean;
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+
+  // Pre-fill from the stored ASSET_EXTRACT result (same shape as /api/fixed-assets/parse-invoice).
+  const linkedFirst = useRef(false);
+  useEffect(() => {
+    if (!open || !fromProposal) return;
+    const payload = fromProposal.payload as Partial<ParseResponse>;
+    const assets = payload.assets ?? [];
+    linkedFirst.current = false;
+    setFileName(payload.meta?.fileName ?? fromProposal.document?.file_name ?? 'Document');
+    setDecisionId(payload.meta?.decisionId ?? null);
+    setDocNote(payload.meta?.documentNote ?? (fromProposal.extract_state === 'done' ? null : 'AI hasn’t read this invoice yet — drop it here to read it now.'));
+    setDrafts(assets.map((a, i) => toDraft(a, i, fromProposal.location_id ?? defaultLocationId)));
+    setPhase(assets.length ? 'review' : 'idle');
+  }, [open, fromProposal, defaultLocationId]);
 
   if (!open) return null;
 
@@ -438,6 +464,16 @@ export function ImportFromInvoice({ open, onClose, onCreated }: { open: boolean;
     if (res.error) { patchDraft(draft.key, { saving: false }); addToast('error', res.error.error); return; }
     patchDraft(draft.key, { saving: false, done: true });
     addToast('success', `${draft.name} added to the register`);
+    const assetId = res.data?.assetId;
+    if (fromProposal && assetId) {
+      if (!linkedFirst.current) {
+        linkedFirst.current = true;
+        const err = await acceptDocumentProposal(fromProposal.id, 'fixed_asset', assetId);
+        if (err) addToast('error', `Added, but linking the document failed: ${err}`);
+      } else {
+        await api.post('/api/documents/intelligence/update', { action: 'link', document_id: fromProposal.document_id, target_type: 'fixed_asset', target_id: assetId });
+      }
+    }
     onCreated();
   };
 
@@ -500,6 +536,13 @@ export function ImportFromInvoice({ open, onClose, onCreated }: { open: boolean;
           )}
 
           {/* Review */}
+          {fromProposal && (
+            <p className="text-2xs text-slate-400" data-testid="from-document">
+              From document: <span className="text-slate-200">{fromProposal.document?.file_name ?? 'stored document'}</span>
+              {' · '}
+              <button type="button" className="underline" onClick={() => { void openDocument(fromProposal.document_id).then((e) => { if (e) addToast('error', e); }); }}>Open the document</button>
+            </p>
+          )}
           {phase === 'review' && (
             <>
               {fileName && (

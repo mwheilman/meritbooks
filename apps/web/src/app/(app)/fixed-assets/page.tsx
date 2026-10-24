@@ -12,6 +12,8 @@ import { CompanyScopeGuard } from '@/components/company-scope-guard';
 import { HubTabs } from '../_components/hub-tabs';
 import { RollForwardView } from './roll-forward-view';
 import { ImportFromInvoice } from './import-from-invoice';
+import { DocumentProposalsBanner } from '@/components/documents/document-proposals-banner';
+import { useDocumentProposal, type ProposalWithDoc } from '@/components/documents/intelligence-client';
 
 interface AssetRow {
   id: string; assetTag: string | null; name: string; description: string | null;
@@ -68,6 +70,11 @@ function FixedAssetsPageInner() {
   const [locationFilter, setLocationFilter] = useState('');
   const [view, setView] = useState<'registry' | 'roll-forward'>('registry');
   const [importOpen, setImportOpen] = useState(false);
+  // Document intelligence: an equipment invoice AI found in Documents (banner Review or ?proposal=).
+  const deepLinked = useDocumentProposal('fixed_asset');
+  const [fromDoc, setFromDoc] = useState<ProposalWithDoc | null>(null);
+  const [proposalsKey, setProposalsKey] = useState(0);
+  const reviewing = fromDoc ?? deepLinked.proposal;
 
   const params: Record<string, string> = {};
   if (statusFilter) params.status = statusFilter;
@@ -110,7 +117,16 @@ function FixedAssetsPageInner() {
         ))}
       </div>
 
-      <ImportFromInvoice open={importOpen} onClose={() => setImportOpen(false)} onCreated={refetch} />
+      {/* Equipment invoices found in Documents (document intelligence). */}
+      <DocumentProposalsBanner kind="fixed_asset" refreshKey={proposalsKey} onReview={(p) => setFromDoc(p)} />
+
+      <ImportFromInvoice open={importOpen && !reviewing} onClose={() => setImportOpen(false)} onCreated={refetch} />
+      <ImportFromInvoice
+        open={!!reviewing}
+        fromProposal={reviewing}
+        onClose={() => { setFromDoc(null); deepLinked.clear(); setProposalsKey((k) => k + 1); }}
+        onCreated={() => { setProposalsKey((k) => k + 1); void refetch(); }}
+      />
 
       {view === 'roll-forward' ? (
         <RollForwardView />

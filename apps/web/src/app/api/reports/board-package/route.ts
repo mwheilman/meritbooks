@@ -28,6 +28,16 @@ import {
 import type { TrendPoint } from '@/lib/reports/board-package';
 import { getOrgDateContext } from '@/lib/dates/org-today';
 import { monthBoundsIso } from '@/lib/dates/org-date';
+import {
+  asOfMonth,
+  governRoute,
+  governRouteMonths,
+  memoFactsLoader,
+  rangeMonths,
+  rangeTooLongResponse,
+  resolveRouteAudience,
+  type RouteGuardContext,
+} from '@/lib/reports/governance/route-guard';
 
 /** How many trailing months the KPI trend strip spans. */
 const TREND_PERIODS = 6;
@@ -41,6 +51,13 @@ const TREND_PERIODS = 6;
  * gateway only PHRASES the pre-computed KPI facts (see board-package.ts). Without
  * `ai=1` a truthful deterministic executive summary is returned, so the package
  * always renders.
+ *
+ * NUMBER GOVERNANCE (route-guard): for a non-finance caller every figure the package states
+ * must be released — the window, the balance sheet / cash flow (cumulative rule) and the A/R
+ * / A/P aging (a snapshot as of TODAY, cumulative through today's month — so in practice the
+ * package is finance-only until aging can be stated as of a released month). Otherwise 403
+ * NOT_RELEASED. The comparison period is dropped (priorIS null) and trend months are dropped
+ * when not released. Finance passes through (preview), labelled by `governance`.
  */
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -100,6 +117,21 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
     params.entity_label && params.entity_label.trim() ? params.entity_label.trim() : 'All Companies (Consolidated)';
   const prior = derivePriorPeriod(startDate, endDate);
 
+  // 0. Number governance — decided before any figure is read.
+  const gctx: RouteGuardContext = { supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.userId, deps: { loadFacts: memoFactsLoader() } };
+  gctx.audience = await resolveRouteAudience(gctx);
+  const windowMonths = rangeMonths(startDate, endDate);
+  if (!windowMonths) return rangeTooLongResponse();
+  const gov = await governRoute(gctx, {
+    months: [...windowMonths, asOfMonth(asOfDate), asOfMonth(today)],
+    locationIds,
+    cumulative: true,
+  });
+  if (gov instanceof NextResponse) return gov;
+  const priorMonths = rangeMonths(prior.s, prior.e);
+  const priorGov = priorMonths ? await governRouteMonths(gctx, { months: priorMonths, locationIds }) : null;
+  const priorShown = !!priorGov && priorMonths!.length > 0 && priorGov.deniedMonths.length === 0;
+
   // 1. Pull all statement payloads deterministically (RLS-scoped, org-isolated).
   let currentIS: IncomeStatementPayload;
   let priorIS: IncomeStatementPayload | null = null;
@@ -108,7 +140,7 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
   try {
     [currentIS, priorIS, balanceSheet, cashFlow, arAging, apAging, debt, trendSeries] = await Promise.all([
       fetchIncomeStatement(ctx.supabase, { startDate, endDate, locationIds, basis }),
-      fetchIncomeStatement(ctx.supabase, { startDate: prior.s, endDate: prior.e, locationIds, basis }),
+      priorShown ? fetchIncomeStatement(ctx.supabase, { startDate: prior.s, endDate: prior.e, locationIds, basis }) : Promise.resolve(null),
       fetchBalanceSheet(ctx.supabase, { asOfDate, locationIds, orgId: ctx.orgId }),
       fetchCashFlow(ctx.supabase, ctx.orgId ?? '', { startDate, endDate, locationIds }),
       // Aging is "as of today" (open items now), in the org's calendar.
@@ -123,6 +155,12 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
       { error: e instanceof Error ? e.message : 'Failed to load report data', code: 'REPORT_QUERY_ERROR' },
       { status: 500 },
     );
+  }
+
+  // Trend points carry ending cash (a balance): each month needs the cumulative rule.
+  if (trendSeries.length) {
+    const trendGov = await governRouteMonths(gctx, { months: trendSeries.map((p) => p.periodStart.slice(0, 7)), locationIds, cumulative: true });
+    trendSeries = trendSeries.filter((p) => trendGov.isShown(p.periodStart.slice(0, 7)));
   }
 
   const periodLabel = `${startDate} to ${endDate}`;
@@ -235,5 +273,9 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
     trendSeries,
   });
 
-  return NextResponse.json({ ...pkg, aiMeta: { requested: params.ai === '1', message: aiMessage } });
+  return NextResponse.json({
+    ...pkg,
+    aiMeta: { requested: params.ai === '1', message: aiMessage },
+    governance: { ...gov.info, comparisonWithheld: !priorShown },
+  });
 });

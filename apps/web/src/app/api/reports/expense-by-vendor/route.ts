@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { governDateRange } from '@/lib/reports/governance/route-guard';
 import { getOrgToday } from '@/lib/dates/org-today';
 import { fetchCoreMap } from '@/lib/stitch-core';
 
@@ -14,6 +15,12 @@ export async function GET(request: Request) {
   const locFilter = locationIds ? locationIds.split(',').filter(Boolean) : (locationId && locationId !== 'all' ? [locationId] : []);
   const startDate = searchParams.get('start_date') ?? new Date().toISOString().slice(0, 8) + '01';
   const endDate = searchParams.get('end_date') ?? (await getOrgToday(supabase, orgId));
+
+  // Number governance: every month of the range released for a non-finance caller (the
+  // query filters by `location_id` only, so that is the scope governed).
+  const govLocs = locationId && locationId !== 'all' ? [locationId] : [];
+  const gov = await governDateRange({ supabase, orgId, userId: ctx.userId }, { startDate, endDate, locationIds: govLocs });
+  if (gov instanceof NextResponse) return gov;
   const mode = searchParams.get('mode') ?? 'summary'; // 'summary' or 'detail'
 
   // Get bills in the period with vendor info
@@ -111,7 +118,7 @@ export async function GET(request: Request) {
 
   const totalExpenseCents = vendors.reduce((s, v) => s + v.totalCents, 0);
 
-  return NextResponse.json({
+  return NextResponse.json({ governance: gov.info,
     period: { startDate, endDate },
     mode,
     data: vendors,

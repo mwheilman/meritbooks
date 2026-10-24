@@ -21,6 +21,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildRequestEmail } from '@/lib/notify/request-email';
+import { loadBrand } from '@/lib/branding/resolve';
+import { emailBrandOf } from '@/lib/branding/email';
 import type { Channels } from '@/lib/notify/channels';
 import { createNotification, notifyMembers, tenantAdminMemberships } from '@/lib/notify/in-app';
 import { afterSend, anchorBase, deferForQuietHours, inQuietHours, quietHoursOf, resolveTimeZone, shouldEscalate, slotTime } from './cadence';
@@ -347,6 +349,8 @@ export async function dispatchOne(
           dueDate: r.due_date,
           ctaUrl: `${base}/r/${token}`,
           unsubscribeUrl: `${base}/r/${token}/unsubscribe`,
+          // The asking company's brand (FPB-branding); Merit look when it has none.
+          brand: emailBrandOf(await loadBrand(db, r.org_id, r.location_id ?? null)),
         });
         const out = await deps.channels.email.send({ to: addr, subject: mail.subject, html: mail.html, text: mail.text });
         if (out.status === 'sent') {

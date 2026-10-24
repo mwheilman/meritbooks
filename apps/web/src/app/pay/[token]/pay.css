@@ -45,3 +45,7 @@
 .mb-pay-powered{text-align:center;color:var(--ink-3);font-size:var(--t-12);margin-top:var(--s2)}
 .mb-pay-missing{max-width:440px;margin:15vh auto 0;background:var(--white);border:1px solid var(--line);padding:var(--s4);text-align:center}
 @media (max-width:560px){.mb-pay{padding:0}.mb-pay-head,.mb-pay-body{padding-left:var(--s2);padding-right:var(--s2)}.mb-pay-balance{font-size:var(--t-28);line-height:var(--lh-28)}}
+/* Company brand (FPB-branding): the faint brand tint on the table head and the
+   "how to pay" box; transparent when the company has no brand yet. */
+.mb-pay-table thead th{background:var(--brand-surface,transparent)}
+.mb-pay-box{background:var(--brand-surface,var(--white))}

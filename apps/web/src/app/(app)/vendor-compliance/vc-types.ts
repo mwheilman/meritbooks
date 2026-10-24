@@ -2,6 +2,8 @@
  * Vendor compliance screen — client-side types and small pure helpers. Server shapes are
  * imported as TYPES only (no server code reaches the client bundle).
  */
+
+import type { QuietHoursSummary } from '@/lib/requests/quiet-display';
 import type { PipKind } from '@meritbooks/merit-ui';
 import type { Dashboard, DashboardRow, StripCell, TimelineItem } from '@/lib/vendor-compliance/dashboard';
 import type { SubmissionRow } from '@/lib/vendor-compliance/review';
@@ -51,6 +53,7 @@ export interface ChaseResponse {
   requirementSets: number;
   vendorsChecked: number;
   items: ChaseItem[];
+  quietHours: QuietHoursSummary;
 }
 
 export interface ActionResponse {

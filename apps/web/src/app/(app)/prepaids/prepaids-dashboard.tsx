@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { PrepaidSetup, type PrepaidPrefill } from './prepaid-setup';
 import { PrepaidParseReview } from './prepaid-parse-review';
+import { DocumentProposalsBanner } from '@/components/documents/document-proposals-banner';
+import { acceptDocumentProposal, useDocumentProposal, type ProposalWithDoc } from '@/components/documents/intelligence-client';
 
 type Status = 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 
@@ -56,6 +58,27 @@ export function PrepaidsDashboard() {
   const [running, setRunning] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState('0');
+  // Document intelligence: a prepaid AI found in Documents → the setup form, pre-filled.
+  const deepLinked = useDocumentProposal('prepaid');
+  const [proposal, setProposal] = useState<ProposalWithDoc | null>(null);
+  const reviewFromDocument = (p: ProposalWithDoc) => {
+    const pp = (p.payload as { prepaid?: { description: string | null; vendor_name: string | null; total_cents: number | null; start_date: string | null; term_months: number | null } }).prepaid;
+    setProposal(p);
+    setSetup({
+      description: pp?.description ?? pp?.vendor_name ?? p.title,
+      vendor_name: pp?.vendor_name ?? null,
+      total_cents: pp?.total_cents ?? null,
+      start_date: pp?.start_date ?? null,
+      term_months: pp?.term_months ?? null,
+      location_id: p.location_id,
+      source_type: 'PREPAID_DOC',
+      origin: 'ai',
+    });
+  };
+  useEffect(() => {
+    if (deepLinked.proposal) reviewFromDocument(deepLinked.proposal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinked.proposal]);
 
   const { data, isLoading, error, refetch } = useQuery<PrepaidResponse>('/api/prepaid', undefined, { key: refreshKey });
   const schedules = data?.data ?? [];
@@ -137,6 +160,9 @@ export function PrepaidsDashboard() {
 
   return (
     <div className="space-y-5">
+      {/* Prepaids found in Documents (document intelligence) — shows on the empty state too. */}
+      <DocumentProposalsBanner kind="prepaid" refreshKey={Number(refreshKey)} onReview={reviewFromDocument} />
+
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-4 text-xs">
           {summary && (
@@ -255,8 +281,15 @@ export function PrepaidsDashboard() {
       {setup && (
         <PrepaidSetup
           prefill={setup === 'new' ? { origin: 'manual' } : setup}
-          onClose={() => setSetup(null)}
-          onSaved={() => { setSetup(null); bump(); }}
+          onClose={() => { setSetup(null); setProposal(null); deepLinked.clear(); }}
+          onSaved={(id) => {
+            const p = proposal;
+            setSetup(null);
+            setProposal(null);
+            deepLinked.clear();
+            if (p && id) void acceptDocumentProposal(p.id, 'prepaid', id).then(() => bump());
+            else bump();
+          }}
         />
       )}
     </div>

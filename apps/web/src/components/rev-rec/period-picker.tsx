@@ -18,7 +18,11 @@ export function periodLabel(periodKey: string): string {
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
-/** Month selector: ‹ [month] › — keyboard reachable, no future months. */
+/**
+ * Month selector: ‹ [month] › — keyboard reachable, no future months.
+ * @deprecated Use the shared `PeriodPicker` + `usePeriodParam` from '@/components/period' (fiscal-year
+ * aware presets, closed-month marks, URL sync). Kept only for the label helpers above.
+ */
 export function PeriodPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const max = new Date().toISOString().slice(0, 7);
   return (

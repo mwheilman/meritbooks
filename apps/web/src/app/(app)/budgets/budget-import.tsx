@@ -44,9 +44,11 @@ interface Preview {
 }
 
 export function BudgetImport({
-  locationId, fiscalYear, departmentId, onImported, initialStoragePath = null, hideTrigger = false, onClosed,
+  locationId, fiscalYear, departmentId, onImported, initialStoragePath = null, hideTrigger = false, onClosed, versionId = null,
 }: {
   locationId: string;
+  /** Target budget version (mig 189). Absent = the company-year's current draft (the import route decides). */
+  versionId?: string | null;
   fiscalYear: number;
   departmentId: string | null;
   onImported: () => void;
@@ -96,7 +98,7 @@ export function BudgetImport({
       res = await fetch('/api/budgets/import', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ storagePath: source.storagePath, companyId: locationId, fiscalYear: year, departmentId, dryRun }),
+        body: JSON.stringify({ storagePath: source.storagePath, companyId: locationId, fiscalYear: year, departmentId, dryRun, ...(versionId ? { versionId } : {}) }),
       });
     } else {
       const fd = new FormData();
@@ -104,6 +106,7 @@ export function BudgetImport({
       fd.append('companyId', locationId);
       fd.append('fiscalYear', String(year));
       if (departmentId) fd.append('departmentId', departmentId);
+      if (versionId) fd.append('versionId', versionId);
       fd.append('dryRun', dryRun ? 'true' : 'false');
       res = await fetch('/api/budgets/import', { method: 'POST', body: fd });
     }
@@ -113,7 +116,7 @@ export function BudgetImport({
       return json && 'layout' in json ? json : null; // 422 previews still carry detail
     }
     return json;
-  }, [locationId, departmentId]);
+  }, [locationId, departmentId, versionId]);
 
   const runPreview = useCallback(async (source: Source, name: string, year: number) => {
     sourceRef.current = source;

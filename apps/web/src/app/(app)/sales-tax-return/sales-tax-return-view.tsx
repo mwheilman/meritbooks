@@ -8,6 +8,11 @@ import {
 import { clsx } from 'clsx';
 import { useQuery } from '@/hooks';
 import { PageHeader, EmptyState } from '@/components/ui';
+import { PeriodPicker, usePeriodParam } from '@/components/period';
+import type { PeriodBasis } from '@/lib/period/resolve';
+
+/** Filing periods: monthly, quarterly or annual returns (or any range of months). */
+const FILING_BASES: readonly PeriodBasis[] = ['month', 'quarter', 'fy', 'ytd', 'range'];
 
 // ── Types mirrored from GET /api/tax/sales-tax-return ────────────────────────────
 interface JurisdictionLine {
@@ -81,20 +86,9 @@ const fmt = (cents: number) => (cents / 100).toLocaleString('en-US', { style: 'c
 const fmtPct = (p: number | null) => (p == null ? '—' : `${p.toFixed(3).replace(/\.?0+$/, '')}%`);
 
 // Quarter helpers for the period presets.
-function quarterRange(year: number, q: number): { start: string; end: string } {
-  const startMonth = (q - 1) * 3;
-  const start = new Date(Date.UTC(year, startMonth, 1));
-  const end = new Date(Date.UTC(year, startMonth + 3, 0));
-  const iso = (d: Date) => d.toISOString().split('T')[0];
-  return { start: iso(start), end: iso(end) };
-}
-
 export function SalesTaxReturnView() {
-  const now = new Date();
-  const [startDate, setStartDate] = useState(`${now.getFullYear()}-01-01`);
-  const [endDate, setEndDate] = useState(
-    new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0],
-  );
+  const pp = usePeriodParam({ pageKey: 'sales-tax-return', defaultPreset: 'last_quarter', bases: FILING_BASES });
+  const { startDate, endDate } = pp.period;
   const [jurisdiction, setJurisdiction] = useState<string>('all');
 
   const params = useMemo(() => {
@@ -103,21 +97,20 @@ export function SalesTaxReturnView() {
     return p;
   }, [startDate, endDate, jurisdiction]);
 
-  const { data, isLoading, error } = useQuery<ReturnReport>('/api/tax/sales-tax-return', params);
+  const { data, isLoading, error } = useQuery<ReturnReport>(pp.ready ? '/api/tax/sales-tax-return' : null, params);
 
   const totals = data?.worksheet?.totals;
   const lines = data?.worksheet?.lines ?? [];
   const gl = data?.glTieOut;
 
+  // States file on CALENDAR quarters regardless of the fiscal year, so the quick buttons pick a
+  // calendar-quarter range (the picker's "Quarter" window follows the fiscal year).
+  const filingYear = Number(pp.context.currentMonth.slice(0, 4));
   const setQuarter = (q: number) => {
-    const { start, end } = quarterRange(now.getFullYear(), q);
-    setStartDate(start);
-    setEndDate(end);
+    const m = (n: number) => `${filingYear}-${String(n).padStart(2, '0')}`;
+    pp.setSelection({ basis: 'range', start: m(q * 3 - 2), end: m(q * 3), preset: 'custom' });
   };
-  const setCurrentMonth = () => {
-    setStartDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`);
-    setEndDate(new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]);
-  };
+  const setCurrentMonth = () => pp.setSelection({ basis: 'month', end: pp.context.currentMonth, preset: 'this_month' });
 
   const exportCsv = () => {
     if (!data) return;
@@ -159,12 +152,8 @@ export function SalesTaxReturnView() {
       {/* Controls */}
       <div className="flex flex-wrap items-end gap-3 mb-5 print:hidden">
         <div>
-          <label className="text-xs text-slate-400">Period start</label>
-          <input type="date" className="input mt-1" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-        </div>
-        <div>
-          <label className="text-xs text-slate-400">Period end</label>
-          <input type="date" className="input mt-1" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <span className="block text-xs text-slate-400 mb-1">Filing period</span>
+          <PeriodPicker {...pp.pickerProps} label="Filing period" />
         </div>
         <div>
           <label className="text-xs text-slate-400">Jurisdiction</label>
@@ -182,7 +171,7 @@ export function SalesTaxReturnView() {
         </div>
         <div className="flex items-center gap-1 ml-auto">
           {[1, 2, 3, 4].map((q) => (
-            <button key={q} onClick={() => setQuarter(q)} className="px-2.5 py-1.5 rounded text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800">
+            <button key={q} onClick={() => setQuarter(q)} title={`Calendar Q${q} ${filingYear}`} className="px-2.5 py-1.5 rounded text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800">
               Q{q}
             </button>
           ))}
@@ -192,7 +181,7 @@ export function SalesTaxReturnView() {
         </div>
       </div>
 
-      {isLoading && (
+      {(isLoading || !pp.ready) && (
         <div className="flex items-center justify-center py-20 text-slate-500"><Loader2 className="animate-spin" size={20} /></div>
       )}
       {error && !isLoading && (

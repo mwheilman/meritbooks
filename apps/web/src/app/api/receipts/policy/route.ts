@@ -14,6 +14,8 @@ import {
   validatePolicyPatch,
   type ReceiptPolicy,
 } from '@/lib/receipts/policy';
+import { loadPolicyContext } from '@/lib/requests/policy';
+import { quietHoursSummary } from '@/lib/requests/quiet-display';
 import { receiptPolicyBody } from '@/lib/validations/receipts';
 
 const getQuery = z.object({ location_id: z.string().uuid().optional() });
@@ -29,7 +31,7 @@ export const GET = apiQueryHandler(getQuery, async (q, { userId, orgId, supabase
   const guard = await requirePermission(userId, 'receipts', 'view', { route: '/api/receipts/policy' });
   if (!guard.ok) return guard.response;
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
-  const ctx = await loadReceiptPolicyContext(supabase, orgId);
+  const [ctx, requestCtx] = await Promise.all([loadReceiptPolicyContext(supabase, orgId), loadPolicyContext(supabase, orgId).catch(() => null)]);
   const { data: org } = await supabase
     .schema('core')
     .from('organizations')
@@ -58,6 +60,8 @@ export const GET = apiQueryHandler(getQuery, async (q, { userId, orgId, supabase
       quietEnd: o.chase_quiet_end ? String(o.chase_quiet_end).slice(0, 5) : null,
       timezone: o.timezone ?? ctx.orgTimezone,
     },
+    // The quiet hours each chase keeps, from the engine's own resolver (one display everywhere).
+    quietHours: requestCtx ? quietHoursSummary(requestCtx) : null,
   });
 });
 

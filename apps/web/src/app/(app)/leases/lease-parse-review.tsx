@@ -9,6 +9,7 @@ import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
 import { dollarsToCents } from '@meritbooks/shared';
 import { UploadCloud, FileText, Loader2, X, Sparkles, AlertTriangle, Info } from 'lucide-react';
+import { acceptDocumentProposal, openDocument, type ProposalWithDoc } from '@/components/documents/intelligence-client';
 
 /** Shape returned by /api/leases/parse (mirrors ProposedLease, payment in DOLLARS). */
 interface ProposedLease {
@@ -70,14 +71,29 @@ function toForm(p: ProposedLease): Form {
   };
 }
 
+/** A blank review form for a document AI hasn't read yet (the person types the terms). */
+function blankLease(lessor: string | null): ProposedLease {
+  return {
+    lessor, description: null, classification: 'OPERATING', commencement_date: null, end_date: null, payment_dollars: null,
+    payment_frequency: 'MONTHLY', payment_timing: 'ARREARS', term_months: null, discount_rate: null, notes: null, snippet: null,
+    lowConfidenceFields: ['lessor', 'commencement_date', 'end_date', 'payment_dollars', 'term_months'],
+  };
+}
+
 export function LeaseParseReview({
   onClose,
   onCreated,
+  fromProposal = null,
 }: {
   onClose: () => void;
   onCreated: () => void;
+  /**
+   * Document intelligence: a lease AI found in Documents (FPB-document-intelligence §7.5).
+   * The form opens pre-filled from it; creating the lease links the document both ways.
+   */
+  fromProposal?: ProposalWithDoc | null;
 }) {
-  const [phase, setPhase] = useState<'upload' | 'parsing' | 'review' | 'saving'>('upload');
+  const [phase, setPhase] = useState<'upload' | 'parsing' | 'review' | 'saving'>(fromProposal ? 'review' : 'upload');
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<ParseResponse['meta'] | null>(null);
@@ -103,6 +119,27 @@ export function LeaseParseReview({
     if (!locationId && isSpecificCompany(activeCompanyId)) setLocationId(activeCompanyId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCompanyId]);
+
+  // Pre-fill from a document proposal (the stored LEASE_EXTRACT result, same shape as /api/leases/parse).
+  useEffect(() => {
+    if (!fromProposal) return;
+    const payload = fromProposal.payload as Partial<ParseResponse>;
+    const lease = payload.lease ?? blankLease(fromProposal.title?.replace(/^Lease — /, '') ?? null);
+    const m = payload.meta;
+    setMeta({
+      fileName: m?.fileName ?? fromProposal.document?.file_name ?? 'Document',
+      model: m?.model ?? '',
+      documentNote: m?.documentNote ?? null,
+      decisionId: m?.decisionId ?? null,
+      sourceDocumentId: fromProposal.document_id,
+    });
+    setDecisionId(m?.decisionId ?? null);
+    setFlags(lease.lowConfidenceFields ?? []);
+    setSnippet(lease.snippet ?? null);
+    setForm(toForm(lease));
+    if (fromProposal.location_id) setLocationId(fromProposal.location_id);
+    setPhase('review');
+  }, [fromProposal]);
 
   const parse = useCallback(async (file: File) => {
     setError(null);
@@ -183,6 +220,11 @@ export function LeaseParseReview({
       setPhase('review');
       return;
     }
+    if (fromProposal) {
+      const createdId = (res.data as { id?: string } | null)?.id;
+      const linkErr = createdId ? await acceptDocumentProposal(fromProposal.id, 'lease', createdId) : 'No lease id returned';
+      if (linkErr) addToast('error', `Lease created, but linking the document failed: ${linkErr}`);
+    }
     addToast('success', 'Lease created — ROU asset and liability set up with the full schedule.');
     onCreated();
   }
@@ -208,6 +250,16 @@ export function LeaseParseReview({
             <X size={18} />
           </button>
         </div>
+
+        {fromProposal && (
+          <p className="mb-4 text-[11px] text-slate-400" data-testid="from-document">
+            From document: <span className="text-slate-200">{fromProposal.document?.file_name ?? 'stored document'}</span>
+            {fromProposal.confidence != null && <> · AI {Math.round(Number(fromProposal.confidence) * 100)}%</>}
+            {fromProposal.extract_state !== 'done' && <> · AI hasn’t read the terms yet — enter them from the document</>}
+            {' · '}
+            <button type="button" className="underline" onClick={() => { void openDocument(fromProposal.document_id).then((e) => { if (e) addToast('error', e); }); }}>Open the document</button>
+          </p>
+        )}
 
         {error && (
           <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">

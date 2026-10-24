@@ -9,7 +9,7 @@ export default function BudgetsPage() {
     <>
       <PageHeader
         title="Budgets & Planning"
-        description="Author annual budgets by account, build them from drivers, and roll them forward against posted GL actuals."
+        description="Versioned company and department budgets: owners draft their departments, finance reviews and approves, and every department gets budget vs actual and bridges against the ledger."
       />
       <Suspense fallback={null}>
         <BudgetsTabs />

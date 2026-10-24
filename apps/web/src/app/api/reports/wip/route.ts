@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { asOfMonth, governRoute } from '@/lib/reports/governance/route-guard';
+import { getOrgToday } from '@/lib/dates/org-today';
 
 /**
  * GET /api/reports/wip — Work-in-Progress schedule.
@@ -15,6 +17,14 @@ export async function GET(request: Request) {
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
   const locIds = new URL(request.url).searchParams.get('location_ids');
+  const govLocs = (locIds ?? '').split(',').filter(Boolean);
+
+  // Number governance: job cost / billings to date (WIP) — a balance as of today, so a non-finance caller needs every
+  // month through the current one released (cumulative rule; the current month never is →
+  // finance-only in practice). 403 NOT_RELEASED otherwise.
+  const govToday = await getOrgToday(ctx.supabase, ctx.orgId);
+  const gov = await governRoute({ supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.userId }, { months: [asOfMonth(govToday)], locationIds: govLocs, cumulative: true });
+  if (gov instanceof NextResponse) return gov;
 
   let query = supabase
     .schema('core').from('jobs')
@@ -70,7 +80,7 @@ export async function GET(request: Request) {
     };
   });
 
-  return NextResponse.json({
+  return NextResponse.json({ governance: gov.info,
     data: rows,
     totals: {
       jobs: rows.length,

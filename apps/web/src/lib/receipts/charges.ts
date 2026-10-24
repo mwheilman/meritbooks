@@ -141,3 +141,57 @@ export function merchantLabel(description: string): string {
   if (!c) return description.slice(0, 80);
   return c.replace(/\b\w/g, (m) => m.toUpperCase()).slice(0, 80);
 }
+
+// ── Card-feed receipt badge + charges that aged out of the chase window ─────────────
+
+/** What the card feed shows in its receipt column for one line. */
+export type CardLineReceiptStatus = 'MATCHED' | 'MISSING' | 'PENDING' | 'NOT_REQUIRED' | 'NOT_APPLICABLE';
+
+/**
+ * The receipt status of one card-feed line. Card payments / autopay / "thank you" lines,
+ * refunds and credits (amount ≥ 0) are NOT purchases, so they never say "No receipt"
+ * (`NOT_APPLICABLE`); a line settled against a bill has its document already.
+ */
+export function cardLineReceiptStatus(
+  line: Pick<ChargeTxn, 'amount_cents' | 'description' | 'matched_receipt_id'> & { matched_bill_id?: string | null },
+  chaseStatus: string | null,
+): CardLineReceiptStatus {
+  if (line.matched_receipt_id || chaseStatus === 'matched') return 'MATCHED';
+  if (Number(line.amount_cents) >= 0 || isCardPaymentLine(line.description ?? '')) return 'NOT_APPLICABLE';
+  if (line.matched_bill_id) return 'NOT_REQUIRED';
+  if (chaseStatus === 'not_required' || chaseStatus === 'below_threshold') return 'NOT_REQUIRED';
+  if (chaseStatus === 'requested') return 'PENDING';
+  return 'MISSING';
+}
+
+/** Does this card-feed line still need a receipt? */
+export function needsReceipt(status: CardLineReceiptStatus): boolean {
+  return status === 'MISSING' || status === 'PENDING';
+}
+
+export interface OlderChargeInput {
+  txns: ReadonlyArray<ChargeTxn>;
+  accounts: ReadonlyMap<string, CardAccount>;
+  assignments: ReadonlyArray<CardAssignmentRow>;
+  /** Transactions the chase already tracks (any state) — counted on the board, not here. */
+  tracked: ReadonlySet<string>;
+  /** Transactions a receipt is already linked to. */
+  withReceipt: ReadonlySet<string>;
+  policyFor: (locationId: string) => Pick<ReceiptPolicy, 'chaseWindowDays' | 'receiptRequiredOverCents'>;
+  now: Date;
+}
+
+/**
+ * Card charges that need a receipt by policy but are OLDER than the chase window, so the
+ * chase never opened a request for them. The board's empty state counts these so it never
+ * claims "every card charge has its receipt" while the card feed shows "No receipt".
+ */
+export function olderUnreceiptedCharges(i: OlderChargeInput): ChargeTxn[] {
+  return i.txns.filter((t) => {
+    if (i.tracked.has(t.id) || i.withReceipt.has(t.id) || t.matched_receipt_id) return false;
+    if (!isCardCharge(t, i.accounts.get(t.bank_account_id), i.assignments)) return false;
+    const p = i.policyFor(t.location_id);
+    if (!receiptRequired(p, Number(t.amount_cents))) return false;
+    return !insideWindow(t.transaction_date, p.chaseWindowDays, i.now);
+  });
+}

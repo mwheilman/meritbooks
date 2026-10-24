@@ -125,7 +125,12 @@ function Tile({
 
 // ── Page ────────────────────────────────────────────────────────────────────────
 
-export function Compliance1099Client() {
+export interface Compliance1099ClientProps {
+  /** Rendered as the "1099 readiness" tab inside Vendor compliance (no page header / section tabs). */
+  embedded?: boolean;
+}
+
+export function Compliance1099Client({ embedded = false }: Compliance1099ClientProps = {}) {
   const years = useMemo(yearOptions, []);
   const [year, setYear] = useState<number>(years[0]);
   const { data, isLoading, error, refetch } = useQuery<Ten99Report>('/api/compliance/1099', {
@@ -164,13 +169,15 @@ export function Compliance1099Client() {
   // Thresholds follow the law for the selected tax year (lib/tax/1099-thresholds).
   const law = get1099Thresholds(year);
   const floorLabel = formatThresholdUsd(law.generalCents);
+  const intro = `Vendors paid ${floorLabel} or more by check / ACH / wire in ${year} (royalties from ${formatThresholdUsd(law.miscBoxCents.MISC_2)}, attorney gross proceeds from ${formatThresholdUsd(law.miscBoxCents.MISC_10)}) — card payments excluded (those are the processor's 1099-K). Services file on 1099-NEC; rents / royalties / medical / attorney proceeds file on 1099-MISC. Flag gaps to queue a W-9 chase, then generate each form.`;
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="1099 Readiness"
-        description={`Vendors paid ${floorLabel} or more by check / ACH / wire in ${year} (royalties from ${formatThresholdUsd(law.miscBoxCents.MISC_2)}, attorney gross proceeds from ${formatThresholdUsd(law.miscBoxCents.MISC_10)}) — card payments excluded (those are the processor's 1099-K). Services file on 1099-NEC; rents / royalties / medical / attorney proceeds file on 1099-MISC. Flag gaps to queue a W-9 chase, then generate each form.`}
-      />
+      {embedded ? (
+        <p className="text-xs text-slate-500">{intro}</p>
+      ) : (
+        <PageHeader title="1099 Readiness" description={intro} />
+      )}
 
       {law.notice && (
         <div role="status" className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
@@ -179,9 +186,11 @@ export function Compliance1099Client() {
         </div>
       )}
 
-      <div className="mb-6">
-        <VendorComplianceTabs />
-      </div>
+      {!embedded && (
+        <div className="mb-6">
+          <VendorComplianceTabs />
+        </div>
+      )}
 
       {/* Tax-year selector + generate */}
       <div className="flex flex-wrap items-center justify-between gap-2">

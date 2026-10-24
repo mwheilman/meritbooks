@@ -18,6 +18,9 @@
  *   • review queue ................ `ai_decisions` status='PROPOSED' per entity.
  *   • WIP review .................. the month's rev_rec_wip_runs status (loadWipCloseSignals,
  *                                    FPB-rev-rec-wip §5) — feeds `wip_accrual_reviewed`.
+ *   • flux review ................. material lines explained + reviewed, or waived
+ *                                    (loadFluxCloseSignals, FPB-financial-reports §5) —
+ *                                    feeds `flux_reviewed`.
  *
  * Manual sign-off state is stored in the existing `close_checklists` table (no new
  * table): one row per (fiscal_period_id, location_id, task_name = CloseTaskKey).
@@ -35,6 +38,8 @@ import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { gatherOpenItemsByLocation, gatherEntityOpenItems, emptyOpenItems } from './open-items';
 import { loadWipCloseSignals } from '@/lib/rev-rec/wip-close-signal';
+import { loadFluxCloseSignals } from './flux/load';
+import { FLUX_SIGNAL_UNKNOWN } from './flux/gate';
 import {
   evaluateCloseGraph,
   evaluateHardCloseGate,
@@ -273,7 +278,7 @@ export async function gatherCloseOrchestration(
   });
 
   // Shared, run-once reads.
-  const [subledger, leakage, aiRes, checkoffsByLoc, openItemsByLoc, wipByLoc] = await Promise.all([
+  const [subledger, leakage, aiRes, checkoffsByLoc, openItemsByLoc, wipByLoc, fluxByLoc] = await Promise.all([
     loadSubledgerVariance(supabase, orgId),
     scanUncategorizedLeakage(supabase, orgId, { dryRun: true, asOfISO: now.toISOString() }),
     fetchAll(
@@ -283,6 +288,7 @@ export async function gatherCloseOrchestration(
     loadManualCheckoffs(supabase, periodIds),
     gatherOpenItemsByLocation(supabase, openItemsContexts).catch(() => new Map<string, ReturnType<typeof emptyOpenItems>>()),
     loadWipCloseSignals(supabase, orgId, periodKey, locations.map((l) => l.id)),
+    loadFluxCloseSignals(supabase, orgId, periodKey, locations.filter((l) => periodByLoc.has(l.id)).map((l) => l.id)),
   ]);
 
   // Per-entity leakage roll-up (across all aged periods — how a controller reasons).
@@ -335,6 +341,7 @@ export async function gatherCloseOrchestration(
       unappliedPaymentCents: oi.unappliedPaymentCents,
       pendingApprovalCount: oi.pendingApprovalCount,
       wipAccrual: wipByLoc.get(loc.id) ?? null,
+      flux: fluxByLoc.get(loc.id) ?? null,
     };
     const checkoffs = checkoffsByLoc.get(loc.id) ?? new Set<CloseTaskKey>();
     const evaluation = evaluateCloseGraph(signals, checkoffs);
@@ -410,7 +417,7 @@ export async function gatherCloseSignals(
     ? `${pr.period_year}-${String(pr.period_month).padStart(2, '0')}`
     : periodEndISO ? periodEndISO.slice(0, 7) : null;
 
-  const [subledger, leakage, recon, aiRes, openItems, wipByLoc] = await Promise.all([
+  const [subledger, leakage, recon, aiRes, openItems, wipByLoc, fluxByLoc] = await Promise.all([
     loadSubledgerVariance(supabase, orgId),
     scanUncategorizedLeakage(supabase, orgId, { dryRun: true }),
     gatherReconciliationCloseStatus(supabase, args).catch(() => null),
@@ -424,6 +431,7 @@ export async function gatherCloseSignals(
       periodEndISO,
     }).catch(() => emptyOpenItems()),
     periodKey ? loadWipCloseSignals(supabase, orgId, periodKey, [args.locationId]) : Promise.resolve(null),
+    periodKey ? loadFluxCloseSignals(supabase, orgId, periodKey, [args.locationId]) : Promise.resolve(null),
   ]);
 
   let uncodedBankCents = 0;
@@ -454,6 +462,8 @@ export async function gatherCloseSignals(
     wipAccrual: wipByLoc
       ? wipByLoc.get(args.locationId) ?? null
       : { applicable: true, status: 'UNKNOWN', jobs: 0, underbilledCents: 0, overbilledCents: 0, lossProvisionCents: 0, dismissReason: null, reversalPending: false },
+    // Same rule for the flux review: no resolvable month (or a read error) ⇒ UNKNOWN blocks.
+    flux: fluxByLoc ? fluxByLoc.get(args.locationId) ?? FLUX_SIGNAL_UNKNOWN : FLUX_SIGNAL_UNKNOWN,
   };
 }
 

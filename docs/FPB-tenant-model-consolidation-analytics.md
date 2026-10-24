@@ -284,3 +284,105 @@ Commercial plan pricing/packaging; the operator console UI; BI/warehouse export;
 - **[DECISION]** The exact default role templates to ship (§12 proposes five) and which permissions are **owner-reserved** (billing/entitlements).
 - **[DECISION]** Whether tenants can only *compose* catalog permissions into roles (recommended) or ever request net-new atomic permissions (recommend no — the app must enforce every permission).
 - **[HUMAN]** None in Clerk for this module; it rides on the identity integration already configured. Provisioning/seats will add platform-console steps when that track starts.
+
+---
+
+## 18. Amendment (2026-10-24, Wave 3D) — Number governance
+
+**Audit rows:** FP-15, RP-17 (`docs/audit-2026-10/FEATURE-GAP-AUDIT.md` §4.9, §6.3 Wave 3D); partner-portal parity
+M11 + X6 (`docs/audit-2026-10/D-PARTNER-PORTAL-REPORTING.md` §1.1, §2.6). Migration **186**. Code:
+`apps/web/src/lib/reports/governance/*`, `app/api/report-governance/*`, `app/(app)/reporting-calendar/*`.
+
+### 18.1 Purpose
+A partner, lender or department head must only ever see numbers the finance team has *released*, must always
+know how final they are ("books closed through …"), and must be told when a month they already saw has changed
+("Restated on …"). Finance must be able to preview the unreleased months, release them deliberately or on a
+calendar rule, and see per company how fresh the books are and what is due when. MeritBooks owns the period
+locks, so "closed" is a fact, not a QuickBooks closing date (portal X6).
+
+### 18.2 Definitions
+- **Audience.** `finance` = holds `journal_entries:create` **or** `close_mgmt:manage` (v2: `gl.journal_entries:create`
+  or `gl.periods:approve` / `close.checklist:edit`) — bookkeeper, accounting manager, controller, finance director
+  (via approve), CFO, company admin. Everyone else is `non_finance` (owner template, department head, lender viewer,
+  external auditor, view-only, client staff). Resolved **server-side only**, never taken from request input.
+- **Release** of (company, month): explicit (`report_releases` row, MANUAL) or derived (AUTO): the tenant (or the
+  company override) enables auto-release, the month has ended, `today ≥ month end + N days` (default N = 20) and the
+  period status is at least the configured minimum (`SOFT_CLOSE` or `HARD_CLOSE`, default `HARD_CLOSE`). An explicit
+  *withdrawn* row beats the auto rule. A month that has not ended, has no fiscal period, or is OPEN can never be
+  released (manual release needs SOFT_CLOSE or HARD_CLOSE).
+- **Released through** (company) = the latest released month. (Group) = the earliest of its members'.
+- **Books closed through** (company) = the last month of the contiguous run of `HARD_CLOSE` periods from the
+  company's first period; a reopened month pulls it back. (Group) = the earliest of its members'.
+- **Group release.** A consolidation group / multi-company view is released for a month only when **every member
+  that is in the group that month** is released (derived; no separate group row — a consolidated figure can never
+  contain an unreleased member).
+- **In group from / until** (`report_company_coverage`). Months before the month of `in_group_from` (or after
+  `in_group_until`) are excluded from multi-company views for everyone, and from single-company views for
+  non-finance. Finance may request **pro forma** (include them), which is annotated.
+- **Snapshot.** At release the key totals for the month are captured: revenue, COGS, opex, other, net income
+  (the month's posted activity) and assets / liabilities / equity (cumulative at month end), entry and line counts,
+  per-account period activity, and a SHA-256 statement hash over the per-account activity.
+- **Restatement.** On the next read of the reporting calendar, on a re-release, on the nightly job or on demand,
+  the month's posted activity is re-hashed; a different hash writes a new snapshot, moves the release baseline, and
+  logs a restatement with the deltas (all eight totals), the changed accounts, the journal entries posted or voided
+  in that period since the prior snapshot (the cause), and the reopen reason from the period. Finance can add an
+  acknowledgement note.
+
+### 18.3 The enforcement contract — `applyGovernance(view, ctx)`
+`lib/reports/governance/apply.ts`. Every report and metric API (3A engine, 3B metrics) calls it **before** it
+returns figures and drops anything not visible (helper `filterByGovernance`). Input: requested months, requested
+companies, scope kind (`company` · `combined` · `consolidated`), `includePreview`, `proForma`. Output
+(`GovernanceDecision`): per month `visible | preview | hidden` (+ reason `not_released | pre_acquisition |
+out_of_scope | no_companies`), the companies to include per month, close status (worst member), released /
+restated flags, closed-through and released-through, annotations, a deterministic footnote sentence, a banner and a
+watermark mode (`none | preliminary | preview`). Companies outside the caller's client scope (RLS) are
+`out_of_scope` and never contribute. The pure core is `evaluateGovernance(input)`.
+
+**Database backstop (security review H2, migrations 185/186).** The read RPCs `report_balances`,
+`report_drill_lines`, `period_balances_tieout` are service-role only (members can't call them); the app calls them
+after the permission + client-scope + governance checks with `p_org` pinned and an explicit company list.
+`core.is_finance_member()` mirrors the audience rule above (journal_entries:create OR close_mgmt:manage, per the
+tenant enforcement mode). A RESTRICTIVE `governance_release_gate` policy on `period_balances`,
+`report_release_snapshots` and `report_restatements` lets a non-finance member read only rows of a (company, month)
+released IN ORDER (`public.report_released_months()`). Releases themselves are ordered by a trigger on
+`report_releases` (RELEASE_ORDER); the restatement log is append-only except the acknowledgement.
+**Known gap:** raw `gl_entry_lines` / `gl_entries` remain org-readable by members (pre-existing), so DB-level release
+enforcement covers `period_balances` / snapshots / restatements and the governed RPCs only; the classic report
+routes enforce governance in code.
+
+### 18.4 UI — Reporting calendar (`/reporting-calendar`, merit-ui, density-cockpit)
+Header strip: closed-through and released-through for the whole tenant, the auto-release rule in words.
+Grid: one row per company, last 12 months as columns; each cell shows Released (manual/auto) · Ready to release ·
+Closed (not released) · Soft close · Open · No period, with a restated marker. Clicking a cell opens a panel with
+the month's status, snapshot totals, release / withdraw (withdraw needs a reason) and its restatements. Below:
+freshness cards per company (status dot, last bank sync, last posted entry, open items blocking close, books
+closed through, last release, in group from) and reporting-deadline tiles; the restatement log (period, company,
+net-income delta, cause entries, who/when, reopen reason, acknowledge); settings (auto-release on/off, N days,
+minimum status, deadlines; per-company in-group-from). Finance can switch "See it as partners do" (preview off).
+
+### 18.5 Acceptance criteria (testable)
+- **G-1** Manual release of a SOFT/HARD-closed, ended month writes a RELEASED row + snapshot + action-log row; an
+  OPEN or not-yet-ended month is refused (409). Release, withdraw, settings and coverage writes require
+  `close_mgmt:manage`; members cannot write the tables directly (DB grants).
+- **G-2** Auto-release: with the rule on (N = 20, min HARD_CLOSE) a HARD_CLOSE month is released on month-end + 20
+  and not a day before; a SOFT_CLOSE month is not (unless the minimum is SOFT_CLOSE); with the rule off nothing
+  auto-releases; a withdrawn month stays withdrawn.
+- **G-3** A non-finance caller receives only released months (others `hidden`, figures dropped by
+  `filterByGovernance`); a finance caller receives unreleased months as `preview` with the banner
+  "Preview — not released" and watermark `preview`; with preview off finance sees exactly the partner view.
+- **G-4** A multi-company month is visible to non-finance only when every in-group member is released.
+- **G-5** Closed-through is the contiguous HARD_CLOSE run; reopening a month moves it back.
+- **G-6** Posting into (or voiding in) a released month is detected as a restatement with the net-income delta, the
+  changed accounts and the causing entries; the report annotation reads "Restated on <date>". No change → no row.
+- **G-7** Months before `in_group_from` are excluded from consolidated views (and from non-finance single-company
+  views); finance `proForma` includes them with an annotation.
+- **G-8** A company outside the caller's client scope is `out_of_scope` and never contributes figures.
+- **G-9** Unclosed visible months are annotated and the watermark is `preliminary`.
+- **G-10** Deadline tiles compute the due date (period end + days), "due in N days" / "overdue N days" / "met" (the
+  scope released on time).
+
+### 18.6 Deferred / decisions
+- Lender reporting obligations have no table yet; deadlines are a simple per-tenant / per-company setting until
+  `debt.lender_obligations` gets one (then the tiles read it).
+- Packet freezing at notice is Wave 4D (pack versions, migration 190); it can reuse the snapshot hash.
+- **[DECISION]** whether pro forma (pre-acquisition) may ever be shown to non-finance audiences (built: finance only).

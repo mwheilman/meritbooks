@@ -6,6 +6,7 @@ import { assertWriteScope, serviceWriter } from '@/lib/db/scoped-writer';
 import { chaseBody, chaseQuery } from '@/lib/validations/vendor-compliance';
 import { chaseSwitches, createVendorDocRequest, planVendorChase, type VendorNeed } from '@/lib/requests/vendor-compliance';
 import { loadPolicyContext } from '@/lib/requests/policy';
+import { quietHoursSummary } from '@/lib/requests/quiet-display';
 import { setChaseSwitch } from '@/lib/vendor-compliance/admin';
 import { noOrg, vcError, vcManage, vcSettings, vcView } from '@/lib/vendor-compliance/route-auth';
 import { consumeSendQuota } from '@/lib/email/send-quota';
@@ -33,6 +34,8 @@ export const GET = apiQueryHandler(chaseQuery, async (q, { userId, orgId, supaba
   const liveStatus = new Map(live.items.map((i) => [`${i.vendor.id}:${i.need.kind}:${i.need.renewal ? 'r' : ''}`, i.status]));
   return NextResponse.json({
     switches: { org: sw.org, byCompany: Object.fromEntries(sw.byCompany) },
+    // The quiet hours the reminder run actually keeps (same resolver), for the drawer's note.
+    quietHours: quietHoursSummary(ctx),
     requirementSets: preview.requirementSets,
     vendorsChecked: preview.vendorsChecked,
     items: preview.items.map((i) => ({

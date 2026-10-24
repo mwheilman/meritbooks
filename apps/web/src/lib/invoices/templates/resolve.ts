@@ -13,6 +13,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { BUILT_IN_TEMPLATE, TEMPLATE_SELECT, templateFromRow, type InvoiceTemplate } from './types';
+import { applyBrandToTemplate, loadBrand } from '@/lib/branding/resolve';
+import type { ResolvedBrand } from '@/lib/branding/types';
 
 export type TemplateSource = 'INVOICE' | 'CUSTOMER' | 'COMPANY_DEFAULT' | 'ORG_DEFAULT' | 'BUILT_IN';
 
@@ -85,15 +87,19 @@ export async function loadCustomerInvoiceSettings(
   return { template_id: row?.template_id ?? null, cc_emails: row?.cc_emails ?? [] };
 }
 
-/** Resolve the template for one invoice (DB-backed). */
+/**
+ * Resolve the template for one invoice (DB-backed), with the company brand applied
+ * (FPB-branding §4.3: an inheriting template prints the brand's logo / colour / font).
+ */
 export async function resolveInvoiceTemplate(
   db: SupabaseClient,
   orgId: string,
   inv: { template_id?: string | null; customer_id?: string | null; location_id?: string | null },
-): Promise<ResolvedTemplate & { customerCc: string[] }> {
-  const [templates, cust] = await Promise.all([
+): Promise<ResolvedTemplate & { customerCc: string[]; brand: ResolvedBrand }> {
+  const [templates, cust, brand] = await Promise.all([
     loadCompanyTemplates(db, orgId, inv.location_id ?? null),
     loadCustomerInvoiceSettings(db, orgId, inv.customer_id ?? null),
+    loadBrand(db, orgId, inv.location_id ?? null),
   ]);
   const resolved = pickTemplate({
     invoiceTemplateId: inv.template_id ?? null,
@@ -101,13 +107,13 @@ export async function resolveInvoiceTemplate(
     locationId: inv.location_id ?? null,
     templates,
   });
-  return { ...resolved, customerCc: cust.cc_emails };
+  return { template: applyBrandToTemplate(resolved.template, brand), source: resolved.source, customerCc: cust.cc_emails, brand };
 }
 
 /**
  * The company's branding default (logo / colour / remit-to) for documents that are not
  * an invoice (statements, estimates, 1099 copies). Company default → org default →
- * built-in. Replaces the old one-row-per-company `.maybeSingle()` reads, which break as
+ * built-in, with the company brand applied (FPB-branding). Replaces the old one-row-per-company `.maybeSingle()` reads, which break as
  * soon as a company has two templates.
  */
 export async function loadBrandTemplate(
@@ -115,6 +121,9 @@ export async function loadBrandTemplate(
   orgId: string,
   locationId: string | null,
 ): Promise<InvoiceTemplate> {
-  const templates = await loadCompanyTemplates(db, orgId, locationId);
-  return pickTemplate({ locationId, templates }).template;
+  const [templates, brand] = await Promise.all([
+    loadCompanyTemplates(db, orgId, locationId),
+    loadBrand(db, orgId, locationId),
+  ]);
+  return applyBrandToTemplate(pickTemplate({ locationId, templates }).template, brand);
 }

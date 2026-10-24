@@ -15,12 +15,18 @@
  *   admin client never touches ledger data.
  * - HUMAN GATE: only packs a user explicitly scheduled (active + cadence +
  *   recipients) are delivered. Nothing auto-emails by default.
+ * - NUMBER GOVERNANCE: recipients are EXTERNAL readers — the pack is compiled with no
+ *   user, i.e. as NON-FINANCE (released months only), regardless of who scheduled it. If
+ *   any section's period is not released the delivery is HELD (reported SKIPPED with the
+ *   reason, last_run_status 'HELD: …') — unreleased figures are never emailed, and a
+ *   partial pack is never sent.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { CompilePackPdf } from '@/app/api/reports/compile/compile-pack-pdf';
 import { runPack } from '@/lib/reports/compiler/run';
+import { heldReason } from '@/lib/reports/compiler/governance';
 import {
   resolveSavedPack,
   parseStoredSpecs,
@@ -153,10 +159,17 @@ export async function deliverDuePacks(
     try {
       const fyStartMonth = await fyStartMonthFor(admin, pack.org_id);
       const resolved = resolveSavedPack(specs, pack.entity_label, pack.location_ids, fyStartMonth);
-      const compiled = await runPack(scoped, pack.org_id, resolved);
+      // No user: governed as non-finance (external recipients see released months only).
+      const compiled = await runPack(scoped, pack.org_id, resolved, { userId: null });
       if (compiled.sections.length === 0) {
         results.push({ id: pack.id, name: pack.name, status: 'FAILED', detail: 'resolved to no sections' });
         await record('FAILED: no sections');
+        continue;
+      }
+      const held = heldReason(compiled);
+      if (held) {
+        results.push({ id: pack.id, name: pack.name, status: 'SKIPPED', detail: `held — ${held}` });
+        await record(`HELD: ${held}`);
         continue;
       }
 

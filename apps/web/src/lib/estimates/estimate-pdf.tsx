@@ -134,7 +134,7 @@ function EstimatePage({ doc, accent }: { doc: EstimateDoc; accent: string }) {
 }
 
 export function EstimatePdf({ doc }: { doc: EstimateDoc }) {
-  const accent = doc.template?.accent_color || '#10b981';
+  const accent = doc.template?.accent_color || '#2563EB';
   return (
     <Document title={`Estimate ${doc.estimate_number}`}>
       <EstimatePage doc={doc} accent={accent} />

@@ -1,601 +1,483 @@
 'use client';
 
 /**
- * Documents center — browse, search, filter, preview/download, and manage every
- * retained document in the tenant. File bytes live in the private `documents` Storage
- * bucket; this reads/writes the metadata rows via /api/documents (RLS-scoped, org-isolated).
+ * DOCUMENTS — every stored file, what it is, and where it went (FPB-document-intelligence §8;
+ * merit-ui v2.3, cockpit density).
  *
- * Depth:
- *  - Search by filename (debounced, server ilike).
- *  - Filters: doc type, linked-record type, an "Unfiled" view for inbound/retained docs
- *    not yet linked to a record, and a created-date range preset.
- *  - A "Linked to" column that click-throughs to the SOURCE record (bill/lease/covenant/…).
- *  - Per-document View (inline signed URL) and Download (attachment signed URL).
- *  - Client-side sortable columns (name / type / linked / size / date).
- *  - Safe bulk-select: download selected. No hard-delete in bulk.
- *  - States: loading, empty, filtered-empty, error, populated.
+ *   Bands       All · Needs review · Proposals ready · Unfiled
+ *   Each row    type (AI tag when AI typed it) · confidence · company · linked records /
+ *               proposals ("Lease proposal") · status ("Needs review · AI later")
+ *   Panel       what it is (other party, key dates, amount, summary), correct the type /
+ *               company, open each proposal in its module, link to an existing record,
+ *               read again, dismiss, view / download / delete
+ *   Header      Upload (we work out the type) · Analyze existing documents (the backfill)
+ *   AI down     an AiPaused notice says what still works: rules typed them, AI re-reads later
+ *
+ * States: loading, empty, filtered-empty, error, populated. Server-side pagination.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { clsx } from 'clsx';
 import {
-  Loader2,
-  AlertCircle,
-  Upload,
-  Download,
-  Trash2,
-  FileText,
+  AiPaused,
+  Bands,
+  Button,
+  Conf,
+  InlineNotice,
+  ListPager,
+  PageHead,
+  QueueTable,
   Search,
-  Link2,
-  FolderOpen,
-  Eye,
-  ArrowUpDown,
-  X,
-  Inbox,
-} from 'lucide-react';
-import { useDebounce } from '@/hooks';
-import { addToast } from '@/hooks/use-toast';
+  Select,
+  Status,
+  Tag,
+  api,
+  toast,
+  useDebounce,
+  useQuery,
+  type QueueAction,
+  type QueueColumn,
+} from '@meritbooks/merit-ui';
+import { DOC_TYPES, DOC_TYPE_LABEL, MAX_DOCUMENT_BYTES, entityTypeLabel, formatBytes, type DocType } from '@/lib/documents/schema';
+import { TARGETS } from '@/lib/documents/intelligence/types';
+import { openDocument } from '@/components/documents/intelligence-client';
+import { DocumentPanel } from './document-panel';
 import {
-  DOC_TYPES,
-  DOC_TYPE_LABEL,
-  LINKABLE_ENTITY_TYPES,
-  entityTypeLabel,
-  entityRecordHref,
-  formatBytes,
-  MAX_DOCUMENT_BYTES,
-  type DocType,
-  type DocumentRow,
-} from '@/lib/documents/schema';
+  fmtDate,
+  statusOf,
+  typeLabel,
+  type AnalyzeResponse,
+  type Band,
+  type CenterRow,
+  type DocListResponse,
+  type IntelResponse,
+  type LocationOption,
+} from './documents-types';
+import s from './documents.module.css';
 
-type LinkFilter = 'ALL' | 'UNFILED' | 'LINKED' | string; // string = specific entity_type
 type DatePreset = 'ALL' | '7D' | '30D' | '90D' | 'YTD';
-type SortKey = 'file_name' | 'doc_type' | 'entity_type' | 'size_bytes' | 'created_at';
-type SortDir = 'asc' | 'desc';
-
-const DATE_PRESETS: { value: DatePreset; label: string }[] = [
+const DATE_PRESETS: Array<{ value: DatePreset; label: string }> = [
   { value: 'ALL', label: 'Any date' },
   { value: '7D', label: 'Last 7 days' },
   { value: '30D', label: 'Last 30 days' },
   { value: '90D', label: 'Last 90 days' },
   { value: 'YTD', label: 'This year' },
 ];
+const PER_PAGE = 50;
 
-function fmtDate(iso: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? '—'
-    : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-/** Compute the ISO lower-bound for a date preset (or null for "any"). */
-function presetToDateFrom(preset: DatePreset): string | null {
-  if (preset === 'ALL') return null;
+function presetToDateFrom(p: DatePreset): string | undefined {
+  if (p === 'ALL') return undefined;
   const now = new Date();
-  if (preset === 'YTD') return new Date(now.getFullYear(), 0, 1).toISOString();
-  const days = preset === '7D' ? 7 : preset === '30D' ? 30 : 90;
-  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+  if (p === 'YTD') return new Date(now.getFullYear(), 0, 1).toISOString();
+  const days = p === '7D' ? 7 : p === '30D' ? 30 : 90;
+  return new Date(now.getTime() - days * 86_400_000).toISOString();
 }
 
 export function DocumentsCenter() {
-  const [docs, setDocs] = useState<DocumentRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [typeFilter, setTypeFilter] = useState<DocType | 'ALL'>('ALL');
-  const [linkFilter, setLinkFilter] = useState<LinkFilter>('ALL');
-  const [datePreset, setDatePreset] = useState<DatePreset>('ALL');
+  const [band, setBand] = useState<Band>('all');
   const [rawSearch, setRawSearch] = useState('');
-  const [uploadType, setUploadType] = useState<DocType>('OTHER');
-  const [uploading, setUploading] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkBusy, setBulkBusy] = useState(false);
-  const [sortKey, setSortKey] = useState<SortKey>('created_at');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const search = useDebounce(rawSearch, 300);
+  const [typeFilter, setTypeFilter] = useState<DocType | 'ALL'>('ALL');
+  const [datePreset, setDatePreset] = useState<DatePreset>('ALL');
+  const [page, setPage] = useState(1);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [uploadType, setUploadType] = useState<DocType | 'AUTO'>('AUTO');
+  const [working, setWorking] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [backfillNote, setBackfillNote] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const bump = useCallback(() => setRefreshKey((k) => k + 1), []);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      if (typeFilter !== 'ALL') params.set('doc_type', typeFilter);
-      if (search.trim()) params.set('search', search.trim());
-      if (linkFilter === 'UNFILED') params.set('linked', 'unfiled');
-      else if (linkFilter === 'LINKED') params.set('linked', 'linked');
-      else if (linkFilter !== 'ALL') params.set('entity_type', linkFilter);
-      const dateFrom = presetToDateFrom(datePreset);
-      if (dateFrom) params.set('date_from', dateFrom);
-      const res = await fetch(`/api/documents?${params.toString()}`);
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error ?? 'Failed to load');
-      setDocs((body.data ?? []) as DocumentRow[]);
-      setSelected(new Set());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load documents');
-      setDocs([]);
-    }
-  }, [typeFilter, search, linkFilter, datePreset]);
-
+  // Deep link from a module banner: /documents?doc=<id>.
   useEffect(() => {
-    void load();
-  }, [load]);
+    const id = new URLSearchParams(window.location.search).get('doc');
+    if (id) setOpenId(id);
+  }, []);
+  useEffect(() => setPage(1), [band, search, typeFilter, datePreset]);
 
-  const counts = useMemo(() => {
-    const total = docs?.length ?? 0;
-    const bytes = (docs ?? []).reduce((s, d) => s + (d.size_bytes ?? 0), 0);
-    const linked = (docs ?? []).filter((d) => d.entity_type).length;
-    const unfiled = total - linked;
-    return { total, bytes, linked, unfiled };
-  }, [docs]);
+  // Bands backed by intelligence state: fetch the ids first.
+  const bandStatus = band === 'review' ? 'needs_review' : band === 'proposals' ? 'proposal_created' : null;
+  const { data: bandIntel } = useQuery<IntelResponse>(bandStatus ? '/api/documents/intelligence' : null, { status: bandStatus ?? undefined }, { key: `b:${refreshKey}`, scope: false });
+  const bandIds = bandStatus ? (bandIntel ? bandIntel.data.map((r) => r.document_id) : null) : undefined;
 
-  const sorted = useMemo(() => {
-    const rows = [...(docs ?? [])];
-    const dir = sortDir === 'asc' ? 1 : -1;
-    rows.sort((a, b) => {
-      let av: string | number = '';
-      let bv: string | number = '';
-      switch (sortKey) {
-        case 'size_bytes':
-          av = a.size_bytes ?? 0;
-          bv = b.size_bytes ?? 0;
-          break;
-        case 'created_at':
-          av = a.created_at ?? '';
-          bv = b.created_at ?? '';
-          break;
-        case 'doc_type':
-          av = DOC_TYPE_LABEL[a.doc_type] ?? a.doc_type;
-          bv = DOC_TYPE_LABEL[b.doc_type] ?? b.doc_type;
-          break;
-        case 'entity_type':
-          av = entityTypeLabel(a.entity_type);
-          bv = entityTypeLabel(b.entity_type);
-          break;
-        default:
-          av = (a.file_name ?? '').toLowerCase();
-          bv = (b.file_name ?? '').toLowerCase();
-      }
-      if (av < bv) return -1 * dir;
-      if (av > bv) return 1 * dir;
-      return 0;
-    });
-    return rows;
-  }, [docs, sortKey, sortDir]);
+  const listParams = {
+    page: String(page),
+    per_page: String(PER_PAGE),
+    search: search.trim() || undefined,
+    doc_type: typeFilter !== 'ALL' ? typeFilter : undefined,
+    date_from: presetToDateFrom(datePreset),
+    linked: band === 'unfiled' ? 'unfiled' : undefined,
+    ids: bandIds === undefined ? undefined : (bandIds ?? []).join(','),
+  };
+  const listReady = bandIds !== null;
+  const { data: list, error: listError, isLoading } = useQuery<DocListResponse>(listReady ? '/api/documents' : null, listParams, { key: `l:${refreshKey}`, scope: false });
+  // The ids param must be sent even when empty (an empty band shows nothing).
+  const docs = useMemo(() => (bandIds && bandIds.length === 0 ? [] : list?.data ?? []), [list, bandIds]);
+  const docIds = docs.map((d) => d.id).join(',');
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    else {
-      setSortKey(key);
-      setSortDir(key === 'file_name' || key === 'doc_type' || key === 'entity_type' ? 'asc' : 'desc');
-    }
-  }
+  const { data: intel, error: intelError } = useQuery<IntelResponse>('/api/documents/intelligence', { document_ids: docIds || undefined }, { key: `i:${refreshKey}:${docIds}`, scope: false });
+  const { data: locData } = useQuery<LocationOption[]>('/api/locations', undefined, { scope: false });
+  const locations = useMemo(() => locData ?? [], [locData]);
+  const locName = useMemo(() => new Map(locations.map((l) => [l.id, l.name])), [locations]);
+  const summary = intel?.summary;
 
-  const allSelected = sorted.length > 0 && sorted.every((d) => selected.has(d.id));
-  function toggleSelectAll() {
-    setSelected(allSelected ? new Set() : new Set(sorted.map((d) => d.id)));
-  }
-  function toggleOne(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
+  const rows: CenterRow[] = useMemo(() => {
+    const byDoc = new Map((intel?.data ?? []).map((i) => [i.document_id, i]));
+    return docs.map((doc) => ({
+      doc,
+      intel: byDoc.get(doc.id) ?? null,
+      proposals: (intel?.proposals ?? []).filter((p) => p.document_id === doc.id),
+      links: (intel?.links ?? []).filter((l) => l.document_id === doc.id),
+    }));
+  }, [docs, intel]);
+
+  // Keep the open document's row even when it is not on this page (deep link).
+  const { data: openList } = useQuery<DocListResponse>(openId && !rows.some((r) => r.doc.id === openId) ? '/api/documents' : null, { ids: openId ?? '' }, { key: `o:${refreshKey}:${openId}`, scope: false });
+  const { data: openIntel } = useQuery<IntelResponse>(openId && !rows.some((r) => r.doc.id === openId) ? '/api/documents/intelligence' : null, { document_ids: openId ?? '' }, { key: `oi:${refreshKey}:${openId}`, scope: false });
+  const openRow: CenterRow | null = useMemo(() => {
+    if (!openId) return null;
+    const here = rows.find((r) => r.doc.id === openId);
+    if (here) return here;
+    const doc = openList?.data?.[0];
+    if (!doc) return null;
+    return {
+      doc,
+      intel: openIntel?.data?.[0] ?? null,
+      proposals: (openIntel?.proposals ?? []).filter((p) => p.document_id === doc.id),
+      links: (openIntel?.links ?? []).filter((l) => l.document_id === doc.id),
+    };
+  }, [openId, rows, openList, openIntel]);
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+  const analyzeOne = useCallback(async (id: string, force = false): Promise<string | null> => {
+    const r = await api.post<AnalyzeResponse>('/api/documents/intelligence/analyze', { document_id: id, force });
+    if (r.error) return r.error.error;
+    return r.data?.message ?? null;
+  }, []);
 
   async function onFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
-    setUploading(true);
-    let ok = 0;
-    for (const file of Array.from(files)) {
+    const list = Array.from(files);
+    const uploaded: Array<{ id: string; name: string }> = [];
+    for (const [i, file] of list.entries()) {
+      setWorking(`Uploading ${i + 1} of ${list.length}…`);
       if (file.size > MAX_DOCUMENT_BYTES) {
-        addToast('error', `${file.name} exceeds the 25 MB limit`);
+        toast.error(`${file.name} is over the 25 MB limit.`);
         continue;
       }
       const fd = new FormData();
       fd.append('file', file);
-      fd.append('doc_type', uploadType);
+      if (uploadType !== 'AUTO') fd.append('doc_type', uploadType);
       const res = await fetch('/api/documents', { method: 'POST', body: fd });
-      if (res.ok) ok += 1;
-      else {
-        const b = await res.json().catch(() => null);
-        addToast('error', b?.error ?? `Failed to upload ${file.name}`);
+      const body = (await res.json().catch(() => null)) as { document?: { id: string; file_name: string }; error?: string } | null;
+      if (!res.ok || !body?.document) {
+        toast.error(body?.error ?? `Couldn’t upload ${file.name}.`);
+        continue;
       }
+      uploaded.push({ id: body.document.id, name: body.document.file_name });
     }
-    setUploading(false);
     if (inputRef.current) inputRef.current.value = '';
-    if (ok > 0) {
-      addToast('success', `${ok} document${ok === 1 ? '' : 's'} uploaded`);
-      void load();
+    bump();
+    // Read each one and route it (proposals only).
+    for (const [i, u] of uploaded.entries()) {
+      setWorking(`Reading ${i + 1} of ${uploaded.length}: ${u.name}`);
+      const msg = await analyzeOne(u.id);
+      if (msg) toast(`${u.name}: ${msg}`);
     }
+    setWorking(null);
+    if (uploaded.length) bump();
   }
 
-  /** Open a signed URL — inline for viewing, attachment for downloading. */
-  async function openDoc(doc: DocumentRow, mode: 'view' | 'download') {
-    try {
-      const q = mode === 'view' ? '?download=0' : '';
-      const res = await fetch(`/api/documents/${doc.id}/signed-url${q}`);
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error ?? 'Failed');
-      window.open(body.url as string, '_blank', 'noopener,noreferrer');
-    } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Could not open document');
+  async function backfill() {
+    setWorking('Analyzing existing documents…');
+    const r = await api.post<{ message: string; result: { remaining: number } }>('/api/documents/intelligence/analyze', { all: true, limit: 25 });
+    setWorking(null);
+    if (r.error) {
+      toast.error(r.error.error);
+      return;
     }
+    setBackfillNote(r.data?.message ?? null);
+    bump();
   }
 
-  /** Bulk-download the selected documents (SAFE — no destructive bulk action). */
-  async function downloadSelected() {
-    const ids = Array.from(selected);
-    if (ids.length === 0) return;
-    setBulkBusy(true);
-    let ok = 0;
+  async function analyzeSelected(ids: string[]) {
+    for (const [i, id] of ids.entries()) {
+      setWorking(`Reading ${i + 1} of ${ids.length}…`);
+      const msg = await analyzeOne(id, true);
+      if (msg && ids.length === 1) toast(msg);
+    }
+    setWorking(null);
+    setSelected(new Set());
+    if (ids.length > 1) toast(`Read ${ids.length} documents.`);
+    bump();
+  }
+
+  async function downloadSelected(ids: string[]) {
+    let failed = 0;
     for (const id of ids) {
-      try {
-        const res = await fetch(`/api/documents/${id}/signed-url`);
-        const body = await res.json();
-        if (!res.ok) throw new Error(body?.error ?? 'Failed');
-        // Trigger a real download via a transient anchor (the signed URL already carries
-        // Content-Disposition: attachment). Spaced slightly so the browser queues each.
-        const a = document.createElement('a');
-        a.href = body.url as string;
-        a.rel = 'noopener noreferrer';
-        a.download = (body.fileName as string) ?? '';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        ok += 1;
-        await new Promise((r) => setTimeout(r, 350));
-      } catch {
-        /* keep going; report the shortfall below */
-      }
+      const e = await openDocument(id, 'download');
+      if (e) failed++;
+      await new Promise((r) => setTimeout(r, 300));
     }
-    setBulkBusy(false);
-    if (ok > 0) addToast('success', `Downloading ${ok} document${ok === 1 ? '' : 's'}`);
-    if (ok < ids.length) addToast('error', `${ids.length - ok} could not be downloaded`);
+    if (failed) toast.error(`${failed} could not be downloaded.`);
   }
 
-  async function remove(doc: DocumentRow) {
-    if (!confirm(`Delete "${doc.file_name}"? This removes the stored file.`)) return;
-    const res = await fetch(`/api/documents/${doc.id}`, { method: 'DELETE' });
-    if (res.ok) {
-      addToast('success', 'Document deleted');
-      void load();
-    } else {
-      const b = await res.json().catch(() => null);
-      addToast('error', b?.error ?? 'Failed to delete document');
-    }
-  }
-
-  const hasFilters = typeFilter !== 'ALL' || linkFilter !== 'ALL' || datePreset !== 'ALL' || !!search;
-  function clearFilters() {
-    setTypeFilter('ALL');
-    setLinkFilter('ALL');
-    setDatePreset('ALL');
-    setRawSearch('');
-  }
-
-  return (
-    <div className="space-y-5">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-4 text-xs">
-          <span className="text-slate-500">{counts.total} document{counts.total === 1 ? '' : 's'}</span>
-          {counts.linked > 0 && <span className="text-emerald-400">{counts.linked} linked</span>}
-          {counts.unfiled > 0 && (
-            <button
-              type="button"
-              onClick={() => setLinkFilter('UNFILED')}
-              className="text-amber-400 hover:text-amber-300 inline-flex items-center gap-1"
-              title="Show only unfiled documents"
-            >
-              <Inbox size={12} /> {counts.unfiled} unfiled
-            </button>
-          )}
-          <span className="text-slate-500">
-            Stored <span className="font-mono text-slate-300">{formatBytes(counts.bytes)}</span>
+  // ── Table ──────────────────────────────────────────────────────────────────
+  const columns: QueueColumn<CenterRow>[] = [
+    {
+      id: 'doc',
+      header: 'Document',
+      cell: (r) => (
+        <span>
+          <b className={s.name}>{r.doc.file_name}</b>
+          <span className="t-cap">
+            {formatBytes(r.doc.size_bytes)} // {fmtDate(r.doc.created_at)}
           </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={uploadType}
-            onChange={(e) => setUploadType(e.target.value as DocType)}
-            className="bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 px-2 py-1.5"
-            title="Type assigned to uploads"
-          >
-            {DOC_TYPES.map((t) => (
-              <option key={t} value={t}>{DOC_TYPE_LABEL[t]}</option>
+        </span>
+      ),
+    },
+    {
+      id: 'type',
+      header: 'Type',
+      width: 170,
+      cell: (r) => <Tag tone={r.intel?.class_source === 'ai' ? 'ai' : 'default'}>{typeLabel(r)}</Tag>,
+    },
+    {
+      id: 'conf',
+      header: 'Confidence',
+      width: 110,
+      cell: (r) => (r.intel && r.intel.class_source !== 'user' && Number(r.intel.confidence) > 0 ? <Conf score={Math.round(Number(r.intel.confidence) * 100)} /> : <span className="t-cap">{r.intel?.class_source === 'user' ? 'You' : '—'}</span>),
+    },
+    {
+      id: 'company',
+      header: 'Company',
+      width: 160,
+      cell: (r) => <span className="t-cap">{r.intel?.location_id ? (locName.get(r.intel.location_id) ?? '—') : '—'}</span>,
+    },
+    {
+      id: 'linked',
+      header: 'Linked to',
+      cell: (r) => {
+        const pend = r.proposals.filter((p) => p.status === 'pending' && p.mode !== 'route');
+        if (r.links.length === 0 && pend.length === 0) {
+          return <span className="t-cap">{r.doc.entity_type && r.doc.entity_type !== 'location' ? entityTypeLabel(r.doc.entity_type) : 'Unfiled'}</span>;
+        }
+        return (
+          <span className={s.links}>
+            {r.links.slice(0, 2).map((l) => (
+              <span key={l.id} className="t-cap">{l.label ?? entityTypeLabel(l.target_type)}</span>
             ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            disabled={uploading}
-            className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg inline-flex items-center gap-1.5"
-          >
-            {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-            {uploading ? 'Uploading…' : 'Upload'}
-          </button>
-          <input ref={inputRef} type="file" multiple className="hidden" onChange={(e) => onFiles(e.target.files)} />
-        </div>
+            {r.links.length > 2 && <span className="t-cap">+{r.links.length - 2}</span>}
+            {pend.map((p) => (
+              <Tag key={p.id} tone="ai">{`${TARGETS[p.target_kind].noun[0].toUpperCase()}${TARGETS[p.target_kind].noun.slice(1)} proposal`}</Tag>
+            ))}
+          </span>
+        );
+      },
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      width: 190,
+      cell: (r) => {
+        const st = statusOf(r);
+        return <Status kind={st.kind}>{st.word}</Status>;
+      },
+    },
+  ];
+
+  const actions: QueueAction<CenterRow>[] = [
+    { key: 'v', label: 'View', run: (rs) => rs[0] && void openDocument(rs[0].doc.id).then((e) => e && toast.error(e)) },
+    { key: 'r', label: 'Read again', run: (rs) => void analyzeSelected(rs.map((r) => r.doc.id)) },
+  ];
+
+  const total = bandIds && bandIds.length === 0 ? 0 : list?.pagination.total ?? 0;
+  const hasFilters = !!search || typeFilter !== 'ALL' || datePreset !== 'ALL';
+  const error = listError ?? intelError;
+  const deferred = summary?.ai_deferred ?? 0;
+  const notAnalyzed = summary?.not_analyzed ?? 0;
+
+  return (
+    <div>
+      <PageHead
+        eyebrow={['Records', 'Documents']}
+        title="Documents"
+        actions={
+          <>
+            <Button variant="quiet" icon="history" onClick={backfill} disabled={working !== null}>
+              Analyze existing documents{notAnalyzed > 0 ? ` (${notAnalyzed})` : ''}
+            </Button>
+            <Button variant="primary" icon="upload" onClick={() => inputRef.current?.click()} disabled={working !== null}>
+              Upload
+            </Button>
+          </>
+        }
+      >
+        <p className="t-cap">
+          Every stored file in one place. Drop anything — a lease, loan, policy, W-9, bill or contract — and we work out what it is, which company it belongs to, and put a proposal in the module that uses it. Nothing is set up or posted until a person reviews it there.
+        </p>
+      </PageHead>
+
+      <input ref={inputRef} type="file" multiple hidden onChange={(e) => void onFiles(e.target.files)} aria-label="Choose files to upload" />
+
+      <div
+        className={`${s.drop} ${dragOver ? s.dropOver : ''}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          void onFiles(e.dataTransfer.files);
+        }}
+      >
+        <span className={s.dropIcon} aria-hidden="true">
+          <Button iconOnly icon="upload" aria-label="Upload" onClick={() => inputRef.current?.click()} />
+        </span>
+        <span className="t-body">{working ?? 'Drop files here. PDFs, images, spreadsheets, Word — up to 25 MB each.'}</span>
+        <label className="row" style={{ gap: 8, alignItems: 'center' }}>
+          <span className="t-cap">Type</span>
+          <Select value={uploadType} onChange={(e) => setUploadType(e.target.value as DocType | 'AUTO')} aria-label="Type for uploads">
+            <option value="AUTO">Work it out for me</option>
+            {DOC_TYPES.filter((t) => t !== 'OTHER').map((t) => (
+              <option key={t} value={t}>
+                {DOC_TYPE_LABEL[t]}
+              </option>
+            ))}
+          </Select>
+        </label>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            value={rawSearch}
-            onChange={(e) => setRawSearch(e.target.value)}
-            placeholder="Search file names…"
-            className="bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 pl-8 pr-3 py-1.5 w-56"
-          />
+      {deferred > 0 && (
+        <AiPaused title="AI reading paused for some documents">
+          {deferred} document{deferred === 1 ? ' was' : 's were'} typed by file name and text rules. We’ll read {deferred === 1 ? 'it' : 'them'} again automatically every 15 minutes — or set the type yourself.
+        </AiPaused>
+      )}
+      {backfillNote && (
+        <InlineNotice tone="info" title="Analysis finished.">
+          {backfillNote}
+        </InlineNotice>
+      )}
+
+      <Bands<Band>
+        aria-label="Documents"
+        value={band}
+        onChange={setBand}
+        items={[
+          { value: 'all', label: 'All', count: band === 'all' ? total : '·', caption: 'Every stored file' },
+          { value: 'review', label: 'Needs review', count: summary?.needs_review ?? '·', caption: 'We couldn’t tell what it is' },
+          { value: 'proposals', label: 'Proposals ready', count: summary?.proposals_pending ?? '·', caption: 'Waiting in a module for review' },
+          { value: 'unfiled', label: 'Unfiled', count: band === 'unfiled' ? total : '·', caption: 'Not linked to a record' },
+        ]}
+      />
+
+      <div className={s.toolbar}>
+        <div className={s.grow}>
+          <Search aria-label="Search file names" slashToFocus value={rawSearch} onChange={(e) => setRawSearch(e.target.value)} placeholder="Search file names" />
         </div>
-
-        {/* Linked-record type / unfiled */}
-        <select
-          value={linkFilter}
-          onChange={(e) => setLinkFilter(e.target.value)}
-          className="bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 px-2 py-1.5"
-          title="Filter by the record a document is linked to"
-        >
-          <option value="ALL">All records</option>
-          <option value="LINKED">Linked only</option>
-          <option value="UNFILED">Unfiled only</option>
-          <optgroup label="Linked record type">
-            {LINKABLE_ENTITY_TYPES.map((et) => (
-              <option key={et} value={et}>{entityTypeLabel(et)}</option>
-            ))}
-          </optgroup>
-        </select>
-
-        {/* Date range preset */}
-        <select
-          value={datePreset}
-          onChange={(e) => setDatePreset(e.target.value as DatePreset)}
-          className="bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 px-2 py-1.5"
-          title="Filter by upload date"
-        >
-          {DATE_PRESETS.map((p) => (
-            <option key={p.value} value={p.value}>{p.label}</option>
-          ))}
-        </select>
-
-        <div className="flex items-center gap-1 flex-wrap">
-          <FilterChip active={typeFilter === 'ALL'} onClick={() => setTypeFilter('ALL')}>All types</FilterChip>
+        <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as DocType | 'ALL')} aria-label="Filter by type">
+          <option value="ALL">All types</option>
           {DOC_TYPES.map((t) => (
-            <FilterChip key={t} active={typeFilter === t} onClick={() => setTypeFilter(t)}>
+            <option key={t} value={t}>
               {DOC_TYPE_LABEL[t]}
-            </FilterChip>
+            </option>
           ))}
-        </div>
-
+        </Select>
+        <Select value={datePreset} onChange={(e) => setDatePreset(e.target.value as DatePreset)} aria-label="Filter by upload date">
+          {DATE_PRESETS.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </Select>
         {hasFilters && (
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="text-[11px] text-slate-500 hover:text-slate-300 inline-flex items-center gap-1"
+          <Button
+            variant="quiet"
+            icon="x"
+            onClick={() => {
+              setRawSearch('');
+              setTypeFilter('ALL');
+              setDatePreset('ALL');
+            }}
           >
-            <X size={12} /> Clear
-          </button>
+            Clear
+          </Button>
         )}
       </div>
 
-      {/* Bulk action bar */}
-      {selected.size > 0 && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-600/10 px-4 py-2">
-          <span className="text-xs text-emerald-300">{selected.size} selected</span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={downloadSelected}
-              disabled={bulkBusy}
-              className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg inline-flex items-center gap-1.5"
-            >
-              {bulkBusy ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-              Download selected
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelected(new Set())}
-              className="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 rounded-lg"
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* List */}
-      {docs === null ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
-        </div>
-      ) : error ? (
-        <div className="card p-10 text-center">
-          <AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" />
-          <p className="text-sm text-red-400">{error}</p>
-        </div>
-      ) : sorted.length === 0 ? (
-        <div className="card p-12 text-center">
-          <FolderOpen className="w-10 h-10 mx-auto text-slate-600 mb-3" />
-          <p className="text-sm text-slate-300 mb-1">
-            {hasFilters ? 'No documents match your filter' : 'No documents yet'}
-          </p>
-          <p className="text-xs text-slate-500 max-w-md mx-auto mb-4">
-            Upload contracts, bills, statements, policies, W-9s, and COIs. Source documents from
-            drop-and-parse features are retained here and linked to the record they created.
-          </p>
-          {hasFilters ? (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="px-4 py-2 text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg inline-flex items-center gap-1.5"
-            >
-              <X size={14} /> Clear filters
-            </button>
+      <div className={openRow ? s.split : undefined}>
+        <div>
+          {error ? (
+            <div className={s.state}>
+              <InlineNotice tone="neg" title="Couldn’t load documents.">
+                {error}
+              </InlineNotice>
+              <Button onClick={bump}>Try again</Button>
+            </div>
+          ) : (isLoading || !listReady) && docs.length === 0 ? (
+            <div className={s.state}>
+              <p className="t-cap">Loading documents…</p>
+            </div>
+          ) : docs.length === 0 ? (
+            <div className={s.state}>
+              <b className="t-body">
+                {hasFilters ? 'No documents match these filters.' : band === 'review' ? 'Nothing needs review.' : band === 'proposals' ? 'No proposals waiting.' : band === 'unfiled' ? 'Everything is filed.' : 'No documents yet.'}
+              </b>
+              <p className="t-cap">
+                {hasFilters
+                  ? 'Clear the filters to see everything.'
+                  : band === 'all'
+                    ? 'Upload a lease, loan agreement, insurance policy, W-9, bill or contract — we’ll work out where it belongs.'
+                    : 'When a document needs you, it shows up here.'}
+              </p>
+            </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg inline-flex items-center gap-1.5"
-            >
-              <Upload size={14} /> Upload a document
-            </button>
+            <>
+              <QueueTable<CenterRow>
+                aria-label="Documents"
+                columns={columns}
+                rows={rows}
+                getRowId={(r) => r.doc.id}
+                rowState={(r) => ({ attn: r.intel?.status === 'needs_review', done: r.intel?.status === 'dismissed' || r.intel?.status === 'duplicate' })}
+                selectable
+                selected={selected}
+                onSelectedChange={setSelected}
+                cursorId={openId}
+                onCursorChange={(id) => id && setOpenId(id)}
+                onOpen={(r) => setOpenId(r.doc.id)}
+                openOnClick
+                actions={actions}
+                bulkSummary={(rs) => [`${rs.length} selected`, formatBytes(rs.reduce((n, r) => n + (r.doc.size_bytes ?? 0), 0))]}
+                bulkActions={(rs) => (
+                  <>
+                    <Button onClick={() => void downloadSelected(rs.map((r) => r.doc.id))}>Download</Button>
+                    <Button variant="primary" onClick={() => void analyzeSelected(rs.map((r) => r.doc.id))} disabled={working !== null}>
+                      Read again
+                    </Button>
+                  </>
+                )}
+              />
+              <ListPager page={page} perPage={PER_PAGE} total={total} onPage={setPage} noun="documents" />
+            </>
           )}
         </div>
-      ) : (
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500">
-                  <th className="px-3 py-2.5 w-8">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      onChange={toggleSelectAll}
-                      className="accent-emerald-500 cursor-pointer"
-                      aria-label="Select all"
-                    />
-                  </th>
-                  <SortHeader label="Document" col="file_name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <SortHeader label="Type" col="doc_type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <SortHeader label="Linked to" col="entity_type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <SortHeader label="Size" col="size_bytes" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
-                  <SortHeader label="Uploaded" col="created_at" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <th className="px-4 py-2.5 font-medium text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((doc) => {
-                  const href = entityRecordHref(doc.entity_type, doc.entity_id);
-                  const isSel = selected.has(doc.id);
-                  return (
-                    <tr key={doc.id} className={clsx('border-b border-slate-800/60 hover:bg-slate-900/40', isSel && 'bg-emerald-600/5')}>
-                      <td className="px-3 py-2.5">
-                        <input
-                          type="checkbox"
-                          checked={isSel}
-                          onChange={() => toggleOne(doc.id)}
-                          className="accent-emerald-500 cursor-pointer"
-                          aria-label={`Select ${doc.file_name}`}
-                        />
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <button
-                          type="button"
-                          onClick={() => openDoc(doc, 'view')}
-                          className="flex items-center gap-2 min-w-0 text-left group"
-                          title="View"
-                        >
-                          <FileText size={14} className="text-slate-500 shrink-0" />
-                          <span className="text-xs text-white truncate group-hover:text-emerald-300 max-w-xs">{doc.file_name}</span>
-                        </button>
-                        {doc.notes && <p className="text-[10px] text-slate-600 mt-0.5 truncate max-w-xs">{doc.notes}</p>}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">{DOC_TYPE_LABEL[doc.doc_type]}</span>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {doc.entity_type ? (
-                          href ? (
-                            <Link
-                              href={href}
-                              className="inline-flex items-center gap-1 text-[11px] text-slate-300 hover:text-emerald-300 group"
-                              title={`Open ${entityTypeLabel(doc.entity_type)} record`}
-                            >
-                              <Link2 size={11} className="text-emerald-500" />
-                              <span className="font-medium group-hover:underline">{entityTypeLabel(doc.entity_type)}</span>
-                              {doc.entity_id && (
-                                <span className="font-mono text-slate-600 truncate max-w-[7rem]">{doc.entity_id.slice(0, 8)}</span>
-                              )}
-                            </Link>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
-                              <Link2 size={11} className="text-emerald-500" />
-                              <span className="font-medium text-slate-300">{entityTypeLabel(doc.entity_type)}</span>
-                            </span>
-                          )
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-amber-500/80">
-                            <Inbox size={11} /> Unfiled
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-[11px] font-mono text-slate-400">{formatBytes(doc.size_bytes)}</td>
-                      <td className="px-4 py-2.5 text-[11px] text-slate-500">{fmtDate(doc.created_at)}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center justify-end gap-1">
-                          <button type="button" onClick={() => openDoc(doc, 'view')} title="View" className="p-1.5 text-slate-500 hover:text-blue-300 rounded">
-                            <Eye size={13} />
-                          </button>
-                          <button type="button" onClick={() => openDoc(doc, 'download')} title="Download" className="p-1.5 text-slate-500 hover:text-emerald-300 rounded">
-                            <Download size={13} />
-                          </button>
-                          <button type="button" onClick={() => remove(doc)} title="Delete" className="p-1.5 text-slate-500 hover:text-red-400 rounded">
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SortHeader({
-  label,
-  col,
-  sortKey,
-  sortDir,
-  onSort,
-  align = 'left',
-}: {
-  label: string;
-  col: SortKey;
-  sortKey: SortKey;
-  sortDir: SortDir;
-  onSort: (k: SortKey) => void;
-  align?: 'left' | 'right';
-}) {
-  const active = sortKey === col;
-  return (
-    <th className={clsx('px-4 py-2.5 font-medium', align === 'right' && 'text-right')}>
-      <button
-        type="button"
-        onClick={() => onSort(col)}
-        className={clsx(
-          'inline-flex items-center gap-1 uppercase tracking-wider hover:text-slate-300',
-          active ? 'text-slate-300' : 'text-slate-500',
+        {openRow && (
+          <DocumentPanel
+            key={openRow.doc.id}
+            row={openRow}
+            locations={locations}
+            onClose={() => setOpenId(null)}
+            onChanged={bump}
+            onDeleted={() => {
+              setOpenId(null);
+              bump();
+            }}
+          />
         )}
-      >
-        {label}
-        <ArrowUpDown size={10} className={clsx(active ? 'opacity-100' : 'opacity-40')} />
-        {active && <span className="text-[8px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
-      </button>
-    </th>
-  );
-}
-
-function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={clsx(
-        'px-2.5 py-1 text-[11px] font-medium rounded-lg border transition-colors',
-        active
-          ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/40'
-          : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200',
-      )}
-    >
-      {children}
-    </button>
+      </div>
+    </div>
   );
 }

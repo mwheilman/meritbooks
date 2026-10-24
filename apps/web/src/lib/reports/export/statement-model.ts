@@ -42,11 +42,28 @@ export const statementModelSchema = z.object({
   accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   columns: z.array(stmtColumnSchema).min(1),
   rows: z.array(stmtRowSchema),
+  /**
+   * Number governance marks (lib/reports/governance), set SERVER-SIDE only — the export
+   * routes overwrite whatever a client sends. watermark: diagonal page mark (e.g.
+   * "PREVIEW — NOT RELEASED"); banner: the warning line under the header; footnote: the
+   * closed-through / preliminary / restated line under the statement.
+   */
+  watermark: z.string().max(60).nullable().optional(),
+  banner: z.string().max(400).nullable().optional(),
+  footnote: z.string().max(1200).nullable().optional(),
 });
 
 export type StmtColumn = z.infer<typeof stmtColumnSchema>;
 export type StmtRow = z.infer<typeof stmtRowSchema>;
 export type StatementModel = z.infer<typeof statementModelSchema>;
+
+/** The marks a model carries when it was NOT re-run server-side (a client-built model). */
+export const UNGOVERNED_FOOTNOTE = 'Prepared from the on-screen report. Not a released (governed) statement.';
+
+/** Strip client-supplied governance marks and stamp a client-built model as ungoverned. */
+export function stampUngoverned(model: StatementModel): StatementModel {
+  return { ...model, watermark: null, banner: null, footnote: UNGOVERNED_FOOTNOTE };
+}
 
 /** slug for filenames — lowercase, hyphenated, ascii-safe. */
 export function slugify(input: string): string {

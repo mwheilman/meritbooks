@@ -3,12 +3,25 @@ import { NextResponse } from 'next/server';
 import { apiQueryHandler } from '@/lib/api-handler';
 import { trialBalanceQuerySchema, type TrialBalanceQuery } from '@/lib/validations/gl';
 import { fetchAll } from '@/lib/supabase/fetch-all';
+import { getOrgToday } from '@/lib/dates/org-today';
+import { asOfMonth, governRoute } from '@/lib/reports/governance/route-guard';
 
 export const GET = apiQueryHandler(
   trialBalanceQuerySchema,
   async (params: TrialBalanceQuery, ctx) => {
     const locIds = (params as Record<string, string>).location_ids;
     const locFilter = locIds ? locIds.split(',').filter(Boolean) : (params.location_id && params.location_id !== 'all' ? [params.location_id] : []);
+
+    // Number governance: v_trial_balance is every posted line to date — a balance as of
+    // the org's current month, so a non-finance caller needs every month through it
+    // released (cumulative rule). In practice the current month is never released, so the
+    // trial balance is a finance-only surface (403 NOT_RELEASED otherwise).
+    const today = await getOrgToday(ctx.supabase, ctx.orgId);
+    const gov = await governRoute(
+      { supabase: ctx.supabase, orgId: ctx.orgId, userId: ctx.userId },
+      { months: [asOfMonth(today)], locationIds: locFilter, cumulative: true },
+    );
+    if (gov instanceof NextResponse) return gov;
 
     // Paged: PostgREST caps responses at 1,000 rows. v_trial_balance is one row per
     // (org, location, account), so a multi-entity TB passes 1,000 rows quickly.
@@ -39,6 +52,6 @@ export const GET = apiQueryHandler(
       );
     }
 
-    return NextResponse.json({ data });
+    return NextResponse.json({ data, governance: gov.info });
   }
 );

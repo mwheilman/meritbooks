@@ -110,6 +110,8 @@ export interface ListArgs {
   /** Inclusive created_at lower/upper bounds (YYYY-MM-DD or ISO). */
   dateFrom?: string | null;
   dateTo?: string | null;
+  /** Restrict to these ids (the center's intelligence bands). An empty list returns nothing. */
+  ids?: string[] | null;
   /** Raw 1-based page number (string, from the query). Defaults to page 1. */
   page?: string | null;
   /** Raw rows-per-page (string, from the query). Hard-capped to MAX_PAGE_SIZE. */
@@ -153,6 +155,10 @@ export async function listDocuments(args: ListArgs): Promise<ListDocumentsResult
   else if (linked === 'linked') q = q.not('entity_type', 'is', null);
   if (dateFrom && dateFrom.trim()) q = q.gte('created_at', dateFrom.trim());
   if (dateTo && dateTo.trim()) q = q.lte('created_at', dateTo.trim());
+  if (args.ids) {
+    if (args.ids.length === 0) return { documents: [], page, perPage, total: 0, totalPages: 1 };
+    q = q.in('id', args.ids.slice(0, 200));
+  }
 
   const { data, error, count } = await q.range(rangeFrom, rangeTo);
   if (error) throw new Error(`Failed to list documents: ${error.message}`);

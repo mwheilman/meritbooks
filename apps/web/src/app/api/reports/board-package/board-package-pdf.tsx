@@ -16,7 +16,7 @@ import type { BoardPackage } from '@/lib/reports/board-package';
 
 const DEFAULT_ACCENT = '#10b981';
 
-export function BoardPackagePdf({ pkg }: { pkg: BoardPackage }) {
+export function BoardPackagePdf({ pkg, governanceNote }: { pkg: BoardPackage; governanceNote?: string | null }) {
   const accent = pkg.meta.accent || DEFAULT_ACCENT;
 
   const s = StyleSheet.create({
@@ -110,7 +110,7 @@ export function BoardPackagePdf({ pkg }: { pkg: BoardPackage }) {
 
   const Footer = () => (
     <View style={s.footer} fixed>
-      <Text style={s.footerText}>{pkg.meta.entityLabel} · Board Financial Package</Text>
+      <Text style={s.footerText}>{pkg.meta.entityLabel} · Board Financial Package{governanceNote ? ` · ${governanceNote}` : ''}</Text>
       <Text style={s.footerText} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
     </View>
   );

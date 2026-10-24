@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Button, Drawer, InlineNotice, PanelSection, Pip, Switch, Tag, api, toast, useQuery } from '@meritbooks/merit-ui';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { QuietHoursNote } from '@/components/requests/quiet-hours-note';
 import type { ActionResponse, ChaseItem, ChaseResponse } from './vc-types';
 import s from './vendor-compliance.module.css';
 
@@ -56,7 +57,8 @@ export function ChaseDrawer({ open, onClose, locationId, companyName }: { open: 
     <Drawer open={open} onClose={onClose} width={560} eyebrow={['Vendor compliance', 'Automatic chase']} title="Ask vendors automatically" meta={companyName ?? 'All companies'}>
       <PanelSection title="Switches">
         <p className="t-cap" style={{ marginBottom: 8 }}>
-          Off by default. When on, the reminder run (every 15 minutes) opens one request per vendor and kind, emails the vendor portal link on the cadence, and stops when the document is accepted. Quiet hours 8 pm–7 am in the vendor’s time zone.
+          Off by default. When on, the reminder run (every 15 minutes) opens one request per vendor and kind, emails the vendor portal link on the cadence, and stops when the document is accepted.{' '}
+          {data ? <QuietHoursNote summary={data.quietHours} primary="vendor" /> : null}
         </p>
         {error && <InlineNotice tone="neg" title="Couldn’t load the switches.">{error}</InlineNotice>}
         {data && (

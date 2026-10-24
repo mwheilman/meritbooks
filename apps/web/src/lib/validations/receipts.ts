@@ -9,6 +9,8 @@ const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 export const chaseListQuery = z.object({
   location_id: uuid.optional(),
   q: z.string().max(100).optional(),
+  /** "1" = also list the charges older than the chase window that never got a receipt. */
+  include_older: z.enum(['0', '1']).optional(),
 });
 
 export const chaseActionBody = z.discriminatedUnion('action', [

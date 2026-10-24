@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { tenantLogoOrNull } from '@/lib/invoices/templates/logo-url';
+import { loadBrandTemplate } from '@/lib/invoices/templates/resolve';
 
 /**
  * Loads everything needed to render an estimate as a PDF document: the header,
@@ -74,23 +75,15 @@ export async function loadEstimateDocById(
     ...new Set(rawLines.map((l) => l.revenue_account_id).filter(Boolean)),
   ] as string[];
 
-  const [{ data: cust }, { data: loc }, { data: tmpl }, { data: acctRows }] = await Promise.all([
+  const [{ data: cust }, { data: loc }, tpl, { data: acctRows }] = await Promise.all([
     e.customer_id
       ? supabase.schema('core').from('customers').select('name, email').eq('id', e.customer_id).maybeSingle()
       : Promise.resolve({ data: null }),
     e.location_id
       ? supabase.schema('core').from('locations').select('name, short_code').eq('id', e.location_id).maybeSingle()
       : Promise.resolve({ data: null }),
-    e.location_id
-      ? supabase
-          .from('invoice_templates')
-          .select('logo_url, accent_color, remit_to, footer_text')
-          .eq('org_id', orgId)
-          .eq('location_id', e.location_id)
-          // 176: a company can have many templates — read its default.
-          .eq('is_default', true)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+    // Company default template → org default → built-in, with the company brand applied.
+    loadBrandTemplate(supabase, orgId, (e.location_id as string | null) ?? null),
     accountIds.length
       ? supabase.from('accounts').select('id, account_number, name').in('id', accountIds)
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
@@ -114,8 +107,6 @@ export async function loadEstimateDocById(
     };
   });
 
-  const tpl = (tmpl as Record<string, unknown> | null) ?? null;
-
   return {
     id: String(e.id),
     estimate_number: String(e.estimate_number ?? ''),
@@ -130,13 +121,11 @@ export async function loadEstimateDocById(
     lines,
     customer: (cust as { name: string; email: string | null }) ?? null,
     entity: (loc as { name: string; short_code: string | null }) ?? null,
-    template: tpl
-      ? {
-          logo_url: tenantLogoOrNull((tpl.logo_url as string) ?? null, orgId),
-          accent_color: (tpl.accent_color as string) ?? '#10b981',
-          remit_to: (tpl.remit_to as string) ?? null,
-          footer_text: (tpl.footer_text as string) ?? null,
-        }
-      : { logo_url: null, accent_color: '#10b981', remit_to: null, footer_text: null },
+    template: {
+      logo_url: tenantLogoOrNull(tpl.logo_url, orgId),
+      accent_color: tpl.accent_color,
+      remit_to: tpl.remit_to,
+      footer_text: tpl.footer_text,
+    },
   };
 }

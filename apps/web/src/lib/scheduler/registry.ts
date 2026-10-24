@@ -27,6 +27,8 @@ import { runPruneRunsJob } from './jobs/platform-jobs';
 import { runAccessExpirySweepJob } from './jobs/access-jobs';
 import { DEALER_MONTH_END_JOB } from './jobs/dealer-jobs';
 import { REQUESTS_DISPATCH_JOB } from './jobs/requests-dispatch';
+import { REPORT_GOVERNANCE_NIGHTLY_JOB } from '@/lib/reports/governance/job';
+import { DOCUMENTS_CLASSIFY_RETRY_JOB } from './jobs/documents-classify-retry';
 import { runBankDailyPullJob } from '@/lib/money/plaid-sync';
 import { DEALER_CONTROLS_JOB } from './jobs/dealer-controls';
 import { runRecurringInvoicesJob } from './jobs/recurring-invoices';
@@ -79,6 +81,9 @@ function stub(
 }
 
 export const JOBS: readonly JobDefinition[] = [
+  // Wave 3: report governance (releases / restatement checks) + document intelligence retries.
+  REPORT_GOVERNANCE_NIGHTLY_JOB,
+  DOCUMENTS_CLASSIFY_RETRY_JOB,
   // Wave 1: requests & chase engine (mig 178) and the nightly Plaid pull (slice 1A).
   REQUESTS_DISPATCH_JOB,
   {

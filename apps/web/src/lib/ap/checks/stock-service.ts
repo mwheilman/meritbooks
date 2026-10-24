@@ -24,6 +24,7 @@ import {
 } from './db';
 import type { PositivePayFormat } from './positive-pay';
 import { loadOpenSecurityChanges, notifySecurityChange, recordSecurityChange, thresholdChanges, type SecurityChangeKind, type SecurityChangeRow } from './stock-security';
+import { checkIneligibleReason } from './check-accounts';
 
 type Account = Awaited<ReturnType<typeof loadBankAccount>>;
 
@@ -147,6 +148,8 @@ export async function saveStockSettings(
 ): Promise<void> {
   const ba = await loadBankAccount(db, orgId, bankAccountId);
   if (ba.account_type !== 'CHECKING') throw new CheckError('Checks can only be printed on a checking account.');
+  const ineligible = checkIneligibleReason(ba);
+  if (ineligible) throw new CheckError(ineligible);
   if (input.logoUrl && !isTenantLogoUrl(input.logoUrl, orgId)) {
     throw new CheckError('Use a logo uploaded in Invoice design — links to images hosted elsewhere are not accepted.');
   }

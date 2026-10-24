@@ -37,7 +37,11 @@ export const PORTED_ROUTES: readonly string[] = [
   '/invoices/design',
   '/pay/[token]',
   '/settings/payments',
+  '/settings/brand', // Brand from logo (FPB-branding)
   '/settings/automation', // Wave 2E
+  '/reports/layouts', // Wave 3
+  '/reports/chart-kit', // Wave 3
+  '/reporting-calendar', // Wave 3
   '/settings/inbound-email', // Wave 2D
   '/settings/payments/refresh',
   '/settings/payments/return',
@@ -53,6 +57,8 @@ export const PORTED_ROUTES: readonly string[] = [
   // Wave 2A — vendor W-9 / COI closed loop, built on the kit
   '/vendor-compliance',
   '/portal/vendor/[token]',
+  // Document intelligence — the Documents center, rebuilt on the kit (FPB-document-intelligence)
+  '/documents',
 ];
 
 /**
@@ -110,7 +116,6 @@ export const LEGACY_ROUTES: readonly string[] = [
   '/dealer/warranty',
   '/debt',
   '/departments',
-  '/documents',
   '/estimates',
   '/exceptions',
   '/expenses',
@@ -193,7 +198,7 @@ export const LEGACY_ROUTES: readonly string[] = [
  * The ratchet. LEGACY_ROUTES.length may never exceed this, and the test asks you
  * to lower it whenever a page is ported. It only ever goes DOWN.
  */
-export const LEGACY_BASELINE = 127;
+export const LEGACY_BASELINE = 126;
 
 /** Compile a route pattern to a pathname matcher. */
 export function routePatternToRegExp(pattern: string): RegExp {

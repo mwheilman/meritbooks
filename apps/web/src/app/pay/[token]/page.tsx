@@ -10,6 +10,7 @@ import { monogram } from '@/lib/invoices/monogram';
 import { buildLineTable } from '@/lib/invoices/templates/columns';
 import { getPaymentIntentStatus } from '@/lib/money/providers/stripe';
 import { PayNow } from './pay-now';
+import { onColorFor } from '@/lib/branding/color';
 import './pay.css';
 
 /**
@@ -28,13 +29,6 @@ const money = (cents: number) =>
   (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const fmtDate = (d: string) =>
   d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
-
-function onColor(hex: string): string {
-  const h = hex.replace('#', '');
-  if (h.length !== 6) return '#FFFFFF';
-  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#0A1628' : '#FFFFFF';
-}
 
 function addressLines(bill: Record<string, unknown> | null): string[] {
   const out: string[] = [];
@@ -82,8 +76,17 @@ export default async function HostedInvoicePage(
   }
 
   const t = doc.template;
+  // The company brand (FPB-branding): the template's accent IS the brand primary when the
+  // template inherits it; the brand's on-primary, surface tint and font come along.
   const brand = t.accent_color;
-  const vars = { '--brand': brand, '--on-brand': onColor(brand) } as CSSProperties;
+  const b = doc.brand && doc.brand.source !== 'MERIT_DEFAULT' && doc.brand.palette.primary.toLowerCase() === brand.toLowerCase()
+    ? doc.brand
+    : null;
+  const vars = {
+    '--brand': brand,
+    '--on-brand': b ? b.palette.on_primary : onColorFor(brand),
+    ...(b ? { '--brand-surface': b.palette.surface, fontFamily: b.fontStack } : {}),
+  } as CSSProperties;
   const paid = doc.status === 'PAID' || doc.balance_cents <= 0;
   const closed = doc.status === 'VOIDED' || doc.status === 'WRITTEN_OFF';
   const overdue = !paid && !closed && new Date(doc.due_date + 'T00:00:00') < new Date();

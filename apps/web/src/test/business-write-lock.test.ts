@@ -175,6 +175,8 @@ const BUSINESS_LOCKED_TABLES_176: ReadonlyArray<readonly [schema: 'public' | 'co
   // 177: bank-feed split lines + remembered split rules (service writes only)
   ['public', 'bank_transaction_splits'],
   ['public', 'split_rules'],
+  // 190: tenant / company brand profiles (service writes after settings_system:edit)
+  ['public', 'brand_profiles'],
 ];
 
 /** 172 §2: append-only evidence — no UPDATE / DELETE / TRUNCATE for ANY role. */
@@ -217,7 +219,7 @@ const MEMBER_WRITABLE: Readonly<Record<string, string>> = {
   // B
   'public.report_views': B,
   'public.report_packs': B,
-  'public.budgets': B,
+  // public.budgets: locked by 189 (the published budget of record; written by the version triggers)
   'public.budget_versions': B,
   'public.learned_preferences': B,
   'public.agent_runs': B,

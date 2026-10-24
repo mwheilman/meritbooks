@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { aliasAddress } from '@/lib/email/inbound-config';
 import { chaseEnabledFor, loadReceiptPolicyContext, memoRequired, mergeReceiptPolicy } from './policy';
 import type { CardAssignmentRow, ChargeState, MatchStatus } from './types';
+import { brandCache } from '@/lib/branding/resolve';
 
 export interface HolderCharge {
   transactionId: string;
@@ -32,6 +33,12 @@ export interface HolderReceipt {
   matchedTo: { merchant: string; chargeDate: string; amountCents: number } | null;
 }
 
+export interface HolderBrand {
+  logoUrl: string | null;
+  logoDarkUrl: string | null;
+  primary: string;
+}
+
 export interface HolderCard {
   assignmentId: string;
   locationId: string;
@@ -40,6 +47,8 @@ export interface HolderCard {
   chaseOn: boolean;
   /** The company's receipts-<company>@… forwarding address (Wave 2D), when set up. */
   receiptsAddress: string | null;
+  /** The company's brand for the app header (FPB-branding); null = Merit look. */
+  brand: HolderBrand | null;
   needed: HolderCharge[];
   neededTotalCents: number;
   recent: HolderReceipt[];
@@ -117,6 +126,14 @@ export async function loadHolderView(db: SupabaseClient, orgId: string, assignme
     }
   }
 
+  // FPB-branding: each company's brand (company → tenant → Merit default), one read per company.
+  const brandOf = brandCache(db, orgId);
+  const brands = new Map<string, HolderBrand | null>();
+  await Promise.all(locIds.map(async (id) => {
+    const b = await brandOf(id);
+    brands.set(id, b.source === 'MERIT_DEFAULT' ? null : { logoUrl: b.logoUrl, logoDarkUrl: b.logoDarkUrl, primary: b.palette.primary });
+  }));
+
   const cards: HolderCard[] = assignments.map((a) => {
     const policy = mergeReceiptPolicy(ctx.rows, a.location_id);
     const chaseOn = chaseEnabledFor(ctx.switches, a.location_id) && !a.chase_opt_out;
@@ -140,6 +157,7 @@ export async function loadHolderView(db: SupabaseClient, orgId: string, assignme
       cardLabel: cardLabelOf(a, a.bank_account_id ? acctName.get(a.bank_account_id) : null),
       chaseOn,
       receiptsAddress: fwd.get(a.location_id) ?? null,
+      brand: brands.get(a.location_id) ?? null,
       needed,
       neededTotalCents: needed.reduce((n, c) => n + c.amountCents, 0),
       recent: rc

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuthedContext } from '@/lib/api-handler';
+import { budgetReadScope } from '@/lib/budgets/route-support';
 import {
   buildReforecast,
   type ReforecastAccountInput,
@@ -28,7 +29,12 @@ export async function GET(request: Request) {
     ...(searchParams.get('location_id') ? [searchParams.get('location_id') as string] : []),
     ...(searchParams.get('location_ids')?.split(',').filter(Boolean) ?? []),
   ];
-  const departmentId = searchParams.get('department_id');
+  const deptRaw = searchParams.get('department_id'); // optional dimension scope
+  // SECURITY (H6): budget view permission per company + department scope (a department owner sees
+  // only their departments, never company-level lines) — public.budgets / GL carry no dept RLS.
+  const scope = await budgetReadScope(ctx, locationIds, deptRaw && deptRaw !== 'null' ? deptRaw : null);
+  if (scope instanceof NextResponse) return scope;
+  const deptIds = scope.departmentIds;
   const fiscalYear = parseInt(
     searchParams.get('fiscal_year') ?? String(new Date().getFullYear()),
     10
@@ -59,7 +65,7 @@ export async function GET(request: Request) {
       .eq('fiscal_year', fiscalYear);
     if (locationIds.length === 1) budgetQ = budgetQ.eq('location_id', locationIds[0]);
     else if (locationIds.length > 1) budgetQ = budgetQ.in('location_id', locationIds);
-    if (departmentId) budgetQ = budgetQ.eq('department_id', departmentId);
+    if (deptIds) budgetQ = budgetQ.in('department_id', deptIds);
     return budgetQ;
   };
 
@@ -136,7 +142,7 @@ export async function GET(request: Request) {
              account:accounts!gl_entry_lines_account_id_fkey(account_number, name, account_type)`
           )
           .in('gl_entry_id', chunk);
-        if (departmentId) linesQ = linesQ.eq('department_id', departmentId);
+        if (deptIds) linesQ = linesQ.in('department_id', deptIds);
         return linesQ;
       },
       { label: 'reforecast gl_entry_lines' },

@@ -63,6 +63,10 @@ export function StatementPdf({ model }: { model: StatementModel }) {
     note: { fontSize: 8.5, color: '#8a9096', fontFamily: 'Helvetica-Oblique', marginTop: 6 },
     spacer: { height: 6 },
 
+    banner: { marginTop: 8, paddingVertical: 5, paddingHorizontal: 8, borderLeftWidth: 2, borderLeftColor: '#b45309', backgroundColor: '#fff7ed', fontSize: 8.5, color: '#7c2d12' },
+    footnote: { marginTop: 12, paddingTop: 6, borderTopWidth: 0.5, borderTopColor: '#c9ced4', fontSize: 8, color: '#4b5563' },
+    watermark: { position: 'absolute', top: 330, left: 40, right: 40, textAlign: 'center', fontSize: 46, fontFamily: 'Helvetica-Bold', color: '#d1d5db', opacity: 0.45, transform: 'rotate(-30deg)' },
+
     footer: { position: 'absolute', bottom: 26, left: 48, right: 48, flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.5, borderTopColor: '#e3e6e9', paddingTop: 6 },
     footerText: { fontSize: 7.5, color: '#aab0b6' },
   });
@@ -126,6 +130,7 @@ export function StatementPdf({ model }: { model: StatementModel }) {
             <Text style={s.meta}>Generated {new Date(model.generatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</Text>
           </View>
           <View style={s.rule} />
+          {model.banner ? <Text style={s.banner}>{model.banner}</Text> : null}
         </View>
 
         <View style={s.thead} fixed>
@@ -134,6 +139,10 @@ export function StatementPdf({ model }: { model: StatementModel }) {
         </View>
 
         {model.rows.map(renderRow)}
+
+        {/* Number governance: closed-through / preliminary / restated / not-released line. */}
+        {model.footnote ? <Text style={s.footnote}>{model.footnote}</Text> : null}
+        {model.watermark ? <Text style={s.watermark} fixed>{model.watermark}</Text> : null}
 
         <View style={s.footer} fixed>
           <Text style={s.footerText}>{model.entityLabel} · {model.title}</Text>

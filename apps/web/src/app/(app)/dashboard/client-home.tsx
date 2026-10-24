@@ -4,6 +4,7 @@ import { ShellLine } from '@/components/layout/shell-context';
 import { getClientHome, getRecentActivity, type ClientHome as ClientHomeData, type PeriodStatus } from './actions';
 import { ClientDecideQueue } from './client-queue';
 import { PERIOD_WORD, ago, cents, dayLabel, monthLabel, shortLabel } from './home-format';
+import { PerformanceWidget } from './performance-widget';
 
 type StepState = 'done' | 'current' | 'todo';
 
@@ -334,6 +335,9 @@ export async function ClientHome({ locationId }: { locationId: string }) {
                   : 'Open: review, reconcile and check, then work the close tasks.'}
           </p>
         </Widget>
+
+        {/* Period-based P&L — the one home figure that follows the period picker. */}
+        <PerformanceWidget scopeLabel={b.name} />
       </Dash>
     </div>
   );
