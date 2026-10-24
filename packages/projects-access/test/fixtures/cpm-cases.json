@@ -1,0 +1,1954 @@
+{
+  "version": 1,
+  "engine": "packages/supabase/migrations/1112_pm_schedule.sql (pm.schedule_cpm)",
+  "client": "apps/projects/src/lib/pm/schedule/cpm.ts (computeCpm)",
+  "semantics": [
+    "Dates are ISO days; durations and lags are working days on the case calendar (workdays: ISO 1=Mon..7=Sun; exceptions: day -> is_workday).",
+    "Tasks are listed in outline order (sort = index). parent = key of the phase row. A phase is a task with a non-cancelled child.",
+    "Phases and CANCELLED tasks are not in the network; links touching them are ignored (ignored_links).",
+    "Integer boundaries: ordinal 0 = first working day on/after the anchor; a task occupies es..ef-1 (ef = es + duration); duration 0 = point.",
+    "FS es(s) >= ef(p)+lag; SS es(s) >= es(p)+lag; FF ef(s) >= ef(p)+lag; SF ef(s) >= es(p)+lag. Unstarted tasks: es >= anchor and >= status_date.",
+    "SNET raises the start; MSO sets it (conflict when logic needs later) and pins late = early; FNLT caps late finish (conflict when early finish is later).",
+    "Actual start/finish pin a task; with an actual finish late = early. In progress + status_date: ef >= status_date + max(1, ceil(duration*(1-pct))).",
+    "A point with predecessors is a finish milestone: shown on the working day before its boundary (never before the anchor); without, on the boundary day.",
+    "Backward pass from PF = max ef: total_float = lf - ef, free_float = min(link slack | PF - ef when no successor, total_float). Critical = total_float <= 0 and not done.",
+    "start_on/due_on = actual dates when present, else early dates. Phases roll up: min start / max due, min/max early & late, min floats, any critical/conflict, duration-weighted pct (4 places), status rollup."
+  ],
+  "cases": [
+    {
+      "name": "fs_chain",
+      "description": "Three tasks in a finish-to-start chain: all critical.",
+      "calendar": {
+        "workdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "hours_per_day": 8,
+        "exceptions": {}
+      },
+      "anchor": "2026-11-02",
+      "status_date": null,
+      "tasks": [
+        {
+          "key": "A",
+          "title": "A",
+          "duration_days": 3,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "B",
+          "title": "B",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "C",
+          "title": "C",
+          "duration_days": 4,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "B",
+          "succ": "C",
+          "dep_type": "FS",
+          "lag_days": 0
+        }
+      ],
+      "expected": {
+        "project_finish": "2026-11-12",
+        "critical_count": 3,
+        "ignored_links": 0,
+        "tasks": {
+          "A": {
+            "start_on": "2026-11-02",
+            "due_on": "2026-11-04",
+            "early_start": "2026-11-02",
+            "early_finish": "2026-11-04",
+            "late_start": "2026-11-02",
+            "late_finish": "2026-11-04",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false,
+            "duration_days": 3
+          },
+          "B": {
+            "start_on": "2026-11-05",
+            "due_on": "2026-11-06",
+            "early_start": "2026-11-05",
+            "early_finish": "2026-11-06",
+            "late_start": "2026-11-05",
+            "late_finish": "2026-11-06",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false,
+            "duration_days": 2
+          },
+          "C": {
+            "start_on": "2026-11-09",
+            "due_on": "2026-11-12",
+            "early_start": "2026-11-09",
+            "early_finish": "2026-11-12",
+            "late_start": "2026-11-09",
+            "late_finish": "2026-11-12",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false,
+            "duration_days": 4
+          }
+        }
+      }
+    },
+    {
+      "name": "textbook_aon",
+      "description": "A2; B4(A); C3(A); D4(B); E2(C); F3(D,E). Critical path A-B-D-F (13 days); C and E carry 3 days of float.",
+      "calendar": {
+        "workdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "hours_per_day": 8,
+        "exceptions": {}
+      },
+      "anchor": "2026-11-02",
+      "status_date": null,
+      "tasks": [
+        {
+          "key": "A",
+          "title": "A",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "B",
+          "title": "B",
+          "duration_days": 4,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "C",
+          "title": "C",
+          "duration_days": 3,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "D",
+          "title": "D",
+          "duration_days": 4,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "E",
+          "title": "E",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "F",
+          "title": "F",
+          "duration_days": 3,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "A",
+          "succ": "C",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "B",
+          "succ": "D",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "C",
+          "succ": "E",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "D",
+          "succ": "F",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "E",
+          "succ": "F",
+          "dep_type": "FS",
+          "lag_days": 0
+        }
+      ],
+      "expected": {
+        "project_finish": "2026-11-18",
+        "critical_count": 4,
+        "ignored_links": 0,
+        "tasks": {
+          "A": {
+            "start_on": "2026-11-02",
+            "due_on": "2026-11-03",
+            "early_start": "2026-11-02",
+            "early_finish": "2026-11-03",
+            "late_start": "2026-11-02",
+            "late_finish": "2026-11-03",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "B": {
+            "start_on": "2026-11-04",
+            "due_on": "2026-11-09",
+            "early_start": "2026-11-04",
+            "early_finish": "2026-11-09",
+            "late_start": "2026-11-04",
+            "late_finish": "2026-11-09",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "C": {
+            "start_on": "2026-11-04",
+            "due_on": "2026-11-06",
+            "early_start": "2026-11-04",
+            "early_finish": "2026-11-06",
+            "late_start": "2026-11-09",
+            "late_finish": "2026-11-11",
+            "total_float": 3,
+            "free_float": 0,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "D": {
+            "start_on": "2026-11-10",
+            "due_on": "2026-11-13",
+            "early_start": "2026-11-10",
+            "early_finish": "2026-11-13",
+            "late_start": "2026-11-10",
+            "late_finish": "2026-11-13",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "E": {
+            "start_on": "2026-11-09",
+            "due_on": "2026-11-10",
+            "early_start": "2026-11-09",
+            "early_finish": "2026-11-10",
+            "late_start": "2026-11-12",
+            "late_finish": "2026-11-13",
+            "total_float": 3,
+            "free_float": 3,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "F": {
+            "start_on": "2026-11-16",
+            "due_on": "2026-11-18",
+            "early_start": "2026-11-16",
+            "early_finish": "2026-11-18",
+            "late_start": "2026-11-16",
+            "late_finish": "2026-11-18",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          }
+        }
+      }
+    },
+    {
+      "name": "parallel_float",
+      "description": "A5; B2(A); C3(A); D1(B,C): B has one day of total and free float.",
+      "calendar": {
+        "workdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "hours_per_day": 8,
+        "exceptions": {}
+      },
+      "anchor": "2026-11-02",
+      "status_date": null,
+      "tasks": [
+        {
+          "key": "A",
+          "title": "A",
+          "duration_days": 5,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "B",
+          "title": "B",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "C",
+          "title": "C",
+          "duration_days": 3,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "D",
+          "title": "D",
+          "duration_days": 1,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "A",
+          "succ": "C",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "B",
+          "succ": "D",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "C",
+          "succ": "D",
+          "dep_type": "FS",
+          "lag_days": 0
+        }
+      ],
+      "expected": {
+        "project_finish": "2026-11-12",
+        "critical_count": 3,
+        "ignored_links": 0,
+        "tasks": {
+          "A": {
+            "start_on": "2026-11-02",
+            "due_on": "2026-11-06",
+            "early_start": "2026-11-02",
+            "early_finish": "2026-11-06",
+            "late_start": "2026-11-02",
+            "late_finish": "2026-11-06",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "B": {
+            "start_on": "2026-11-09",
+            "due_on": "2026-11-10",
+            "early_start": "2026-11-09",
+            "early_finish": "2026-11-10",
+            "late_start": "2026-11-10",
+            "late_finish": "2026-11-11",
+            "total_float": 1,
+            "free_float": 1,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "C": {
+            "start_on": "2026-11-09",
+            "due_on": "2026-11-11",
+            "early_start": "2026-11-09",
+            "early_finish": "2026-11-11",
+            "late_start": "2026-11-09",
+            "late_finish": "2026-11-11",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "D": {
+            "start_on": "2026-11-12",
+            "due_on": "2026-11-12",
+            "early_start": "2026-11-12",
+            "early_finish": "2026-11-12",
+            "late_start": "2026-11-12",
+            "late_finish": "2026-11-12",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          }
+        }
+      }
+    },
+    {
+      "name": "link_types_lags",
+      "description": "B SS+2, C FF+1, D SF+3 from A; E FS-1 (lead) from B; F FS+2 from C.",
+      "calendar": {
+        "workdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "hours_per_day": 8,
+        "exceptions": {}
+      },
+      "anchor": "2026-11-02",
+      "status_date": null,
+      "tasks": [
+        {
+          "key": "A",
+          "title": "A",
+          "duration_days": 4,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "B",
+          "title": "B",
+          "duration_days": 3,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "C",
+          "title": "C",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "D",
+          "title": "D",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "E",
+          "title": "E",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "F",
+          "title": "F",
+          "duration_days": 1,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B",
+          "dep_type": "SS",
+          "lag_days": 2
+        },
+        {
+          "pred": "A",
+          "succ": "C",
+          "dep_type": "FF",
+          "lag_days": 1
+        },
+        {
+          "pred": "A",
+          "succ": "D",
+          "dep_type": "SF",
+          "lag_days": 3
+        },
+        {
+          "pred": "B",
+          "succ": "E",
+          "dep_type": "FS",
+          "lag_days": -1
+        },
+        {
+          "pred": "C",
+          "succ": "F",
+          "dep_type": "FS",
+          "lag_days": 2
+        }
+      ],
+      "expected": {
+        "project_finish": "2026-11-11",
+        "critical_count": 3,
+        "ignored_links": 0,
+        "tasks": {
+          "A": {
+            "start_on": "2026-11-02",
+            "due_on": "2026-11-05",
+            "early_start": "2026-11-02",
+            "early_finish": "2026-11-05",
+            "late_start": "2026-11-02",
+            "late_finish": "2026-11-05",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "B": {
+            "start_on": "2026-11-04",
+            "due_on": "2026-11-06",
+            "early_start": "2026-11-04",
+            "early_finish": "2026-11-06",
+            "late_start": "2026-11-06",
+            "late_finish": "2026-11-10",
+            "total_float": 2,
+            "free_float": 0,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "C": {
+            "start_on": "2026-11-05",
+            "due_on": "2026-11-06",
+            "early_start": "2026-11-05",
+            "early_finish": "2026-11-06",
+            "late_start": "2026-11-05",
+            "late_finish": "2026-11-06",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "D": {
+            "start_on": "2026-11-03",
+            "due_on": "2026-11-04",
+            "early_start": "2026-11-03",
+            "early_finish": "2026-11-04",
+            "late_start": "2026-11-10",
+            "late_finish": "2026-11-11",
+            "total_float": 5,
+            "free_float": 5,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "E": {
+            "start_on": "2026-11-06",
+            "due_on": "2026-11-09",
+            "early_start": "2026-11-06",
+            "early_finish": "2026-11-09",
+            "late_start": "2026-11-10",
+            "late_finish": "2026-11-11",
+            "total_float": 2,
+            "free_float": 2,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "F": {
+            "start_on": "2026-11-11",
+            "due_on": "2026-11-11",
+            "early_start": "2026-11-11",
+            "early_finish": "2026-11-11",
+            "late_start": "2026-11-11",
+            "late_finish": "2026-11-11",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          }
+        }
+      }
+    },
+    {
+      "name": "constraints",
+      "description": "SNET pushes B; MSO pins C earlier than logic allows (conflict); FNLT on D cannot be met (conflict, negative float back through B and A); SNET before the project start does nothing.",
+      "calendar": {
+        "workdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "hours_per_day": 8,
+        "exceptions": {}
+      },
+      "anchor": "2026-11-02",
+      "status_date": null,
+      "tasks": [
+        {
+          "key": "A",
+          "title": "A",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "B",
+          "title": "B",
+          "duration_days": 3,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "SNET",
+          "constraint_date": "2026-11-09",
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "C",
+          "title": "C",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "MSO",
+          "constraint_date": "2026-11-03",
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "D",
+          "title": "D",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "FNLT",
+          "constraint_date": "2026-11-12",
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "E",
+          "title": "E",
+          "duration_days": 1,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "SNET",
+          "constraint_date": "2026-10-28",
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "A",
+          "succ": "C",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "B",
+          "succ": "D",
+          "dep_type": "FS",
+          "lag_days": 0
+        }
+      ],
+      "expected": {
+        "project_finish": "2026-11-13",
+        "critical_count": 4,
+        "ignored_links": 0,
+        "tasks": {
+          "A": {
+            "start_on": "2026-11-02",
+            "due_on": "2026-11-03",
+            "early_start": "2026-11-02",
+            "early_finish": "2026-11-03",
+            "late_start": "2026-10-30",
+            "late_finish": "2026-11-02",
+            "total_float": -1,
+            "free_float": -1,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "B": {
+            "start_on": "2026-11-09",
+            "due_on": "2026-11-11",
+            "early_start": "2026-11-09",
+            "early_finish": "2026-11-11",
+            "late_start": "2026-11-06",
+            "late_finish": "2026-11-10",
+            "total_float": -1,
+            "free_float": -1,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "C": {
+            "start_on": "2026-11-03",
+            "due_on": "2026-11-04",
+            "early_start": "2026-11-03",
+            "early_finish": "2026-11-04",
+            "late_start": "2026-11-03",
+            "late_finish": "2026-11-04",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": true
+          },
+          "D": {
+            "start_on": "2026-11-12",
+            "due_on": "2026-11-13",
+            "early_start": "2026-11-12",
+            "early_finish": "2026-11-13",
+            "late_start": "2026-11-11",
+            "late_finish": "2026-11-12",
+            "total_float": -1,
+            "free_float": -1,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": true
+          },
+          "E": {
+            "start_on": "2026-11-02",
+            "due_on": "2026-11-02",
+            "early_start": "2026-11-02",
+            "early_finish": "2026-11-02",
+            "late_start": "2026-11-13",
+            "late_finish": "2026-11-13",
+            "total_float": 9,
+            "free_float": 9,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          }
+        }
+      }
+    },
+    {
+      "name": "holidays_calendar",
+      "description": "Thanksgiving Thu/Fri off, Saturday 28th worked; FS+1 lag; SS; an SNET on a holiday lands on the next working day.",
+      "calendar": {
+        "workdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "hours_per_day": 8,
+        "exceptions": {
+          "2026-11-26": false,
+          "2026-11-27": false,
+          "2026-11-28": true
+        }
+      },
+      "anchor": "2026-11-23",
+      "status_date": null,
+      "tasks": [
+        {
+          "key": "A",
+          "title": "A",
+          "duration_days": 5,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "B",
+          "title": "B",
+          "duration_days": 3,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "C",
+          "title": "C",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "D",
+          "title": "D",
+          "duration_days": 1,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "SNET",
+          "constraint_date": "2026-11-26",
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B",
+          "dep_type": "FS",
+          "lag_days": 1
+        },
+        {
+          "pred": "A",
+          "succ": "C",
+          "dep_type": "SS",
+          "lag_days": 0
+        }
+      ],
+      "expected": {
+        "project_finish": "2026-12-04",
+        "critical_count": 2,
+        "ignored_links": 0,
+        "tasks": {
+          "A": {
+            "start_on": "2026-11-23",
+            "due_on": "2026-11-30",
+            "early_start": "2026-11-23",
+            "early_finish": "2026-11-30",
+            "late_start": "2026-11-23",
+            "late_finish": "2026-11-30",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "B": {
+            "start_on": "2026-12-02",
+            "due_on": "2026-12-04",
+            "early_start": "2026-12-02",
+            "early_finish": "2026-12-04",
+            "late_start": "2026-12-02",
+            "late_finish": "2026-12-04",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "C": {
+            "start_on": "2026-11-23",
+            "due_on": "2026-11-24",
+            "early_start": "2026-11-23",
+            "early_finish": "2026-11-24",
+            "late_start": "2026-12-03",
+            "late_finish": "2026-12-04",
+            "total_float": 7,
+            "free_float": 7,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "D": {
+            "start_on": "2026-11-28",
+            "due_on": "2026-11-28",
+            "early_start": "2026-11-28",
+            "early_finish": "2026-11-28",
+            "late_start": "2026-12-04",
+            "late_finish": "2026-12-04",
+            "total_float": 5,
+            "free_float": 5,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          }
+        }
+      }
+    },
+    {
+      "name": "summary_rollup_progress",
+      "description": "Phases roll up (nested); A done (actuals pin it), B in progress; a cancelled task's links are ignored.",
+      "calendar": {
+        "workdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "hours_per_day": 8,
+        "exceptions": {}
+      },
+      "anchor": "2026-11-02",
+      "status_date": null,
+      "tasks": [
+        {
+          "key": "P1",
+          "title": "P1",
+          "duration_days": null,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "A",
+          "title": "A",
+          "duration_days": 2,
+          "parent": "P1",
+          "is_milestone": false,
+          "status": "DONE",
+          "pct_complete": 1,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": "2026-11-02",
+          "actual_finish": "2026-11-03",
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "B",
+          "title": "B",
+          "duration_days": 3,
+          "parent": "P1",
+          "is_milestone": false,
+          "status": "IN_PROGRESS",
+          "pct_complete": 0.5,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": "2026-11-04",
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "P2",
+          "title": "P2",
+          "duration_days": null,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "C",
+          "title": "C",
+          "duration_days": 4,
+          "parent": "P2",
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "P2a",
+          "title": "P2a",
+          "duration_days": null,
+          "parent": "P2",
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "D",
+          "title": "D",
+          "duration_days": 1,
+          "parent": "P2a",
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "M",
+          "title": "M",
+          "duration_days": 0,
+          "parent": null,
+          "is_milestone": true,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "X",
+          "title": "X",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "CANCELLED",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "Y",
+          "title": "Y",
+          "duration_days": 1,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "B",
+          "succ": "C",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "C",
+          "succ": "D",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "D",
+          "succ": "M",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "A",
+          "succ": "X",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "X",
+          "succ": "Y",
+          "dep_type": "FS",
+          "lag_days": 0
+        }
+      ],
+      "expected": {
+        "project_finish": "2026-11-13",
+        "critical_count": 4,
+        "ignored_links": 2,
+        "tasks": {
+          "A": {
+            "start_on": "2026-11-02",
+            "due_on": "2026-11-03",
+            "early_start": "2026-11-02",
+            "early_finish": "2026-11-03",
+            "late_start": "2026-11-02",
+            "late_finish": "2026-11-03",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "B": {
+            "start_on": "2026-11-04",
+            "due_on": "2026-11-06",
+            "early_start": "2026-11-04",
+            "early_finish": "2026-11-06",
+            "late_start": "2026-11-04",
+            "late_finish": "2026-11-06",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "C": {
+            "start_on": "2026-11-09",
+            "due_on": "2026-11-12",
+            "early_start": "2026-11-09",
+            "early_finish": "2026-11-12",
+            "late_start": "2026-11-09",
+            "late_finish": "2026-11-12",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "D": {
+            "start_on": "2026-11-13",
+            "due_on": "2026-11-13",
+            "early_start": "2026-11-13",
+            "early_finish": "2026-11-13",
+            "late_start": "2026-11-13",
+            "late_finish": "2026-11-13",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "M": {
+            "start_on": "2026-11-13",
+            "due_on": "2026-11-13",
+            "early_start": "2026-11-13",
+            "early_finish": "2026-11-13",
+            "late_start": "2026-11-13",
+            "late_finish": "2026-11-13",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false,
+            "duration_days": 0
+          },
+          "Y": {
+            "start_on": "2026-11-02",
+            "due_on": "2026-11-02",
+            "early_start": "2026-11-02",
+            "early_finish": "2026-11-02",
+            "late_start": "2026-11-13",
+            "late_finish": "2026-11-13",
+            "total_float": 9,
+            "free_float": 9,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "X": {
+            "early_start": null,
+            "early_finish": null,
+            "late_start": null,
+            "late_finish": null,
+            "total_float": null,
+            "free_float": null,
+            "is_critical": false,
+            "is_summary": false
+          },
+          "P1": {
+            "start_on": "2026-11-02",
+            "due_on": "2026-11-06",
+            "duration_days": 5,
+            "early_start": "2026-11-02",
+            "early_finish": "2026-11-06",
+            "late_start": "2026-11-02",
+            "late_finish": "2026-11-06",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": true,
+            "constraint_conflict": false,
+            "pct_complete": 0.7,
+            "status": "IN_PROGRESS",
+            "actual_start": "2026-11-02",
+            "actual_finish": null
+          },
+          "P2a": {
+            "start_on": "2026-11-13",
+            "due_on": "2026-11-13",
+            "duration_days": 1,
+            "total_float": 0,
+            "is_critical": true,
+            "is_summary": true,
+            "pct_complete": 0,
+            "status": "TODO"
+          },
+          "P2": {
+            "start_on": "2026-11-09",
+            "due_on": "2026-11-13",
+            "duration_days": 5,
+            "early_start": "2026-11-09",
+            "early_finish": "2026-11-13",
+            "late_start": "2026-11-09",
+            "late_finish": "2026-11-13",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": true,
+            "pct_complete": 0,
+            "status": "TODO",
+            "actual_start": null,
+            "actual_finish": null
+          }
+        }
+      }
+    },
+    {
+      "name": "status_date",
+      "description": "Status date Thu: A (in progress, 40 %) needs 3 more days from the status date; unstarted C cannot start before it.",
+      "calendar": {
+        "workdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "hours_per_day": 8,
+        "exceptions": {}
+      },
+      "anchor": "2026-11-02",
+      "status_date": "2026-11-05",
+      "tasks": [
+        {
+          "key": "A",
+          "title": "A",
+          "duration_days": 5,
+          "parent": null,
+          "is_milestone": false,
+          "status": "IN_PROGRESS",
+          "pct_complete": 0.4,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": "2026-11-02",
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "B",
+          "title": "B",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "C",
+          "title": "C",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B",
+          "dep_type": "FS",
+          "lag_days": 0
+        }
+      ],
+      "expected": {
+        "project_finish": "2026-11-11",
+        "critical_count": 2,
+        "ignored_links": 0,
+        "tasks": {
+          "A": {
+            "start_on": "2026-11-02",
+            "due_on": "2026-11-09",
+            "early_start": "2026-11-02",
+            "early_finish": "2026-11-09",
+            "late_start": "2026-11-03",
+            "late_finish": "2026-11-09",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "B": {
+            "start_on": "2026-11-10",
+            "due_on": "2026-11-11",
+            "early_start": "2026-11-10",
+            "early_finish": "2026-11-11",
+            "late_start": "2026-11-10",
+            "late_finish": "2026-11-11",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "C": {
+            "start_on": "2026-11-05",
+            "due_on": "2026-11-06",
+            "early_start": "2026-11-05",
+            "early_finish": "2026-11-06",
+            "late_start": "2026-11-10",
+            "late_finish": "2026-11-11",
+            "total_float": 3,
+            "free_float": 3,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          }
+        }
+      }
+    },
+    {
+      "name": "milestones",
+      "description": "A start milestone shows on its day, a finish milestone on its predecessor's last day; an SNET milestone drives the critical path.",
+      "calendar": {
+        "workdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "hours_per_day": 8,
+        "exceptions": {}
+      },
+      "anchor": "2026-11-02",
+      "status_date": null,
+      "tasks": [
+        {
+          "key": "S",
+          "title": "S",
+          "duration_days": 0,
+          "parent": null,
+          "is_milestone": true,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "T1",
+          "title": "T1",
+          "duration_days": 3,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "F",
+          "title": "F",
+          "duration_days": 0,
+          "parent": null,
+          "is_milestone": true,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "T2",
+          "title": "T2",
+          "duration_days": 2,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "M2",
+          "title": "M2",
+          "duration_days": 0,
+          "parent": null,
+          "is_milestone": true,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "SNET",
+          "constraint_date": "2026-11-11",
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "T3",
+          "title": "T3",
+          "duration_days": 1,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        }
+      ],
+      "deps": [
+        {
+          "pred": "S",
+          "succ": "T1",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "T1",
+          "succ": "F",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "F",
+          "succ": "T2",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "T2",
+          "succ": "M2",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "M2",
+          "succ": "T3",
+          "dep_type": "FS",
+          "lag_days": 0
+        }
+      ],
+      "expected": {
+        "project_finish": "2026-11-12",
+        "critical_count": 2,
+        "ignored_links": 0,
+        "tasks": {
+          "S": {
+            "start_on": "2026-11-02",
+            "due_on": "2026-11-02",
+            "early_start": "2026-11-02",
+            "early_finish": "2026-11-02",
+            "late_start": "2026-11-05",
+            "late_finish": "2026-11-05",
+            "total_float": 3,
+            "free_float": 0,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false,
+            "duration_days": 0
+          },
+          "T1": {
+            "start_on": "2026-11-02",
+            "due_on": "2026-11-04",
+            "early_start": "2026-11-02",
+            "early_finish": "2026-11-04",
+            "late_start": "2026-11-05",
+            "late_finish": "2026-11-09",
+            "total_float": 3,
+            "free_float": 0,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "F": {
+            "start_on": "2026-11-04",
+            "due_on": "2026-11-04",
+            "early_start": "2026-11-04",
+            "early_finish": "2026-11-04",
+            "late_start": "2026-11-09",
+            "late_finish": "2026-11-09",
+            "total_float": 3,
+            "free_float": 0,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false,
+            "duration_days": 0
+          },
+          "T2": {
+            "start_on": "2026-11-05",
+            "due_on": "2026-11-06",
+            "early_start": "2026-11-05",
+            "early_finish": "2026-11-06",
+            "late_start": "2026-11-10",
+            "late_finish": "2026-11-11",
+            "total_float": 3,
+            "free_float": 3,
+            "is_critical": false,
+            "is_summary": false,
+            "constraint_conflict": false
+          },
+          "M2": {
+            "start_on": "2026-11-11",
+            "due_on": "2026-11-11",
+            "early_start": "2026-11-11",
+            "early_finish": "2026-11-11",
+            "late_start": "2026-11-11",
+            "late_finish": "2026-11-11",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false,
+            "duration_days": 0
+          },
+          "T3": {
+            "start_on": "2026-11-12",
+            "due_on": "2026-11-12",
+            "early_start": "2026-11-12",
+            "early_finish": "2026-11-12",
+            "late_start": "2026-11-12",
+            "late_finish": "2026-11-12",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false
+          }
+        }
+      }
+    },
+    {
+      "name": "legacy_duration",
+      "description": "A task without a duration takes the working days between its start and due dates (Wed..Tue = 5).",
+      "calendar": {
+        "workdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "hours_per_day": 8,
+        "exceptions": {}
+      },
+      "anchor": "2026-11-02",
+      "status_date": null,
+      "tasks": [
+        {
+          "key": "L",
+          "title": "L",
+          "duration_days": null,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": "2026-11-04",
+          "due_on": "2026-11-10"
+        }
+      ],
+      "deps": [],
+      "expected": {
+        "project_finish": "2026-11-06",
+        "critical_count": 1,
+        "ignored_links": 0,
+        "tasks": {
+          "L": {
+            "start_on": "2026-11-02",
+            "due_on": "2026-11-06",
+            "early_start": "2026-11-02",
+            "early_finish": "2026-11-06",
+            "late_start": "2026-11-02",
+            "late_finish": "2026-11-06",
+            "total_float": 0,
+            "free_float": 0,
+            "is_critical": true,
+            "is_summary": false,
+            "constraint_conflict": false,
+            "duration_days": 5
+          }
+        }
+      }
+    },
+    {
+      "name": "cycle",
+      "description": "A -> B -> C -> A is refused. Adding C -> A last is refused by the link guard naming the loop from the new link's predecessor.",
+      "calendar": {
+        "workdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "hours_per_day": 8,
+        "exceptions": {}
+      },
+      "anchor": "2026-11-02",
+      "status_date": null,
+      "tasks": [
+        {
+          "key": "A",
+          "title": "A",
+          "duration_days": 1,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "B",
+          "title": "B",
+          "duration_days": 1,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        },
+        {
+          "key": "C",
+          "title": "C",
+          "duration_days": 1,
+          "parent": null,
+          "is_milestone": false,
+          "status": "TODO",
+          "pct_complete": null,
+          "constraint_type": "ASAP",
+          "constraint_date": null,
+          "actual_start": null,
+          "actual_finish": null,
+          "start_on": null,
+          "due_on": null
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "B",
+          "succ": "C",
+          "dep_type": "FS",
+          "lag_days": 0
+        },
+        {
+          "pred": "C",
+          "succ": "A",
+          "dep_type": "FS",
+          "lag_days": 0
+        }
+      ],
+      "expect_error": {
+        "code": "PM_DEP_CYCLE",
+        "loop": [
+          "A",
+          "B",
+          "C"
+        ],
+        "guard_message": "PM_DEP_CYCLE: C → A → B → C"
+      }
+    }
+  ]
+}

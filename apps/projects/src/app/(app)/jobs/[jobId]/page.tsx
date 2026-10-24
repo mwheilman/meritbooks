@@ -22,7 +22,8 @@ import { JobHeader } from '@/components/job/JobHeader';
 import { JobTabsNav } from '@/components/job/JobTabsNav';
 import { OverviewTab } from '@/components/job/OverviewTab';
 import { BudgetTab } from '@/components/job/BudgetTab';
-import { ScheduleTab } from '@/components/job/ScheduleTab';
+import { Gantt } from '@/components/schedule/Gantt';
+import { loadJobSchedule } from '@/lib/pm/schedule/server';
 import { ContractTab } from '@/components/job/ContractTab';
 import { LaterTab } from '@/components/job/LaterTab';
 import { ChangeOrderQueue } from '@/components/co/ChangeOrderQueue';
@@ -174,7 +175,22 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
       />
     );
   } else if (tab.value === 'schedule') {
-    body = <ScheduleTab jobId={list.job_id} tasks={await listTasks(db, list.job_id)} today={today} />;
+    // Gantt (WAVE1-SCHEDULE-SPEC): edits need projects.jobs:edit at this job's company; Labor and
+    // view-only seats get the same schedule read-only. Billing amounts need contract_value.
+    const bundle = await loadJobSchedule(db, { jobId: list.job_id, companyId: list.location_id, plannedStart: project.planned_start });
+    body = (
+      <Gantt
+        bundle={bundle}
+        jobLabel={label}
+        today={today}
+        userId={scope.userId}
+        canEdit={may('projects.jobs:edit') && !scope.readOnly}
+        showBilling={mv.contract}
+        archetype={jobType.archetype}
+        jobTypeKey={jobType.key}
+        jobTypeLabel={jobType.label}
+      />
+    );
   } else if (tab.value === 'change-orders') {
     const cos = await listChangeOrders(db, list.job_id);
     body = (

@@ -1,0 +1,465 @@
+{
+  "version": 1,
+  "note": "Client CPM cases (apps/projects). The SQL engine's shared cases live at packages/projects-access/test/fixtures/cpm-cases.json; schedule-cpm.test.ts runs both when the shared file exists. Calendar Mon-Fri unless stated; 2026-11-02 is a Monday; 2026-11-26 is Thanksgiving.",
+  "cases": [
+    {
+      "name": "finish-to-start chain is all critical",
+      "anchor": "2026-11-02",
+      "tasks": [
+        {
+          "id": "A",
+          "duration_days": 3
+        },
+        {
+          "id": "B",
+          "duration_days": 2
+        },
+        {
+          "id": "C",
+          "duration_days": 1
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B"
+        },
+        {
+          "pred": "B",
+          "succ": "C"
+        }
+      ],
+      "expect": {
+        "A": {
+          "early_start": "2026-11-02",
+          "early_finish": "2026-11-04",
+          "total_float": 0,
+          "is_critical": true
+        },
+        "B": {
+          "early_start": "2026-11-05",
+          "early_finish": "2026-11-06",
+          "late_start": "2026-11-05",
+          "late_finish": "2026-11-06",
+          "total_float": 0,
+          "is_critical": true
+        },
+        "C": {
+          "early_start": "2026-11-09",
+          "early_finish": "2026-11-09",
+          "total_float": 0,
+          "is_critical": true
+        }
+      },
+      "project_finish": "2026-11-09"
+    },
+    {
+      "name": "a short parallel path has float",
+      "anchor": "2026-11-02",
+      "tasks": [
+        {
+          "id": "A",
+          "duration_days": 3
+        },
+        {
+          "id": "B",
+          "duration_days": 1
+        },
+        {
+          "id": "C",
+          "duration_days": 2
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "C"
+        },
+        {
+          "pred": "B",
+          "succ": "C"
+        }
+      ],
+      "expect": {
+        "B": {
+          "early_start": "2026-11-02",
+          "early_finish": "2026-11-02",
+          "late_start": "2026-11-04",
+          "late_finish": "2026-11-04",
+          "total_float": 2,
+          "free_float": 2,
+          "is_critical": false
+        },
+        "C": {
+          "early_start": "2026-11-05",
+          "early_finish": "2026-11-06",
+          "is_critical": true
+        }
+      },
+      "project_finish": "2026-11-06"
+    },
+    {
+      "name": "finish-to-start with a 2-day lag",
+      "anchor": "2026-11-02",
+      "tasks": [
+        {
+          "id": "A",
+          "duration_days": 2
+        },
+        {
+          "id": "B",
+          "duration_days": 1
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B",
+          "type": "FS",
+          "lag": 2
+        }
+      ],
+      "expect": {
+        "B": {
+          "early_start": "2026-11-06",
+          "early_finish": "2026-11-06",
+          "total_float": 0
+        }
+      },
+      "project_finish": "2026-11-06"
+    },
+    {
+      "name": "start-to-start +1 leaves the successor a day of float",
+      "anchor": "2026-11-02",
+      "tasks": [
+        {
+          "id": "A",
+          "duration_days": 4
+        },
+        {
+          "id": "B",
+          "duration_days": 2
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B",
+          "type": "SS",
+          "lag": 1
+        }
+      ],
+      "expect": {
+        "A": {
+          "early_start": "2026-11-02",
+          "early_finish": "2026-11-05",
+          "total_float": 0,
+          "is_critical": true
+        },
+        "B": {
+          "early_start": "2026-11-03",
+          "early_finish": "2026-11-04",
+          "late_start": "2026-11-04",
+          "late_finish": "2026-11-05",
+          "total_float": 1,
+          "is_critical": false
+        }
+      },
+      "project_finish": "2026-11-05"
+    },
+    {
+      "name": "finish-to-finish lines the finishes up",
+      "anchor": "2026-11-02",
+      "tasks": [
+        {
+          "id": "A",
+          "duration_days": 3
+        },
+        {
+          "id": "B",
+          "duration_days": 1
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B",
+          "type": "FF",
+          "lag": 0
+        }
+      ],
+      "expect": {
+        "B": {
+          "early_start": "2026-11-04",
+          "early_finish": "2026-11-04",
+          "total_float": 0
+        }
+      },
+      "project_finish": "2026-11-04"
+    },
+    {
+      "name": "start-to-finish +2 (finish no earlier than two days after the predecessor starts)",
+      "anchor": "2026-11-02",
+      "tasks": [
+        {
+          "id": "A",
+          "duration_days": 1,
+          "constraint_type": "SNET",
+          "constraint_date": "2026-11-04"
+        },
+        {
+          "id": "B",
+          "duration_days": 2
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B",
+          "type": "SF",
+          "lag": 2
+        }
+      ],
+      "expect": {
+        "B": {
+          "early_start": "2026-11-04",
+          "early_finish": "2026-11-05"
+        }
+      },
+      "project_finish": "2026-11-05"
+    },
+    {
+      "name": "holidays and weekends are skipped",
+      "anchor": "2026-11-25",
+      "calendar": {
+        "workdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "holidays": [
+          "2026-11-26"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "A",
+          "duration_days": 3
+        }
+      ],
+      "deps": [],
+      "expect": {
+        "A": {
+          "early_start": "2026-11-25",
+          "early_finish": "2026-11-30"
+        }
+      },
+      "project_finish": "2026-11-30"
+    },
+    {
+      "name": "an anchor on a Saturday starts on Monday",
+      "anchor": "2026-11-07",
+      "tasks": [
+        {
+          "id": "A",
+          "duration_days": 1
+        }
+      ],
+      "deps": [],
+      "expect": {
+        "A": {
+          "early_start": "2026-11-09",
+          "early_finish": "2026-11-09"
+        }
+      },
+      "project_finish": "2026-11-09"
+    },
+    {
+      "name": "a finish milestone shows on its predecessor's last day",
+      "anchor": "2026-11-02",
+      "tasks": [
+        {
+          "id": "A",
+          "duration_days": 2
+        },
+        {
+          "id": "M",
+          "is_milestone": true,
+          "duration_days": 0
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "M"
+        }
+      ],
+      "expect": {
+        "M": {
+          "early_start": "2026-11-03",
+          "early_finish": "2026-11-03",
+          "is_critical": true
+        }
+      },
+      "project_finish": "2026-11-03"
+    },
+    {
+      "name": "start-no-earlier-than holds a task and drives the finish",
+      "anchor": "2026-11-02",
+      "tasks": [
+        {
+          "id": "A",
+          "duration_days": 1,
+          "constraint_type": "SNET",
+          "constraint_date": "2026-11-04"
+        },
+        {
+          "id": "B",
+          "duration_days": 2
+        }
+      ],
+      "deps": [],
+      "expect": {
+        "A": {
+          "early_start": "2026-11-04",
+          "early_finish": "2026-11-04",
+          "total_float": 0
+        },
+        "B": {
+          "early_start": "2026-11-02",
+          "early_finish": "2026-11-03",
+          "total_float": 1
+        }
+      },
+      "project_finish": "2026-11-04"
+    },
+    {
+      "name": "finish-no-later-than breached gives negative float and a conflict",
+      "anchor": "2026-11-02",
+      "tasks": [
+        {
+          "id": "A",
+          "duration_days": 5,
+          "constraint_type": "FNLT",
+          "constraint_date": "2026-11-04"
+        }
+      ],
+      "deps": [],
+      "expect": {
+        "A": {
+          "early_finish": "2026-11-06",
+          "total_float": -2,
+          "is_critical": true,
+          "constraint_conflict": true
+        }
+      },
+      "project_finish": "2026-11-06"
+    },
+    {
+      "name": "an actual start pins the task before the anchor",
+      "anchor": "2026-11-02",
+      "tasks": [
+        {
+          "id": "A",
+          "duration_days": 4,
+          "actual_start": "2026-10-29",
+          "status": "IN_PROGRESS"
+        },
+        {
+          "id": "B",
+          "duration_days": 1
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B"
+        }
+      ],
+      "expect": {
+        "A": {
+          "early_start": "2026-10-29",
+          "early_finish": "2026-11-03"
+        },
+        "B": {
+          "early_start": "2026-11-04",
+          "early_finish": "2026-11-04"
+        }
+      },
+      "project_finish": "2026-11-04"
+    },
+    {
+      "name": "a phase rolls up its tasks",
+      "anchor": "2026-11-02",
+      "tasks": [
+        {
+          "id": "P",
+          "duration_days": 1
+        },
+        {
+          "id": "A",
+          "parent": "P",
+          "duration_days": 2
+        },
+        {
+          "id": "B",
+          "parent": "P",
+          "duration_days": 3
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B"
+        }
+      ],
+      "expect": {
+        "P": {
+          "early_start": "2026-11-02",
+          "early_finish": "2026-11-06",
+          "is_summary": true,
+          "is_critical": true
+        }
+      },
+      "project_finish": "2026-11-06"
+    },
+    {
+      "name": "a loop is refused and named",
+      "anchor": "2026-11-02",
+      "tasks": [
+        {
+          "id": "A",
+          "title": "Frame",
+          "duration_days": 1
+        },
+        {
+          "id": "B",
+          "title": "Rough-in",
+          "duration_days": 1
+        },
+        {
+          "id": "C",
+          "title": "Insulate",
+          "duration_days": 1
+        }
+      ],
+      "deps": [
+        {
+          "pred": "A",
+          "succ": "B"
+        },
+        {
+          "pred": "B",
+          "succ": "C"
+        },
+        {
+          "pred": "C",
+          "succ": "A"
+        }
+      ],
+      "expect_error": "PM_DEP_CYCLE"
+    }
+  ]
+}
