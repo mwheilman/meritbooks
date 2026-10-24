@@ -14,7 +14,7 @@
   "dependencies": {
     "@clerk/nextjs": "^6.9.0",
     "@meritbooks/merit-ui": "*",
-    "@react-pdf/renderer": "^4.3.0",
+    "@react-pdf/renderer": "4.6.0",
     "@stripe/react-stripe-js": "^3.0.0",
     "@stripe/stripe-js": "^5.0.0",
     "@supabase/ssr": "^0.6.0",
