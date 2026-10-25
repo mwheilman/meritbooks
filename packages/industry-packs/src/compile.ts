@@ -20,7 +20,8 @@ import { DEFAULT_COST_TYPE_ROLES, RETAINAGE_BILLING_MODES } from './constants';
 import { resolveManifest } from './catalog';
 import { checkParams, type ParamValue } from './params';
 import { AnswerError, applyEffects, includedJobTypes, resolveAnswers, type AnswerValue } from './effects';
-import { resolveVocabulary } from './vocab';
+import { isVocabKey, resolveVocabulary } from './vocab';
+import { applyExperienceOverrides, applyPatch, compileExperience, parsePointer, type PackOverride } from './experience';
 
 export { diffPlans, type PlanDiff, type SectionDiff } from './diff';
 export { describePlan, type PreviewCard } from './describe';
@@ -38,6 +39,34 @@ export interface CompileInput {
   answers?: Record<string, unknown>;
   locationId: string;
   includeSample?: boolean;
+  /**
+   * Tenant deltas (pm.pack_overrides rows, PLT-03), applied in order after compile. Pointers under
+   * /experience/ and /vocabulary/ are applied here; /modules/ rows belong to the app's module-switch
+   * layer (lib/onboarding/plan.ts applyModuleOverrides) and are passed over. Anything else is refused.
+   */
+  overrides?: ReadonlyArray<PackOverride>;
+}
+
+/** Roots a tenant override may touch, and who applies them. */
+export const OVERRIDE_ROOTS = { experience: 'compiler', vocabulary: 'compiler', modules: 'app' } as const;
+
+function applyVocabularyOverrides(vocab: Record<string, string>, overrides: ReadonlyArray<PackOverride>): Record<string, string> {
+  let cur: Record<string, string> = vocab;
+  for (const o of overrides) {
+    const path = parsePointer(o.json_pointer);
+    if (path[0] !== 'vocabulary') continue;
+    const key = path[1];
+    if (path.length !== 2 || !key || !isVocabKey(key)) throw new PlanCompileError(`Override ${o.json_pointer}: not a vocabulary key`);
+    if (o.op === 'remove') {
+      cur = { ...cur, [key]: resolveVocabulary({})[key] };
+      continue;
+    }
+    if (typeof o.value !== 'string' || o.value.trim().length === 0 || o.value.length > 40) {
+      throw new PlanCompileError(`Override ${o.json_pointer}: a term is 1–40 characters`);
+    }
+    cur = applyPatch({ vocabulary: cur }, { ...o, op: 'add' }).vocabulary;
+  }
+  return cur;
 }
 
 export class PlanCompileError extends Error {
@@ -279,6 +308,17 @@ export function compilePlan(input: CompileInput): WorkspacePlan {
     }
   }
 
+  const overrides = input.overrides ?? [];
+  for (const o of overrides) {
+    let root: string | undefined;
+    try {
+      root = parsePointer(o.json_pointer)[0];
+    } catch (err) {
+      throw new PlanCompileError(err instanceof Error ? err.message : String(err));
+    }
+    if (!root || !Object.hasOwn(OVERRIDE_ROOTS, root)) throw new PlanCompileError(`Override ${o.json_pointer}: only ${Object.keys(OVERRIDE_ROOTS).join(', ')} can be overridden`);
+  }
+
   const main = compilePart(primary, input.params, input.answers);
   const parts = [main, ...addons.map((a) => compilePart(a, undefined, input.answers, a.key))];
 
@@ -316,6 +356,18 @@ export function compilePlan(input: CompileInput): WorkspacePlan {
   const revRec: Record<string, RevRecHint> = {};
   for (const j of jobTypes) if (j.rev_rec_hint) revRec[j.key] = j.rev_rec_hint;
 
+  const experience = applyExperienceOverrides(
+    compileExperience(
+      { manifest: primary, jobTypeKeys: main.jobTypes.map((j) => j.key) },
+      parts.slice(1).map((p) => ({ manifest: p.manifest, jobTypeKeys: p.jobTypes.map((j) => j.key) })),
+    ),
+    overrides,
+  );
+  if (experience.skipped.length) {
+    const s0 = experience.skipped[0]!;
+    throw new PlanCompileError(`Override ${s0.override.json_pointer} does not fit: ${s0.reason}`);
+  }
+
   const sample = primary.sampleJob;
   const sampleJob = input.includeSample && jobTypes.some((j) => j.key === sample.jobType)
     ? JSON.parse(JSON.stringify(sample)) as WorkspacePlan['sample_job']
@@ -328,7 +380,7 @@ export function compilePlan(input: CompileInput): WorkspacePlan {
     addon_packs: addons.map((a) => ({ key: a.key, version: a.version })),
     params: Object.fromEntries(Object.keys(params).sort().map((k) => [k, params[k]])),
     answers,
-    vocabulary: resolveVocabulary(primary.vocabulary),
+    vocabulary: applyVocabularyOverrides(resolveVocabulary(primary.vocabulary), overrides),
     modules,
     job_types: jobTypes,
     stages,
@@ -343,6 +395,7 @@ export function compilePlan(input: CompileInput): WorkspacePlan {
       rev_rec_by_job_type: revRec,
     },
     sample_job: sampleJob,
+    experience: experience.experience,
   };
   return { ...plan, plan_hash: planHash(plan) };
 }

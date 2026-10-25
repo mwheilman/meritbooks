@@ -46,6 +46,8 @@ export interface GanttProps {
   archetype: string | null;
   jobTypeKey: string | null;
   jobTypeLabel: string | null;
+  /** The view the pack opens this job type on (manifest v2 scheduleViewFor); a person's own pick wins. */
+  defaultView?: ScheduleView;
 }
 
 const HEAD_H = 44;
@@ -106,7 +108,7 @@ export function Gantt(props: GanttProps) {
     },
     [userId],
   );
-  const view: ScheduleView = prefs.views[bundle.jobId] ?? defaultScheduleView(props.archetype);
+  const view: ScheduleView = prefs.views[bundle.jobId] ?? props.defaultView ?? defaultScheduleView(props.archetype);
   const setView = (v: ScheduleView) => update({ views: { ...prefs.views, [bundle.jobId]: v } });
   const hasBaseline = !!bundle.baseline && bundle.baselineTasks.length > 0;
   const showBaseline = prefs.baseline && hasBaseline;

@@ -11,11 +11,10 @@ import 'server-only';
  */
 import { cache } from 'react';
 import { cookies } from 'next/headers';
-import { getPack, getPackInput } from '@meritbooks/industry-packs';
 import { getDb, getTenant } from '@/lib/tenant';
-import { listInstalls } from '@/lib/pm/config';
+import { getCompanyExperience } from '@/lib/packs/experience-server';
+import { roleTitleFor } from '@/lib/packs/experience';
 import { buildAccess, emptyAccess, grantsByCompany } from './derive';
-import { packRoleTitle } from './titles';
 import type { Access, AccessRow, PersonaKey } from './types';
 
 /** Preview-as cookie (owners only): value = PersonaKey. */
@@ -30,17 +29,18 @@ function toRows(data: unknown): AccessRow[] {
     && Array.isArray((r as AccessRow).actions));
 }
 
-/** Title from the pack of the company the caller is working in (display only — never throws). */
+/**
+ * Title from the industry experience of the company the caller is working in (pack manifest v2
+ * `roles` slot, with tenant overrides). Display only — never throws.
+ */
 async function loadTitleResolver(companyId: string | null): Promise<(p: PersonaKey) => string | null> {
   if (!companyId) return () => null;
   try {
     const db = await getDb();
     if (!db) return () => null;
-    const [install] = await listInstalls(db, [companyId]);
-    if (!install) return () => null;
-    const manifest = getPack(install.pack_key, install.pack_version) ?? getPack(install.pack_key);
-    const input = getPackInput(install.pack_key, install.pack_version) ?? getPackInput(install.pack_key);
-    return (p) => packRoleTitle(manifest, p) ?? packRoleTitle(input, p);
+    const exp = await getCompanyExperience(db, companyId);
+    if (!exp) return () => null;
+    return (p) => roleTitleFor(exp.experience, p);
   } catch {
     return () => null;
   }

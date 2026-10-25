@@ -58,6 +58,33 @@ export interface Options<BS extends ZodTypeAny | undefined, QS extends ZodTypeAn
 
 type Infer<S> = S extends ZodTypeAny ? z.infer<S> : undefined;
 
+/**
+ * The options route() acts on, read as OWN properties only: a polluted Object.prototype (e.g. a
+ * `mask: false` planted there) can never switch masking off or open a read-only view. Missing
+ * `mask` → the strict key union (masking on); missing `access` → no grant satisfies it (403);
+ * `allowReadOnly` only when it is exactly true on the options object itself. Pure (unit-tested).
+ */
+export interface ResolvedRouteOptions {
+  access: RouteAccess | null;
+  mask: MoneyObject | readonly MoneyObject[] | false | undefined;
+  allowReadOnly: boolean;
+  ops: Readonly<Record<string, RouteGrant>> | undefined;
+}
+
+export function resolveRouteOptions(opts: object): ResolvedRouteOptions {
+  const o = opts as Record<string, unknown>;
+  const get = (k: string): unknown => (Object.hasOwn(o, k) ? o[k] : undefined);
+  const access = get('access');
+  const mask = get('mask');
+  const ops = get('ops');
+  return {
+    access: access === 'none' || (typeof access === 'object' && access !== null) ? (access as RouteAccess) : null,
+    mask: mask === false || typeof mask === 'string' || Array.isArray(mask) ? (mask as ResolvedRouteOptions['mask']) : undefined,
+    allowReadOnly: get('allowReadOnly') === true,
+    ops: typeof ops === 'object' && ops !== null ? (ops as Readonly<Record<string, RouteGrant>>) : undefined,
+  };
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function json(status: number, body: unknown): NextResponse {
@@ -103,8 +130,9 @@ function denied(g: RouteGrant, access: Access, companyId: string | null, tenant:
  * leak: a route that declares nothing gets the strictest key union. Owners (all money at every
  * company) skip the walk entirely.
  */
-async function masked(result: unknown, access: Access, companyId: string | null, mask: Options<undefined, undefined>['mask']): Promise<NextResponse> {
-  const objects = mask === false ? null : mask;
+async function masked(result: unknown, access: Access, companyId: string | null, mask: ResolvedRouteOptions['mask']): Promise<NextResponse> {
+  // Only an explicit, own `mask: false` skips masking; anything else masks (undefined = strict union).
+  const objects = mask === false ? null : typeof mask === 'string' || Array.isArray(mask) ? mask : undefined;
   if (result instanceof NextResponse) {
     if (objects === null || seesAllMoney(access) || !(result.headers.get('content-type') ?? '').includes('application/json')) return result;
     const body: unknown = await result.clone().json().catch(() => undefined);
@@ -128,6 +156,8 @@ export function route<BS extends ZodTypeAny | undefined = undefined, QS extends 
   opts: Options<BS, QS>,
   handler: (ctx: RouteContext<Infer<BS>, Infer<QS>>) => Promise<unknown>,
 ) {
+  // Own properties only, read once (never through a prototype someone could pollute).
+  const ro = resolveRouteOptions(opts);
   return async (req: NextRequest, segment: { params: Record<string, string | string[]> } = { params: {} }): Promise<NextResponse> => {
     try {
       const { userId } = await auth();
@@ -138,11 +168,12 @@ export function route<BS extends ZodTypeAny | undefined = undefined, QS extends 
       if (!db) return json(401, { error: 'Your session expired. Sign in again.', code: 'UNAUTHENTICATED' });
       const access = await getAccess();
       // Union check first (cheap, before parsing): the grant at ANY company.
-      if (opts.access !== 'none') {
-        const no = denied(opts.access, access, null, tenant);
+      if (ro.access === null) return json(403, { error: 'This action is not available.', code: 'FORBIDDEN' });
+      if (ro.access !== 'none') {
+        const no = denied(ro.access, access, null, tenant);
         if (no) return no;
       }
-      if (req.method !== 'GET' && !opts.allowReadOnly && !tenant.activeCompanyId && req.cookies.get('mp_view')?.value === 'consolidated') {
+      if (req.method !== 'GET' && !ro.allowReadOnly && !tenant.activeCompanyId && req.cookies.get('mp_view')?.value === 'consolidated') {
         return json(403, { error: 'The consolidated view is read-only. Switch to a company to make changes.', code: 'READ_ONLY' });
       }
 
@@ -182,23 +213,23 @@ export function route<BS extends ZodTypeAny | undefined = undefined, QS extends 
 
       // Company check: a body/query companyId must hold the grant AT that company.
       const companyId = companyOf(body) ?? companyOf(query);
-      if (opts.access !== 'none' && companyId) {
-        const no = denied(opts.access, access, companyId, tenant);
+      if (ro.access !== 'none' && companyId) {
+        const no = denied(ro.access, access, companyId, tenant);
         if (no) return no;
       }
       const op = opOf(body);
-      const opGrant = op && opts.ops && Object.prototype.hasOwnProperty.call(opts.ops, op) ? opts.ops[op] : undefined;
+      const opGrant = op && ro.ops && Object.hasOwn(ro.ops, op) ? ro.ops[op] : undefined;
       if (opGrant) {
         const no = denied(opGrant, access, companyId, tenant);
         if (no) return no;
       }
 
-      const grants: RouteGrant[] = [...(opts.access === 'none' ? [] : [opts.access]), ...(opGrant ? [opGrant] : [])];
+      const grants: RouteGrant[] = [...(ro.access === 'none' ? [] : [ro.access]), ...(opGrant ? [opGrant] : [])];
       const reqTenant: ReadyTenant = { ...tenant };
       REQUEST_GRANTS.set(reqTenant, { access, grants });
 
       const result = await handler({ req, body: body as Infer<BS>, query: query as Infer<QS>, params, db, tenant: reqTenant, userId, access });
-      return await masked(result, access, companyId ?? tenant.activeCompanyId, opts.mask);
+      return await masked(result, access, companyId ?? tenant.activeCompanyId, ro.mask);
     } catch (e) {
       if (isNextControlFlow(e)) throw e;
       return errorResponse(e);

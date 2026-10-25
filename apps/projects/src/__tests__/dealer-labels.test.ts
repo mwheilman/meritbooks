@@ -31,7 +31,7 @@ describe('equipment_dealer pack, as the app reads it', () => {
   });
   it('runs the whole store: version bumped, store KPIs present and defined', () => {
     const m = resolveManifest('equipment_dealer');
-    expect(m.version).toBe('1.1.0');
+    expect(m.version).toBe('1.2.0'); // 1.2.0 = 1.1.0 + manifest v2 experience slots
     expect(m.name).toBe('Equipment dealer');
     const metrics = m.kpis.map((k) => k.metric);
     for (const key of ['unit_turn_days', 'aged_inventory_count_over_180', 'deal_gross_avg_cents', 'parts_fill_rate_pct', 'rental_utilization_pct']) {

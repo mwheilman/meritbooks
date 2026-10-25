@@ -9,6 +9,7 @@ import { loadEstimate } from '@/lib/pm/money/load';
 import { callRpc, wrote } from '@/lib/pm/money/rpc';
 import { IsoDate, Rate, Text200, Text2000 } from '@/lib/pm/money/schemas';
 import type { EstimateLineRow } from '@/lib/pm/money/types';
+import { approvalNeeded, approvalSummary, decideObject } from '@/lib/approvals/server';
 
 export const GET = route({ access: { cap: 'projects.estimates', action: 'view' }, mask: 'estimate' }, async ({ db, params }) => {
   const estimate = await loadEstimate(db, params.estimateId!);
@@ -66,8 +67,13 @@ interface AcceptResult { estimate_id: string; budget_id: string; contract_id: st
 export const POST = route({ access: { cap: 'projects.estimates', action: 'edit' }, mask: 'estimate', body: Op }, async ({ db, params, body }) => {
   const e = await loadEstimate(db, params.estimateId!);
   if (body.op === 'send') {
-    await callRpc(db, 'send_estimate', { p_estimate: e.id }, 'estimate');
-    return { ok: true };
+    // below the margin floor it goes through the approvals engine first (1113); the engine sends it
+    const a = await decideObject(db, 'estimate', e.id);
+    if (a.status === 'not_needed') {
+      await callRpc(db, 'send_estimate', { p_estimate: e.id }, 'estimate');
+      return { ok: true, sent: true, approval: approvalSummary(a) };
+    }
+    return { ok: true, sent: a.status === 'approved', approval: approvalSummary(a) };
   }
   if (body.op === 'decline') {
     await callRpc(db, 'decline_estimate', { p_estimate: e.id, p_reason: body.reason ?? null }, 'estimate');
@@ -76,6 +82,9 @@ export const POST = route({ access: { cap: 'projects.estimates', action: 'edit' 
   if (body.op === 'revise') {
     const id = await callRpc<string>(db, 'revise_estimate', { p_estimate: e.id }, 'estimate');
     return { estimateId: id };
+  }
+  if (e.status === 'DRAFT' && (await approvalNeeded(db, 'estimate', e.id))) {
+    throw new HttpError(409, 'This estimate is below the margin floor. Send it for approval first; it can be accepted once it is approved and sent.', 'PM_APPROVAL_REQUIRED');
   }
   const r = await callRpc<AcceptResult>(db, 'accept_estimate', { p_estimate: e.id }, 'estimate');
   return { budgetId: r.budget_id, contractId: r.contract_id, contractCreated: r.contract_created, progressSent: !!r.progress_event_id, totalCents: e.total_cents, costCents: e.cost_total_cents };

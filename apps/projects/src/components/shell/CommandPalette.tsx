@@ -5,6 +5,7 @@ import {
   Icon, Keys, Popover, PopoverFoot, PopoverGroup, PopoverHead, PopoverItem, PopoverList, Tag,
   api, useDebounce, type FilteredNavGroup, type IconName,
 } from '@meritbooks/merit-ui';
+import { matches, type PaletteAction } from './actions';
 
 export interface SearchJob {
   id: string;
@@ -25,13 +26,23 @@ export interface SearchResult {
   customers: SearchCustomer[];
 }
 
+/** Whether Ask can answer here. When it can't, the palette says so plainly (never a fake answer). */
+export interface AskStatus {
+  available: boolean;
+  /** One sentence shown on the Ask row when it is paused. */
+  reason: string;
+}
+
+type Group = 'Recent' | 'Go to' | 'Actions' | 'Jobs' | 'Customers' | 'Ask';
+
 interface Row {
   id: string;
-  group: 'Jobs' | 'Customers' | 'Pages' | 'Ask';
+  group: Group;
   label: string;
   sub?: string;
   icon: IconName;
   href?: string;
+  keys?: string;
 }
 
 export interface CommandPaletteProps {
@@ -39,33 +50,60 @@ export interface CommandPaletteProps {
   onClose: () => void;
   anchorRef: RefObject<HTMLElement>;
   nav: ReadonlyArray<FilteredNavGroup>;
+  /** Registered actions the caller may take here (components/shell/actions.ts). */
+  actions?: ReadonlyArray<PaletteAction>;
+  ask?: AskStatus;
   jobsLabel: string;
   onNavigate: (href: string) => void;
 }
 
-function matches(text: string, q: string): boolean {
-  const hay = text.toLowerCase();
-  return q.toLowerCase().split(/\s+/).filter(Boolean).every((t) => hay.includes(t));
+const RECENT_KEY = 'mp.cmdk.recent';
+const RECENT_MAX = 6;
+
+interface Recent { id: string; label: string; sub?: string; href: string; icon: IconName }
+
+function readRecent(): Recent[] {
+  try {
+    const raw = window.localStorage.getItem(RECENT_KEY);
+    const v: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(v) ? (v.filter((r) => r && typeof r.href === 'string' && typeof r.label === 'string') as Recent[]).slice(0, RECENT_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRecent(r: Recent): void {
+  try {
+    const next = [r, ...readRecent().filter((x) => x.href !== r.href)].slice(0, RECENT_MAX);
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    /* private window or blocked storage: recents are a convenience */
+  }
 }
 
 /**
- * ⌘K — jump to a job, a customer or a page. A typed question with no match gets a
- * calm "Ask is coming" row: Ask (NL over the metric catalog) ships in a later release.
+ * ⌘K (UX seat §3f): navigation matches → actions → records → "Ask AI". With no query it shows
+ * recent picks, then the rail and the actions for this screen. Ask degrades honestly: it says
+ * why it is paused and never invents an answer.
  */
-export function CommandPalette({ open, onClose, anchorRef, nav, jobsLabel, onNavigate }: CommandPaletteProps) {
+export function CommandPalette({ open, onClose, anchorRef, nav, actions = [], ask, jobsLabel, onNavigate }: CommandPaletteProps) {
   const uid = useId();
   const [q, setQ] = useState('');
   const [cursor, setCursor] = useState(0);
   const [result, setResult] = useState<SearchResult>({ jobs: [], customers: [] });
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
-  const debounced = useDebounce(q.trim(), 200);
+  const [recent, setRecent] = useState<Recent[]>([]);
+  const [askNote, setAskNote] = useState<string | null>(null);
+  const debounced = useDebounce(q.trim(), 150);
   const refs = useRef(new Map<string, HTMLLIElement>());
 
   useEffect(() => {
     if (open) {
       setQ('');
       setCursor(0);
+      setAskNote(null);
+      setRecent(readRecent());
     }
   }, [open]);
 
@@ -94,32 +132,37 @@ export function CommandPalette({ open, onClose, anchorRef, nav, jobsLabel, onNav
 
   const rows = useMemo<Row[]>(() => {
     const term = q.trim();
-    const pageRows: Row[] = pages
-      .filter((p) => !term || matches(`${p.label} ${p.href}`, term))
-      .slice(0, term ? 6 : 8)
-      .map((p) => ({ id: `p:${p.href}`, group: 'Pages', label: p.label, icon: 'right', href: p.href }));
-    const jobRows: Row[] = result.jobs.map((j) => ({
-      id: `j:${j.id}`,
-      group: 'Jobs',
-      label: [j.number, j.name].filter(Boolean).join(' · '),
-      sub: [j.customer, j.stage, j.company].filter(Boolean).join(' · '),
-      icon: 'hammer',
-      href: `/jobs/${j.id}`,
-    }));
-    const custRows: Row[] = result.customers.map((c) => ({
-      id: `c:${c.id}`,
-      group: 'Customers',
-      label: c.name,
-      sub: `${jobsLabel} for this customer`,
-      icon: 'users',
-      href: `/jobs?q=${encodeURIComponent(c.name)}`,
-    }));
-    const out = [...jobRows, ...custRows, ...pageRows];
-    if (term.length >= 2 && !loading && jobRows.length + custRows.length + pageRows.length === 0) {
-      out.push({ id: 'ask', group: 'Ask', label: 'Ask is coming in a later release', sub: `For now, try a job number, a customer or a page name.`, icon: 'ask' });
+    const out: Row[] = [];
+    if (!term) {
+      for (const r of recent) out.push({ id: `r:${r.href}`, group: 'Recent', label: r.label, sub: r.sub, icon: r.icon, href: r.href });
+    }
+    const seen = new Set(out.map((r) => r.href));
+    for (const p of pages.filter((p) => !term || matches(`${p.label} ${p.href}`, term)).slice(0, term ? 6 : 8)) {
+      if (seen.has(p.href)) continue;
+      out.push({ id: `p:${p.href}`, group: 'Go to', label: p.label, icon: 'right', href: p.href, keys: p.keys });
+    }
+    const acts = actions.filter((a) => !term || matches(`${a.label} ${a.keywords}`, term));
+    // On a job page its own actions lead.
+    acts.sort((a, b) => Number(!!b.jobScoped) - Number(!!a.jobScoped));
+    for (const a of acts.slice(0, term ? 6 : 5)) out.push({ id: `a:${a.id}`, group: 'Actions', label: a.label, icon: 'plus', href: a.href, keys: a.keys });
+    for (const j of result.jobs) {
+      out.push({
+        id: `j:${j.id}`, group: 'Jobs', label: [j.number, j.name].filter(Boolean).join(' · '),
+        sub: [j.customer, j.stage, j.company].filter(Boolean).join(' · '), icon: 'hammer', href: `/jobs/${j.id}`,
+      });
+    }
+    for (const c of result.customers) {
+      out.push({ id: `c:${c.id}`, group: 'Customers', label: c.name, sub: 'Customer record', icon: 'users', href: `/customers/${c.id}` });
+    }
+    if (term.length >= 3) {
+      out.push({
+        id: 'ask', group: 'Ask', label: `Ask AI: “${term.length > 60 ? `${term.slice(0, 57)}…` : term}”`,
+        sub: ask?.available ? 'Answers with the numbers it used and where they came from.' : ask?.reason ?? 'AI assist is paused.',
+        icon: 'ask',
+      });
     }
     return out;
-  }, [q, pages, result, loading, jobsLabel]);
+  }, [q, pages, actions, result, recent, ask]);
 
   useEffect(() => setCursor((c) => Math.min(c, Math.max(0, rows.length - 1))), [rows.length]);
   const active = rows[cursor];
@@ -128,7 +171,13 @@ export function CommandPalette({ open, onClose, anchorRef, nav, jobsLabel, onNav
   }, [active]);
 
   const choose = (r: Row | undefined) => {
-    if (!r?.href) return;
+    if (!r) return;
+    if (r.group === 'Ask') {
+      setAskNote(ask?.available ? null : ask?.reason ?? 'AI assist is paused.');
+      return;
+    }
+    if (!r.href) return;
+    writeRecent({ id: r.id, label: r.label, sub: r.sub, href: r.href, icon: r.icon });
     onClose();
     onNavigate(r.href);
   };
@@ -147,12 +196,12 @@ export function CommandPalette({ open, onClose, anchorRef, nav, jobsLabel, onNav
     }
   };
 
-  const groups: Array<Row['group']> = ['Jobs', 'Customers', 'Pages', 'Ask'];
+  const groups: Group[] = ['Recent', 'Go to', 'Actions', 'Jobs', 'Customers', 'Ask'];
   const listId = `${uid}-list`;
   const optId = (r: Row) => `${uid}-${r.id.replace(/[^a-z0-9]/gi, '')}`;
 
   return (
-    <Popover open={open} onClose={onClose} anchorRef={anchorRef} width={560} placement="bottom-end" aria-label="Jump to">
+    <Popover open={open} onClose={onClose} anchorRef={anchorRef} width={600} placement="bottom-end" aria-label="Command palette">
       <PopoverHead>
         <Icon name="search" className="ink-3" />
         <input
@@ -163,13 +212,14 @@ export function CommandPalette({ open, onClose, anchorRef, nav, jobsLabel, onNav
           aria-controls={listId}
           aria-activedescendant={active ? optId(active) : undefined}
           aria-autocomplete="list"
-          aria-label="Jump to a job, customer or page"
-          placeholder="Jump to a job, customer or page"
+          aria-label="Go to a page, run an action, find a record or ask"
+          placeholder={`Go to, do, find a ${jobsLabel.toLowerCase().replace(/s$/, '')} or customer, or ask`}
           autoComplete="off"
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
             setCursor(0);
+            setAskNote(null);
           }}
           onKeyDown={onKeyDown}
         />
@@ -190,14 +240,13 @@ export function CommandPalette({ open, onClose, anchorRef, nav, jobsLabel, onNav
                     else refs.current.delete(r.id);
                   }}
                   active={active?.id === r.id}
-                  aria-disabled={r.href ? undefined : true}
                   onMouseMove={() => {
                     const i = rows.findIndex((x) => x.id === r.id);
                     if (i >= 0 && i !== cursor) setCursor(i);
                   }}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => choose(r)}
-                  right={r.group === 'Ask' ? <Tag>Later release</Tag> : undefined}
+                  right={r.group === 'Ask' ? (ask?.available ? <Tag tone="ai">AI</Tag> : <Tag tone="warn">Paused</Tag>) : r.keys ? <Keys chord={r.keys} /> : undefined}
                 >
                   <Icon name={r.icon} className="ink-2" />
                   <span style={{ minWidth: 0 }}>
@@ -209,9 +258,14 @@ export function CommandPalette({ open, onClose, anchorRef, nav, jobsLabel, onNav
             </GroupBlock>
           );
         })}
+        {askNote && (
+          <li className="popover-group" role="status">
+            <span>{askNote}</span>
+          </li>
+        )}
         {rows.length === 0 && (
           <li className="popover-group" role="presentation">
-            <span>{loading ? 'Searching…' : failed ? 'Search did not load. Keep typing to try again.' : 'Type a job number, a name or a customer.'}</span>
+            <span>{loading ? 'Searching…' : failed ? 'Search did not load. Keep typing to try again.' : 'Type a page, an action, a job number, a name or a customer.'}</span>
           </li>
         )}
       </PopoverList>

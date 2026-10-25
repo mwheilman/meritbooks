@@ -9,7 +9,9 @@ import {
   type Crumb, type Density, type FilteredNavGroup, type ShellContext, type SwitcherGroup, type SwitcherItem,
 } from '@meritbooks/merit-ui';
 import type { Vocabulary } from '@/lib/pm/vocab';
-import { CommandPalette } from './CommandPalette';
+import { CommandPalette, type AskStatus } from './CommandPalette';
+import { BellSlot } from './BellSlot';
+import { jobIdFromPath, paletteActions } from './actions';
 import { crumbsFor } from './crumbs';
 import { ShellProvider, useLoadedAt, type ShellAccess, type ShellCompany } from './ShellContext';
 import { PreviewBand } from './PreviewBand';
@@ -32,6 +34,8 @@ export interface AppFrameProps {
   access: ShellAccess;
   /** Money the shell's screens may draw, for the company in view. */
   money: MoneyVis;
+  /** Whether ⌘K "Ask AI" can answer (it says why when it can't). */
+  ask?: AskStatus;
   children: ReactNode;
 }
 
@@ -131,6 +135,11 @@ export function AppFrame(p: AppFrameProps) {
         : { name: p.orgName, meta: 'Workspace', icon: 'grid' as const };
 
   const crumbs = pageCrumbs ?? crumbsFor(pathname, p.vocab);
+  const jobId = jobIdFromPath(pathname);
+  const actions = useMemo(
+    () => paletteActions({ grants: p.access.grants, vocab: p.vocab, jobId, readOnly: p.readOnly }),
+    [p.access.grants, p.vocab, jobId, p.readOnly],
+  );
   const shellValue = useMemo(
     () => ({ vocab: p.vocab, companies: p.companies, activeCompanyId: p.activeCompanyId, readOnly: p.readOnly, access: p.access, money: p.money, setCrumbs: setPageCrumbs }),
     [p.vocab, p.companies, p.activeCompanyId, p.readOnly, p.access, p.money],
@@ -174,8 +183,9 @@ export function AppFrame(p: AppFrameProps) {
             />
             <Crumbs items={crumbs} />
             <span ref={cmdkRef} style={{ marginLeft: 'auto', display: 'flex' }}>
-              <CmdkTrigger label={`Jump to ${p.vocab.job.toLowerCase()}, customer, page…`} onOpen={() => setPaletteOpen((o) => !o)} />
+              <CmdkTrigger label={`Go to, do or find a ${p.vocab.job.toLowerCase()}…`} onOpen={() => setPaletteOpen((o) => !o)} />
             </span>
+            <BellSlot />
             <SyncStatus>{loadedAt ? `Loaded ${loadedAt}` : 'Loading…'}</SyncStatus>
           </Bar>
         }
@@ -196,6 +206,8 @@ export function AppFrame(p: AppFrameProps) {
         onClose={() => setPaletteOpen(false)}
         anchorRef={cmdkRef}
         nav={p.nav}
+        actions={actions}
+        ask={p.ask}
         jobsLabel={p.vocab.jobs}
         onNavigate={navigate}
       />

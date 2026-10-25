@@ -186,6 +186,20 @@ export const MONEY_KEYS = {
     financials: ['cost_cents', 'costCents'],
     public: ['price_cents', 'priceCents'],
   },
+  /**
+   * Field-service option builder (1117: fs_estimates, options, option items, option totals): the
+   * good / better / best sell prices are price-book sell figures the tech presents at the kitchen
+   * table, so they are public like the price book (dispatcher "price-book sell only" rule); the
+   * cost behind each line is financials.
+   */
+  fs_estimate: {
+    public: [
+      'unit_price_cents', 'member_unit_price_cents', 'unitPriceCents', 'memberUnitPriceCents', 'regular_cents', 'member_cents',
+      'rebate_cents', 'regularCents', 'memberCents', 'rebateCents', 'deposit_cents', 'depositCents', 'price_cents', 'priceCents',
+      'member_price_cents', 'memberPriceCents',
+    ],
+    financials: ['unit_cost_cents', 'unitCostCents', 'cost_cents', 'costCents', 'margin_cents', 'marginCents', 'gm_pct'],
+  },
   /** Service agreements: the customer's contract price. */
   agreement: {
     contract_value: ['price_cents', 'priceCents'],
@@ -262,16 +276,19 @@ export function rulesFor(objects?: ReadonlyArray<MoneyObject>): MaskRules {
   const money = new Map<string, Set<MoneyClass>>();
   const pub = new Set<string>();
   for (const o of list) {
+    if (!Object.hasOwn(MONEY_KEYS, o)) continue;
     const k: MoneyKeyList = MONEY_KEYS[o];
+    // own lists only: a polluted Object.prototype can never add a `public` list or drop a class
+    const listOf = (name: MoneyClass | 'public'): readonly string[] => (Object.hasOwn(k, name) ? k[name] ?? [] : []);
     for (const c of CLASSES) {
-      for (const key of k[c] ?? []) {
+      for (const key of listOf(c)) {
         if (!declared && !MONEY_LIKE_KEY.test(key)) continue;
         let set = money.get(key);
         if (!set) money.set(key, (set = new Set()));
         set.add(c);
       }
     }
-    for (const key of k.public ?? []) pub.add(key);
+    for (const key of listOf('public')) pub.add(key);
   }
   // A key that is money for any merged type is money (public loses).
   for (const key of money.keys()) pub.delete(key);
@@ -282,7 +299,7 @@ export function rulesFor(objects?: ReadonlyArray<MoneyObject>): MaskRules {
 export function metricClasses(metric: string): readonly MoneyClass[] | null {
   const k: MoneyKeyList = MONEY_KEYS.kpi;
   const out: MoneyClass[] = [];
-  for (const c of CLASSES) if ((k[c] ?? []).includes(metric)) out.push(c);
+  for (const c of CLASSES) if ((Object.hasOwn(k, c) ? k[c] ?? [] : []).includes(metric)) out.push(c);
   if (out.length) return out;
   return MONEY_LIKE_KEY.test(metric) ? ['financials', 'contract_value'] : null;
 }

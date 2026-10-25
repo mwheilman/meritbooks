@@ -10,6 +10,10 @@ import { DispatchBoard } from '@/components/ops/dispatch/DispatchBoard';
 import { ModuleOff } from '@/components/ops/common/ModuleOff';
 import '@/components/ops/ops.css';
 import { guardPage } from '@/components/shell/page-guard';
+import { DispatchFieldStrip } from '@/components/fieldservice/dispatch/DispatchFieldStrip';
+import '@/components/fieldservice/fs.css';
+import { loadBookingSetup, loadCapacityGrid, loadDispatchExtras } from '@/lib/fieldservice/queries';
+import { addDays } from '@/lib/time';
 
 export const metadata: Metadata = { title: 'Dispatch' };
 export const dynamic = 'force-dynamic';
@@ -47,6 +51,12 @@ export default async function DispatchPage({ searchParams }: { searchParams: { d
     if (l) jobLabels[id] = o.multi ? [l, o.jobs.company(id)].filter(Boolean).join(' · ') : l;
   }
   const overdue = data.queue.filter((q) => q.is_overdue).length;
+  // field-service strip (capacity, on call, blocks) for one company at a time
+  const fsCompany = o.scope.company?.id ?? (o.companyIds.length === 1 ? o.companyIds[0]! : null);
+  const [fsSetup, fsCells, fsExtras] = fsCompany
+    ? await Promise.all([loadBookingSetup(o.db, [fsCompany]), loadCapacityGrid(o.db, fsCompany, day, 1), loadDispatchExtras(o.db, [fsCompany], `${day}T00:00:00Z`, `${addDays(day, 1)}T06:00:00Z`)])
+    : [null, [], { events: [], onCall: [] }];
+  const empNames = Object.fromEntries(data.employees.map((e) => [e.id, [e.first_name, e.last_name].filter(Boolean).join(' ')]));
 
   return (
     <>
@@ -60,6 +70,9 @@ export default async function DispatchPage({ searchParams }: { searchParams: { d
       />
       <Page>
         <PageHead eyebrow={o.where} title="Dispatch" />
+        {fsSetup && fsSetup.businessUnits.length > 0 && (
+          <DispatchFieldStrip cells={fsCells} businessUnits={fsSetup.businessUnits} windows={fsSetup.windows} onCall={fsExtras.onCall} events={fsExtras.events} employees={empNames} day={day} />
+        )}
         <DispatchBoard
           day={day}
           today={today}

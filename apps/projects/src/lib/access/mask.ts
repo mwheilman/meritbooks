@@ -35,7 +35,7 @@ function cachedRules(objects?: ReadonlyArray<MoneyObject>): MaskRules {
 
 function holds(access: Access, cls: MoneyClass, companyId: string | null): boolean {
   const g = VIEW[cls];
-  if (companyId) return access.byCompany[companyId]?.has(g) ?? false;
+  if (companyId) return (Object.hasOwn(access.byCompany, companyId) ? access.byCompany[companyId] : undefined)?.has(g) ?? false;
   return access.grants.has(g);
 }
 
@@ -78,7 +78,7 @@ export function maskMoney<T>(
     if (!isPlainObject(v)) return v;
     let here = company;
     for (const ck of COMPANY_KEYS) {
-      const c = v[ck];
+      const c = Object.hasOwn(v, ck) ? v[ck] : undefined; // own keys only: never a polluted prototype
       if (typeof c === 'string' && c) { here = c; break; }
     }
     const out: Record<string, unknown> = {};

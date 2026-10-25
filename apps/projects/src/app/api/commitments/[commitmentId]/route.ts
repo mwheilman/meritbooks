@@ -9,6 +9,7 @@ import { IsoDate, Rate, Text200, Text2000, Uuid } from '@/lib/pm/money/schemas';
 import type { CommitmentRow } from '@/lib/pm/money/types';
 import { CommitmentLineSchema, commitmentLineRow } from '@/lib/pm/money/commitment-lines';
 import { loadCommitment } from '@/lib/pm/money/load';
+import { approvalSummary, decideObject } from '@/lib/approvals/server';
 
 function draftOnly(c: CommitmentRow) {
   if (c.status !== 'DRAFT') throw new HttpError(422, 'Lines change only while the commitment is a draft. Use a change order on the commitment instead.', 'PM_COMMITMENT_LOCKED');
@@ -63,8 +64,13 @@ export const POST = route({ access: { cap: 'projects.commitments', action: 'edit
       return { ok: true };
     }
     case 'approve': {
-      const eventId = await callRpc<string | null>(db, 'approve_commitment', { p_commitment: c.id }, 'commitment');
-      return { sent: !!eventId };
+      // through the approvals engine (1113): tier + role + limit + preparer ≠ approver; approve_commitment runs at the last step
+      const r = await decideObject(db, 'commitment', c.id);
+      if (r.status === 'not_needed') {
+        const eventId = await callRpc<string | null>(db, 'approve_commitment', { p_commitment: c.id }, 'commitment');
+        return { sent: !!eventId, approval: approvalSummary(r) };
+      }
+      return { sent: !!r.result?.event_id, approval: approvalSummary(r) };
     }
     case 'execute': {
       const eventId = await callRpc<string | null>(db, 'execute_commitment', { p_commitment: c.id, p_executed_on: body.executedOn ?? null }, 'commitment');

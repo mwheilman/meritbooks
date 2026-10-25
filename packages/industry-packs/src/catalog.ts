@@ -10,7 +10,9 @@
  *                   items first, a child item with the same key replaces it in place, new child
  *                   items are appended.
  *   - replace       the workspace shape (jobTypes, stageMachines, costCodes, priceBook, kpis,
- *                   questions): the child's array if it has one, otherwise the parent's.
+ *                   questions) and the v2 lists (roles, docTemplates, checklists): the child's array
+ *                   if it has one, otherwise the parent's.
+ *   - shallow (v2)  nav and home per persona group, jobTabs per job type, mobile, schedule.
  * A child always resolves against the parent's latest version.
  */
 import { PackManifestSchema, type PackManifest, type PackManifestInput } from './types';
@@ -41,6 +43,15 @@ export const MERGE_POLICY: Record<keyof PackManifestInput, MergePolicy> = {
   priceBook: 'replace',
   kpis: 'replace',
   questions: 'replace',
+  // manifest v2 experience slots
+  roles: 'replace',
+  nav: 'shallow',          // per persona group: a child's rail for a group replaces the parent's
+  home: 'shallow',
+  jobTabs: 'shallow',      // per job type; the parent's '*' set stays the fallback
+  mobile: 'shallow',
+  schedule: 'shallow',
+  docTemplates: 'replace',
+  checklists: 'replace',
 };
 
 export interface PackSummary {

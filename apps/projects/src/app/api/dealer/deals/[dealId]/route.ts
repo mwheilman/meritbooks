@@ -6,6 +6,7 @@ import { assertCompany, route } from '@/lib/api';
 import { rows } from '@/lib/pm/db';
 import { loadDealWorkspace } from '@/lib/pm/dealer/deal-queries';
 import { dcall, downs, dwrite } from '@/lib/pm/dealer/rpc';
+import { approvalSummary, decideObject } from '@/lib/approvals/server';
 import { Day, FiTypeZ, FinanceZ, LineTypeZ, Meter, Qty4, Rate, Text, Uuid, Year } from '@/lib/pm/dealer/schemas';
 
 const Money = z.number().int().min(0).max(1e12);
@@ -220,8 +221,14 @@ export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, o
       await dcall(db, 'write_deal', { p_deal: d.id });
       return { ok: true };
     case 'approve': {
-      const r = await dcall<Record<string, unknown>>(db, 'approve_deal', { p_deal: d.id, p_override_reason: body.overrideReason || null });
-      return { ok: true, approval: r };
+      // desk approval through the approvals engine (1113): below the floor adds the GM / owner step;
+      // pm.approve_deal (gross, floor reason) runs at the last step with the approver's reason
+      const a = await decideObject(db, 'dealer_deal', d.id, { reason: body.overrideReason || null });
+      if (a.status === 'not_needed') {
+        const r = await dcall<Record<string, unknown>>(db, 'approve_deal', { p_deal: d.id, p_override_reason: body.overrideReason || null });
+        return { ok: true, approval: r };
+      }
+      return { ok: true, approved: a.status === 'approved', approval: a.result ?? null, engine: approvalSummary(a) };
     }
     case 'reopen':
       await dcall(db, 'reopen_deal', { p_deal: d.id, p_reason: body.reason || null });

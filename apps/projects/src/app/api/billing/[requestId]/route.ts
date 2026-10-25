@@ -6,7 +6,8 @@ import { route } from '@/lib/api';
 import { one, pm, rows } from '@/lib/pm/db';
 import { BILLING_LINE_COLS, PAY_APP_COLS } from '@/lib/pm/money/queries';
 import { loadBillingRequest } from '@/lib/pm/money/load';
-import { callRpc, wrote } from '@/lib/pm/money/rpc';
+import { callRpc, moneyError, wrote } from '@/lib/pm/money/rpc';
+import { approvalSummary, decideObject } from '@/lib/approvals/server';
 import { IsoDate, Text2000 } from '@/lib/pm/money/schemas';
 import type { BillingLineRow, PayApplicationRow } from '@/lib/pm/money/types';
 
@@ -37,8 +38,15 @@ const Body = z.discriminatedUnion('op', [
 export const POST = route({ access: { cap: 'projects.billing', action: 'edit' }, ops: { approve: { cap: 'projects.billing', action: 'approve' } }, mask: 'billing', body: Body }, async ({ db, params, body }) => {
   const r = await loadBillingRequest(db, params.requestId!);
   if (body.op === 'approve') {
-    const eventId = await callRpc<string | null>(db, 'approve_and_emit_billing', { p_request: r.id }, 'billing request');
-    return { status: eventId ? 'EMITTED' : 'UNISSUED', eventId, resent: r.status === 'REJECTED' };
+    // through the approvals engine (1113); approve_and_emit_billing runs at the last step
+    const a = await decideObject(db, 'billing_request', r.id, { objectError: (e) => moneyError(e, 'billing request') });
+    if (a.status === 'not_needed') {
+      const eventId = await callRpc<string | null>(db, 'approve_and_emit_billing', { p_request: r.id }, 'billing request');
+      return { status: eventId ? 'EMITTED' : 'UNISSUED', eventId, resent: r.status === 'REJECTED', approval: approvalSummary(a) };
+    }
+    const eventId = typeof a.result?.event_id === 'string' ? a.result.event_id : null;
+    if (a.status !== 'approved') return { status: r.status, eventId: null, resent: false, approval: approvalSummary(a) };
+    return { status: eventId ? 'EMITTED' : 'UNISSUED', eventId, resent: r.status === 'REJECTED', approval: approvalSummary(a) };
   }
   if (body.op === 'void') {
     await callRpc(db, 'void_billing_request', { p_request: r.id, p_reason: body.reason ?? null }, 'billing request');

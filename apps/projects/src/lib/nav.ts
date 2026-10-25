@@ -15,11 +15,15 @@ import type { Vocabulary } from '@/lib/pm/vocab';
 import { lower } from '@/lib/pm/vocab';
 import { isDealerVocab, woVocab } from '@/lib/pm/ops/labels';
 import type { Grant, PersonaGroup } from '@/lib/access/types';
+import type { NavItemKey, PlanExperience } from '@meritbooks/industry-packs/src/types';
+import { navFor } from '@meritbooks/industry-packs/src/experience';
 
 export interface NavCounts {
   openJobs?: number;
   toReview?: number;
   overdueTasks?: number;
+  /** Approvals waiting on the caller (GET /api/approvals?mine → counts.mine). */
+  approvalsMine?: number;
 }
 
 /** The part of Access the rail and the page guards read. `Access` satisfies it. */
@@ -50,6 +54,12 @@ export interface NavInput {
   access?: NavAccess;
   /** The company in view; grants are read for it (else the union across companies). */
   companyId?: string | null;
+  /**
+   * The company's industry experience (pack manifest v2). When it names a rail for the caller's
+   * persona group, that rail leads (pack order and labels) and the rest of the persona's
+   * destinations fold behind "More". Company context only: roll-up views keep the built-in rails.
+   */
+  experience?: PlanExperience | null;
 }
 
 // ------------------------------------------------------------------ reachability (rail + guards)
@@ -69,6 +79,17 @@ const APPROVER: ReadonlyArray<Grant> = [
 const RULES: ReadonlyArray<readonly [string, Rule]> = [
   ['/jobs', { all: ['projects.jobs:view'] }],
   ['/review', { any: APPROVER }],
+  // Approvals: every member (preparers see "Waiting on others"); the rules page is Settings.
+  ['/approvals/policies', { all: ['projects.settings:view'] }],
+  ['/documents', { all: ['projects.documents:view'] }],
+  ['/inbox/company', { all: ['projects.settings:configure'] }],
+  // Field service depth (1117)
+  ['/calls/campaigns', { any: ['projects.reports:view', 'projects.leads:view'] }],
+  ['/calls', { all: ['projects.dispatch:edit'] }],
+  ['/pricebook', { any: ['projects.settings:view', 'projects.dispatch:view', 'projects.estimates:view'] }],
+  ['/dispatch/capacity', { all: ['projects.dispatch:view'] }],
+  ['/dispatch/scorecards', { all: ['projects.jobs:view'] }],
+  ['/dispatch/visit', { all: ['projects.jobs:view'] }],
   ['/estimates', { all: ['projects.estimates:view'] }],
   ['/leads', { all: ['projects.leads:view'] }],
   ['/customers', { all: ['projects.customers:view'] }],
@@ -172,8 +193,18 @@ function items(i: NavInput) {
     home: { label: 'Home', href: '/', keys: 'g h' } satisfies NavItem,
     today: { label: 'Today', href: '/', keys: 'g h' } satisfies NavItem,
     inbox: { label: 'Inbox', href: '/inbox' } satisfies NavItem,
-    approvals: { label: 'Approvals', href: '/review', keys: 'g r', count: review, processing: true } satisfies NavItem,
-    toReview: { label: 'To review', href: '/review', keys: 'g r', count: review, processing: true } satisfies NavItem,
+    // Approvals is the unified approvals inbox (Wave A); To review is the change-order review queue.
+    approvals: { label: 'Approvals', href: '/approvals', keys: 'g r', count: c.approvalsMine || undefined, processing: true } satisfies NavItem,
+    outOfOffice: { label: 'Out of office', href: '/approvals/delegation', disclosure: 'M' } satisfies NavItem,
+    approvalRules: { label: 'Approval rules', href: '/approvals/policies', disclosure: 'M' } satisfies NavItem,
+    companyMessages: { label: 'Company messages', href: '/inbox/company', disclosure: 'M' } satisfies NavItem,
+    calls: a('Calls', '/calls', 'dispatch'),
+    campaigns: a('Campaigns', '/calls/campaigns', 'dispatch'),
+    priceBook: a('Price book', '/pricebook', 'dispatch'),
+    capacity: a('Capacity', '/dispatch/capacity', 'dispatch'),
+    scorecards: a('Scorecards', '/dispatch/scorecards', 'dispatch'),
+    toReview: { label: 'To review', href: '/review', keys: 'g v', count: review, processing: true } satisfies NavItem,
+    documents: { label: 'Documents', href: '/documents', keys: 'g d' } satisfies NavItem,
     me: { label: 'Me', href: '/me', keys: 'g m' } satisfies NavItem,
     jobs: { label: v.jobs, href: '/jobs', keys: 'g j', count: openJobs } satisfies NavItem,
     myJobs: { label: `My ${lower(v.jobs)}`, href: '/jobs', keys: 'g j', count: openJobs } satisfies NavItem,
@@ -226,21 +257,21 @@ function storeGroup(it: Items): NavGroup {
 /** Management (owner, GM): every screen, Pipeline and Insights, Approvals at the top. */
 function managementRail(i: NavInput, it: Items): NavGroup[] {
   return [
-    { id: 'home', items: [it.home, it.inbox, { ...it.approvals, contexts: COMPANY }] },
+    { id: 'home', items: [it.home, it.inbox, { ...it.approvals, contexts: COMPANY }, { ...it.toReview, contexts: COMPANY }] },
     // ---- company rail ----
     storeGroup(it),
     { id: 'sell', label: 'Pipeline', contexts: COMPANY, items: [it.leads, it.customers, it.estimates] },
     { id: 'jobs', label: i.vocab.jobs, contexts: COMPANY, items: [it.jobs, it.changeOrders, it.selections, it.units] },
     {
       id: 'field', label: 'Field', contexts: COMPANY,
-      items: [it.schedule, it.dispatch, it.workOrders, it.agreements, it.equipment, it.logs, it.punch, it.time],
+      items: [it.schedule, it.calls, it.dispatch, it.capacity, it.workOrders, it.agreements, it.equipment, it.priceBook, it.logs, it.punch, it.time, it.scorecards, it.campaigns],
     },
     { id: 'make', label: 'Make', contexts: COMPANY, items: [it.production] },
     { id: 'buy', label: 'Buy', contexts: COMPANY, items: [it.commitments, it.subcontractors] },
     { id: 'bill', label: 'Bill', contexts: COMPANY, items: [it.billing, it.retainage, it.draws] },
     { id: 'cost', label: 'Cost', contexts: COMPANY, items: [it.jobCost, ...(i.booksPresent ? [it.wip] : [])] },
     { id: 'insights-co', label: 'Insights', contexts: COMPANY, items: [it.margin, it.backlog] },
-    { id: 'controls', label: 'Controls', contexts: COMPANY, items: [it.activity, it.aiDecisions, it.settings] },
+    { id: 'controls', label: 'Controls', contexts: COMPANY, items: [it.documents, it.activity, it.aiDecisions, it.settings, it.approvalRules, it.outOfOffice, it.companyMessages] },
     // ---- workspace / consolidated rail ----
     { id: 'work', label: 'Work', contexts: ROLLUP, items: [{ ...it.jobs }, it.schedule, it.approvals] },
     { id: 'pipeline', label: 'Pipeline', contexts: ROLLUP, items: [it.leads, it.customers] },
@@ -255,11 +286,12 @@ function managementRail(i: NavInput, it: Items): NavGroup[] {
 /** PM: Home, My jobs, Schedule, Changes, Commitments/POs, Billing, Inbox. */
 function pmRail(i: NavInput, it: Items): NavGroup[] {
   return [
-    { id: 'home', items: [it.home, it.inbox, it.toReview] },
+    { id: 'home', items: [it.home, it.inbox, it.approvals, it.toReview] },
     storeGroup(it),
     { id: 'jobs', label: `My ${lower(i.vocab.jobs)}`, items: [it.myJobs, it.changeOrders, it.selections, it.units, it.jobCost] },
     { id: 'sell', label: 'Customers', items: [it.customers, it.leads] },
-    { id: 'field', label: 'Schedule', items: [it.schedule, it.workOrders, it.logs, it.punch, it.time, it.production] },
+    { id: 'field', label: 'Schedule', items: [it.schedule, it.dispatch, it.capacity, it.workOrders, it.logs, it.punch, it.time, it.production, it.priceBook, it.scorecards] },
+    { id: 'away', items: [it.outOfOffice] },
     { id: 'buy', label: 'Buy', items: [it.commitments, it.subcontractors] },
     { id: 'bill', label: 'Bill', items: [it.billing, it.retainage, it.draws] },
   ];
@@ -268,22 +300,22 @@ function pmRail(i: NavInput, it: Items): NavGroup[] {
 /** Office (office manager, project accountant, dispatcher, purchasing): the needs-you desk. */
 function adminRail(i: NavInput, it: Items): NavGroup[] {
   return [
-    { id: 'home', items: [it.home, it.inbox, it.toReview] },
+    { id: 'home', items: [it.home, it.inbox, it.approvals, it.toReview] },
     storeGroup(it),
     { id: 'sell', label: 'Calls and leads', items: [it.leads, it.customers, it.estimates] },
     { id: 'jobs', label: i.vocab.jobs, items: [it.jobs, it.changeOrders, it.selections, it.units] },
-    { id: 'field', label: 'Schedule and dispatch', items: [it.schedule, it.dispatch, it.workOrders, it.agreements, it.equipment, it.time] },
+    { id: 'field', label: 'Schedule and dispatch', items: [it.schedule, it.calls, it.dispatch, it.capacity, it.workOrders, it.agreements, it.equipment, it.priceBook, it.time, it.campaigns] },
     { id: 'buy', label: 'Buy', items: [it.commitments, it.subcontractors] },
     { id: 'bill', label: 'Bill', items: [it.billing, it.retainage, it.draws] },
     { id: 'cost', label: 'Cost', items: [it.jobCost, ...(i.booksPresent ? [it.wip] : [])] },
-    { id: 'controls', label: 'Controls', items: [it.activity, it.settings] },
+    { id: 'controls', label: 'Controls', items: [it.documents, it.activity, it.settings, it.approvalRules, it.outOfOffice, it.companyMessages] },
   ];
 }
 
 /** Supervisor: Today, My jobs, Schedule, Crew time, Logs, Punch. */
 function supervisorRail(_i: NavInput, it: Items): NavGroup[] {
   return [
-    { id: 'home', items: [it.today, it.myJobs, it.schedule, it.dispatch, it.crewTime, it.logs, it.punch] },
+    { id: 'home', items: [it.today, it.myJobs, it.schedule, it.dispatch, it.crewTime, it.logs, it.punch, { ...it.documents, label: 'Docs' }, it.approvals, it.scorecards] },
   ];
 }
 
@@ -295,9 +327,9 @@ function laborRail(_i: NavInput, it: Items): NavGroup[] {
 /** Sales: the pipeline, then the jobs they sold. */
 function salesRail(i: NavInput, it: Items): NavGroup[] {
   return [
-    { id: 'home', items: [it.home, it.inbox] },
+    { id: 'home', items: [it.home, it.inbox, it.approvals] },
     storeGroup(it),
-    { id: 'sell', label: 'Pipeline', items: [it.leads, it.customers, it.estimates] },
+    { id: 'sell', label: 'Pipeline', items: [it.leads, it.customers, it.estimates, it.priceBook, it.campaigns] },
     { id: 'jobs', label: `My ${lower(i.vocab.jobs)}`, items: [it.myJobs] },
   ];
 }
@@ -311,18 +343,81 @@ const RAILS: Readonly<Record<PersonaGroup, (i: NavInput, it: Items) => NavGroup[
   sales: salesRail,
 };
 
+/** Manifest rail item key → the destination it names. */
+const NAV_ITEM_DEST: Readonly<Record<NavItemKey, keyof Items>> = {
+  home: 'home', today: 'today', inbox: 'inbox', approvals: 'approvals', to_review: 'toReview', me: 'me', jobs: 'jobs',
+  my_jobs: 'myJobs', leads: 'leads', customers: 'customers', estimates: 'estimates', change_orders: 'changeOrders',
+  selections: 'selections', units: 'units', schedule: 'schedule', dispatch: 'dispatch', work_orders: 'workOrders',
+  agreements: 'agreements', equipment: 'equipment', logs: 'logs', punch: 'punch', time: 'time', crew_time: 'crewTime',
+  production: 'production', commitments: 'commitments', subcontractors: 'subcontractors', billing: 'billing',
+  retainage: 'retainage', draws: 'draws', job_cost: 'jobCost', wip: 'wip', margin: 'margin', backlog: 'backlog',
+  compare: 'compare', activity: 'activity', ai_decisions: 'aiDecisions', onboarding: 'onboarding', settings: 'settings',
+  documents: 'documents', stock: 'stock', deals: 'deals', parts: 'parts', rentals: 'rentals', warranty: 'warranty',
+  calls: 'calls', campaigns: 'campaigns', price_book: 'priceBook', capacity: 'capacity', scorecards: 'scorecards',
+  out_of_office: 'outOfOffice', approval_rules: 'approvalRules', company_messages: 'companyMessages',
+};
+
+export function navDestination(key: NavItemKey, i: NavInput): NavItem {
+  return items(i)[NAV_ITEM_DEST[key]];
+}
+
+function modulesInUse(i: NavInput): ReadonlyArray<string> {
+  return isDealerNav(i) ? [...i.modules, DEALER_STORE_MODULE] : i.modules;
+}
+
+/** filterNav's activation rule (A items show when their module is in use or they hold open work). */
+function activated(item: NavItem, used: ReadonlyArray<string>): boolean {
+  if (item.disclosure !== 'A') return true;
+  const open = typeof item.count === 'number' ? item.count > 0 : typeof item.count === 'string' && item.count.length > 0;
+  return (item.module !== undefined && used.includes(item.module)) || open;
+}
+
+/**
+ * The pack's rail for this persona (company context): the pack's items in its order and words,
+ * then a folded "More" group with the persona's other destinations (module-activated, deduped by
+ * page, chords dropped so the pack rail owns them).
+ */
+function packRail(i: NavInput, it: Items, access: NavAccess): NavGroup[] | null {
+  if (i.context !== 'client') return null;
+  const entries = navFor(i.experience, access.group);
+  if (!entries) return null;
+  const lead: NavItem[] = [];
+  const seen = new Set<string>();
+  for (const e of entries) {
+    const dest = it[NAV_ITEM_DEST[e.item]];
+    if (!dest || seen.has(dest.href)) continue;
+    seen.add(dest.href);
+    lead.push(e.label ? { ...dest, id: `pack:${e.item}`, label: e.label } : { ...dest, id: `pack:${e.item}` });
+  }
+  const used = modulesInUse(i);
+  const rest: NavItem[] = [];
+  for (const g of RAILS[access.group](i, it)) {
+    if (g.contexts && !g.contexts.includes('client')) continue;
+    for (const item of g.items) {
+      if (item.contexts && !item.contexts.includes('client')) continue;
+      if (seen.has(item.href) || !activated(item, used)) continue;
+      seen.add(item.href);
+      const { keys: _k, ...noChord } = item;
+      rest.push({ ...noChord, disclosure: 'M' });
+    }
+  }
+  return [
+    { id: 'pack', items: lead },
+    ...(rest.length ? [{ id: 'more', items: rest }] : []),
+  ];
+}
+
 /** The persona's rail, with every item the caller can't reach removed. */
 export function buildNav(i: NavInput): NavGroup[] {
   const access = i.access ?? FULL_NAV_ACCESS;
   const it = items(i);
   const reach = (item: NavItem) => canReach(access, item.href, i.companyId);
-  return RAILS[access.group](i, it)
+  return (packRail(i, it, access) ?? RAILS[access.group](i, it))
     .map((g) => ({ ...g, items: g.items.filter(reach) }))
     .filter((g) => g.items.length > 0);
 }
 
 /** buildNav + filterNav: what the rail renders. */
 export function railNav(i: NavInput): FilteredNavGroup[] {
-  const modulesInUse: ReadonlyArray<string> = isDealerNav(i) ? [...i.modules, DEALER_STORE_MODULE] : i.modules;
-  return filterNav(buildNav(i), { context: i.context, modulesInUse });
+  return filterNav(buildNav(i), { context: i.context, modulesInUse: modulesInUse(i) });
 }

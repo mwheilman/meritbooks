@@ -13,7 +13,9 @@
  */
 import { z } from 'zod';
 
-export const PLAN_SCHEMA_VERSION = 1 as const;
+export const PLAN_SCHEMA_VERSION = 2 as const;
+/** Plan versions pm.apply_pack_plan accepts (1 = no experience section; 2 = adds `experience`). */
+export const SUPPORTED_PLAN_SCHEMA_VERSIONS = [1, 2] as const;
 
 // ---------------------------------------------------------------------------
 // Closed vocabularies (engine-level; packs choose from these, never extend them)
@@ -96,12 +98,122 @@ export type VocabKey = (typeof VOCAB_KEYS)[number];
 export const FIELD_OBJECTS = ['project', 'task', 'work_order', 'asset', 'selection', 'field_log', 'commitment'] as const;
 export const FIELD_TYPES = ['text', 'number', 'integer', 'date', 'bool', 'enum', 'money_cents'] as const;
 
+
+// ---------------------------------------------------------------------------
+// Manifest v2: the experience slots (UX seat §3a "What changes per industry", PLT-01).
+// Closed vocabularies: packs pick keys the app implements; they never add a screen.
+// ---------------------------------------------------------------------------
+
+/** Persona role templates (WAVE0 spec §2.2). Mirrors apps/projects lib/access/types PERSONAS. */
+export const PERSONA_TEMPLATES = [
+  'projects_owner', 'projects_gm', 'projects_office_manager', 'projects_project_accountant',
+  'projects_dispatcher', 'projects_purchasing', 'projects_pm', 'projects_supervisor', 'projects_labor',
+  'projects_sales',
+] as const;
+export type PersonaTemplate = (typeof PERSONA_TEMPLATES)[number];
+
+/** The rails the app builds (one per persona group). */
+export const PERSONA_GROUPS = ['management', 'admin', 'pm', 'supervisor', 'labor', 'sales'] as const;
+export type PersonaGroupKey = (typeof PERSONA_GROUPS)[number];
+
+export const PERSONA_TEMPLATE_GROUP: Readonly<Record<PersonaTemplate, PersonaGroupKey>> = {
+  projects_owner: 'management',
+  projects_gm: 'management',
+  projects_office_manager: 'admin',
+  projects_project_accountant: 'admin',
+  projects_dispatcher: 'admin',
+  projects_purchasing: 'admin',
+  projects_pm: 'pm',
+  projects_supervisor: 'supervisor',
+  projects_labor: 'labor',
+  projects_sales: 'sales',
+};
+
+/** Rail destinations the app has a route for. A pack orders and relabels these; it never adds one. */
+export const NAV_ITEMS = [
+  'home', 'today', 'inbox', 'approvals', 'to_review', 'me', 'jobs', 'my_jobs', 'leads', 'customers',
+  'estimates', 'change_orders', 'selections', 'units', 'schedule', 'dispatch', 'work_orders', 'agreements',
+  'equipment', 'logs', 'punch', 'time', 'crew_time', 'production', 'commitments', 'subcontractors',
+  'billing', 'retainage', 'draws', 'job_cost', 'wip', 'margin', 'backlog', 'compare', 'activity',
+  'ai_decisions', 'onboarding', 'settings', 'documents', 'stock', 'deals', 'parts', 'rentals', 'warranty',
+  // field service depth (1117), approvals (1113), notifications (1114)
+  'calls', 'campaigns', 'price_book', 'capacity', 'scorecards', 'out_of_office', 'approval_rules', 'company_messages',
+] as const;
+export type NavItemKey = (typeof NAV_ITEMS)[number];
+
+/** Home modules (UX seat §3b). The app renders each; a pack picks and orders them per persona group. */
+export const HOME_WIDGETS = [
+  // management
+  'weekly_brief', 'cash_ar', 'jobs_at_risk', 'backlog_capacity', 'over_under_billing', 'pipeline', 'approvals_queue',
+  // admin
+  'needs_you', 'today_schedule', 'billing_ready', 'new_leads', 'setup_card',
+  // pm
+  'my_jobs', 'week_schedule', 'billing_due', 'client_updates',
+  // supervisor
+  'today_on_site', 'lookahead_constraints', 'crew_time_to_approve', 'open_punch', 'daily_report_status',
+  // labor
+  'current_assignment', 'rest_of_today', 'timecard', 'earnings', 'office_messages',
+  // industry signature screens (each opens a real board)
+  'dispatch_board', 'service_board', 'capacity_board', 'install_board', 'crew_board', 'draw_status',
+  'selections_queue', 'item_tracker', 'utilization', 'unit_aging', 'pay_apps_due', 'productivity',
+] as const;
+export type HomeWidgetKey = (typeof HOME_WIDGETS)[number];
+
+/**
+ * Job page tab kinds. Each is a screen the app renders (or, for the few marked later in the app,
+ * an honest placeholder with a link to where the work lives today). A pack orders and relabels.
+ */
+export const JOB_TAB_KINDS = [
+  'overview', 'estimates', 'budget', 'schedule', 'change_orders', 'contract', 'commitments', 'billing',
+  'job_cost', 'work_orders', 'production', 'selections', 'draws', 'units', 'logs', 'punch', 'time',
+  'documents', 'activity', 'team',
+  // not built yet: rendered as an honest placeholder that links to where the work lives
+  'rfis', 'client_view', 'equipment', 'agreement', 'parts', 'warranty_claim', 'capital_stack', 'bom',
+  'tm_tickets', 'receiving', 'productivity',
+] as const;
+export type JobTabKind = (typeof JOB_TAB_KINDS)[number];
+
+/** Field-app primary actions (UX seat §3a last column, §3e). */
+export const MOBILE_ACTIONS = [
+  'clock_in', 'on_my_way', 'start', 'finish', 'photo', 'note', 'checklist', 'daily_log', 'punch_item',
+  'crew_time', 'inspection', 'report_quantities', 'tm_ticket', 'request_change_order', 'todo',
+  'stage_complete', 'trade_check_in', 'present_options', 'take_payment', 'scan_equipment', 'sell_agreement',
+  'operation_start_stop', 'good_scrap_qty', 'scan_label', 'flag_issue', 'measure_room', 'start_ticket',
+  'confirm_dye_lot', 'customer_sign_off', 'clip_product', 'receive_item', 'log_time', 'install_checklist',
+  'clock_on_ro_line', 'check_in_unit', 'request_part', 'voice_notes', 'rental_inspection', 'site_visit_report',
+  'timer', 'expense_receipt', 'approve_crew_time',
+] as const;
+export type MobileActionKey = (typeof MOBILE_ACTIONS)[number];
+
+/** Schedule lenses (UX seat §3c). */
+export const SCHEDULE_VIEWS = [
+  'gantt', 'lookahead', 'calendar', 'crew_board', 'dispatch', 'production_capacity', 'install_board',
+  'milestone_timeline', 'service_board', 'resource_planner',
+] as const;
+export type ScheduleViewKey = (typeof SCHEDULE_VIEWS)[number];
+
+/** Document templates a pack may ship (keys only today; the template bodies live with Documents). */
+export const DOC_TEMPLATES = [
+  'proposal', 'estimate', 'contract', 'change_order', 'pay_app', 'invoice', 'work_order', 'install_ticket',
+  'purchase_order', 'subcontract', 'daily_report', 'buyers_order', 'draw_request', 'closeout', 'lien_waiver',
+  'tm_ticket', 'measure_sheet', 'delivery_receipt', 'inspection_report', 'service_agreement', 'warranty_claim',
+  'repair_order', 'design_agreement', 'selection_sheet', 'punch_list', 'rental_agreement',
+] as const;
+export type DocTemplateKey = (typeof DOC_TEMPLATES)[number];
+
+/** Job-type key slot that applies to every job type without its own entry. */
+export const ANY_JOB_TYPE = '*' as const;
+/** The visible tab row holds this many; the rest go behind "More" (UX seat §3d). */
+export const MAX_VISIBLE_JOB_TABS = 7;
+
 // ---------------------------------------------------------------------------
 // Manifest schema
 // ---------------------------------------------------------------------------
 
 const keyRe = /^[a-z][a-z0-9_]{1,47}$/;
-const Key = z.string().regex(keyRe, 'lower_snake key');
+/** Keys that reach Object.prototype when used as a record key; never a pack key. */
+const RESERVED_KEYS: ReadonlySet<string> = new Set(['constructor', 'prototype']);
+const Key = z.string().regex(keyRe, 'lower_snake key').refine((k) => !RESERVED_KEYS.has(k), 'reserved key');
 
 export const StageDefSchema = z.object({
   key: Key,
@@ -223,6 +335,59 @@ export const SampleJobSchema = z.object({
   stage: Key,
 });
 
+
+// ---- manifest v2 experience slots (all optional: v1 manifests parse unchanged) ----
+
+const Label = z.string().min(1).max(40);
+/** '*' or a job type key. */
+const JobTypeSlot = z.string().regex(/^(\*|[a-z][a-z0-9_]{1,47})$/, 'job type key or "*"').refine((k) => !RESERVED_KEYS.has(k), 'reserved key');
+
+export const RoleTitleSchema = z.object({
+  /** Industry title shown to people ("Comfort advisor"). */
+  title: Label,
+  /** Persona template it maps to. */
+  template: z.enum(PERSONA_TEMPLATES),
+});
+
+export const NavEntrySchema = z.union([
+  z.enum(NAV_ITEMS),
+  z.object({ item: z.enum(NAV_ITEMS), label: Label }),
+]);
+
+export const JobTabEntrySchema = z.union([
+  z.enum(JOB_TAB_KINDS),
+  z.object({ tab: z.enum(JOB_TAB_KINDS), label: Label }),
+]);
+
+export const JobTabSetSchema = z.object({
+  tabs: z.array(JobTabEntrySchema).min(2).max(12),
+  /** Tab the job opens on (defaults to the first). field_service opens on Visits. */
+  defaultTab: z.enum(JOB_TAB_KINDS).optional(),
+});
+
+export const MobileProfileSchema = z.object({
+  /** group → job type ('*' = any) → primary actions, first is the big button. */
+  actions: z.record(z.enum(PERSONA_GROUPS), z.record(JobTypeSlot, z.array(z.enum(MOBILE_ACTIONS)).min(1).max(6))).default({}),
+  /** Shop / wall-screen kiosk (QR or PIN, one work center's queue). */
+  kiosk: z.boolean().default(false),
+});
+
+export const ScheduleProfileSchema = z.object({
+  /** job type ('*' = any) → the view the job's Schedule tab opens on. */
+  job: z.record(JobTypeSlot, z.enum(SCHEDULE_VIEWS)).default({}),
+  /** The global Schedule rail item's multi-job view. */
+  multiJob: z.enum(SCHEDULE_VIEWS).default('calendar'),
+  /** Per persona group override of the multi-job view (supers on look-ahead, foremen on the crew board). */
+  byGroup: z.record(z.enum(PERSONA_GROUPS), z.enum(SCHEDULE_VIEWS)).default({}),
+});
+
+export const ChecklistRefSchema = z.object({
+  key: Key,
+  label: z.string().min(1).max(60),
+  /** Job types it applies to (omit = all). */
+  jobTypes: z.array(Key).optional(),
+});
+
 export const PackManifestSchema = z.object({
   key: Key,
   version: z.string().regex(/^\d+\.\d+\.\d+$/),
@@ -257,6 +422,19 @@ export const PackManifestSchema = z.object({
     tone: z.string().max(80).default('plain, direct, numbers first'),
   }).default({ watchFor: [], tone: 'plain, direct, numbers first' }),
   sampleJob: SampleJobSchema,
+  // ---- manifest v2 (PLT-01). Optional so every v1 manifest still parses. ----
+  /** Industry titles → persona templates. First title per template is the display title. */
+  roles: z.array(RoleTitleSchema).max(30).optional(),
+  /** Rail per persona group, top to bottom. Items the person can't reach are dropped by the app. */
+  nav: z.record(z.enum(PERSONA_GROUPS), z.array(NavEntrySchema).min(1).max(14)).optional(),
+  /** Home modules per persona group, top-left first. */
+  home: z.record(z.enum(PERSONA_GROUPS), z.array(z.enum(HOME_WIDGETS)).min(1).max(10)).optional(),
+  /** Job page tabs per job type ('*' = every job type without its own set). */
+  jobTabs: z.record(JobTypeSlot, JobTabSetSchema).optional(),
+  mobile: MobileProfileSchema.optional(),
+  schedule: ScheduleProfileSchema.optional(),
+  docTemplates: z.array(z.enum(DOC_TEMPLATES)).max(26).optional(),
+  checklists: z.array(ChecklistRefSchema).max(30).optional(),
 });
 export type PackManifest = z.infer<typeof PackManifestSchema>;
 export type PackManifestInput = z.input<typeof PackManifestSchema>;
@@ -359,6 +537,32 @@ export interface WorkspacePlan {
     rev_rec_by_job_type: Record<string, RevRecHint>;
   };
   sample_job: z.infer<typeof SampleJobSchema> | null; // included only if the user opts in
+  /** v2: the compiled experience (roles, rails, homes, job tabs, field actions, schedule views, templates). */
+  experience: PlanExperience;
   /** stable hash of everything above except answers/sample_job; idempotency + drift detection */
   plan_hash: string;
+}
+
+// ---------------------------------------------------------------------------
+// Compiled experience (plan v2). snake_case like the rest of the plan.
+// ---------------------------------------------------------------------------
+
+export interface PlanNavEntry { item: NavItemKey; label: string | null }
+export interface PlanJobTab { tab: JobTabKind; label: string | null }
+export interface PlanJobTabSet { tabs: PlanJobTab[]; default_tab: JobTabKind }
+
+export interface PlanExperience {
+  roles: { title: string; template: PersonaTemplate }[];
+  /** Missing group = the app's built-in rail for that persona. */
+  nav: Partial<Record<PersonaGroupKey, PlanNavEntry[]>>;
+  home: Partial<Record<PersonaGroupKey, HomeWidgetKey[]>>;
+  /** Keyed by job type key or '*'. */
+  job_tabs: Record<string, PlanJobTabSet>;
+  mobile_actions: Partial<Record<PersonaGroupKey, Record<string, MobileActionKey[]>>>;
+  kiosk: boolean;
+  schedule_views: { job: Record<string, ScheduleViewKey>; multi_job: ScheduleViewKey; by_group: Partial<Record<PersonaGroupKey, ScheduleViewKey>> };
+  doc_templates: DocTemplateKey[];
+  checklists: { key: string; label: string; job_types: string[] | null }[];
+  /** Which pack each job type's slots came from (primary or an add-on). */
+  sources: Record<string, string>;
 }

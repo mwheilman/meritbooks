@@ -1,5 +1,6 @@
 'use client';
 
+import { approvalOutcome, chainPending } from '@/lib/approvals/outcome';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -58,8 +59,9 @@ export function ChangeOrderQueue(p: ChangeOrderQueueProps) {
 
   const approve = async (co: CoRow) => {
     if (!OPEN.has(co.stage)) return;
-    const r = await run(`a:${co.id}`, 'post', `${url(co)}/approve`, {}, `Approved ${co.number}`, { quietError: true });
+    const r = await run<{ approval?: unknown }>(`a:${co.id}`, 'post', `${url(co)}/approve`, {}, (d) => approvalOutcome(d.approval, `Approved ${co.number}`, co.number), { quietError: true });
     if (r.error) setNotice({ id: co.id, text: r.error.error });
+    else if (chainPending(r.data?.approval)) setNotice({ id: co.id, text: approvalOutcome(r.data?.approval, '', co.number) });
     else setNotice(null);
   };
   const advance = async (co: CoRow, to: ChangeOrderStage, verb: string) => {

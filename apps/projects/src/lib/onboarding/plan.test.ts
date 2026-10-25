@@ -31,7 +31,7 @@ describe('plan request → apply payload', () => {
     const payload = buildApplyPayload(plan, DEC);
     expect(payload.ai_decision_id).toBe(DEC);
     expect(payload.plan_hash).toBe(plan.plan_hash);
-    expect(payload.schema_version).toBe(1);
+    expect(payload.schema_version).toBe(2); // plan schema v2: adds the experience section
     expect(buildApplyPayload(plan, null)).not.toHaveProperty('ai_decision_id');
   });
 

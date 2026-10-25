@@ -381,7 +381,7 @@ export function DispatchBoard(p: DispatchBoardProps) {
                 <span>{visit.skills.length ? <>Needs <b>{visit.skills.map((s) => skillName.get(s) ?? s).join(', ')}</b></> : 'No required skills'}</span>
                 {visit.estimated ? <span>Estimate <b>{durationText(visit.estimated)}</b></span> : null}
               </div>
-              <p style={{ marginTop: 12 }}><Link className="link" href={`/work-orders?wo=${visit.id}`}>Open the {lower(wv.one)}</Link></p>
+              <p style={{ marginTop: 12 }}><Link className="link" href={`/dispatch/visit/${visit.id}`}>Open the {lower(wv.one)}</Link> · <Link className="link" href={`/work-orders?wo=${visit.id}`}>In the list</Link></p>
             </PanelSection>
           </Panel>
         ) : block ? (
@@ -421,7 +421,7 @@ export function DispatchBoard(p: DispatchBoardProps) {
               </PanelSection>
             )}
             <PanelSection>
-              {block.order && <Link className="link" href={`/work-orders?wo=${block.order.id}`}>Open the {lower(wv.one)}</Link>}
+              {block.order && <><Link className="link" href={`/dispatch/visit/${block.order.id}`}>Open the {lower(wv.one)}</Link> · <Link className="link" href={`/work-orders?wo=${block.order.id}`}>In the list</Link></>}
               {!readOnly && ASSIGNMENT_NEXT[block.assignment.status].includes('CANCELLED') && (
                 <div style={{ marginTop: 12 }}>
                   <Button variant="quiet" disabled={busy === 'status'} onClick={() => void moveAssignment(block.assignment.id, 'CANCELLED', `Took ${block.row.name} off ${block.label}`)}>Take off the board</Button>

@@ -13,6 +13,20 @@ import { shortDate } from '@meritbooks/merit-ui';
 import { AppFrame } from '@/components/shell/AppFrame';
 import { EnableProjectsScreen, NoWorkspaceScreen } from '@/components/shell/GateScreens';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getCompanyExperience } from '@/lib/packs/experience-server';
+import { loadInbox } from '@/lib/approvals/server';
+import { aiConfigured } from '@/lib/ai/gateway';
+import type { AskStatus } from '@/components/shell/CommandPalette';
+
+/**
+ * ⌘K Ask: there is no question-answering endpoint yet, so Ask is paused everywhere; the sentence
+ * says which part is missing so nobody waits on an answer that will not come.
+ */
+function askStatus(): AskStatus {
+  return aiConfigured()
+    ? { available: false, reason: 'AI assist is paused: questions about your numbers arrive with the Ask release. Try a page, a job or a customer.' }
+    : { available: false, reason: 'AI assist is paused: the AI service is not switched on for this workspace.' };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +46,11 @@ async function counts(db: SupabaseClient, scope: Scope): Promise<NavCounts> {
       .select('job_id', { count: 'exact', head: true })
       .in('location_id', scope.companyIds)
       .not('stage_is_terminal', 'is', true);
+    // Same answer as GET /api/approvals?mine (counts.mine), for the Approvals badge.
+    const approvalsMine = await loadInbox(db, { tab: 'mine', companyId: scope.company?.id ?? null, limit: 1 })
+      .then((r) => r.counts?.mine ?? 0, () => 0);
     return {
+      approvalsMine,
       openJobs: openJobsRes.count ?? undefined,
       toReview: ((cosRes.data ?? []) as Array<{ job_id: string }>).filter((c) => inScope.has(c.job_id)).length,
       overdueTasks: ((tasksRes.data ?? []) as Array<{ job_id: string }>).filter((t) => inScope.has(t.job_id)).length,
@@ -52,12 +70,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   const scope = r.scope;
   const db = await requireDb();
-  const [access, me, modules, vocab, navCounts] = await Promise.all([
+  const [access, me, modules, vocab, navCounts, experience] = await Promise.all([
     getAccess(),
     getMe(db, scope.userId),
     getModulesFor(db, scope.companyIds, scope.installs),
     getVocabulary(db, scope.company?.id ?? null, scope.companyIds),
     counts(db, scope),
+    // The company in view's industry experience (pack manifest v2): its rail per persona.
+    scope.context === 'client' ? getCompanyExperience(db, scope.company?.id ?? null) : Promise.resolve(null),
   ]);
 
   let name = [me.firstName, me.lastName].filter(Boolean).join(' ');
@@ -96,6 +116,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         packKeys: scope.installs
           .filter((i) => !scope.company || i.location_id === scope.company.id)
           .map((i) => i.pack_key),
+        experience: experience?.experience ?? null,
       })}
       orgName={scope.tenant.orgName ?? 'Workspace'}
       companies={scope.tenant.companies.map((c) => ({ id: c.id, name: c.name, shortCode: c.shortCode, installed: installedIds.has(c.id) }))}
@@ -108,6 +129,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       readOnly={scope.readOnly}
       access={shellAccess}
       money={moneyVisFor(access, companyId)}
+      ask={askStatus()}
     >
       {children}
     </AppFrame>

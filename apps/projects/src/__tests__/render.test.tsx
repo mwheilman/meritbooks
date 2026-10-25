@@ -127,14 +127,23 @@ describe('views render with real-shaped rows', () => {
     const tasks = [task('1', '2026-10-15'), task('2', '2026-10-25', 'IN_PROGRESS'), task('3', null, 'DONE')];
     expect(wrap(<ScheduleTab jobId="j" tasks={tasks} today="2026-10-20" />)).toContain('Add task');
     expect(wrap(<ContractTab jobId="j" contracts={[]} snapshots={[]} originalCents={0} approvedCoCents={0} pendingCoCents={0} defaultBasis="PHYSICAL_PCT" booksPresent isSample={false} />)).toContain('Set the contract');
-    expect(wrap(<OverviewTab job={jobs[0]!} overview={null} tasks={tasks} activity={[]} today="2026-10-20" hasSchedule details={{ jobId: 'j', companyId: A, customerId: null, customerName: null, plannedStart: null, plannedFinish: null, actualStart: null, facts: [] }} />)).toContain('Key figures');
-    const header = wrap(
-      <JobHeader jobId="j" companyId={A} number="HHC-2026-0001" name="Job 1" customer={null} stageLabel="Lead" coreStatus="BID" pmName={null} jobTypeLabel="Remodel" companyName={null} isSample
-        stages={[{ key: 'lead', label: 'Lead', terminal: false }, { key: 'won', label: 'Contracted', terminal: false }, { key: 'closed', label: 'Closed', terminal: true }]}
-        currentStage="lead" next={[{ to_stage: 'won', label: 'Contracted', core_status: 'ACTIVE', guards: ['has_customer', 'has_budget'] }]} />,
+    const links = { contract: '/jobs/j?tab=contract', budget: '/jobs/j?tab=budget', changes: '/jobs/j?tab=change-orders', schedule: '/jobs/j?tab=schedule', activity: '/jobs/j?tab=activity' };
+    const ov = wrap(
+      <OverviewTab job={jobs[0]!} overview={null} tasks={tasks} activity={[]} today="2026-10-20" hasSchedule
+        attention={[{ id: 'stage', tone: 'warn', title: 'Not ready for Contracted', evidence: 'This job has no customer on file yet.', action: { label: 'Choose the customer', href: '/jobs/j' } }]}
+        openItems={[{ key: 'tasks', label: 'Open tasks', count: 2, href: '/jobs/j?tab=schedule' }]} photos={[]} photosHref="/documents?job=j"
+        customer={null} links={links} />,
     );
-    expect(header).toContain('Remove sample data');
-    expect(header).toContain('Move stage');
+    for (const t of ['Needs attention', 'Key numbers', 'Next 14 days', 'Open items', 'Latest photos', 'Recent activity', 'Choose the customer']) expect(ov).toContain(t);
+    const header = wrap(
+      <JobHeader jobId="j" companyId={A} number="HHC-2026-0001" name="Job 1" customer={null} site={{ label: '12 Main St', mapHref: null }} stageLabel="Lead" coreStatus="BID"
+        people={[{ role: 'Project manager', name: 'Pat Lee' }]} jobTypeLabel="Remodel" companyName={null} isSample
+        stages={[{ key: 'lead', label: 'Lead', terminal: false }, { key: 'won', label: 'Contracted', terminal: false }, { key: 'closed', label: 'Closed', terminal: true }]}
+        currentStage="lead" next={[{ to_stage: 'won', label: 'Contracted', core_status: 'ACTIVE', guards: ['has_customer', 'has_budget'] }]}
+        primary={{ kind: 'fix', label: 'Choose the customer', href: '/jobs/j', why: 'Before Contracted: no customer' }}
+        figures={[{ key: 'contract', label: 'Contract', kind: 'money', value: 2_500_000, sub: 'Original', href: '/jobs/j?tab=contract' }]} booksNote={null} />,
+    );
+    for (const t of ['HHC-2026-0001', 'Choose the customer', 'Stage', 'Contract', '25,000', 'Pat Lee', '12 Main St', 'Sample']) expect(header).toContain(t);
   });
 
   it('change orders: review bands and the all view; read-only hides verbs', () => {

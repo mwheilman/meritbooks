@@ -23,6 +23,8 @@ import { PERSONAS } from '@/lib/access/types';
 import { PERSONA_LABEL } from '@/lib/access/templates';
 import { TeamArea } from '@/components/settings/TeamArea';
 import { loadTeamDirectory, rolesAt } from '@/components/settings/team-data';
+import { getCompanyExperience } from '@/lib/packs/experience-server';
+import { roleTitleFor } from '@/lib/packs/experience';
 
 export const metadata: Metadata = { title: 'Settings' };
 
@@ -50,7 +52,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: { c
     listCostCodes(db, company.id, { includeInactive: true }),
     seesRates ? listLaborRates(db, company.id).catch(() => []) : Promise.resolve([]),
   ]);
-  const [team, real] = area === 'team' ? await Promise.all([loadTeamDirectory(db, scope.userId), getRealAccess()]) : [null, null];
+  const [team, real, exp] = area === 'team'
+    ? await Promise.all([loadTeamDirectory(db, scope.userId), getRealAccess(), getCompanyExperience(db, company.id)])
+    : [null, null, null];
+  // Industry titles (pack roles slot) wherever a Projects role shows; a custom tenant role keeps its own name.
+  const titleOf = (r: { persona: (typeof PERSONAS)[number] | null; title: string }) => (r.persona ? roleTitleFor(exp?.experience, r.persona) ?? r.title : r.title);
   const labor = area === 'labor'
     ? await Promise.all([getLaborSettings(db, company.id), listEmployeeCards(db, company.id), listEmployees(db)])
     : null;
@@ -203,12 +209,18 @@ export default async function SettingsPage({ searchParams }: { searchParams: { c
                 error={team.error}
                 rows={team.members.map((m) => ({
                   membershipId: m.membershipId, name: m.name, email: m.email, booksRole: m.booksRole, status: m.status, isMe: m.isMe,
-                  titles: [...new Set(rolesAt(m, company.id).map((r) => r.title))],
+                  titles: [...new Set(rolesAt(m, company.id).map(titleOf))],
                   isAdminSeat: m.isAdminSeat, projectsOnly: m.projectsOnly,
                 }))}
                 preview={
                   real && canPreview(real.grants)
-                    ? { personas: PERSONAS.map((k) => ({ key: k, label: PERSONA_LABEL[k] })), current: access.preview }
+                    ? {
+                        personas: PERSONAS.map((k) => {
+                          const t = roleTitleFor(exp?.experience, k);
+                          return { key: k, label: t && t !== PERSONA_LABEL[k] ? `${t} (${PERSONA_LABEL[k]})` : PERSONA_LABEL[k] };
+                        }),
+                        current: access.preview,
+                      }
                     : null
                 }
                 booksTeamUrl={`${booksUrl()}/settings/team`}

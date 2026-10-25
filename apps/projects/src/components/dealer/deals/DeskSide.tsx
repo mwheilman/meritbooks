@@ -1,5 +1,6 @@
 'use client';
 
+import { approvalOutcome } from '@/lib/approvals/outcome';
 import { useState } from 'react';
 import {
   Button, ButtonLink, Check, ConfirmDialog, Field, Input, MoneyInput, Status, Textarea, money, pct, shortDate,
@@ -155,7 +156,7 @@ export function StageActions({ w, url, act, busy, failure, readOnly, today }: { 
               </Field>
             )}
             <div className="btn-row">
-              <Button variant="primary" disabled={busy === 'approve' || (below && !reason.trim())} onClick={() => void act<{ approval: Record<string, unknown> }>('approve', 'post', url, { op: 'approve', overrideReason: below ? reason.trim() : null }, below ? 'Approved below the floor' : 'Approved the deal')}>{below ? 'Approve with override' : 'Approve the deal'}</Button>
+              <Button variant="primary" disabled={busy === 'approve' || (below && !reason.trim())} onClick={() => void act<{ approval: Record<string, unknown> | null; engine?: unknown }>('approve', 'post', url, { op: 'approve', overrideReason: below ? reason.trim() : null }, (r) => approvalOutcome(r?.engine, below ? 'Approved below the floor' : 'Approved the deal', 'The deal'))}>{below ? 'Approve with override' : 'Approve the deal'}</Button>
               <Button variant="quiet" onClick={() => setLostOpen(true)}>Mark lost</Button>
             </div>
           </>

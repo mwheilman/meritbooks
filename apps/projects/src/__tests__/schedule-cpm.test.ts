@@ -212,14 +212,23 @@ describe('drag preview (ghost bars)', () => {
     for (let i = 2; i < n; i++) if (i % 20 !== 0 && (i - 1) % 20 !== 0) links.push({ pred_id: `t${i - 1}`, succ_id: `t${i}`, dep_type: 'FS', lag_days: 0 });
     for (let i = 21; i < n; i += 20) links.push({ pred_id: `t${i - 2}`, succ_id: `t${i}`, dep_type: i % 3 === 0 ? 'SS' : 'FS', lag_days: i % 2 });
     computeCpm(tasks, links, DEFAULT_CALENDAR, '2026-11-02'); // warm up
-    const runs = 10;
-    const t0 = performance.now();
-    for (let k = 0; k < runs; k++) computeCpm(applyMove(tasks, { taskId: 't3', start: `2026-11-${String(3 + k).padStart(2, '0')}`, duration: null }), links, DEFAULT_CALENDAR, '2026-11-02');
-    const per = (performance.now() - t0) / runs;
+    // Time each frame on its own and judge the fastest and the median: a busy CPU (the parallel
+    // runner, the PGlite suites) slows some frames, never all of them, while an algorithmic
+    // regression (quadratic CPM) slows every frame by orders of magnitude.
+    const runs = 15;
+    const frames: number[] = [];
+    for (let k = 0; k < runs; k++) {
+      const t0 = performance.now();
+      computeCpm(applyMove(tasks, { taskId: 't3', start: `2026-11-${String(3 + (k % 20)).padStart(2, '0')}`, duration: null }), links, DEFAULT_CALENDAR, '2026-11-02');
+      frames.push(performance.now() - t0);
+    }
+    frames.sort((x, y) => x - y);
+    const best = frames[0]!;
+    const median = frames[Math.floor(runs / 2)]!;
     // eslint-disable-next-line no-console
-    console.info(`[perf] CPM, 2,000 tasks / ${links.length} links: ${per.toFixed(2)} ms per drag frame`);
-    // ~6 ms alone (and it runs only when the snapped day changes, not on every pointer move);
-    // the ceiling allows for the parallel test runner sharing the CPU.
-    expect(per).toBeLessThan(33);
+    console.info(`[perf] CPM, 2,000 tasks / ${links.length} links: best ${best.toFixed(2)} ms, median ${median.toFixed(2)} ms per drag frame`);
+    // ~6 ms alone (and it runs only when the snapped day changes, not on every pointer move).
+    expect(best).toBeLessThan(33);
+    expect(median).toBeLessThan(150);
   });
 });

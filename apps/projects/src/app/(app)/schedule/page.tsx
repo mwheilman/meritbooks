@@ -13,6 +13,11 @@ import { addDays, todayIso } from '@/lib/time';
 import { PageLine } from '@/components/common/PageLine';
 import { GlobalSchedule, type GlobalJob, type GlobalView } from '@/components/schedule/GlobalSchedule';
 import { guardPage } from '@/components/shell/page-guard';
+import Link from 'next/link';
+import { getCompanyExperience } from '@/lib/packs/experience-server';
+import { multiJobViewFor } from '@/lib/packs/experience';
+import { globalViewFromPack } from '@/lib/pm/schedule/views';
+import { canReach } from '@/lib/nav';
 
 export const metadata: Metadata = { title: 'Schedule' };
 
@@ -59,10 +64,14 @@ function lookaheadFromTasks(tasks: ReadonlyArray<TaskRow>, from: string, days: n
 export default async function SchedulePage({ searchParams }: { searchParams: { view?: string; from?: string; crew?: string } }) {
   const scope = await pageScope();
   if (!scope) return null;
-  await guardPage('/schedule');
+  const { access } = await guardPage('/schedule');
   const db = await requireDb();
   const today = todayIso();
-  const view: GlobalView = (VIEWS as readonly string[]).includes(searchParams.view ?? '') ? (searchParams.view as GlobalView) : 'jobs';
+  // No ?view: the pack's multi-job lens for this persona (manifest v2 multiJobViewFor).
+  const exp = scope.context === 'client' ? await getCompanyExperience(db, scope.company?.id ?? null) : null;
+  const lens = globalViewFromPack(multiJobViewFor(exp?.experience, access.group));
+  const board = lens.board && canReach(access, lens.board.href, scope.company?.id ?? null) ? lens.board : null;
+  const view: GlobalView = (VIEWS as readonly string[]).includes(searchParams.view ?? '') ? (searchParams.view as GlobalView) : lens.view;
   const from = monday(searchParams.from && DAY.test(searchParams.from) ? searchParams.from : today);
 
   const jobs = await scopedJobs(db, scope);
@@ -123,7 +132,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: { v
     <>
       <PageLine facts={facts} />
       <Page>
-        <PageHead eyebrow={where} title="Schedule" />
+        <PageHead eyebrow={where} title="Schedule" actions={board ? <Link className="btn" href={board.href}>{board.label}</Link> : undefined} />
         <GlobalSchedule
           view={view}
           jobs={globalJobs}

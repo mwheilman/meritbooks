@@ -3,6 +3,7 @@ import { HttpError } from '@/lib/api-errors';
 import { route } from '@/lib/api';
 import { rows } from '@/lib/pm/db';
 import { call, own, write } from '@/lib/pm/ops/rpc';
+import { approvalSummary, decideObject } from '@/lib/approvals/server';
 import { PACKAGE_ITEMS } from '@/lib/pm/ops/draw-math';
 import { Cents, Day, Need, Text, Uuid } from '@/lib/pm/ops/schemas';
 
@@ -62,9 +63,13 @@ export const POST = route({ access: { cap: 'projects.billing', action: 'edit' },
       await write(pm.from('draws').update(patch).eq('id', d.id).select('id'), 'update draw');
       return { ok: true };
     }
-    case 'submit':
-      await call(db, 'submit_draw', { p_draw: d.id });
-      return { ok: true };
+    case 'submit': {
+      // the internal chain (PM → PA → owner by company size) runs before the lender sees it;
+      // pm.submit_draw runs at its last step (approvals engine, 1113)
+      const a = await decideObject(db, 'draw', d.id);
+      if (a.status === 'not_needed') await call(db, 'submit_draw', { p_draw: d.id });
+      return { ok: true, submitted: a.status === 'approved' || a.status === 'not_needed', approval: approvalSummary(a) };
+    }
     case 'inspect':
       await call(db, 'record_draw_inspection', { p_draw: d.id, p_result: body.result, p_pct_complete: body.pctComplete ?? null, p_inspector: body.inspector || null, p_inspected_on: body.inspectedOn ?? null, p_notes: body.notes || null });
       return { ok: true };

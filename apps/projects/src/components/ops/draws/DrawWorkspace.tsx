@@ -1,5 +1,6 @@
 'use client';
 
+import { approvalOutcome } from '@/lib/approvals/outcome';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Button, Check, ConfirmDialog, Field, InlineNotice, Input, KV, MoneyInput, Select, Tag, money, pct, shortDate,
@@ -64,7 +65,7 @@ export function DrawWorkspace(p: DrawWorkspaceProps) {
           {actions.includes('cancel') && <Button variant="quiet" onClick={() => setCancelOpen(true)}>Cancel draw</Button>}
           {actions.includes('return') && <Button onClick={() => setMode(mode === 'return' ? 'none' : 'return')}>Lender returned it</Button>}
           {actions.includes('inspect') && <Button onClick={() => setMode(mode === 'inspect' ? 'none' : 'inspect')}>Record inspection</Button>}
-          {actions.includes('submit') && <Button variant="primary" disabled={busy === 'submit' || dirty || p.lines.length === 0} title={dirty ? 'Save the lines first' : undefined} onClick={() => void act('submit', 'post', url, { op: 'submit' }, `Submitted draw ${d.draw_number} to ${p.schedule.lender_name}`)}>Submit to lender</Button>}
+          {actions.includes('submit') && <Button variant="primary" disabled={busy === 'submit' || dirty || p.lines.length === 0} title={dirty ? 'Save the lines first' : undefined} onClick={() => void act<{ approval?: unknown }>('submit', 'post', url, { op: 'submit' }, (r) => approvalOutcome(r?.approval, `Submitted draw ${d.draw_number} to ${p.schedule.lender_name}`, `Draw ${d.draw_number}`))}>Submit to lender</Button>}
           {actions.includes('approve') && <Button variant="primary" onClick={() => setMode(mode === 'approve' ? 'none' : 'approve')}>Lender approved</Button>}
           {actions.includes('fund') && <Button variant="primary" onClick={() => setMode(mode === 'fund' ? 'none' : 'fund')}>Record funding</Button>}
         </div>

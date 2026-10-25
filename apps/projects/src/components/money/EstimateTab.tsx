@@ -1,5 +1,6 @@
 'use client';
 
+import { approvalOutcome } from '@/lib/approvals/outcome';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -145,7 +146,7 @@ export function EstimateTab(p0: EstimateTabProps) {
                   <Button disabled={busy === 'revise'} onClick={() => void run<{ estimateId: string }>('revise', 'post', url, { op: 'revise' }, `Started v${sel.version + 1} with the same lines`).then((r) => r.data && setSelId(r.data.estimateId))}>Revise</Button>
                 )}
                 {sel.status === 'DRAFT' && (
-                  <Button disabled={busy === 'send' || lines.length === 0} onClick={() => void run('send', 'post', url, { op: 'send' }, `Marked ${sel.number} sent to the customer`)}>Mark sent</Button>
+                  <Button disabled={busy === 'send' || lines.length === 0} onClick={() => void run<{ sent?: boolean; approval?: unknown }>('send', 'post', url, { op: 'send' }, (d) => approvalOutcome(d?.approval, `Marked ${sel.number} sent to the customer`, sel.number))}>Mark sent</Button>
                 )}
                 {(sel.status === 'DRAFT' || sel.status === 'SENT') && (
                   <Button variant="primary" disabled={busy === 'accept' || lines.length === 0 || totals.sell <= 0} onClick={() => setConfirm('accept')}>Accepted</Button>

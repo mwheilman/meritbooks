@@ -22,6 +22,10 @@ import { CompanyTieoutPanel } from '@/components/tieout/TieoutPanels';
 import type { ProjectListRow } from '@/lib/pm/types';
 import type { Access } from '@/lib/access/types';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getCompanyExperience } from '@/lib/packs/experience-server';
+import { experienceManifest } from '@/lib/packs/experience';
+import { PackHomeStrip } from '@/components/home/PackHomeStrip';
+import { isDealerNav } from '@/lib/nav';
 
 export const metadata: Metadata = { title: 'Home' };
 export const dynamic = 'force-dynamic';
@@ -40,6 +44,24 @@ export default async function HomePage({ searchParams }: { searchParams: { view?
   const where = scope.company?.name ?? (scope.view === 'consolidated' ? `${scope.tenant.orgName ?? 'Workspace'}, consolidated` : `${count(scope.installedCompanies.length)} companies`);
   const base = { db, scope, access, modules };
 
+  // The company in view's industry home modules (pack manifest v2 `home` slot), per persona group.
+  const companyId = scope.company?.id ?? null;
+  const exp = scope.context === 'client' ? await getCompanyExperience(db, companyId) : null;
+  const install = companyId ? scope.installs.find((i) => i.location_id === companyId) : undefined;
+  const packName = install ? experienceManifest(install)?.name ?? null : null;
+  const strip = (
+    <PackHomeStrip
+      experience={exp?.experience ?? null}
+      group={access.group}
+      access={access}
+      companyId={companyId}
+      modules={modules}
+      isDealer={isDealerNav({ vocab, packKeys: install ? [install.pack_key] : [] })}
+      vocab={vocab}
+      packName={packName}
+    />
+  );
+
   if (access.group === 'labor') {
     const data = await loadLaborHome(base);
     const name = data.me ? data.me.first_name : null;
@@ -48,6 +70,7 @@ export default async function HomePage({ searchParams }: { searchParams: { view?
         <PageLine facts={[where, { label: data.current ? 'On a visit now' : 'Today', strong: true }, ...(data.hours.ok ? [`${(Math.round(data.hours.value.total * 100) / 100).toLocaleString('en-US')} hours this week`] : [])]} />
         <Page>
           <PageHead eyebrow={name ? `${name} · ${access.title}` : access.title} title="Today" />
+          {strip}
           <LaborToday data={data} readOnly={scope.readOnly} />
         </Page>
       </>
@@ -62,8 +85,9 @@ export default async function HomePage({ searchParams }: { searchParams: { view?
       <>
         <PageLine facts={[where, shortDate(data.today), { label: `${count(site)} ${site === 1 ? 'site' : 'sites'} today`, strong: true }, ...(crew ? [`${count(crew)} time entries to approve`] : [])]} />
         <Page>
-          <PageHead eyebrow={where} title="Today" />
+          <PageHead eyebrow={`${where} · ${access.title}`} title="Today" />
           <div className="density-cockpit">
+            {strip}
             <SupervisorHome data={data} readOnly={scope.readOnly} />
           </div>
         </Page>
@@ -80,8 +104,9 @@ export default async function HomePage({ searchParams }: { searchParams: { view?
       <>
         <PageLine facts={[where, { label: data.items.length ? `${count(data.items.length)} need the office` : 'Nothing waiting', strong: true }, `${count(data.openJobs)} open ${lower(vocab.jobs)}`]} />
         <Page>
-          <PageHead eyebrow={where} title="Home" />
+          <PageHead eyebrow={`${where} · ${access.title}`} title="Home" />
           <div className="density-cockpit">
+            {strip}
             <AdminHome data={data} readOnly={scope.readOnly} />
             {tie}
           </div>
@@ -104,14 +129,16 @@ export default async function HomePage({ searchParams }: { searchParams: { view?
     <>
       <PageLine facts={[where, fact, ...(data.overdueCount ? [`${count(data.overdueCount)} tasks overdue`] : [])]} />
       <Page>
-        <PageHead eyebrow={management ? where : `${where} · My ${lower(vocab.jobs)}`} title="Home" actions={management ? <HomeViewToggle value={view} /> : undefined} />
+        <PageHead eyebrow={management ? `${where} · ${access.title}` : `${where} · ${access.title} · My ${lower(vocab.jobs)}`} title="Home" actions={management ? <HomeViewToggle value={view} /> : undefined} />
         {view === 'report' ? (
           <div className="density-report">
+            {strip}
             <OwnerHome data={data} />
             {tie}
           </div>
         ) : (
           <div className="density-cockpit">
+            {strip}
             <PmHome data={data} readOnly={scope.readOnly} modules={modules} />
             {tie}
           </div>

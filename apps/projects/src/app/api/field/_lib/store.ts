@@ -16,7 +16,8 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HttpError, PmQueryError, type PgErrorLike } from '@/lib/api-errors';
 import { call } from '@/lib/pm/ops/rpc';
-import { laborCall } from '@/lib/pm/labor/rpc';
+import { laborErrorCopy } from '@/lib/pm/labor/errors';
+import { approveTimeEntries } from '@/lib/approvals/server';
 import {
   DuplicateRowError, extError, extViolation,
   type DocSubject, type FieldJob, type FieldMe, type FieldStore, type NewDocument, type NewLog, type NewPunch, type NewTime, type TimeRow,
@@ -97,8 +98,12 @@ export function createFieldStore(db: SupabaseClient, who: { userId: string; orgI
     },
 
     async approveTime(ids) {
-      const n = await laborCall<number>(db, 'approve_time_entries', { p_ids: [...ids] });
-      return n ?? 0;
+      // through the approvals engine (1113): counts entries approved now (a later step may remain for others)
+      const r = await approveTimeEntries(db, [...ids], (e) => {
+        const c = laborErrorCopy(e);
+        return c ? new HttpError(c.status, c.error, c.code) : new PmQueryError('approve time', e);
+      }, 'phone');
+      return r.approved;
     },
 
     async logByCommand(commandId) {

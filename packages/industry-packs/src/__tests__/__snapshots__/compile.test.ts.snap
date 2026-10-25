@@ -454,6 +454,458 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
       "role_hint": "SUBCONTRACT_COST",
     },
   ],
+  "experience": {
+    "checklists": [
+      {
+        "job_types": null,
+        "key": "preconstruction_meeting",
+        "label": "Preconstruction meeting",
+      },
+      {
+        "job_types": null,
+        "key": "site_safety_walk",
+        "label": "Site safety walk",
+      },
+      {
+        "job_types": null,
+        "key": "mep_rough_in",
+        "label": "MEP rough-in inspection",
+      },
+      {
+        "job_types": null,
+        "key": "punch_walk",
+        "label": "Punch walk",
+      },
+      {
+        "job_types": null,
+        "key": "closeout",
+        "label": "Closeout package",
+      },
+    ],
+    "doc_templates": [
+      "contract",
+      "subcontract",
+      "change_order",
+      "pay_app",
+      "purchase_order",
+      "daily_report",
+      "lien_waiver",
+      "punch_list",
+      "closeout",
+    ],
+    "home": {
+      "admin": [
+        "needs_you",
+        "today_schedule",
+        "billing_ready",
+        "new_leads",
+        "setup_card",
+      ],
+      "labor": [
+        "current_assignment",
+        "rest_of_today",
+        "timecard",
+        "earnings",
+        "office_messages",
+      ],
+      "management": [
+        "weekly_brief",
+        "jobs_at_risk",
+        "over_under_billing",
+        "backlog_capacity",
+        "cash_ar",
+        "pipeline",
+        "approvals_queue",
+      ],
+      "pm": [
+        "needs_you",
+        "my_jobs",
+        "pay_apps_due",
+        "week_schedule",
+        "billing_due",
+      ],
+      "sales": [
+        "new_leads",
+        "pipeline",
+        "my_jobs",
+      ],
+      "supervisor": [
+        "today_on_site",
+        "lookahead_constraints",
+        "crew_time_to_approve",
+        "open_punch",
+        "daily_report_status",
+      ],
+    },
+    "job_tabs": {
+      "*": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": null,
+            "tab": "budget",
+          },
+          {
+            "label": null,
+            "tab": "schedule",
+          },
+          {
+            "label": null,
+            "tab": "commitments",
+          },
+          {
+            "label": "Changes",
+            "tab": "change_orders",
+          },
+          {
+            "label": "RFIs & submittals",
+            "tab": "rfis",
+          },
+          {
+            "label": "Pay apps",
+            "tab": "billing",
+          },
+          {
+            "label": "Daily reports",
+            "tab": "logs",
+          },
+          {
+            "label": null,
+            "tab": "documents",
+          },
+          {
+            "label": "Directory",
+            "tab": "team",
+          },
+        ],
+      },
+      "small_work": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": null,
+            "tab": "budget",
+          },
+          {
+            "label": "Changes",
+            "tab": "change_orders",
+          },
+          {
+            "label": null,
+            "tab": "time",
+          },
+          {
+            "label": null,
+            "tab": "billing",
+          },
+          {
+            "label": null,
+            "tab": "documents",
+          },
+        ],
+      },
+    },
+    "kiosk": false,
+    "mobile_actions": {
+      "labor": {
+        "*": [
+          "clock_in",
+          "photo",
+          "punch_item",
+        ],
+      },
+      "supervisor": {
+        "*": [
+          "daily_log",
+          "photo",
+          "punch_item",
+          "crew_time",
+          "inspection",
+        ],
+      },
+    },
+    "nav": {
+      "admin": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "billing",
+          "label": "Pay apps",
+        },
+        {
+          "item": "retainage",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "subcontractors",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "labor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "me",
+          "label": null,
+        },
+      ],
+      "management": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "approvals",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": "Pipeline",
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "margin",
+          "label": "Insights",
+        },
+        {
+          "item": "backlog",
+          "label": null,
+        },
+        {
+          "item": "wip",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "pm": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "commitments",
+          "label": null,
+        },
+        {
+          "item": "change_orders",
+          "label": "Change events",
+        },
+        {
+          "item": "billing",
+          "label": "Pay apps",
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+        {
+          "item": "margin",
+          "label": "Reports",
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+      ],
+      "sales": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+      ],
+      "supervisor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": "Look-ahead",
+        },
+        {
+          "item": "crew_time",
+          "label": null,
+        },
+        {
+          "item": "logs",
+          "label": null,
+        },
+        {
+          "item": "punch",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+      ],
+    },
+    "roles": [
+      {
+        "template": "projects_owner",
+        "title": "President",
+      },
+      {
+        "template": "projects_gm",
+        "title": "Project executive",
+      },
+      {
+        "template": "projects_office_manager",
+        "title": "Office manager",
+      },
+      {
+        "template": "projects_project_accountant",
+        "title": "Project accountant",
+      },
+      {
+        "template": "projects_dispatcher",
+        "title": "Project coordinator",
+      },
+      {
+        "template": "projects_purchasing",
+        "title": "Purchasing manager",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Project manager",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Assistant project manager",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Superintendent",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Assistant superintendent",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Field crew",
+      },
+      {
+        "template": "projects_sales",
+        "title": "Estimator",
+      },
+    ],
+    "schedule_views": {
+      "by_group": {
+        "management": "milestone_timeline",
+        "supervisor": "lookahead",
+      },
+      "job": {
+        "*": "gantt",
+        "small_work": "calendar",
+      },
+      "multi_job": "gantt",
+    },
+    "sources": {
+      "gmp_cost_plus": "commercial_gc",
+      "lump_sum": "commercial_gc",
+      "small_work": "commercial_gc",
+      "tenant_improvement": "commercial_gc",
+    },
+  },
   "field_defs": [
     {
       "data_type": "text",
@@ -813,11 +1265,11 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
     "self_perform": false,
     "uses_retainage": true,
   },
-  "plan_hash": "6fc89c69014e802f3c60c9aa7c4e773a518f34d1738a065c2efc767226676655",
+  "plan_hash": "4be548f6d96983f69d58edb54a3564d3860dc41d6ea07599408758f4ba2b9a5e",
   "price_book": [],
   "primary_pack": {
     "key": "commercial_gc",
-    "version": "1.0.0",
+    "version": "1.1.0",
   },
   "sample_job": {
     "budget": [
@@ -925,7 +1377,7 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
       },
     ],
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "stages": [
     {
       "core_status": "BID",
@@ -1499,6 +1951,415 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
       "role_hint": "WARRANTY_COST",
     },
   ],
+  "experience": {
+    "checklists": [
+      {
+        "job_types": [
+          "pdi_setup",
+        ],
+        "key": "pdi_checklist",
+        "label": "Pre-delivery inspection",
+      },
+      {
+        "job_types": null,
+        "key": "unit_check_in",
+        "label": "Unit check-in",
+      },
+      {
+        "job_types": null,
+        "key": "rental_out_in",
+        "label": "Rental out and in inspection",
+      },
+    ],
+    "doc_templates": [
+      "repair_order",
+      "estimate",
+      "invoice",
+      "warranty_claim",
+      "buyers_order",
+      "rental_agreement",
+      "inspection_report",
+    ],
+    "home": {
+      "admin": [
+        "needs_you",
+        "service_board",
+        "today_schedule",
+        "billing_ready",
+      ],
+      "labor": [
+        "current_assignment",
+        "rest_of_today",
+        "timecard",
+        "earnings",
+        "office_messages",
+      ],
+      "management": [
+        "weekly_brief",
+        "unit_aging",
+        "cash_ar",
+        "jobs_at_risk",
+        "approvals_queue",
+      ],
+      "pm": [
+        "needs_you",
+        "service_board",
+        "unit_aging",
+        "my_jobs",
+      ],
+      "sales": [
+        "new_leads",
+        "pipeline",
+        "my_jobs",
+      ],
+      "supervisor": [
+        "today_on_site",
+        "lookahead_constraints",
+        "crew_time_to_approve",
+        "open_punch",
+        "daily_report_status",
+      ],
+    },
+    "job_tabs": {
+      "*": {
+        "default_tab": "work_orders",
+        "tabs": [
+          {
+            "label": "Lines",
+            "tab": "work_orders",
+          },
+          {
+            "label": null,
+            "tab": "parts",
+          },
+          {
+            "label": "Labor",
+            "tab": "time",
+          },
+          {
+            "label": "Unit history",
+            "tab": "equipment",
+          },
+          {
+            "label": "Invoice",
+            "tab": "billing",
+          },
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": null,
+            "tab": "activity",
+          },
+        ],
+      },
+      "warranty_repair": {
+        "default_tab": "work_orders",
+        "tabs": [
+          {
+            "label": "Lines",
+            "tab": "work_orders",
+          },
+          {
+            "label": null,
+            "tab": "parts",
+          },
+          {
+            "label": "Labor",
+            "tab": "time",
+          },
+          {
+            "label": null,
+            "tab": "warranty_claim",
+          },
+          {
+            "label": "Unit history",
+            "tab": "equipment",
+          },
+          {
+            "label": "Invoice",
+            "tab": "billing",
+          },
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": null,
+            "tab": "activity",
+          },
+        ],
+      },
+    },
+    "kiosk": false,
+    "mobile_actions": {
+      "labor": {
+        "*": [
+          "clock_on_ro_line",
+          "voice_notes",
+          "request_part",
+          "check_in_unit",
+          "photo",
+        ],
+      },
+      "supervisor": {
+        "*": [
+          "check_in_unit",
+          "rental_inspection",
+          "approve_crew_time",
+        ],
+      },
+    },
+    "nav": {
+      "admin": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "work_orders",
+          "label": "Service",
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "stock",
+          "label": "Units",
+        },
+        {
+          "item": "deals",
+          "label": null,
+        },
+        {
+          "item": "parts",
+          "label": "Parts counter",
+        },
+        {
+          "item": "rentals",
+          "label": null,
+        },
+        {
+          "item": "warranty",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "labor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "me",
+          "label": null,
+        },
+      ],
+      "management": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "approvals",
+          "label": null,
+        },
+        {
+          "item": "stock",
+          "label": "Units",
+        },
+        {
+          "item": "deals",
+          "label": null,
+        },
+        {
+          "item": "work_orders",
+          "label": "Service",
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "margin",
+          "label": "Insights",
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "pm": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "work_orders",
+          "label": "Service",
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "stock",
+          "label": "Units",
+        },
+        {
+          "item": "parts",
+          "label": "Parts counter",
+        },
+        {
+          "item": "warranty",
+          "label": null,
+        },
+        {
+          "item": "rentals",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+      ],
+      "sales": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "stock",
+          "label": "Units",
+        },
+        {
+          "item": "deals",
+          "label": null,
+        },
+      ],
+      "supervisor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "work_orders",
+          "label": "Service board",
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "crew_time",
+          "label": null,
+        },
+        {
+          "item": "parts",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+      ],
+    },
+    "roles": [
+      {
+        "template": "projects_owner",
+        "title": "Dealer principal",
+      },
+      {
+        "template": "projects_gm",
+        "title": "General manager",
+      },
+      {
+        "template": "projects_office_manager",
+        "title": "Office manager",
+      },
+      {
+        "template": "projects_project_accountant",
+        "title": "Controller",
+      },
+      {
+        "template": "projects_dispatcher",
+        "title": "Service writer",
+      },
+      {
+        "template": "projects_purchasing",
+        "title": "Parts manager",
+      },
+      {
+        "template": "projects_purchasing",
+        "title": "Parts counter",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Service manager",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Shop foreman",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Technician",
+      },
+      {
+        "template": "projects_sales",
+        "title": "Salesperson",
+      },
+    ],
+    "schedule_views": {
+      "by_group": {},
+      "job": {
+        "*": "service_board",
+      },
+      "multi_job": "service_board",
+    },
+    "sources": {
+      "customer_repair": "equipment_dealer",
+      "pdi_setup": "equipment_dealer",
+      "warranty_repair": "equipment_dealer",
+    },
+  },
   "field_defs": [
     {
       "data_type": "text",
@@ -1911,7 +2772,7 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
     "uses_retainage": false,
     "warranty_labor_rate_cents": 9500,
   },
-  "plan_hash": "fd05f1268a4060bcd8f048170053ae4015a935b62ef02c535c7aeb160c0aac32",
+  "plan_hash": "73d7d63326631d2b88cc913a8ea70bb4a9114a31a4af38847b6c078e2e37195a",
   "price_book": [
     {
       "code": "OP-DIAG",
@@ -2024,7 +2885,7 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
   ],
   "primary_pack": {
     "key": "equipment_dealer",
-    "version": "1.1.0",
+    "version": "1.2.0",
   },
   "sample_job": {
     "budget": [
@@ -2083,7 +2944,7 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
       },
     ],
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "stages": [
     {
       "core_status": "ACTIVE",
@@ -2769,6 +3630,484 @@ exports[`compilePlan(field_service, defaults) > matches the golden snapshot 1`] 
       "role_hint": "WARRANTY_COST",
     },
   ],
+  "experience": {
+    "checklists": [
+      {
+        "job_types": [
+          "maintenance_visit",
+          "service_call",
+        ],
+        "key": "ac_tune_up",
+        "label": "AC tune-up",
+      },
+      {
+        "job_types": [
+          "maintenance_visit",
+          "service_call",
+        ],
+        "key": "furnace_tune_up",
+        "label": "Furnace tune-up",
+      },
+      {
+        "job_types": [
+          "replacement_install",
+        ],
+        "key": "install_startup",
+        "label": "New install startup",
+      },
+      {
+        "job_types": [
+          "replacement_install",
+        ],
+        "key": "water_heater_install",
+        "label": "Water heater install",
+      },
+    ],
+    "doc_templates": [
+      "work_order",
+      "estimate",
+      "invoice",
+      "service_agreement",
+      "inspection_report",
+      "warranty_claim",
+    ],
+    "home": {
+      "admin": [
+        "needs_you",
+        "dispatch_board",
+        "today_schedule",
+        "new_leads",
+        "billing_ready",
+        "setup_card",
+      ],
+      "labor": [
+        "current_assignment",
+        "rest_of_today",
+        "timecard",
+        "earnings",
+        "office_messages",
+      ],
+      "management": [
+        "weekly_brief",
+        "cash_ar",
+        "jobs_at_risk",
+        "pipeline",
+        "approvals_queue",
+      ],
+      "pm": [
+        "needs_you",
+        "dispatch_board",
+        "my_jobs",
+        "billing_due",
+      ],
+      "sales": [
+        "new_leads",
+        "pipeline",
+        "my_jobs",
+      ],
+      "supervisor": [
+        "today_on_site",
+        "lookahead_constraints",
+        "crew_time_to_approve",
+        "open_punch",
+        "daily_report_status",
+      ],
+    },
+    "job_tabs": {
+      "*": {
+        "default_tab": "work_orders",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "work_orders",
+          },
+          {
+            "label": "Options",
+            "tab": "estimates",
+          },
+          {
+            "label": null,
+            "tab": "equipment",
+          },
+          {
+            "label": "Invoice & payments",
+            "tab": "billing",
+          },
+          {
+            "label": null,
+            "tab": "agreement",
+          },
+          {
+            "label": "History",
+            "tab": "activity",
+          },
+          {
+            "label": null,
+            "tab": "overview",
+          },
+        ],
+      },
+      "replacement_install": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": "Options",
+            "tab": "estimates",
+          },
+          {
+            "label": null,
+            "tab": "schedule",
+          },
+          {
+            "label": null,
+            "tab": "work_orders",
+          },
+          {
+            "label": null,
+            "tab": "commitments",
+          },
+          {
+            "label": null,
+            "tab": "budget",
+          },
+          {
+            "label": "Invoice & payments",
+            "tab": "billing",
+          },
+          {
+            "label": null,
+            "tab": "equipment",
+          },
+        ],
+      },
+    },
+    "kiosk": false,
+    "mobile_actions": {
+      "labor": {
+        "*": [
+          "on_my_way",
+          "start",
+          "present_options",
+          "take_payment",
+          "scan_equipment",
+          "sell_agreement",
+        ],
+        "replacement_install": [
+          "clock_in",
+          "photo",
+          "checklist",
+        ],
+      },
+      "supervisor": {
+        "*": [
+          "on_my_way",
+          "photo",
+          "approve_crew_time",
+        ],
+      },
+    },
+    "nav": {
+      "admin": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "calls",
+          "label": null,
+        },
+        {
+          "item": "dispatch",
+          "label": null,
+        },
+        {
+          "item": "work_orders",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "agreements",
+          "label": null,
+        },
+        {
+          "item": "equipment",
+          "label": null,
+        },
+        {
+          "item": "price_book",
+          "label": null,
+        },
+        {
+          "item": "billing",
+          "label": "Invoices",
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "capacity",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "labor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "me",
+          "label": null,
+        },
+      ],
+      "management": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "approvals",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "dispatch",
+          "label": null,
+        },
+        {
+          "item": "scorecards",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": "Pipeline",
+        },
+        {
+          "item": "agreements",
+          "label": null,
+        },
+        {
+          "item": "campaigns",
+          "label": null,
+        },
+        {
+          "item": "margin",
+          "label": "Insights",
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "pm": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "dispatch",
+          "label": null,
+        },
+        {
+          "item": "capacity",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "work_orders",
+          "label": null,
+        },
+        {
+          "item": "agreements",
+          "label": null,
+        },
+        {
+          "item": "equipment",
+          "label": null,
+        },
+        {
+          "item": "price_book",
+          "label": null,
+        },
+        {
+          "item": "billing",
+          "label": "Invoices",
+        },
+        {
+          "item": "scorecards",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+      ],
+      "sales": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": "Options",
+        },
+        {
+          "item": "price_book",
+          "label": null,
+        },
+        {
+          "item": "agreements",
+          "label": null,
+        },
+        {
+          "item": "campaigns",
+          "label": null,
+        },
+      ],
+      "supervisor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "dispatch",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "work_orders",
+          "label": null,
+        },
+        {
+          "item": "crew_time",
+          "label": null,
+        },
+        {
+          "item": "scorecards",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+      ],
+    },
+    "roles": [
+      {
+        "template": "projects_owner",
+        "title": "Owner",
+      },
+      {
+        "template": "projects_gm",
+        "title": "General manager",
+      },
+      {
+        "template": "projects_office_manager",
+        "title": "Office manager",
+      },
+      {
+        "template": "projects_project_accountant",
+        "title": "Bookkeeper",
+      },
+      {
+        "template": "projects_dispatcher",
+        "title": "Dispatcher",
+      },
+      {
+        "template": "projects_dispatcher",
+        "title": "CSR",
+      },
+      {
+        "template": "projects_purchasing",
+        "title": "Purchasing",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Service manager",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Install manager",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Field supervisor",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Technician",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Installer",
+      },
+      {
+        "template": "projects_sales",
+        "title": "Comfort advisor",
+      },
+    ],
+    "schedule_views": {
+      "by_group": {},
+      "job": {
+        "*": "dispatch",
+        "replacement_install": "gantt",
+      },
+      "multi_job": "dispatch",
+    },
+    "sources": {
+      "maintenance_visit": "field_service",
+      "replacement_install": "field_service",
+      "service_call": "field_service",
+    },
+  },
   "field_defs": [
     {
       "data_type": "text",
@@ -3155,7 +4494,7 @@ exports[`compilePlan(field_service, defaults) > matches the golden snapshot 1`] 
     "target_repair_margin_pct": 0.7,
     "uses_retainage": false,
   },
-  "plan_hash": "5db84d386e2ea6870ba161cb45d2a43c4b67d1a07ebaf0561b3add94d1b0b2d2",
+  "plan_hash": "7a2e32e43b4ee61e3cd276dcaba452d59d208f40d2097952fce02bdcc508e195",
   "price_book": [
     {
       "code": "DIAG",
@@ -3331,7 +4670,7 @@ exports[`compilePlan(field_service, defaults) > matches the golden snapshot 1`] 
   ],
   "primary_pack": {
     "key": "field_service",
-    "version": "1.0.0",
+    "version": "1.1.0",
   },
   "sample_job": {
     "budget": [
@@ -3407,7 +4746,7 @@ exports[`compilePlan(field_service, defaults) > matches the golden snapshot 1`] 
       },
     ],
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "stages": [
     {
       "core_status": "BID",
@@ -4019,6 +5358,389 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
       "role_hint": "OTHER_JOB_COST",
     },
   ],
+  "experience": {
+    "checklists": [
+      {
+        "job_types": null,
+        "key": "subfloor_check",
+        "label": "Subfloor check",
+      },
+      {
+        "job_types": null,
+        "key": "moisture_test",
+        "label": "Moisture test",
+      },
+      {
+        "job_types": null,
+        "key": "install_sign_off",
+        "label": "Install sign-off",
+      },
+    ],
+    "doc_templates": [
+      "measure_sheet",
+      "estimate",
+      "contract",
+      "purchase_order",
+      "install_ticket",
+      "invoice",
+      "change_order",
+    ],
+    "home": {
+      "admin": [
+        "needs_you",
+        "install_board",
+        "today_schedule",
+        "new_leads",
+        "billing_ready",
+      ],
+      "labor": [
+        "current_assignment",
+        "rest_of_today",
+        "timecard",
+        "earnings",
+        "office_messages",
+      ],
+      "management": [
+        "weekly_brief",
+        "cash_ar",
+        "jobs_at_risk",
+        "backlog_capacity",
+        "over_under_billing",
+        "pipeline",
+        "approvals_queue",
+      ],
+      "pm": [
+        "needs_you",
+        "install_board",
+        "my_jobs",
+        "billing_due",
+      ],
+      "sales": [
+        "new_leads",
+        "pipeline",
+        "my_jobs",
+      ],
+      "supervisor": [
+        "today_on_site",
+        "lookahead_constraints",
+        "crew_time_to_approve",
+        "open_punch",
+        "daily_report_status",
+      ],
+    },
+    "job_tabs": {
+      "*": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": "Measure & diagram",
+            "tab": "selections",
+          },
+          {
+            "label": "Quote",
+            "tab": "estimates",
+          },
+          {
+            "label": "Products & POs",
+            "tab": "commitments",
+          },
+          {
+            "label": null,
+            "tab": "work_orders",
+          },
+          {
+            "label": "Deposits & billing",
+            "tab": "billing",
+          },
+          {
+            "label": "Callbacks",
+            "tab": "punch",
+          },
+        ],
+      },
+    },
+    "kiosk": false,
+    "mobile_actions": {
+      "labor": {
+        "*": [
+          "measure_room",
+          "start_ticket",
+          "confirm_dye_lot",
+          "customer_sign_off",
+          "photo",
+        ],
+      },
+      "supervisor": {
+        "*": [
+          "start_ticket",
+          "photo",
+          "approve_crew_time",
+        ],
+      },
+    },
+    "nav": {
+      "admin": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "selections",
+          "label": "Measures",
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "dispatch",
+          "label": "Install schedule",
+        },
+        {
+          "item": "work_orders",
+          "label": null,
+        },
+        {
+          "item": "commitments",
+          "label": "Special orders",
+        },
+        {
+          "item": "billing",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "labor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "me",
+          "label": null,
+        },
+      ],
+      "management": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "approvals",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": "Pipeline",
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "margin",
+          "label": "Insights",
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "pm": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "selections",
+          "label": "Measures",
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "dispatch",
+          "label": "Install schedule",
+        },
+        {
+          "item": "commitments",
+          "label": "Special orders",
+        },
+        {
+          "item": "work_orders",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+      ],
+      "sales": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "selections",
+          "label": "Measures",
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+      ],
+      "supervisor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "dispatch",
+          "label": "Install schedule",
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "work_orders",
+          "label": null,
+        },
+        {
+          "item": "crew_time",
+          "label": null,
+        },
+        {
+          "item": "punch",
+          "label": "Callbacks",
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+      ],
+    },
+    "roles": [
+      {
+        "template": "projects_owner",
+        "title": "Owner",
+      },
+      {
+        "template": "projects_gm",
+        "title": "Store manager",
+      },
+      {
+        "template": "projects_office_manager",
+        "title": "Office manager",
+      },
+      {
+        "template": "projects_project_accountant",
+        "title": "Bookkeeper",
+      },
+      {
+        "template": "projects_dispatcher",
+        "title": "Install coordinator",
+      },
+      {
+        "template": "projects_purchasing",
+        "title": "Purchasing",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Project manager",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Install lead",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Installer",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Measure tech",
+      },
+      {
+        "template": "projects_sales",
+        "title": "Flooring consultant",
+      },
+    ],
+    "schedule_views": {
+      "by_group": {},
+      "job": {
+        "*": "install_board",
+      },
+      "multi_job": "install_board",
+    },
+    "sources": {
+      "retail_install": "flooring",
+    },
+  },
   "field_defs": [
     {
       "data_type": "text",
@@ -4276,7 +5998,7 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
     "tracks_roll_inventory": true,
     "uses_retainage": false,
   },
-  "plan_hash": "9384785a7c27f6b385815cad654c9a0c452a0991215351ae822dc21b6c7697dd",
+  "plan_hash": "128fdc8d84aa8dd70a0eeb809cedf38d0b77f6bc8f951ea2c7683b3ca40a0e6f",
   "price_book": [
     {
       "code": "L-CPT",
@@ -4407,7 +6129,7 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
   ],
   "primary_pack": {
     "key": "flooring",
-    "version": "1.0.0",
+    "version": "1.1.0",
   },
   "sample_job": {
     "budget": [
@@ -4495,7 +6217,7 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
       },
     ],
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "stages": [
     {
       "core_status": "BID",
@@ -4933,6 +6655,382 @@ exports[`compilePlan(general, defaults) > matches the golden snapshot 1`] = `
       "role_hint": "OTHER_JOB_COST",
     },
   ],
+  "experience": {
+    "checklists": [
+      {
+        "job_types": null,
+        "key": "site_safety_walk",
+        "label": "Site safety walk",
+      },
+      {
+        "job_types": null,
+        "key": "job_closeout",
+        "label": "Job closeout",
+      },
+    ],
+    "doc_templates": [
+      "estimate",
+      "contract",
+      "change_order",
+      "invoice",
+      "purchase_order",
+      "daily_report",
+      "closeout",
+    ],
+    "home": {
+      "admin": [
+        "needs_you",
+        "today_schedule",
+        "billing_ready",
+        "new_leads",
+        "setup_card",
+      ],
+      "labor": [
+        "current_assignment",
+        "rest_of_today",
+        "timecard",
+        "earnings",
+        "office_messages",
+      ],
+      "management": [
+        "weekly_brief",
+        "cash_ar",
+        "jobs_at_risk",
+        "backlog_capacity",
+        "over_under_billing",
+        "pipeline",
+        "approvals_queue",
+      ],
+      "pm": [
+        "needs_you",
+        "my_jobs",
+        "week_schedule",
+        "billing_due",
+        "client_updates",
+      ],
+      "sales": [
+        "new_leads",
+        "pipeline",
+        "my_jobs",
+      ],
+      "supervisor": [
+        "today_on_site",
+        "lookahead_constraints",
+        "crew_time_to_approve",
+        "open_punch",
+        "daily_report_status",
+      ],
+    },
+    "job_tabs": {
+      "*": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": null,
+            "tab": "estimates",
+          },
+          {
+            "label": "Tasks",
+            "tab": "schedule",
+          },
+          {
+            "label": null,
+            "tab": "budget",
+          },
+          {
+            "label": null,
+            "tab": "time",
+          },
+          {
+            "label": null,
+            "tab": "billing",
+          },
+          {
+            "label": "Files",
+            "tab": "documents",
+          },
+        ],
+      },
+    },
+    "kiosk": false,
+    "mobile_actions": {
+      "labor": {
+        "*": [
+          "clock_in",
+          "photo",
+          "note",
+          "checklist",
+        ],
+      },
+      "supervisor": {
+        "*": [
+          "daily_log",
+          "photo",
+          "approve_crew_time",
+        ],
+      },
+    },
+    "nav": {
+      "admin": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "billing",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "subcontractors",
+          "label": "Vendors",
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "labor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "me",
+          "label": null,
+        },
+      ],
+      "management": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "approvals",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": "Pipeline",
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "margin",
+          "label": "Insights",
+        },
+        {
+          "item": "backlog",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "pm": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "change_orders",
+          "label": null,
+        },
+        {
+          "item": "commitments",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "billing",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+      ],
+      "sales": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+      ],
+      "supervisor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "crew_time",
+          "label": null,
+        },
+        {
+          "item": "logs",
+          "label": null,
+        },
+        {
+          "item": "punch",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+      ],
+    },
+    "roles": [
+      {
+        "template": "projects_owner",
+        "title": "Owner",
+      },
+      {
+        "template": "projects_gm",
+        "title": "General manager",
+      },
+      {
+        "template": "projects_office_manager",
+        "title": "Office manager",
+      },
+      {
+        "template": "projects_project_accountant",
+        "title": "Bookkeeper",
+      },
+      {
+        "template": "projects_dispatcher",
+        "title": "Scheduler",
+      },
+      {
+        "template": "projects_purchasing",
+        "title": "Purchasing",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Project manager",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Lead",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Crew member",
+      },
+      {
+        "template": "projects_sales",
+        "title": "Estimator",
+      },
+    ],
+    "schedule_views": {
+      "by_group": {},
+      "job": {
+        "*": "gantt",
+      },
+      "multi_job": "calendar",
+    },
+    "sources": {
+      "fixed_price": "general",
+      "milestone_project": "general",
+      "time_materials": "general",
+    },
+  },
   "field_defs": [
     {
       "data_type": "text",
@@ -5132,11 +7230,11 @@ exports[`compilePlan(general, defaults) > matches the golden snapshot 1`] = `
   "params": {
     "uses_retainage": false,
   },
-  "plan_hash": "1ef0d20a188ebaa90198380fdc4210c6b41d051942afe12d4a7334bafc53b19c",
+  "plan_hash": "ad763f61dc9c5d73c49b6b22f7e5e8a37bce653764eef239b1bda9e7c800969a",
   "price_book": [],
   "primary_pack": {
     "key": "general",
-    "version": "1.0.0",
+    "version": "1.1.0",
   },
   "sample_job": {
     "budget": [
@@ -5198,7 +7296,7 @@ exports[`compilePlan(general, defaults) > matches the golden snapshot 1`] = `
       },
     ],
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "stages": [
     {
       "core_status": "BID",
@@ -5840,6 +7938,454 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
       "role_hint": "OTHER_JOB_COST",
     },
   ],
+  "experience": {
+    "checklists": [
+      {
+        "job_types": null,
+        "key": "pre_pour",
+        "label": "Pre-pour inspection",
+      },
+      {
+        "job_types": null,
+        "key": "frame_walk",
+        "label": "Frame walk",
+      },
+      {
+        "job_types": null,
+        "key": "pre_drywall",
+        "label": "Pre-drywall walk",
+      },
+      {
+        "job_types": null,
+        "key": "blue_tape",
+        "label": "Blue-tape walk",
+      },
+      {
+        "job_types": null,
+        "key": "homeowner_orientation",
+        "label": "Homeowner orientation",
+      },
+    ],
+    "doc_templates": [
+      "contract",
+      "purchase_order",
+      "change_order",
+      "selection_sheet",
+      "draw_request",
+      "daily_report",
+      "punch_list",
+      "closeout",
+    ],
+    "home": {
+      "admin": [
+        "needs_you",
+        "today_schedule",
+        "billing_ready",
+        "new_leads",
+        "setup_card",
+      ],
+      "labor": [
+        "current_assignment",
+        "rest_of_today",
+        "timecard",
+        "earnings",
+        "office_messages",
+      ],
+      "management": [
+        "weekly_brief",
+        "cash_ar",
+        "jobs_at_risk",
+        "backlog_capacity",
+        "over_under_billing",
+        "pipeline",
+        "approvals_queue",
+      ],
+      "pm": [
+        "needs_you",
+        "my_jobs",
+        "draw_status",
+        "selections_queue",
+        "week_schedule",
+      ],
+      "sales": [
+        "new_leads",
+        "pipeline",
+        "my_jobs",
+      ],
+      "supervisor": [
+        "today_on_site",
+        "lookahead_constraints",
+        "open_punch",
+        "daily_report_status",
+      ],
+    },
+    "job_tabs": {
+      "*": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": null,
+            "tab": "schedule",
+          },
+          {
+            "label": null,
+            "tab": "selections",
+          },
+          {
+            "label": null,
+            "tab": "budget",
+          },
+          {
+            "label": null,
+            "tab": "commitments",
+          },
+          {
+            "label": null,
+            "tab": "draws",
+          },
+          {
+            "label": null,
+            "tab": "logs",
+          },
+          {
+            "label": "Warranty",
+            "tab": "punch",
+          },
+          {
+            "label": null,
+            "tab": "documents",
+          },
+        ],
+      },
+      "spec_home": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": null,
+            "tab": "schedule",
+          },
+          {
+            "label": null,
+            "tab": "budget",
+          },
+          {
+            "label": null,
+            "tab": "commitments",
+          },
+          {
+            "label": null,
+            "tab": "draws",
+          },
+          {
+            "label": null,
+            "tab": "logs",
+          },
+          {
+            "label": "Warranty",
+            "tab": "punch",
+          },
+          {
+            "label": null,
+            "tab": "units",
+          },
+          {
+            "label": null,
+            "tab": "documents",
+          },
+        ],
+      },
+    },
+    "kiosk": false,
+    "mobile_actions": {
+      "labor": {
+        "*": [
+          "clock_in",
+          "photo",
+          "punch_item",
+        ],
+      },
+      "supervisor": {
+        "*": [
+          "stage_complete",
+          "daily_log",
+          "photo",
+          "trade_check_in",
+          "punch_item",
+        ],
+      },
+    },
+    "nav": {
+      "admin": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "units",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "selections",
+          "label": null,
+        },
+        {
+          "item": "commitments",
+          "label": null,
+        },
+        {
+          "item": "draws",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "labor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "me",
+          "label": null,
+        },
+      ],
+      "management": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "approvals",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "units",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": "Pipeline",
+        },
+        {
+          "item": "margin",
+          "label": "Insights",
+        },
+        {
+          "item": "backlog",
+          "label": null,
+        },
+        {
+          "item": "draws",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "pm": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "selections",
+          "label": null,
+        },
+        {
+          "item": "commitments",
+          "label": null,
+        },
+        {
+          "item": "draws",
+          "label": null,
+        },
+        {
+          "item": "punch",
+          "label": "Warranty",
+        },
+        {
+          "item": "units",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+      ],
+      "sales": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+      ],
+      "supervisor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "crew_time",
+          "label": null,
+        },
+        {
+          "item": "logs",
+          "label": null,
+        },
+        {
+          "item": "punch",
+          "label": "Punch & warranty",
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+      ],
+    },
+    "roles": [
+      {
+        "template": "projects_owner",
+        "title": "Owner",
+      },
+      {
+        "template": "projects_gm",
+        "title": "President",
+      },
+      {
+        "template": "projects_office_manager",
+        "title": "Office manager",
+      },
+      {
+        "template": "projects_project_accountant",
+        "title": "Bookkeeper",
+      },
+      {
+        "template": "projects_dispatcher",
+        "title": "Scheduler",
+      },
+      {
+        "template": "projects_purchasing",
+        "title": "Purchasing agent",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Construction manager",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Superintendent",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Field crew",
+      },
+      {
+        "template": "projects_sales",
+        "title": "New home consultant",
+      },
+    ],
+    "schedule_views": {
+      "by_group": {
+        "management": "milestone_timeline",
+        "supervisor": "crew_board",
+      },
+      "job": {
+        "*": "gantt",
+      },
+      "multi_job": "gantt",
+    },
+    "sources": {
+      "cost_plus_home": "home_builder",
+      "custom_home": "home_builder",
+      "spec_home": "home_builder",
+    },
+  },
   "field_defs": [
     {
       "data_type": "text",
@@ -6151,11 +8697,11 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
     "uses_retainage": false,
     "warranty_program": "one_year",
   },
-  "plan_hash": "f16f1650fe3aae58e06c34130acb7b2b3d2ce88bcd5f5a20b3fdfb67f2678110",
+  "plan_hash": "e929a9fe2b79ff3de136f3cd7868c280437ce528b9af3942d511b9f4d1cdcea5",
   "price_book": [],
   "primary_pack": {
     "key": "home_builder",
-    "version": "1.0.0",
+    "version": "1.1.0",
   },
   "sample_job": {
     "budget": [
@@ -6307,7 +8853,7 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
       },
     ],
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "stages": [
     {
       "core_status": "BID",
@@ -6919,6 +9465,411 @@ exports[`compilePlan(interior_design, defaults) > matches the golden snapshot 1`
       "role_hint": "OTHER_JOB_COST",
     },
   ],
+  "experience": {
+    "checklists": [
+      {
+        "job_types": null,
+        "key": "site_measure",
+        "label": "Site measure",
+      },
+      {
+        "job_types": null,
+        "key": "receiving_inspection",
+        "label": "Receiving inspection",
+      },
+      {
+        "job_types": null,
+        "key": "install_day",
+        "label": "Install day",
+      },
+    ],
+    "doc_templates": [
+      "design_agreement",
+      "proposal",
+      "purchase_order",
+      "invoice",
+      "delivery_receipt",
+      "closeout",
+    ],
+    "home": {
+      "admin": [
+        "needs_you",
+        "today_schedule",
+        "billing_ready",
+        "new_leads",
+        "setup_card",
+      ],
+      "labor": [
+        "current_assignment",
+        "rest_of_today",
+        "timecard",
+        "earnings",
+        "office_messages",
+      ],
+      "management": [
+        "weekly_brief",
+        "utilization",
+        "cash_ar",
+        "jobs_at_risk",
+        "pipeline",
+        "approvals_queue",
+      ],
+      "pm": [
+        "needs_you",
+        "item_tracker",
+        "my_jobs",
+        "client_updates",
+        "billing_due",
+      ],
+      "sales": [
+        "new_leads",
+        "pipeline",
+        "my_jobs",
+      ],
+      "supervisor": [
+        "today_on_site",
+        "lookahead_constraints",
+        "crew_time_to_approve",
+        "open_punch",
+        "daily_report_status",
+      ],
+    },
+    "job_tabs": {
+      "*": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": "Rooms & items",
+            "tab": "selections",
+          },
+          {
+            "label": null,
+            "tab": "estimates",
+          },
+          {
+            "label": null,
+            "tab": "commitments",
+          },
+          {
+            "label": null,
+            "tab": "receiving",
+          },
+          {
+            "label": "Time & fees",
+            "tab": "time",
+          },
+          {
+            "label": null,
+            "tab": "billing",
+          },
+          {
+            "label": null,
+            "tab": "client_view",
+          },
+        ],
+      },
+      "procurement_order": {
+        "default_tab": "selections",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "selections",
+          },
+          {
+            "label": null,
+            "tab": "estimates",
+          },
+          {
+            "label": null,
+            "tab": "commitments",
+          },
+          {
+            "label": null,
+            "tab": "receiving",
+          },
+          {
+            "label": null,
+            "tab": "billing",
+          },
+          {
+            "label": null,
+            "tab": "overview",
+          },
+        ],
+      },
+    },
+    "kiosk": false,
+    "mobile_actions": {
+      "labor": {
+        "*": [
+          "clip_product",
+          "receive_item",
+          "log_time",
+          "install_checklist",
+        ],
+      },
+      "supervisor": {
+        "*": [
+          "receive_item",
+          "install_checklist",
+          "photo",
+        ],
+      },
+    },
+    "nav": {
+      "admin": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "selections",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "commitments",
+          "label": "Purchasing",
+        },
+        {
+          "item": "billing",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "labor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "me",
+          "label": null,
+        },
+      ],
+      "management": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "approvals",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": "Pipeline",
+        },
+        {
+          "item": "margin",
+          "label": "Insights",
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "pm": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "selections",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "commitments",
+          "label": "Purchasing",
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "billing",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+      ],
+      "sales": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+      ],
+      "supervisor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "selections",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "crew_time",
+          "label": null,
+        },
+        {
+          "item": "punch",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+      ],
+    },
+    "roles": [
+      {
+        "template": "projects_owner",
+        "title": "Principal designer",
+      },
+      {
+        "template": "projects_gm",
+        "title": "Studio manager",
+      },
+      {
+        "template": "projects_office_manager",
+        "title": "Office manager",
+      },
+      {
+        "template": "projects_project_accountant",
+        "title": "Bookkeeper",
+      },
+      {
+        "template": "projects_dispatcher",
+        "title": "Design coordinator",
+      },
+      {
+        "template": "projects_purchasing",
+        "title": "Procurement coordinator",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Lead designer",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Install lead",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Design assistant",
+      },
+      {
+        "template": "projects_sales",
+        "title": "Business development",
+      },
+    ],
+    "schedule_views": {
+      "by_group": {
+        "management": "resource_planner",
+      },
+      "job": {
+        "*": "calendar",
+      },
+      "multi_job": "calendar",
+    },
+    "sources": {
+      "full_service_design": "interior_design",
+      "procurement_order": "interior_design",
+    },
+  },
   "field_defs": [
     {
       "data_type": "text",
@@ -7206,7 +10157,7 @@ exports[`compilePlan(interior_design, defaults) > matches the golden snapshot 1`
     "product_markup_pct": 0.35,
     "uses_retainage": false,
   },
-  "plan_hash": "cdb37bfd5652b9d548c03a740393045ded0f230174ccf36fcc0872d728626a5b",
+  "plan_hash": "7df0af244d501dff4f3490f42200b010adc0bbb5f5715594450f656df95f7da3",
   "price_book": [
     {
       "code": "RATE-PRIN",
@@ -7265,7 +10216,7 @@ exports[`compilePlan(interior_design, defaults) > matches the golden snapshot 1`
   ],
   "primary_pack": {
     "key": "interior_design",
-    "version": "1.0.0",
+    "version": "1.1.0",
   },
   "sample_job": {
     "budget": [
@@ -7360,7 +10311,7 @@ exports[`compilePlan(interior_design, defaults) > matches the golden snapshot 1`
       },
     ],
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "stages": [
     {
       "core_status": "BID",
@@ -7994,6 +10945,408 @@ exports[`compilePlan(manufacturing_eto, defaults) > matches the golden snapshot 
       "role_hint": "WARRANTY_COST",
     },
   ],
+  "experience": {
+    "checklists": [
+      {
+        "job_types": null,
+        "key": "shop_drawing_review",
+        "label": "Shop drawing review",
+      },
+      {
+        "job_types": null,
+        "key": "finish_qc",
+        "label": "Finish quality check",
+      },
+      {
+        "job_types": null,
+        "key": "ship_check",
+        "label": "Ship check",
+      },
+      {
+        "job_types": null,
+        "key": "install_punch",
+        "label": "Install punch",
+      },
+    ],
+    "doc_templates": [
+      "estimate",
+      "contract",
+      "change_order",
+      "purchase_order",
+      "work_order",
+      "delivery_receipt",
+      "invoice",
+      "closeout",
+    ],
+    "home": {
+      "admin": [
+        "needs_you",
+        "today_schedule",
+        "billing_ready",
+        "new_leads",
+        "setup_card",
+      ],
+      "labor": [
+        "current_assignment",
+        "rest_of_today",
+        "timecard",
+        "earnings",
+        "office_messages",
+      ],
+      "management": [
+        "weekly_brief",
+        "backlog_capacity",
+        "jobs_at_risk",
+        "cash_ar",
+        "over_under_billing",
+        "approvals_queue",
+      ],
+      "pm": [
+        "needs_you",
+        "capacity_board",
+        "my_jobs",
+        "week_schedule",
+        "billing_due",
+      ],
+      "sales": [
+        "new_leads",
+        "pipeline",
+        "my_jobs",
+      ],
+      "supervisor": [
+        "today_on_site",
+        "capacity_board",
+        "crew_time_to_approve",
+        "open_punch",
+      ],
+    },
+    "job_tabs": {
+      "*": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": "Quote",
+            "tab": "estimates",
+          },
+          {
+            "label": "Releases & operations",
+            "tab": "production",
+          },
+          {
+            "label": "BOM & cut list",
+            "tab": "bom",
+          },
+          {
+            "label": "Purchasing",
+            "tab": "commitments",
+          },
+          {
+            "label": "Install",
+            "tab": "schedule",
+          },
+          {
+            "label": null,
+            "tab": "budget",
+          },
+          {
+            "label": null,
+            "tab": "billing",
+          },
+          {
+            "label": null,
+            "tab": "change_orders",
+          },
+        ],
+      },
+    },
+    "kiosk": true,
+    "mobile_actions": {
+      "labor": {
+        "*": [
+          "operation_start_stop",
+          "good_scrap_qty",
+          "scan_label",
+          "flag_issue",
+          "clock_in",
+        ],
+      },
+      "supervisor": {
+        "*": [
+          "approve_crew_time",
+          "flag_issue",
+          "photo",
+        ],
+      },
+    },
+    "nav": {
+      "admin": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "production",
+          "label": null,
+        },
+        {
+          "item": "commitments",
+          "label": "Purchasing",
+        },
+        {
+          "item": "schedule",
+          "label": "Shipping & install",
+        },
+        {
+          "item": "billing",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "labor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "me",
+          "label": null,
+        },
+      ],
+      "management": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "approvals",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "production",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": "Pipeline",
+        },
+        {
+          "item": "margin",
+          "label": "Insights",
+        },
+        {
+          "item": "backlog",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "pm": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "production",
+          "label": null,
+        },
+        {
+          "item": "commitments",
+          "label": "Purchasing",
+        },
+        {
+          "item": "schedule",
+          "label": "Shipping & install",
+        },
+        {
+          "item": "change_orders",
+          "label": null,
+        },
+        {
+          "item": "billing",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+      ],
+      "sales": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+      ],
+      "supervisor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "production",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "crew_time",
+          "label": null,
+        },
+        {
+          "item": "punch",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+      ],
+    },
+    "roles": [
+      {
+        "template": "projects_owner",
+        "title": "Owner",
+      },
+      {
+        "template": "projects_gm",
+        "title": "Plant manager",
+      },
+      {
+        "template": "projects_office_manager",
+        "title": "Office manager",
+      },
+      {
+        "template": "projects_project_accountant",
+        "title": "Controller",
+      },
+      {
+        "template": "projects_dispatcher",
+        "title": "Production scheduler",
+      },
+      {
+        "template": "projects_purchasing",
+        "title": "Purchasing manager",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Project manager",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Production manager",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Shop foreman",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Install lead",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Shop worker",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Installer",
+      },
+      {
+        "template": "projects_sales",
+        "title": "Estimator",
+      },
+    ],
+    "schedule_views": {
+      "by_group": {
+        "supervisor": "production_capacity",
+      },
+      "job": {
+        "*": "gantt",
+      },
+      "multi_job": "production_capacity",
+    },
+    "sources": {
+      "residential_cabinets": "manufacturing_eto",
+    },
+  },
   "field_defs": [
     {
       "data_type": "text",
@@ -8257,11 +11610,11 @@ exports[`compilePlan(manufacturing_eto, defaults) > matches the golden snapshot 
     "shop_hours_per_week": 40,
     "uses_retainage": false,
   },
-  "plan_hash": "4e09c595dff0bccb4ec6783d0caa2121e252859e343ca126cbf1fe6e0428d9a3",
+  "plan_hash": "caf68c95d251c814a9c33e3a27bc9dea6dcd3624b3e4e7972993531fa6fbde9c",
   "price_book": [],
   "primary_pack": {
     "key": "manufacturing_eto",
-    "version": "1.0.0",
+    "version": "1.1.0",
   },
   "sample_job": {
     "budget": [
@@ -8369,7 +11722,7 @@ exports[`compilePlan(manufacturing_eto, defaults) > matches the golden snapshot 
       },
     ],
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "stages": [
     {
       "core_status": "BID",
@@ -8788,6 +12141,377 @@ exports[`compilePlan(professional_services, defaults) > matches the golden snaps
       "role_hint": "OTHER_JOB_COST",
     },
   ],
+  "experience": {
+    "checklists": [
+      {
+        "job_types": null,
+        "key": "project_kickoff",
+        "label": "Project kickoff",
+      },
+      {
+        "job_types": null,
+        "key": "project_closeout",
+        "label": "Project closeout",
+      },
+    ],
+    "doc_templates": [
+      "proposal",
+      "contract",
+      "change_order",
+      "invoice",
+    ],
+    "home": {
+      "admin": [
+        "needs_you",
+        "today_schedule",
+        "billing_ready",
+        "new_leads",
+        "setup_card",
+      ],
+      "labor": [
+        "current_assignment",
+        "rest_of_today",
+        "timecard",
+        "earnings",
+        "office_messages",
+      ],
+      "management": [
+        "weekly_brief",
+        "utilization",
+        "cash_ar",
+        "jobs_at_risk",
+        "pipeline",
+        "approvals_queue",
+      ],
+      "pm": [
+        "needs_you",
+        "utilization",
+        "my_jobs",
+        "billing_due",
+      ],
+      "sales": [
+        "new_leads",
+        "pipeline",
+        "my_jobs",
+      ],
+      "supervisor": [
+        "today_on_site",
+        "lookahead_constraints",
+        "crew_time_to_approve",
+        "open_punch",
+        "daily_report_status",
+      ],
+    },
+    "job_tabs": {
+      "*": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": "Phases & tasks",
+            "tab": "schedule",
+          },
+          {
+            "label": null,
+            "tab": "time",
+          },
+          {
+            "label": "Budget (hours & fees)",
+            "tab": "budget",
+          },
+          {
+            "label": null,
+            "tab": "change_orders",
+          },
+          {
+            "label": null,
+            "tab": "billing",
+          },
+          {
+            "label": "Files",
+            "tab": "documents",
+          },
+        ],
+      },
+      "monthly_retainer": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": null,
+            "tab": "time",
+          },
+          {
+            "label": "Budget (hours & fees)",
+            "tab": "budget",
+          },
+          {
+            "label": null,
+            "tab": "billing",
+          },
+          {
+            "label": "Files",
+            "tab": "documents",
+          },
+        ],
+      },
+    },
+    "kiosk": false,
+    "mobile_actions": {
+      "labor": {
+        "*": [
+          "timer",
+          "log_time",
+          "expense_receipt",
+        ],
+      },
+      "supervisor": {
+        "*": [
+          "timer",
+          "approve_crew_time",
+          "expense_receipt",
+        ],
+      },
+    },
+    "nav": {
+      "admin": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": "Resourcing",
+        },
+        {
+          "item": "billing",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "labor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "me",
+          "label": null,
+        },
+      ],
+      "management": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "approvals",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": "Pipeline",
+        },
+        {
+          "item": "margin",
+          "label": "Insights",
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "pm": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": "Resourcing",
+        },
+        {
+          "item": "billing",
+          "label": null,
+        },
+        {
+          "item": "change_orders",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+      ],
+      "sales": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+      ],
+      "supervisor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "crew_time",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+      ],
+    },
+    "roles": [
+      {
+        "template": "projects_owner",
+        "title": "Principal",
+      },
+      {
+        "template": "projects_gm",
+        "title": "Managing director",
+      },
+      {
+        "template": "projects_office_manager",
+        "title": "Office manager",
+      },
+      {
+        "template": "projects_project_accountant",
+        "title": "Bookkeeper",
+      },
+      {
+        "template": "projects_dispatcher",
+        "title": "Resource manager",
+      },
+      {
+        "template": "projects_purchasing",
+        "title": "Operations coordinator",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Project manager",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Team lead",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Consultant",
+      },
+      {
+        "template": "projects_sales",
+        "title": "Business development",
+      },
+    ],
+    "schedule_views": {
+      "by_group": {},
+      "job": {
+        "*": "gantt",
+      },
+      "multi_job": "resource_planner",
+    },
+    "sources": {
+      "fixed_fee": "professional_services",
+      "hourly_engagement": "professional_services",
+      "monthly_retainer": "professional_services",
+    },
+  },
   "field_defs": [
     {
       "data_type": "text",
@@ -9079,7 +12803,7 @@ exports[`compilePlan(professional_services, defaults) > matches the golden snaps
     "target_utilization_pct": 0.75,
     "uses_retainage": false,
   },
-  "plan_hash": "8df00a4b137e5d363d78e38915a89640e11f369fb022191ca4062c029e73da91",
+  "plan_hash": "cc080cbe3ebe4c5661f6099d128a6f8f069b33b1b0be3a44ef8e0632db466f40",
   "price_book": [
     {
       "code": "RATE-PRIN",
@@ -9156,7 +12880,7 @@ exports[`compilePlan(professional_services, defaults) > matches the golden snaps
   ],
   "primary_pack": {
     "key": "professional_services",
-    "version": "1.0.0",
+    "version": "1.1.0",
   },
   "sample_job": {
     "budget": [
@@ -9218,7 +12942,7 @@ exports[`compilePlan(professional_services, defaults) > matches the golden snaps
       },
     ],
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "stages": [
     {
       "core_status": "BID",
@@ -9854,6 +13578,372 @@ exports[`compilePlan(real_estate_development, defaults) > matches the golden sna
       "role_hint": "SOFT_COST",
     },
   ],
+  "experience": {
+    "checklists": [
+      {
+        "job_types": null,
+        "key": "draw_inspection",
+        "label": "Draw inspection walk",
+      },
+      {
+        "job_types": null,
+        "key": "site_visit",
+        "label": "Site visit report",
+      },
+      {
+        "job_types": null,
+        "key": "closing_checklist",
+        "label": "Closing checklist",
+      },
+    ],
+    "doc_templates": [
+      "contract",
+      "draw_request",
+      "change_order",
+      "lien_waiver",
+      "closeout",
+    ],
+    "home": {
+      "admin": [
+        "needs_you",
+        "today_schedule",
+        "billing_ready",
+        "new_leads",
+        "setup_card",
+      ],
+      "labor": [
+        "current_assignment",
+        "rest_of_today",
+        "timecard",
+        "earnings",
+        "office_messages",
+      ],
+      "management": [
+        "weekly_brief",
+        "draw_status",
+        "cash_ar",
+        "jobs_at_risk",
+        "approvals_queue",
+      ],
+      "pm": [
+        "needs_you",
+        "draw_status",
+        "my_jobs",
+        "week_schedule",
+      ],
+      "sales": [
+        "new_leads",
+        "pipeline",
+        "my_jobs",
+      ],
+      "supervisor": [
+        "today_on_site",
+        "lookahead_constraints",
+        "crew_time_to_approve",
+        "open_punch",
+        "daily_report_status",
+      ],
+    },
+    "job_tabs": {
+      "*": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": null,
+            "tab": "budget",
+          },
+          {
+            "label": "Contracts & COs",
+            "tab": "commitments",
+          },
+          {
+            "label": null,
+            "tab": "draws",
+          },
+          {
+            "label": "Milestones",
+            "tab": "schedule",
+          },
+          {
+            "label": null,
+            "tab": "capital_stack",
+          },
+          {
+            "label": null,
+            "tab": "documents",
+          },
+          {
+            "label": null,
+            "tab": "units",
+          },
+          {
+            "label": null,
+            "tab": "change_orders",
+          },
+        ],
+      },
+    },
+    "kiosk": false,
+    "mobile_actions": {
+      "labor": {
+        "*": [
+          "site_visit_report",
+          "photo",
+          "note",
+        ],
+      },
+      "supervisor": {
+        "*": [
+          "site_visit_report",
+          "photo",
+          "note",
+        ],
+      },
+    },
+    "nav": {
+      "admin": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "commitments",
+          "label": null,
+        },
+        {
+          "item": "draws",
+          "label": null,
+        },
+        {
+          "item": "units",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "labor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "me",
+          "label": null,
+        },
+      ],
+      "management": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "approvals",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "draws",
+          "label": null,
+        },
+        {
+          "item": "job_cost",
+          "label": "Budget",
+        },
+        {
+          "item": "margin",
+          "label": "Insights",
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "pm": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "job_cost",
+          "label": "Budget",
+        },
+        {
+          "item": "commitments",
+          "label": null,
+        },
+        {
+          "item": "draws",
+          "label": null,
+        },
+        {
+          "item": "units",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+        {
+          "item": "change_orders",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+      ],
+      "sales": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+      ],
+      "supervisor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "logs",
+          "label": null,
+        },
+        {
+          "item": "punch",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+      ],
+    },
+    "roles": [
+      {
+        "template": "projects_owner",
+        "title": "Principal",
+      },
+      {
+        "template": "projects_gm",
+        "title": "Development director",
+      },
+      {
+        "template": "projects_office_manager",
+        "title": "Office manager",
+      },
+      {
+        "template": "projects_project_accountant",
+        "title": "Development accountant",
+      },
+      {
+        "template": "projects_dispatcher",
+        "title": "Project coordinator",
+      },
+      {
+        "template": "projects_purchasing",
+        "title": "Contracts manager",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Development manager",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Owner's representative",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Field staff",
+      },
+      {
+        "template": "projects_sales",
+        "title": "Acquisitions manager",
+      },
+    ],
+    "schedule_views": {
+      "by_group": {},
+      "job": {
+        "*": "milestone_timeline",
+      },
+      "multi_job": "milestone_timeline",
+    },
+    "sources": {
+      "for_sale_development": "real_estate_development",
+      "land_development": "real_estate_development",
+    },
+  },
   "field_defs": [
     {
       "data_type": "text",
@@ -10136,11 +14226,11 @@ exports[`compilePlan(real_estate_development, defaults) > matches the golden sna
     "retainage_pct": 0.1,
     "uses_retainage": true,
   },
-  "plan_hash": "47dc3f9fdff65cf8ce3a625246003d1da43296cd13d27b78ee3c8d41d89bd2ef",
+  "plan_hash": "b5a18747e333843d7a0174168bf15c4dd6545b8c1deb40dee2c3f7a9b9bcbe23",
   "price_book": [],
   "primary_pack": {
     "key": "real_estate_development",
-    "version": "1.0.0",
+    "version": "1.1.0",
   },
   "sample_job": {
     "budget": [
@@ -10272,7 +14362,7 @@ exports[`compilePlan(real_estate_development, defaults) > matches the golden sna
       },
     ],
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "stages": [
     {
       "core_status": "BID",
@@ -11017,6 +15107,440 @@ exports[`compilePlan(residential_remodel, defaults) > matches the golden snapsho
       "role_hint": "OTHER_JOB_COST",
     },
   ],
+  "experience": {
+    "checklists": [
+      {
+        "job_types": null,
+        "key": "preconstruction_meeting",
+        "label": "Preconstruction meeting",
+      },
+      {
+        "job_types": null,
+        "key": "demo_protection",
+        "label": "Demo and dust protection",
+      },
+      {
+        "job_types": null,
+        "key": "pre_drywall_walk",
+        "label": "Pre-drywall walk",
+      },
+      {
+        "job_types": null,
+        "key": "final_walkthrough",
+        "label": "Final walkthrough with the client",
+      },
+    ],
+    "doc_templates": [
+      "proposal",
+      "design_agreement",
+      "contract",
+      "change_order",
+      "selection_sheet",
+      "invoice",
+      "daily_report",
+      "punch_list",
+      "closeout",
+    ],
+    "home": {
+      "admin": [
+        "needs_you",
+        "today_schedule",
+        "billing_ready",
+        "new_leads",
+        "setup_card",
+      ],
+      "labor": [
+        "current_assignment",
+        "rest_of_today",
+        "timecard",
+        "earnings",
+        "office_messages",
+      ],
+      "management": [
+        "weekly_brief",
+        "cash_ar",
+        "jobs_at_risk",
+        "backlog_capacity",
+        "over_under_billing",
+        "pipeline",
+        "approvals_queue",
+      ],
+      "pm": [
+        "needs_you",
+        "selections_queue",
+        "my_jobs",
+        "week_schedule",
+        "client_updates",
+        "billing_due",
+      ],
+      "sales": [
+        "new_leads",
+        "pipeline",
+        "my_jobs",
+      ],
+      "supervisor": [
+        "today_on_site",
+        "lookahead_constraints",
+        "crew_time_to_approve",
+        "open_punch",
+        "daily_report_status",
+      ],
+    },
+    "job_tabs": {
+      "*": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": "Proposal",
+            "tab": "estimates",
+          },
+          {
+            "label": null,
+            "tab": "selections",
+          },
+          {
+            "label": null,
+            "tab": "schedule",
+          },
+          {
+            "label": null,
+            "tab": "change_orders",
+          },
+          {
+            "label": null,
+            "tab": "budget",
+          },
+          {
+            "label": null,
+            "tab": "billing",
+          },
+          {
+            "label": "Logs & photos",
+            "tab": "logs",
+          },
+          {
+            "label": null,
+            "tab": "client_view",
+          },
+        ],
+      },
+      "design_agreement": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": "Proposal",
+            "tab": "estimates",
+          },
+          {
+            "label": null,
+            "tab": "selections",
+          },
+          {
+            "label": null,
+            "tab": "time",
+          },
+          {
+            "label": null,
+            "tab": "billing",
+          },
+          {
+            "label": null,
+            "tab": "documents",
+          },
+        ],
+      },
+    },
+    "kiosk": false,
+    "mobile_actions": {
+      "labor": {
+        "*": [
+          "clock_in",
+          "photo",
+          "todo",
+        ],
+      },
+      "supervisor": {
+        "*": [
+          "daily_log",
+          "photo",
+          "clock_in",
+          "punch_item",
+          "request_change_order",
+        ],
+      },
+    },
+    "nav": {
+      "admin": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "selections",
+          "label": null,
+        },
+        {
+          "item": "billing",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "labor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "me",
+          "label": null,
+        },
+      ],
+      "management": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "approvals",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": "Pipeline",
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "margin",
+          "label": "Insights",
+        },
+        {
+          "item": "backlog",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "pm": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "selections",
+          "label": null,
+        },
+        {
+          "item": "change_orders",
+          "label": null,
+        },
+        {
+          "item": "billing",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+      ],
+      "sales": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+      ],
+      "supervisor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "crew_time",
+          "label": null,
+        },
+        {
+          "item": "logs",
+          "label": "Logs & photos",
+        },
+        {
+          "item": "punch",
+          "label": "To-dos & punch",
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+      ],
+    },
+    "roles": [
+      {
+        "template": "projects_owner",
+        "title": "Owner",
+      },
+      {
+        "template": "projects_gm",
+        "title": "General manager",
+      },
+      {
+        "template": "projects_office_manager",
+        "title": "Office manager",
+      },
+      {
+        "template": "projects_project_accountant",
+        "title": "Bookkeeper",
+      },
+      {
+        "template": "projects_dispatcher",
+        "title": "Production coordinator",
+      },
+      {
+        "template": "projects_purchasing",
+        "title": "Purchasing",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Project manager",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Lead carpenter",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Carpenter",
+      },
+      {
+        "template": "projects_sales",
+        "title": "Designer",
+      },
+      {
+        "template": "projects_sales",
+        "title": "Salesperson",
+      },
+    ],
+    "schedule_views": {
+      "by_group": {},
+      "job": {
+        "*": "gantt",
+      },
+      "multi_job": "crew_board",
+    },
+    "sources": {
+      "design_agreement": "residential_remodel",
+      "fixed_price_remodel": "residential_remodel",
+    },
+  },
   "field_defs": [
     {
       "data_type": "text",
@@ -11300,11 +15824,11 @@ exports[`compilePlan(residential_remodel, defaults) > matches the golden snapsho
     "uses_retainage": false,
     "warranty_months": 12,
   },
-  "plan_hash": "324e8da9600e32d84513aaa05f6f9e734b9a843a3ab8dc53299890e017c0a032",
+  "plan_hash": "7eba3e235a4e1f3bd758c7153e7678945c6d992eed7bd35666e0a71e59d77e14",
   "price_book": [],
   "primary_pack": {
     "key": "residential_remodel",
-    "version": "1.0.0",
+    "version": "1.1.0",
   },
   "sample_job": {
     "budget": [
@@ -11412,7 +15936,7 @@ exports[`compilePlan(residential_remodel, defaults) > matches the golden snapsho
       },
     ],
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "stages": [
     {
       "core_status": "BID",
@@ -12126,6 +16650,460 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
       "role_hint": "SUBCONTRACT_COST",
     },
   ],
+  "experience": {
+    "checklists": [
+      {
+        "job_types": null,
+        "key": "jobsite_safety",
+        "label": "Jobsite safety (toolbox talk)",
+      },
+      {
+        "job_types": null,
+        "key": "rough_in_inspection",
+        "label": "Rough-in inspection",
+      },
+      {
+        "job_types": [
+          "subcontract",
+        ],
+        "key": "system_startup",
+        "label": "System startup",
+      },
+    ],
+    "doc_templates": [
+      "pay_app",
+      "change_order",
+      "tm_ticket",
+      "lien_waiver",
+      "daily_report",
+      "invoice",
+    ],
+    "home": {
+      "admin": [
+        "needs_you",
+        "today_schedule",
+        "billing_ready",
+        "new_leads",
+        "setup_card",
+      ],
+      "labor": [
+        "current_assignment",
+        "rest_of_today",
+        "timecard",
+        "earnings",
+        "office_messages",
+      ],
+      "management": [
+        "weekly_brief",
+        "cash_ar",
+        "jobs_at_risk",
+        "backlog_capacity",
+        "over_under_billing",
+        "pipeline",
+        "approvals_queue",
+      ],
+      "pm": [
+        "needs_you",
+        "productivity",
+        "my_jobs",
+        "pay_apps_due",
+        "week_schedule",
+      ],
+      "sales": [
+        "new_leads",
+        "pipeline",
+        "my_jobs",
+      ],
+      "supervisor": [
+        "today_on_site",
+        "crew_time_to_approve",
+        "crew_board",
+        "daily_report_status",
+        "open_punch",
+      ],
+    },
+    "job_tabs": {
+      "*": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": "SOV & pay apps",
+            "tab": "billing",
+          },
+          {
+            "label": "Production",
+            "tab": "productivity",
+          },
+          {
+            "label": "Changes",
+            "tab": "change_orders",
+          },
+          {
+            "label": "T&M tickets",
+            "tab": "tm_tickets",
+          },
+          {
+            "label": "Crew",
+            "tab": "team",
+          },
+          {
+            "label": null,
+            "tab": "documents",
+          },
+          {
+            "label": null,
+            "tab": "budget",
+          },
+          {
+            "label": null,
+            "tab": "time",
+          },
+          {
+            "label": null,
+            "tab": "logs",
+          },
+        ],
+      },
+      "tm_work": {
+        "default_tab": "overview",
+        "tabs": [
+          {
+            "label": null,
+            "tab": "overview",
+          },
+          {
+            "label": "T&M tickets",
+            "tab": "tm_tickets",
+          },
+          {
+            "label": null,
+            "tab": "time",
+          },
+          {
+            "label": null,
+            "tab": "billing",
+          },
+          {
+            "label": "Changes",
+            "tab": "change_orders",
+          },
+          {
+            "label": null,
+            "tab": "documents",
+          },
+        ],
+      },
+    },
+    "kiosk": false,
+    "mobile_actions": {
+      "labor": {
+        "*": [
+          "clock_in",
+          "report_quantities",
+          "photo",
+        ],
+      },
+      "supervisor": {
+        "*": [
+          "crew_time",
+          "report_quantities",
+          "tm_ticket",
+          "photo",
+          "daily_log",
+        ],
+      },
+    },
+    "nav": {
+      "admin": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": "Bids",
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": "Crew schedule",
+        },
+        {
+          "item": "calls",
+          "label": null,
+        },
+        {
+          "item": "dispatch",
+          "label": null,
+        },
+        {
+          "item": "billing",
+          "label": "Pay apps",
+        },
+        {
+          "item": "retainage",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "price_book",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "labor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "me",
+          "label": null,
+        },
+      ],
+      "management": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "approvals",
+          "label": null,
+        },
+        {
+          "item": "jobs",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": "Pipeline",
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": null,
+        },
+        {
+          "item": "margin",
+          "label": "Insights",
+        },
+        {
+          "item": "backlog",
+          "label": null,
+        },
+        {
+          "item": "settings",
+          "label": null,
+        },
+      ],
+      "pm": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": "Bids",
+        },
+        {
+          "item": "schedule",
+          "label": "Crew schedule",
+        },
+        {
+          "item": "billing",
+          "label": "Pay apps",
+        },
+        {
+          "item": "change_orders",
+          "label": null,
+        },
+        {
+          "item": "time",
+          "label": null,
+        },
+        {
+          "item": "commitments",
+          "label": null,
+        },
+        {
+          "item": "dispatch",
+          "label": null,
+        },
+        {
+          "item": "price_book",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+      ],
+      "sales": [
+        {
+          "item": "home",
+          "label": null,
+        },
+        {
+          "item": "inbox",
+          "label": null,
+        },
+        {
+          "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+      ],
+      "supervisor": [
+        {
+          "item": "today",
+          "label": null,
+        },
+        {
+          "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "schedule",
+          "label": "Crew board",
+        },
+        {
+          "item": "crew_time",
+          "label": null,
+        },
+        {
+          "item": "logs",
+          "label": null,
+        },
+        {
+          "item": "punch",
+          "label": null,
+        },
+        {
+          "item": "documents",
+          "label": null,
+        },
+      ],
+    },
+    "roles": [
+      {
+        "template": "projects_owner",
+        "title": "Owner",
+      },
+      {
+        "template": "projects_gm",
+        "title": "Operations manager",
+      },
+      {
+        "template": "projects_office_manager",
+        "title": "Office manager",
+      },
+      {
+        "template": "projects_project_accountant",
+        "title": "Project accountant",
+      },
+      {
+        "template": "projects_dispatcher",
+        "title": "Scheduler",
+      },
+      {
+        "template": "projects_purchasing",
+        "title": "Purchasing",
+      },
+      {
+        "template": "projects_pm",
+        "title": "Project manager",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "Foreman",
+      },
+      {
+        "template": "projects_supervisor",
+        "title": "General foreman",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Journeyman",
+      },
+      {
+        "template": "projects_labor",
+        "title": "Apprentice",
+      },
+      {
+        "template": "projects_sales",
+        "title": "Estimator",
+      },
+    ],
+    "schedule_views": {
+      "by_group": {
+        "supervisor": "lookahead",
+      },
+      "job": {
+        "*": "gantt",
+        "tm_work": "calendar",
+      },
+      "multi_job": "crew_board",
+    },
+    "sources": {
+      "subcontract": "specialty_trade",
+      "tm_work": "specialty_trade",
+    },
+  },
   "field_defs": [
     {
       "data_type": "text",
@@ -12397,11 +17375,11 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
     "union_labor": false,
     "uses_retainage": true,
   },
-  "plan_hash": "a27bd26c9cf2b3d4acff17202e4dd94ffeb4b4b7916eaf9edf8723d8fc6c785e",
+  "plan_hash": "fb9ef9f2c328a20688282c0c45bcf486482774babb8481b7081ef8145d650d85",
   "price_book": [],
   "primary_pack": {
     "key": "specialty_trade",
-    "version": "1.0.0",
+    "version": "1.1.0",
   },
   "sample_job": {
     "budget": [
@@ -12496,7 +17474,7 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
       },
     ],
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "stages": [
     {
       "core_status": "BID",

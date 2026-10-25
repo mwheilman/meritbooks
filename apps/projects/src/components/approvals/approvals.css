@@ -1,0 +1,56 @@
+/* ==========================================================================
+   Approvals inbox + settings. Tokens only (no hex, no radius, no shadow beyond the kit).
+   Phone: one column; the decision panel becomes a full-screen sheet with the verbs at the
+   thumb; secondary columns drop out of the queue.
+   ========================================================================== */
+.ap-toolbar{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:var(--s2)}
+.ap-toolbar .sp{flex:1}
+.ap-toolbar .field{margin:0;min-width:180px}
+.ap-split{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s3);align-items:start}
+.ap-split.has-panel{grid-template-columns:minmax(0,1fr) 420px}
+.ap-split > .panel{position:sticky;top:0;max-height:calc(100dvh - 128px);min-height:480px}
+.ap-table{border:1px solid var(--line);background:var(--white)}
+.ap-sub{color:var(--ink-3);font-size:var(--t-12);line-height:var(--lh-12)}
+.ap-num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.ap-facts{display:flex;flex-wrap:wrap;gap:4px 16px;color:var(--ink-2);font-size:var(--t-13)}
+.ap-facts b{color:var(--ink);font-weight:600}
+.ap-chain{list-style:none;margin:0;padding:0}
+.ap-chain li{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:8px;align-items:start;padding:8px 0;border-bottom:1px solid var(--line)}
+.ap-chain li:last-child{border-bottom:0}
+.ap-chain .n{font-variant-numeric:tabular-nums;color:var(--ink-3);font-weight:600}
+.ap-chain .now{color:var(--electric);font-weight:700}
+.ap-hist{list-style:none;margin:0;padding:0;font-size:var(--t-13)}
+.ap-hist li{padding:6px 0;border-bottom:1px solid var(--line)}
+.ap-hist li:last-child{border-bottom:0}
+.ap-hist .why{color:var(--ink-2);display:block}
+.ap-lines{width:100%;border-collapse:collapse;font-size:var(--t-13)}
+.ap-lines td{padding:6px 0;border-bottom:1px solid var(--line)}
+.ap-lines td.n{text-align:right;font-variant-numeric:tabular-nums}
+.ap-verbs{display:flex;gap:8px;width:100%;flex-wrap:wrap}
+.ap-verbs .sp{flex:1}
+.ap-form{display:grid;gap:16px;max-width:720px}
+.ap-form-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.ap-types{display:flex;flex-wrap:wrap;gap:4px 16px}
+.ap-section{border-top:2px solid var(--electric);padding-top:12px}
+.ap-section + .ap-section{margin-top:var(--s4)}
+.ap-section-h{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+.ap-section-h .sp{flex:1}
+.ap-rules{width:100%;border-collapse:collapse;font-size:var(--t-13);background:var(--white);border:1px solid var(--line)}
+.ap-rules th{text-align:left;font-weight:600;color:var(--ink-3);font-size:var(--t-12);padding:8px;border-bottom:1px solid var(--line)}
+.ap-rules td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+.ap-rules td.n,.ap-rules th.n{text-align:right;font-variant-numeric:tabular-nums}
+.ap-rules tr.off td{color:var(--ink-3)}
+.ap-rules tr[role="button"]{cursor:pointer}
+.ap-rules tr[role="button"]:hover td{background:var(--canvas)}
+.ap-list{list-style:none;margin:0;padding:0;background:var(--white);border:1px solid var(--line)}
+.ap-list li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.ap-list li:last-child{border-bottom:0}
+
+@media (max-width: 900px){
+  .ap-split.has-panel{grid-template-columns:minmax(0,1fr)}
+  .ap-split > .panel{position:fixed;inset:0;z-index:40;max-height:none;min-height:0;height:100dvh;overflow:auto}
+  .ap-hide-sm{display:none}
+  .ap-toolbar .field{min-width:0;flex:1 1 140px}
+  .ap-form-2{grid-template-columns:minmax(0,1fr)}
+  .ap-verbs .btn{flex:1 1 auto;min-height:44px}
+}

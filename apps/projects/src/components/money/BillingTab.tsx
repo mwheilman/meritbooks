@@ -1,5 +1,6 @@
 'use client';
 
+import { approvalOutcome, chainPending } from '@/lib/approvals/outcome';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -104,9 +105,10 @@ export function BillingTab(p0: BillingTabProps) {
       return;
     }
     if (r.status !== 'DRAFT' && r.status !== 'REJECTED') return;
-    const res = await run<{ status: string; resent: boolean }>(`a:${r.id}`, 'post', `/api/billing/${r.id}`, { op: 'approve' }, (d) =>
-      d.status === 'EMITTED' ? `${d.resent ? 'Sent again' : 'Approved and sent'} to Merit Books. It numbers and posts the invoice` : 'Approved. Not sent: Merit Books is off or this is a sample job', { quietError: true });
-    setNotice(res.error ? { id: r.id, text: res.error.error } : null);
+    const res = await run<{ status: string; resent: boolean; approval?: unknown }>(`a:${r.id}`, 'post', `/api/billing/${r.id}`, { op: 'approve' }, (d) =>
+      chainPending(d.approval) ? approvalOutcome(d.approval, '', r.label)
+        : d.status === 'EMITTED' ? `${d.resent ? 'Sent again' : 'Approved and sent'} to Merit Books. It numbers and posts the invoice` : 'Approved. Not sent: Merit Books is off or this is a sample job', { quietError: true });
+    setNotice(res.error ? { id: r.id, text: res.error.error } : chainPending(res.data?.approval) ? { id: r.id, text: approvalOutcome(res.data?.approval, '', r.label) } : null);
   };
 
   const columns: QueueColumn<ReqRow>[] = [

@@ -23,7 +23,13 @@ export {
   type AiProposalResult, type AiRejection, type AnthropicToolDefinition,
 } from './classify';
 export {
-  PlanCompileError, canonicalJson, compilePlan, describePlan, diffPlans, planHash,
+  EXPERIENCE_POINTER_ROOT, PlanExperienceSchema, applyExperienceOverrides, applyPatch, compileExperience, experienceOf,
+  homeFor, jobTabsFor, mobileActionsFor, multiJobViewFor, navFor, parsePointer, roleTitleFor, roleTitlesFor,
+  scheduleViewFor,
+  type ExperiencePart, type OverrideResult, type PackOverride,
+} from './experience';
+export {
+  OVERRIDE_ROOTS, PlanCompileError, canonicalJson, compilePlan, describePlan, diffPlans, planHash,
   type CompileInput, type PlanDiff, type PreviewCard, type SectionDiff,
 } from './compile';
 export { formatCents } from './describe';

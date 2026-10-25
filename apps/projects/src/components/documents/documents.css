@@ -1,0 +1,80 @@
+/* ==========================================================================
+   Documents, drawings and e-signature. Kit tokens only: no hex, no radius.
+   ========================================================================== */
+
+.docs{display:grid;grid-template-columns:240px minmax(0,1fr);gap:var(--s3);align-items:start}
+.docs.has-panel{grid-template-columns:240px minmax(0,1fr) 460px}
+.docs > .panel{position:sticky;top:0;max-height:calc(100dvh - 128px);min-height:480px}
+.docs-tree{border:1px solid var(--line);background:var(--white);position:sticky;top:0}
+.docs-tree h3{padding:12px 16px 8px}
+.docs-tree ul{list-style:none;padding-bottom:8px}
+.docs-tree button{display:flex;width:100%;align-items:baseline;gap:8px;padding:6px 16px;text-align:left;color:var(--ink-2);background:none;border:0;cursor:pointer;font:inherit}
+.docs-tree button:hover{background:var(--canvas)}
+.docs-tree button[aria-current="true"]{color:var(--ink);font-weight:600;box-shadow:inset 3px 0 0 var(--electric);background:var(--sky)}
+.docs-tree .n{margin-left:auto;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.docs-tree .lock{color:var(--ink-3)}
+.docs-drop{border:1px dashed var(--line-2,var(--line));padding:16px;text-align:center;color:var(--ink-3);background:var(--white)}
+.docs-drop.over{border-color:var(--electric);color:var(--electric);background:var(--sky)}
+.docs-versions{list-style:none}
+.docs-versions li{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:8px;align-items:start;padding:8px 0;border-bottom:1px solid var(--line)}
+.docs-versions li:last-child{border-bottom:0}
+.docs-versions .vno{font-weight:700;font-variant-numeric:tabular-nums}
+.docs-versions .old{color:var(--ink-3)}
+.docs-hash{font-size:var(--t-12);color:var(--ink-3);word-break:break-all}
+.docs-photo{width:100%;max-height:260px;object-fit:contain;background:var(--canvas);border:1px solid var(--line)}
+.docs-row-tags{display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle}
+
+/* Signers / envelopes */
+.esg-signers{list-style:none;counter-reset:s}
+.esg-signers li{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.esg-signers li:last-child{border-bottom:0}
+.esg-signers .o{font-weight:700;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.esg-trail{list-style:none;font-size:var(--t-12);color:var(--ink-2)}
+.esg-trail li{display:grid;grid-template-columns:132px minmax(0,1fr);gap:8px;padding:3px 0}
+.esg-trail time{color:var(--ink-3);font-variant-numeric:tabular-nums}
+.esg-form-signer{display:grid;grid-template-columns:28px minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr) 120px 32px;gap:8px;align-items:end;margin-bottom:8px}
+.esg-form-signer .o{padding-bottom:8px;font-weight:700;color:var(--ink-3)}
+.esg-link{display:flex;gap:8px;align-items:center}
+.esg-link input{flex:1;min-width:0}
+
+/* Public signing page */
+.sign-page{min-height:100dvh;background:var(--canvas);color:var(--ink)}
+.sign-bar{display:flex;align-items:center;gap:12px;padding:12px 24px;background:var(--white);border-bottom:2px solid var(--brand,var(--electric))}
+.sign-bar img{height:32px;width:auto}
+.sign-bar .co{font-weight:700}
+.sign-main{max-width:1100px;margin:0 auto;padding:24px;display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:24px;align-items:start}
+.sign-doc{background:var(--white);border:1px solid var(--line);min-height:70dvh}
+.sign-doc iframe{width:100%;height:78dvh;border:0;display:block}
+.sign-side{background:var(--white);border:1px solid var(--line);padding:16px;position:sticky;top:16px}
+.sign-side h1{margin-bottom:4px}
+.sign-consent{background:var(--canvas);padding:12px;font-size:var(--t-12);line-height:var(--lh-12);color:var(--ink-2);margin:12px 0}
+.sign-pad{position:relative;border:1px solid var(--ink-3);background:var(--white);touch-action:none}
+.sign-pad canvas{display:block;width:100%;height:150px;cursor:crosshair}
+.sign-pad .base{position:absolute;left:16px;right:16px;bottom:36px;border-bottom:1px solid var(--line)}
+.sign-pad .hint{position:absolute;left:16px;bottom:12px;font-size:var(--t-12);color:var(--ink-3);pointer-events:none}
+.sign-done{border-left:3px solid var(--pos);padding:12px 16px;background:var(--white)}
+@media (max-width:860px){
+  .sign-main{grid-template-columns:minmax(0,1fr);padding:12px}
+  .sign-side{position:static}
+  .sign-doc iframe{height:60dvh}
+}
+
+/* Drawings */
+.dwg-index{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:var(--s2)}
+.dwg-card{border:1px solid var(--line);background:var(--white);padding:12px 16px;display:block;color:inherit;text-decoration:none}
+.dwg-card:hover,.dwg-card:focus-visible{border-color:var(--electric)}
+.dwg-card .num{font-weight:700;font-size:var(--t-15)}
+.dwg-viewer{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:var(--s3);align-items:start}
+.dwg-stage{position:relative;border:1px solid var(--line);background:var(--canvas);overflow:auto;max-height:calc(100dvh - 200px)}
+.dwg-stage .sheet{position:relative;margin:16px;display:inline-block;background:var(--white);box-shadow:0 0 0 1px var(--line)}
+.dwg-stage canvas{display:block}
+.dwg-stage canvas.cmp{position:absolute;inset:0;mix-blend-mode:multiply}
+.dwg-stage svg{position:absolute;inset:0;width:100%;height:100%}
+.dwg-stage svg.drawing{cursor:crosshair}
+.dwg-tools{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:8px}
+.dwg-marks{list-style:none}
+.dwg-marks li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:var(--t-13)}
+.dwg-review td input{min-width:90px}
+.dwg-legend{display:flex;gap:16px;font-size:var(--t-12);color:var(--ink-2);margin-top:8px}
+.dwg-legend .a{color:var(--neg);font-weight:700}
+.dwg-legend .b{color:var(--electric);font-weight:700}

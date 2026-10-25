@@ -1,5 +1,6 @@
 'use client';
 
+import { approvalOutcome, chainPending } from '@/lib/approvals/outcome';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -63,8 +64,8 @@ export function CommitmentQueue({ rows, currentUserId, showCompany, mode = 'all'
 
   const approve = async (r: CommitmentQueueRow) => {
     if (r.status !== 'DRAFT') return;
-    const res = await run(`a:${r.id}`, 'post', `/api/commitments/${r.id}`, { op: 'approve' }, `Approved ${r.number}`, { quietError: true });
-    setNotice(res.error ? { id: r.id, text: res.error.error } : null);
+    const res = await run<{ approval?: unknown }>(`a:${r.id}`, 'post', `/api/commitments/${r.id}`, { op: 'approve' }, (d) => approvalOutcome(d?.approval, `Approved ${r.number}`, r.number), { quietError: true });
+    setNotice(res.error ? { id: r.id, text: res.error.error } : chainPending(res.data?.approval) ? { id: r.id, text: approvalOutcome(res.data?.approval, '', r.number) } : null);
     if (res.error) setCursorId(r.id);
   };
 

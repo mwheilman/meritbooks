@@ -1,5 +1,6 @@
 'use client';
 
+import { approvalOutcome, chainPending } from '@/lib/approvals/outcome';
 import { useState } from 'react';
 import {
   Button, Check, ConfirmDialog, Field, Input, InlineNotice, KV, MoneyInput, Select, Switch, Tabs, Tag, Textarea, money, shortDate,
@@ -51,8 +52,8 @@ export function CommitmentDetail(p0: CommitmentDetailProps) {
   const missing = p0.compliance.filter((d) => d.required && !complianceMark(d, p0.today).ok);
 
   const act = async (key: string, body: Record<string, unknown>, ok: string) => {
-    const r = await run(key, 'post', url, body, ok, { quietError: true });
-    setNotice(r.error ? r.error.error : null);
+    const r = await run<{ approval?: unknown }>(key, 'post', url, body, (d) => approvalOutcome(d?.approval, ok, c.number), { quietError: true });
+    setNotice(r.error ? r.error.error : chainPending(r.data?.approval) ? approvalOutcome(r.data?.approval, '', c.number) : null);
     return r;
   };
 
@@ -366,7 +367,7 @@ function ChangesSection({ row, lines, changes, codes, costCodes, ownerCos, curre
     if (!r.error) { setDesc(''); setReason(''); setAmt(null); setOwner(''); }
   };
   const approve = async (x: CommitmentChangeRow) => {
-    const r = await run(`a:${x.id}`, 'post', url, { op: 'approve', changeId: x.id }, `Approved ${x.number}`, { quietError: true });
+    const r = await run<{ approval?: unknown }>(`a:${x.id}`, 'post', url, { op: 'approve', changeId: x.id }, (d) => approvalOutcome(d?.approval, `Approved ${x.number}`, x.number), { quietError: true });
     setRowErr(r.error ? { id: x.id, text: r.error.error } : null);
   };
 

@@ -3,7 +3,7 @@
  * passes can be compiled with any valid answers and produces a plan the database can apply.
  */
 import {
-  ACCOUNT_ROLE_HINTS, BILLING_MODES, MODULES, PackManifestSchema, VOCAB_KEYS,
+  ACCOUNT_ROLE_HINTS, ANY_JOB_TYPE, BILLING_MODES, MODULES, PackManifestSchema, VOCAB_KEYS,
   type PackManifest,
 } from './types';
 import { APPROVAL_ROLES, BANNED_WORDS_RE, RETAINAGE_BILLING_MODES, WELL_KNOWN_PARAMS } from './constants';
@@ -384,7 +384,42 @@ export function validateManifest(input: unknown): ValidationResult {
     if (t.title.trim().length === 0) add(`sampleJob.tasks[${i}].title`, 'Task title is required');
   });
 
+  validateExperience(m, jobTypes, add);
+
   return issues.length === 0 ? { ok: true, manifest: m, issues: [] } : { ok: false, manifest: m, issues };
+}
+
+/** Manifest v2 slots: every job-type slot names a job type of this pack (or '*'), no duplicates, defaults in range. */
+function validateExperience(m: PackManifest, jobTypes: ReadonlyMap<string, unknown>, add: (path: string, message: string) => void): void {
+  const jtSlot = (path: string, k: string) => {
+    if (k !== ANY_JOB_TYPE && !jobTypes.has(k)) add(path, `Unknown job type "${k}"`);
+  };
+  const titles = (m.roles ?? []).map((r) => r.title.toLowerCase());
+  for (const d of dupes(titles)) add('roles', `Duplicate role title "${d}"`);
+
+  for (const [g, list] of Object.entries(m.nav ?? {})) {
+    const keys = (list ?? []).map((e) => (typeof e === 'string' ? e : e.item));
+    for (const d of dupes(keys)) add(`nav.${g}`, `Rail item "${d}" is listed twice`);
+  }
+  for (const [g, list] of Object.entries(m.home ?? {})) {
+    for (const d of dupes(list ?? [])) add(`home.${g}`, `Home widget "${d}" is listed twice`);
+  }
+  for (const [k, set] of Object.entries(m.jobTabs ?? {})) {
+    jtSlot(`jobTabs.${k}`, k);
+    const kinds = set.tabs.map((e) => (typeof e === 'string' ? e : e.tab));
+    for (const d of dupes(kinds)) add(`jobTabs.${k}`, `Tab "${d}" is listed twice`);
+    if (set.defaultTab && !kinds.includes(set.defaultTab)) add(`jobTabs.${k}.defaultTab`, `Default tab "${set.defaultTab}" is not in the tab list`);
+  }
+  for (const [g, byJt] of Object.entries(m.mobile?.actions ?? {})) {
+    for (const [k, acts] of Object.entries(byJt ?? {})) {
+      jtSlot(`mobile.actions.${g}.${k}`, k);
+      for (const d of dupes(acts)) add(`mobile.actions.${g}.${k}`, `Action "${d}" is listed twice`);
+    }
+  }
+  for (const k of Object.keys(m.schedule?.job ?? {})) jtSlot(`schedule.job.${k}`, k);
+  for (const d of dupes(m.docTemplates ?? [])) add('docTemplates', `Template "${d}" is listed twice`);
+  for (const d of dupes((m.checklists ?? []).map((c) => c.key))) add('checklists', `Duplicate checklist "${d}"`);
+  (m.checklists ?? []).forEach((c, i) => (c.jobTypes ?? []).forEach((k) => jtSlot(`checklists[${i}].jobTypes`, k)));
 }
 
 /** Throwing variant for build-time use. */

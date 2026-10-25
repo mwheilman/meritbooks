@@ -7,6 +7,7 @@ import { one, pm } from '@/lib/pm/db';
 import { callRpc, wrote } from '@/lib/pm/money/rpc';
 import { Cents, Text200, Text2000, Uuid } from '@/lib/pm/money/schemas';
 import { loadCommitment } from '@/lib/pm/money/load';
+import { approvalSummary, decideObject } from '@/lib/approvals/server';
 
 const Body = z.discriminatedUnion('op', [
   z.object({
@@ -45,8 +46,13 @@ export const POST = route({ access: { cap: 'projects.commitments', action: 'edit
   const x = one<{ id: string; commitment_id: string; status: string }>(await pm(db).from('commitment_changes').select('id, commitment_id, status').eq('id', body.changeId).maybeSingle(), 'change');
   if (!x || x.commitment_id !== c.id) throw new HttpError(404, 'That change was not found on this commitment.', 'NOT_FOUND');
   if (body.op === 'approve') {
-    const eventId = await callRpc<string | null>(db, 'approve_commitment_change', { p_change: x.id }, 'commitment change');
-    return { sent: !!eventId };
+    // through the approvals engine (1113); approve_commitment_change runs at the last step
+    const r = await decideObject(db, 'commitment_change', x.id);
+    if (r.status === 'not_needed') {
+      const eventId = await callRpc<string | null>(db, 'approve_commitment_change', { p_change: x.id }, 'commitment change');
+      return { sent: !!eventId, approval: approvalSummary(r) };
+    }
+    return { sent: !!r.result?.event_id, approval: approvalSummary(r) };
   }
   if (body.op === 'reject') {
     await callRpc(db, 'reject_commitment_change', { p_change: x.id, p_reason: body.reason ?? null }, 'commitment change');

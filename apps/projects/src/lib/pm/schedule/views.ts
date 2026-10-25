@@ -48,3 +48,39 @@ export function suggestTemplate(templates: ReadonlyArray<TemplateOption>, jobTyp
 export function templatePhrase(name: string): string {
   return /template$/i.test(name.trim()) ? `the ${name.trim()}` : `the ${name.trim()} template`;
 }
+
+// ---------------------------------------------------------------------------
+// Pack manifest v2 schedule lenses (UX seat §3c) → the views this app draws today
+// ---------------------------------------------------------------------------
+
+/** The pack's lens names (packages/industry-packs SCHEDULE_VIEWS). */
+export type PackScheduleView =
+  | 'gantt' | 'lookahead' | 'calendar' | 'crew_board' | 'dispatch' | 'production_capacity' | 'install_board'
+  | 'milestone_timeline' | 'service_board' | 'resource_planner';
+
+/** A job's Schedule tab: timeline lenses open on the Gantt, board / calendar lenses on the task list. */
+export function jobViewFromPack(v: PackScheduleView | null | undefined, archetype: string | null | undefined): ScheduleView {
+  if (!v) return defaultScheduleView(archetype);
+  return v === 'gantt' || v === 'lookahead' || v === 'milestone_timeline' || v === 'resource_planner' ? 'gantt' : 'list';
+}
+
+export type GlobalScheduleView = 'jobs' | 'lookahead' | 'crews';
+
+export interface GlobalLens {
+  view: GlobalScheduleView;
+  /** The pack's own board when it lives on another screen (dispatch, service, shop). */
+  board: { label: string; href: string } | null;
+}
+
+/** The global Schedule page: the pack's multi-job lens, and where its board lives when it is elsewhere. */
+export function globalViewFromPack(v: PackScheduleView | null | undefined): GlobalLens {
+  switch (v) {
+    case 'lookahead': return { view: 'lookahead', board: null };
+    case 'crew_board': return { view: 'crews', board: null };
+    case 'install_board': return { view: 'crews', board: { label: 'Open the install board', href: '/dispatch' } };
+    case 'dispatch': return { view: 'jobs', board: { label: 'Open the dispatch board', href: '/dispatch' } };
+    case 'service_board': return { view: 'jobs', board: { label: 'Open the service board', href: '/work-orders' } };
+    case 'production_capacity': return { view: 'jobs', board: { label: 'Open production capacity', href: '/production' } };
+    default: return { view: 'jobs', board: null };
+  }
+}

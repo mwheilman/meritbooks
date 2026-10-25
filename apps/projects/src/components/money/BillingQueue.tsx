@@ -34,7 +34,7 @@ export interface BillingQueueRowView {
   ageDays: number | null;
 }
 
-interface BulkResult { id: string; ok: boolean; status?: 'EMITTED' | 'UNISSUED'; error?: string; code?: string; preconditions?: string[] }
+interface BulkResult { id: string; ok: boolean; status?: 'EMITTED' | 'UNISSUED' | 'PENDING_APPROVAL'; waitingOn?: string | null; error?: string; code?: string; preconditions?: string[] }
 
 const BANDS: Array<{ value: BillingBand; label: string; caption: string }> = [
   { value: 'draft', label: 'Draft', caption: 'A check is not met yet' },
@@ -93,9 +93,10 @@ export function BillingQueue({ rows, currentUserId, booksPresent, showCompany, o
     setBusy(false);
     setResults((prev) => ({ ...prev, ...Object.fromEntries(out.map((x) => [x.id, x])) }));
     setSelected(new Set());
-    const approved = out.filter((x) => x.ok).length;
-    const refused = out.length - approved;
-    const text = `${approved ? `Approved ${count(approved)}${booksPresent ? ' and sent to Merit Books' : ''}` : 'None approved'}${refused ? ` · ${count(refused)} refused, see each row` : ''}`;
+    const waiting = out.filter((x) => x.ok && x.status === 'PENDING_APPROVAL').length;
+    const approved = out.filter((x) => x.ok).length - waiting;
+    const refused = out.length - approved - waiting;
+    const text = `${approved ? `Approved ${count(approved)}${booksPresent ? ' and sent to Merit Books' : ''}` : waiting ? '' : 'None approved'}${waiting ? `${approved ? ' · ' : ''}${count(waiting)} waiting on the next approver` : ''}${refused ? ` · ${count(refused)} refused, see each row` : ''}`;
     if (refused) toast.error(text);
     else toast(text);
     router.refresh();
@@ -123,7 +124,10 @@ export function BillingQueue({ rows, currentUserId, booksPresent, showCompany, o
       id: 'note', header: band === 'issued' ? 'Invoice' : band === 'sent' ? 'Waiting' : 'Result', width: 220,
       cell: (r) => {
         const res = results[r.id];
-        if (res) return res.ok ? <Tag tone="pos">{res.status === 'EMITTED' ? 'Sent' : 'Approved, not sent'}</Tag> : <span className="neg" style={{ whiteSpace: 'normal' }}>{res.error}</span>;
+        if (res) {
+          if (res.ok && res.status === 'PENDING_APPROVAL') return <Tag tone="warn">{`Waiting on ${res.waitingOn?.trim() || 'the next approver'}`}</Tag>;
+          return res.ok ? <Tag tone="pos">{res.status === 'EMITTED' ? 'Sent' : 'Approved, not sent'}</Tag> : <span className="neg" style={{ whiteSpace: 'normal' }}>{res.error}</span>;
+        }
         if (r.invoice) return <span className="code">{r.invoice}</span>;
         if (r.band === 'sent') return <span className={r.ageDays != null && r.ageDays >= 1 ? 'neg' : 'l2'}>{r.ageDays != null ? `${count(r.ageDays)} d` : '—'}</span>;
         if (r.kind === 'BILLING' && r.createdBy === currentUserId && sendable(r)) return <Tag>You prepared it</Tag>;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BANNED_WORDS_RE, CATALOG_KEYS, DEFAULT_VOCAB, MODULES, PlanCompileError, VOCAB_KEYS, canonicalJson, compilePlan,
-  describePlan, diffPlans, planHash, resolveManifest, type WorkspacePlan,
+  PLAN_SCHEMA_VERSION, describePlan, diffPlans, latestVersions, planHash, resolveManifest, type WorkspacePlan,
 } from '../index';
 
 const LOC = 'loc_00000000-0000-0000-0000-000000000001';
@@ -15,7 +15,7 @@ describe.each([...CATALOG_KEYS])('compilePlan(%s, defaults)', (key) => {
   });
 
   it('is complete and internally consistent', () => {
-    expect(plan.schema_version).toBe(1);
+    expect(plan.schema_version).toBe(PLAN_SCHEMA_VERSION);
     expect(plan.primary_pack.key).toBe(key);
     expect(Object.keys(plan.vocabulary).sort()).toEqual([...VOCAB_KEYS].sort());
     expect(Object.keys(plan.modules).sort()).toEqual([...MODULES].sort());
@@ -219,7 +219,7 @@ describe('add-on packs', () => {
     expect(plan.cost_codes.some((c) => c.code === 'SVC-LAB')).toBe(true);
     expect(plan.cost_codes.some((c) => c.code === '03 30 00')).toBe(true);
     expect(plan.vocabulary.job).toBe('Project');
-    expect(plan.addon_packs).toEqual([{ key: 'field_service', version: '1.0.0' }]);
+    expect(plan.addon_packs).toEqual([{ key: 'field_service', version: latestVersions().field_service }]);
     expect(plan.modules.dispatch).toBe(true);
     expect(plan.answers['field_service.does_replacements']).toBe(false);
     expect(plan.price_book.length).toBe(resolveManifest('field_service').priceBook.length);

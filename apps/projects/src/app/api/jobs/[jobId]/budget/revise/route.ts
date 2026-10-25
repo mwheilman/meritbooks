@@ -4,6 +4,7 @@ import { must, route } from '@/lib/api';
 import { getBudget } from '@/lib/pm/budget';
 import { draftBudget, emitBudgetRevised } from '@/lib/pm/budget-ops';
 import { loadJob } from '@/lib/pm/guarded';
+import { afterApproval, approvalSummary, decideObject } from '@/lib/approvals/server';
 import { todayIso } from '@/lib/time';
 
 const Body = z.discriminatedUnion('op', [
@@ -49,6 +50,11 @@ export const POST = route({ access: { cap: 'projects.financials', action: 'edit'
     return { ok: true };
   }
 
+  // a budget transfer goes through the approvals engine (1113): it becomes the budget at the last step
+  const a = await decideObject(db, 'budget_transfer', draft.id);
+  if (a.status !== 'not_needed') {
+    return { ok: true, saved: a.status === 'approved', approval: approvalSummary(a), ...(await afterApproval(db, a, tenant.booksPresent)) };
+  }
   must(await pm.from('budgets').update({ status: 'SUPERSEDED' }).eq('job_id', job.job_id).eq('kind', 'REVISED').eq('status', 'APPROVED').select('id'), 'supersede');
   must(await pm.from('budgets').update({ status: 'APPROVED', as_of: todayIso() }).eq('id', draft.id).select('id'), 'save revision');
   return { ok: true, books: await emitBudgetRevised(db, job.job_id, tenant.booksPresent) };

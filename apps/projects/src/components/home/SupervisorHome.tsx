@@ -1,5 +1,6 @@
 'use client';
 
+import { timeApprovalText, type TimeApprovalWire } from '@/lib/approvals/outcome';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -32,13 +33,13 @@ export function SupervisorHome({ data, readOnly }: { data: SupervisorHomeData; r
   const approve = async (rows: CrewTimeItem[]) => {
     if (!rows.length) return;
     setBusy(true);
-    const res = await api.post<{ approved: number }>('/api/ops/time/approve', { ids: rows.map((r) => r.id) });
+    const res = await api.post<TimeApprovalWire>('/api/ops/time/approve', { ids: rows.map((r) => r.id) });
     setBusy(false);
     if (res.error) {
       toast.error(res.error.error);
       return;
     }
-    toast(`Approved ${count(res.data?.approved ?? rows.length)} ${rows.length === 1 ? 'entry' : 'entries'}`);
+    toast(timeApprovalText(res.data, rows.length));
     setSelected(new Set());
     router.refresh();
   };

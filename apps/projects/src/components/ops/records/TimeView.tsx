@@ -1,5 +1,6 @@
 'use client';
 
+import { timeApprovalText, type TimeApprovalWire } from '@/lib/approvals/outcome';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -71,7 +72,7 @@ export function TimeView(p: TimeViewProps) {
   const submittedMine = shown.filter((t) => approveBlock(t, p.meUserId, clerkOf) === 'YOURS').length;
   const approve = async (ids: string[], key: string) => {
     if (!ids.length) return;
-    const r = await act<{ approved: number }>(key, 'post', '/api/ops/time/approve', { ids }, (d) => `Approved ${count(d.approved)} ${d.approved === 1 ? 'entry' : 'entries'}`);
+    const r = await act<TimeApprovalWire>(key, 'post', '/api/ops/time/approve', { ids }, (d) => timeApprovalText(d, ids.length));
     if (r) setSel(new Set());
   };
   const total = (rs: TimeEntryRow[]) => rs.reduce((s, t) => s + Number(t.hours), 0);
